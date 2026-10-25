@@ -107,6 +107,36 @@ struct Shared {
     youtube: Mutex<Option<Arc<Youtube>>>,
     /// The preview thread, which draws and encodes every session's preview streams.
     previews: PreviewHub,
+    /// The WASM automation plugins installed this run (ADR-0069). On its own lock,
+    /// never taken with the collection lock held, nor while a plugin runs.
+    #[cfg(feature = "wasm-plugins")]
+    automation: crate::plugins::automation::Registry,
+}
+
+/// A handle to an [`Engine`] that doesn't keep it alive: what a plugin's thread holds,
+/// so an engine with plugins installed still ends when its last handle and session go.
+#[cfg(feature = "wasm-plugins")]
+#[derive(Clone)]
+pub(crate) struct WeakEngine {
+    shared: Weak<Shared>,
+    media: Option<Weak<MediaHost>>,
+    drops: Weak<Mutex<DropLedger>>,
+}
+
+#[cfg(feature = "wasm-plugins")]
+impl WeakEngine {
+    /// The engine, while any handle or session keeps it alive.
+    pub(crate) fn upgrade(&self) -> Option<Engine> {
+        let media = match &self.media {
+            Some(media) => Some(media.upgrade()?),
+            None => None,
+        };
+        Some(Engine {
+            shared: self.shared.upgrade()?,
+            media,
+            drops: self.drops.upgrade()?,
+        })
+    }
 }
 
 impl Default for Engine {
@@ -130,6 +160,8 @@ impl Default for Engine {
                 audio_scopes,
                 youtube: Mutex::new(None),
                 previews: PreviewHub::default(),
+                #[cfg(feature = "wasm-plugins")]
+                automation: crate::plugins::automation::Registry::default(),
             }),
             media: None,
             drops: Arc::new(Mutex::new(DropLedger::default())),
@@ -200,11 +232,25 @@ impl Engine {
     /// earlier scan found stays. Each plugin file is scanned in its own host process, so
     /// this can take seconds: call it from a worker thread. The engine's locks are held
     /// only to add the kinds, after the scan.
-    pub fn scan_clap_plugins(&self, hosts: &dyn PluginHosts) -> ClapScan {
-        let scan = clap_kinds::scan(hosts);
+    ///
+    /// From then on a source's audio chain runs its CLAP filters, each in a host process
+    /// `hosts` starts. A collection may hold CLAP filters before the scan that
+    /// describes their kinds (it loads before the scan runs): they are bypassed until
+    /// then.
+    pub fn scan_clap_plugins(&self, hosts: Arc<dyn PluginHosts>) -> ClapScan {
+        let scan = clap_kinds::scan(hosts.as_ref());
         let mut state = lock(&self.shared.state);
         state.graph = std::mem::take(&mut state.graph)
             .with_kinds(scan.kinds.iter().map(|k| k.descriptor.clone()));
+        state.audio.add_clap_plugins(
+            hosts,
+            scan.kinds.iter().map(|k| {
+                (
+                    k.descriptor.kind_id.clone(),
+                    (k.file.clone(), k.plugin_id.clone()),
+                )
+            }),
+        );
         scan
     }
 
@@ -650,6 +696,30 @@ impl Engine {
         InProcessControl::new(self.clone())
     }
 
+    /// A handle to this engine that doesn't keep it alive.
+    #[cfg(feature = "wasm-plugins")]
+    pub(crate) fn downgrade(&self) -> WeakEngine {
+        WeakEngine {
+            shared: Arc::downgrade(&self.shared),
+            media: self.media.as_ref().map(Arc::downgrade),
+            drops: Arc::downgrade(&self.drops),
+        }
+    }
+
+    /// Sends `event` to every subscriber, outside any call.
+    #[cfg(feature = "wasm-plugins")]
+    pub(crate) fn emit(&self, event: &Event) {
+        let mut wake = Vec::new();
+        lock(&self.shared.state).subscribers.emit(event, &mut wake);
+        wake_all(wake);
+    }
+
+    /// The installed WASM automation plugins.
+    #[cfg(feature = "wasm-plugins")]
+    pub(crate) fn automation(&self) -> &crate::plugins::automation::Registry {
+        &self.shared.automation
+    }
+
     /// The current state revision.
     pub fn rev(&self) -> Rev {
         lock(&self.shared.state).graph.rev()
@@ -808,7 +878,9 @@ impl Engine {
             } => Some(output_id.clone()),
             _ => None,
         };
-        let result = if let Some(result) = self.youtube_call(&call) {
+        let result = if let Some(result) = self.plugin_call(&call) {
+            result
+        } else if let Some(result) = self.youtube_call(&call) {
             result
         } else if let Call::Action {
             action: action @ (Action::OutputSetKey { .. } | Action::OutputClearKey { .. }),
@@ -887,6 +959,22 @@ impl Engine {
         Executed::Ready(Box::new(result))
     }
 
+    /// `plugin.install`, `plugin.grant` and `plugin.enable`, or `None` for any other call
+    /// or without the `wasm-plugins` feature. They run with no engine lock held: a plugin
+    /// loads, and may call back into the engine, while its install waits.
+    #[cfg(feature = "wasm-plugins")]
+    fn plugin_call(&self, call: &Call) -> Option<Result<CallResult, ProtocolError>> {
+        match call {
+            Call::Action { action } => crate::plugins::automation::action(self, action),
+            _ => None,
+        }
+    }
+
+    #[cfg(not(feature = "wasm-plugins"))]
+    fn plugin_call(&self, _: &Call) -> Option<Result<CallResult, ProtocolError>> {
+        None
+    }
+
     /// The YouTube actions and queries, or `None` for any other call. They run with no
     /// engine lock held, since most of them call the Live API.
     fn youtube_call(&self, call: &Call) -> Option<Result<CallResult, ProtocolError>> {
@@ -941,31 +1029,32 @@ impl Engine {
                 ),
                 _ => return None,
             },
-            Call::Query { query: q } => {
-                match q {
-                    Query::YoutubeStatus => Ok(CallResult::Query {
-                        result: youtube.map_or(
-                            QueryResult::YoutubeStatus {
-                                auth: YoutubeAuth::Unavailable,
-                            },
-                            |y| y.status(),
-                        ),
-                    }),
-                    Query::YoutubeListBroadcasts {
-                        status,
-                        broadcast_type,
-                        page_token,
-                    } => query(youtube.ok_or_else(unavailable).and_then(|y| {
-                        y.list_broadcasts(*status, *broadcast_type, page_token.clone())
-                    })),
-                    Query::YoutubeListStreams { page_token } => query(
-                        youtube
-                            .ok_or_else(unavailable)
-                            .and_then(|y| y.list_streams(page_token.clone())),
+            Call::Query { query: q } => match q {
+                Query::YoutubeStatus => Ok(CallResult::Query {
+                    result: youtube.map_or(
+                        QueryResult::YoutubeStatus {
+                            auth: YoutubeAuth::Unavailable,
+                        },
+                        |y| y.status(),
                     ),
-                    _ => return None,
+                }),
+                Query::YoutubeListBroadcasts {
+                    status,
+                    broadcast_type,
+                    page_token,
+                } => {
+                    query(youtube.ok_or_else(unavailable).and_then(|y| {
+                        y.list_broadcasts(*status, *broadcast_type, page_token.clone())
+                    }))
                 }
-            }
+                Query::YoutubeListStreams { page_token } => query(
+                    youtube
+                        .ok_or_else(unavailable)
+                        .and_then(|y| y.list_streams(page_token.clone())),
+                ),
+                Query::YoutubeStats => query(youtube.ok_or_else(unavailable).map(|y| y.audience())),
+                _ => return None,
+            },
             _ => return None,
         })
     }
@@ -1114,6 +1203,7 @@ impl Engine {
                     encoder: _,
                     encoder_sessions: _,
                     hardware_sessions: _,
+                    cleartext,
                 },
         }) = result
         else {
@@ -1138,6 +1228,7 @@ impl Engine {
                 encoder,
                 encoder_sessions,
                 hardware_sessions,
+                cleartext,
             },
         })
     }
@@ -1565,7 +1656,7 @@ impl Engine {
             return Err(not_implemented("output.stop"));
         };
         if let Some(youtube) = self.youtube() {
-            youtube.unwatch_health(&output_id);
+            youtube.unwatch(&output_id);
         }
         let mut wake = Vec::new();
         let (running, watcher, wait_for) = {
@@ -1633,8 +1724,8 @@ impl Engine {
         Ok(CallResult::action())
     }
 
-    /// Polls the health of the stream a `youtube` output started on, while the output
-    /// is `active` or `reconnecting`.
+    /// Polls the health of the stream a `youtube` output started on, and its
+    /// broadcast's audience, while the output is `active` or `reconnecting`.
     fn watch_health(&self, output_id: &OutputId, watch: HealthTarget) {
         let shared = Arc::downgrade(&self.shared);
         let watched = output_id.clone();
@@ -1646,7 +1737,7 @@ impl Engine {
                 )
             })
         });
-        watch.youtube.watch_health(
+        watch.youtube.watch(
             output_id.clone(),
             watch.broadcast_id,
             watch.stream_id,
@@ -2295,13 +2386,14 @@ impl State {
     /// Applies `batch` atomically through `Graph::apply_with_running`, which checks
     /// `expected_rev` (before rejecting an empty batch), applies every edit or none, and
     /// bumps `rev` by exactly one. The batch becomes one step of the client's undo
-    /// history, holding the inverse the graph returned, and clears what it could redo.
+    /// history, holding the inverse the graph returned, and clears what it could redo; a
+    /// batch that changed nothing, with an empty inverse, is no step. The result reports
+    /// the keyframe overrides the batch dropped (ADR-0040 §1).
     ///
     /// A batch whose idempotency key this client already used is not applied again: it
     /// gets the result of the first call with that key, and emits nothing. That check
     /// comes first, so a retry succeeds even after `rev` moved on. An `ends_gesture` the
-    /// client has no open gesture for is refused next, as the mock does, and then a
-    /// `filter.add` of a scanned CLAP kind, since nothing runs CLAP filters yet.
+    /// client has no open gesture for is refused next, as the mock does.
     fn batch(
         &mut self,
         client_id: &ClientId,
@@ -2324,7 +2416,6 @@ impl State {
                 format!("the client has no open gesture `{gesture_id}`"),
             ));
         }
-        clap_kinds::refuse_filters(&batch.edits)?;
         // A running output can't be deleted.
         let applied = self.graph.apply_with_running(
             &batch.edits,
@@ -2340,6 +2431,7 @@ impl State {
         let result = CallResult::Batch {
             rev: applied.rev,
             removed_hotkeys: applied.removed_hotkeys,
+            dropped_overrides: applied.dropped_overrides,
         };
         if let Some(keyed) = keyed {
             self.applied.insert(keyed, result.clone());
@@ -2570,12 +2662,18 @@ impl State {
             other @ (Action::PairingStart | Action::DeviceRevoke { .. }) => {
                 return Err(served_by_the_server(other.name()));
             }
-            // This engine hosts no plugins yet (WA1, ADR-0069).
-            other @ (Action::PluginInstall { .. }
-            | Action::PluginGrant { .. }
-            | Action::PluginEnable { .. }) => {
+            // Built without the `wasm-plugins` feature, the engine can't run a plugin, so
+            // none is ever installed. With it, `Engine::execute` answers these before
+            // taking the collection lock.
+            other @ Action::PluginInstall { .. } => {
                 return Err(ProtocolError::Unsupported {
                     call: other.name().into(),
+                });
+            }
+            Action::PluginGrant { plugin_id, .. } | Action::PluginEnable { plugin_id } => {
+                return Err(ProtocolError::NotFound {
+                    entity: EntityKind::Plugin,
+                    id: plugin_id.to_string(),
                 });
             }
             Action::PrivacySet { on } => {
@@ -2622,6 +2720,11 @@ impl State {
                     encoder: None,
                     encoder_sessions: 0,
                     hardware_sessions: 0,
+                    cleartext: self
+                        .graph
+                        .state()
+                        .output(output_id)
+                        .is_some_and(|output| output.kind().sends_key_in_cleartext()),
                 },
                 Query::LiveList => QueryResult::LiveList {
                     gestures: self.gestures.list(),
@@ -2662,6 +2765,8 @@ impl State {
         let now = self.live.now();
         let running = match (run, from_scene) {
             (Some(run), Some(from_scene)) => {
+                let state = self.graph.state();
+                let by_item = state.family_of(&from_scene) == state.family_of(&scene_id);
                 let from = match self.studio.running() {
                     Some(running) => {
                         let Self {
@@ -2691,6 +2796,7 @@ impl State {
                     to: scene_id.clone(),
                     start: now,
                     run,
+                    by_item,
                 })
             }
             // Nothing on program yet: there is nothing to transition from.
@@ -2737,7 +2843,8 @@ impl State {
     /// to re-plan then. The program mix shows the program scene (ADR-0030), or the
     /// transition running toward it (ADR-0029), whose length in milliseconds it returns;
     /// a transition that has ended is let go. The shot lists the displays and windows the
-    /// program and every mix capture.
+    /// program and every mix capture. A source the shot shows enlarged is drawn again at
+    /// the density that keeps it sharp, when its kind can be (ADR-0073).
     fn publish_render(&mut self) -> Option<f32> {
         let Self {
             graph,
@@ -2763,6 +2870,7 @@ impl State {
             &assets,
         );
         live.end_plan();
+        live.densities(&planning.shot.scales());
         if let Some(sound) = live.take_audio() {
             audio.sync_live(sound);
         }
@@ -2788,6 +2896,17 @@ impl State {
         wake: &mut Vec<Waker>,
     ) -> Result<CallResult, ProtocolError> {
         self.gestures.check_set(client_id, gesture_id, &values)?;
+        // Live values are drawn per item, so one meant for a keyframe scene's override
+        // would move the parent's item wherever it shows (#702 builds them).
+        let state = self.graph.state();
+        if let Some(at) = values.iter().position(|value| {
+            live_scene(value).is_some_and(|scene| state.family_of(scene) != scene)
+        }) {
+            return Err(ProtocolError::invalid_argument(
+                format!("values.{at}.scene_id"),
+                "live values on a keyframe scene are not supported yet (#702); send the value in a batch",
+            ));
+        }
         self.graph
             .clone()
             .apply(&values, None)
@@ -3085,5 +3204,15 @@ fn served_by_the_server(call: &str) -> ProtocolError {
 fn not_implemented(what: &str) -> ProtocolError {
     ProtocolError::Internal {
         reason: format!("the engine does not implement {what} yet"),
+    }
+}
+
+/// The scene a live-adjustable setter names, if it names one.
+fn live_scene(value: &Edit) -> Option<&SceneId> {
+    match value {
+        Edit::ItemSetTransform { scene_id, .. }
+        | Edit::ItemSetGeometry { scene_id, .. }
+        | Edit::ItemSetCrop { scene_id, .. } => scene_id.as_ref(),
+        _ => None,
     }
 }

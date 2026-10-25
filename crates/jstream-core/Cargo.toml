@@ -21,6 +21,11 @@ workspace = true
 # Run them on a Windows machine with a display and a DX12 GPU:
 # `cargo test -p jstream-core --features hw-tests --lib windows_gpu -- --ignored --nocapture`.
 hw-tests = []
+# Sandboxed WASM automation plugins (ADR-0069): `plugin.install`, `plugin.grant` and
+# `plugin.enable` run them on `jstream-plugin-wasm`'s host. On by default; a build without
+# it answers those actions with `unsupported` and leaves wasmtime out.
+wasm-plugins = ["dep:jstream-plugin-wasm"]
+default = ["wasm-plugins"]
 
 [dependencies]
 # The render snapshot the control side publishes and the render thread loads lock-free.
@@ -36,6 +41,9 @@ jstream-outputs.workspace = true
 jstream-platform.workspace = true
 # The plugin-host control messages and block the CLAP supervisor reads (ADR-0035).
 jstream-plugin-proto.workspace = true
+# The wasmtime host the engine runs automation plugins on (ADR-0069), behind
+# `wasm-plugins`.
+jstream-plugin-wasm = { workspace = true, optional = true }
 jstream-protocol.workspace = true
 jstream-render.workspace = true
 # The built-in source kinds and their descriptors (ADR-0061, ADR-0025).
@@ -51,6 +59,14 @@ thiserror.workspace = true
 jstream-youtube.workspace = true
 # Spans around commands, outputs and sessions (R-RS-005).
 tracing.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+# The audit log and the collection file are created with a user-only DACL, and an
+# existing audit log is refused if its DACL lets other users in (#547). Windows only:
+# Unix uses the file mode. Only these two helpers; platform backends stay injected. The
+# ignored hardware test of the GPU capture path (`src/tests/windows_gpu.rs`) also uses
+# it: the engine on WGC capture and the platform's DX12 device.
+jstream-platform-windows.workspace = true
 
 [dev-dependencies]
 # The mock engine, for a differential test: the same calls must get the same answers.
@@ -68,9 +84,7 @@ jstream-protocol = { workspace = true, features = ["fixtures"] }
 # Decodes the preview stream's JPEGs in its tests; already in the tree for the image
 # source (`jstream-sources`).
 zune-jpeg.workspace = true
-
-[target.'cfg(windows)'.dev-dependencies]
-# The ignored hardware test of the GPU capture path (`src/tests/windows_gpu.rs`): the
-# engine on WGC capture and the platform's DX12 device. Tests only; the engine itself
-# never names a platform crate.
-jstream-platform-windows.workspace = true
+# The built-in kinds' snapshot, reviewed like an API diff (ADR-0025).
+insta.workspace = true
+# The WASM text format, for the automation plugins the engine tests install.
+wat.workspace = true

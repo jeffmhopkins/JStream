@@ -1,16 +1,19 @@
-//! One VA-API H.264 encode session (ADR-0060 §6): a config and context on one render
-//! node, input surfaces with a coded buffer each, and reconstructed surfaces for the
-//! reference chain.
+//! One VA-API H.264 or HEVC encode session (ADR-0060 §6): a config and context on one
+//! render node, input surfaces with a coded buffer each, and reconstructed surfaces for
+//! the reference chain.
 //!
 //! The session takes CPU frames (NV12, or the compositor's RGBA and BGRA, converted by
 //! `upload`). Each is written into a free input surface, through
 //! `vaDeriveImage` where the driver maps its surfaces, otherwise through a staging image
-//! and `vaPutImage`, and then encoded with the parameters `h264` builds.
+//! and `vaPutImage`, and then encoded with the parameters `h264` or `hevc` builds.
 //! Up to [`DEPTH`] frames are in flight; `poll` collects each finished one without
 //! blocking (`vaQuerySurfaceStatus`), in submission order, which is also presentation
 //! order because there are no B-frames. Packets are Annex B: the driver writes the coded
-//! slice, preceded on IDR frames by the SPS and PPS ([`h264::sps`], [`h264::pps`]) when
-//! it takes packed headers, or by its own otherwise.
+//! slice, preceded on IDR frames by the SPS and PPS ([`h264::sps`], [`h264::pps`]), or
+//! the VPS, SPS and PPS ([`hevc::parameter_sets`]), when it takes packed headers, or by
+//! its own otherwise. An HEVC session also sends each picture's slice header
+//! ([`hevc::slice_header`]) when the driver takes packed slice headers, and codes with
+//! the tools the driver's config attributes advertise ([`hevc::Tools`]).
 //!
 //! A session opened on the engine's GPU context (`open_on` with the context's state)
 //! takes that context's encode targets instead (`VideoSurface::Gpu`, `gpu::export`): it
@@ -37,14 +40,15 @@ use super::display::{Display, Va};
 use super::ffi::{
     ATTRIB_NOT_SUPPORTED, CODED_BUF_STATUS_SLICE_OVERFLOW_MASK, CodedBufferSegment, ConfigAttrib,
     DrmPrimeSurfaceDescriptor, FOURCC_NV12, INVALID_ID, Id, Image, ImageFormat, Nv12Object,
-    PACKED_HEADER_SEQUENCE, PROGRESSIVE, PackedHeaderParam, RT_FORMAT_YUV420, SURFACE_RENDERING,
-    SURFACE_SKIPPED, SurfaceAttrib, attrib, buffer, packed, surface_attrib,
+    PACKED_HEADER_SEQUENCE, PACKED_HEADER_SLICE, PROGRESSIVE, PackedHeaderParam, RT_FORMAT_YUV420,
+    SURFACE_RENDERING, SURFACE_SKIPPED, SurfaceAttrib, attrib, buffer, packed, surface_attrib,
 };
-use super::h264::{self, Gop, Picture, Settings};
+use super::h264::{self, RcMode};
+use super::hevc;
 use super::upload::{Nv12Image, write_nv12};
-use crate::VaEncoder;
 use crate::gpu::Shared;
 use crate::gpu::export::{Nv12DmaBuf, TargetSync};
+use crate::{VaEncoder, VaProfile};
 
 /// Frames in flight: input surfaces, each with its coded buffer. When all are busy a
 /// frame is refused as busy, and the encode thread drops and counts it (R-RT-004).
@@ -54,8 +58,8 @@ pub(crate) const DEPTH: usize = 4;
 /// three leave one spare.
 const RECON: usize = 3;
 /// The most buffers one picture submits: sequence, three misc, picture, the packed
-/// header's two, slice.
-const MAX_BUFFERS: usize = 8;
+/// sequence header's two, the packed slice header's two (HEVC), slice.
+const MAX_BUFFERS: usize = 10;
 /// How long an encode waits for render's write of a GPU frame. Render submitted it
 /// before queueing the frame, so this is reached only when the GPU hangs.
 const WRITE_WAIT: Duration = Duration::from_secs(1);
@@ -100,6 +104,25 @@ impl Resources {
     fn data_buffer(&self, kind: c_int, bytes: &[u8]) -> Result<Id, PlatformError> {
         // SAFETY: libva copies `bytes.len()` bytes from the slice while it is borrowed.
         unsafe { self.raw_buffer(kind, bytes.as_ptr().cast(), bytes.len()) }
+    }
+
+    /// A packed header of `kind` holding `bytes` (whole NAL units, emulation prevention
+    /// included): its parameter buffer and its data buffer, pushed onto `buffers`.
+    fn packed_header(
+        &self,
+        kind: u32,
+        bytes: &[u8],
+        buffers: &mut Vec<Id>,
+    ) -> Result<(), PlatformError> {
+        let param = PackedHeaderParam {
+            kind,
+            bit_length: u32::try_from(bytes.len() * 8).unwrap_or(u32::MAX),
+            has_emulation_bytes: 1,
+            va_reserved: [0; 4],
+        };
+        buffers.push(self.buffer(buffer::PACKED_HEADER_PARAMETER, &param)?);
+        buffers.push(self.data_buffer(buffer::PACKED_HEADER_DATA, bytes)?);
+        Ok(())
     }
 
     /// # Safety
@@ -352,7 +375,7 @@ impl Resources {
                 // SAFETY: the segment's `buf` holds `size` bytes, valid until the unmap.
                 let bytes =
                     unsafe { std::slice::from_raw_parts(s.buf.cast::<u8>(), s.size as usize) };
-                // H.264 segments are whole NAL units: `bit_offset` is 0.
+                // Segments are whole NAL units: `bit_offset` is 0.
                 out.extend_from_slice(bytes);
             }
             segment = s.next.cast::<CodedBufferSegment>().cast_const();
@@ -418,16 +441,161 @@ struct InFlight {
     _target: Option<GpuFrame>,
 }
 
-/// One H.264 encode session on a VA-API driver.
-pub(crate) struct VaapiH264Encoder {
+/// The codec's side of a session: its checked settings and its GOP.
+#[derive(Debug)]
+enum Stream {
+    H264 {
+        settings: h264::Settings,
+        gop: h264::Gop,
+    },
+    Hevc {
+        settings: hevc::Settings,
+        gop: hevc::Gop,
+    },
+}
+
+/// One picture of either codec's stream.
+#[derive(Clone, Copy, Debug)]
+enum Picture {
+    H264(h264::Picture),
+    Hevc(hevc::Picture),
+}
+
+impl Picture {
+    fn idr(&self) -> bool {
+        match self {
+            Self::H264(p) => p.idr,
+            Self::Hevc(p) => p.idr,
+        }
+    }
+}
+
+impl Stream {
+    /// The stream for `config` on an encoder of `profile`. HEVC is checked with the
+    /// default tools; [`Self::with_tools`] sets the driver's.
+    fn new(config: &VideoEncoderConfig, profile: VaProfile) -> Result<Self, PlatformError> {
+        Ok(match profile {
+            VaProfile::H264(profile) => {
+                let settings = h264::check(config, profile)?;
+                Self::H264 {
+                    gop: h264::Gop::new(&settings),
+                    settings,
+                }
+            }
+            VaProfile::HevcMain => {
+                let settings = hevc::check(config, hevc::Tools::DEFAULT)?;
+                Self::Hevc {
+                    gop: hevc::Gop::new(&settings),
+                    settings,
+                }
+            }
+        })
+    }
+
+    /// An HEVC stream checked again for the driver's `tools`; an H.264 one as it is.
+    fn with_tools(
+        self,
+        config: &VideoEncoderConfig,
+        tools: hevc::Tools,
+    ) -> Result<Self, PlatformError> {
+        Ok(match self {
+            Self::Hevc { .. } => {
+                let settings = hevc::check(config, tools)?;
+                Self::Hevc {
+                    gop: hevc::Gop::new(&settings),
+                    settings,
+                }
+            }
+            h264 => h264,
+        })
+    }
+
+    fn codec(&self) -> Codec {
+        match self {
+            Self::H264 { .. } => Codec::H264,
+            Self::Hevc { .. } => Codec::Hevc,
+        }
+    }
+
+    fn rc(&self) -> RcMode {
+        match self {
+            Self::H264 { settings, .. } => settings.rc,
+            Self::Hevc { settings, .. } => settings.rate.rc,
+        }
+    }
+
+    /// The size of the surfaces and the context: whole macroblocks for H.264, the
+    /// aligned coded size for HEVC. The SPS crops the excess.
+    fn coded_size(&self) -> (u32, u32) {
+        match self {
+            Self::H264 { settings, .. } => (settings.width_mbs * 16, settings.height_mbs * 16),
+            Self::Hevc { settings, .. } => (settings.coded_width, settings.coded_height),
+        }
+    }
+
+    fn coded_buffer_size(&self) -> u32 {
+        match self {
+            Self::H264 { settings, .. } => settings.coded_buffer_size(),
+            Self::Hevc { settings, .. } => settings.coded_buffer_size(),
+        }
+    }
+
+    /// The parameter sets, sent as one packed sequence header on IDR frames.
+    fn parameter_sets(&self) -> Vec<u8> {
+        match self {
+            Self::H264 { settings, .. } => [h264::sps(settings), h264::pps(settings)].concat(),
+            Self::Hevc { settings, .. } => hevc::parameter_sets(settings),
+        }
+    }
+
+    fn next_picture(&mut self) -> Picture {
+        match self {
+            Self::H264 { gop, .. } => Picture::H264(gop.next_picture()),
+            Self::Hevc { gop, .. } => Picture::Hevc(gop.next_picture()),
+        }
+    }
+
+    fn force_idr(&mut self) {
+        match self {
+            Self::H264 { gop, .. } => gop.force_idr(),
+            Self::Hevc { gop, .. } => gop.force_idr(),
+        }
+    }
+
+    /// What failing encode calls name.
+    fn encode_what(&self) -> &'static str {
+        match self {
+            Self::H264 { .. } => "H.264 encode",
+            Self::Hevc { .. } => "HEVC encode",
+        }
+    }
+
+    fn keyframe_what(&self) -> &'static str {
+        match self {
+            Self::H264 { .. } => "H.264 keyframe request",
+            Self::Hevc { .. } => "HEVC keyframe request",
+        }
+    }
+
+    fn encoder_what(&self) -> &'static str {
+        match self {
+            Self::H264 { .. } => "VA-API H.264 encoder",
+            Self::Hevc { .. } => "VA-API HEVC encoder",
+        }
+    }
+}
+
+/// One H.264 or HEVC encode session on a VA-API driver.
+pub(crate) struct VaapiEncoder {
     res: Resources,
     info: CodecInfo,
     config: VideoEncoderConfig,
-    settings: Settings,
-    gop: Gop,
-    /// The SPS and PPS, sent as one packed sequence header on IDR frames when the
+    stream: Stream,
+    /// The parameter sets, sent as one packed sequence header on IDR frames when the
     /// driver takes packed headers (`None`: it writes its own).
     headers: Option<Vec<u8>>,
+    /// Whether the driver takes packed slice headers (HEVC only).
+    packed_slice: bool,
     /// The last picture's reconstructed surface: the next P frame's reference.
     reference: Option<(Id, Picture)>,
     /// How many of `res.surfaces` are input surfaces: [`DEPTH`] on CPU frames, none on
@@ -449,25 +617,28 @@ pub(crate) struct VaapiH264Encoder {
 // call except `can_accept`, which reads plain fields). Its VA display is its own (its
 // own render-node fd), and libva and its drivers have no thread affinity: a display may
 // be used from any thread as long as calls on it don't race, which `&mut self` ensures.
-unsafe impl Send for VaapiH264Encoder {}
+unsafe impl Send for VaapiEncoder {}
 
-impl VaapiH264Encoder {
+impl VaapiEncoder {
     /// Opens a session on `encoder` (a probe result) for `config`, reported as `info`,
-    /// that takes CPU frames, or, with `gpu`, that context's NV12 encode targets.
+    /// that takes CPU frames, or, with `gpu`, that context's NV12 encode targets. The
+    /// encoder's profile says which codec it encodes.
     ///
     /// # Errors
     /// [`PlatformError::Unsupported`] when the configuration is outside what
-    /// [`h264::check`] accepts, a GPU session isn't configured for NV12, or the driver
-    /// lacks 4:2:0 surfaces or the rate-control mode, [`PlatformError::MissingComponent`]
-    /// when libva is missing, and [`PlatformError::Os`] when the node or the driver
-    /// fails.
+    /// [`h264::check`] or [`hevc::check`] accepts, a GPU session isn't configured for
+    /// NV12, the driver lacks 4:2:0 surfaces or the rate-control mode, or, for HEVC, the
+    /// driver requires a tool JStream's parameter sets turn off
+    /// ([`hevc::Tools::required_but_off`]), [`PlatformError::MissingComponent`] when libva is missing, and
+    /// [`PlatformError::Os`] when the node or the driver fails.
     pub(crate) fn open_on(
         encoder: &VaEncoder,
         config: &VideoEncoderConfig,
         info: CodecInfo,
         gpu: Option<Arc<Shared>>,
     ) -> Result<Self, PlatformError> {
-        let settings = h264::check(config, encoder.profile)?;
+        // Checked before the driver is opened, so a refusal costs nothing.
+        let stream = Stream::new(config, encoder.profile)?;
         if gpu.is_some() && config.input_format != PixelFormat::Nv12 {
             return Err(PlatformError::Unsupported {
                 what: format!(
@@ -488,21 +659,39 @@ impl VaapiH264Encoder {
             staging: None,
         };
         let (va, dpy) = (res.display.va.clone(), res.display.dpy);
-        let (profile, entrypoint) = (encoder.profile as c_int, encoder.entrypoint as c_int);
+        let (profile, entrypoint) = (encoder.profile.va(), encoder.entrypoint as c_int);
+        let hevc = stream.codec() == Codec::Hevc;
         let mut offered = [
             attrib::RT_FORMAT,
             attrib::RATE_CONTROL,
             attrib::ENC_PACKED_HEADERS,
+            // HEVC only: what the driver codes.
+            attrib::ENC_HEVC_FEATURES,
+            attrib::ENC_HEVC_BLOCK_SIZES,
+            attrib::PREDICTION_DIRECTION,
         ]
         .map(|kind| ConfigAttrib { kind, value: 0 });
-        // SAFETY: the display is initialised; libva fills the values of the three
-        // attributes in place.
+        let asked: c_int = if hevc { 6 } else { 3 };
+        // SAFETY: the display is initialised; `offered` holds at least `asked`
+        // attributes, whose values libva fills in place.
         // C: `VAStatus vaGetConfigAttributes(VADisplay, VAProfile, VAEntrypoint,
         // VAConfigAttrib *attrib_list, int num_attribs)`.
         let status = unsafe {
-            (va.get_config_attributes)(dpy, profile, entrypoint, offered.as_mut_ptr(), 3)
+            (va.get_config_attributes)(dpy, profile, entrypoint, offered.as_mut_ptr(), asked)
         };
         va.check("vaGetConfigAttributes", status)?;
+        let stream = if hevc {
+            if let Some(tool) = hevc::Tools::required_but_off(offered[3].value) {
+                return Err(PlatformError::Unsupported {
+                    what: format!("HEVC encoding that requires {tool} on {}", info.name),
+                });
+            }
+            let tools =
+                hevc::Tools::from_attributes(offered[3].value, offered[4].value, offered[5].value);
+            stream.with_tools(config, tools)?
+        } else {
+            stream
+        };
         let has =
             |a: ConfigAttrib, bits: u32| a.value != ATTRIB_NOT_SUPPORTED && a.value & bits == bits;
         if !has(offered[0], RT_FORMAT_YUV420) {
@@ -510,12 +699,15 @@ impl VaapiH264Encoder {
                 what: format!("4:2:0 encode surfaces on {}", info.name),
             });
         }
-        if !has(offered[1], settings.rc.va()) {
+        let rc = stream.rc();
+        if !has(offered[1], rc.va()) {
             return Err(PlatformError::Unsupported {
-                what: format!("{:?} rate control on {}", settings.rc, info.name),
+                what: format!("{rc:?} rate control on {}", info.name),
             });
         }
         let packed = has(offered[2], PACKED_HEADER_SEQUENCE);
+        // JStream's slice headers match its own parameter sets, not the driver's.
+        let packed_slice = packed && hevc && has(offered[2], PACKED_HEADER_SLICE);
         let mut wanted = vec![
             ConfigAttrib {
                 kind: attrib::RT_FORMAT,
@@ -523,13 +715,15 @@ impl VaapiH264Encoder {
             },
             ConfigAttrib {
                 kind: attrib::RATE_CONTROL,
-                value: settings.rc.va(),
+                value: rc.va(),
             },
         ];
-        if packed {
+        let packed_bits = if packed { PACKED_HEADER_SEQUENCE } else { 0 }
+            | if packed_slice { PACKED_HEADER_SLICE } else { 0 };
+        if packed_bits != 0 {
             wanted.push(ConfigAttrib {
                 kind: attrib::ENC_PACKED_HEADERS,
-                value: PACKED_HEADER_SEQUENCE,
+                value: packed_bits,
             });
         }
         let mut id = INVALID_ID;
@@ -550,8 +744,9 @@ impl VaapiH264Encoder {
         va.check("vaCreateConfig", status)?;
         res.config = Some(id);
 
-        // Surfaces at the coded (macroblock-aligned) size; the SPS crops the excess.
-        let (cw, ch) = (settings.width_mbs * 16, settings.height_mbs * 16);
+        // Surfaces at the coded (macroblock- or block-aligned) size; the SPS crops the
+        // excess.
+        let (cw, ch) = stream.coded_size();
         let mut surfaces = vec![INVALID_ID; inputs + RECON];
         // SAFETY: `surfaces` has room for the `inputs + RECON` IDs libva writes; no
         // surface attributes are passed.
@@ -599,7 +794,7 @@ impl VaapiH264Encoder {
                 res.raw_buffer(
                     buffer::CODED,
                     std::ptr::null(),
-                    settings.coded_buffer_size() as usize,
+                    stream.coded_buffer_size() as usize,
                 )
             }?;
             res.coded.push(coded);
@@ -611,9 +806,9 @@ impl VaapiH264Encoder {
             res,
             info,
             config: *config,
-            gop: Gop::new(&settings),
-            headers: packed.then(|| [h264::sps(&settings), h264::pps(&settings)].concat()),
-            settings,
+            headers: packed.then(|| stream.parameter_sets()),
+            packed_slice,
+            stream,
             reference: None,
             inputs,
             next_recon: 0,
@@ -658,34 +853,69 @@ impl VaapiH264Encoder {
     /// Submits `picture` from `input`, with `slot`'s coded buffer.
     fn submit(&mut self, slot: usize, input: Id, picture: &Picture) -> Result<(), PlatformError> {
         let recon = self.res.surfaces[self.inputs + self.next_recon];
-        let reference = self.reference.as_ref().map(|(s, p)| (*s, p));
+        let reference = self.reference;
         let res = &self.res;
-        let s = &self.settings;
+        let stream = &self.stream;
+        let headers = self.headers.as_deref().filter(|_| picture.idr());
+        let packed_slice = self.packed_slice;
         let buffers = &mut self.buffers;
         buffers.clear();
         let mut built = || -> Result<(), PlatformError> {
-            if picture.idr {
-                buffers.push(res.buffer(buffer::SEQUENCE_PARAMETER, &h264::sequence(s))?);
-                buffers.push(res.buffer(buffer::MISC_PARAMETER, &h264::rate_control(s))?);
-                buffers.push(res.buffer(buffer::MISC_PARAMETER, &h264::hrd(s))?);
-                buffers.push(res.buffer(buffer::MISC_PARAMETER, &h264::frame_rate(s))?);
-            }
             let coded = res.coded[slot];
-            buffers.push(res.buffer(
-                buffer::PICTURE_PARAMETER,
-                &h264::picture(s, picture, recon, reference, coded),
-            )?);
-            if let (true, Some(headers)) = (picture.idr, &self.headers) {
-                let param = PackedHeaderParam {
-                    kind: packed::SEQUENCE,
-                    bit_length: u32::try_from(headers.len() * 8).unwrap_or(u32::MAX),
-                    has_emulation_bytes: 1,
-                    va_reserved: [0; 4],
-                };
-                buffers.push(res.buffer(buffer::PACKED_HEADER_PARAMETER, &param)?);
-                buffers.push(res.data_buffer(buffer::PACKED_HEADER_DATA, headers)?);
+            match (stream, picture) {
+                (Stream::H264 { settings: s, .. }, Picture::H264(p)) => {
+                    let reference = reference.as_ref().and_then(|(id, r)| match r {
+                        Picture::H264(r) => Some((*id, r)),
+                        Picture::Hevc(_) => None,
+                    });
+                    if p.idr {
+                        buffers.push(res.buffer(buffer::SEQUENCE_PARAMETER, &h264::sequence(s))?);
+                        buffers.push(res.buffer(buffer::MISC_PARAMETER, &h264::rate_control(s))?);
+                        buffers.push(res.buffer(buffer::MISC_PARAMETER, &h264::hrd(s))?);
+                        buffers.push(res.buffer(buffer::MISC_PARAMETER, &h264::frame_rate(s))?);
+                    }
+                    buffers.push(res.buffer(
+                        buffer::PICTURE_PARAMETER,
+                        &h264::picture(s, p, recon, reference, coded),
+                    )?);
+                    if let Some(headers) = headers {
+                        res.packed_header(packed::SEQUENCE, headers, buffers)?;
+                    }
+                    buffers
+                        .push(res.buffer(buffer::SLICE_PARAMETER, &h264::slice(s, p, reference))?);
+                }
+                (Stream::Hevc { settings: s, .. }, Picture::Hevc(p)) => {
+                    let reference = reference.as_ref().and_then(|(id, r)| match r {
+                        Picture::Hevc(r) => Some((*id, r)),
+                        Picture::H264(_) => None,
+                    });
+                    if p.idr {
+                        buffers.push(res.buffer(buffer::SEQUENCE_PARAMETER, &hevc::sequence(s))?);
+                        buffers.push(res.buffer(buffer::MISC_PARAMETER, &hevc::rate_control(s))?);
+                        buffers.push(res.buffer(buffer::MISC_PARAMETER, &hevc::hrd(s))?);
+                        buffers.push(res.buffer(buffer::MISC_PARAMETER, &hevc::frame_rate(s))?);
+                    }
+                    buffers.push(res.buffer(
+                        buffer::PICTURE_PARAMETER,
+                        &hevc::picture(s, p, recon, reference, coded),
+                    )?);
+                    if let Some(headers) = headers {
+                        res.packed_header(packed::SEQUENCE, headers, buffers)?;
+                    }
+                    if packed_slice {
+                        let header = hevc::slice_header(s, p, reference);
+                        res.packed_header(packed::SLICE, &header, buffers)?;
+                    }
+                    buffers
+                        .push(res.buffer(buffer::SLICE_PARAMETER, &hevc::slice(s, p, reference))?);
+                }
+                _ => {
+                    return Err(PlatformError::InvalidState {
+                        what: stream.encode_what(),
+                        state: "the picture is of the other codec",
+                    });
+                }
             }
-            buffers.push(res.buffer(buffer::SLICE_PARAMETER, &h264::slice(s, picture, reference))?);
             let (va, dpy, ctx) = (res.va(), res.display.dpy, res.context());
             // SAFETY: the context and input surface are live, and the surface is idle.
             // C: `VAStatus vaBeginPicture(VADisplay, VAContextID, VASurfaceID)`.
@@ -738,14 +968,14 @@ impl VaapiH264Encoder {
                 other => {
                     // A lost or skipped picture breaks the reference chain: start again
                     // from an IDR frame.
-                    self.gop.force_idr();
+                    self.stream.force_idr();
                     self.reference = None;
                     other?;
                     continue;
                 }
             };
             self.pending.push(Packet::new(
-                Codec::H264,
+                self.stream.codec(),
                 front.keyframe,
                 front.pts,
                 front.pts,
@@ -756,7 +986,7 @@ impl VaapiH264Encoder {
     }
 }
 
-impl VaapiH264Encoder {
+impl VaapiEncoder {
     /// The input surface for `frame`, written or imported, and the encode target to
     /// hold while the driver reads it.
     fn input(
@@ -796,7 +1026,7 @@ impl VaapiH264Encoder {
     }
 }
 
-impl VideoEncoder for VaapiH264Encoder {
+impl VideoEncoder for VaapiEncoder {
     fn info(&self) -> &CodecInfo {
         &self.info
     }
@@ -810,7 +1040,7 @@ impl VideoEncoder for VaapiH264Encoder {
     fn encode(&mut self, frame: VideoSurface) -> Result<(), PlatformError> {
         if self.finished {
             return Err(PlatformError::InvalidState {
-                what: "H.264 encode",
+                what: self.stream.encode_what(),
                 state: "the encoder is finished",
             });
         }
@@ -831,11 +1061,11 @@ impl VideoEncoder for VaapiH264Encoder {
         }
         let Some(slot) = self.free.pop() else {
             return Err(PlatformError::Busy {
-                what: "VA-API H.264 encoder",
+                what: self.stream.encoder_what(),
             });
         };
         let submitted = self.input(slot, frame).and_then(|(surface, target)| {
-            let picture = self.gop.next_picture();
+            let picture = self.stream.next_picture();
             self.submit(slot, surface, &picture)
                 .map(|()| (surface, target, picture))
         });
@@ -845,14 +1075,14 @@ impl VideoEncoder for VaapiH264Encoder {
                     slot,
                     surface,
                     pts: info.pts,
-                    keyframe: picture.idr,
+                    keyframe: picture.idr(),
                     _target: target,
                 });
                 Ok(())
             }
             Err(e) => {
                 self.free.push(slot);
-                self.gop.force_idr();
+                self.stream.force_idr();
                 self.reference = None;
                 Err(e)
             }
@@ -865,16 +1095,16 @@ impl VideoEncoder for VaapiH264Encoder {
         Ok(())
     }
 
-    /// The next frame is encoded as an IDR frame, with the SPS and PPS, and the
+    /// The next frame is encoded as an IDR frame, with the parameter sets, and the
     /// keyframe cadence restarts from it.
     fn request_keyframe(&mut self) -> Result<(), PlatformError> {
         if self.finished {
             return Err(PlatformError::InvalidState {
-                what: "H.264 keyframe request",
+                what: self.stream.keyframe_what(),
                 state: "the encoder is finished",
             });
         }
-        self.gop.force_idr();
+        self.stream.force_idr();
         Ok(())
     }
 
@@ -886,7 +1116,7 @@ impl VideoEncoder for VaapiH264Encoder {
     }
 }
 
-impl Drop for VaapiH264Encoder {
+impl Drop for VaapiEncoder {
     fn drop(&mut self) {
         // Let the driver finish what it is encoding before the context goes.
         for f in &self.in_flight {
@@ -913,14 +1143,20 @@ mod device_tests {
 
     use crate::{LinuxGpu, VaapiCodecs};
 
-    /// Encodes 90 frames of a moving gradient from `format` frames of `size`, with a
-    /// keyframe every 30 and one requested at frame 45. 1280x720 is whole macroblocks;
-    /// 1920x1080 is coded at 1088 rows and cropped.
-    fn encode_three_seconds(format: PixelFormat, size: FrameSize, rate_control: RateControl) {
+    /// Encodes 90 frames of a moving gradient as `codec` from `format` frames of `size`,
+    /// with a keyframe every 30 and one requested at frame 45. 1280x720 is whole
+    /// macroblocks; 1920x1080 is coded at 1088 rows and cropped (in H.264, and in HEVC
+    /// on a driver whose coding blocks are 16x16).
+    fn encode_three_seconds(
+        codec: Codec,
+        format: PixelFormat,
+        size: FrameSize,
+        rate_control: RateControl,
+    ) {
         let codecs = VaapiCodecs::new();
         let mut enc = codecs
             .video_encoder(&VideoEncoderConfig {
-                codec: Codec::H264,
+                codec,
                 size,
                 input_format: format,
                 frame_period: Timebase::new(1, 30).expect("30 fps"),
@@ -928,7 +1164,7 @@ mod device_tests {
                 keyframe_interval: 30,
                 hardware: HardwarePreference::Require,
             })
-            .expect("open the VA-API H.264 encoder");
+            .expect("open the VA-API encoder");
         assert!(enc.info().hardware);
         let tb = Timebase::MPEG_90K;
         let h = size.height();
@@ -977,17 +1213,22 @@ mod device_tests {
         // The cadence restarts at the requested keyframe.
         assert_eq!(keyframes, [0, 30, 45, 75]);
         for (i, p) in out.iter().enumerate() {
-            assert_eq!(p.codec(), Codec::H264);
+            assert_eq!(p.codec(), codec);
             assert_eq!(p.pts(), MediaTime::new(i as i64 * 3000, tb));
             assert_eq!(p.pts(), p.dts());
             assert!(p.data().starts_with(&[0, 0, 1]) || p.data().starts_with(&[0, 0, 0, 1]));
         }
-        // Each keyframe carries an SPS (NAL type 7), ours or the driver's.
+        // Each keyframe carries an SPS (H.264 NAL type 7, HEVC 33), ours or the
+        // driver's.
+        let is_sps = |header: u8| match codec {
+            Codec::Hevc => (header >> 1) & 0x3F == 33,
+            _ => header & 0x1F == 7,
+        };
         for &k in &keyframes {
             let sps = out[k]
                 .data()
                 .windows(4)
-                .any(|w| w[..3] == [0, 0, 1] && w[3] & 0x1F == 7);
+                .any(|w| w[..3] == [0, 0, 1] && is_sps(w[3]));
             assert!(sps, "packet {k} carries an SPS");
         }
     }
@@ -996,6 +1237,7 @@ mod device_tests {
     #[ignore = "needs a GPU with a VA-API H.264 encode driver"]
     fn encodes_nv12_at_720p_cbr() {
         encode_three_seconds(
+            Codec::H264,
             PixelFormat::Nv12,
             FrameSize::new(1280, 720).expect("size"),
             RateControl::Cbr { kbps: 3000 },
@@ -1047,6 +1289,8 @@ mod device_tests {
                 state: wgpu::TextureUses::PRESENT,
             }),
         );
+        // Staged and submitted under the context's submit lock, as render does (#667).
+        let _submitting = context.submit_lock().lock();
         target.stage(context.queue()).expect("stage");
         context.queue().submit([encoder.finish()]);
     }
@@ -1120,6 +1364,33 @@ mod device_tests {
     #[ignore = "needs a GPU with a VA-API H.264 encode driver"]
     fn encodes_rgba_at_1080p_vbr() {
         encode_three_seconds(
+            Codec::H264,
+            PixelFormat::Rgba8,
+            FrameSize::new(1920, 1080).expect("size"),
+            RateControl::Vbr {
+                kbps: 4000,
+                max_kbps: 6000,
+            },
+        );
+    }
+
+    /// #736: HEVC through the same session.
+    #[test]
+    #[ignore = "needs a GPU with a VA-API HEVC encode driver"]
+    fn encodes_hevc_nv12_at_720p_cbr() {
+        encode_three_seconds(
+            Codec::Hevc,
+            PixelFormat::Nv12,
+            FrameSize::new(1280, 720).expect("size"),
+            RateControl::Cbr { kbps: 3000 },
+        );
+    }
+
+    #[test]
+    #[ignore = "needs a GPU with a VA-API HEVC encode driver"]
+    fn encodes_hevc_rgba_at_1080p_vbr() {
+        encode_three_seconds(
+            Codec::Hevc,
             PixelFormat::Rgba8,
             FrameSize::new(1920, 1080).expect("size"),
             RateControl::Vbr {

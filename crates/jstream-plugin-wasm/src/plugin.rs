@@ -7,7 +7,7 @@ use crate::error::Error;
 use crate::events::EventSender;
 use crate::limits::{self, Limits};
 use crate::rate::CommandRate;
-use jstream_control::protocol::Call;
+use jstream_control::protocol::{Call, ProtocolError, WireError};
 use jstream_control::{Control, ControlError};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -34,6 +34,23 @@ pub struct PluginConfig {
     pub capabilities: Capabilities,
     /// Its fuel, memory and table limits.
     pub limits: Limits,
+    /// How a call the host refuses is answered.
+    pub refusals: Refusals,
+}
+
+/// How the host answers a call it refuses: one outside [`PluginConfig::capabilities`], or
+/// past the cap of commands a second ([`Limits::commands_per_second`]). Either way the
+/// call never reaches `Control` and the plugin keeps running.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Refusals {
+    /// The ABI's own statuses: [`abi::STATUS_DENIED`] and [`abi::STATUS_LIMITED`].
+    #[default]
+    Statuses,
+    /// The protocol's `forbidden` error, as [`abi::STATUS_FAILED`] with the wire error for
+    /// its result, which is how the engine answers a plugin's call outside its grant
+    /// (ADR-0069).
+    Forbidden,
 }
 
 /// The shared wasmtime engine plugins are compiled and run on. Create one and load every
@@ -105,6 +122,7 @@ impl Drop for Ticker {
 struct HostState {
     control: Arc<dyn Control>,
     capabilities: Capabilities,
+    refusals: Refusals,
     limits: StoreLimits,
     /// What the last `call` answered, for `result_read`.
     result: Vec<u8>,
@@ -162,6 +180,7 @@ impl Plugin {
         let state = HostState {
             control,
             capabilities: config.capabilities,
+            refusals: config.refusals,
             limits: StoreLimitsBuilder::new()
                 .memory_size(limits.memory_bytes())
                 .table_elements(limits.table_elements())
@@ -198,6 +217,14 @@ impl Plugin {
             events: EventSender::default(),
             _ticker: host.ticker.clone(),
         })
+    }
+
+    /// Whether the plugin exports `entry` as a function of type `() -> ()`, so
+    /// [`Plugin::invoke`] can run it. Runs none of the plugin's code.
+    pub fn has_entry(&mut self, entry: &str) -> bool {
+        self.instance
+            .get_typed_func::<(), ()>(&mut self.store, entry)
+            .is_ok()
     }
 
     /// Runs the exported function `entry` (type `() -> ()`) with a fresh fuel budget,
@@ -321,17 +348,46 @@ fn call(state: &mut HostState, bytes: &[u8]) -> (i32, Vec<u8>) {
         Ok(call) => call,
         Err(e) => return (abi::STATUS_MALFORMED, e.to_string().into_bytes()),
     };
+    let names = command_names(&call).unwrap_or_default();
+    // What a `forbidden` names: the first command, or for a call that names none, `batch`
+    // for an empty batch as the protocol does, and `call` for a kind this version doesn't
+    // know.
+    let first = names
+        .first()
+        .copied()
+        .unwrap_or(if matches!(call, Call::Batch(_)) {
+            "batch"
+        } else {
+            "call"
+        });
     if let Err(denied) = state.capabilities.check(&call) {
-        let body = serde_json::json!({ "denied": denied });
-        return (abi::STATUS_DENIED, body.to_string().into_bytes());
+        return match state.refusals {
+            Refusals::Statuses => {
+                let body = serde_json::json!({ "denied": denied });
+                (abi::STATUS_DENIED, body.to_string().into_bytes())
+            }
+            Refusals::Forbidden => forbidden(
+                denied.first().copied().unwrap_or(first),
+                "the plugin isn't granted it".into(),
+            ),
+        };
     }
     // Every edit of a batch is a command (ADR-0013), so each counts against the cap.
-    let commands = command_names(&call).map_or(1, |names| names.len());
+    let commands = names.len().max(1);
     if !state.rate.admit(Instant::now(), commands) {
-        let body = serde_json::json!({
-            "limited": { "per_second": state.rate.cap(), "commands": commands }
-        });
-        return (abi::STATUS_LIMITED, body.to_string().into_bytes());
+        let cap = state.rate.cap();
+        return match state.refusals {
+            Refusals::Statuses => {
+                let body = serde_json::json!({
+                    "limited": { "per_second": cap, "commands": commands }
+                });
+                (abi::STATUS_LIMITED, body.to_string().into_bytes())
+            }
+            Refusals::Forbidden => forbidden(
+                first,
+                format!("past the plugin's cap of {cap} commands a second"),
+            ),
+        };
     }
     let answer = block_on(state.control.call(call));
     let encoded = match answer {
@@ -345,6 +401,19 @@ fn call(state: &mut HostState, bytes: &[u8]) -> (i32, Vec<u8>) {
         }
     };
     encoded.unwrap_or_else(|e| (abi::STATUS_FAILED, e.to_string().into_bytes()))
+}
+
+/// `forbidden` for `call` (its name, or a batch's first refused edit), as a failed call's
+/// status and wire error.
+fn forbidden(call: &str, reason: String) -> (i32, Vec<u8>) {
+    let error = WireError::from(ProtocolError::Forbidden {
+        call: call.to_owned(),
+        reason,
+    });
+    match serde_json::to_vec(&error) {
+        Ok(bytes) => (abi::STATUS_FAILED, bytes),
+        Err(e) => (abi::STATUS_FAILED, e.to_string().into_bytes()),
+    }
 }
 
 /// The fuel a host call costs before its bytes, so a loop of empty calls still drains fuel.
@@ -394,6 +463,21 @@ mod tests {
     use jstream_control::{Control, MockEngine};
     use std::sync::Arc;
     use std::time::{Duration, Instant};
+
+    #[test]
+    fn a_refusal_as_forbidden_is_the_protocol_wire_error() {
+        let (status, bytes) = super::forbidden("output.start", "not granted".into());
+        assert_eq!(status, crate::abi::STATUS_FAILED);
+        let wire: jstream_control::protocol::WireError =
+            serde_json::from_slice(&bytes).expect("a wire error");
+        assert_eq!(
+            wire.error,
+            jstream_control::protocol::ProtocolError::Forbidden {
+                call: "output.start".into(),
+                reason: "not granted".into(),
+            }
+        );
+    }
 
     /// An endless loop, and the same loop as a module's `start` function.
     const SPIN: &str = r#"(module

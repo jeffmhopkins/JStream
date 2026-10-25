@@ -278,8 +278,9 @@ fn connect_rtmp_with(
     key: &str,
     policy: ReconnectPolicy,
 ) -> Result<RtmpPublish, PublishError> {
+    let cleartext = jstream_protocol::rtmp_url_sends_key_in_cleartext(url);
     let url = RtmpUrl::parse(url).map_err(rtmp_err)?;
-    if url.sends_key_in_cleartext() {
+    if cleartext {
         // The host only: never the URL's path, which may hold a pasted key.
         tracing::warn!(
             host = url.host(),

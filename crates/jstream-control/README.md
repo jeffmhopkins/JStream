@@ -114,7 +114,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   shared with history calls. A retry with a known key gets its first result; then, in `Graph::apply`'s order, a stale
   `expected_rev` fails with `rev_conflict` before an empty batch fails with
   `empty_batch`;
-- every protocol edit but the transition ones (below), with the
+- every protocol edit but the transition ones (below) and the keyframe-scene ones
+  (`scene.create_variant` and `item.clear_override` answer `internal`, as an edit the
+  mock doesn't implement; with no keyframe scenes its `state.get` reports none and its
+  batch results drop no overrides), with the
   checks `jstream-graph` makes, in the same order per
   edit, and the same error codes and `edits.<n>.<field>` paths:
   - `not_found` and `already_exists`;
@@ -206,13 +209,15 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   the way `Engine::with_output` does: it can be started, stopped and read with
   `output.status`, but it is not in the collection, so `output.list` and `state.get`
   don't report it and `output.set_key` answers `not_found` for it. It runs no
-  encoders, so `output.status` reports no encoder session and zero sessions;
+  encoders, so `output.status` reports no encoder session and zero sessions; its
+  `cleartext` follows the output's kind by the engine's rule;
 - the pairing calls (`pairing.start`, `device.list`, `device.revoke`) answered with
   `unsupported`, as the in-process engine answers them: only a server in front of a
   session serves them
   ([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md));
-- the plugin actions (`plugin.install`, `plugin.grant`, `plugin.enable`) answered with
-  `unsupported`, as the engine answers them: neither hosts plugins yet;
+- `plugin.install` answered with `unsupported`, since the mock can't run a plugin, and
+  `plugin.grant` and `plugin.enable` with `not_found` (entity `plugin`), as the engine
+  answers them for a plugin that isn't installed: none ever is in the mock;
 - the stream-key actions with the engine's checks and errors. `output.set_key` answers
   `not_found` for an output not in the collection, then `invalid_argument` (field
   `key`) for an empty or over-long key, or one with whitespace, control or non-ASCII

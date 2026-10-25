@@ -628,6 +628,7 @@ impl State {
         let (rev, inverse, removed_hotkeys) = self.apply(batch.edits)?;
         self.history.record_batch(client_id, rev, inverse);
         let result = CallResult::Batch {
+            dropped_overrides: Vec::new(),
             rev,
             removed_hotkeys,
         };
@@ -914,16 +915,18 @@ impl State {
                 self.keys.remove(&output_id);
                 return Ok(CallResult::action());
             }
-            // As the engine: the server in front answers the pairing calls (ADR-0044),
-            // and the mock hosts no plugins (ADR-0069).
+            // As the engine: the server in front answers the pairing calls (ADR-0044).
+            // The mock runs no plugins (ADR-0069), so it installs none: it can't load a
+            // module, and none is ever installed to grant or enable.
             other @ (Action::PairingStart
             | Action::DeviceRevoke { .. }
-            | Action::PluginInstall { .. }
-            | Action::PluginGrant { .. }
-            | Action::PluginEnable { .. }) => {
+            | Action::PluginInstall { .. }) => {
                 return Err(ProtocolError::Unsupported {
                     call: other.name().into(),
                 });
+            }
+            Action::PluginGrant { plugin_id, .. } | Action::PluginEnable { plugin_id } => {
+                return Err(not_found(EntityKind::Plugin, plugin_id.as_str()));
             }
             // The mock runs no mixer, so there is no loudness to reset.
             Action::AudioResetLoudness {} => return Ok(CallResult::action()),
@@ -982,6 +985,11 @@ impl State {
                 // The mock opens no encoders, so it reports no sessions.
                 QueryResult::OutputStatus {
                     key_set: self.keys.contains_key(&output_id),
+                    cleartext: self
+                        .collection
+                        .outputs
+                        .get(&output_id)
+                        .is_some_and(OutputKind::sends_key_in_cleartext),
                     output_id,
                     state,
                     encoder: None,
@@ -1010,6 +1018,8 @@ impl State {
                     .scenes
                     .iter()
                     .map(|scene| SceneInfo {
+                        overrides: Vec::new(),
+                        variant_of: None,
                         scene_id: scene.id.clone(),
                         name: scene.name.clone(),
                         role: scene.role,
@@ -4452,6 +4462,7 @@ mod tests {
                     encoder: None,
                     encoder_sessions: 0,
                     hardware_sessions: 0,
+                    cleartext: false,
                 }
             }
         );
@@ -4486,6 +4497,38 @@ mod tests {
         match query(control, Query::OutputStatus { output_id })? {
             QueryResult::OutputStatus { state, key_set, .. } => Ok((state, key_set)),
             other => panic!("not an output status: {other:?}"),
+        }
+    }
+
+    /// `output.status` reports `cleartext` as the engine does: plain `rtmp://` to a remote
+    /// host, not `rtmps://` or a loopback relay (#562).
+    #[test]
+    fn output_status_reports_a_cleartext_server() {
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let outputs = [
+            ("remote", "rtmp://a.rtmp.youtube.com/live2", true),
+            ("tls", "rtmps://a.rtmps.youtube.com/live2", false),
+            ("relay", "rtmp://127.0.0.1/live", false),
+        ];
+        for (id, url, _) in outputs {
+            let create = Batch::single(Edit::OutputCreate {
+                output_id: OutputId::new(id),
+                kind: rtmp(url),
+            });
+            batch(&*control, create).expect("created");
+        }
+        for (id, url, want) in outputs {
+            let status = query(
+                &*control,
+                Query::OutputStatus {
+                    output_id: OutputId::new(id),
+                },
+            );
+            let Ok(QueryResult::OutputStatus { cleartext, .. }) = status else {
+                panic!("{status:?}");
+            };
+            assert_eq!(cleartext, want, "{url}");
         }
     }
 

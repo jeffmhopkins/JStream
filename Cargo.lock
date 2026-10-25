@@ -2863,6 +2863,7 @@ version = "0.0.0"
 dependencies = [
  "arc-swap",
  "futures-core",
+ "insta",
  "jstream-audio",
  "jstream-browser",
  "jstream-control",
@@ -2875,6 +2876,7 @@ dependencies = [
  "jstream-platform",
  "jstream-platform-windows",
  "jstream-plugin-proto",
+ "jstream-plugin-wasm",
  "jstream-protocol",
  "jstream-render",
  "jstream-sources",
@@ -2883,6 +2885,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.21",
  "tracing",
+ "wat",
  "zune-jpeg",
 ]
 
@@ -2970,6 +2973,7 @@ dependencies = [
 name = "jstream-graph"
 version = "0.0.0"
 dependencies = [
+ "jstream-anim",
  "jstream-protocol",
  "proptest",
  "serde",

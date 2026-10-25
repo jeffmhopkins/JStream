@@ -26,7 +26,7 @@ depends_on = ["docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-004"]
 
 | Asset | Why it matters | Where it lives |
 |---|---|---|
-| Stream keys | Anyone holding one can broadcast as the user's channel | OS credential store only ([R-SEC-001](../RULES.md#R-SEC-001)); Windows Credential Manager, and the macOS Keychain ([ADR-0063](../adr/0063-macos-platform-support.md)), which the daemon uses where it is live on macOS (#639); Linux has none yet. **Accepted** for Linux, not built ([ADR-0071](../adr/0071-linux-secret-store.md)): the Secret Service, else a `0600` plaintext file (see [Secrets](#secrets)) |
+| Stream keys | Anyone holding one can broadcast as the user's channel | OS credential store only ([R-SEC-001](../RULES.md#R-SEC-001)); Windows Credential Manager, and the macOS Keychain ([ADR-0063](../adr/0063-macos-platform-support.md)), which the daemon uses where it is live on macOS (#639); and Linux's ([ADR-0071](../adr/0071-linux-secret-store.md): the Secret Service, else a `0600` plaintext file, see [Secrets](#secrets)) is built in `jstream-platform-linux` but no app uses it yet |
 | YouTube OAuth refresh token | Manages the user's channel (the `youtube` scope) | OS credential store; access tokens stay in memory |
 | Control token | Full control of the engine, by design ([ADR-0006](../adr/0006-mcp-full-access.md)), including every stream key's use | The daemon's token file (user-chosen path); the desktop app's is in memory and new on every start |
 | Paired device tokens | Same power as the control token ([ADR-0044](../adr/0044-pairing-remote-browsers.md)) | A digest in the devices file beside the token file; the device's own copy; a browser's in a cookie, once there is a TLS listener |
@@ -120,10 +120,14 @@ a stolen token, local denial of service.
 - Failed tokens are logged one by one only up to 10 a minute, then counted, so a flood
   of them can't fill the log (#354).
 - On Unix the token file is created `0600` and refused if group or others can read it.
-  **In flight** (#548, the fix for #344): on Windows the token, devices and log files are created
-  with a protected DACL for SYSTEM and the user, and an existing token or devices file
-  is refused unless its owner is the user, SYSTEM or Administrators and its DACL lets
-  no one else in.
+  On Windows (#548) the daemon's token, devices and log files, and the daemon's and the
+  desktop app's crash reports (#656), are created with a protected DACL for SYSTEM and the user
+  in the same `CreateFileW` call (`jstream_platform_windows::create_private_file`), so
+  they never carry their folder's inherited entries. An existing token or devices file
+  is refused unless its owner is the user, SYSTEM or Administrators and its DACL grants
+  no one else more than reading its descriptor or attributes (`check_private_file`).
+  The daemon's log files and the crash reports are always new files, so nothing existing
+  is checked.
 
 **Accepted:** the token is full access with no tiers ([ADR-0006](../adr/0006-mcp-full-access.md)).
 It doesn't expire or rotate; deleting the file and restarting makes a new one. A browser
@@ -132,7 +136,10 @@ ambient credential until it is closed. Failed tokens are not delayed or locked o
 256 bits can't be guessed, and a lockout would let any local process shut out the real
 clients.
 
-**Gaps:** the Windows token file only inherits its folder's ACL (#344, fix in flight in #548).
+**Gaps:** #546's Windows hardware pass reported the token file and the daemon's logs
+user-only with no inheritance. Still to run on hardware: the devices file after a real
+pairing, and the crash reports' DACL (#656), which hasn't run on Windows CI either. So
+#344 stays open until those are checked (#546).
 
 <a id="pairing"></a>
 ## Pairing and remote browsers
@@ -169,8 +176,8 @@ its device token, and the cookie is never compared with the control token.
 
 **Accepted:** a device token has the control token's full power ("no tiers").
 
-**Gaps:** the devices file has the same Windows ACL gap as the token file (#344, fix
-in flight in #548).
+**Gaps:** the devices file's Windows DACL, like the token file's, waits on a Windows
+hardware run (#546, for #344).
 
 <a id="browser"></a>
 ## Browser source
@@ -255,6 +262,10 @@ write recordings anywhere the user can. That follows from ADR-0006's full access
 Windows send the user's NTLM hash to a remote host (#345); a file created between the
 recording's last check and its rename is replaced (#355). The Media Foundation file
 reader (in flight, #245) will parse untrusted media in native code inside the engine.
+On Windows the collection file and the audit log are now created user-only and an
+existing audit log is refused if loosened (#574, through `private_file`); #546's pass
+reported them user-only on #574's branch, but audit-log rotation past 8 MiB hasn't run on
+Windows hardware yet (#547).
 
 <a id="plugins"></a>
 ## Plugins
@@ -264,30 +275,35 @@ depends_on = ["docs/RULES.md#R-SEC-003", "docs/adr/0035-clap-plugins-out-of-proc
 
 | Kind | Trust | On main | Boundary |
 |---|---|---|---|
-| CLAP audio plugins | Trusted native code the user installed; adding one shows a warning | The shared-memory contract (`jstream-plugin-proto`) and the mixer's side; the host process (`jstream-plugin-host`) and its launcher; running a filter from the graph is not wired yet | One host process per instance, in a kill-on-close job, with no token, no protocol connection and a scrubbed environment ([ADR-0035](../adr/0035-clap-plugins-out-of-process.md)). It isolates crashes, not capabilities |
-| WASM automation plugins | Untrusted | The `jstream-plugin-wasm` host (#486, #623, #722): a fixed set of five imports and no WASI, an empty capability list by default, a fuel budget, a wall-time deadline per entry (100 ms an invocation, 1 s the load), 64 MiB of memory, 10,000 table elements, a 512 KiB stack and 50 commands to `Control` a second, each edit of a batch counted. No app loads plugins yet | wasmtime with no ambient imports, so no filesystem, network or clock; a call reaches `Control` only when every command it names is granted ([R-SEC-003](../RULES.md#R-SEC-003)) |
+| CLAP audio plugins | Trusted native code the user installed; adding one shows a warning | The shared-memory contract (`jstream-plugin-proto`), the mixer's side, the host process, its launcher and supervisor, and CLAP filters in a source's chain | One host process per instance, in a kill-on-close job, with no token, no protocol connection and a scrubbed environment ([ADR-0035](../adr/0035-clap-plugins-out-of-process.md)). It isolates crashes, not capabilities |
+| WASM automation plugins | Untrusted | The `jstream-plugin-wasm` host (#486, #623, #722): a fixed set of five imports and no WASI, an empty capability list by default, a fuel budget, a wall-time deadline per entry (100 ms an invocation, 1 s the load), 64 MiB of memory, 10,000 table elements, a 512 KiB stack and 50 commands to `Control` a second, each edit of a batch counted. The engine runs it in process ([ADR-0075](../adr/0075-wasm-plugin-host-in-the-engine.md)): `plugin.install` loads a package a person names, with the grant they give it | wasmtime with no ambient imports, so no filesystem, network or clock; each plugin's own engine session checks every call against its grant (its classes, a hotkey's bound action, and the hosts and folders a call's settings reach) and answers `forbidden` for one outside it ([R-SEC-003](../RULES.md#R-SEC-003), [ADR-0069](../adr/0069-wasm-plugin-limits-and-capabilities.md)) |
 | WGSL effect packs | Untrusted GPU code | Nothing (X1); only built-in shaders | naga validation ([ARCH › GPU pipeline](../ARCHITECTURE.md#gpu-pipeline)) |
 
-What the engine reads back from a CLAP host is already checked: the block's magic,
-version and sizes, seqlocked rings with fixed slot indexing, a latency cap, and
-non-finite samples turned to silence.
+What the engine reads back from a CLAP host is checked: the block's magic, version and
+sizes, seqlocked rings with fixed slot indexing, a latency cap, and non-finite samples
+turned to silence. The block is an unnamed section whose handle the engine duplicates
+into its host alone, so no other process can open it by name and no other child
+inherits it. The mixer's miss counts, which mark a filter degraded, live in the
+engine's memory, not the block. Parameter descriptions with an unusable range or a
+repeated id are dropped; a parameter change coming back (a control message or the
+block's ring) must name a described parameter and be finite and in range; a saved
+state over 2 MiB is ignored; and plugin-chosen names are made plain text and capped
+before they reach the UI, agents or the log (#351).
 
 **Gaps:**
-- CLAP (#351): the shared section's name and DACL are not specified; parameter values
-  coming back are not validated (nothing reads them yet); plugin-reported names reach
-  the UI and agents; the host can reset the mixer's miss counters.
 - WASM (#348): [ADR-0069](../adr/0069-wasm-plugin-limits-and-capabilities.md) decided
-  the limits. The host builds its CPU and memory limits (the 100 ms and 1 s deadlines, 64 MiB and 10,000
-  table elements), the cap of 50 commands a second (answered with the ABI's
-  `STATUS_LIMITED`) and the 1,000-event queue with its `events.dropped` notice (nothing
-  feeds it yet), and adds a fuel budget of its own. Not built yet: the capability
-  classes checked against the protocol's table and grants made only by people, the
-  `forbidden` error,
-  disabling a plugin that fails, and the untrusted-output handling (U1: plugin text about the
-  plugin in `remote_*` fields, and MCP instructions saying state text can come from a
-  plugin). Until grants exist a plugin is
-  granted nothing; a host that granted output commands would let a plugin retarget an
-  output (it can't take the old key along: #343 removes it on a new server).
+  the limits, and the engine enforces them: the CPU and memory limits (the 100 ms and 1 s
+  deadlines, 64 MiB and 10,000 table elements) and a fuel budget, the cap of 50 commands
+  a second, the 1,000-event queue with its `events.dropped` notice, the capability
+  classes checked against the protocol's table, `forbidden` for a call outside the grant
+  or past the cap, and disabling a plugin that traps or runs past a limit until a person
+  re-enables it. Installing, granting and re-enabling are people-only actions with no
+  MCP tool, and the manifest's `name` reaches clients only as `remote_name`. Not built
+  yet: the MCP instructions saying state text can come from a plugin (U1), saving the
+  installed plugins, the manifest's classes and the `needs_grant` check on an update,
+  and a plugin's private data folder. A grant of `outputs` lets a plugin start and stop
+  existing outputs, never retarget one: creating and retargeting outputs and stream keys
+  are never granted.
 - WGSL (#349): validation doesn't bound run time; a hanging shader resets the GPU, and
   device loss isn't handled.
 
@@ -333,7 +349,8 @@ intercepted connection.
 **Controls on main:**
 - Keys and refresh tokens live in Windows Credential Manager, and stream keys in the
   macOS Keychain where the daemon is live on macOS (#639). Where an app has no store
-  (the desktop app on macOS; Linux has none) `set_key` fails rather than fall back to a
+  (the desktop app on macOS; on Linux, where the Secret Service store is built but not
+  wired into an app yet) `set_key` fails rather than fall back to a
   file. Secret types print `***` and
   are zeroed on drop. The collection never holds a key, and target URLs that could carry
   one (user info, query, fragment) are refused.
@@ -355,24 +372,29 @@ intercepted connection.
 **Accepted:** a key pasted into the URL's path (`rtmp://host/app/<key>`) is stored as
 the URL, as the target documentation warns. Plain `rtmp://` to another machine sends
 the key across the network in the clear, since some ingest servers offer nothing else.
-The engine logs a warning naming the host on each start, and the web UI's output card
-shows one (`RtmpUrl::sends_key_in_cleartext`; `localhost` and loopback are exempt).
-`output.status` carries no flag for it yet, so other clients must apply the rule
-themselves.
+The engine logs a warning naming the host on each start, and `output.status` reports
+it as `cleartext` (from protocol 0.37), which the web UI's output card and the CLI
+show. The rule is `jstream-protocol`'s `rtmp_url_sends_key_in_cleartext`; `localhost`
+and loopback are exempt.
 
-**Accepted** ([ADR-0071](../adr/0071-linux-secret-store.md), nothing built): on Linux,
-keys and refresh tokens go to the Secret Service, and only where none is reachable to
-`secrets` in `~/.config/jstream`. That file is **plaintext at rest**: anyone with read
+**Accepted** ([ADR-0071](../adr/0071-linux-secret-store.md)), built as `LinuxSecrets` in
+`jstream-platform-linux` and not yet used by an app: on Linux, keys and refresh tokens
+go to the Secret Service, and only where none is reachable to `secrets` in
+`~/.config/jstream`. That file is **plaintext at rest**: anyone with read
 access to the user's account or its files, or to a backup or sync of that folder, can
 read the keys in it, and use them to broadcast as the user's channel. The mitigations:
-- the file is `0600` in a `0700` folder, and refused if group or others can read it;
+- the file is written `0600` (through a fresh file and a rename) in a folder created
+  `0700`, and refused, never repaired, if it is a symlink, another user owns it, or
+  group or others can read or write it;
 - the UI shows a lasting warning while the fallback holds any secret, and the daemon
-  logs one at startup;
+  logs one at startup (the store gives the warning's text; the protocol field and the
+  daemon's log line come with the wiring);
 - secrets move into the keyring, and the file is deleted, once a keyring is reachable;
 - a later setting turns the fallback off, so a machine can be keyring-only.
 
 A keyring that is locked, or whose unlock prompt is dismissed, fails the call and
-never sends the secret to the file.
+never sends the secret to the file. A secret cleared while no keyring is reachable is
+recorded as cleared, so the keyring's older copy is deleted rather than coming back.
 
 **Gaps:** the daemon's and the desktop app's crash reports redact the control token and the keys and refresh
 tokens that pass through their credential stores, but not a YouTube-bound output's key
@@ -438,12 +460,13 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 
 | Issue | Area | Gap | Severity |
 |---|---|---|---|
-| #344 | Server, pairing | Windows token, devices and log files only inherit their folder's ACL | Medium |
+| #344 | Server, pairing | Windows devices file and crash reports not yet checked user-only on hardware; token and daemon logs reported user-only (#546) | Low |
+| #547 | Files | Windows audit log's user-only DACL not yet checked across a rotation on hardware (#574 landed in the wave) | Low |
+| #780 | Server | The desktop app's log file only inherits its folder's ACL on Windows and gets the umask's mode on Unix | Low |
 | #345 | Files | `absolute` asset paths accept UNC and device paths | Medium |
 | #347 | Browser | Permissions Chromium grants without a prompt; public names resolving locally (`*.nip.io`, DNS rebinding) and requests the handler doesn't see | Medium |
 | #348 | WASM | ADR-0069's capability classes, grants, `forbidden` error and untrusted-output handling are decided but not built (the CPU and memory limits, the command cap and the event queue are) | Medium |
 | #349 | WGSL | No GPU-hang or device-lost handling | Medium |
-| #351 | CLAP | Shared section naming, and validation of what the host sends back | Medium |
 | #353 | Secrets | Crash reports miss a YouTube-bound key and the access token | Low |
 | #355 | Files | A recording can replace a file created just before its rename | Low |
 | #356 | Virtual camera | A pre-created control mapping keeps its own DACL | Low |

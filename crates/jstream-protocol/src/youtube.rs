@@ -1,5 +1,6 @@
 //! YouTube (ADR-0058): the account's sign-in state, broadcasts and streams as the engine
-//! reports them, the health of a live stream, and the results the YouTube actions return.
+//! reports them, the health and audience of a live stream, the engine's estimate of the
+//! day's API quota, and the results the YouTube actions return.
 //!
 //! JStream signs in to one Google account at a time, once, with the full `youtube`
 //! scope (ADR-0041 §4, kept by ADR-0058). No token ever travels in the protocol (R-SEC-001): a sign-in
@@ -12,6 +13,7 @@
 //! Text YouTube returns (titles, health issue descriptions) is untrusted: clients show
 //! it as plain text.
 
+use crate::id::OutputId;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -232,4 +234,61 @@ pub struct StreamInfo {
     pub status: StreamStatus,
     /// How healthy what it receives is.
     pub health: StreamHealth,
+}
+
+/// A running `youtube` output's audience, as YouTube last reported it (ADR-0041 §3,
+/// 0.38): what the `youtube.stats` event sends and the `youtube.stats` query lists.
+/// The engine reads it at a low fixed rate, about once a minute, while the output runs.
+/// A count YouTube doesn't report (the owner hides it, or the broadcast has no viewers
+/// now or has ended) is omitted.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct AudienceStatsInfo {
+    /// The output.
+    pub output_id: OutputId,
+    /// The broadcast it sends to.
+    pub broadcast_id: String,
+    /// People watching now.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub concurrent_viewers: Option<u64>,
+    /// Likes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub likes: Option<u64>,
+    /// Views.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub views: Option<u64>,
+}
+
+/// How the engine polls audience stats, by how much of the day's estimated YouTube
+/// quota is left (ADR-0041 §5). Serialized as a snake_case string.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum StatsPolling {
+    /// At the normal rate.
+    #[default]
+    Normal,
+    /// Less often, because the quota is running low.
+    Slowed,
+    /// Not at all until the quota resets, because it is nearly or entirely used up.
+    Stopped,
+    /// A value this version doesn't know, from a newer server.
+    #[serde(other)]
+    Other,
+}
+
+/// The engine's estimate of the day's YouTube API quota (ADR-0041 §5). It adds up what
+/// each call the engine makes costs by YouTube's published unit costs. YouTube's own
+/// count, which other apps on the same Google project share, can differ.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct QuotaInfo {
+    /// Units used since the quota last reset, by the engine's count.
+    pub used: u64,
+    /// The units the engine assumes a day has.
+    pub daily: u64,
+    /// Whether YouTube refused a call since the quota last reset because it is used up.
+    /// Omitted when it hasn't.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub exhausted: bool,
+    /// How audience stats are polled now.
+    pub stats: StatsPolling,
 }

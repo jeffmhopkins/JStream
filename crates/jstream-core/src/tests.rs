@@ -5,9 +5,12 @@
 
 mod audio;
 mod audio_routing;
+#[cfg(feature = "wasm-plugins")]
+mod automation;
 mod collection;
 mod gpu_capture;
 mod history;
+mod keyframes;
 mod live_values;
 mod preview;
 mod sources;
@@ -435,7 +438,7 @@ fn scanned_clap_plugins_are_audio_filter_kinds() {
         }],
     );
     let engine = Engine::new();
-    let scan = engine.scan_clap_plugins(&OneDir(dir.clone(), fake));
+    let scan = engine.scan_clap_plugins(std::sync::Arc::new(OneDir(dir.clone(), fake)));
     std::fs::remove_dir_all(&dir).unwrap();
     assert_eq!(scan.kinds.len(), 1);
     assert_eq!(scan.kinds[0].file, file);
@@ -477,9 +480,9 @@ fn scanned_clap_plugins_are_audio_filter_kinds() {
         matches!(error.protocol(), Some(ProtocolError::InvalidArgument { field, .. }) if field == "edits.0.kind.kind"),
         "{error:?}"
     );
-    // Nothing runs a CLAP filter yet, and a collection holding one wouldn't load before
-    // the next scan, so `filter.add` refuses the kind.
-    let error = batch(
+    // A CLAP filter is added like any filter, its settings completed from the plugin's
+    // parameters.
+    let added = batch(
         &control,
         Batch {
             edits: vec![
@@ -487,7 +490,7 @@ fn scanned_clap_plugins_are_audio_filter_kinds() {
                     source_id: SourceId::new("mic"),
                     name: "mic".into(),
                     kind: SourceKind::Builtin {
-                        kind: "tone".into(),
+                        kind: "desktop_audio".into(),
                     },
                     settings: Default::default(),
                     duplicated_from: None,
@@ -509,11 +512,14 @@ fn scanned_clap_plugins_are_audio_filter_kinds() {
             ends_gesture: None,
         },
     )
-    .expect_err("a CLAP filter can't be added yet");
-    assert!(
-        matches!(error.protocol(), Some(ProtocolError::InvalidArgument { field, .. }) if field == "edits.1.kind"),
-        "{error:?}"
-    );
+    .expect("a CLAP filter is added");
+    assert_eq!(added, Rev(1));
+    let Ok(QueryResult::SourceList { sources, .. }) = query(&control, Query::SourceList) else {
+        panic!("source.list");
+    };
+    let filter = &sources[0].filters.audio[0];
+    assert_eq!(filter.kind, "clap/org.example.gain");
+    assert_eq!(filter.settings.get("1"), Some(&serde_json::json!(1.0)));
 }
 
 /// The engine describes its built-in kinds, and validates and completes settings against
@@ -600,8 +606,23 @@ fn queries_match_the_parity_fixture() {
             encoder: None,
             encoder_sessions: 0,
             hardware_sessions: 0,
+            cleartext: false,
         })
     );
+    // `cleartext` follows the output's server URL (#562): Twitch's is plain `rtmp://`,
+    // YouTube's `rtmps://`, and the recording and the virtual camera send no key.
+    for (id, want) in [("rec", false), ("tw", true), ("vcam", false), ("yt", false)] {
+        let status = query(
+            &control,
+            Query::OutputStatus {
+                output_id: OutputId::new(id),
+            },
+        );
+        let Ok(QueryResult::OutputStatus { cleartext, .. }) = status else {
+            panic!("{status:?}");
+        };
+        assert_eq!(cleartext, want, "{id}");
+    }
     let missing = query(
         &control,
         Query::OutputStatus {
@@ -1524,16 +1545,17 @@ fn the_engine_answers_like_the_mock() {
                 gesture_id: GestureId::new("g9"),
             },
         },
-        // Neither hosts plugins yet (ADR-0069): both answer `unsupported`.
+        // No plugin is installed (ADR-0069): both answer `not_found`. `plugin.install`
+        // isn't sent: the engine loads the package, which the mock can't
+        // (`tests/automation.rs`).
         Call::Action {
             action: Action::PluginEnable {
                 plugin_id: jstream_protocol::PluginId::new("plg_1"),
             },
         },
         Call::Action {
-            action: Action::PluginInstall {
+            action: Action::PluginGrant {
                 plugin_id: jstream_protocol::PluginId::new("plg_1"),
-                path: "/plugins/one".into(),
                 grant: jstream_protocol::PluginGrant::default(),
             },
         },

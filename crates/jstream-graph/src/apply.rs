@@ -7,15 +7,17 @@
 
 use crate::audio;
 use crate::deps::{self, Node};
+use crate::keyframe;
 use crate::model::{Chains, Graph, Item, MAX_CANVAS_EDGE, Output, Placement, Scene, Source, State};
 use crate::target::{broadcast_id_problem, record_path_problem, rtmp_url_problem};
 use crate::touched::Touched;
+use jstream_anim::Value as KeyValue;
 use jstream_protocol::{
-    Batch, BlendMode, Blocker, Canvas, Crop, Edit, EntityKind, Finite32, GeometryError,
-    HotkeyBinding, ItemGeometry, ItemId, ItemTransform, ItemTransition, KindCategory,
-    KindDescriptor, Media, OutputId, OutputKind, ParamDescriptor, ParamType, ProtocolError,
-    RecordContainer, Reference, Rev, RtmpTarget, SceneId, SceneMeta, Settings, SourceAudio,
-    SourceId, SourceKind,
+    Batch, BlendMode, Blocker, Canvas, Crop, DroppedOverride, Edit, EntityKind, Finite32,
+    GeometryError, HotkeyBinding, ItemGeometry, ItemId, ItemTransform, ItemTransition,
+    KindCategory, KindDescriptor, Media, OutputId, OutputKind, ParamDescriptor, ParamType,
+    ProtocolError, RecordContainer, Reference, Rev, RtmpTarget, SceneId, SceneMeta, Settings,
+    SourceAudio, SourceId, SourceKind,
 };
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -39,6 +41,10 @@ pub struct Applied {
     /// The hotkey bindings the batch removed because their action named an object it
     /// deleted (ADR-0040 §3), in the order it removed them. The inverse restores them.
     pub removed_hotkeys: Vec<HotkeyBinding>,
+    /// The keyframe-scene overrides the batch dropped because their item left the
+    /// variant's parent (ADR-0040 §1), in the order it dropped them. The inverse
+    /// restores them.
+    pub dropped_overrides: Vec<DroppedOverride>,
 }
 
 impl Graph {
@@ -90,9 +96,17 @@ impl Graph {
         let mut work = self.state.clone();
         let mut undo: Vec<Vec<Edit>> = Vec::with_capacity(edits.len());
         let mut removed_hotkeys = Vec::new();
+        let mut dropped_overrides = Vec::new();
         for (at, edit) in edits.iter().enumerate() {
             let mut removed = Vec::new();
-            let mut inverse = apply_edit(&mut work, &self.kinds, edit, at, running)?;
+            let mut inverse = apply_edit(
+                &mut work,
+                &self.kinds,
+                edit,
+                at,
+                running,
+                &mut dropped_overrides,
+            )?;
             // A delete takes the bindings that name its target with it (ADR-0040 §3);
             // they come back after the target does.
             if let Some((entity, id)) = deleted_object(edit) {
@@ -112,6 +126,7 @@ impl Graph {
         Ok(Applied {
             rev,
             removed_hotkeys,
+            dropped_overrides,
             touched: Touched::of(edits, &inverse),
             inverse: Batch {
                 edits: inverse,
@@ -246,32 +261,42 @@ fn item_mut(state: &mut State, (si, ii): (usize, usize)) -> Result<&mut Item, Pr
         })
 }
 
-/// The item a placement edit changes. `scene_id` is the edit's optional addressing
-/// (ADR-0024 §2): absent or the item's own scene is the item itself. Keyframe scenes,
-/// whose overrides another scene would write, aren't built yet, so any other existing
-/// scene is `invalid_argument` and a missing one `not_found`.
+/// What a placement edit changes. `scene_id` is the edit's optional addressing
+/// (ADR-0024 §2): absent or the item's own scene is the item itself, and a keyframe
+/// scene of the item's scene is that variant's override (ADR-0049 §2). Any other scene is
+/// `invalid_argument` and a missing one `not_found`.
+enum PlacementTarget<'a> {
+    Item(&'a mut Item),
+    Variant(usize),
+}
+
 fn placement_mut<'a>(
     state: &'a mut State,
     item_id: &ItemId,
     scene_id: Option<&SceneId>,
     at: usize,
-) -> Result<&'a mut Item, ProtocolError> {
-    let (si, ii) = find_item(state, item_id)?;
-    if let Some(scene_id) = scene_id
-        && scene_id != &state.scenes[si].id
-    {
-        find_scene(state, scene_id)?;
-        return Err(invalid(
+) -> Result<PlacementTarget<'a>, ProtocolError> {
+    if let Some(vi) = keyframe::target(state, item_id, scene_id, at)? {
+        return Ok(PlacementTarget::Variant(vi));
+    }
+    let found = find_item(state, item_id)?;
+    item_mut(state, found).map(PlacementTarget::Item)
+}
+
+/// Refuses an edit that would give the keyframe scene at `si` items of its own.
+fn check_not_variant(state: &State, si: usize, at: usize) -> Result<(), ProtocolError> {
+    match &state.scenes[si].variant_of {
+        Some(parent) => Err(invalid(
             at,
             "scene_id",
             format!(
-                "item `{item_id}` is in scene `{}`, and only its own scene can be named \
-                 until keyframe scenes exist",
+                "scene `{}` is a keyframe scene of `{parent}`: it shows its parent's items \
+                 and has none of its own",
                 state.scenes[si].id
             ),
-        ));
+        )),
+        None => Ok(()),
     }
-    item_mut(state, (si, ii))
 }
 
 /// Applies `item.move` and returns its inverse: `item.move` back.
@@ -281,9 +306,11 @@ fn move_item(
     scene_id: &SceneId,
     index: u32,
     at: usize,
+    dropped: &mut Vec<DroppedOverride>,
 ) -> Result<Vec<Edit>, ProtocolError> {
     let (from_scene, from_index) = find_item(state, item_id)?;
     let to_scene = find_scene(state, scene_id)?;
+    check_not_variant(state, to_scene, at)?;
     let old_scene_id = state.scenes[from_scene].id.clone();
     // The item's final position: one past the top is allowed in another scene.
     let slots = state.scenes[to_scene].items.len() + usize::from(to_scene != from_scene);
@@ -305,14 +332,18 @@ fn move_item(
             ),
         ));
     }
-    // No keyframe overrides exist yet, so a move can't orphan any (ADR-0040 §1).
     let item = state.scenes[from_scene].items.remove(from_index);
     state.scenes[to_scene].items.insert(to_index, item);
-    Ok(vec![Edit::ItemMove {
+    let mut inverse = vec![Edit::ItemMove {
         item_id: item_id.clone(),
-        scene_id: old_scene_id,
+        scene_id: old_scene_id.clone(),
         index: wire_index(from_index)?,
-    }])
+    }];
+    // Leaving its scene takes it out of that scene's keyframe scenes (ADR-0040 §1).
+    if to_scene != from_scene {
+        inverse.extend(keyframe::drop_item(state, &old_scene_id, item_id, dropped));
+    }
+    Ok(inverse)
 }
 
 /// Applies one edit to `state` and returns the edits that undo it.
@@ -322,7 +353,11 @@ fn apply_edit(
     edit: &Edit,
     at: usize,
     running: &BTreeSet<OutputId>,
+    dropped: &mut Vec<DroppedOverride>,
 ) -> Result<Vec<Edit>, ProtocolError> {
+    if let Some(applied) = keyframe::apply(state, edit, at) {
+        return applied;
+    }
     if let Some(applied) = crate::encoder::apply(state, edit, at) {
         return applied;
     }
@@ -364,6 +399,8 @@ fn apply_edit(
                 folder: None,
                 meta: SceneMeta::default(),
                 items: Vec::new(),
+                variant_of: None,
+                overrides: crate::model::Overrides::new(),
             });
             Ok(vec![Edit::SceneDelete {
                 scene_id: scene_id.clone(),
@@ -371,8 +408,10 @@ fn apply_edit(
         }
         Edit::SceneSetRole { scene_id, role } => {
             let si = find_scene(state, scene_id)?;
-            // No keyframe overrides exist yet, so a role change can't orphan any
-            // (ADR-0040 §1); once they do, this edit drops and its inverse restores them.
+            // ADR-0040 §1 drops the overrides a role change orphans. Overrides name only
+            // a parent's own items so far (#702), and a role changes neither a parent's
+            // items nor a keyframe scene's parent, so none is orphaned: a keyframe
+            // scene's role is set like any scene's.
             let old = std::mem::replace(&mut state.scenes[si].role, *role);
             Ok(vec![Edit::SceneSetRole {
                 scene_id: scene_id.clone(),
@@ -397,11 +436,25 @@ fn apply_edit(
                 return Err(blocked(at, "scene_id", &target, blockers));
             }
             let scene = state.scenes.remove(si);
-            let mut inverse = vec![Edit::SceneCreate {
-                scene_id: scene.id.clone(),
-                name: scene.name.clone(),
-                role: (!scene.role.is_scene()).then_some(scene.role),
+            let mut inverse = vec![match &scene.variant_of {
+                Some(parent) => Edit::SceneCreateVariant {
+                    scene_id: scene.id.clone(),
+                    variant_of: parent.clone(),
+                    name: scene.name.clone(),
+                },
+                None => Edit::SceneCreate {
+                    scene_id: scene.id.clone(),
+                    name: scene.name.clone(),
+                    role: (!scene.role.is_scene()).then_some(scene.role),
+                },
             }];
+            // `scene.create_variant` takes no role.
+            if scene.variant_of.is_some() && !scene.role.is_scene() {
+                inverse.push(Edit::SceneSetRole {
+                    scene_id: scene.id.clone(),
+                    role: scene.role,
+                });
+            }
             // Re-created scenes are appended, so only a scene that wasn't last moves back.
             if si != state.scenes.len() {
                 inverse.push(Edit::SceneReorder {
@@ -432,6 +485,9 @@ fn apply_edit(
             for (ii, item) in scene.items.iter().enumerate() {
                 inverse.extend(restore_item(&scene.id, item, ii, ii)?);
             }
+            for (item_id, o) in scene.overrides.iter() {
+                inverse.extend(keyframe::write_edits(&scene.id, item_id, o));
+            }
             Ok(inverse)
         }
         Edit::SceneReorder { scene_id, index } => {
@@ -455,6 +511,7 @@ fn apply_edit(
         } => {
             check_id(item_id.as_str(), at, "item_id")?;
             let si = find_scene(state, scene_id)?;
+            check_not_variant(state, si, at)?;
             if state.source(source_id).is_none() {
                 return Err(not_found(EntityKind::Source, source_id.as_str()));
             }
@@ -502,7 +559,10 @@ fn apply_edit(
             let scene = &mut state.scenes[si];
             let item = scene.items.remove(ii);
             // `item.add` puts it on top, which is index `len` now that it is gone.
-            restore_item(&scene.id, &item, ii, scene.items.len())
+            let mut inverse = restore_item(&scene.id, &item, ii, scene.items.len())?;
+            let scene_id = scene.id.clone();
+            inverse.extend(keyframe::drop_item(state, &scene_id, item_id, dropped));
+            Ok(inverse)
         }
         Edit::ItemReorder { item_id, index } => {
             let (si, from) = find_item(state, item_id)?;
@@ -519,25 +579,47 @@ fn apply_edit(
             item_id,
             scene_id,
             index,
-        } => move_item(state, item_id, scene_id, *index, at),
+        } => move_item(state, item_id, scene_id, *index, at, dropped),
         Edit::ItemSetTransform {
             item_id,
             scene_id,
             transform,
         } => {
-            let item = placement_mut(state, item_id, scene_id.as_ref(), at)?;
-            let old = std::mem::replace(&mut item.placement, Placement::Legacy(*transform));
-            Ok(vec![set_placement(item_id, scene_id, old)])
+            match placement_mut(state, item_id, scene_id.as_ref(), at)? {
+                // The 0.3 form overrides the same field as a geometry (ADR-0024 §2).
+                PlacementTarget::Variant(vi) => keyframe::write(
+                    state,
+                    vi,
+                    item_id,
+                    KeyValue::Geometry(Placement::Legacy(*transform)),
+                    at,
+                ),
+                PlacementTarget::Item(item) => {
+                    let old = std::mem::replace(&mut item.placement, Placement::Legacy(*transform));
+                    Ok(vec![set_placement(item_id, scene_id, old)])
+                }
+            }
         }
         Edit::ItemSetGeometry {
             item_id,
             scene_id,
             geometry,
         } => {
-            let item = placement_mut(state, item_id, scene_id.as_ref(), at)?;
             check_geometry(geometry, at)?;
-            let old = std::mem::replace(&mut item.placement, Placement::Geometry(*geometry));
-            Ok(vec![set_placement(item_id, scene_id, old)])
+            match placement_mut(state, item_id, scene_id.as_ref(), at)? {
+                PlacementTarget::Variant(vi) => keyframe::write(
+                    state,
+                    vi,
+                    item_id,
+                    KeyValue::Geometry(Placement::Geometry(*geometry)),
+                    at,
+                ),
+                PlacementTarget::Item(item) => {
+                    let old =
+                        std::mem::replace(&mut item.placement, Placement::Geometry(*geometry));
+                    Ok(vec![set_placement(item_id, scene_id, old)])
+                }
+            }
         }
         Edit::CanvasSetSize { width, height } => {
             check_canvas_side(*width, at, "width")?;
@@ -574,41 +656,55 @@ fn apply_edit(
             item_id,
             scene_id,
             crop,
-        } => {
-            let item = placement_mut(state, item_id, scene_id.as_ref(), at)?;
-            let old = std::mem::replace(&mut item.crop, *crop);
-            Ok(vec![Edit::ItemSetCrop {
-                item_id: item_id.clone(),
-                scene_id: scene_id.clone(),
-                crop: old,
-            }])
-        }
+        } => match placement_mut(state, item_id, scene_id.as_ref(), at)? {
+            PlacementTarget::Variant(vi) => {
+                keyframe::write(state, vi, item_id, KeyValue::Crop(*crop), at)
+            }
+            PlacementTarget::Item(item) => {
+                let old = std::mem::replace(&mut item.crop, *crop);
+                Ok(vec![Edit::ItemSetCrop {
+                    item_id: item_id.clone(),
+                    scene_id: scene_id.clone(),
+                    crop: old,
+                }])
+            }
+        },
         Edit::ItemSetVisible {
             item_id,
             scene_id,
             visible,
-        } => {
-            let item = placement_mut(state, item_id, scene_id.as_ref(), at)?;
-            let old = std::mem::replace(&mut item.visible, *visible);
-            Ok(vec![Edit::ItemSetVisible {
-                item_id: item_id.clone(),
-                scene_id: scene_id.clone(),
-                visible: old,
-            }])
-        }
+        } => match placement_mut(state, item_id, scene_id.as_ref(), at)? {
+            PlacementTarget::Variant(vi) => {
+                keyframe::write(state, vi, item_id, KeyValue::Visible(*visible), at)
+            }
+            PlacementTarget::Item(item) => {
+                let old = std::mem::replace(&mut item.visible, *visible);
+                Ok(vec![Edit::ItemSetVisible {
+                    item_id: item_id.clone(),
+                    scene_id: scene_id.clone(),
+                    visible: old,
+                }])
+            }
+        },
         Edit::ItemSetOpacity {
             item_id,
             scene_id,
             opacity,
         } => {
-            let item = placement_mut(state, item_id, scene_id.as_ref(), at)?;
             check_opacity(*opacity, at)?;
-            let old = std::mem::replace(&mut item.opacity, *opacity);
-            Ok(vec![Edit::ItemSetOpacity {
-                item_id: item_id.clone(),
-                scene_id: scene_id.clone(),
-                opacity: old,
-            }])
+            match placement_mut(state, item_id, scene_id.as_ref(), at)? {
+                PlacementTarget::Variant(vi) => {
+                    keyframe::write(state, vi, item_id, KeyValue::Opacity(opacity.get()), at)
+                }
+                PlacementTarget::Item(item) => {
+                    let old = std::mem::replace(&mut item.opacity, *opacity);
+                    Ok(vec![Edit::ItemSetOpacity {
+                        item_id: item_id.clone(),
+                        scene_id: scene_id.clone(),
+                        opacity: old,
+                    }])
+                }
+            }
         }
         Edit::ItemSetBlend { item_id, blend } => {
             let (si, ii) = find_item(state, item_id)?;

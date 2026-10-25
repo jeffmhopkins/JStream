@@ -84,7 +84,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Opens the gesture `gesture_id` if it is new, and sets its live values (ADR-0032):\neach overrides one parameter of the collection on output, from the next render\ntick, without changing `rev`. A value replaces the gesture's previous value for\nthe same parameter, and takes the parameter over from any other gesture that held\nit. Values are validated as a batch's edits are (`not_found`, `invalid_argument`\nwith the field `values.<n>.<field>`); a value that is not a live-adjustable\nsetter (`item.set_transform`, `item.set_geometry`, `item.set_crop`), an empty or\nover-256 list, and a 17th open gesture are `invalid_argument`. Nothing in a\nrejected message is applied. The gesture ends with a batch carrying\n`ends_gesture`, with `live.cancel`, or when its client's session ends.",
+          "description": "Opens the gesture `gesture_id` if it is new, and sets its live values (ADR-0032):\neach overrides one parameter of the collection on output, from the next render\ntick, without changing `rev`. A value replaces the gesture's previous value for\nthe same parameter, and takes the parameter over from any other gesture that held\nit. Values are validated as a batch's edits are (`not_found`, `invalid_argument`\nwith the field `values.<n>.<field>`); a value that is not a live-adjustable\nsetter (`item.set_transform`, `item.set_geometry`, `item.set_crop`), a value whose\n`scene_id` names a keyframe scene (until #702), an empty or over-256 list, and a\n17th open gesture are `invalid_argument`. Nothing in a\nrejected message is applied. The gesture ends with a batch carrying\n`ends_gesture`, with `live.cancel`, or when its client's session ends.",
           "properties": {
             "gesture_id": {
               "$ref": "#/$defs/GestureId",
@@ -406,7 +406,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Installs a WASM automation plugin from the package at `path` on the engine's\nmachine, with what the person granted it after seeing its manifest (0.35,\nADR-0069). It starts enabled, and `plugin.state_changed` reports it. For a person\nonly: no MCP tool carries it, and no plugin is ever granted it. Fails with\n`already_exists` for a plugin ID in use, `invalid_argument` for a grant whose\n`problem` names a field (`grant.hosts.0`) or a package that isn't a plugin, and\n`unsupported` from an engine that hosts no plugins.",
+          "description": "Installs a WASM automation plugin from the package at `path` on the engine's\nmachine, with what the person granted it after seeing its manifest (0.35,\nADR-0069). It starts enabled, and `plugin.state_changed` reports it. For a person\nonly: no MCP tool carries it, and no plugin is ever granted it. Fails with\n`already_exists` for a plugin ID in use, `invalid_argument` for a grant whose\n`problem` names a field (`grant.hosts.0`) or a package that isn't a plugin,\n`action_failed` for a module whose `start` function traps or runs past its limits,\nand `unsupported` from an engine that hosts no plugins.",
           "properties": {
             "grant": {
               "$ref": "#/$defs/PluginGrant",
@@ -595,6 +595,51 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         }
       ]
+    },
+    "AudienceStatsInfo": {
+      "description": "A running `youtube` output's audience, as YouTube last reported it (ADR-0041 §3,\n0.38): what the `youtube.stats` event sends and the `youtube.stats` query lists.\nThe engine reads it at a low fixed rate, about once a minute, while the output runs.\nA count YouTube doesn't report (the owner hides it, or the broadcast has no viewers\nnow or has ended) is omitted.",
+      "properties": {
+        "broadcast_id": {
+          "description": "The broadcast it sends to.",
+          "type": "string"
+        },
+        "concurrent_viewers": {
+          "description": "People watching now.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "likes": {
+          "description": "Likes.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "output_id": {
+          "$ref": "#/$defs/OutputId",
+          "description": "The output."
+        },
+        "views": {
+          "description": "Views.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "output_id",
+        "broadcast_id"
+      ],
+      "type": "object"
     },
     "AudioCodec": {
       "description": "An audio codec. Serialized as a snake_case string.",
@@ -1113,6 +1158,13 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "description": "The batch was applied (or had already been applied under its idempotency key).",
           "properties": {
+            "dropped_overrides": {
+              "description": "The keyframe-scene overrides the batch dropped because their item left the\nvariant's parent (ADR-0040 §1), in the order it dropped them. Undoing the\nbatch restores them. Omitted when there are none, and missing (from a server\nolder than 0.39) parses as empty.",
+              "items": {
+                "$ref": "#/$defs/DroppedOverride"
+              },
+              "type": "array"
+            },
             "kind": {
               "const": "batch",
               "type": "string"
@@ -1547,6 +1599,75 @@ source: crates/jstream-protocol/src/fixtures.rs
       },
       "type": "object"
     },
+    "DroppedOverride": {
+      "description": "Overrides a batch dropped because their item left the keyframe scene's parent\n(ADR-0040 §1): `item.remove` of the item, or `item.move` of it to another scene.\nUndoing the batch restores them.",
+      "properties": {
+        "crop": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Crop"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The overridden crop."
+        },
+        "geometry": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ItemGeometry"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The overridden geometry, as `item.set_geometry` wrote it."
+        },
+        "item_id": {
+          "$ref": "#/$defs/ItemId",
+          "description": "The parent's item."
+        },
+        "opacity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Finite32"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The overridden opacity, in `0..=1`."
+        },
+        "scene_id": {
+          "$ref": "#/$defs/SceneId",
+          "description": "The keyframe scene that held the override."
+        },
+        "transform": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ItemTransform"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The overridden geometry in the deprecated 0.3 form, as `item.set_transform` wrote\nit. Never set together with `geometry`: both are the one `geometry` field."
+        },
+        "visible": {
+          "description": "The overridden visibility.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "scene_id",
+        "item_id"
+      ],
+      "type": "object"
+    },
     "Easing": {
       "description": "How a value moves from its start to its end over a transition\n([ADR-0029](../../../docs/adr/0029-transitions.md) §5).",
       "oneOf": [
@@ -1610,6 +1731,62 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Creates a keyframe scene (a variant) of `variant_of` (ADR-0024 §2, ADR-0049): a\nscene with no items of its own that shows its parent's items, each at its parent's\nvalues until the variant overrides a field. Placement edits with `scene_id` set to\nthe variant write its overrides; `item.clear_override` removes them. `variant_of`\nmust name an existing scene that is not itself a variant (a keyframe of a keyframe\nis made on the parent), else `invalid_argument`; a missing one is `not_found`.\nThe variant has the role `scene`, no folder (it sits under its parent) and no\ntransition overrides; its own `scene.set_transitions` and `scene.set_meta` apply.\nInverse: `scene.delete`.",
+          "properties": {
+            "name": {
+              "description": "Display name.",
+              "type": "string"
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The new scene's ID, chosen by the client. Rejected if it exists."
+            },
+            "type": {
+              "const": "scene.create_variant",
+              "type": "string"
+            },
+            "variant_of": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene it is a keyframe of."
+            }
+          },
+          "required": [
+            "type",
+            "scene_id",
+            "variant_of",
+            "name"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Removes one field of a keyframe scene's override of an item (ADR-0049 §2), so\nthat field follows the parent again. \"Reset keyframe\" is a batch of these.\n`scene_id` must name a keyframe scene and `item_id` an item of its parent, else\n`invalid_argument` (`not_found` for a missing one). Clearing a field the variant\ndoesn't override is allowed and changes nothing. Inverse: the placement edit that\nwrites the old value with `scene_id` set, or nothing when the field was absent.",
+          "properties": {
+            "field": {
+              "$ref": "#/$defs/OverrideField",
+              "description": "The field to clear."
+            },
+            "item_id": {
+              "$ref": "#/$defs/ItemId",
+              "description": "The parent's item."
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The keyframe scene."
+            },
+            "type": {
+              "const": "item.clear_override",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id",
+            "item_id",
+            "field"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Renames a scene. Inverse: `scene.rename` back to the previous name.",
           "properties": {
             "name": {
@@ -1656,7 +1833,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source or a video mix shows it, or any source's\nsettings refer to it: delete those sources, point those mixes elsewhere, or clear\nthose references, first (in the same batch if needed). Hotkey bindings whose\naction names the scene are not blockers: they are removed with it (ADR-0040 §3).\nInverse: `scene.create` with its role (omitted for `scene`), then `scene.reorder`\nto its old display position (unless it was last), `scene.set_transitions` if it\nhad an override, `scene.set_folder` and `scene.set_meta` if it had a folder or\nmetadata, then each deleted item's `item.remove` inverse, from bottom to top, then\n`hotkey.set` for each removed binding.",
+          "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source or a video mix shows it, or any source's\nsettings refer to it: delete those sources, point those mixes elsewhere, or clear\nthose references, first (in the same batch if needed). Hotkey bindings whose\naction names the scene are not blockers: they are removed with it (ADR-0040 §3).\nA scene with keyframe scenes is refused the same way, the variants listed as its\nblockers; delete them first. Inverse: `scene.create` with its role (omitted for\n`scene`), or `scene.create_variant` for a keyframe scene, then `scene.reorder`\nto its old display position (unless it was last), `scene.set_transitions` if it\nhad an override, `scene.set_folder` and `scene.set_meta` if it had a folder or\nmetadata, then each deleted item's `item.remove` inverse, from bottom to top (a\nkeyframe scene's overrides instead, as placement edits with its `scene_id`), then\n`hotkey.set` for each removed binding.",
           "properties": {
             "scene_id": {
               "$ref": "#/$defs/SceneId",
@@ -1746,7 +1923,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Removes an item from its scene. The source itself stays. Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden, and\n`item.set_transition` if its transition settings were not the default.",
+          "description": "Removes an item from its scene. The source itself stays. Every keyframe scene of\nthat scene loses its override of the item, reported in the batch result's\n`dropped_overrides` (ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default, and the\nplacement edits that write each dropped override back.",
           "properties": {
             "item_id": {
               "$ref": "#/$defs/ItemId",
@@ -1764,7 +1941,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Moves an item to a stacking position in another scene, keeping its ID, source,\nplacement, crop and visibility (ADR-0024 §1). Grouping is a batch that creates a\ngroup scene, places it, and moves the selected items into it. Rejected with\n`invalid_argument` if the move would make a scene contain itself (field\n`scene_id`, naming the cycle) or if the index is out of range. Inverse:\n`item.move` back to its previous scene and index.",
+          "description": "Moves an item to a stacking position in another scene, keeping its ID, source,\nplacement, crop and visibility (ADR-0024 §1). Grouping is a batch that creates a\ngroup scene, places it, and moves the selected items into it. Rejected with\n`invalid_argument` if the move would make a scene contain itself (field\n`scene_id`, naming the cycle), if the index is out of range, or if the scene is\na keyframe scene, which has no items of its own. A move to another scene drops\nthe item's overrides in the keyframe scenes of the scene it leaves, as\n`item.remove` does. Inverse: `item.move` back to its previous scene and index,\nthen the placement edits that write each dropped override back.",
           "properties": {
             "index": {
               "description": "Its position in that scene after the move, counted from the bottom (0). Must\nbe at most the number of items already in that scene (less than it for the\nitem's own scene), else `invalid_argument`.",
@@ -1877,7 +2054,7 @@ source: crates/jstream-protocol/src/fixtures.rs
                   "type": "null"
                 }
               ],
-              "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item.\nAny other scene is `invalid_argument` until keyframe scenes exist, when naming\na keyframe scene of the item's scene will write that scene's override."
+              "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item. A\nkeyframe scene of the item's scene writes that scene's override of this\nfield (since 0.39), whose inverse is `item.clear_override` if the field was\nnot overridden and this edit with the old value if it was. Any other scene is\n`invalid_argument`."
             },
             "type": {
               "const": "item.set_visible",
@@ -3985,6 +4162,56 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "A running `youtube` output's audience (ADR-0041 §3, 0.38): sent when a reading\ndiffers from the last one, and once on the first. The engine reads it about once\na minute while the output runs, less often or not at all when the day's quota\nruns low (the `youtube.stats` query says which).",
+          "properties": {
+            "broadcast_id": {
+              "description": "The broadcast it sends to.",
+              "type": "string"
+            },
+            "concurrent_viewers": {
+              "description": "People watching now.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "likes": {
+              "description": "Likes.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "output_id": {
+              "$ref": "#/$defs/OutputId",
+              "description": "The output."
+            },
+            "type": {
+              "const": "youtube.stats",
+              "type": "string"
+            },
+            "views": {
+              "description": "Views.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "output_id",
+            "broadcast_id"
+          ],
+          "type": "object"
+        },
+        {
           "description": "The mixer's levels (ADR-0028): sent about ten times a second while the mixer runs\n(an output is running), and never while it doesn't. Runtime state: a client that\nmisses one just shows the next. Until event subscriptions exist, every client\nreceives it.",
           "properties": {
             "buses": {
@@ -4645,6 +4872,70 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "ItemOverride": {
+      "description": "What a keyframe scene overrides for one of its parent's items, as `state.get` reports\nit. An omitted field follows the parent. At least one field is set: an item with no\noverride has no entry.",
+      "properties": {
+        "crop": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Crop"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The overridden crop."
+        },
+        "geometry": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ItemGeometry"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The overridden geometry, as `item.set_geometry` wrote it."
+        },
+        "item_id": {
+          "$ref": "#/$defs/ItemId",
+          "description": "The parent's item."
+        },
+        "opacity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Finite32"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The overridden opacity, in `0..=1`."
+        },
+        "transform": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ItemTransform"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The overridden geometry in the deprecated 0.3 form, as `item.set_transform` wrote\nit. Never set together with `geometry`: both are the one `geometry` field."
+        },
+        "visible": {
+          "description": "The overridden visibility.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "item_id"
+      ],
+      "type": "object"
+    },
     "ItemTransform": {
       "description": "A protocol 0.3 placement: where a scene item sits until it is stored as\n[`ItemGeometry`](crate::ItemGeometry).\n\n**Deprecated** since 0.11 (ADR-0022) and removed in 1.0, with `item.set_transform`,\n`item.add`'s `transform` and `ItemInfo.transform`. Until then it keeps the meaning\nbelow.\n\n`position` is the top-left corner in canvas pixels, `scale` is relative to the\nsource's current size, and `rotation_deg` turns clockwise about that corner.\nADR-0022 (`docs/adr/0022-item-transform-and-canvas.md`) does not extend this struct\nwith 3D fields. The replacement is [`ItemGeometry`](crate::ItemGeometry): a box,\nrotation about its centre, and a fit mode. Until 1.0 a legacy placement keeps this\nmeaning, and [`legacy_quad`](crate::legacy_quad) evaluates it. Crop is [`Crop`],\napplied before the transform.\n\nEvery number is a [`Finite32`], so a non-finite or out-of-range number is rejected at\ndeserialization as `malformed`.",
       "properties": {
@@ -5131,6 +5422,31 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "failed",
           "description": "Stopped because of an error. The error is in the audit log.",
+          "type": "string"
+        }
+      ]
+    },
+    "OverrideField": {
+      "description": "One of the four fields a keyframe scene can override. Each is overridden whole: a\nvariant that overrides `geometry` overrides all of it.",
+      "oneOf": [
+        {
+          "const": "geometry",
+          "description": "The item's geometry (`item.set_geometry`, or `item.set_transform` while it lasts).",
+          "type": "string"
+        },
+        {
+          "const": "crop",
+          "description": "Its crop (`item.set_crop`).",
+          "type": "string"
+        },
+        {
+          "const": "visible",
+          "description": "Whether it is drawn (`item.set_visible`).",
+          "type": "string"
+        },
+        {
+          "const": "opacity",
+          "description": "Its opacity (`item.set_opacity`).",
           "type": "string"
         }
       ]
@@ -5864,6 +6180,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "The audience of each running `youtube` output, as last read, and the engine's\nestimate of the day's API quota (ADR-0041 §3 and §5, 0.38). Never calls YouTube.",
+          "properties": {
+            "type": {
+              "const": "youtube.stats",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Lists the collection's audio buses, ordered by ID, and every send into them.",
           "properties": {
             "type": {
@@ -5954,6 +6283,11 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "description": "The result of `output.status`. Output state is runtime state, not collection\nstate, so it carries no `rev`.",
           "properties": {
+            "cleartext": {
+              "default": false,
+              "description": "Whether publishing sends the stream key across the network unencrypted:\na generic RTMP target whose server URL is plain `rtmp://` to a host other than\nthe engine's machine (loopback and `localhost` don't count). A client shows it\nas a warning; the engine still publishes. Missing (from a server older than\n0.37) parses as `false`.",
+              "type": "boolean"
+            },
             "encoder": {
               "anyOf": [
                 {
@@ -6492,6 +6826,32 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "The result of `youtube.stats`. Runtime state, so it carries no `rev`.",
+          "properties": {
+            "outputs": {
+              "description": "The audience of each running `youtube` output YouTube has reported one for,\nordered by output ID.",
+              "items": {
+                "$ref": "#/$defs/AudienceStatsInfo"
+              },
+              "type": "array"
+            },
+            "quota": {
+              "$ref": "#/$defs/QuotaInfo",
+              "description": "The day's estimated quota."
+            },
+            "type": {
+              "const": "youtube.stats",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "outputs",
+            "quota"
+          ],
+          "type": "object"
+        },
+        {
           "description": "The result of `bus.list`.",
           "properties": {
             "buses": {
@@ -6601,6 +6961,37 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         }
       ]
+    },
+    "QuotaInfo": {
+      "description": "The engine's estimate of the day's YouTube API quota (ADR-0041 §5). It adds up what\neach call the engine makes costs by YouTube's published unit costs. YouTube's own\ncount, which other apps on the same Google project share, can differ.",
+      "properties": {
+        "daily": {
+          "description": "The units the engine assumes a day has.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "exhausted": {
+          "description": "Whether YouTube refused a call since the quota last reset because it is used up.\nOmitted when it hasn't.",
+          "type": "boolean"
+        },
+        "stats": {
+          "$ref": "#/$defs/StatsPolling",
+          "description": "How audience stats are polled now."
+        },
+        "used": {
+          "description": "Units used since the quota last reset, by the engine's count.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "used",
+        "daily",
+        "stats"
+      ],
+      "type": "object"
     },
     "RateControl": {
       "description": "How a video encoder spends bits. Serialized with an internal `type` tag.",
@@ -6788,7 +7179,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           ]
         },
         "items": {
-          "description": "Its items, in stacking order: the first is at the bottom.",
+          "description": "Its items, in stacking order: the first is at the bottom. Always empty for a\nkeyframe scene, which shows its parent's.",
           "items": {
             "$ref": "#/$defs/ItemInfo"
           },
@@ -6797,6 +7188,13 @@ source: crates/jstream-protocol/src/fixtures.rs
         "name": {
           "description": "Its display name.",
           "type": "string"
+        },
+        "overrides": {
+          "description": "A keyframe scene's overrides of its parent's items, in item ID order. Omitted\nwhen there are none, and for every scene that is not a variant.",
+          "items": {
+            "$ref": "#/$defs/ItemOverride"
+          },
+          "type": "array"
         },
         "role": {
           "$ref": "#/$defs/SceneRole",
@@ -6831,6 +7229,17 @@ source: crates/jstream-protocol/src/fixtures.rs
             }
           ],
           "description": "The preset a switch out of this scene uses, unless the switch or the next scene\nnames one. Omitted for none."
+        },
+        "variant_of": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SceneId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The scene this one is a keyframe scene of (ADR-0024 §2, protocol 0.39), whose\nitems it shows. Omitted for a scene that is not a variant."
         }
       },
       "required": [
@@ -7197,6 +7606,31 @@ source: crates/jstream-protocol/src/fixtures.rs
         "rms"
       ],
       "type": "object"
+    },
+    "StatsPolling": {
+      "description": "How the engine polls audience stats, by how much of the day's estimated YouTube\nquota is left (ADR-0041 §5). Serialized as a snake_case string.",
+      "oneOf": [
+        {
+          "const": "normal",
+          "description": "At the normal rate.",
+          "type": "string"
+        },
+        {
+          "const": "slowed",
+          "description": "Less often, because the quota is running low.",
+          "type": "string"
+        },
+        {
+          "const": "stopped",
+          "description": "Not at all until the quota resets, because it is nearly or entirely used up.",
+          "type": "string"
+        },
+        {
+          "const": "other",
+          "description": "A value this version doesn't know, from a newer server.",
+          "type": "string"
+        }
+      ]
     },
     "StreamHealth": {
       "description": "How YouTube rates what a stream receives (`status.healthStatus.status`). Serialized\nas a snake_case string.",
@@ -7900,5 +8334,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.36"
+  "title": "JStream protocol 0.39"
 }

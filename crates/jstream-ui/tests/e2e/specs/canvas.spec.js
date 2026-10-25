@@ -1,6 +1,6 @@
 // The canvas editor over the selected scene: selecting, dragging, nudging, the readout,
 // and undo and redo through the engine. The seed's box is 640×360 at the centre of a 1920×1080 canvas.
-import { test, expect, connect, rev } from '../fixtures.js';
+import { test, expect, connect, nestScene, rev } from '../fixtures.js';
 
 /** The seed item's outline: its polygon's corners, in canvas pixels. It is the bottom
  *  item, so the first of the Backdrop source's outlines. */
@@ -70,7 +70,30 @@ test('the canvas, the scene list and the sources list share one selection', asyn
   await expect(outline(page)).toHaveCount(0);
 });
 
+/** Records the JSON messages the page sends on its WebSockets, from now on. */
+function sentMessages(page) {
+  const sent = [];
+  page.on('websocket', (ws) =>
+    ws.on('framesent', ({ payload }) => {
+      if (typeof payload === 'string') sent.push(JSON.parse(payload));
+    }),
+  );
+  return sent;
+}
+
+/** The `live.*` actions and gesture-ending batches among `sent`, as short labels. */
+function gestureTraffic(sent) {
+  return sent.flatMap((m) => {
+    const text = JSON.stringify(m);
+    if (text.includes('"live.set"')) return ['live.set'];
+    if (text.includes('"live.cancel"')) return ['live.cancel'];
+    if (text.includes('"ends_gesture"')) return ['commit'];
+    return [];
+  });
+}
+
 test('a drag is one undoable edit', async ({ page, daemon }) => {
+  const sent = sentMessages(page);
   await connect(page, daemon);
   await expect(outline(page)).toBeVisible();
   const before = await corners(page);
@@ -85,12 +108,14 @@ test('a drag is one undoable edit', async ({ page, daemon }) => {
   await page.mouse.down();
   await page.mouse.move(from.x + by.x / 2, from.y + by.y / 2, { steps: 4 });
   await page.mouse.move(from.x + by.x, from.y + by.y, { steps: 4 });
-  // The readout shows where the box's top-left is, and nothing reaches the engine
-  // until the drop.
+  // The readout shows where the box's top-left is. The output follows through live
+  // values, which change no revision; the drop commits them and ends the gesture.
   await expect(readout(page)).toHaveText(/^X \d+ {2}Y \d+$/);
+  await expect.poll(() => gestureTraffic(sent).includes('live.set')).toBe(true);
   expect(await rev(page)).toBe(startRev);
   await page.mouse.up();
   await page.keyboard.up('Control');
+  await expect.poll(() => gestureTraffic(sent).at(-1)).toBe('commit');
 
   // The page measures its stage in whole pixels, so allow half a screen pixel.
   const halfPixel = 0.5 / from.scale;
@@ -105,6 +130,24 @@ test('a drag is one undoable edit', async ({ page, daemon }) => {
   await page.keyboard.press('Control+Shift+z');
   await expectCorners(page, moved);
   expect(await rev(page)).toBe(startRev + 3);
+});
+
+test('Escape during a drag cancels its live values', async ({ page, daemon }) => {
+  const sent = sentMessages(page);
+  await connect(page, daemon);
+  await expect(outline(page)).toBeVisible();
+  const before = await corners(page);
+  const startRev = await rev(page);
+  const from = await onScreen(page, 960, 540);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(from.x + 100, from.y + 60, { steps: 5 });
+  await expect.poll(() => gestureTraffic(sent).includes('live.set')).toBe(true);
+  await page.keyboard.press('Escape');
+  await page.mouse.up();
+  await expect.poll(() => gestureTraffic(sent).at(-1)).toBe('live.cancel');
+  await expectCorners(page, before);
+  expect(await rev(page)).toBe(startRev);
 });
 
 test('Shift drags at half speed', async ({ page, daemon }) => {
@@ -193,9 +236,8 @@ test('a marquee from the margin selects what it touches', async ({ page, daemon 
 test('several items are selected, moved and dropped from the selection together', async ({ page, daemon }) => {
   await connect(page, daemon);
   await expect(outline(page)).toBeVisible();
-  // A second item of the same source, which covers the canvas.
-  await page.getByLabel('What to add').selectOption({ label: 'Backdrop' });
-  await page.locator('.sources-panel').getByRole('button', { name: 'Add' }).click();
+  // A second item, which covers the canvas: the Intro scene, nested.
+  await nestScene(page, 'Intro');
   await expect(page.locator('.sources-panel li.row')).toHaveCount(2);
   const before = await corners(page);
 
@@ -224,27 +266,22 @@ test('several items are selected, moved and dropped from the selection together'
   await expect(readout(page)).toHaveText('2 items · 1920 × 1080');
 });
 
-test('a double click shows the item in the Inspector', async ({ page, daemon }) => {
+test('a double click opens the item\'s Properties', async ({ page, daemon }) => {
   await connect(page, daemon);
   await expect(outline(page)).toBeVisible();
-  // Close the Inspector from the View menu.
-  await page.getByRole('button', { name: 'View' }).click();
-  await page.getByRole('menu', { name: 'View' }).getByRole('menuitemcheckbox', { name: /Inspector/ }).click();
-  await page.keyboard.press('Escape');
-  await expect(page.locator('.panel-inspector')).toBeHidden();
-
   const centre = await onScreen(page, 960, 540);
   await page.mouse.dblclick(centre.x, centre.y);
-  await expect(page.locator('.panel-inspector .source-title')).toHaveText('Backdrop');
+  const dialog = page.getByRole('dialog', { name: 'Properties' });
+  await expect(dialog.getByRole('textbox', { name: 'Name' })).toHaveValue('Backdrop');
+  await expect(page.locator('.sources-panel li.row').first()).toHaveClass(/selected/);
 });
 
 test('a double click on the canvas tools selects nothing under them', async ({ page, daemon }) => {
   await connect(page, daemon);
   await expect(outline(page)).toBeVisible();
-  // A second item covering the canvas, nudged up and right so it reaches under the
-  // tools, which sit above the frame's top-right corner.
-  await page.getByLabel('What to add').selectOption({ label: 'Backdrop' });
-  await page.locator('.sources-panel').getByRole('button', { name: 'Add' }).click();
+  // A second item covering the canvas (the Intro scene, nested), nudged up and right
+  // so it reaches under the tools, which sit above the frame's top-right corner.
+  await nestScene(page, 'Intro');
   await expect(page.locator('.sources-panel li.row')).toHaveCount(2);
   await page.getByLabel('Scene canvas, Main').focus();
   for (let i = 0; i < 25; i += 1) {
