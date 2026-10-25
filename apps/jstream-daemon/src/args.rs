@@ -21,6 +21,10 @@ Options:
                        change to it; created, empty, if it doesn't exist
                        (default: none, the collection starts empty every run)
   --output <id>        add a stopped placeholder output (repeatable)
+  --plugin-dir <dir>   where installed WASM plugins and their grants are saved
+                       (plugins.json) and loaded from at startup (default:
+                       `plugins` in the platform data directory); created if
+                       missing
   --ui-dir <dir>       serve the web UI's built files from this directory at
                        http://127.0.0.1:<port>/ (the browser asks for the token
                        as a password)
@@ -78,6 +82,9 @@ pub struct Options {
     pub youtube_client: Option<String>,
     /// `--ui-dir`: the web UI's built files. Without it no UI is served.
     pub ui_dir: Option<String>,
+    /// `--plugin-dir`: where installed WASM plugins are saved. Without it `main` uses
+    /// `plugins` in the platform data directory; left out entirely, plugins aren't saved.
+    pub plugin_dir: Option<String>,
 }
 
 /// A parsed command line.
@@ -155,6 +162,12 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
                     return Err(format!("`{arg}` given twice"));
                 }
             }
+            "--plugin-dir" => {
+                let dir = value()?;
+                if options.plugin_dir.replace(dir.clone()).is_some() {
+                    return Err(format!("`{arg}` given twice"));
+                }
+            }
             other if other.starts_with('-') => return Err(format!("unknown option `{other}`")),
             other => return Err(format!("unexpected argument `{other}`")),
         }
@@ -209,7 +222,7 @@ mod tests {
         let options = serve(
             "--output out_1 --log-level debug --port 4455 --token-file /tmp/t \
              --collection /tmp/c.json --log-dir /tmp/logs --output out_2 --ui-dir /tmp/dist \
-             --youtube-client /tmp/yt.json",
+             --youtube-client /tmp/yt.json --plugin-dir /tmp/plugins",
         );
         assert_eq!(
             options,
@@ -222,6 +235,7 @@ mod tests {
                 log_level: Some("debug".to_owned()),
                 youtube_client: Some("/tmp/yt.json".to_owned()),
                 ui_dir: Some("/tmp/dist".to_owned()),
+                plugin_dir: Some("/tmp/plugins".to_owned()),
             }
         );
     }
@@ -244,6 +258,10 @@ mod tests {
         assert_eq!(error("--collection"), "`--collection` needs a value");
         assert_eq!(error("--ui-dir"), "`--ui-dir` needs a value");
         assert_eq!(error("--ui-dir a --ui-dir b"), "`--ui-dir` given twice");
+        assert_eq!(
+            error("--plugin-dir a --plugin-dir b"),
+            "`--plugin-dir` given twice"
+        );
         assert_eq!(
             error("--youtube-client"),
             "`--youtube-client` needs a value"

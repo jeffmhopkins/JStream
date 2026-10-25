@@ -57,8 +57,12 @@ wasn't granted:
   Running past the deadline stops the plugin with `Error::Deadline`. This catches what
   fuel misses, such as a plugin whose few instructions are slow. The ticker runs while
   the host or any plugin loaded on it lives. Linear memory is capped at 64 MiB and tables
-  at 10,000 elements by default; `memory.grow` past the cap answers −1, and a module whose memory starts above
-  it is refused. One instance, one memory and one table per plugin. The WASM stack is
+  at 10,000 elements by default (`limits::Caps`, the store's resource limiter). Growing
+  either past its cap is a trap the plugin can't catch, `Error::MemoryLimit` (ADR-0069
+  treats reaching a cap as a trap; the engine reports it as `memory_limit`, ADR-0076), and
+  so is a module whose memory starts above it, at load. A growth past the module's own
+  declared maximum, below the cap, answers −1 as WASM says. One instance, one memory and
+  one table per plugin. The WASM stack is
   capped at 512 KiB for every plugin. A plugin may send at most 50 commands to
   `Control` in any second (ADR-0069), counted over a sliding window. Every edit of a
   batch is a command (ADR-0013), as is a call's one action, query or history operation.
@@ -97,7 +101,9 @@ against the deadline; with fuel unmetered, an endless loop and a spinning `start
 function miss the default and a lowered deadline, even after the host is dropped, and a
 host call in `start` re-arms the load's deadline, not an invocation's; an endless loop
 runs out of fuel under the default and a lowered budget, in an invocation and in
-`start`; memory can't grow past the default or a lowered cap, nor start above it; a
+`start`; growing memory past the default or a lowered cap, or the table past a lowered
+one, is `Error::MemoryLimit`, as is a memory that starts above the cap, while growing
+past the module's own maximum answers −1; a
 result read outside memory traps; of sixty calls in one invocation the first fifty reach
 `Control` and the rest are limited without stopping the plugin, a lowered cap holds
 across invocations and frees a second later, denied calls don't use it, each edit of a
@@ -114,10 +120,13 @@ names none.
 **Not here:** installing plugins, the package and its manifest, the person's grant and
 the scoped session that holds a plugin to it, pumping a plugin's events into its queue
 and the entry that handles them (`on_event`), and disabling a failed plugin with
-`plugin.state_changed`. `jstream-core` does all of these
-([ADR-0075](../../docs/adr/0075-wasm-plugin-host-in-the-engine.md)). Not anywhere yet:
-saving installed plugins, the manifest's classes, and any limits on what a plugin may
-write into names and other strings the UI and agents show.
+`plugin.state_changed`, saving the installed plugins and holding a grant to what the
+manifest asks for. `jstream-core` does all of these
+([ADR-0075](../../docs/adr/0075-wasm-plugin-host-in-the-engine.md),
+[ADR-0076](../../docs/adr/0076-saved-wasm-plugins-and-manifest-requests.md)). Not
+anywhere yet: a private data folder per plugin and the file imports it would need, and
+any limits on what a plugin may write into names and other strings the UI and agents
+show.
 
 <a id="abi"></a>
 ## Plugin ABI

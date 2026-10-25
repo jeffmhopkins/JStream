@@ -126,7 +126,7 @@ impl CollectionFile {
 /// share it. Within a process, the engine's saves to one file are serialized by its
 /// lock; two engines saving the same path would overwrite each other's collections
 /// anyway, so that is not a supported setup.
-fn write_atomically(path: &Path, bytes: &[u8]) -> io::Result<()> {
+pub(crate) fn write_atomically(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let name = path
         .file_name()
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "the path names no file"))?;
@@ -149,7 +149,7 @@ fn write_atomically(path: &Path, bytes: &[u8]) -> io::Result<()> {
             tracing::warn!(
                 path = %path.display(),
                 error = %err,
-                "collection saved, but its directory was not flushed to disk"
+                "file saved, but its directory was not flushed to disk"
             );
         }
     }
