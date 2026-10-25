@@ -49,7 +49,10 @@ It has:
   window", which the desktop's ScreenCast portal picker resolves when the capture starts.
   A headless session lists none. `start` runs the portal's session flow on the session
   bus: `CreateSession`, `SelectSources` (one source of the picked kind, the cursor drawn
-  into the frames, `persist_mode` 2 with the last restore token), `Start` (the picker;
+  into the frames, or sent as metadata for `CursorCapture::Metadata` where the portal
+  offers that mode; for `CursorCapture::Hidden`, cursor mode hidden where it's offered,
+  else metadata that the stream doesn't ask PipeWire for, else drawn in;
+  `persist_mode` 2 with the last restore token), `Start` (the picker;
   `start` blocks while it is open, up to five minutes) and `OpenPipeWireRemote`. Each
   request's `Response` is matched on the request path computed before the call, or on
   the handle the call returns. Only the portal is listened to: its unique bus name
@@ -123,7 +126,15 @@ It has:
   stream offers shared memory only, PipeWire renegotiates, and the capture goes on
   with CPU frames. Its `pts` is
   the buffer header's `CLOCK_MONOTONIC` time when that is plausible, else the clock's
-  `now`. The callbacks catch panics (R-UNSAFE-005); a stream error is `DeviceLost`.
+  `now`. With cursor metadata the stream also asks for `SPA_META_Cursor`, with room for
+  a 256-pixel picture, and reads it from every buffer on either path, before the frame
+  and whether or not the buffer holds one:
+  the position less the hot spot, less the crop's origin, and the picture (RGBA, BGRA
+  or their padded forms, made straight RGBA) when the buffer carries a new one. A
+  buffer without one keeps the last picture, an empty one or an `id` of 0 hides the
+  pointer, and every offset and size is checked against the metadata's own. A change
+  goes into a second mailbox, which the stream's `cursor` reads as `CaptureCursor`.
+  The callbacks catch panics (R-UNSAFE-005); a stream error is `DeviceLost`.
   The portal protocol's option values are here too: source types, cursor modes,
   `persist_mode`, request handle tokens and request object paths.
 - **`PipeWire`** loads `libpipewire-0.3.so.0` and checks it is at least ADR-0060's floor
@@ -291,12 +302,12 @@ It has:
   feature out of the defaults. Without it, `jstream-aac` leaves the build, the list has
   no AAC encoder, and opening one reports `Unsupported`.
 
+The engine starts each display and window source's capture with `start_with` and
+`CaptureOptions::for_source`, asks for `Drawn` when the source's `show_cursor` setting
+(protocol 0.36) is on and `Hidden` when it's off, and never draws the pointer itself.
+It calls `forget_source` when the source is deleted.
+
 Not here yet, in roughly the order they follow:
-- the cursor as stream metadata, composited by the source, once the source has a
-  "show cursor" setting (it is drawn into the frames for now);
-- the engine starting each portal source's capture with `start_with` and
-  `CaptureOptions::for_source`, and calling `forget_source` when the source is deleted,
-  once captures follow sources on this wave (it captures the primary display for now);
 - choosing between PipeWire and ALSA (ADR-0060 §8): ALSA when no PipeWire daemon runs,
   and which one where both are present;
 - pairing a V4L2 webcam with its microphone, and DMA-BUF export from V4L2;
@@ -306,7 +317,7 @@ The virtual camera is out of scope (`Backends::vcam` is `None` on Linux).
 
 Tests run on every platform where they can: D-Bus messages, the portal handshake, SPA
 pods (the DMA-BUF offer was checked byte for byte against libspa's builder), the frame
-copy, the H.264 parameters, parameter sets, GOP and upload, and V4L2's ABI layouts,
+copy, the cursor metadata, the H.264 parameters, parameter sets, GOP and upload, and V4L2's ABI layouts,
 formats list, colour, buffer times and device IDs are platform-independent. The GPU interop's tests open a device on a software Vulkan
 adapter where there is no GPU, and skip without one: the frame copy (crop, opaque
 padding, slots reused only once free) and the context checks. The VA-API surface
@@ -330,7 +341,7 @@ recorded, needs the `openh264-download` feature and `--ignored`; CI runs neither
 `hw-tests` feature holds the tests against a real desktop, `#[ignore]`d
 and run by hand: the session bus (`dbus-run-session` is enough), a portal capture in a
 GNOME or KDE session with PipeWire (on the CPU path, and on the GPU path with a Vulkan
-driver that imports DMA-BUFs), VA-API H.264 encodes on a GPU with an encode driver,
+driver that imports DMA-BUFs, and the pointer as metadata), VA-API H.264 encodes on a GPU with an encode driver,
 from CPU frames and from the context's encode targets (which needs the Vulkan and
 VA-API drivers on one render node), `PipeWireAudio` recording (on the data loop),
 playing and looping back on a PipeWire daemon (`pipewire/audio_tests.rs`; null nodes
