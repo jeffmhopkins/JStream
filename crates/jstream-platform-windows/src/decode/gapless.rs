@@ -195,7 +195,11 @@ mod tests {
     #[test]
     fn a_new_delay_applies_from_the_next_pass() {
         let mut gapless = Gapless::new(1, 1500, 0, None);
-        assert_eq!(gapless.push(block(0, 1024)), None, "inside the first pass's priming");
+        assert_eq!(
+            gapless.push(block(0, 1024)),
+            None,
+            "inside the first pass's priming"
+        );
         gapless.reset();
         gapless.set_delay(500);
         let cut = gapless.push(block(0, 1024)).expect("past the new priming");
