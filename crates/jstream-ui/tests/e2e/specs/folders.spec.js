@@ -58,7 +58,7 @@ test('folders hold scenes and folders, fold, and keep a search match in view', a
   await page.getByRole('menuitem', { name: 'New folder' }).click();
   await name(page, 'Show');
   // Folders come first at each level.
-  expect(await tree(page)).toEqual(['Show', 'Intro', 'Main']);
+  await expect.poll(() => tree(page)).toEqual(['Show', 'Intro', 'Main']);
   await expect(row(page, 'Show').locator('.tree-label')).toHaveText('Show');
 
   // Into the folder's middle half, and the folder opens.
