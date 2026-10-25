@@ -435,8 +435,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   cuts until a client adds another.
   Audio (protocol 0.19): an audio source's `audio` (`enabled`, `follow`, fader and
   mute; a nested scene source has no fader or mute), the master bus and up to 15
-  others with their faders, and the post-fader sends, a new channel source sending to
-  the master at 0 dB. A send always runs from a source to a bus, and filters have no
+  others with their faders and (protocol 0.42) each bus's optional monitor, an output
+  device and a tap point before or after its filters (`bus.set_monitor`), and the
+  post-fader sends, a new channel source sending to the master at 0 dB. A send always runs from a source to a bus, and filters have no
   sidechain keys yet, so no edit can close an audio cycle. The engine routes these into
   the program stage's mixer while it runs.
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
@@ -444,7 +445,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   Not yet: settings migrations between kind versions (a source saved at another
   version is refused on load), blend modes
   other than `normal`,
-  bus monitors, per-placement effects, a keyframe scene's overrides of a group's
+  per-placement effects, a keyframe scene's overrides of a group's
   children (so `scene.set_role` and removing or retargeting a group's item drop none
   yet, #702), `background`, output audio buses and chains, the `YouTube` kind, a virtual
   camera's video mix (it always shows the program), and everything outside `sources`,
