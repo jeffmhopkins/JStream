@@ -94,13 +94,18 @@ struct Scrub {
     value: f64,
 }
 
-/// A number field with − and + steppers, a unit, and a label above it. `value` is the
-/// committed value, `None` to disable the field; `send` gets each new value, kept to
-/// `[min, max]` and rounded to `decimals` places.
+/// A number field with − and + steppers, a unit, and a label above it, or `named` in
+/// place of the label. `value` is the committed value, `None` to disable the field;
+/// `send` gets each new value, kept to `[min, max]` and rounded to `decimals` places.
 #[component]
 pub fn NumberField(
     /// The label above the field, also the input's accessible name.
+    #[prop(optional)]
     label: &'static str,
+    /// The input's accessible name, for a field shown without a label (a row that
+    /// names it already).
+    #[prop(optional, into)]
+    named: Option<Signal<String>>,
     /// The unit after the number, such as `px`.
     #[prop(optional)]
     unit: &'static str,
@@ -267,17 +272,18 @@ pub fn NumberField(
         dragged.set(None);
     };
 
+    let name = move || named.map_or_else(|| label.to_owned(), |n| n.get());
     view! {
         <label class="number-field">
-            <span class="field-label">{label}</span>
+            {named.is_none().then(|| view! { <span class="field-label">{label}</span> })}
             <span class="stepper">
-                <button type="button" tabindex="-1" aria-label=format!("Decrease {label}")
+                <button type="button" tabindex="-1" aria-label=move || format!("Decrease {}", name())
                     disabled=disabled on:click=move |_| nudge(-step)>"−"</button>
                 <input
                     type="text"
                     inputmode="decimal"
                     class="mono"
-                    aria-label=label
+                    aria-label=name
                     title="Drag to change · Shift: fine · Ctrl: coarse · or type a value"
                     node_ref=input
                     disabled=disabled
@@ -290,7 +296,7 @@ pub fn NumberField(
                     on:pointercancel=on_cancel
                 />
                 <span class="unit">{unit}</span>
-                <button type="button" tabindex="-1" aria-label=format!("Increase {label}")
+                <button type="button" tabindex="-1" aria-label=move || format!("Increase {}", name())
                     disabled=disabled on:click=move |_| nudge(step)>"+"</button>
             </span>
         </label>
