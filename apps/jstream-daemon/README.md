@@ -515,9 +515,12 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   registers each secret as it is stored or loaded, and every YouTube refresh token,
   since `serve.rs` hands YouTube its Credential Manager token store behind
   `Redacting` too. The secrets that pass through neither store are registered by the
-  YouTube setup's secret hook (`Secrets::hook`, #353): every OAuth access token and
-  rotated refresh token the account's client gets, and every stream key YouTube sends
-  it, such as the one a `youtube` output's `Youtube::ingest` reads for its connect.
+  YouTube setup's secret hook (`Secrets::hook(SecretKind::slot)`, #353): every OAuth
+  access token and rotated refresh token the account's client gets, and every stream
+  key YouTube sends it, such as the one a `youtube` output's `Youtube::ingest` reads for
+  its connect. The client's access tokens share one slot, which keeps the newest and
+  the one it superseded, so hourly refreshes don't grow the list; a sign-in's access
+  token is kept, since the store may refuse it and leave the client on its own (#844).
   Only their length and BLAKE3 digest are kept, and the text is scanned for windows
   with that digest, so the hook holds no plaintext. It replaces the default hook,
   whose stderr line would quote the message unredacted; `main.rs`'s `crash_line` prints

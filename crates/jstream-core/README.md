@@ -52,9 +52,11 @@ state machine. Contents:
   empty, as it is until the maintainer fills it in; `YoutubeSetup::new` takes another
   client, for a developer override. `YoutubeSetup::with_secret_hook` hands the
   account's client a `jstream_youtube::SecretHook`, which it calls with each token and
-  stream key it gets, a `youtube` output's key included, so the host can redact them
-  from crash reports (#353). A sign-in's two tokens go to the hook as soon as the code
-  is exchanged, so even a grant that is abandoned or that the store refuses is redacted. It holds one `jstream-youtube` `LiveClient`
+  stream key it gets and its `SecretKind`, a `youtube` output's key included, so the
+  host can redact them from crash reports (#353). A sign-in's two tokens go to the hook as soon as the code
+  is exchanged, so even a grant that is abandoned or that the store refuses is redacted.
+  Its access token goes as `SignInAccessToken`, which supersedes nothing, since a
+  refused grant leaves the current client using its own (#844). It holds one `jstream-youtube` `LiveClient`
   (one account, its refresh token stored under the fixed opaque ID `TOKEN_ACCOUNT`, so
   no email or other personal detail names the credential) and runs the `youtube.*`
   actions and queries with no engine lock held. `youtube.sign_in` asks for the full
@@ -506,7 +508,8 @@ feature and `jstream-protocol`'s `fixtures` feature (the differential and parity
 tests), `jstream-platform`'s `fake` feature (the pipeline test and
 `tests/scenarios.rs`, and the CLAP fake hosts), `jstream-youtube`'s `fake` feature
 (`src/tests/youtube.rs`), `jstream-browser`'s `fake` feature (the browser pages in
-`src/tests/audio.rs`), `zune-jpeg` (decoding the preview's JPEG pictures in tests),
+`src/tests/audio.rs`), `jstream-crash` (the crash redaction's `Secrets` fed by the
+YouTube secret hook, in `src/tests/youtube.rs`), `zune-jpeg` (decoding the preview's JPEG pictures in tests),
 `insta` (the built-in kinds' snapshot, `schema/kinds.snap`) and `jstream-mcp`
 (`tests/mcp.rs`); the tests also use `serde_json`
 for settings values and saved collection files. All of them
