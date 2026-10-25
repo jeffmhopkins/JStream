@@ -116,6 +116,12 @@ state machine. Contents:
     the scan describes the kind. So nothing hosts a CLAP filter, keeps its saved state,
     runs a supervisor or reports its events. Also not yet: the plugin's editor, and
     rescanning.
+- **WASM automation plugins** (`plugins/automation.rs`, the `wasm-plugins` feature, on
+  by default; [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md),
+  [ADR-0075](../../docs/adr/0075-wasm-plugin-host-in-the-engine.md)): `plugin.install`
+  loads a package's module on `jstream-plugin-wasm`'s host, `plugin.grant` replaces what
+  it may do, and `plugin.enable` loads it again after the engine disabled it. See
+  *WASM plugins* under Design.
 - **Live sources** (`live.rs`): a running `jstream-sources` source for every source
   in the collection, built when it is created, rebuilt when its settings change and
   dropped when it is deleted, on the engine's `jstream-sources` thread. The program
@@ -434,9 +440,11 @@ WebSocket API does, minus serialization:
   they never reach the engine, so the audit log doesn't record them; the server logs
   them. A device's `hello` reaches the engine as `device:<name>`, so the audit
   log names it.
-- `plugin.install`, `plugin.grant` and `plugin.enable` fail with `unsupported`: the
-  engine hosts no plugins yet (WA1). The differential script sends two of them, so the
-  mock answers the same.
+- `plugin.install`, `plugin.grant` and `plugin.enable` run with no engine lock held
+  (see *WASM plugins*). Built without the `wasm-plugins` feature, the engine answers
+  `plugin.install` with `unsupported` and the other two with `not_found`, since nothing
+  is ever installed. That is also how the mock answers, so the differential script
+  sends `plugin.enable` and `plugin.grant` for a plugin that isn't installed.
 
 ### Dependencies
 
@@ -449,7 +457,9 @@ counters), `jstream-encode` (the H.264 and AAC sessions and their drop counters)
 `jstream-mux` (FLV and fragmented MP4), `jstream-outputs` (the reconnecting RTMP
 publisher and the recording file sink), `jstream-sources` (the built-in kinds: their
 descriptors and the sources that draw them), `jstream-plugin-proto` (the CLAP host
-supervisor's block and control messages), `jstream-youtube` (Google sign-in and the
+supervisor's block and control messages), `jstream-plugin-wasm` (the wasmtime host the
+WASM automation plugins run on; optional, behind the `wasm-plugins` feature, which is on
+by default, ADR-0075), `jstream-youtube` (Google sign-in and the
 Live API client behind the YouTube commands and `youtube` outputs), `serde_json` (settings
 values: the audio filter kinds' defaults, what the mixer kernels read from a filter's
 settings, and the CLAP kinds' parameter defaults), `png`
@@ -468,7 +478,8 @@ tests), `jstream-platform`'s `fake` feature (the pipeline test and
 `tests/scenarios.rs`, and the CLAP fake hosts), `jstream-youtube`'s `fake` feature
 (`src/tests/youtube.rs`), `jstream-browser`'s `fake` feature (the browser pages in
 `src/tests/audio.rs`), `zune-jpeg` (decoding the preview's JPEG pictures in tests),
-`insta` (the built-in kinds' snapshot, `schema/kinds.snap`) and `jstream-mcp`
+`insta` (the built-in kinds' snapshot, `schema/kinds.snap`), `wat` (the text-format
+test plugins of `src/tests/automation.rs`) and `jstream-mcp`
 (`tests/mcp.rs`); the tests also use `serde_json`
 for settings values and saved collection files. All of them
 are in lower layers
@@ -535,6 +546,9 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   most call the Live API (see *YouTube* under *Outputs*). Without `with_youtube`,
   YouTube's API features are off: `youtube.status` answers `unavailable` and the others
   `action_failed` saying the build has no OAuth client, and clients hide them.
+- **Plugin** actions (`plugin.*`) run with no engine lock held, since a plugin loads,
+  and may call back into the engine, while its install or enable waits (see *WASM
+  plugins*).
 - A call, query or action this engine does not implement answers `internal`, as the
   mock does.
 
@@ -1730,6 +1744,56 @@ the log while `connect_rtmp` refuses an empty key, and checks that a plain `rtmp
 URL to another machine logs one warning naming the host and nothing from the path,
 and that `rtmps://` and loopback log none.
 
+### WASM plugins
+
+The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in process
+(ADR-0075), under ADR-0069's limits and grants. The installed plugins last for the run:
+none is saved yet.
+
+- **Package.** `plugin.install`'s `path` is an absolute directory on the engine's machine
+  holding `plugin.wasm` and, optionally, `manifest.json`, a JSON object whose `name`, a
+  string, is the plugin's own text: `plugin.state_changed` carries it as `remote_name`.
+  Other manifest fields are ignored. Like the ABI, the layout is version 0.
+- **Install.** It fails with `invalid_argument` for a grant whose `problem` names a field
+  (`grant.hosts.0`) or that names a folder this OS doesn't read as absolute
+  (`grant.folders.0`), and on `path` for a relative path, a directory without a readable
+  `plugin.wasm`, a manifest that isn't a JSON object with a string `name`, or a module
+  that isn't a plugin (not WASM, an import besides the ABI's, no `memory` export). It
+  fails with `already_exists` for an ID in use, and `action_failed` when the module's
+  `start` function traps or runs past its limits; a failed install leaves no plugin.
+  Otherwise the plugin is enabled when the call returns, and `plugin.state_changed`
+  (`enabled`) says so. The first install makes the host, whose epoch ticker runs from
+  then on.
+- **Threads.** Each run of a plugin has a `jstream-plugin` thread that loads the module,
+  within the host's load deadline while the install or enable waits, and then runs it.
+  A plugin that exports `on_event` gets every engine event, in order, through a
+  subscription of its own: a `jstream-plugin-events` thread moves each into the host's
+  queue (at most 1,000, then `events.dropped`) and nudges the plugin's thread, which hands
+  them over one invocation at a time. One that doesn't export it gets none. Both threads
+  hold the engine weakly, so installed plugins don't keep it alive: when it ends, its
+  event streams close and the threads end.
+- **Session.** A plugin's calls go through a session of its own, registered as the client
+  `plugin:<id>`, which the audit log names. The host grants it every command and answers
+  a refusal with `forbidden` (`Refusals::Forbidden`); the session checks each call against
+  the plugin's grant (`PluginGrant::check`: its classes, a hotkey's bound action, and the
+  hosts and folders a source's or filter's settings reach) and answers `forbidden`
+  without reaching the engine for one outside it. So a call outside the grant counts
+  against the cap of 50 commands a second, which the host checks first. A call past the
+  cap is `forbidden` too, and neither stops the plugin. `plugin.grant` replaces the grant
+  the running plugin's next call is checked against. Ending a run ends the session, as
+  a disconnect does.
+- **Disabling.** A plugin that traps, runs out of fuel or runs past its deadline while
+  handling an event is disabled: its subscription closes, its instance drops, a warning
+  is logged, and `plugin.state_changed` carries `disabled` with `cpu_limit` (fuel or the
+  deadline) or `trap` (anything else, including a trap after `memory.grow` failed at the
+  cap). The engine never re-enables it. `plugin.enable` reads the package again and
+  loads it as an install does, answering `action_failed` if that fails, which leaves it
+  disabled; for a running plugin it succeeds and changes nothing. `plugin.grant` and
+  `plugin.enable` fail with `not_found` for a plugin that isn't installed.
+- **Not yet:** saving installed plugins and their grants, the manifest's classes and the
+  `needs_grant` check on an update, a private data folder per plugin, and the
+  `memory_limit` reason.
+
 ### Locking
 
 `std::sync::Mutex` locks, always taken in one order: a session's identity lock (held
@@ -1765,7 +1829,12 @@ lock (which makes the control side its one writer) and loaded by the render thre
 with no lock at all, as are the live values on the parameter channel. `video.snapshot`
 reads both under the collection lock and the snapshot thread only receives them. The
 `jstream-live` thread takes the collection lock only to send due `live.changed` events
-and release committed values, and sleeps without it. A stream's poll takes only its queue's lock. No lock
+and release committed values, and sleeps without it. The WASM plugins' registry lock
+and the host's lock are taken with no other engine lock held, and released before a
+plugin loads, before an event is emitted and before a subscription closes; under the
+registry lock, an entry's grant lock is a leaf, which a plugin's session also takes
+alone. A plugin's thread holds no engine lock while the plugin runs, so the plugin's
+calls take the collection lock as any session's do. A stream's poll takes only its queue's lock. No lock
 is held across an `await`, and a snapshot's reply slot is not held across a wake.
 `output.start`
 drops the collection lock before `Compositor::open`. The pipeline gate is not held

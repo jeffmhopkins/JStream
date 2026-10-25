@@ -91,6 +91,7 @@ jstream-platform-macos = { path = "crates/jstream-platform-macos" }
 jstream-platform-windows = { path = "crates/jstream-platform-windows" }
 jstream-plugin-clap = { path = "crates/jstream-plugin-clap" }
 jstream-plugin-proto = { path = "crates/jstream-plugin-proto" }
+jstream-plugin-wasm = { path = "crates/jstream-plugin-wasm" }
 jstream-protocol = { path = "crates/jstream-protocol" }
 jstream-render = { path = "crates/jstream-render" }
 jstream-server = { path = "crates/jstream-server" }

@@ -5,7 +5,7 @@
 use jstream_control::protocol::{Call, CallResult, Event, Hello, RequestId, Response, Welcome};
 use jstream_control::{BoxFuture, Control, ControlError, EventStream};
 use jstream_plugin_wasm::{
-    Capabilities, Error, Limits, MAX_QUEUED_EVENTS, Plugin, PluginConfig, PluginHost, abi,
+    Capabilities, Error, Limits, MAX_QUEUED_EVENTS, Plugin, PluginConfig, PluginHost, Refusals, abi,
 };
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -132,6 +132,25 @@ fn a_denied_call_never_reaches_control() {
     plugin
         .invoke("run", &[status])
         .expect("the plugin sees the denial and returns");
+    assert!(fake.calls().is_empty());
+}
+
+#[test]
+fn a_denied_call_is_forbidden_when_refusals_are_forbidden() {
+    // The engine's setting (ADR-0069): the denial comes back as a failed call, not as
+    // `STATUS_DENIED`, and still never reaches `Control`.
+    let call = r#"{"kind":"action","action":{"type":"output.start","output_id":"main"}}"#;
+    let config = PluginConfig {
+        capabilities: Capabilities::from_names(["output.stop"]),
+        refusals: Refusals::Forbidden,
+        ..PluginConfig::default()
+    };
+    let (plugin, fake) = load(&calling_plugin(call), config);
+    let mut plugin = plugin.expect("the plugin loads");
+    let status = u8::try_from(abi::STATUS_FAILED).expect("fits");
+    plugin
+        .invoke("run", &[status])
+        .expect("the plugin sees a failed call and returns");
     assert!(fake.calls().is_empty());
 }
 
@@ -332,6 +351,7 @@ fn time_the_engine_spends_answering_is_not_the_plugins() {
     let config = PluginConfig {
         capabilities: Capabilities::from_names(["output.stop"]),
         limits: Limits::default().with_call_deadline(Duration::from_millis(30)),
+        ..PluginConfig::default()
     };
     let slow = Fake {
         delay: Duration::from_millis(60),
@@ -377,6 +397,7 @@ fn stop_granted(limits: Limits) -> PluginConfig {
     PluginConfig {
         capabilities: Capabilities::from_names(["output.stop"]),
         limits,
+        ..PluginConfig::default()
     }
 }
 
@@ -393,6 +414,23 @@ fn calls_past_the_cap_a_second_never_reach_control() {
         .invoke("run", &[60, limited])
         .expect("a limited call doesn't stop the plugin");
     assert_eq!(fake.calls().len(), 50);
+}
+
+#[test]
+fn calls_past_the_cap_are_forbidden_when_refusals_are_forbidden() {
+    let config = PluginConfig {
+        refusals: Refusals::Forbidden,
+        ..stop_granted(Limits::default().with_commands_per_second(3))
+    };
+    let (plugin, fake) = load(&repeating_plugin(STOP), config);
+    let mut plugin = plugin.expect("the plugin loads");
+    let ok = u8::try_from(abi::STATUS_OK).expect("fits");
+    let failed = u8::try_from(abi::STATUS_FAILED).expect("fits");
+    plugin.invoke("run", &[3, ok]).expect("three calls fit");
+    plugin
+        .invoke("run", &[2, failed])
+        .expect("a call past the cap fails without stopping the plugin");
+    assert_eq!(fake.calls().len(), 3);
 }
 
 #[test]
@@ -464,6 +502,7 @@ fn create_granted(limits: Limits) -> PluginConfig {
     PluginConfig {
         capabilities: Capabilities::from_names(["scene.create"]),
         limits,
+        ..PluginConfig::default()
     }
 }
 
