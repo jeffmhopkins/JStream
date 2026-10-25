@@ -7,6 +7,13 @@
 //! else goes. A right-click on a scene opens its menu, and one on the panel's empty
 //! space opens the panel's (spec-workspace.md 5.2.3 and 5.2.7).
 //!
+//! A scene's keyframe scenes (ADR-0024 §2) nest under it, each with the purple diamond,
+//! and the scene's caret folds them away. They stay under their scene: they aren't
+//! dragged, and a drop on one does nothing. A keyframe's menu switches to it, resets it
+//! to its parent (`item.clear_override` for every field it overrides), makes another
+//! keyframe of the parent (`scene.create_variant`) and deletes it, at once, since it
+//! holds no items of its own (undo brings it back).
+//!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#scenes
 
 use crate::app::SessionContext;
@@ -14,36 +21,81 @@ use crate::icons::{Icon, named};
 use crate::menu::{Entry, Menus};
 use crate::panels::confirm::{Confirm, Pending};
 use crate::panels::tree::{Filter, Reorder, SearchBar, Side, Star, dropped_at};
-use crate::store::{Collection, Studio, apply, plan_delete, plan_summary};
-use jstream_control::protocol::{Action, DeleteTarget, Edit, SceneId};
+use crate::store::{Collection, Studio, apply, plan_delete, plan_summary, reset_edits};
+use jstream_control::protocol::{Action, DeleteTarget, Edit, SceneId, SceneInfo};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
+use std::collections::HashSet;
 
 /// One row of the list, as the view needs it.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct Row {
     scene_id: SceneId,
     name: String,
-    /// The scene's icon, or the scene icon.
+    /// The scene's icon, the keyframe diamond for a keyframe scene, or the scene icon.
     icon: &'static str,
     favourite: bool,
+    /// For a keyframe scene, its parent and the parent's name.
+    keyframe_of: Option<(SceneId, String)>,
+    /// Whether the scene has keyframe scenes, so its row has a caret.
+    keyframes: bool,
 }
 
-/// The rows: listed scenes only (groups are hidden), in display order.
-fn rows(collection: &Collection) -> Vec<Row> {
-    collection
-        .listed_scenes()
-        .map(|scene| Row {
+impl Row {
+    fn of(scene: &SceneInfo, keyframe_of: Option<&SceneInfo>, keyframes: bool) -> Row {
+        Row {
             scene_id: scene.scene_id.clone(),
             name: scene.name.clone(),
-            icon: scene
-                .meta
-                .icon
-                .as_deref()
-                .map_or("layers", |icon| named(icon, "layers")),
+            icon: match keyframe_of {
+                Some(_) => "keyframe",
+                None => scene
+                    .meta
+                    .icon
+                    .as_deref()
+                    .map_or("layers", |icon| named(icon, "layers")),
+            },
             favourite: scene.meta.favourite,
-        })
-        .collect()
+            keyframe_of: keyframe_of.map(|p| (p.scene_id.clone(), p.name.clone())),
+            keyframes,
+        }
+    }
+}
+
+/// The rows: listed scenes only (groups are hidden), in display order, each followed
+/// by its keyframe scenes in theirs unless it is folded. A keyframe scene whose parent
+/// isn't listed shows on its own.
+fn rows(collection: &Collection, folded: &HashSet<SceneId>) -> Vec<Row> {
+    let listed: Vec<&SceneInfo> = collection.listed_scenes().collect();
+    let is_listed = |id: &SceneId| listed.iter().any(|s| &s.scene_id == id);
+    let mut rows = Vec::new();
+    for scene in &listed {
+        if scene.variant_of.as_ref().is_some_and(is_listed) {
+            continue;
+        }
+        let keyframes: Vec<&SceneInfo> = listed
+            .iter()
+            .filter(|k| k.variant_of.as_ref() == Some(&scene.scene_id))
+            .copied()
+            .collect();
+        rows.push(Row::of(
+            scene,
+            collection.parent_of(&scene.scene_id),
+            !keyframes.is_empty(),
+        ));
+        if !folded.contains(&scene.scene_id) {
+            rows.extend(
+                keyframes
+                    .into_iter()
+                    .map(|k| Row::of(k, Some(scene), false)),
+            );
+        }
+    }
+    rows
+}
+
+/// The name a new keyframe scene of a scene with `count` of them gets.
+fn keyframe_name(count: usize) -> String {
+    format!("Keyframe {}", count + 1)
 }
 
 /// The scene list.
@@ -55,12 +107,16 @@ pub fn Scenes() -> impl IntoView {
     let pending = RwSignal::new(None::<Pending>);
     let filter = Filter::new();
     let reorder = Reorder::new();
+    // The scenes whose keyframes are folded away.
+    let folded = RwSignal::new(HashSet::<SceneId>::new());
 
     let menus = use_context::<Menus>();
     let all_rows = move || {
-        studio
-            .collection
-            .with(|c| c.as_ref().map(rows).unwrap_or_default())
+        folded.with(|folded| {
+            studio
+                .collection
+                .with(|c| c.as_ref().map(|c| rows(c, folded)).unwrap_or_default())
+        })
     };
     let shown_rows = move || {
         all_rows()
@@ -97,6 +153,58 @@ pub fn Scenes() -> impl IntoView {
             studio.apply(&s, vec![edit]);
         }
     };
+    let switch = move |scene_id: SceneId| {
+        if let Some(s) = session.get() {
+            studio.act(
+                &s,
+                Action::SceneSwitch {
+                    scene_id,
+                    preset_id: None,
+                },
+            );
+        }
+    };
+    // A new keyframe scene of `parent`, unfolded and selected so it can be arranged.
+    let new_keyframe = move |parent: SceneId| {
+        let Some(s) = session.get() else { return };
+        let count = studio
+            .collection
+            .with_untracked(|c| c.as_ref().map_or(0, |c| c.keyframes_of(&parent).count()));
+        let scene_id = SceneId::new(studio.fresh_id(&s, "scene"));
+        studio.apply(
+            &s,
+            vec![Edit::SceneCreateVariant {
+                scene_id: scene_id.clone(),
+                variant_of: parent.clone(),
+                name: keyframe_name(count),
+            }],
+        );
+        folded.update(|f| _ = f.remove(&parent));
+        studio.select_scene(scene_id);
+    };
+    // Every item of the keyframe follows its parent again.
+    let reset_keyframe = move |scene_id: SceneId| {
+        let Some(s) = session.get() else { return };
+        let edits = studio.collection.with_untracked(|c| {
+            c.as_ref()
+                .and_then(|c| c.scene(&scene_id))
+                .map(reset_edits)
+                .unwrap_or_default()
+        });
+        if !edits.is_empty() {
+            studio.apply(&s, edits);
+        }
+    };
+    // A keyframe holds no items, so it goes at once; its parent is selected if it was.
+    let delete_keyframe = move |scene_id: SceneId, parent: SceneId| {
+        if studio
+            .selection
+            .with_untracked(|s| s.scene.as_ref() == Some(&scene_id))
+        {
+            studio.select_scene(parent);
+        }
+        send(Edit::SceneDelete { scene_id });
+    };
 
     let ask_delete = move |scene_id: SceneId, name: String| {
         let Some(s) = session.get() else { return };
@@ -124,12 +232,12 @@ pub fn Scenes() -> impl IntoView {
     // scenes, groups included, as `scene.reorder` counts.
     let drop = move |moved: String, target: String, side: Side| {
         let index = studio.collection.with_untracked(|c| {
-            let order: Vec<&str> = c
-                .as_ref()?
-                .scenes
-                .iter()
-                .map(|s| s.scene_id.as_str())
-                .collect();
+            let c = c.as_ref()?;
+            // Keyframes stay under their scene.
+            if c.is_keyframe(&SceneId::new(target.as_str())) {
+                return None;
+            }
+            let order: Vec<&str> = c.scenes.iter().map(|s| s.scene_id.as_str()).collect();
             dropped_at(&order, &moved.as_str(), &target.as_str(), side)
         });
         if let Some(index) = index {
@@ -146,7 +254,10 @@ pub fn Scenes() -> impl IntoView {
             name,
             icon,
             favourite,
+            keyframe_of,
+            keyframes,
         } = row;
+        let is_keyframe = keyframe_of.is_some();
         let key = scene_id.to_string();
         let selected = {
             let id = scene_id.clone();
@@ -166,17 +277,7 @@ pub fn Scenes() -> impl IntoView {
         };
         let to_program = {
             let id = scene_id.clone();
-            move |_| {
-                if let Some(s) = session.get() {
-                    studio.act(
-                        &s,
-                        Action::SceneSwitch {
-                            scene_id: id.clone(),
-                            preset_id: None,
-                        },
-                    );
-                }
-            }
+            move |_| switch(id.clone())
         };
         let rename = {
             let id = scene_id.clone();
@@ -200,6 +301,7 @@ pub fn Scenes() -> impl IntoView {
         let on_key = {
             let id = scene_id.clone();
             let name = name.clone();
+            let parent = keyframe_of.clone();
             move |event: leptos::ev::KeyboardEvent| match event.key().as_str() {
                 "F2" => {
                     event.prevent_default();
@@ -207,7 +309,10 @@ pub fn Scenes() -> impl IntoView {
                 }
                 "Delete" => {
                     event.prevent_default();
-                    ask_delete(id.clone(), name.clone());
+                    match &parent {
+                        Some((parent, _)) => delete_keyframe(id.clone(), parent.clone()),
+                        None => ask_delete(id.clone(), name.clone()),
+                    }
                 }
                 _ => {}
             }
@@ -230,14 +335,49 @@ pub fn Scenes() -> impl IntoView {
             }
         };
         // The scene's menu (5.2.7). Rename and Delete scene work here, though the
-        // prototype shows them disabled, and so does Show in preview.
+        // prototype shows them disabled, and so does Show in preview. A keyframe's menu
+        // is its own.
         let on_row_context = {
             let id = scene_id.clone();
             let name = name.clone();
+            let parent = keyframe_of.clone();
             move |event: leptos::ev::MouseEvent| {
                 let Some(menus) = menus else { return };
                 let rename_id = id.clone();
+                if let Some((parent, parent_name)) = parent.clone() {
+                    let (switch_id, reset_id, delete_id) = (id.clone(), id.clone(), id.clone());
+                    let new_parent = parent.clone();
+                    let overrides = studio.collection.with_untracked(|c| {
+                        c.as_ref()
+                            .and_then(|c| c.scene(&id))
+                            .is_some_and(|s| !s.overrides.is_empty())
+                    });
+                    menus.open(
+                        &event,
+                        vec![
+                            Entry::item("Switch to it", move || switch(switch_id.clone())),
+                            Entry::item("Rename", move || renaming.set(Some(rename_id.clone())))
+                                .hint("F2"),
+                            Entry::Sep,
+                            Entry::submenu("Transition in", Vec::new()),
+                            Entry::submenu("Transition out", Vec::new()),
+                            Entry::Sep,
+                            Entry::item(format!("Reset to “{parent_name}”"), move || {
+                                reset_keyframe(reset_id.clone());
+                            })
+                            .disabled_if(!overrides),
+                            Entry::item("New keyframe", move || new_keyframe(new_parent.clone())),
+                            Entry::Sep,
+                            Entry::item("Delete keyframe", move || {
+                                delete_keyframe(delete_id.clone(), parent.clone());
+                            })
+                            .hint("Del"),
+                        ],
+                    );
+                    return;
+                }
                 let preview_id = id.clone();
+                let keyframe_id = id.clone();
                 let (delete_id, delete_name) = (id.clone(), name.clone());
                 menus.open(
                     &event,
@@ -263,7 +403,7 @@ pub fn Scenes() -> impl IntoView {
                         Entry::submenu("Pop out", Vec::new()),
                         Entry::Sep,
                         Entry::item("New scene", new_scene),
-                        Entry::unavailable("New keyframe"),
+                        Entry::item("New keyframe", move || new_keyframe(keyframe_id.clone())),
                         Entry::unavailable("New folder"),
                         Entry::Sep,
                         Entry::unavailable("Duplicate scene"),
@@ -293,16 +433,51 @@ pub fn Scenes() -> impl IntoView {
         let press = {
             let key = key.clone();
             move |event: leptos::ev::PointerEvent| {
-                if !filter.active() && renaming.with_untracked(Option::is_none) {
+                if !is_keyframe && !filter.active() && renaming.with_untracked(Option::is_none) {
                     reorder.down(&key, &event);
                 }
             }
         };
+        // The caret folds or unfolds the scene's keyframes.
+        let caret = {
+            let id = scene_id.clone();
+            let open = {
+                let id = id.clone();
+                Memo::new(move |_| !folded.with(|f| f.contains(&id)))
+            };
+            let toggle = move |event: leptos::ev::MouseEvent| {
+                event.stop_propagation();
+                folded.update(|f| {
+                    if !f.remove(&id) {
+                        f.insert(id.clone());
+                    }
+                });
+            };
+            keyframes.then(|| {
+                view! {
+                    <button
+                        type="button"
+                        class="tree-fold"
+                        aria-label="Keyframes"
+                        aria-expanded=move || open.get().to_string()
+                        on:click=toggle
+                        on:pointerdown=|event| event.stop_propagation()
+                    >
+                        {move || if open.get() { "▾" } else { "▸" }}
+                    </button>
+                }
+            })
+        };
+        let title = keyframe_of
+            .as_ref()
+            .map(|(_, parent)| format!("Keyframe of “{parent}”"));
         let shown_name = name.clone();
         let star_name = name.clone();
         view! {
             <li
                 class="row tree-row"
+                class:keyframe=is_keyframe
+                title=title
                 class:selected=selected
                 class:drop-before=drop_side(Side::Before)
                 class:drop-after=drop_side(Side::After)
@@ -313,14 +488,16 @@ pub fn Scenes() -> impl IntoView {
                 on:keydown=on_key
                 on:pointerdown=press
             >
-                <span class="tree-caret"></span>
+                <span class="tree-caret">{caret}</span>
                 <Show
                     when=is_renaming
                     fallback=move || {
                         let name = shown_name.clone();
                         view! {
                             <button class="row-main" on:click=select.clone() on:dblclick=start_rename.clone()>
-                                <Icon name=icon size=15 />
+                                <span class="tree-icon" class:keyframe-icon=is_keyframe>
+                                    <Icon name=icon size=15 />
+                                </span>
                                 <span class="tree-label">{name}</span>
                                 <Show when=move || on_program.get()>
                                     <span class="tree-badge">"program"</span>
@@ -438,5 +615,58 @@ pub fn RenameField(value: String, done: impl Fn(String) + Clone + 'static) -> im
                 }
             }
         />
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{keyframe_name, rows};
+    use crate::store::Collection;
+    use jstream_control::protocol::{SceneId, SceneInfo, SceneRole};
+    use std::collections::HashSet;
+
+    fn scene(id: &str, variant_of: Option<&str>) -> SceneInfo {
+        SceneInfo {
+            overrides: Vec::new(),
+            filters: Default::default(),
+            variant_of: variant_of.map(SceneId::new),
+            scene_id: id.into(),
+            name: id.to_uppercase(),
+            role: SceneRole::Scene,
+            folder: None,
+            meta: Default::default(),
+            items: Vec::new(),
+            transition_in: None,
+            transition_out: None,
+        }
+    }
+
+    #[test]
+    fn keyframes_nest_under_their_scene_and_fold_away() {
+        let c = Collection {
+            scenes: vec![
+                scene("k2", Some("b")),
+                scene("a", None),
+                scene("b", None),
+                scene("k1", Some("b")),
+            ],
+            ..Collection::default()
+        };
+        let ids = |folded: &HashSet<SceneId>| {
+            rows(&c, folded)
+                .into_iter()
+                .map(|r| r.scene_id.to_string())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(ids(&HashSet::new()), ["a", "b", "k2", "k1"]);
+        let all = rows(&c, &HashSet::new());
+        assert!(all[1].keyframes && !all[0].keyframes);
+        assert_eq!(all[2].icon, "keyframe");
+        assert_eq!(
+            all[2].keyframe_of,
+            Some((SceneId::new("b"), "B".to_owned()))
+        );
+        assert_eq!(ids(&HashSet::from([SceneId::new("b")])), ["a", "b"]);
+        assert_eq!(keyframe_name(2), "Keyframe 3");
     }
 }

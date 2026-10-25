@@ -51,11 +51,15 @@ Contents ([Design](#design) explains the choices):
   and `engine_url_for_page`, the engine URL the connect form offers.
 - **Store** (`store.rs`): `Studio`, the state the scene, sources and properties panels
   share: the collection as `state.get` last reported it (`Collection`, with its buses
-  for the bus picker), the program
+  for the bus picker and its hotkey bindings; a keyframe scene's items are its
+  parent's with its overrides applied, `shown_items`), the program
   scene, the `Selection`, the source kinds and the kind descriptors read so far, and the
   last failed call, and `keys_changed`, which the outputs panel bumps when a stream key
   is set or cleared. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
-  `plan_summary` and `fresh_id`.
+  `plan_summary`, `reset_edits` (a keyframe's Reset) and `fresh_id`.
+- **Hotkeys** (`hotkeys.rs`): `Hotkeys`, which runs the collection's hotkey bindings
+  while the page has the focus, and the chord of a key press, its label and the edits
+  that bind a chord to a scene, tested natively.
 - **Menus, dialogs and icons**: `menu.rs` (`ContextMenu`, the right-click menu, and
   `Menus`, the context that opens it with a list of `Entry`s), `item_menu.rs` (the
   selected items' entries, which the canvas and the sources list share, with the
@@ -151,7 +155,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **Scenes and sources.** The Scenes and Scene objects panels are the prototype's
   trees (spec-panels.md 1 and 2), without folders and groups yet. The scene list shows
   scenes in display order and leaves out groups (ADR-0024), marks the program scene
-  "program", and puts a scene on program with `scene.switch` from a hover button. The
+  "program", and puts a scene on program with `scene.switch` from a hover button. A
+  scene's keyframe scenes (ADR-0024 §2) nest under it with the diamond, folded away by
+  its caret, and stay there: they aren't dragged. A keyframe scene has no items of its
+  own; it shows its parent's at its overrides, so selecting one lists and draws those,
+  and its eye, the canvas, the Inspector's placement fields and the item menu's
+  placement choices send placement edits addressed to it, which write its overrides
+  (ADR-0049). What would change the parent's items (Del, dragging rows, Add source,
+  layer order, the duplicates, Remove, the blend mode) is off there. The
   sources list shows the selected scene's items with the top of the stack first, each
   with its source's type icon, in italics when the source is placed in another scene
   too, and an eye that shows or hides it. Each panel has a search box and a filter for
@@ -173,8 +184,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the focus with the arrows, Home and End, and closes on a choice, a press outside,
   Escape or Tab. The canvas opens the empty canvas or margin menu, the scene and
   sources lists their panels' menus, and a scene row its scene's (Show in preview,
-  Rename, New scene and Delete scene work; the rest waits on folders, keyframes,
-  transitions and the scene Properties dialog). A right-click on an item, on the canvas or its row, selects it
+  Rename, New scene, New keyframe and Delete scene work; the rest waits on folders,
+  transitions and the scene Properties dialog). A keyframe row's menu switches to it,
+  renames it, resets it to its parent (`item.clear_override` for each field it
+  overrides), makes another keyframe of the parent (`scene.create_variant`) and deletes
+  it with a plain `scene.delete`, since it holds no items. A right-click on an item, on the canvas or its row, selects it
   unless it was selected and opens `item_menu.rs`'s menu for the selection: Properties
   (the Properties dialog), the Audio check (`source.set_audio`), layer order
   (`item.reorder`s that keep the selected items' order), Center, Fit and Stretch to
@@ -209,7 +223,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`item.set_crop`, in source pixels), Blending (the nine modes, of which the engine
   draws only Normal so the others are disabled, and Opacity, `item.set_opacity`) and
   Properties, the source's settings form. A scene shows its object count, the scenes
-  that use it as a source, and its Transition in and out (`scene.set_transitions`, with
+  that use it as a source, its Hotkey row (the chords bound to its `scene.switch`, an ×
+  that unbinds one, and Set key, which binds the next chord pressed and takes it from
+  whatever it ran), and its Transition in and out (`scene.set_transitions`, with
   the presets read by `state.get` whenever the collection changes). The panel is built
   once per selected item or scene and each field follows the collection, so an edit
   doesn't rebuild it or take the focus. The fields show committed values: a canvas drag
@@ -483,7 +499,11 @@ browser, and `mod.rs` is the component.
   draws. An item still stored as a 0.3 legacy placement is not drawn: its box depends
   on the source's runtime size, which the UI doesn't read yet (ADR-0022's
   `source.sizes`, protocol 0.40), and a note top left counts such items. Hidden items are drawn
-  dashed, and the box under the pointer gets a light outline.
+  dashed, and the box under the pointer gets a light outline. A keyframe scene shows its
+  parent's items at its overrides under a banner, "◆ Keyframe of “<parent>”: only
+  placement and visibility can change", and its edits are addressed to it, so they
+  write its overrides (ADR-0049). Its drags send no live values, which the engine
+  doesn't take on a keyframe scene yet (#702): the drop commits as usual.
 - **The preview.** Under the boxes is the program mix, live, while the selected
   scene is the one on program; on another scene the background says the preview
   shows the program scene. The canvas opens the

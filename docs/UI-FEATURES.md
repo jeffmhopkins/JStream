@@ -57,20 +57,20 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Theme and shared controls](#theme) | 8 | 3 | 3 | 1 | 0 | 1 |
 | [Header bar](#header) | 9 | 4 | 2 | 1 | 2 | 0 |
 | [Docking and layouts](#docking) | 10 | 8 | 2 | 0 | 0 | 0 |
-| [Canvas](#canvas) | 18 | 11 | 3 | 2 | 2 | 0 |
-| [Context menus](#menus) | 8 | 0 | 5 | 2 | 1 | 0 |
+| [Canvas](#canvas) | 18 | 12 | 3 | 1 | 2 | 0 |
+| [Context menus](#menus) | 8 | 0 | 6 | 1 | 1 | 0 |
 | [Dialogs and windows](#dialogs) | 8 | 4 | 1 | 0 | 3 | 0 |
-| [Scenes panel](#scenes) | 10 | 4 | 3 | 2 | 1 | 0 |
+| [Scenes panel](#scenes) | 10 | 5 | 3 | 1 | 1 | 0 |
 | [Scene objects panel](#objects) | 9 | 6 | 1 | 1 | 1 | 0 |
-| [Inspector](#inspector) | 10 | 5 | 2 | 2 | 1 | 0 |
+| [Inspector](#inspector) | 10 | 6 | 1 | 2 | 1 | 0 |
 | [Transform panel](#transform) | 4 | 4 | 0 | 0 | 0 | 0 |
 | [Filters](#filters) | 8 | 5 | 0 | 0 | 3 | 0 |
 | [Mixer](#mixer) | 7 | 4 | 0 | 2 | 1 | 0 |
 | [Outputs](#outputs) | 4 | 0 | 1 | 0 | 3 | 0 |
 | [Transitions](#transitions) | 6 | 3 | 2 | 0 | 1 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
-| [Keyboard](#keyboard) | 7 | 1 | 3 | 1 | 2 | 0 |
-| **Total** | **130** | **62** | **28** | **14** | **25** | **1** |
+| [Keyboard](#keyboard) | 7 | 2 | 3 | 1 | 1 | 0 |
+| **Total** | **130** | **66** | **28** | **11** | **24** | **1** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -166,7 +166,7 @@ Spec: [workspace › canvas structure](../design/ui-prototype/spec-workspace.md#
 | CV-13 | Double-click | Opens the item's Properties (a reference opens its source's). | ✅ | Selects the item alone and opens its source's Properties dialog ([DL-02](#dialogs)), which is the same for every placement of the source. A nested scene's properties are the scene's ([DL-03](#dialogs)), so it shows in the Inspector until that dialog exists. |
 | CV-14 | Right-click | Opens the canvas context menu ([menus](#menus)). | ✅ | On an item, the selected items' menu, after selecting the item alone unless it was selected; on the frame and the margin, theirs ([CM-02](#menus)). |
 | CV-15 | Opacity, blend and 3D drawn | Items draw with their opacity, blend mode and 3D tilt. | 🔒 | The picture comes from the engine; it accepts only the `normal` blend, and 3D it can draw from protocol 0.34 (X1). |
-| CV-16 | Keyframe banner | "◆ Keyframe of “<parent>”: only placement and visibility can change" while editing a keyframe. | ⬜ | Keyframe scenes are in the protocol since 0.39 (K1): `variant_of`, `overrides` and placement edits addressed to the keyframe. |
+| CV-16 | Keyframe banner | "◆ Keyframe of “<parent>”: only placement and visibility can change" while editing a keyframe. | ✅ | A keyframe scene shows its parent's items at its overrides, under the banner, and its edits are placement edits addressed to it (K1). Its drags commit without live values, which the engine refuses on a keyframe scene until #702. |
 | CV-17 | Privacy overlay | Blurred frame with "Privacy screen on · output blurred · mic muted". | 🔒 | E2b (#317). |
 | CV-18 | Half speed | Shift halves pointer speed for any drag but the marquee. | ✅ | The slow pointer follows the real one's movement, so pressing Shift mid-drag doesn't jump. |
 
@@ -185,12 +185,12 @@ on the canvas and in Scene objects but for its last lines.
 |---|---|---|---|---|
 | CM-01 | Menu mechanics | One menu at the pointer, kept on screen; check column, colour swatch, label, shortcut hint, submenu arrow; Windows-style submenus that open on hover; full keyboard navigation; any outside press closes. | 🟡 | Built but for the colour swatch column, which comes with the label menus that use it. Items the UI or the engine can't do yet show disabled, as the prototype's "(dis)" items do. |
 | CM-02 | Canvas menus | Item: Properties, Edit filters, Pop out, reference/clone, layer order, Center/Fit/Stretch, Reset rotation, Clear crop, Crop, Duplicate as reference/clone, Remove, Select all. Empty canvas and margin: Select all, snapping, Add source, scene transitions and Properties. | 🟡 | Built, with an Audio check for a source with sound and the prototype's shorter menus for a nested scene and an audio-only source. Properties opens the Properties dialog ([DL-02](#dialogs)), and Edit filters selects the item and shows the Filters panel ([FL-01](#filters)). Reference and clone wait on [CM-06](#menus), Crop on [CV-08](#canvas), Group selection on [OB-04](#objects), and Pop out, the transitions and the scene's Properties on [DL-07](#dialogs), [CM-07](#menus) and [DL-03](#dialogs), so they show disabled. Remove from scene works, though the prototype shows it disabled. |
-| CM-03 | Scene row menu | Rename, Transition in ▸, Transition out ▸, Properties, Edit filters, Pop out ▸, New scene, New keyframe, New folder, Duplicate scene, Delete scene. | 🟡 | Built. Show in preview (`studio.set_preview`), Rename, New scene and Delete scene work, though the prototype shows all but New scene disabled. Transitions wait on T1, New keyframe (`scene.create_variant`, K1) on the keyframe rows ([SC-07](#scenes)), folders on [SC-06](#scenes), Properties on [DL-03](#dialogs), Edit filters on [FL-06](#filters), and Duplicate scene on an engine edit that copies a scene, so they show disabled. |
+| CM-03 | Scene row menu | Rename, Transition in ▸, Transition out ▸, Properties, Edit filters, Pop out ▸, New scene, New keyframe, New folder, Duplicate scene, Delete scene. | 🟡 | Built. Show in preview (`studio.set_preview`), Rename, New scene and Delete scene work, though the prototype shows all but New scene disabled. New keyframe works too (`scene.create_variant`, [SC-07](#scenes)). Transitions wait on T1, folders on [SC-06](#scenes), Properties on [DL-03](#dialogs), Edit filters on [FL-06](#filters), and Duplicate scene on an engine edit that copies a scene, so they show disabled. |
 | CM-04 | Scene object row menu | Audio on/off, Properties, Edit filters, Pop out, reference/clone, layer order, Add source, New group, Remove from scene. | 🟡 | The selected items' menu of [CM-02](#menus), ending with Add source and New group instead of Select all; New group waits on [OB-04](#objects). |
 | CM-05 | Empty panel menus | Scenes: New scene, New folder, Paste scene. Scene objects: Add source, Add scene as source, New group, Select all, Paste. | 🟡 | Both are built. New folder ([SC-06](#scenes)), New group ([OB-04](#objects)) and the two Pastes (decision register D43) show disabled. |
 | CM-06 | Reference ↔ clone | A placement of a shared source toggles between "Reference to original" and "Independent clone". | ⬜ | `item.set_source` and `source.duplicate` exist ([ADR-0023](adr/0023-placements-references-and-clones.md)). |
 | CM-07 | Transition in/out submenus | Default (preset), then each preset, then "Manage presets…". | 🔒 | T1 (#260). |
-| CM-08 | Keyframe and folder menus | Switch to it, Reset to parent, New keyframe, Delete keyframe; New folder, Rename, Delete folder / Ungroup. | ⬜ | K1: Reset to parent is a batch of `item.clear_override`s; Delete keyframe is `scene.delete`. |
+| CM-08 | Keyframe and folder menus | Switch to it, Reset to parent, New keyframe, Delete keyframe; New folder, Rename, Delete folder / Ungroup. | 🟡 | The keyframe menu is built: Switch to it (`scene.switch`), Rename, the transition submenus (empty until T1), Reset to “<parent>” (a batch of `item.clear_override`s, disabled while it overrides nothing), New keyframe (of the parent) and Delete keyframe (`scene.delete`, at once: it holds no items, and undo brings it back). The folder menu waits on folders ([SC-06](#scenes)). |
 
 <a id="dialogs"></a>
 ## Dialogs and windows
@@ -227,7 +227,7 @@ Spec: [panels › scenes](../design/ui-prototype/spec-panels.md#scenes-panel).
 | SC-04 | Drag to reorder | Drag rows before or after others, or into a folder. | 🟡 | Rows drag before or after others (`scene.reorder`), with the prototype's drop line, and not while filtering. Into a folder waits on SC-06. A pointer drag rather than HTML drag and drop, as for the dock's tabs. |
 | SC-05 | Rename, delete, new | Rename (F2 or menu), delete with the plan's summary, New scene. | ✅ | F2 or the menu's Rename renames in place, Del or Delete scene asks with the plan's summary, and the menus' New scene adds one with its name open. A double click renames too, until scenes have their Properties dialog (DL-03). |
 | SC-06 | Folders | Folders organise scenes; collapsible. | ⬜ | `folder.*` and `scene.set_folder`; folders nest ([ADR-0024](adr/0024-scene-structure.md) §3, [ADR-0064](adr/0064-nested-scene-folders.md), #323). |
-| SC-07 | Keyframe rows | Keyframes nest under their scene with a purple diamond icon. | ⬜ | `SceneInfo.variant_of` names the parent (K1). |
+| SC-07 | Keyframe rows | Keyframes nest under their scene with a purple diamond icon. | ✅ | From `SceneInfo.variant_of` (K1). The scene's caret folds them away; they aren't dragged, and a drop on one does nothing. A new keyframe is selected, so it can be arranged. |
 | SC-08 | Labels and favourites | Label chips and a favourite star per row; label manager (name, colour, icon). | 🟡 | The favourite star is built (`scene.set_meta`). Labels wait on the label manager. |
 | SC-09 | Filter by favourites and labels | Funnel button with a count badge; "Favorites only", labels (any of), Clear, Edit labels. | 🟡 | The funnel with its count, Favorites only and Clear are built, client-side; the labels part waits on SC-08's labels. |
 | SC-10 | Put on program | Clicking a scene switches to it (or, in studio mode, puts it on preview). | 🔒 | Clicking a scene selects it, as in the prototype. Until T1's studio mode, a hover button (broadcast icon) puts the scene on program, and the row menu's Show in preview sends `studio.set_preview`. |
@@ -242,7 +242,7 @@ Spec: [panels › scene objects](../design/ui-prototype/spec-panels.md#scene-obj
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| OB-01 | Object list | "In “<scene>”, top to bottom" caption, then the scene's items top first, with type icons. | ✅ | The caption and each source's type icon (the scene icon for a nested scene) in the prototype's 30 px rows. |
+| OB-01 | Object list | "In “<scene>”, top to bottom" caption, then the scene's items top first, with type icons. | ✅ | The caption and each source's type icon (the scene icon for a nested scene) in the prototype's 30 px rows. A keyframe scene lists its parent's items as it shows them, under a note saying so: there the eye writes its override, and Del, dragging and Add source are off (ADR-0049). |
 | OB-02 | Visibility eye | Hover-revealed eye; stays shown while hidden; hidden rows dimmed. | ✅ | |
 | OB-03 | References in italics | A placement of a source shared with other scenes reads in italics. | ✅ | Italics when the source is placed in another scene too, as the Inspector's header does, since a source has no owner scene. |
 | OB-04 | Nested scenes as groups | A nested scene (group) expands to show its items. | ⬜ | `scene.set_role` and `item.move` exist ([ADR-0024](adr/0024-scene-structure.md)). |
@@ -272,7 +272,7 @@ in the Inspector until the Inspector's own rows say otherwise.
 | IN-05 | 3D | Tilt, Turn, Depth, Perspective, folded by default. | ⬜ | `item.set_geometry` takes any 3D it can draw from protocol 0.34 ([ADR-0050](adr/0050-3d-transforms-rendering.md)). |
 | IN-06 | Crop | Left, Right, Top, Bottom in px. | ✅ | `item.set_crop`, in source pixels. The canvas doesn't draw crop yet (CV-08). |
 | IN-07 | Blending | Mode (9 modes) and Opacity %. | ✅ | Opacity is `item.set_opacity`. The select lists all nine modes; the engine accepts only `normal`, so the others are disabled until it draws them. |
-| IN-08 | Scene section | Objects count, "Used as a source in", hotkey. | 🟡 | Objects and "Used as a source in" are built. The hotkey row waits on K1. |
+| IN-08 | Scene section | Objects count, "Used as a source in", hotkey. | ✅ | The Hotkey row lists the chords bound to the scene's `scene.switch`, each with × to unbind (`hotkey.clear`); Set key binds the next chord pressed (`hotkey.set`, after a `hotkey.clear` when it ran something else), and Escape cancels. A keyframe's header says “Keyframe of “<parent>””, and its item's blend mode is locked, with the prototype's note. |
 | IN-09 | Scene transitions | Transition in and out selects, with the "next scene's in wins" note. | ✅ | `scene.set_transitions`, with "Default (<name>)" for none and the folded hint. The presets are read with `state.get` when the collection changes. |
 | IN-10 | Scene switches per item | Delay, easing, glide, appear and disappear effects. | 🔒 | T1 (`item.set_transition`). |
 
@@ -391,7 +391,7 @@ Spec: [panels › stream stats](../design/ui-prototype/spec-panels.md#stream-sta
 <a id="keyboard"></a>
 ## Keyboard
 <!-- @section
-covers = ["crates/jstream-ui/src/canvas/mod.rs", "crates/jstream-ui/src/canvas/transform.rs"]
+covers = ["crates/jstream-ui/src/canvas/mod.rs", "crates/jstream-ui/src/canvas/transform.rs", "crates/jstream-ui/src/hotkeys.rs"]
 -->
 
 Spec: [workspace › keyboard shortcuts](../design/ui-prototype/spec-workspace.md#keyboard-shortcuts).
@@ -406,7 +406,7 @@ handlers; the real UI makes them work.
 | KB-04 | Edit keys | Ctrl+D duplicate as reference, Ctrl+Shift+D as clone, Del remove, F2 rename. | 🟡 | F2 renames and Del removes in the Scenes and Scene objects rows (Del deletes a scene there, through its plan). Ctrl+D and Ctrl+Shift+D wait. |
 | KB-05 | Copy and paste | Ctrl+C, Ctrl+V. | ⬜ | Decision register D43. |
 | KB-06 | Privacy key | Pause toggles privacy. | 🔒 | E2b (#317). |
-| KB-07 | Scene hotkeys | F1–F5 switch to the scene bound to them. | 🔒 | K1 (#319). |
+| KB-07 | Scene hotkeys | F1–F5 switch to the scene bound to them. | ✅ | Every binding in the collection (K1) runs its action while the page has the focus (`hotkeys.rs`), unless a field or a focused row took the key: F2 on a scene row still renames. The prototype's F1–F5 are bindings like any other, set from the Inspector ([IN-08](#inspector)). |
 
 <a id="beyond"></a>
 ## Beyond the prototype

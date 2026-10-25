@@ -2,7 +2,9 @@
 //! selection, drag, resize, rotate and snapping on their geometry (ADR-0022), each
 //! finished gesture sent as one undoable edit, and undo and redo (ADR-0032) from the
 //! keyboard. The scene and the selected item are the shared [`Studio`] selection, so
-//! the canvas, the sources list and the properties form show the same ones.
+//! the canvas, the sources list and the properties form show the same ones. A keyframe
+//! scene shows its parent's items at its overrides under the keyframe banner, and its
+//! drags commit without live values, which the engine doesn't take there yet (#702).
 //!
 //! Under the boxes is the live program preview: one `preview.subscribe` stream on the
 //! session's binary channel, decoded into a `<canvas>` ([`preview`], [`screen`]). Pure
@@ -360,9 +362,12 @@ pub fn Canvas() -> impl IntoView {
             Action::Group(gesture) => Some(Active::Group(gesture.kind)),
             Action::Marquee { .. } => None,
         });
-        // A box drag opens a gesture, so the output follows it before the drop.
+        // A box drag opens a gesture, so the output follows it before the drop. Live
+        // values on a keyframe scene wait on #702, so its drags only commit.
         let gesture = match (&action, session, current.scene.as_ref()) {
-            (Action::One { .. } | Action::Group(_), Some(session), Some((scene_id, _))) => {
+            (Action::One { .. } | Action::Group(_), Some(session), Some((scene_id, _)))
+                if current.keyframe_of.is_none() =>
+            {
                 // Unique for the session, so a remounted canvas never reuses one.
                 session.get().map(|open| {
                     let id = GestureId::new(studio.fresh_id(&open, "drag"));
@@ -1200,6 +1205,11 @@ pub fn Canvas() -> impl IntoView {
                     </svg>
                 </button>
             </div>
+            {move || layout.with(|l| l.as_ref()?.keyframe_of.clone()).map(|parent| view! {
+                <div class="keyframe-banner" role="status">
+                    "◆ Keyframe of “" {parent} "”: only placement and visibility can change"
+                </div>
+            })}
             <div class="canvas-caption">{caption}</div>
             {legacy_note}
         </div>

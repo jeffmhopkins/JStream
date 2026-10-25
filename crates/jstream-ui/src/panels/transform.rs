@@ -415,7 +415,10 @@ pub fn Transform() -> impl IntoView {
             if action == Action::ClearCrop {
                 let crops: Vec<(ItemId, Crop)> = selection
                     .items()
-                    .filter_map(|id| c.item(id).map(|(_, i)| (id.clone(), i.crop)))
+                    .filter_map(|id| {
+                        c.item_in(Some(&scene), id)
+                            .map(|(_, i)| (id.clone(), i.crop))
+                    })
                     .collect();
                 return Some(
                     crops_to_clear(&crops)
@@ -429,7 +432,7 @@ pub fn Transform() -> impl IntoView {
                 );
             }
             let geometry_form = |id: &ItemId| {
-                c.item(id)
+                c.item_in(Some(&scene), id)
                     .is_some_and(|(_, i)| i.placement == PlacementForm::Geometry)
             };
             // Matching takes the primary item's size, which a legacy item doesn't have.

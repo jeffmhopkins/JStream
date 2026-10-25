@@ -1,7 +1,10 @@
 //! The right-click menu of the selected items, shared by the canvas and the Scene
 //! objects panel (spec-workspace.md 5.2.8 to 5.2.12): Properties, the Audio check,
 //! layer order, Center, Fit and Stretch to canvas, Reset rotation, Clear crop, the two
-//! duplicates and Remove from scene. Each choice sends one batch, so one undo step.
+//! duplicates and Remove from scene. Each choice sends one batch, so one undo step. In
+//! a keyframe scene only placement and visibility can change (ADR-0049), so what would
+//! change the parent's items (layer order, the duplicates, Remove, Add source) is
+//! disabled, and the placement choices write the keyframe's overrides.
 //!
 //! Docs: docs/UI-FEATURES.md#menus
 
@@ -158,6 +161,8 @@ struct Facts {
     picture: bool,
     /// Whether the primary item's source plays its audio, if it has any.
     audio: Option<bool>,
+    /// Whether the scene is a keyframe scene, which shows its parent's items.
+    keyframe: bool,
 }
 
 impl Facts {
@@ -189,6 +194,7 @@ impl Facts {
             kind: source.kind.clone(),
             picture,
             audio: source.audio.as_ref().map(|a| a.enabled),
+            keyframe: scene.variant_of.is_some(),
         })
     }
 
@@ -347,6 +353,7 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
     };
     let facts = Rc::new(facts);
     let many = facts.items.len() > 1;
+    let keyframe = facts.keyframe;
     let primary = facts.items[0].clone();
 
     let properties = {
@@ -383,6 +390,7 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
             );
         })
         .hint("Del")
+        .disabled_if(keyframe)
     };
 
     // A nested scene (5.2.8).
@@ -437,6 +445,7 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
                     .collect(),
             );
         })
+        .disabled_if(keyframe)
     };
     let scene = scene_id.clone();
     let arrange = |label: &str, how: fn(&Facts) -> Vec<(ItemId, ItemGeometry)>| {
@@ -476,7 +485,8 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
     let duplicate = |label: &str, clone: bool| {
         let facts = Rc::clone(&facts);
         let scene = scene_id.clone();
-        Entry::item(label, move || cx.duplicate(scene.clone(), &facts, clone)).disabled_if(many)
+        Entry::item(label, move || cx.duplicate(scene.clone(), &facts, clone))
+            .disabled_if(many || keyframe)
     };
     list.extend([
         layer("Bring to front", Layer::Front),
@@ -504,7 +514,7 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
             list.extend([
                 Entry::Sep,
                 Entry::item("Add source…", move || cx.add_source(scene.clone()))
-                    .disabled_if(cx.adder.is_none()),
+                    .disabled_if(cx.adder.is_none() || keyframe),
                 Entry::unavailable("New group"),
             ]);
         }

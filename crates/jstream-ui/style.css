@@ -643,6 +643,38 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
   font-size: 11px;
   color: var(--muted);
 }
+/* The keyframe banner, top centre, while a keyframe scene is edited (CV-16). */
+.keyframe-banner {
+  position: absolute;
+  left: 50%;
+  top: 10px;
+  transform: translateX(-50%);
+  z-index: 4;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: rgba(176, 124, 255, 0.16);
+  border: 1px solid #6e4fb0;
+  color: #d9c6ff;
+  font-size: 11px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+/* Keyframe rows nest under their scene, with the purple diamond (SC-07). */
+.row.tree-row.keyframe { padding-left: 22px; }
+.tree-icon { display: inline-flex; }
+.tree-row .row-main .tree-icon.keyframe-icon .icon { color: #b07cff; }
+.tree-fold { width: 16px; height: 16px; padding: 0; border: 0; background: none; color: var(--dim); font-size: 10px; }
+.tree-fold:hover:not(:disabled) { background: none; color: var(--text); }
+.keyframe-note { color: #c9b3ff; }
+.inspector-head .kind-tag.keyframe { color: #c9b3ff; }
+/* A scene's Hotkey row (IN-08): its chords, each unbindable, and Set key. */
+.hotkeys { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px; }
+.hotkeys .none { color: var(--dim); }
+.hotkey-chip { display: inline-flex; align-items: center; gap: 2px; }
+.hotkey-chip kbd { padding: 1px 5px; border: 1px solid var(--border); border-radius: 4px; background: var(--raised); font: 11px "IBM Plex Mono", ui-monospace, monospace; }
+.hotkey-chip .icon-button { width: 18px; height: 18px; padding: 0; color: var(--dim); }
+.set-key { padding: 2px 8px; font-size: 11px; }
+.set-key.capturing { border-color: var(--accent); color: var(--link); }
 
 @media (max-width: 800px) {
   .shell { height: auto; }

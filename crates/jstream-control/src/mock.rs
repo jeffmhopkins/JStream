@@ -55,6 +55,7 @@ use std::task::{Context, Poll, Waker};
 
 mod audio;
 mod filter;
+mod keyframe;
 mod organise;
 
 /// Locks `mutex`, ignoring poisoning: the mock's state stays consistent because every
@@ -564,6 +565,10 @@ struct Scene {
     meta: jstream_protocol::SceneMeta,
     /// Its filters (ADR-0065), settings as given: a video chain only.
     filters: jstream_protocol::FilterChains,
+    /// The scene it is a keyframe scene of (ADR-0024 §2), whose items it shows.
+    variant_of: Option<SceneId>,
+    /// A keyframe scene's overrides of its parent's items; empty for any other scene.
+    overrides: keyframe::Overrides,
 }
 
 /// An item: the scene that holds it, the source it places, and every property an edit
@@ -1034,9 +1039,9 @@ impl State {
                     .scenes
                     .iter()
                     .map(|scene| SceneInfo {
-                        overrides: Vec::new(),
+                        overrides: keyframe::override_infos(&scene.overrides),
                         filters: scene.filters.clone(),
-                        variant_of: None,
+                        variant_of: scene.variant_of.clone(),
                         scene_id: scene.id.clone(),
                         name: scene.name.clone(),
                         role: scene.role,
@@ -1141,6 +1146,16 @@ impl State {
         }
         if let Some(at) = values.iter().position(|value| !is_live_adjustable(value)) {
             return Err(invalid(format!("values.{at}.type"), "not live-adjustable"));
+        }
+        // Live values on a keyframe scene wait on #702, as in the engine.
+        if let Some(at) = values.iter().position(|value| {
+            live_scene(value).is_some_and(|scene_id| self.collection.is_variant(scene_id))
+        }) {
+            return Err(invalid(
+                format!("values.{at}.scene_id"),
+                "live values on a keyframe scene are not supported yet (#702); send the value \
+                 in a batch",
+            ));
         }
         let key = (client_id.clone(), gesture_id);
         let open = self
@@ -1298,6 +1313,9 @@ impl Collection {
         if let Some(applied) = self.apply_organise(&edit, at) {
             return applied;
         }
+        if let Some(applied) = self.apply_keyframe(&edit, at) {
+            return applied;
+        }
         let inverse = match edit {
             Edit::SceneCreate {
                 scene_id,
@@ -1317,6 +1335,8 @@ impl Collection {
                     folder: None,
                     meta: Default::default(),
                     filters: Default::default(),
+                    variant_of: None,
+                    overrides: keyframe::Overrides::new(),
                 });
                 vec![Edit::SceneDelete { scene_id }]
             }
@@ -1371,11 +1391,28 @@ impl Collection {
                         format!("scene `{scene_id}` is referred to by settings; clear them first"),
                     ));
                 }
+                let blockers = self.variant_blockers(&scene_id);
+                if !blockers.is_empty() {
+                    return Err(ProtocolError::InvalidArgument {
+                        field: format!("edits.{at}.scene_id"),
+                        reason: format!(
+                            "scene `{scene_id}` has keyframe scenes; delete them first"
+                        ),
+                        blockers,
+                    });
+                }
                 let scene = self.scenes.remove(index);
-                let mut inverse = vec![Edit::SceneCreate {
-                    scene_id: scene.id.clone(),
-                    name: scene.name,
-                    role: (!scene.role.is_scene()).then_some(scene.role),
+                let mut inverse = vec![match &scene.variant_of {
+                    Some(parent) => Edit::SceneCreateVariant {
+                        scene_id: scene.id.clone(),
+                        variant_of: parent.clone(),
+                        name: scene.name.clone(),
+                    },
+                    None => Edit::SceneCreate {
+                        scene_id: scene.id.clone(),
+                        name: scene.name.clone(),
+                        role: (!scene.role.is_scene()).then_some(scene.role),
+                    },
                 }];
                 // Re-created scenes are appended, so only a scene that wasn't last moves back.
                 if index != self.scenes.len() {
@@ -1406,6 +1443,7 @@ impl Collection {
                         inverse.extend(restore_item(item_id, &item, position, position)?);
                     }
                 }
+                inverse.extend(keyframe::restore_overrides(&scene.id, &scene.overrides));
                 inverse
             }
             Edit::SceneReorder { scene_id, index } => {
@@ -1429,6 +1467,7 @@ impl Collection {
             } => {
                 check_id(item_id.as_str(), at, "item_id")?;
                 let index = self.existing_scene(&scene_id)?;
+                self.check_not_variant(index, at)?;
                 if !self.sources.contains_key(&source_id) {
                     return Err(not_found(EntityKind::Source, source_id.as_str()));
                 }
@@ -1477,7 +1516,9 @@ impl Collection {
                 let position = items.iter().position(|id| *id == item_id).unwrap_or(0);
                 items.remove(position);
                 // `item.add` puts it on top, which is index `len` now that it is gone.
-                restore_item(&item_id, &item, position, items.len())?
+                let mut inverse = restore_item(&item_id, &item, position, items.len())?;
+                inverse.extend(self.drop_overrides(&item.scene_id, &item_id));
+                inverse
             }
             Edit::ItemReorder { item_id, index } => {
                 let scene_id = self.existing_item(&item_id)?.scene_id.clone();
@@ -2038,6 +2079,7 @@ impl Collection {
         };
         let from = self.existing_scene(&from_scene_id)?;
         let to = self.existing_scene(&scene_id)?;
+        self.check_not_variant(to, at)?;
         let slots = self.scenes[to].items.len() + usize::from(to != from);
         let to_index = check_index(index, slots, at, "positions in the scene")?;
         if let Some(cycle) = self.nesting_cycle(&scene_id, &source_id) {
@@ -2060,11 +2102,16 @@ impl Collection {
         if let Some(item) = self.items.get_mut(&item_id) {
             item.scene_id = scene_id;
         }
-        Ok(vec![Edit::ItemMove {
-            item_id,
-            scene_id: from_scene_id,
+        let mut inverse = vec![Edit::ItemMove {
+            item_id: item_id.clone(),
+            scene_id: from_scene_id.clone(),
             index: wire_index(from_index)?,
-        }])
+        }];
+        // Leaving its scene takes it out of that scene's keyframe scenes (ADR-0040 §1).
+        if to != from {
+            inverse.extend(self.drop_overrides(&from_scene_id, &item_id));
+        }
+        Ok(inverse)
     }
 
     /// Creates a source and returns the edit that undoes it.
@@ -2294,7 +2341,8 @@ impl Collection {
     }
 
     /// The item a placement edit changes, with its optional `scene_id` checked as
-    /// `jstream-graph` checks it: only the item's own scene, until keyframe scenes exist.
+    /// `jstream-graph` checks it. A `scene_id` naming one of the scene's keyframe scenes
+    /// never gets here: [`Collection::apply_keyframe`] writes the override.
     fn placement(
         &mut self,
         item_id: &ItemId,
@@ -2310,12 +2358,22 @@ impl Collection {
                 at,
                 "scene_id",
                 format!(
-                    "item `{item_id}` is in scene `{own}`, and only its own scene can be named \
-                     until keyframe scenes exist"
+                    "item `{item_id}` is in scene `{own}`; name that scene or one of its \
+                     keyframe scenes"
                 ),
             ));
         }
         self.existing_item(item_id)
+    }
+}
+
+/// The scene a live-adjustable value names, if it names one.
+fn live_scene(value: &Edit) -> Option<&SceneId> {
+    match value {
+        Edit::ItemSetTransform { scene_id, .. }
+        | Edit::ItemSetGeometry { scene_id, .. }
+        | Edit::ItemSetCrop { scene_id, .. } => scene_id.as_ref(),
+        _ => None,
     }
 }
 
@@ -3923,6 +3981,98 @@ mod tests {
             let got = query(&*control, call.clone()).map_err(|error| error.protocol().cloned());
             assert_eq!(got, expected.map_err(Some), "{call:?}");
         }
+    }
+
+    /// Keyframe scenes as `jstream-graph` keeps them (ADR-0049): a variant shows its
+    /// parent's items, placement edits addressed to it write its overrides,
+    /// `item.clear_override` removes one, the parent can't be deleted while it has one,
+    /// and undo restores what each edit changed.
+    #[test]
+    fn keyframe_scenes_override_their_parents_items() {
+        use jstream_protocol::OverrideField;
+        let variant = |id: &str, of: &str| Edit::SceneCreateVariant {
+            scene_id: SceneId::new(id),
+            variant_of: SceneId::new(of),
+            name: id.to_uppercase(),
+        };
+        let hide = |scene: Option<&str>| Edit::ItemSetVisible {
+            item_id: ItemId::new("i1"),
+            scene_id: scene.map(SceneId::new),
+            visible: false,
+        };
+        let scene = |control: &dyn Control, id: &str| match state(control) {
+            QueryResult::StateGet { scenes, .. } => scenes
+                .into_iter()
+                .find(|s| s.scene_id.as_str() == id)
+                .expect("the scene"),
+            other => panic!("not state.get: {other:?}"),
+        };
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let setup = Batch {
+            edits: vec![
+                create("a"),
+                webcam(),
+                add("a", "i1", "webcam"),
+                variant("k", "a"),
+            ],
+            ..Batch::single(create("unused"))
+        };
+        assert_eq!(batch(&*control, setup), Ok(Rev(1)));
+        let k = scene(&*control, "k");
+        assert_eq!(k.variant_of, Some(SceneId::new("a")));
+        assert!(k.items.is_empty() && k.overrides.is_empty());
+
+        assert_eq!(batch(&*control, Batch::single(hide(Some("k")))), Ok(Rev(2)));
+        let k = scene(&*control, "k");
+        assert_eq!(k.overrides.len(), 1);
+        assert_eq!(k.overrides[0].visible, Some(false));
+        assert!(
+            scene(&*control, "a").items[0].visible,
+            "the parent's item is untouched"
+        );
+
+        let refused = |edit: Edit| batch(&*control, Batch::single(edit)).expect_err("refused");
+        assert_eq!(code(&refused(variant("kk", "k"))), Some("invalid_argument"));
+        assert_eq!(
+            code(&refused(add("k", "i2", "webcam"))),
+            Some("invalid_argument")
+        );
+        assert_eq!(
+            code(&refused(Edit::SceneDelete {
+                scene_id: SceneId::new("a")
+            })),
+            Some("invalid_argument"),
+            "a parent with a keyframe scene"
+        );
+
+        let clear = Edit::ItemClearOverride {
+            scene_id: SceneId::new("k"),
+            item_id: ItemId::new("i1"),
+            field: OverrideField::Visible,
+        };
+        assert_eq!(batch(&*control, Batch::single(clear)), Ok(Rev(3)));
+        assert!(scene(&*control, "k").overrides.is_empty());
+        assert!(undo(&*control).is_ok());
+        assert_eq!(scene(&*control, "k").overrides[0].visible, Some(false));
+
+        // Removing the item drops its overrides, and undo brings both back.
+        let before = state(&*control);
+        let remove = Edit::ItemRemove {
+            item_id: ItemId::new("i1"),
+        };
+        assert!(batch(&*control, Batch::single(remove)).is_ok());
+        assert!(scene(&*control, "k").overrides.is_empty());
+        assert!(undo(&*control).is_ok());
+        assert_eq!(state(&*control), before);
+
+        // Deleting the keyframe scene, then undoing, restores it with its override.
+        let delete = Edit::SceneDelete {
+            scene_id: SceneId::new("k"),
+        };
+        assert!(batch(&*control, Batch::single(delete)).is_ok());
+        assert!(undo(&*control).is_ok());
+        assert_eq!(state(&*control), before);
     }
 
     /// ADR-0040 §3, as `jstream-graph` does it: deleting what a binding names removes the
