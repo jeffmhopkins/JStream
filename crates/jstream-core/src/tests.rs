@@ -2863,6 +2863,7 @@ fn deleting_a_source_drops_its_frame() {
 
 mod cpu_pipeline {
     mod captures;
+    mod hardware_sessions;
 
     use super::{
         batch, block_on, code, connected, drain, edits, output_call, output_state, output_steps,

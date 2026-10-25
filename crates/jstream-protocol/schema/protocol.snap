@@ -8351,6 +8351,32 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "`output.start` could not open a hardware video encoder while other hardware\nencoder sessions were open, so the machine's hardware session limit is taken to\nbe reached (0.44, ADR-0027 §3). The engine doesn't guess vendor caps and never\nfalls back to a software encoder for this. Nothing was started. Stop one of\n`outputs`, share an encoder session with one, or start this output with an\nencoder profile whose `hardware` is `avoid`.",
+          "properties": {
+            "code": {
+              "const": "hardware_session_limit",
+              "type": "string"
+            },
+            "outputs": {
+              "description": "The running outputs that hold hardware encoder sessions, sorted.",
+              "items": {
+                "$ref": "#/$defs/OutputId"
+              },
+              "type": "array"
+            },
+            "reason": {
+              "description": "What the encoder said when it refused the new session.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "outputs",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
           "description": "The engine hit a bug or an unexpected condition. The request may be retried.",
           "properties": {
             "code": {
@@ -8421,5 +8447,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.40"
+  "title": "JStream protocol 0.44"
 }

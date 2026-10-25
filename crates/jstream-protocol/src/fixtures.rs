@@ -1920,6 +1920,10 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
             call: "output.start".into(),
             reason: "the plugin is not granted `outputs`".into(),
         },
+        ProtocolError::HardwareSessionLimit {
+            outputs: vec![OutputId::new("out_main"), OutputId::new("out_rec")],
+            reason: "the hardware encoder refused the session".into(),
+        },
         ProtocolError::Internal {
             reason: "render thread stopped".into(),
         },

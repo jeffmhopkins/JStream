@@ -733,9 +733,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   dedicated to it because of its own video chain (0.33), plus the sessions and hardware
   sessions in use. A profile's settings and the output's video mix at start
   count, so an output started after `encoder.update` gets a session of its own, and
-  outputs on different mixes never share one. Planned: when the encoder refuses a
-  session, `output.start` fails with a stable session-limit error code naming the
-  outputs that hold sessions, with no fallback to a software encoder
+  outputs on different mixes never share one. While any output holds a hardware
+  session, a new one opens with `require`, and when the encoder refuses it
+  `output.start` fails with `hardware_session_limit` (0.44) naming the outputs that hold
+  hardware sessions, with no fallback to a software encoder
   ([ADR-0027](adr/0027-program-master-and-output-chains.md)).
 - **Queries** (`state.get` → state + `rev`, the canvas included, `scene.list`, `source.list`, `item.list`,
   `output.list`, `output.status`, `encoder.list` (protocol 0.13), `video_mix.list`

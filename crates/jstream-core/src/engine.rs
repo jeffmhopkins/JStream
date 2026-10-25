@@ -24,8 +24,8 @@ use crate::preview::{Opening, PreviewHub, PreviewSource, SessionPreviews};
 use crate::privacy::Privacy;
 use crate::runtime::{
     Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, MixKey, OpenPublish,
-    OutputEncode, OutputStats, Pending, PipelineEvent, Release, RenderHub, Running, VcamOut,
-    launch, launch_program, launch_vcam, parts_from,
+    OutputEncode, OutputStats, Pending, PipelineEvent, Release, RenderHub, Running, StartError,
+    VcamOut, launch, launch_program, launch_vcam, parts_from,
 };
 use crate::session::InProcessControl;
 use crate::snapshot::{self, Frame, Look, SnapshotReply, SnapshotWorker, SourceFrameError};
@@ -1269,7 +1269,7 @@ impl Engine {
             None => None,
         };
         let mut wake = Vec::new();
-        let (parts, publish, generation, program, key, own_audio) = loop {
+        let (parts, publish, generation, program, key, own_audio, hardware_held) = loop {
             // A failed pipeline may still be joining. When it held the program stage,
             // wait that out before opening devices, and do not hold the collection
             // lock across the wait.
@@ -1386,11 +1386,27 @@ impl Engine {
                     return Err(err);
                 }
             }
+            // The outputs holding hardware video sessions now: while there is one, a
+            // new session that hardware refuses is the session limit (ADR-0027 §3).
+            let hardware_held: Vec<OutputId> = gate
+                .running
+                .iter()
+                .filter(|(_, running)| running.encoders().is_some_and(|e| e.hardware()))
+                .map(|(id, _)| id.clone())
+                .collect();
             // A running program stage is shared; holding it here keeps it running
             // until this start has its own hold, or gives up. Taken last, so no early
             // return drops it under the locks.
             let program = gate.program();
-            break (parts, publish, generation, program, key, own_audio);
+            break (
+                parts,
+                publish,
+                generation,
+                program,
+                key,
+                own_audio,
+                hardware_held,
+            );
         };
         wake_all(std::mem::take(&mut wake));
 
@@ -1402,36 +1418,45 @@ impl Engine {
         };
         let (fail_tx, fail_rx) = mpsc::channel();
         let mut health = None;
-        let launched = publish.open(&output_id).and_then(|(opened, watch)| {
-            health = watch;
-            let program = match program {
-                Some(program) => program,
-                None => {
-                    let program = launch_program(self, parts)?;
-                    lock(&host.gate).set_program(&program);
-                    program
-                }
-            };
-            match opened {
-                Opened::Muxed(destination) => launch(
-                    self,
-                    program,
-                    OutputEncode { key, own_audio },
-                    destination,
-                    output_id.clone(),
-                    generation,
-                    fail_tx,
-                ),
-                Opened::Vcam(vcam, canvas) => launch_vcam(
-                    program,
-                    vcam,
-                    canvas,
-                    output_id.clone(),
-                    generation,
-                    fail_tx,
-                ),
-            }
-        });
+        let launched =
+            publish
+                .open(&output_id)
+                .map_err(StartError::from)
+                .and_then(|(opened, watch)| {
+                    health = watch;
+                    let program = match program {
+                        Some(program) => program,
+                        None => {
+                            let program = launch_program(self, parts)?;
+                            lock(&host.gate).set_program(&program);
+                            program
+                        }
+                    };
+                    match opened {
+                        Opened::Muxed(destination) => launch(
+                            self,
+                            program,
+                            OutputEncode {
+                                key,
+                                own_audio,
+                                hardware_held,
+                            },
+                            destination,
+                            output_id.clone(),
+                            generation,
+                            fail_tx,
+                        ),
+                        Opened::Vcam(vcam, canvas) => launch_vcam(
+                            program,
+                            vcam,
+                            canvas,
+                            output_id.clone(),
+                            generation,
+                            fail_tx,
+                        )
+                        .map_err(StartError::from),
+                    }
+                });
         // A link change the output thread reported before `active` is replayed once
         // the start settles; the watcher takes every later one.
         let mut link_down = false;
@@ -1464,7 +1489,10 @@ impl Engine {
                             );
                             // Joined below, outside the locks. A new start waits.
                             gate.draining += 1;
-                            StartOutcome::Failed(Some(running), reason)
+                            StartOutcome::Failed(
+                                Some(running),
+                                ProtocolError::ActionFailed { reason },
+                            )
                         }
                         Ok(PipelineEvent::LinkDown | PipelineEvent::LinkUp)
                         | Err(TryRecvError::Disconnected) => {
@@ -1478,7 +1506,11 @@ impl Engine {
                             gate.draining += 1;
                             StartOutcome::Failed(
                                 Some(running),
-                                "the output thread ended before the pipeline was active".into(),
+                                ProtocolError::ActionFailed {
+                                    reason: "the output thread ended before the pipeline was \
+                                             active"
+                                        .into(),
+                                },
                             )
                         }
                         Err(TryRecvError::Empty) => {
@@ -1531,15 +1563,17 @@ impl Engine {
                                     gate.draining += 1;
                                     StartOutcome::Failed(
                                         Some(running),
-                                        format!("starting the publish watcher: {err}"),
+                                        ProtocolError::ActionFailed {
+                                            reason: format!("starting the publish watcher: {err}"),
+                                        },
                                     )
                                 }
                             }
                         }
                     },
-                    Err(reason) => {
+                    Err(err) => {
                         abandon_start(&mut state, &mut gate, &mut inflight, &output_id, &mut wake);
-                        StartOutcome::Failed(None, reason)
+                        StartOutcome::Failed(None, err.into())
                     }
                 }
             }
@@ -1559,13 +1593,13 @@ impl Engine {
                     reason: format!("output `{output_id}` stopped while starting"),
                 })
             }
-            StartOutcome::Failed(running, reason) => {
+            StartOutcome::Failed(running, err) => {
                 // `failed` is already out and `pending` cleared, so `draining` (set
                 // above when there is a pipeline) holds a new start off until this
                 // join ends, including when it unwinds.
                 let _clear_drain = ClearDrain::arm(Arc::clone(host), running.is_some());
                 drop(running);
-                Err(ProtocolError::ActionFailed { reason })
+                Err(err)
             }
         }
     }
@@ -1944,7 +1978,7 @@ enum StartOutcome {
     /// Stop won. Any threads `launch` opened are dropped before the in-flight
     /// generation is cleared, so stop can settle `stopped`.
     Cancelled(Option<Running>),
-    Failed(Option<Running>, String),
+    Failed(Option<Running>, ProtocolError),
 }
 
 /// Clears `pending` on drop unless the start already settled.

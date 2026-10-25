@@ -63,7 +63,7 @@ use jstream_platform::{
 };
 use jstream_protocol::{
     EncoderProfile, EncoderProfileId, HardwarePreference as ProfileHardware, OutputId, OutputKind,
-    RateControl as ProfileRate, VideoCodec, VideoMixId,
+    ProtocolError, RateControl as ProfileRate, VideoCodec, VideoMixId,
 };
 use jstream_render::{
     Compositor, Nv12Converter, Nv12Pass, Nv12Target, OpenOptions, Reclaimed, RenderError,
@@ -509,6 +509,53 @@ pub(crate) struct OutputEncode {
     /// Whether the output has an audio chain of its own, so an output tap and an audio
     /// encode only it reads.
     pub(crate) own_audio: bool,
+    /// The running outputs whose sessions hold hardware video encoders. While there is
+    /// one, a new video session opens with `require`, and a refused open is the
+    /// hardware session limit (ADR-0027 §3, #443), not a fallback to software.
+    pub(crate) hardware_held: Vec<OutputId>,
+}
+
+/// Why an output could not start.
+#[derive(Debug)]
+pub(crate) enum StartError {
+    /// The start failed (`action_failed`).
+    Failed(String),
+    /// A new hardware video session was refused while `outputs` held hardware sessions
+    /// (`hardware_session_limit`).
+    HardwareSessionLimit {
+        outputs: Vec<OutputId>,
+        reason: String,
+    },
+}
+
+impl From<String> for StartError {
+    fn from(reason: String) -> Self {
+        StartError::Failed(reason)
+    }
+}
+
+impl From<StartError> for ProtocolError {
+    fn from(err: StartError) -> Self {
+        match err {
+            StartError::Failed(reason) => ProtocolError::ActionFailed { reason },
+            StartError::HardwareSessionLimit { outputs, reason } => {
+                ProtocolError::HardwareSessionLimit { outputs, reason }
+            }
+        }
+    }
+}
+
+/// `profile` as a new video session opens it while `held` hold hardware sessions: a
+/// hardware preference becomes `require`, so a full hardware session limit fails the
+/// start instead of falling back to software (ADR-0027 §3). `avoid` stays software.
+/// Whether it was changed comes back with it.
+fn while_hardware_held(profile: &EncoderProfile, held: &[OutputId]) -> (EncoderProfile, bool) {
+    let mut opened = *profile;
+    let limited = !held.is_empty() && !matches!(profile.video.hardware, ProfileHardware::Avoid);
+    if limited {
+        opened.video.hardware = ProfileHardware::Require;
+    }
+    (opened, limited)
 }
 
 /// Undoes something once its output has stopped.
@@ -591,8 +638,14 @@ pub(crate) struct Program {
 impl Program {
     /// The encoder sessions for `key`: the open ones, or new ones not yet fed. Call
     /// [`attach`](Self::attach) once the output has subscribed, so a new session's
-    /// first packets go to it.
-    fn encoders(&self, engine: &Engine, key: EncodeKey) -> Result<Arc<Encoders>, String> {
+    /// first packets go to it. While `hardware_held` names outputs, a new video session
+    /// opens as [`while_hardware_held`] says, and its refusal is the session limit.
+    fn encoders(
+        &self,
+        engine: &Engine,
+        key: EncodeKey,
+        hardware_held: &[OutputId],
+    ) -> Result<Arc<Encoders>, StartError> {
         lock(&self.sessions).get_or_open(key.clone(), || {
             let feed = Feed {
                 mix: key.0.mix.clone(),
@@ -604,7 +657,19 @@ impl Program {
             // session's tap, so a fallback can't land between the open and the attach.
             let mut claim = self.context.as_ref().and_then(|_| self.gpu_gate.claim());
             let context = claim.as_ref().and(self.context.as_deref());
-            let video = Arc::new(open_video(self.codecs.as_ref(), context, &feed, &key.2)?);
+            let (profile, limited) = while_hardware_held(&key.2, hardware_held);
+            let video =
+                open_video(self.codecs.as_ref(), context, &feed, &profile).map_err(|reason| {
+                    if limited {
+                        StartError::HardwareSessionLimit {
+                            outputs: hardware_held.to_vec(),
+                            reason,
+                        }
+                    } else {
+                        StartError::Failed(reason)
+                    }
+                })?;
+            let video = Arc::new(video);
             if *video.path() != VideoPath::Gpu {
                 claim = None;
             }
@@ -1636,12 +1701,16 @@ pub(crate) fn launch(
     output_id: OutputId,
     generation: u64,
     fail_tx: Sender<PipelineEvent>,
-) -> Result<Running, String> {
+) -> Result<Running, StartError> {
     let registration = program
         .failures
         .add(output_id.clone(), generation, fail_tx.clone());
-    let OutputEncode { key, own_audio } = encode;
-    let encoders = program.encoders(engine, key)?;
+    let OutputEncode {
+        key,
+        own_audio,
+        hardware_held,
+    } = encode;
+    let encoders = program.encoders(engine, key, &hardware_held)?;
     let origin = program.origin()?;
     let own_audio = if own_audio {
         let (tap, release) = engine.add_output_tap(&output_id)?;
@@ -1652,7 +1721,7 @@ pub(crate) fn launch(
             }),
             Err(err) => {
                 release();
-                return Err(err);
+                return Err(err.into());
             }
         }
     } else {
