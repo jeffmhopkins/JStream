@@ -4512,7 +4512,7 @@ stamp = { hash = "b3:e7d2b3325e5ac572", by = "agent:a2656", note = "Dependabot #
 stamp = { hash = "b3:063a37f95f399bff" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/canvas.spec.js"]
-stamp = { hash = "b3:b348474fc3d7553c", by = "agent:ui-parity", note = "Checked fixtures.js: openAddSource right-clicks just under the last row of Scene objects and nestScene goes through it; the other helpers are as described." }
+stamp = { hash = "b3:d80e258411340923", by = "agent:mx05-monitoring", note = "canvas.spec.js only waits (expect.poll) for the header's revision after a drag, undo and redo, and nudges, instead of reading it once; no fixture, daemon or setup change, so the harness holds" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/connect.spec.js"]
 stamp = { hash = "b3:10a4b3cdfca0b4e0", by = "agent:claude-ui-features", note = "fixtures.js: connect waits for header.app-header, new disconnect (File menu) and rev (header data-rev), now listed in the Harness bullet; connect.spec.js uses the disconnect fixture and the File menu; outputs.spec.js adds header Record steps using connect and inspectorPage as described. Daemon, console-error and setup behaviour unchanged." }
@@ -4560,7 +4560,7 @@ stamp = { hash = "b3:063a37f95f399bff" }
 stamp = { hash = "b3:953d15643337cd4f", by = "agent:mx05-monitoring", note = "MX-05: the Mixer bullet now has the Hear button enabled and the new monitoring test: off, after FX, before FX, the master strip's monitor menu and device field, a second bus's own monitor, and the vertical strip's Hear off to Hear post" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/canvas.spec.js"]
-stamp = { hash = "b3:b348474fc3d7553c", by = "agent:ui-parity", note = "Checked each spec against its bullet: canvas live.set and live.cancel checks and the double click opening Properties, the new menus and properties specs, and inspector and transform now adding their second item through the Add source dialog and a nested scene." }
+stamp = { hash = "b3:d80e258411340923", by = "agent:mx05-monitoring", note = "canvas.spec.js checks the same revisions (one edit per drag, three after undo and redo, three after the nudges) but polls for them, since the box moves before the header hears the revision; the Canvas bullet still describes what the tests check" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/connect.spec.js"]
 stamp = { hash = "b3:10a4b3cdfca0b4e0", by = "agent:claude-ui-features", note = "connect.spec.js: File menu shows URL and protocol, Escape closes it, Disconnect through it, as the Connecting bullet says; outputs.spec.js: Go Live and End stream from the header and the header's Record starting and stopping a recording, as the Outputs bullet says." }
