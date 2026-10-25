@@ -125,8 +125,16 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   restacks in one edit and Stretch to canvas fills the canvas; on the canvas the menu
   ends with Select all, Duplicate as clone adds "Backdrop copy" selected, two selected
   items get a counted head with the duplicates disabled, and Remove from scene removes
-  both; a nested scene's menu opens it; a scene row's Rename renames, and the Scenes
-  panel's New scene adds one with its name field focused.
+  both; a placement of a shared source switches to an independent clone and back to a
+  reference in one edit each, its menu's head and checks following, and the original,
+  placed once, has no switch; Ctrl+D and Ctrl+Shift+D duplicate on the canvas and in a
+  row, and Del removes there; a nested scene's menu opens it; a scene row's Rename
+  renames, and the Scenes panel's New scene adds one with its name field focused.
+- **Groups** (`groups.spec.js`): Group selection on two items makes "Group 1", left
+  out of the Scenes panel, whose caret shows the two items indented; a click on one
+  opens the group's scene with it selected; Ungroup puts them back, which a second
+  client follows; the panel's New group groups the selected item, and a row dragged
+  onto the group's row goes into it.
 - **Properties dialog** (`properties.spec.js`): opened from an item's menu, it shows
   the type's title, the source's name, its two filters and an enabled Add filter
   button; Cancel and Escape drop

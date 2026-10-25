@@ -10,6 +10,11 @@ use crate::icons::Icon;
 use leptos::prelude::*;
 use leptos::wasm_bindgen::JsCast;
 
+/// A row's left padding for its depth in the tree: 18 px a level (spec-panels.md S10).
+pub fn indent(depth: usize) -> String {
+    format!("{}px", 6 + depth * 18)
+}
+
 /// The search text and the favourites-only switch over one panel's rows.
 #[derive(Clone, Copy)]
 pub struct Filter {

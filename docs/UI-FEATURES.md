@@ -58,10 +58,10 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Header bar](#header) | 9 | 4 | 2 | 2 | 1 | 0 |
 | [Docking and layouts](#docking) | 10 | 8 | 2 | 0 | 0 | 0 |
 | [Canvas](#canvas) | 18 | 11 | 3 | 3 | 1 | 0 |
-| [Context menus](#menus) | 8 | 0 | 6 | 2 | 0 | 0 |
+| [Context menus](#menus) | 8 | 1 | 6 | 1 | 0 | 0 |
 | [Dialogs and windows](#dialogs) | 8 | 4 | 1 | 0 | 3 | 0 |
 | [Scenes panel](#scenes) | 10 | 6 | 2 | 2 | 0 | 0 |
-| [Scene objects panel](#objects) | 9 | 6 | 1 | 1 | 1 | 0 |
+| [Scene objects panel](#objects) | 9 | 8 | 0 | 0 | 1 | 0 |
 | [Inspector](#inspector) | 10 | 5 | 2 | 3 | 0 | 0 |
 | [Transform panel](#transform) | 4 | 4 | 0 | 0 | 0 | 0 |
 | [Filters](#filters) | 8 | 5 | 0 | 1 | 2 | 0 |
@@ -69,8 +69,8 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Outputs](#outputs) | 4 | 0 | 1 | 2 | 1 | 0 |
 | [Transitions](#transitions) | 6 | 3 | 2 | 1 | 0 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
-| [Keyboard](#keyboard) | 7 | 1 | 3 | 3 | 0 | 0 |
-| **Total** | **130** | **65** | **28** | **23** | **13** | **1** |
+| [Keyboard](#keyboard) | 7 | 2 | 2 | 3 | 0 | 0 |
+| **Total** | **130** | **69** | **26** | **21** | **13** | **1** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -184,13 +184,13 @@ on the canvas and in Scene objects but for its last lines.
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
 | CM-01 | Menu mechanics | One menu at the pointer, kept on screen; check column, colour swatch, label, shortcut hint, submenu arrow; Windows-style submenus that open on hover; full keyboard navigation; any outside press closes. | 🟡 | Built but for the colour swatch column, which comes with the label menus that use it. Items the UI or the engine can't do yet show disabled, as the prototype's "(dis)" items do. |
-| CM-02 | Canvas menus | Item: Properties, Edit filters, Pop out, reference/clone, layer order, Center/Fit/Stretch, Reset rotation, Clear crop, Crop, Duplicate as reference/clone, Remove, Select all. Empty canvas and margin: Select all, snapping, Add source, scene transitions and Properties. | 🟡 | Built, with an Audio check for a source with sound and the prototype's shorter menus for a nested scene and an audio-only source. Properties opens the Properties dialog ([DL-02](#dialogs)), and Edit filters selects the item and shows the Filters panel ([FL-01](#filters)). Reference and clone wait on [CM-06](#menus), Crop on [CV-08](#canvas), Group selection on [OB-04](#objects), and Pop out, the transitions and the scene's Properties on [DL-07](#dialogs), [CM-07](#menus) and [DL-03](#dialogs), so they show disabled. Remove from scene works, though the prototype shows it disabled. |
+| CM-02 | Canvas menus | Item: Properties, Edit filters, Pop out, reference/clone, layer order, Center/Fit/Stretch, Reset rotation, Clear crop, Crop, Duplicate as reference/clone, Remove, Select all. Empty canvas and margin: Select all, snapping, Add source, scene transitions and Properties. | 🟡 | Built, with an Audio check for a source with sound and the prototype's shorter menus for a nested scene and an audio-only source. Properties opens the Properties dialog ([DL-02](#dialogs)), and Edit filters selects the item and shows the Filters panel ([FL-01](#filters)). The reference ↔ clone block ([CM-06](#menus)), the two duplicates and Group selection ([OB-04](#objects)) work. Crop waits on [CV-08](#canvas), and Pop out, the transitions and the scene's Properties on [DL-07](#dialogs), [CM-07](#menus) and [DL-03](#dialogs), so they show disabled. Remove from scene works, though the prototype shows it disabled. |
 | CM-03 | Scene row menu | Rename, Transition in ▸, Transition out ▸, Properties, Edit filters, Pop out ▸, New scene, New keyframe, New folder, Duplicate scene, Delete scene. | 🟡 | Built. Show in preview (`studio.set_preview`), Rename, New scene, New folder and Delete scene work, though the prototype shows all but New scene disabled; New scene and New folder land in the scene's folder. Transitions wait on T1, New keyframe (`scene.create_variant`, K1) on the keyframe rows ([SC-07](#scenes)), Properties on [DL-03](#dialogs), Edit filters on [FL-06](#filters), and Duplicate scene on an engine edit that copies a scene, so they show disabled. |
-| CM-04 | Scene object row menu | Audio on/off, Properties, Edit filters, Pop out, reference/clone, layer order, Add source, New group, Remove from scene. | 🟡 | The selected items' menu of [CM-02](#menus), ending with Add source and New group instead of Select all; New group waits on [OB-04](#objects). |
-| CM-05 | Empty panel menus | Scenes: New scene, New folder, Paste scene. Scene objects: Add source, Add scene as source, New group, Select all, Paste. | 🟡 | Both are built, with the Scenes panel's New folder. New group ([OB-04](#objects)) and the two Pastes (decision register D43) show disabled. |
-| CM-06 | Reference ↔ clone | A placement of a shared source toggles between "Reference to original" and "Independent clone". | ⬜ | `item.set_source` and `source.duplicate` exist ([ADR-0023](adr/0023-placements-references-and-clones.md)). |
+| CM-04 | Scene object row menu | Audio on/off, Properties, Edit filters, Pop out, reference/clone, layer order, Add source, New group, Remove from scene. | 🟡 | The selected items' menu of [CM-02](#menus), ending with Add source and New group instead of Select all. New group groups the selected items ([OB-04](#objects)). |
+| CM-05 | Empty panel menus | Scenes: New scene, New folder, Paste scene. Scene objects: Add source, Add scene as source, New group, Select all, Paste. | 🟡 | Both are built, with the Scenes panel's New folder and the Scene objects panel's New group, which groups the selection. The two Pastes (decision register D43) show disabled. |
+| CM-06 | Reference ↔ clone | A placement of a shared source toggles between "Reference to original" and "Independent clone". | ✅ | `item_menu.rs`, for one item (decision register D3, [ADR-0023](adr/0023-placements-references-and-clones.md)): a placement of a source placed more than once shows "Source" with "Reference to original" checked, and "Independent clone" gives it a copy of its own (`source.duplicate`, then `item.set_source`, keeping the item). A copy whose original still exists shows "Duplicate of <original>" with "Independent clone" checked, and "Reference to original" places the original again, deleting the copy if nothing else places it. The prototype's toasts wait on [WS-08](#theme). |
 | CM-07 | Transition in/out submenus | Default (preset), then each preset, then "Manage presets…". | ⬜ | `scene.set_transitions` (T1) sets a scene's in and out overrides; the presets come from the Transitions panel. |
-| CM-08 | Keyframe and folder menus | Switch to it, Reset to parent, New keyframe, Delete keyframe; New folder, Rename, Delete folder / Ungroup. | 🟡 | The folder menu is built: New scene and New folder inside the folder, Rename (F2) and Delete folder (Del), which deletes an empty folder at once and asks with `delete.plan`'s summary otherwise. The keyframe menu waits on the keyframe rows ([SC-07](#scenes)). K1: Reset to parent is a batch of `item.clear_override`s; Delete keyframe is `scene.delete`. |
+| CM-08 | Keyframe and folder menus | Switch to it, Reset to parent, New keyframe, Delete keyframe; New folder, Rename, Delete folder / Ungroup. | 🟡 | The folder menu is built: New scene and New folder inside the folder, Rename (F2) and Delete folder (Del), which deletes an empty folder at once and asks with `delete.plan`'s summary otherwise. A group's Ungroup is on its row's nested-scene menu ([OB-04](#objects)). The keyframe menu waits on the keyframe rows ([SC-07](#scenes)). K1: Reset to parent is a batch of `item.clear_override`s; Delete keyframe is `scene.delete`. |
 
 <a id="dialogs"></a>
 ## Dialogs and windows
@@ -245,9 +245,9 @@ Spec: [panels › scene objects](../design/ui-prototype/spec-panels.md#scene-obj
 | OB-01 | Object list | "In “<scene>”, top to bottom" caption, then the scene's items top first, with type icons. | ✅ | The caption and each source's type icon (the scene icon for a nested scene) in the prototype's 30 px rows. |
 | OB-02 | Visibility eye | Hover-revealed eye; stays shown while hidden; hidden rows dimmed. | ✅ | |
 | OB-03 | References in italics | A placement of a source shared with other scenes reads in italics. | ✅ | Italics when the source is placed in another scene too, as the Inspector's header does, since a source has no owner scene. |
-| OB-04 | Nested scenes as groups | A nested scene (group) expands to show its items. | ⬜ | `scene.set_role` and `item.move` exist ([ADR-0024](adr/0024-scene-structure.md)). |
+| OB-04 | Nested scenes as groups | A nested scene (group) expands to show its items. | ✅ | `sources.rs`: a nested scene's row has a caret that shows its items under it, nested ones too. Group selection, or New group, makes a `group` scene ("Group N", left out of the Scenes panel) placed over the whole canvas where the topmost selected item was, and moves the items into it, keeping their IDs and boxes (`item.move`, decision register D4). Ungroup on a group's menu moves them back and deletes the group if nothing else places it. The prototype edits a group's items inline on the parent canvas; here a click on one opens the group's scene with it selected, as the engine draws a nested scene as one item. |
 | OB-05 | Scene-input filter rows | An object with a mask, matte, clip or displacement filter shows the scene it uses as a child row with a role badge. | 🔒 | Scene-input video filters (V3, #313). |
-| OB-06 | Drag to reorder and group | Drag before, after or into a group. | 🟡 | Rows drag before or after others (`item.reorder`), not while filtering. Into a group waits on OB-04. |
+| OB-06 | Drag to reorder and group | Drag before, after or into a group. | ✅ | Rows drag before or after others (`item.reorder`), not while filtering. A drop on a nested scene's row (its middle half) or beside one of its items moves the dragged item into that scene (`item.move`); the engine refuses a move that would nest a scene in itself. A nested scene's items don't drag out; Ungroup does that. |
 | OB-07 | Search | "Search objects". | ✅ | |
 | OB-08 | Multi-select | Shift-click adds; shares the canvas selection. | ✅ | Shift-click adds a row or takes it out; every selected item's row is highlighted. |
 | OB-09 | Add, remove, delete | Add source (dialog), Remove from scene, delete everywhere with the plan's summary. | ✅ | Add source is the dialog (DL-06), from the panel's right-click menu; Del or the item menu's Remove from scene removes; the row menu's Delete source everywhere… asks with the plan's summary. |
@@ -403,7 +403,7 @@ handlers; the real UI makes them work.
 | KB-01 | Canvas keys | C crop mode, V move tool, Esc deselect, Ctrl+A select all, arrows nudge. | 🟡 | Esc, Ctrl+A and arrows built (arrows move every selected item, as one edit); C and V wait on crop (CV-08). |
 | KB-02 | Modifiers | Shift half speed or add; Ctrl no snap, stretch, 45° steps; Alt crops. | 🟡 | Shift half speed and add, and all of Ctrl, built; Alt crop waits on CV-08. |
 | KB-03 | Undo and redo | Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y. | ✅ | The prototype has none; kept. |
-| KB-04 | Edit keys | Ctrl+D duplicate as reference, Ctrl+Shift+D as clone, Del remove, F2 rename. | 🟡 | F2 renames and Del removes in the Scenes and Scene objects rows (Del deletes a scene there, through its plan). Ctrl+D and Ctrl+Shift+D wait. |
+| KB-04 | Edit keys | Ctrl+D duplicate as reference, Ctrl+Shift+D as clone, Del remove, F2 rename. | ✅ | F2 renames and Del removes in the Scenes and Scene objects rows (Del deletes a scene or a folder there, through its plan). Ctrl+D and Ctrl+Shift+D duplicate the item as a reference or a clone on the canvas and in its row, and Del on the canvas removes the selection. |
 | KB-05 | Copy and paste | Ctrl+C, Ctrl+V. | ⬜ | Decision register D43. |
 | KB-06 | Privacy key | Pause toggles privacy. | ⬜ | `privacy.set` (E2b); the key comes with HD-05. |
 | KB-07 | Scene hotkeys | F1–F5 switch to the scene bound to them. | ⬜ | `hotkey.set` binds a chord such as F1 to `scene.switch`; the UI's key handling is to build. |

@@ -610,10 +610,26 @@ pub fn Canvas() -> impl IntoView {
         studio.select_items(all);
     };
 
+    let item_cx = item_menu::Context::from_page();
+    // The selected items of the scene shown, for the edit keys.
+    let chosen_here = move || {
+        let scene = layout.with_untracked(|l| l.as_ref()?.scene.as_ref().map(|s| s.0.clone()));
+        scene.map(|scene| (scene, chosen.get_untracked()))
+    };
     let on_key = move |event: ev::KeyboardEvent| {
         let key = event.key();
         let command = event.ctrl_key() || event.meta_key();
         match key.as_str() {
+            // Ctrl+D duplicates as a reference, Ctrl+Shift+D as a clone (KB-04).
+            "d" | "D" if command => {
+                if let (Some(cx), Some((scene, items))) = (item_cx, chosen_here()) {
+                    cx.duplicate_selected(&scene, &items, event.shift_key());
+                }
+            }
+            "Delete" => match (item_cx, chosen_here()) {
+                (Some(cx), Some((_, items))) if !items.is_empty() => cx.remove(&items),
+                _ => return,
+            },
             "z" | "Z" if command && event.shift_key() => step(HistoryOp::Redo),
             "z" | "Z" if command => step(HistoryOp::Undo),
             "y" | "Y" if command => step(HistoryOp::Redo),
@@ -646,7 +662,6 @@ pub fn Canvas() -> impl IntoView {
     };
 
     // A double click on an item selects it alone and opens its properties.
-    let item_cx = item_menu::Context::from_page();
     let on_double = move |event: ev::MouseEvent| {
         let Some((_, point)) = canvas_at(event.client_x(), event.client_y()) else {
             return;

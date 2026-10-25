@@ -13,7 +13,7 @@ use crate::app::SessionContext;
 use crate::icons::{Icon, named};
 use crate::menu::{Entry, Menus};
 use crate::panels::confirm::{Confirm, Pending};
-use crate::panels::tree::{Filter, Reorder, SearchBar, Side, Star, dropped_at};
+use crate::panels::tree::{Filter, Reorder, SearchBar, Side, Star, dropped_at, indent};
 use crate::store::{Collection, Studio, apply, plan_delete, plan_summary};
 use jstream_control::protocol::{Action, DeleteTarget, Edit, FolderId, SceneId};
 use leptos::prelude::*;
@@ -412,7 +412,6 @@ pub fn Scenes() -> impl IntoView {
             }
         }
     };
-    let indent = |depth: usize| format!("{}px", 6 + depth * 18);
 
     let scene_row = move |scene_id: SceneId,
                           name: String,

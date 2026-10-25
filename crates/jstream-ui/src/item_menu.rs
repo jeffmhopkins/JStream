@@ -1,7 +1,9 @@
 //! The right-click menu of the selected items, shared by the canvas and the Scene
 //! objects panel (spec-workspace.md 5.2.8 to 5.2.12): Properties, the Audio check,
 //! layer order, Center, Fit and Stretch to canvas, Reset rotation, Clear crop, the two
-//! duplicates and Remove from scene. Each choice sends one batch, so one undo step.
+//! duplicates and Remove from scene, and for a placement of a shared or copied source
+//! the switch between a reference and a clone (decision register D3, ADR-0023). Each
+//! choice sends one batch, so one undo step.
 //!
 //! Docs: docs/UI-FEATURES.md#menus
 
@@ -15,7 +17,8 @@ use crate::panels::source_properties::{self, PropertiesDialog};
 use crate::store::{Collection, Studio};
 use crate::workspace::DockState;
 use jstream_control::protocol::{
-    Canvas, Crop, Edit, Finite32, ItemGeometry, ItemId, SceneId, SourceId, SourceKind,
+    Canvas, Crop, Edit, Finite32, ItemGeometry, ItemId, ItemInfo, SceneId, SceneRole, Settings,
+    SourceId, SourceKind,
 };
 use leptos::prelude::*;
 use std::rc::Rc;
@@ -139,6 +142,227 @@ pub fn unrotated(geometry: &ItemGeometry) -> ItemGeometry {
     }
 }
 
+/// Whether an item's placement is a reference to a shared source or a clone of one, which
+/// the menu switches between (spec-workspace.md 9.3, D3).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Sharing {
+    /// The source was copied from another, which still exists, so the item can go back
+    /// to placing it.
+    Clone {
+        /// The source it was copied from.
+        original: SourceId,
+        /// That source's name.
+        name: String,
+        /// Whether nothing else places the copy, which then goes too.
+        alone: bool,
+    },
+    /// The source is placed more than once, so the item can take a copy of its own.
+    Reference,
+    /// Neither: the only placement of a source of its own.
+    Own,
+}
+
+impl Sharing {
+    /// What the item's placement is.
+    pub fn of(collection: &Collection, item: &ItemInfo) -> Sharing {
+        let placements = collection
+            .scenes
+            .iter()
+            .flat_map(|scene| &scene.items)
+            .filter(|i| i.source_id == item.source_id)
+            .count();
+        let original = collection
+            .source(&item.source_id)
+            .and_then(|s| s.duplicated_from.as_ref())
+            .and_then(|from| collection.source(from));
+        match original {
+            Some(original) => Sharing::Clone {
+                original: original.source_id.clone(),
+                name: original.name.clone(),
+                alone: placements <= 1,
+            },
+            None if placements > 1 => Sharing::Reference,
+            None => Sharing::Own,
+        }
+    }
+}
+
+/// The edits that turn `item_id`, placing `source_id` named `name`, into an independent
+/// clone placing `copy`.
+pub fn to_clone(item_id: &ItemId, source_id: &SourceId, name: &str, copy: SourceId) -> Vec<Edit> {
+    vec![
+        Edit::SourceDuplicate {
+            source_id: source_id.clone(),
+            new_source_id: copy.clone(),
+            name: name.to_owned(),
+        },
+        Edit::ItemSetSource {
+            item_id: item_id.clone(),
+            source_id: copy,
+        },
+    ]
+}
+
+/// The edits that make the clone `item_id`, placing `source_id`, a reference to
+/// `original` again, deleting the copy when nothing else places it.
+pub fn to_reference(
+    item_id: &ItemId,
+    source_id: &SourceId,
+    original: &SourceId,
+    alone: bool,
+) -> Vec<Edit> {
+    let mut edits = vec![Edit::ItemSetSource {
+        item_id: item_id.clone(),
+        source_id: original.clone(),
+    }];
+    if alone {
+        edits.push(Edit::SourceDelete {
+            source_id: source_id.clone(),
+        });
+    }
+    edits
+}
+
+/// "Group N", with the first N no scene is named (spec-workspace.md 9.5).
+pub fn group_name(collection: &Collection) -> String {
+    (1..)
+        .map(|n| format!("Group {n}"))
+        .find(|name| !collection.scenes.iter().any(|s| s.name == *name))
+        .unwrap_or_else(|| "Group".into())
+}
+
+/// The IDs a new group takes: its scene, the `scene` source showing it, and its item.
+#[derive(Clone, Debug)]
+pub struct GroupIds {
+    /// The group's scene.
+    pub scene: SceneId,
+    /// The source that places it.
+    pub source: SourceId,
+    /// Its item in the scene it is made in.
+    pub item: ItemId,
+}
+
+/// The batch that groups `items` of `scene_id` (D4, spec-workspace.md 9.5): a new group
+/// scene, a source showing it placed over the whole canvas where the topmost of them was
+/// (on top with none), and each of them moved into it, keeping its ID, box and order. The
+/// group shares the canvas, so the children keep their places on screen.
+pub fn group_edits(
+    collection: &Collection,
+    scene_id: &SceneId,
+    items: &[ItemId],
+    ids: GroupIds,
+) -> Vec<Edit> {
+    let Some(scene) = collection.scene(scene_id) else {
+        return Vec::new();
+    };
+    let order: Vec<&ItemId> = scene.items.iter().map(|i| &i.item_id).collect();
+    let chosen: Vec<&ItemId> = order
+        .iter()
+        .copied()
+        .filter(|id| items.contains(id))
+        .collect();
+    let name = group_name(collection);
+    let mut edits = vec![
+        Edit::SceneCreate {
+            scene_id: ids.scene.clone(),
+            name: name.clone(),
+            role: Some(SceneRole::Group),
+        },
+        Edit::SourceCreate {
+            source_id: ids.source.clone(),
+            name,
+            kind: SourceKind::Scene {
+                scene_id: ids.scene.clone(),
+            },
+            settings: Settings::new(),
+            duplicated_from: None,
+        },
+    ];
+    for (index, item_id) in chosen.iter().enumerate() {
+        edits.push(Edit::ItemMove {
+            item_id: (*item_id).clone(),
+            scene_id: ids.scene.clone(),
+            index: u32::try_from(index).unwrap_or(u32::MAX),
+        });
+    }
+    let canvas = collection.canvas;
+    edits.push(Edit::ItemAdd {
+        scene_id: scene_id.clone(),
+        item_id: ids.item.clone(),
+        source_id: ids.source,
+        transform: None,
+        geometry: ItemGeometry::covering_canvas(canvas.width, canvas.height).ok(),
+        opacity: None,
+        blend: None,
+    });
+    // Where the topmost chosen item was, counted among the items that stay.
+    let left = order.len() - chosen.len();
+    if let Some(top) = chosen.last() {
+        let at = order
+            .iter()
+            .take_while(|id| *id != top)
+            .filter(|id| !chosen.contains(id))
+            .count();
+        if at < left {
+            edits.push(Edit::ItemReorder {
+                item_id: ids.item,
+                index: u32::try_from(at).unwrap_or(u32::MAX),
+            });
+        }
+    }
+    edits
+}
+
+/// The batch that ungroups the nested scene `item_id` places: its items move into the
+/// item's scene where it was, in their order, and the item goes. A group scene that
+/// nothing else places goes too, with its unplaced `scene` sources. `None` when the item
+/// doesn't place a scene.
+pub fn ungroup_edits(collection: &Collection, item_id: &ItemId) -> Option<Vec<Edit>> {
+    let (parent, item) = collection.item(item_id)?;
+    let SourceKind::Scene { scene_id: group } = &collection.source(&item.source_id)?.kind else {
+        return None;
+    };
+    let nested = collection.scene(group)?;
+    let at = parent.items.iter().position(|i| i.item_id == *item_id)?;
+    let mut edits: Vec<Edit> = nested
+        .items
+        .iter()
+        .enumerate()
+        .map(|(k, child)| Edit::ItemMove {
+            item_id: child.item_id.clone(),
+            scene_id: parent.scene_id.clone(),
+            index: u32::try_from(at + k).unwrap_or(u32::MAX),
+        })
+        .collect();
+    edits.push(Edit::ItemRemove {
+        item_id: item_id.clone(),
+    });
+    let shows_group =
+        |kind: &SourceKind| matches!(kind, SourceKind::Scene { scene_id } if scene_id == group);
+    let placed = |source_id: &SourceId| {
+        collection
+            .scenes
+            .iter()
+            .flat_map(|s| &s.items)
+            .any(|i| i.source_id == *source_id && i.item_id != *item_id)
+    };
+    let sources: Vec<&SourceId> = collection
+        .sources
+        .iter()
+        .filter(|s| shows_group(&s.kind))
+        .map(|s| &s.source_id)
+        .collect();
+    if nested.role == SceneRole::Group && !sources.iter().any(|s| placed(s)) {
+        edits.extend(sources.into_iter().map(|source_id| Edit::SourceDelete {
+            source_id: source_id.clone(),
+        }));
+        edits.push(Edit::SceneDelete {
+            scene_id: group.clone(),
+        });
+    }
+    Some(edits)
+}
+
 /// What the menu needs to know about the selection.
 #[derive(Clone, Debug)]
 struct Facts {
@@ -158,6 +382,8 @@ struct Facts {
     picture: bool,
     /// Whether the primary item's source plays its audio, if it has any.
     audio: Option<bool>,
+    /// Whether the primary item is a reference or a clone.
+    sharing: Sharing,
 }
 
 impl Facts {
@@ -189,6 +415,7 @@ impl Facts {
             kind: source.kind.clone(),
             picture,
             audio: source.audio.as_ref().map(|a| a.enabled),
+            sharing: Sharing::of(collection, primary),
         })
     }
 
@@ -274,6 +501,66 @@ impl Context {
         }
     }
 
+    /// Duplicates the primary one of the selected `items` of `scene_id` as a reference or
+    /// a clone, as the menu's Duplicate entries do (Ctrl+D, Ctrl+Shift+D). Nothing when
+    /// several items are selected, or the primary one is a nested scene or has no
+    /// picture, where the menu has no Duplicate entries.
+    pub fn duplicate_selected(self, scene_id: &SceneId, items: &[ItemId], clone: bool) {
+        let facts = self
+            .studio
+            .collection
+            .with_untracked(|c| c.as_ref().and_then(|c| Facts::of(c, scene_id, items)));
+        let Some(facts) = facts else { return };
+        let nested = matches!(facts.kind, SourceKind::Scene { .. });
+        if facts.items.len() == 1 && facts.picture && !nested {
+            self.duplicate(scene_id.clone(), &facts, clone);
+        }
+    }
+
+    /// Groups the selected `items` of `scene_id`, or makes an empty group on top with
+    /// none, and selects the group.
+    pub fn group(self, scene_id: &SceneId, items: &[ItemId]) {
+        let Some(s) = self.session.get() else { return };
+        let ids = GroupIds {
+            scene: SceneId::new(self.studio.fresh_id(&s, "scene")),
+            source: SourceId::new(self.studio.fresh_id(&s, "source")),
+            item: ItemId::new(self.studio.fresh_id(&s, "item")),
+        };
+        let item = ids.item.clone();
+        let edits = self.studio.collection.with_untracked(|c| {
+            c.as_ref()
+                .map(|c| group_edits(c, scene_id, items, ids))
+                .unwrap_or_default()
+        });
+        if !edits.is_empty() {
+            self.studio.apply(&s, edits);
+            self.studio.select_item(Some(item));
+        }
+    }
+
+    /// Ungroups the nested scene `item_id` places.
+    fn ungroup(self, item_id: &ItemId) {
+        let edits = self
+            .studio
+            .collection
+            .with_untracked(|c| c.as_ref().and_then(|c| ungroup_edits(c, item_id)));
+        if let Some(edits) = edits {
+            self.send(edits);
+        }
+    }
+
+    /// Removes the selected `items` from their scene (Del).
+    pub fn remove(self, items: &[ItemId]) {
+        self.send(
+            items
+                .iter()
+                .map(|id| Edit::ItemRemove {
+                    item_id: id.clone(),
+                })
+                .collect(),
+        );
+    }
+
     /// Places the primary item's source again, or a copy of it, 40 pixels right and
     /// down and one place above it, and selects the new item.
     fn duplicate(self, scene_id: SceneId, facts: &Facts, clone: bool) {
@@ -335,6 +622,44 @@ impl Context {
     }
 }
 
+/// The reference ↔ clone block for the one selected item (spec-workspace.md 5.2.10): a
+/// head, then "Reference to original" and "Independent clone", the current one checked.
+fn sharing_entries(cx: Context, facts: &Facts) -> Vec<Entry> {
+    let item = facts.items[0].clone();
+    let source = facts.source_id.clone();
+    let (head, clone) = match &facts.sharing {
+        Sharing::Own => return Vec::new(),
+        Sharing::Clone { name, .. } => (format!("Duplicate of {name}"), true),
+        Sharing::Reference => ("Source".to_owned(), false),
+    };
+    let reference = {
+        let sharing = facts.sharing.clone();
+        let (item, source) = (item.clone(), source.clone());
+        Entry::item("Reference to original", move || {
+            if let Sharing::Clone {
+                original, alone, ..
+            } = &sharing
+            {
+                cx.send(to_reference(&item, &source, original, *alone));
+            }
+        })
+        .checked(!clone)
+    };
+    let independent = {
+        let name = facts.name.clone();
+        Entry::item("Independent clone", move || {
+            if clone {
+                return;
+            }
+            let Some(s) = cx.session.get() else { return };
+            let copy = SourceId::new(cx.studio.fresh_id(&s, "source"));
+            cx.send(to_clone(&item, &source, &name, copy));
+        })
+        .checked(clone)
+    };
+    vec![Entry::Head(head), reference, independent, Entry::Sep]
+}
+
 /// The menu for the selected `items` of `scene_id`, the primary one first; empty when
 /// none of them is in the scene.
 pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) -> Vec<Entry> {
@@ -373,16 +698,7 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
     });
     let remove = {
         let ids = facts.items.clone();
-        Entry::item("Remove from scene", move || {
-            cx.send(
-                ids.iter()
-                    .map(|id| Edit::ItemRemove {
-                        item_id: id.clone(),
-                    })
-                    .collect(),
-            );
-        })
-        .hint("Del")
+        Entry::item("Remove from scene", move || cx.remove(&ids)).hint("Del")
     };
 
     // A nested scene (5.2.8).
@@ -390,6 +706,15 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
         let into = nested.clone();
         let open = nested.clone();
         let studio = cx.studio;
+        let group = cx.studio.collection.with_untracked(|c| {
+            c.as_ref()
+                .and_then(|c| c.scene(nested))
+                .is_some_and(|s| s.role == SceneRole::Group)
+        });
+        let ungroup = group.then(|| {
+            let id = primary.clone();
+            Entry::item("Ungroup", move || cx.ungroup(&id))
+        });
         let mut list = vec![properties, filters, pop_out, Entry::Sep];
         list.extend(audio);
         list.extend([
@@ -399,8 +724,9 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
             Entry::item("Open nested scene", move || {
                 studio.select_scene(open.clone())
             }),
-            remove,
         ]);
+        list.extend(ungroup);
+        list.push(remove);
         return list;
     }
     // A source with no picture (5.2.9).
@@ -418,7 +744,10 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
     if many {
         list.extend([
             Entry::Head(format!("{} items selected", facts.items.len())),
-            Entry::unavailable("Group selection"),
+            {
+                let (scene, ids) = (scene_id.clone(), facts.items.clone());
+                Entry::item("Group selection", move || cx.group(&scene, &ids))
+            },
             Entry::Sep,
         ]);
     } else {
@@ -426,6 +755,7 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
             list.extend([audio, Entry::Sep]);
         }
         list.extend([properties, filters, pop_out, Entry::Sep]);
+        list.extend(sharing_entries(cx, &facts));
     }
     let layer = |label: &str, layer: Layer| {
         let facts = Rc::clone(&facts);
@@ -501,11 +831,12 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
         }
         Scope::Objects => {
             let scene = scene_id.clone();
+            let (into, ids) = (scene_id.clone(), facts.items.clone());
             list.extend([
                 Entry::Sep,
                 Entry::item("Add source…", move || cx.add_source(scene.clone()))
                     .disabled_if(cx.adder.is_none()),
-                Entry::unavailable("New group"),
+                Entry::item("New group", move || cx.group(&into, &ids)),
             ]);
         }
     }
@@ -599,6 +930,241 @@ mod tests {
             (full.size.width.get(), full.size.height.get()),
             (1920.0, 1080.0)
         );
+    }
+
+    fn placing(id: &str, source: &str) -> ItemInfo {
+        ItemInfo {
+            item_id: id.into(),
+            source_id: source.into(),
+            placement: jstream_control::protocol::PlacementForm::Legacy,
+            transform: jstream_control::protocol::ItemTransform::IDENTITY,
+            geometry: None,
+            crop: Crop::NONE,
+            visible: true,
+            effects: Vec::new(),
+            opacity: Finite32::ONE,
+            blend: Default::default(),
+            transition: Default::default(),
+        }
+    }
+
+    fn source(id: &str, from: Option<&str>) -> jstream_control::protocol::SourceInfo {
+        jstream_control::protocol::SourceInfo {
+            source_id: id.into(),
+            name: id.to_uppercase(),
+            kind: SourceKind::Builtin {
+                kind: "image".into(),
+            },
+            settings: Default::default(),
+            duplicated_from: from.map(SourceId::new),
+            audio: None,
+            filters: Default::default(),
+            meta: Default::default(),
+        }
+    }
+
+    fn studio(items: Vec<ItemInfo>) -> Collection {
+        Collection {
+            sources: vec![
+                source("logo", None),
+                source("copy", Some("logo")),
+                source("orphan", Some("deleted")),
+            ],
+            scenes: vec![jstream_control::protocol::SceneInfo {
+                scene_id: "main".into(),
+                name: "Main".into(),
+                role: Default::default(),
+                transition_in: None,
+                transition_out: None,
+                folder: None,
+                meta: Default::default(),
+                variant_of: None,
+                overrides: Vec::new(),
+                items,
+                filters: Default::default(),
+            }],
+            ..Collection::default()
+        }
+    }
+
+    #[test]
+    fn sharing_tells_a_reference_from_a_clone() {
+        let c = studio(vec![
+            placing("a", "logo"),
+            placing("b", "logo"),
+            placing("c", "copy"),
+            placing("d", "orphan"),
+        ]);
+        let item = |id: &str| c.item(&ItemId::new(id)).expect("placed").1.clone();
+        assert_eq!(Sharing::of(&c, &item("a")), Sharing::Reference);
+        assert_eq!(
+            Sharing::of(&c, &item("c")),
+            Sharing::Clone {
+                original: SourceId::new("logo"),
+                name: "LOGO".into(),
+                alone: true,
+            }
+        );
+        // A copy whose original is gone is a source of its own.
+        assert_eq!(Sharing::of(&c, &item("d")), Sharing::Own);
+        let alone = studio(vec![placing("a", "logo")]);
+        let a = alone.item(&ItemId::new("a")).expect("placed").1.clone();
+        assert_eq!(Sharing::of(&alone, &a), Sharing::Own);
+        let twice = studio(vec![placing("c", "copy"), placing("e", "copy")]);
+        let e = twice.item(&ItemId::new("e")).expect("placed").1.clone();
+        assert!(matches!(
+            Sharing::of(&twice, &e),
+            Sharing::Clone { alone: false, .. }
+        ));
+    }
+
+    /// A collection with scene `main` holding `items` (bottom first) and a group scene
+    /// `grp` holding `kids`, shown by the source `grp_src`.
+    fn grouped(items: Vec<ItemInfo>, kids: Vec<ItemInfo>) -> Collection {
+        let mut c = studio(items);
+        let mut group = c.scenes[0].clone();
+        group.scene_id = "grp".into();
+        group.name = "Group 1".into();
+        group.role = SceneRole::Group;
+        group.items = kids;
+        c.scenes.push(group);
+        let mut src = source("grp_src", None);
+        src.kind = SourceKind::Scene {
+            scene_id: "grp".into(),
+        };
+        c.sources.push(src);
+        c
+    }
+
+    fn ids_of(edits: &[Edit]) -> Vec<String> {
+        edits
+            .iter()
+            .map(|e| match e {
+                Edit::SceneCreate { scene_id, name, .. } => format!("scene {scene_id} {name}"),
+                Edit::SourceCreate { source_id, .. } => format!("source {source_id}"),
+                Edit::ItemMove {
+                    item_id,
+                    scene_id,
+                    index,
+                } => format!("move {item_id} {scene_id} {index}"),
+                Edit::ItemAdd { item_id, .. } => format!("add {item_id}"),
+                Edit::ItemReorder { item_id, index } => format!("reorder {item_id} {index}"),
+                Edit::ItemRemove { item_id } => format!("remove {item_id}"),
+                Edit::SourceDelete { source_id } => format!("delete source {source_id}"),
+                Edit::SceneDelete { scene_id } => format!("delete scene {scene_id}"),
+                other => format!("{other:?}"),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn grouping_moves_the_items_in_order_and_puts_the_group_where_the_top_one_was() {
+        let c = grouped(
+            vec![
+                placing("a", "logo"),
+                placing("b", "logo"),
+                placing("c", "logo"),
+                placing("d", "logo"),
+            ],
+            Vec::new(),
+        );
+        let ids = GroupIds {
+            scene: "g".into(),
+            source: "gs".into(),
+            item: "gi".into(),
+        };
+        let edits = group_edits(&c, &SceneId::new("main"), &ids_list(&["c", "a"]), ids);
+        assert_eq!(
+            ids_of(&edits),
+            [
+                "scene g Group 2",
+                "source gs",
+                "move a g 0",
+                "move c g 1",
+                "add gi",
+                // b stays below where c was; d above.
+                "reorder gi 1",
+            ]
+        );
+        let on_top = group_edits(
+            &c,
+            &SceneId::new("main"),
+            &ids_list(&["d"]),
+            GroupIds {
+                scene: "g".into(),
+                source: "gs".into(),
+                item: "gi".into(),
+            },
+        );
+        assert_eq!(ids_of(&on_top).last().map(String::as_str), Some("add gi"));
+    }
+
+    fn ids_list(names: &[&str]) -> Vec<ItemId> {
+        names.iter().map(|n| ItemId::new(*n)).collect()
+    }
+
+    #[test]
+    fn ungrouping_puts_the_children_back_and_drops_an_unplaced_group() {
+        let c = grouped(
+            vec![
+                placing("a", "logo"),
+                placing("g1", "grp_src"),
+                placing("b", "logo"),
+            ],
+            vec![placing("x", "logo"), placing("y", "copy")],
+        );
+        let edits = ungroup_edits(&c, &ItemId::new("g1")).expect("a nested scene");
+        assert_eq!(
+            ids_of(&edits),
+            [
+                "move x main 1",
+                "move y main 2",
+                "remove g1",
+                "delete source grp_src",
+                "delete scene grp",
+            ]
+        );
+        // Placed elsewhere too, the group stays.
+        let twice = grouped(
+            vec![placing("g1", "grp_src"), placing("g2", "grp_src")],
+            vec![placing("x", "logo")],
+        );
+        let edits = ungroup_edits(&twice, &ItemId::new("g1")).expect("a nested scene");
+        assert_eq!(ids_of(&edits), ["move x main 0", "remove g1"]);
+        assert!(ungroup_edits(&c, &ItemId::new("a")).is_none());
+    }
+
+    #[test]
+    fn switching_keeps_the_item_and_drops_an_unused_copy() {
+        let (item, logo, copy) = (ItemId::new("a"), SourceId::new("logo"), SourceId::new("c2"));
+        assert_eq!(
+            to_clone(&item, &logo, "Logo", copy.clone()),
+            vec![
+                Edit::SourceDuplicate {
+                    source_id: logo.clone(),
+                    new_source_id: copy.clone(),
+                    name: "Logo".into(),
+                },
+                Edit::ItemSetSource {
+                    item_id: item.clone(),
+                    source_id: copy.clone(),
+                },
+            ]
+        );
+        let back = to_reference(&item, &copy, &logo, true);
+        assert_eq!(
+            back,
+            vec![
+                Edit::ItemSetSource {
+                    item_id: item.clone(),
+                    source_id: logo.clone(),
+                },
+                Edit::SourceDelete {
+                    source_id: copy.clone(),
+                },
+            ]
+        );
+        assert_eq!(to_reference(&item, &copy, &logo, false).len(), 1);
     }
 
     #[test]
