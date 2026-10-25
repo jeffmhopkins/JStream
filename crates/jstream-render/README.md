@@ -584,6 +584,15 @@ premultiplied linear light on the way out.
   `f32` `frame.time` would drift). Sampling is bilinear by hand: a looping axis wraps
   across its seam; off, the area the picture leaves is transparent. A new speed jumps
   to where that speed puts the picture at the current time.
+- `vignette`: `strength` (0..1, default 0.5), `radius` (0..1, default 0.5), `softness`
+  (0..1, default 0.5) and `color` (with alpha, default opaque black). The distance from
+  the centre is measured in the frame's own UV, so the shape is an ellipse that follows
+  the frame's aspect: 0 at the centre, 1 at the corners. Inside `radius` the picture is
+  untouched. Over the next `softness` it fades towards `color`, to `strength` times the
+  colour's alpha (a smoothstep; 0 is a hard edge). Coverage is kept, so a transparent
+  pixel stays transparent. It frames whatever its chain runs on: the source's whole
+  frame here, and an item's cropped box or a scene's composite once those owners are
+  built (ADR-0065, #529).
 
 Aspect ratio (V1a): `aspect_ratio` gives the frame a target shape before it is placed.
 Settings: `ratio` (`16:9`, `9:16`, `4:3`, `1:1`, `21:9` or `custom`, with
