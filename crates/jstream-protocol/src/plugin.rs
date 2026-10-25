@@ -89,6 +89,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("youtube.status", N),
     ("youtube.list_broadcasts", N),
     ("youtube.list_streams", N),
+    ("youtube.stats", N),
     ("device.list", N),
     // Edits.
     ("scene.create", Class(E)),

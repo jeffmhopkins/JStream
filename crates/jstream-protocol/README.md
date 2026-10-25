@@ -112,10 +112,12 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   the item's `placement` form and its `geometry`, `SceneInfo` a scene's transition
   overrides, `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
   returns the program mix as a PNG. `youtube.status`, `youtube.list_broadcasts` and
-  `youtube.list_streams` read the YouTube account.
+  `youtube.list_streams` read the YouTube account, and `youtube.stats` the running
+  `youtube` outputs' audience and the day's quota estimate.
 - **YouTube** (`youtube.rs`, [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)):
   `YoutubeAuth`, `BroadcastInfo`, `StreamInfo` and the enums they carry, mirroring the
-  Live API with an `other` value for anything newer.
+  Live API with an `other` value for anything newer, and `AudienceStatsInfo`,
+  `QuotaInfo` and `StatsPolling` (0.38).
 - **Transitions** (`transition.rs`, [ADR-0029](../../docs/adr/0029-transitions.md),
   [ADR-0037](../../docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md)): the
   built-in transition kinds (`cut`, `fade`, `move`) and their descriptors, `Easing` with
@@ -136,7 +138,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   (program, preview and the transition a switch started), `privacy.changed`,
   `events.dropped`,
   `stats.tick`, `meters.tick`, `youtube.status_changed`, `youtube.health_changed`,
-  `live.changed`, `live.ended` and `plugin.state_changed`.
+  `youtube.stats`, `live.changed`, `live.ended` and `plugin.state_changed`.
 - **Plugins** (`plugin.rs`, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)): `PluginClass` (`read`,
   `edit`, `live`, `outputs`), `PLUGIN_SCOPES`, the table that places every command in
   one class or under "never", with `plugin_scope` and `plugin_classes` (a call's
@@ -171,7 +173,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.37 because of
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.38 because of YouTube
+  audience stats and the quota estimate (the `youtube.stats` event and query,
+  `AudienceStatsInfo`, `QuotaInfo`, `StatsPolling`); 0.37 added
   `output.status`'s `cleartext` (#562); 0.36 added
   the `show_cursor` setting of the `display` and `window` kinds (whether the pointer
   shows in the capture; on by default, which is what those kinds did before); 0.35
@@ -1079,7 +1083,9 @@ After `welcome`, the server pushes every event to every client.
   audio above the absolute gate. Each tick is a full reading, so a client that misses
   one loses nothing; nothing numbers them.
 - `youtube.status_changed {auth}` and `youtube.health_changed {output_id, broadcast_id,
-  stream_id, status, health, issues}` (0.23) are described under [YouTube](#design).
+  stream_id, status, health, issues}` (0.23), and `youtube.stats {output_id,
+  broadcast_id, concurrent_viewers?, likes?, views?}` (0.38), are described under
+  [YouTube](#design).
 - `plugin.state_changed {plugin_id, state, reason?, remote_name?}` (0.35) is described
   under [Plugins](#design).
 
@@ -1113,13 +1119,27 @@ YouTube is for people, not agents (ADR-0058 §3):
 - An output with the `youtube {broadcast_id}` target publishes to the `rtmps://`
   ingest of its broadcast's bound stream. While it runs, the engine polls the stream's
   health and sends `youtube.health_changed` when it changes.
+- While it runs, the engine also reads the broadcast's audience about once a minute
+  (ADR-0041 §3) and sends `youtube.stats {output_id, broadcast_id,
+  concurrent_viewers?, likes?, views?}` when a reading differs from the last. A count
+  YouTube doesn't report (hidden by the owner, no viewers now, or the broadcast ended)
+  is omitted. The chat rate ADR-0041 §3 also names comes with the engine's chat
+  polling, as a later optional field.
+- `youtube.stats` (the query, 0.38) returns `outputs`, the last reading of each running
+  `youtube` output that has one, by output ID, and `quota {used, daily, exhausted?,
+  stats}`: the engine's count of the day's API units, the units it assumes a day has,
+  whether YouTube has refused a call for quota since the day began, and how audience
+  stats are polled (`normal`, `slowed` once less than a fifth of the day is left, or
+  `stopped` below a tenth or once exhausted) (ADR-0041 §5). It never calls YouTube.
+  The count is an estimate at YouTube's published costs and starts again at midnight
+  Pacific Time; YouTube's own count, shared with anything else on the same Google
+  project, can differ.
 - A Live API failure is `action_failed`, queries included, and a used-up quota says so
   in its reason (ADR-0041 §5, kept by ADR-0058).
 
 Values mirrored from YouTube (`life_cycle`, `privacy`, `status`, `health`, `severity`)
 have an `other` value, so a value YouTube adds later still parses. Text from YouTube is
-untrusted and shown as plain text. Chat, the featured message and audience stats come
-later.
+untrusted and shown as plain text. Chat and the featured message come later.
 
 ### Plugins
 

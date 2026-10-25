@@ -941,31 +941,32 @@ impl Engine {
                 ),
                 _ => return None,
             },
-            Call::Query { query: q } => {
-                match q {
-                    Query::YoutubeStatus => Ok(CallResult::Query {
-                        result: youtube.map_or(
-                            QueryResult::YoutubeStatus {
-                                auth: YoutubeAuth::Unavailable,
-                            },
-                            |y| y.status(),
-                        ),
-                    }),
-                    Query::YoutubeListBroadcasts {
-                        status,
-                        broadcast_type,
-                        page_token,
-                    } => query(youtube.ok_or_else(unavailable).and_then(|y| {
-                        y.list_broadcasts(*status, *broadcast_type, page_token.clone())
-                    })),
-                    Query::YoutubeListStreams { page_token } => query(
-                        youtube
-                            .ok_or_else(unavailable)
-                            .and_then(|y| y.list_streams(page_token.clone())),
+            Call::Query { query: q } => match q {
+                Query::YoutubeStatus => Ok(CallResult::Query {
+                    result: youtube.map_or(
+                        QueryResult::YoutubeStatus {
+                            auth: YoutubeAuth::Unavailable,
+                        },
+                        |y| y.status(),
                     ),
-                    _ => return None,
+                }),
+                Query::YoutubeListBroadcasts {
+                    status,
+                    broadcast_type,
+                    page_token,
+                } => {
+                    query(youtube.ok_or_else(unavailable).and_then(|y| {
+                        y.list_broadcasts(*status, *broadcast_type, page_token.clone())
+                    }))
                 }
-            }
+                Query::YoutubeListStreams { page_token } => query(
+                    youtube
+                        .ok_or_else(unavailable)
+                        .and_then(|y| y.list_streams(page_token.clone())),
+                ),
+                Query::YoutubeStats => query(youtube.ok_or_else(unavailable).map(|y| y.audience())),
+                _ => return None,
+            },
             _ => return None,
         })
     }
@@ -1567,7 +1568,7 @@ impl Engine {
             return Err(not_implemented("output.stop"));
         };
         if let Some(youtube) = self.youtube() {
-            youtube.unwatch_health(&output_id);
+            youtube.unwatch(&output_id);
         }
         let mut wake = Vec::new();
         let (running, watcher, wait_for) = {
@@ -1635,8 +1636,8 @@ impl Engine {
         Ok(CallResult::action())
     }
 
-    /// Polls the health of the stream a `youtube` output started on, while the output
-    /// is `active` or `reconnecting`.
+    /// Polls the health of the stream a `youtube` output started on, and its
+    /// broadcast's audience, while the output is `active` or `reconnecting`.
     fn watch_health(&self, output_id: &OutputId, watch: HealthTarget) {
         let shared = Arc::downgrade(&self.shared);
         let watched = output_id.clone();
@@ -1648,7 +1649,7 @@ impl Engine {
                 )
             })
         });
-        watch.youtube.watch_health(
+        watch.youtube.watch(
             output_id.clone(),
             watch.broadcast_id,
             watch.stream_id,

@@ -953,8 +953,8 @@ milestone = "M3"
 title = "YouTube chat, metadata, health and audience stats"
 status = "review"
 prs = [363, 375, 594, 696]
-note = "chat reading and the featured message (#363, landed with wave/m1-2, #545); chat preset of the browser source (#375, landed with wave/m1); audience stats in jstream-youtube (#594, landed with wave/m3-2, #663); the engine's stats polling, the youtube.stats event and query, and the quota estimate (#696) are in review into wave/m1-4; signed-in features need the OAuth client (ADR-0058)"
-needs = ["build", "maintainer"]
+note = "chat reading and the featured message (#363, landed with wave/m1-2, #545); chat preset of the browser source (#375, landed with wave/m1); audience stats in jstream-youtube (#594, landed with wave/m3-2, #663); the engine's stats polling, the youtube.stats event and query, and the quota estimate (#696, protocol 0.38, in review into wave/m1-4); the chat rate waits on the engine polling chat; signed-in features need the OAuth client (ADR-0058)"
+needs = ["build", "wave", "maintainer"]
 
 [[item]]
 id = "CL1"

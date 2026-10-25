@@ -765,8 +765,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   the actions `youtube.chat.send { text }`, which posts to the bound broadcast's chat as
   the channel and goes to the audit log, and `youtube.chat.feature { message_id }`, which
   sets or clears the featured message (runtime state, reported by an event) that the chat
-  message source draws as plain text. Audience stats (concurrent viewers, likes, chat
-  rate) come in a low-rate `youtube.stats` event and a query.
+  message source draws as plain text. Since protocol 0.38 a running YouTube output's
+  audience (concurrent viewers, likes, views) comes in a low-rate `youtube.stats`
+  event, and the `youtube.stats` query lists the last readings with the engine's
+  estimate of the day's API quota, by which audience reads slow and stop first
+  (ADR-0041 §3 and §5); the chat rate follows with the engine's chat polling.
 - **Errors** carry a stable machine-readable `code`, detail fields and a message. A
   `scene.delete` or `source.delete` refused because something still refers to its
   target lists every such reference in `invalid_argument`'s `blockers` (protocol 0.15,
