@@ -626,9 +626,8 @@ or an item's audio chain is `invalid_argument` on `edits.N.chain`, and a keyfram
 as the owner on `edits.N.owner`, since it shows its parent's filters. References in
 them are edges of the scene, or of the item's scene: a blocker names them as
 `filters.<filter_id>.<param>` of the scene or `effects.<filter_id>.<param>` of the item.
-The engine runs a scene's filters on its composite. It checks an edit on an item as
-the graph does, and then refuses it with `invalid_argument` on `edits.N.owner` until it
-renders item effects, so `effects` stays empty for now.
+The engine runs a scene's filters on its composite and an item's effects over its box,
+once per frame each.
 
 Every float on the wire (`Vec2`, `ItemTransform`, `ItemGeometry`, an opacity) is a `Finite32`:
 an `f32` that is never NaN or infinite. Computed geometry results use plain `f32`. serde
