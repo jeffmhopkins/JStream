@@ -89,7 +89,9 @@ test('the Scene objects panel adds a source as a reference', async ({ page, daem
   await connect(page, daemon);
   const dialog = await openAddSource(page);
   await expect(dialog.getByText('Into “Main”')).toBeVisible();
-  await expect(dialog.locator('.add-cat')).toHaveText(['GENERATED', 'SCENES']);
+  // The seed's audio inputs come first.
+  await expect(dialog.locator('.add-cat')).toHaveText(['AUDIO', 'GENERATED', 'SCENES']);
+  await dialog.getByRole('option', { name: 'Color' }).click();
   await expect(dialog.getByRole('option', { name: 'Color' })).toHaveAttribute('aria-selected', 'true');
   // The engine doesn't list colour, so it can't be created: only placed again.
   await expect(dialog.getByRole('radio', { name: 'Create new' })).toHaveCount(0);
@@ -138,6 +140,7 @@ function rows(page) {
 /** Places the seed's Backdrop a second time, as a reference on top of the stack. */
 async function placeBackdropAgain(page) {
   const dialog = await openAddSource(page);
+  await dialog.getByRole('option', { name: 'Color' }).click();
   await dialog.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(rows(page)).toHaveCount(2);
 }
