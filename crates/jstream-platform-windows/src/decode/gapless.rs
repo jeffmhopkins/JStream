@@ -3,7 +3,7 @@
 //!
 //! An AAC or MP3 encoder adds frames of priming before the first real sample and pads
 //! the last packet out to a whole one. The container says how many (an MP4's edit list
-//! or `iTunSMPB`, an MP3's LAME header), but the Source Reader hands both on decoded, as
+//! or `iTunSMPB`, an MP3's LAME tag), but the Source Reader hands both on decoded, as
 //! near-silence: a looping file then has a 25-40 ms hole at each wrap. This drops them.
 //! Frames are counted at the stream's rate, from its start as decoded.
 
@@ -55,6 +55,11 @@ impl Gapless {
             end: end.filter(|&end| end > 0),
             held: None,
         }
+    }
+
+    /// Cuts `delay` frames of priming from here on.
+    pub(super) fn set_delay(&mut self, delay: u32) {
+        self.delay = i64::from(delay);
     }
 
     /// Forgets the block held back, for a seek.
@@ -185,5 +190,17 @@ mod tests {
         assert_eq!(gapless.push(block(5000, 1024)), None, "nothing from before");
         let last = gapless.finish().expect("the last block");
         assert_eq!((last.start, last.samples.len()), (5000, 924));
+    }
+
+    #[test]
+    fn a_new_delay_applies_from_the_next_pass() {
+        let mut gapless = Gapless::new(1, 1500, 0, None);
+        assert_eq!(gapless.push(block(0, 1024)), None, "inside the first pass's priming");
+        gapless.reset();
+        gapless.set_delay(500);
+        let cut = gapless.push(block(0, 1024)).expect("past the new priming");
+        assert_eq!(cut.start, 0);
+        assert_eq!(cut.samples.first().copied(), Some(500.0));
+        assert_eq!(cut.samples.len(), 524);
     }
 }
