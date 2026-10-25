@@ -21,6 +21,11 @@ workspace = true
 # Run them on a Windows machine with a display and a DX12 GPU:
 # `cargo test -p jstream-core --features hw-tests --lib windows_gpu -- --ignored --nocapture`.
 hw-tests = []
+# Sandboxed WASM automation plugins (ADR-0069): `plugin.install`, `plugin.grant` and
+# `plugin.enable` run them on `jstream-plugin-wasm`'s host. On by default; a build without
+# it answers those actions with `unsupported` and leaves wasmtime out.
+wasm-plugins = ["dep:jstream-plugin-wasm"]
+default = ["wasm-plugins"]
 
 [dependencies]
 # The render snapshot the control side publishes and the render thread loads lock-free.
@@ -36,12 +41,17 @@ jstream-outputs.workspace = true
 jstream-platform.workspace = true
 # The plugin-host control messages and block the CLAP supervisor reads (ADR-0035).
 jstream-plugin-proto.workspace = true
+# The wasmtime host the engine runs automation plugins on (ADR-0069), behind
+# `wasm-plugins`.
+jstream-plugin-wasm = { workspace = true, optional = true }
 jstream-protocol.workspace = true
 jstream-render.workspace = true
 # The built-in source kinds and their descriptors (ADR-0061, ADR-0025).
 jstream-sources.workspace = true
 # PNG for `video.snapshot` (ADR-0061). Encoding only; deflate stays pure Rust.
 png.workspace = true
+# The installed WASM plugins' file (`plugins.json`, ADR-0076).
+serde.workspace = true
 # Settings values: the audio filter kinds' defaults and the mixer kernels read from them
 # (ADR-0025, ADR-0026), the CLAP kinds' parameter defaults, and saved collection files in
 # the engine tests.
@@ -71,6 +81,9 @@ jstream-browser = { workspace = true, features = ["fake"] }
 jstream-mcp.workspace = true
 # `FakeTransport` and its JSON fixtures, for the YouTube tests (R-TEST-004).
 jstream-youtube = { workspace = true, features = ["fake"] }
+# The YouTube tests: the crash redaction's `Secrets`, fed by the setup's secret hook
+# (#844).
+jstream-crash.workspace = true
 # The shared parity fixture that `jstream-graph` and the mock are held to.
 jstream-protocol = { workspace = true, features = ["fixtures"] }
 # Decodes the preview stream's JPEGs in its tests; already in the tree for the image
@@ -78,3 +91,5 @@ jstream-protocol = { workspace = true, features = ["fixtures"] }
 zune-jpeg.workspace = true
 # The built-in kinds' snapshot, reviewed like an API diff (ADR-0025).
 insta.workspace = true
+# The WASM text format, for the automation plugins the engine tests install.
+wat.workspace = true

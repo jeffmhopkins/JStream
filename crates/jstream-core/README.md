@@ -33,8 +33,9 @@ state machine. Contents:
   `Engine::new()`, `with_output(id)`, `with_backends`, `with_publish`,
   `with_publish_opener`, `with_key_store`, `with_youtube`, `with_audit`,
   `with_history_limit`, `with_browser` (the browser engine `browser` sources and their
-  `youtube_chat` preset open pages in) and `with_collection_file`; `scan_clap_plugins`
-  adds the CLAP filter kinds;
+  `youtube_chat` preset open pages in) and `with_collection_file`; `open_plugin_dir`
+  (where installed WASM plugins are saved, ADR-0076), called once the engine is built;
+  `scan_clap_plugins` adds the CLAP filter kinds;
   `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
   frame of a source; `output_stats` reads a running output's pipeline counters
   (`output_stats_of` names the output); `output_kind` reads a
@@ -52,9 +53,11 @@ state machine. Contents:
   empty, as it is until the maintainer fills it in; `YoutubeSetup::new` takes another
   client, for a developer override. `YoutubeSetup::with_secret_hook` hands the
   account's client a `jstream_youtube::SecretHook`, which it calls with each token and
-  stream key it gets, a `youtube` output's key included, so the host can redact them
-  from crash reports (#353). A sign-in's two tokens go to the hook as soon as the code
-  is exchanged, so even a grant that is abandoned or that the store refuses is redacted. It holds one `jstream-youtube` `LiveClient`
+  stream key it gets and its `SecretKind`, a `youtube` output's key included, so the
+  host can redact them from crash reports (#353). A sign-in's two tokens go to the hook as soon as the code
+  is exchanged, so even a grant that is abandoned or that the store refuses is redacted.
+  Its access token goes as `SignInAccessToken`, which supersedes nothing, since a
+  refused grant leaves the current client using its own (#844). It holds one `jstream-youtube` `LiveClient`
   (one account, its refresh token stored under the fixed opaque ID `TOKEN_ACCOUNT`, so
   no email or other personal detail names the credential) and runs the `youtube.*`
   actions and queries with no engine lock held. `youtube.sign_in` asks for the full
@@ -135,10 +138,15 @@ state machine. Contents:
     settings); a new mixer filter when a restarted plugin reports a new latency; the
     plugin's editor; rescanning; and stopping a removed filter's host off the
     `jstream-audio-sources` thread (now each stop waits up to `STOP_GRACE` there).
-- **Not yet: item effects** (ADR-0065, ADR-0068). The graph holds them, but nothing
-  renders them, so the engine refuses a `filter.*` edit whose owner is an item
-  (`invalid_argument` on `edits.N.owner`). It validates the batch first, so a batch
-  the graph refuses gets the graph's answer. Scene filters run (Video chains, below).
+- **WASM automation plugins** (`plugins/automation.rs`, the `wasm-plugins` feature, on
+  by default; [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md),
+  [ADR-0075](../../docs/adr/0075-wasm-plugin-host-in-the-engine.md),
+  [ADR-0076](../../docs/adr/0076-saved-wasm-plugins-and-manifest-requests.md)):
+  `plugin.install` loads a package's module on `jstream-plugin-wasm`'s host,
+  `plugin.grant` replaces what it may do, never past what its manifest asks for, and
+  `plugin.enable` loads it again after the engine disabled it. With a plugin folder
+  (`open_plugin_dir`), the installed plugins and their grants are saved in its
+  `plugins.json` and loaded again at the next start. See *WASM plugins* under Design.
 - **Live sources** (`live.rs`): a running `jstream-sources` source for every source
   in the collection, built when it is created, rebuilt when its settings change and
   dropped when it is deleted, on the engine's `jstream-sources` thread. The program
@@ -325,6 +333,11 @@ state machine. Contents:
   absolute on this machine, no `.part` file left by a failed start), recording while
   streaming on one shared encoder session (and separate sessions on separate
   profiles, and on a half-rate video mix held to its rate without being starved), a
+  second hardware session refused as `hardware_session_limit` naming the holder, under
+  `prefer` or `require`, with `avoid` opening software beside it and `prefer` still
+  falling back when no hardware session is open, and an HEVC start the machine lists no
+  hardware encoder for kept at `prefer` and failing as `action_failed`
+  (`src/tests/cpu_pipeline/hardware_sessions.rs`), a
   virtual camera publishing the program as BGRA at the canvas size (fitted into a canvas of another size, started again after a stop, running beside
   a stream, refused without a camera in the backends or while another output uses
   it, a refused start keeping the sink, a failed publish failing only that output, black under the privacy screen), a render panic failing both outputs, overload drops from a
@@ -472,9 +485,11 @@ WebSocket API does, minus serialization:
   they never reach the engine, so the audit log doesn't record them; the server logs
   them. A device's `hello` reaches the engine as `device:<name>`, so the audit
   log names it.
-- `plugin.install`, `plugin.grant` and `plugin.enable` fail with `unsupported`: the
-  engine hosts no plugins yet (WA1). The differential script sends two of them, so the
-  mock answers the same.
+- `plugin.install`, `plugin.grant` and `plugin.enable` run with no engine lock held
+  (see *WASM plugins*). Built without the `wasm-plugins` feature, the engine answers
+  `plugin.install` with `unsupported` and the other two with `not_found`, since nothing
+  is ever installed. That is also how the mock answers, so the differential script
+  sends `plugin.enable` and `plugin.grant` for a plugin that isn't installed.
 
 ### Dependencies
 
@@ -487,7 +502,10 @@ counters), `jstream-encode` (the H.264 and AAC sessions and their drop counters)
 `jstream-mux` (FLV and fragmented MP4), `jstream-outputs` (the reconnecting RTMP
 publisher and the recording file sink), `jstream-sources` (the built-in kinds: their
 descriptors and the sources that draw them), `jstream-plugin-proto` (the CLAP host
-supervisor's block and control messages), `jstream-youtube` (Google sign-in and the
+supervisor's block and control messages), `jstream-plugin-wasm` (the wasmtime host the
+WASM automation plugins run on; optional, behind the `wasm-plugins` feature, which is on
+by default, ADR-0075), `serde` (the derives of the installed plugins' file,
+ADR-0076), `jstream-youtube` (Google sign-in and the
 Live API client behind the YouTube commands and `youtube` outputs), `serde_json` (settings
 values: the audio filter kinds' defaults, what the mixer kernels read from a filter's
 settings, and the CLAP kinds' parameter defaults), `png`
@@ -505,8 +523,10 @@ feature and `jstream-protocol`'s `fixtures` feature (the differential and parity
 tests), `jstream-platform`'s `fake` feature (the pipeline test and
 `tests/scenarios.rs`, and the CLAP fake hosts), `jstream-youtube`'s `fake` feature
 (`src/tests/youtube.rs`), `jstream-browser`'s `fake` feature (the browser pages in
-`src/tests/audio.rs`), `zune-jpeg` (decoding the preview's JPEG pictures in tests),
-`insta` (the built-in kinds' snapshot, `schema/kinds.snap`) and `jstream-mcp`
+`src/tests/audio.rs`), `jstream-crash` (the crash redaction's `Secrets` fed by the
+YouTube secret hook, in `src/tests/youtube.rs`), `zune-jpeg` (decoding the preview's JPEG pictures in tests),
+`insta` (the built-in kinds' snapshot, `schema/kinds.snap`), `wat` (the text-format
+test plugins of `src/tests/automation.rs`) and `jstream-mcp`
 (`tests/mcp.rs`); the tests also use `serde_json`
 for settings values and saved collection files. All of them
 are in lower layers
@@ -574,6 +594,9 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   most call the Live API (see *YouTube* under *Outputs*). Without `with_youtube`,
   YouTube's API features are off: `youtube.status` answers `unavailable` and the others
   `action_failed` saying the build has no OAuth client, and clients hide them.
+- **Plugin** actions (`plugin.*`) run with no engine lock held, since a plugin loads,
+  and may call back into the engine, while its install or enable waits (see *WASM
+  plugins*).
 - A call, query or action this engine does not implement answers `internal`, as the
   mock does.
 
@@ -927,10 +950,35 @@ leaves the scene composited as before. In a transition the scene is one picture
 it, Move falls back to that, and a filtered nested scene is never flattened into its
 items.
 
+An item's effects (ADR-0065 §5, in v1 under
+[ADR-0068](../../docs/adr/0068-item-effects-in-v1.md)) run over its box, once per frame,
+as the scene that draws the item draws it: a keyframe scene's items have chains of
+their own, at their effective values. The chain phase draws the item into
+`GpuKey::ItemBox`, a layer the size of its planned box plus the effects' outset on
+every side, in canvas pixels. The outset is the sum of their kinds' `max_outset_px`; no
+built-in kind declares one yet. A layer longer than 8192 pixels on a side is scaled
+down uniformly. The item is drawn cropped and fitted, centred, flat and unrotated,
+with its fit and flips, and its live values applied. Then the chain runs into
+`GpuKey::Filtered`. The item's layer in its scene shows that output, stretched over the
+item's box grown by the outset in proportion, and turned and projected as the box is,
+before its opacity and blend. So a live resize draws the same layer, scaled, until
+the plan is made again. A layer that can't be made or drawn (too large for the
+adapter) blanks only its item that frame, logged once until a frame draws it, as a
+failed chain blanks only its owner. What the item shows is read as the chain phase draws it: a
+source's frame or chain output, a capture, or a nested scene through its own chain or
+drawn as a `scene_mask`'s scene is, at depth 1, so the nesting count restarts below
+it. A legacy transform has the box its quad covers, so
+over a capture, whose size isn't known when planning, its effects are bypassed. A
+source's own chain still runs once, wherever it is placed. In a transition an item
+with effects is its effects' layer over its grown box, uncropped, and two items pair
+only when their effects are the same kinds with the same settings in order. Not yet:
+`stats.tick`'s counts of these layers and passes (ADR-0065 §7), which need protocol
+fields.
+
 A filter that reads an asset (`apply_lut`'s `lut`, a `.cube` file or a tiled PNG, and
 `image_mask`'s `image`, whose first frame is the mask) gets it through the live
 sources (`filter_assets.rs`). Each sync lists the assets the collection's video filters
-name, a source's or a scene's, enabled or not, so enabling one needs no load. The `jstream-sources` thread
+name, a source's, a scene's or an item's, enabled or not, so enabling one needs no load. The `jstream-sources` thread
 reads and decodes each new one, as it builds sources, and an asset no filter names any
 more is let go. A plan hands each chain filter the asset it names, numbered by its load,
 and each compositor makes the filter's reference image from it once: the LUT's tile
@@ -1028,7 +1076,8 @@ A source the program mix shows enlarged is drawn at a density, when its kind can
 `Shot::scales` measures how much each frame its passes draw is enlarged: canvas pixels
 per pixel of the frame's extent, from the placements the collection holds (not a
 gesture's live values, so a drag is measured once it commits), the most of any item, in
-the program's passes and the video mixes'. A source a video chain runs over counts as 1,
+the program's passes and the video mixes', and the items whose effects draw it into
+their layer. A source a video chain runs over counts as 1,
 since its filters' settings are in its pixels. `LiveSources::densities` turns each scale
 into the next quarter step of a doubling at or above it (1, 1.19, 1.41, … up to 8) and,
 when that differs from the source's density, queues a build at it: the thread creates the
@@ -1518,8 +1567,20 @@ other outputs on the same session, whether its video encoder is a hardware one
 its first frame reports software) and whether the session is `dedicated` to it, plus
 the video sessions and hardware sessions open
 ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)); it does not
-guess a hardware cap. A hardware session limit fails the start with the encoder's own
-error for now, not a session-limit code.
+guess a hardware cap. Instead, while any running output holds a hardware video
+session, a new video session opens with `require` in place of `prefer` (`avoid` stays
+software), so a refusal can't fall back to software. That refusal fails the start with
+`hardware_session_limit`, naming the outputs that hold hardware sessions and keeping the
+encoder's message (0.44, `StartError`; ADR-0027 §3, #443). This holds only for a codec
+the platform lists a hardware encoder for, or when it can't list them: a held session
+can't be what refuses a codec the machine has no hardware encoder for (HEVC or AV1 on
+many GPUs), so that session opens with its own preference, `prefer` falls back, and a
+failure stays `action_failed` with what the machine lacks. An output that joins an
+open session opens nothing, so it is never refused. With no hardware session open,
+`prefer` still falls back to software when hardware refuses (ADR-0031). A hardware
+encoder that takes the session and then refuses its first frame no longer falls back
+either (its fallback is `prefer`'s only), but that comes after `output.start` has
+answered: the output settles `failed` with the encoder's reason, not this code.
 
 **Video mixes.** The render thread keeps one frame per video mix the running sessions
 are fed from, each at its session's size, and counts base ticks (1/30 s). On a tick it
@@ -1632,7 +1693,8 @@ lavapipe can open slower than that on a loaded CI runner. When others are runnin
 theirs. It then gets the encoder session for its key (opening one if no running
 output has it), opens its sink, subscribes to the session and starts its output
 thread, and returns once that thread has started the sink. Success emits `active`.
-Failure emits `failed` and `action_failed`, and drops a one-shot publish target so
+Failure emits `failed` and `action_failed` (`hardware_session_limit` when a new
+hardware session is refused, as above), and drops a one-shot publish target so
 the host sets another before retrying (an opener is kept); the other outputs keep
 running. `output.stop` on an `active` output emits `stopping`, drops its pipeline
 outside the lock (the program stage and an encoder session stop with the last output
@@ -1894,6 +1956,91 @@ the log while `connect_rtmp` refuses an empty key, and checks that a plain `rtmp
 URL to another machine logs one warning naming the host and nothing from the path,
 and that `rtmps://` and loopback log none.
 
+### WASM plugins
+
+The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in process
+(ADR-0075), under ADR-0069's limits and grants. With a plugin folder, it saves them
+(ADR-0076).
+
+- **Package.** `plugin.install`'s `path` is an absolute directory on the engine's machine
+  holding `plugin.wasm` and, optionally, `manifest.json`, a JSON object. Its `name`, a
+  string, is the plugin's own text: `plugin.state_changed` carries it as `remote_name`.
+  What it asks for (`Request`) is its `classes` (capability classes), `hosts` (as
+  `scheme://host:port`) and `folders` (true for folders a person picks), each optional.
+  Other manifest fields are ignored. Like the ABI, the layout is version 0.
+- **Install.** It fails with `invalid_argument` for a grant whose `problem` names a field
+  (`grant.hosts.0`), that names a folder this OS doesn't read as absolute
+  (`grant.folders.0`), or that gives more than the manifest asks for (a class, host or
+  folders on `grant.classes.N`, `grant.hosts.N` or `grant.folders.0`; `read` is every
+  plugin's), and on `path` for a relative path, a directory without a readable
+  `plugin.wasm`, a manifest that isn't a JSON object, has a `name` that isn't a string,
+  or asks for an unknown class, a host `problem` refuses or a `folders` that isn't true
+  or false, or a module that isn't a plugin (not WASM, an import besides the ABI's, no
+  `memory` export). It
+  fails with `already_exists` for an ID in use, and `action_failed` when the module's
+  `start` function traps or runs past its limits; a failed install leaves no plugin.
+  Otherwise the plugin is enabled when the call returns, and `plugin.state_changed`
+  (`enabled`) says so. The first install makes the host, whose epoch ticker runs from
+  then on.
+- **Threads.** Each run of a plugin has a `jstream-plugin` thread that loads the module,
+  within the host's load deadline while the install or enable waits, and then runs it.
+  A plugin that exports `on_event` gets every engine event, in order, through a
+  subscription of its own: a `jstream-plugin-events` thread moves each into the host's
+  queue (at most 1,000, then `events.dropped`) and nudges the plugin's thread, which hands
+  them over one invocation at a time. One that doesn't export it gets none. Events that
+  arrive while it loads wait in the queue until its entry is running and
+  `plugin.state_changed` (`enabled`) is out, so a plugin that faults on its first event
+  is disabled like any other, after it was enabled. Both threads
+  hold the engine weakly, so installed plugins don't keep it alive: when it ends, its
+  event streams close and the threads end.
+- **Session.** A plugin's calls go through a session of its own, registered as the client
+  `plugin:<id>`, which the audit log names. The host grants it every command and answers
+  a refusal with `forbidden` (`Refusals::Forbidden`); the session checks each call against
+  the plugin's grant (`PluginGrant::check`: its classes, a hotkey's bound action, and the
+  hosts and folders a source's or filter's settings reach) and answers `forbidden`
+  without reaching the engine for one outside it. So a call outside the grant counts
+  against the cap of 50 commands a second, which the host checks first. A call past the
+  cap is `forbidden` too, and neither stops the plugin. `plugin.grant` replaces the grant
+  the running plugin's next call is checked against, refusing one that gives more than
+  the manifest asks for as an install does. Ending a run ends the session, as a
+  disconnect does.
+- **Disabling.** A plugin that traps, runs out of fuel, runs past its deadline or grows
+  its memory or table past the cap while handling an event is disabled: its subscription
+  closes, its instance drops, a warning is logged, and `plugin.state_changed` carries
+  `disabled` with `cpu_limit` (fuel or the deadline), `memory_limit` (a cap; the host
+  makes growing past one a trap, `Error::MemoryLimit`) or `trap` (anything else). The
+  engine never re-enables it. `plugin.enable` reads the package again and loads it as an
+  install does, answering `action_failed` if that fails, which leaves it disabled; for a
+  running plugin it succeeds and changes nothing. `plugin.grant` and `plugin.enable` fail
+  with `not_found` for a plugin that isn't installed.
+- **Updates.** Each load of a package (`plugin.enable`, and the start of a saved plugin)
+  compares what its manifest asks for with what it asked for when a person last granted
+  the plugin, at install or with `plugin.grant`. One that asks for more stays disabled
+  as `needs_grant` (`plugin.state_changed` says so when the reason changes), and
+  `plugin.enable` answers `action_failed` naming what is new; a `plugin.grant`
+  acknowledges what it asks for now, and the plugin can be enabled after it. One that
+  asks for less has its grant narrowed to match. A running plugin keeps the module it
+  loaded.
+- **Saving.** `open_plugin_dir(dir)` creates `dir` if missing and reads its
+  `plugins.json` (`PLUGINS_FILE`, version 0): each plugin's ID, package, grant, name,
+  request, what it asked for when last granted, and its disabled reason, if any. The
+  host calls it once the engine is built, after `with_backends`: a plugin it loads keeps
+  a handle to the engine as it is then, and one opened earlier would act on an engine
+  without its media host. A second call is logged and ignored. A saved grant is checked
+  as `plugin.grant` checks one, and a plugin whose grant fails it (an edited file) loses
+  the grant and waits as `needs_grant`. Each saved as enabled is loaded as
+  `plugin.enable` loads it, and one that no longer loads stays disabled as `trap` (or
+  `needs_grant`), with the cause in the log. From then on
+  the file is replaced atomically (`collection::write_atomically`, user-only) after every
+  install, failed install, grant, enable and disable; a failed save is logged at
+  `error`, and the next change saves again. A file that can't be read, or of a version
+  it doesn't know, is logged at `error` and left as it is, and nothing is loaded or saved
+  that run. Without a plugin folder, the installed plugins last for the run.
+- **Not yet:** a private data folder per plugin, deferred until the file imports a plugin
+  would need to use it are designed (ADR-0076); a query that lists the installed plugins;
+  a way to remove one (no `plugin.uninstall` yet, so an unwanted plugin stays saved,
+  disabled, until `plugins.json` is edited); and the UI's grant flow.
+
 ### Locking
 
 `std::sync::Mutex` locks, always taken in one order: a session's identity lock (held
@@ -1929,7 +2076,14 @@ lock (which makes the control side its one writer) and loaded by the render thre
 with no lock at all, as are the live values on the parameter channel. `video.snapshot`
 reads both under the collection lock and the snapshot thread only receives them. The
 `jstream-live` thread takes the collection lock only to send due `live.changed` events
-and release committed values, and sleeps without it. A stream's poll takes only its queue's lock. No lock
+and release committed values, and sleeps without it. The WASM plugins' registry lock
+and the host's lock are taken with no other engine lock held, and released before a
+plugin loads, before an event is emitted and before a subscription closes; under the
+registry lock, an entry's grant lock is a leaf, which a plugin's session also takes
+alone. The plugin file's lock comes before the registry lock: a save holds it while it
+reads the plugins and writes `plugins.json`, and nothing takes it under the registry
+lock. A plugin's thread holds no engine lock while the plugin runs, so the plugin's
+calls take the collection lock as any session's do. A stream's poll takes only its queue's lock. No lock
 is held across an `await`, and a snapshot's reply slot is not held across a wake.
 `output.start`
 drops the collection lock before `Compositor::open`. The pipeline gate is not held

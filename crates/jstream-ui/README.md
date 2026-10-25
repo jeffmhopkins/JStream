@@ -40,7 +40,8 @@ Contents ([Design](#design) explains the choices):
   `save_as_new`, `apply`, `reset`), and it reads and writes itself as JSON. Tested
   natively.
 - **Workspace** (`workspace.rs`): `Workspace`, which draws the dock around the canvas,
-  with the splitters, dividers, tabs and close buttons, and drags a tab to dock it;
+  with the splitters, dividers, tabs and close buttons (and the mixer's meter flip in
+  its title bar), and drags a tab to dock it;
   `DockState`, the dock as context, which the header's menus change; and `restore`,
   the dock the browser kept.
 - **Host detection** (`host.rs`): `desktop()`, the engine URL and token the desktop
@@ -82,7 +83,8 @@ Contents ([Design](#design) explains the choices):
   stop, and the pipeline's health), and the calls and
   logic behind it and the header's Go Live, tested natively against `MockEngine`; and `mixer.rs`: `Mixer`, the
   audio mixer (the master card with its loudness and true peak, the channels folded
-  under it with their meters, faders, dB fields, mutes and routing, and the buses),
+  under it with their meters, faders, dB fields, mutes and routing, the same as
+  vertical strips, and the buses),
   also tested natively against `MockEngine`; and `studio.rs`:
   `StudioMode`, the Transitions panel (preview, program, Transition and Cut, the
   transition presets and each scene's overrides; [Design](#design)); and
@@ -281,7 +283,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `fresh_id`; the new filter opens in place, or in the settings dialog when it has more
   than three settings or isn't described yet. Edit filters… in the item menus selects the item and shows the
   panel. Names come from the prototype's catalogue, then `kind.list`, then the kind's ID.
-  An FX button (the Outputs panel's rows, the Mixer's master card) picks the program
+  An FX button (the Outputs panel's rows, the Mixer's master card or strip) picks the program
   output's chain (owner `master`) or an output's (ADR-0027) instead, and shows the
   panel; the same rows and dialogs edit it with that owner. Only their audio chains
   show, since the engine refuses their video chains so far, and the virtual camera,
@@ -427,7 +429,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (the shared `NumberField`), mute and, folded under "Routing", whether its audio is
   on, when it is heard (`always` or `when_shown`) and its send into each bus (on or
   off, and its gain). A nested scene's row has only the routing toggles, since it has
-  no fader or sends of its own. Each bus gets a strip, the master first, with renaming
+  no fader or sends of its own. Docked in a side column the mixer shows vertical strips
+  instead (`MixerOrientation`, until the flip button the dock draws in the mixer's
+  title bar, `MixerFlip`, sets an orientation for the session; a memo, so a dock change
+  that keeps the orientation doesn't rebuild the rows): a master strip with the
+  loudness filling up to the target line, the loudness and true peak (its warning
+  heard by a screen reader only, for want of room) and the same "FX N", then, folded
+  beside it, a strip per source with its short name, a meter filling upwards, the dB
+  field stacked + over − and scrubbed up and down, and mute. Each bus gets a strip, the master first, with renaming
   and (except the master) deleting. A delete reads `delete.plan`
   first, as a scene's or source's does: the strip asks, saying how many `waveform` or
   `spectrum` settings drawing the bus the plan clears, and sends the plan's edits

@@ -65,12 +65,12 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Inspector](#inspector) | 10 | 5 | 2 | 2 | 1 | 0 |
 | [Transform panel](#transform) | 4 | 4 | 0 | 0 | 0 | 0 |
 | [Filters](#filters) | 8 | 5 | 1 | 0 | 2 | 0 |
-| [Mixer](#mixer) | 7 | 4 | 0 | 2 | 1 | 0 |
+| [Mixer](#mixer) | 7 | 5 | 0 | 1 | 1 | 0 |
 | [Outputs](#outputs) | 4 | 3 | 0 | 0 | 1 | 0 |
 | [Transitions](#transitions) | 6 | 3 | 2 | 0 | 1 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
 | [Keyboard](#keyboard) | 7 | 1 | 3 | 1 | 2 | 0 |
-| **Total** | **130** | **65** | **28** | **14** | **22** | **1** |
+| **Total** | **130** | **66** | **28** | **13** | **22** | **1** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -90,7 +90,7 @@ Spec: [workspace › theme](../design/ui-prototype/spec-workspace.md#theme-fonts
 | WS-02 | Fonts | IBM Plex Sans 13px for the UI, IBM Plex Mono for numbers and readouts. | ⏸ | The UI's CSP allows fonts from `'self'` only, so the prototype's Google Fonts link can't load. Bundling the OFL-licensed Plex files is a licensing question for the maintainer ([R-GOV-005](RULES.md#R-GOV-005)). Until then, the font stack names Plex first and falls back to system fonts. |
 | WS-03 | Scrollbars, focus and selection | Thin 10px scrollbars (`#3A3F48` thumb), 2px accent focus ring, `#2B4A7A` text selection. | ✅ | |
 | WS-04 | Icons | 24×24 stroke icons (1.8 stroke, round caps) for source types, scene kinds, labels and tools, in place of text glyphs. | 🟡 | The prototype's icons are in `icons.rs`; the Add source, Properties and filter dialogs, the canvas tools, the Scenes and Scene objects rows and the Filters panel use them. Other panels' rows still use text glyphs (● ○ ↺). |
-| WS-05 | Number field | Stepper with − and +, typed entry (Enter commits, Escape cancels, `−` and `,` accepted), arrow keys (Shift fine, Ctrl coarse), and pointer scrubbing (3px per step, Shift ×0.1, Ctrl ×4). | ✅ | `NumberField` (`panels/number.rs`), used by the Inspector and the mixer's channel rows (named by the row, with no label above); the filters and dialogs take it as they are rebuilt. A drag shows its value as it goes and is sent once on release, so it is one undo step, where the prototype writes every step. |
+| WS-05 | Number field | Stepper with − and +, typed entry (Enter commits, Escape cancels, `−` and `,` accepted), arrow keys (Shift fine, Ctrl coarse), and pointer scrubbing (3px per step, Shift ×0.1, Ctrl ×4). | ✅ | `NumberField` (`panels/number.rs`), used by the Inspector and the mixer's channel rows (named by the row, with no label above) and strips (stacked, scrubbed up and down); the filters and dialogs take it as they are rebuilt. A drag shows its value as it goes and is sent once on release, so it is one undo step, where the prototype writes every step. |
 | WS-06 | Foldable section headers | Caret plus uppercase title; folded sections show a hint ("cropped", "in use"); fold state remembered per title. | 🟡 | `Fold` in `inspector.rs`: caret, uppercase title and folded hint ("cropped", the transitions hint); fold state isn't remembered per title yet. The mixer's Buses section uses it too; the other panels take it as they are built |
 | WS-07 | Hover-revealed row buttons | Row tools fade in on hover or focus, and stay shown while their state is on. | 🟡 | Built for the Scenes and Scene objects rows (`tree.rs`): the buttons fade in over 120 ms on hover or focus, and a hidden item's eye and a favourite's star stay shown; and for the filter rows' × (`filters.rs`). The other panels' rows take it as they are rebuilt. |
 | WS-08 | Toasts | One toast at a time, bottom centre, hides after 4.5 s. | ⬜ | Today: a fixed bottom-right error box with Dismiss, in the prototype's toast colours. Errors may stay sticky; toasts are for confirmations ("Added a reference…"). |
@@ -328,10 +328,10 @@ does more than the prototype (buses, sends, routing); that stays ([Beyond](#beyo
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| MX-01 | Master card | "Master · program output", N channels, Loudness bar against a target marker with "−14.2 LUFS", True peak with "safe" or a warning, "FX N". | ✅ | `mixer.rs`: the short-term loudness on a bar from −60 to +6 LUFS, the marker at the −14 LUFS target (70%), momentary, short-term and integrated in the tooltip, the true peak's note in green or red, and a Reset button for the integrated loudness. "Hear" shows disabled until [MX-05](#mixer); "FX N" counts the master chain's filters and shows it in the Filters panel ([FL-07](#filters)). |
+| MX-01 | Master card | "Master · program output", N channels, Loudness bar against a target marker with "−14.2 LUFS", True peak with "safe" or a warning, "FX N". | ✅ | `mixer.rs`: the short-term loudness on a bar from −60 to +6 LUFS, the marker at the −14 LUFS target (70%), momentary, short-term and integrated in the tooltip, the true peak's note in green or red, and a Reset button for the integrated loudness. "Hear" shows disabled until [MX-05](#mixer); "FX N", on the card and on the vertical master strip, counts the master chain's filters and shows it in the Filters panel ([FL-07](#filters)). |
 | MX-02 | Channels fold under the master | Channels hidden under the master card by default. | ✅ | The master card's button folds them (not remembered across reloads). The buses, which the prototype doesn't have, fold under their own Buses header below. |
 | MX-03 | Channel strips | Name, level bar, dB number field. | ✅ | Each row: name, the stereo meter as the level bar, the console-taper fader ([Beyond](#beyond)), the dB field (`NumberField`, −100 to +24, step 0.5), mute and Routing. |
-| MX-04 | Vertical meters | Vertical strips in side columns; a title-bar toggle flips orientation. | ⬜ | The dock's title bar is built; the toggle comes with the mixer's restyle. |
+| MX-04 | Vertical meters | Vertical strips in side columns; a title-bar toggle flips orientation. | ✅ | `mixer.rs`: docked in a side column the meters turn vertical until the button in the mixer's title bar flips them, for the session. The master strip folds the channel strips beside it; each strip has its short name (the full one as a tooltip), a stereo meter filling upwards, the dB field stacked + over −, scrubbed up and down, and mute. Routing stays in the horizontal rows. |
 | MX-05 | Monitoring | "Hear: after FX" / "before FX". | ⬜ | Decision register D22: a bus's monitor (`bus.set_monitor`, protocol 0.42), which the engine plays on its device while an output runs. |
 | MX-06 | Privacy mute | The mic reads "muted (privacy)" while privacy is on. | 🔒 | E2b (#317). |
 | MX-07 | Real levels | Meters show the engine's levels. | ✅ | `meters.tick`, with RMS, peak and peak hold; the prototype's numbers are simulated. |

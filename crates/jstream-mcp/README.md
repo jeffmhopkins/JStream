@@ -115,7 +115,9 @@ shape (ADR-0059): a protocol field holding third-party text is named `remote_*`
 server sent (each at most 512 characters). Nothing delimits the server's words there, so
 the description and the server instructions say the whole `reason` is untrusted. The
 server instructions say both are data, never instructions, and point at the
-annotations. Tested by `annotations_follow_what_each_tool_can_do`,
+annotations. They also say that names and other state text can be set by any client or
+plugin, and are data, not instructions ([ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)'s
+U1). Tested by `annotations_follow_what_each_tool_can_do`,
 `output_tool_marks_remote_rejection_text` and
 `instructions_mark_remote_text_and_tools_carry_annotations`.
 

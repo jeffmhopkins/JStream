@@ -166,12 +166,18 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   deletes it.
 - **Mixer** (`mixer.spec.js`, on the Audio mixer tab): the master card counting the
   seed's two channels, its Hear button disabled, its "FX 0" showing the program
-  output's chain in the Filters panel, and its button unfolding the
+  output's chain in the Filters panel, and its button (with its tooltip) unfolding the
   channel rows by name and folding them again; a typed gain in the Mic's dB field and
   its + stepper each as one edit, with the fader following; with `meterTicks`, the
   short-term loudness and its tooltip, the bar's fill against the target, and the true
-  peak "safe", then the warning over 0 dBTP; and the Buses section folded under its
-  count, the master first, adding a bus.
+  peak "safe" with nothing announced, then the warning over 0 dBTP, announced; and the Buses section folded under its
+  count, the master first, adding a bus. A tab click elsewhere in the dock leaving a
+  channel's open Routing open (the rows aren't rebuilt). The title bar's flip button turning the meters
+  vertical: the master strip, its "FX 0" enabled, and its channels folded beside it by short name, the
+  Mic's stacked field scrubbed upwards and stepped down as one edit each, and its mute;
+  docked in the Right sidebar the strips start vertical, 64px wide, and the button
+  flips them back; and, with `meterTicks`, the vertical meters filling upwards and the
+  master strip's loudness and true-peak warning, announced only once over 0 dBTP.
 - **Transform** (`transform.spec.js`, on the Transform tab): the summary and the disabled buttons with
   nothing selected; with one item, Selection off and Canvas on, Stretch as one edit
   Ctrl+Z undoes, and Reset rotation and Clear crop sending nothing when nothing

@@ -1,7 +1,7 @@
 //! Protocol errors, with stable machine-readable codes.
 
 use crate::history::HistoryDirection;
-use crate::id::{ClientId, Rev};
+use crate::id::{ClientId, OutputId, Rev};
 use crate::version::ProtocolVersion;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -127,6 +127,23 @@ pub enum ProtocolError {
         /// Why: the class the caller lacks, or that no plugin may make it.
         reason: String,
     },
+    /// `output.start` could not open a hardware video encoder while other hardware
+    /// encoder sessions were open, so the machine's hardware session limit is taken to
+    /// be reached (0.44, ADR-0027 §3). The engine doesn't guess vendor caps and never
+    /// falls back to a software encoder for this. Nothing was started. Stop one of
+    /// `outputs`, share an encoder session with one, or start this output with an
+    /// encoder profile whose `hardware` is `avoid`.
+    #[error(
+        "the hardware encoder session limit is reached: {} hold hardware encoder \
+         sessions, and opening another failed ({reason})",
+        list_outputs(.outputs)
+    )]
+    HardwareSessionLimit {
+        /// The running outputs that hold hardware encoder sessions, sorted.
+        outputs: Vec<OutputId>,
+        /// What the encoder said when it refused the new session.
+        reason: String,
+    },
     /// The engine hit a bug or an unexpected condition. The request may be retried.
     #[error("internal error: {reason}")]
     Internal {
@@ -139,6 +156,16 @@ pub enum ProtocolError {
     #[serde(other)]
     #[schemars(skip)]
     Unknown,
+}
+
+/// `outputs` for a message: each one in backticks, `and` before the last.
+fn list_outputs(outputs: &[OutputId]) -> String {
+    let named: Vec<String> = outputs.iter().map(|id| format!("`{id}`")).collect();
+    match named.as_slice() {
+        [] => "other outputs".into(),
+        [one] => format!("output {one}"),
+        [rest @ .., last] => format!("outputs {} and {last}", rest.join(", ")),
+    }
 }
 
 impl ProtocolError {
@@ -167,6 +194,7 @@ impl ProtocolError {
             ProtocolError::ActionFailed { .. } => "action_failed",
             ProtocolError::Unsupported { .. } => "unsupported",
             ProtocolError::Forbidden { .. } => "forbidden",
+            ProtocolError::HardwareSessionLimit { .. } => "hardware_session_limit",
             ProtocolError::Internal { .. } => "internal",
             ProtocolError::Unknown => "unknown",
         }
