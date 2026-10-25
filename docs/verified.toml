@@ -906,7 +906,7 @@ stamp = { hash = "b3:7b6e5ed3dd8380e8" }
 stamp = { hash = "b3:35328ace37395ff8" }
 
 ["CRATE-jstream-audio#purpose"."body"]
-stamp = { hash = "b3:3d8ccf2a75f92aed", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 merge (#466): kept #459's Mixer::input_block API bullet, the test bullet (each_input_keeps_its_block_after_its_fader_and_activity in mixer.rs) and no_alloc's per-input block read, beside main's #449 discontinuity-off-the-line text; merged tests/no_alloc.rs has both DiscontinuityOffLine and the input_block reads (input_blocks counter). Holds, no edit. Not run here: cargo test." }
+stamp = { hash = "b3:bcd735cd90b1a1af", by = "agent:builder-b8rnvf", note = "D9 engine side: added Mixer::monitor_block/MonitorTap (pre_filters through the fader and mute, post_filters = bus_block), MixerControl::add_monitor and the Monitor feed/player/control API, the device-rate/format errors (error.rs now names devices), the monitor and monitor-tap unit tests, and no_alloc feeding two monitors; noted core opens none until the protocol has a monitor. cmd.rs/mod.rs/retire.rs/ring.rs changes are the plumbing those bullets describe." }
 
 ["CRATE-jstream-audio#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-audio"]
 stamp = { hash = "b3:308082ece28cb86f" }
@@ -915,7 +915,7 @@ stamp = { hash = "b3:308082ece28cb86f" }
 stamp = { hash = "b3:8b7bc73f164ea9f6", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "Stale via ARCH#threading: privacy's flag is video-side; the mixer doesn't read it, matching the audio README's not-yet 'privacy screen's mute'; holds | merge: merged wave/m1-3 at bf37f98f (wave/m1-2 landed via main, T1 transitions and studio preview at 0.30, master/output audio filter chains at 0.29): ARCH#threading now carries both the privacy flag paragraph and the wave's audio-chain/transition text; this section's claims are unaffected" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/error.rs"]
-stamp = { hash = "b3:d8e9ac73d567425f" }
+stamp = { hash = "b3:9ee658941f287ef9", by = "agent:builder-b8rnvf", note = "D9 engine side: added Mixer::monitor_block/MonitorTap (pre_filters through the fader and mute, post_filters = bus_block), MixerControl::add_monitor and the Monitor feed/player/control API, the device-rate/format errors (error.rs now names devices), the monitor and monitor-tap unit tests, and no_alloc feeding two monitors; noted core opens none until the protocol has a monitor. cmd.rs/mod.rs/retire.rs/ring.rs changes are the plumbing those bullets describe." }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/filter/compressor.rs"]
 stamp = { hash = "b3:7836f4052222a2a2" }
@@ -939,7 +939,7 @@ stamp = { hash = "b3:418e944950d88c36" }
 stamp = { hash = "b3:146dce3f0e502506", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. Inputs against wave/m3: handle.rs gains only main's InputStats::resets doc (a discontinuity more than 20 ms off the fitted clock line, #449) beside wave/m3's add_plugin_filter doc. ARCH#threading, against wave/m3, gains main's Preview thread row (one per engine while a preview stream is open: its own compositor, H.264 or JPEG encode into the session's bounded queue, a brief collection lock) and the reworded CLAP sentence (host and supervisor built, running a CLAP filter from the graph not yet, the host sleeping a quarter block between passes). The purpose's account of input stats and plugin filters holds, and its not-yet list says the same about CLAP filters." }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/lib.rs"]
-stamp = { hash = "b3:4008e0f5daf6f486", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#372: MAX_BUSES now pub and re-exported; noted it in the bus API bullet and that core ties it to the protocol's; rest re-read, holds" }
+stamp = { hash = "b3:b9a20b5d3807895e", by = "agent:builder-b8rnvf", note = "D9 engine side: added Mixer::monitor_block/MonitorTap (pre_filters through the fader and mute, post_filters = bus_block), MixerControl::add_monitor and the Monitor feed/player/control API, the device-rate/format errors (error.rs now names devices), the monitor and monitor-tap unit tests, and no_alloc feeding two monitors; noted core opens none until the protocol has a monitor. cmd.rs/mod.rs/retire.rs/ring.rs changes are the plumbing those bullets describe." }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/meter/kweight.rs"]
 stamp = { hash = "b3:5245705e37deb44d" }
@@ -960,7 +960,7 @@ stamp = { hash = "b3:d23609c35396ae52", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:0471f6f1d1625d24" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/rt/cmd.rs"]
-stamp = { hash = "b3:6612a7b89f893989", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#459: added Mixer::input_block (mixer.rs: per-input monitor block after chain, fader, mute and activity gain, before sends; cmd.rs allocates it with the input, retire.rs frees it on the collector); the API list now names input_block, the unit-test list adds each_input_keeps_its_block_after_its_fader_and_activity, and the no_alloc description now says each input's block is read after every block (tests/no_alloc.rs). Ran jstream-audio tests incl. rt::callback_does_not_allocate." }
+stamp = { hash = "b3:22722429422a18f7", by = "agent:builder-b8rnvf", note = "D9 engine side: added Mixer::monitor_block/MonitorTap (pre_filters through the fader and mute, post_filters = bus_block), MixerControl::add_monitor and the Monitor feed/player/control API, the device-rate/format errors (error.rs now names devices), the monitor and monitor-tap unit tests, and no_alloc feeding two monitors; noted core opens none until the protocol has a monitor. cmd.rs/mod.rs/retire.rs/ring.rs changes are the plumbing those bullets describe." }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/rt/continuity.rs"]
 stamp = { hash = "b3:d05ce04f7cd98328" }
@@ -981,16 +981,19 @@ stamp = { hash = "b3:7b96e0548bba48b1" }
 stamp = { hash = "b3:d085c53043059921", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#449. input.rs: the first stamp after a discontinuity flag (trust_next_stamp, spent by that stamp) restarts the drift segment at once when >20 ms off the line instead of being rejected until the 50-outlier run; new tests a_discontinuity_off_the_line_re_anchors_at_once and only_the_stamp_after_a_discontinuity_skips_outlier_rejection. handle.rs: InputStats::resets doc now names an off-line discontinuity. tests/no_alloc.rs: new DiscontinuityOffLine mic event at tick 1900 and an assert that mic.resets > 0. Body: the unit-test list now says an off-line discontinuity re-anchors at once and unflagged outliers still wait for the run; the API counter list, layering and sim.rs glitch case are unchanged." }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/rt/mixer.rs"]
-stamp = { hash = "b3:7a78627cc07e32c5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#459: added Mixer::input_block (mixer.rs: per-input monitor block after chain, fader, mute and activity gain, before sends; cmd.rs allocates it with the input, retire.rs frees it on the collector); the API list now names input_block, the unit-test list adds each_input_keeps_its_block_after_its_fader_and_activity, and the no_alloc description now says each input's block is read after every block (tests/no_alloc.rs). Ran jstream-audio tests incl. rt::callback_does_not_allocate." }
+stamp = { hash = "b3:da0b58a1a77978fd", by = "agent:builder-b8rnvf", note = "D9 engine side: added Mixer::monitor_block/MonitorTap (pre_filters through the fader and mute, post_filters = bus_block), MixerControl::add_monitor and the Monitor feed/player/control API, the device-rate/format errors (error.rs now names devices), the monitor and monitor-tap unit tests, and no_alloc feeding two monitors; noted core opens none until the protocol has a monitor. cmd.rs/mod.rs/retire.rs/ring.rs changes are the plumbing those bullets describe." }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/rt/mod.rs"]
-stamp = { hash = "b3:69ca57b1048cdd53" }
+stamp = { hash = "b3:085d7a5cd64d0dd5", by = "agent:builder-b8rnvf", note = "D9 engine side: added Mixer::monitor_block/MonitorTap (pre_filters through the fader and mute, post_filters = bus_block), MixerControl::add_monitor and the Monitor feed/player/control API, the device-rate/format errors (error.rs now names devices), the monitor and monitor-tap unit tests, and no_alloc feeding two monitors; noted core opens none until the protocol has a monitor. cmd.rs/mod.rs/retire.rs/ring.rs changes are the plumbing those bullets describe (mod.rs names the monitor's device thread)." }
+
+["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/rt/monitor.rs"]
+stamp = { hash = "b3:1ad9204acaea2991", by = "agent:builder-b8rnvf", note = "D9 engine side: added Mixer::monitor_block/MonitorTap (pre_filters through the fader and mute, post_filters = bus_block), MixerControl::add_monitor and the Monitor feed/player/control API, the device-rate/format errors (error.rs now names devices), the monitor and monitor-tap unit tests, and no_alloc feeding two monitors; noted core opens none until the protocol has a monitor. cmd.rs/mod.rs/retire.rs/ring.rs changes are the plumbing those bullets describe." }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/rt/retire.rs"]
-stamp = { hash = "b3:21c5e53c58efda9d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#459: added Mixer::input_block (mixer.rs: per-input monitor block after chain, fader, mute and activity gain, before sends; cmd.rs allocates it with the input, retire.rs frees it on the collector); the API list now names input_block, the unit-test list adds each_input_keeps_its_block_after_its_fader_and_activity, and the no_alloc description now says each input's block is read after every block (tests/no_alloc.rs). Ran jstream-audio tests incl. rt::callback_does_not_allocate." }
+stamp = { hash = "b3:d07d2a3d8494275f", by = "agent:builder-b8rnvf", note = "D9 engine side: added Mixer::monitor_block/MonitorTap (pre_filters through the fader and mute, post_filters = bus_block), MixerControl::add_monitor and the Monitor feed/player/control API, the device-rate/format errors (error.rs now names devices), the monitor and monitor-tap unit tests, and no_alloc feeding two monitors; noted core opens none until the protocol has a monitor. cmd.rs/mod.rs/retire.rs/ring.rs changes are the plumbing those bullets describe." }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/rt/ring.rs"]
-stamp = { hash = "b3:11a8ee3967274327" }
+stamp = { hash = "b3:b7b391202e64f9bc", by = "agent:builder-b8rnvf", note = "D9 engine side: added Mixer::monitor_block/MonitorTap (pre_filters through the fader and mute, post_filters = bus_block), MixerControl::add_monitor and the Monitor feed/player/control API, the device-rate/format errors (error.rs now names devices), the monitor and monitor-tap unit tests, and no_alloc feeding two monitors; noted core opens none until the protocol has a monitor. cmd.rs/mod.rs/retire.rs/ring.rs changes are the plumbing those bullets describe." }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/rt/shared.rs"]
 stamp = { hash = "b3:d9f812544be5eb7b" }
@@ -1008,13 +1011,13 @@ stamp = { hash = "b3:3e63f714aef88590" }
 stamp = { hash = "b3:c06e0c67b9b83617" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/tests/no_alloc.rs"]
-stamp = { hash = "b3:9877d3cd56a5b6cc", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 merge (#466): kept #459's Mixer::input_block API bullet, the test bullet (each_input_keeps_its_block_after_its_fader_and_activity in mixer.rs) and no_alloc's per-input block read, beside main's #449 discontinuity-off-the-line text; merged tests/no_alloc.rs has both DiscontinuityOffLine and the input_block reads (input_blocks counter). Holds, no edit. Not run here: cargo test." }
+stamp = { hash = "b3:9a33372a1f231db8", by = "agent:builder-b8rnvf", note = "D9 engine side: added Mixer::monitor_block/MonitorTap (pre_filters through the fader and mute, post_filters = bus_block), MixerControl::add_monitor and the Monitor feed/player/control API, the device-rate/format errors (error.rs now names devices), the monitor and monitor-tap unit tests, and no_alloc feeding two monitors; noted core opens none until the protocol has a monitor. cmd.rs/mod.rs/retire.rs/ring.rs changes are the plumbing those bullets describe." }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/tests/sim.rs"]
 stamp = { hash = "b3:e5a6edbd7802a068" }
 
 ["CRATE-jstream-audio#realtime"."body"]
-stamp = { hash = "b3:4c4707b7e310f3be", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 merge (#466): kept #459's Mixer paragraph (input's own block allocated in Command::Add, freed via Retired::Block, QUEUE_CAP 7 per input), no-alloc and Cost text beside main's #449 Drift fit (first stamp after a discontinuity restarts the segment) and the off-line discontinuity in the no-alloc list; checked against mixer.rs, cmd.rs, retire.rs, input.rs. Holds, no edit. Not run here: cargo test." }
+stamp = { hash = "b3:29d253439b8f063a", by = "agent:builder-b8rnvf", note = "Added the Monitors paragraph (ring per monitor, 64-frame stages, resampler to the device rate steered by the inputs' PI to a 1.5-block + 20 ms target, forward-only re-anchor past 50 ms, silence when the feed stalls, collector hand-off from both ends) and the pre-filters buffer in the Mixer paragraph; checked retire.rs (Monitor variant, queue cap +4 per bus), ring.rs (written accessor) and cmd.rs (monitor_config) against it." }
 
 ["CRATE-jstream-audio#realtime"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:8b7bc73f164ea9f6", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "Stale via ARCH#threading (privacy flag, fail-closed black, live values); the mixer's realtime text is unaffected; holds | merge: merged wave/m1-3 at bf37f98f (wave/m1-2 landed via main, T1 transitions and studio preview at 0.30, master/output audio filter chains at 0.29): ARCH#threading now carries both the privacy flag paragraph and the wave's audio-chain/transition text; this section's claims are unaffected" }
@@ -1032,7 +1035,7 @@ stamp = { hash = "b3:d23609c35396ae52", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:0471f6f1d1625d24" }
 
 ["CRATE-jstream-audio#realtime"."file:crates/jstream-audio/src/rt/cmd.rs"]
-stamp = { hash = "b3:6612a7b89f893989", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#459: mixer.rs now copies each input's post-fader signal into its own block with the activity gain ramped (activity_now per slot), no allocation: the block comes in Command::Add (cmd.rs) and goes to the collector via the new Retired::Block (retire.rs, QUEUE_CAP 7 per input). Edited the Mixer, no-alloc and Cost paragraphs (measured 47 to 54 us master-only on a 2.10 GHz Xeon container); ring, sends, chains, taps and command-queue text unchanged and still hold. rt::callback_does_not_allocate passes." }
+stamp = { hash = "b3:22722429422a18f7", by = "agent:builder-b8rnvf", note = "Added the Monitors paragraph (ring per monitor, 64-frame stages, resampler to the device rate steered by the inputs' PI to a 1.5-block + 20 ms target, forward-only re-anchor past 50 ms, silence when the feed stalls, collector hand-off from both ends) and the pre-filters buffer in the Mixer paragraph; checked retire.rs (Monitor variant, queue cap +4 per bus), ring.rs (written accessor) and cmd.rs (monitor_config) against it." }
 
 ["CRATE-jstream-audio#realtime"."file:crates/jstream-audio/src/rt/continuity.rs"]
 stamp = { hash = "b3:d05ce04f7cd98328" }
@@ -1053,16 +1056,19 @@ stamp = { hash = "b3:7b96e0548bba48b1" }
 stamp = { hash = "b3:d085c53043059921", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#449. input.rs: add_point now restarts the segment for the first stamp after a discontinuity flag when it is >20 ms off the line (a bool and the existing new_segment/fit.add path, no allocation, lock or log, so R-RT-001/R-RT-003 hold); the module docs say so. Body: the Drift fit bullet now states that this stamp is never rejected and restarts the segment at once, and the no_alloc paragraph lists the new off-line discontinuity event; ring, resampler, steering constants and the rest of the section are unchanged." }
 
 ["CRATE-jstream-audio#realtime"."file:crates/jstream-audio/src/rt/mixer.rs"]
-stamp = { hash = "b3:7a78627cc07e32c5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#459: mixer.rs now copies each input's post-fader signal into its own block with the activity gain ramped (activity_now per slot), no allocation: the block comes in Command::Add (cmd.rs) and goes to the collector via the new Retired::Block (retire.rs, QUEUE_CAP 7 per input). Edited the Mixer, no-alloc and Cost paragraphs (measured 47 to 54 us master-only on a 2.10 GHz Xeon container); ring, sends, chains, taps and command-queue text unchanged and still hold. rt::callback_does_not_allocate passes." }
+stamp = { hash = "b3:da0b58a1a77978fd", by = "agent:builder-b8rnvf", note = "Added the Monitors paragraph (ring per monitor, 64-frame stages, resampler to the device rate steered by the inputs' PI to a 1.5-block + 20 ms target, forward-only re-anchor past 50 ms, silence when the feed stalls, collector hand-off from both ends) and the pre-filters buffer in the Mixer paragraph; checked retire.rs (Monitor variant, queue cap +4 per bus), ring.rs (written accessor) and cmd.rs (monitor_config) against it." }
 
 ["CRATE-jstream-audio#realtime"."file:crates/jstream-audio/src/rt/mod.rs"]
-stamp = { hash = "b3:69ca57b1048cdd53" }
+stamp = { hash = "b3:085d7a5cd64d0dd5", by = "agent:builder-b8rnvf", note = "Added the Monitors paragraph (ring per monitor, 64-frame stages, resampler to the device rate steered by the inputs' PI to a 1.5-block + 20 ms target, forward-only re-anchor past 50 ms, silence when the feed stalls, collector hand-off from both ends) and the pre-filters buffer in the Mixer paragraph; checked retire.rs (Monitor variant, queue cap +4 per bus), ring.rs (written accessor), cmd.rs (monitor_config) and mod.rs (the device thread listed among real-time threads) against it." }
+
+["CRATE-jstream-audio#realtime"."file:crates/jstream-audio/src/rt/monitor.rs"]
+stamp = { hash = "b3:1ad9204acaea2991", by = "agent:builder-b8rnvf", note = "Added the Monitors paragraph (ring per monitor, 64-frame stages, resampler to the device rate steered by the inputs' PI to a 1.5-block + 20 ms target, forward-only re-anchor past 50 ms, silence when the feed stalls, collector hand-off from both ends) and the pre-filters buffer in the Mixer paragraph; checked retire.rs (Monitor variant, queue cap +4 per bus), ring.rs (written accessor) and cmd.rs (monitor_config) against it." }
 
 ["CRATE-jstream-audio#realtime"."file:crates/jstream-audio/src/rt/retire.rs"]
-stamp = { hash = "b3:21c5e53c58efda9d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#459: mixer.rs now copies each input's post-fader signal into its own block with the activity gain ramped (activity_now per slot), no allocation: the block comes in Command::Add (cmd.rs) and goes to the collector via the new Retired::Block (retire.rs, QUEUE_CAP 7 per input). Edited the Mixer, no-alloc and Cost paragraphs (measured 47 to 54 us master-only on a 2.10 GHz Xeon container); ring, sends, chains, taps and command-queue text unchanged and still hold. rt::callback_does_not_allocate passes." }
+stamp = { hash = "b3:d07d2a3d8494275f", by = "agent:builder-b8rnvf", note = "Added the Monitors paragraph (ring per monitor, 64-frame stages, resampler to the device rate steered by the inputs' PI to a 1.5-block + 20 ms target, forward-only re-anchor past 50 ms, silence when the feed stalls, collector hand-off from both ends) and the pre-filters buffer in the Mixer paragraph; checked retire.rs (Monitor variant, queue cap +4 per bus), ring.rs (written accessor) and cmd.rs (monitor_config) against it." }
 
 ["CRATE-jstream-audio#realtime"."file:crates/jstream-audio/src/rt/ring.rs"]
-stamp = { hash = "b3:11a8ee3967274327" }
+stamp = { hash = "b3:b7b391202e64f9bc", by = "agent:builder-b8rnvf", note = "Added the Monitors paragraph (ring per monitor, 64-frame stages, resampler to the device rate steered by the inputs' PI to a 1.5-block + 20 ms target, forward-only re-anchor past 50 ms, silence when the feed stalls, collector hand-off from both ends) and the pre-filters buffer in the Mixer paragraph; checked retire.rs (Monitor variant, queue cap +4 per bus), ring.rs (written accessor) and cmd.rs (monitor_config) against it." }
 
 ["CRATE-jstream-audio#realtime"."file:crates/jstream-audio/src/rt/shared.rs"]
 stamp = { hash = "b3:d9f812544be5eb7b" }

@@ -31,8 +31,9 @@ compensates their latency. It also has
 master chain on every bus that feeds an output, output taps with their own chains for
 outputs that encode their own audio, and each bus's output before the master chain for
 monitoring. Each input has an activity gain (audio that follows the program) before
-its sends. Sidechain keys in the mixer
-and the monitor devices themselves come later. The true-peak and loudness meters
+its sends. A bus monitor (ADR-0028's D22) hears the bus before or after its filters and
+plays on an output device through a monitor player; `jstream-core` doesn't open one yet,
+since the protocol has no monitor. Sidechain keys in the mixer come later. The true-peak and loudness meters
 ([Meters](#meters)) exist as DSP but don't run in the mixer yet; `jstream-core`'s
 mixer thread runs them on the master block the mixer returns.
 
@@ -110,6 +111,20 @@ stamped on the clock, and no device is the master.
   contributes to the mix before each send's gain, which `jstream-core` draws for a
   `waveform` or `spectrum` source that names the source (ADR-0028 defines a sidechain
   key's signal at the same point).
+- `Mixer::monitor_block(bus, tap)` reads what a monitor on `bus` hears in the last block
+  mixed, at its `MonitorTap`: `PostFilters` is `bus_block`, and `PreFilters` is the bus's
+  sum before its filter chain, through the same fader and mute (so only the filters
+  differ). Neither has the master chain. `PreFilters` skips the bus chain's latency and
+  its compensation, so it is that much earlier than `PostFilters`.
+- `MixerControl::add_monitor(format)` builds a `Monitor` for an output device of
+  `format` (the device's rate, 12 to 288 kHz at a 48 kHz engine, and layout, interleaved
+  `f32`): its `feed` (`MonitorFeed::push(frame, block)`) takes each block the mixer
+  thread monitors, its `player` (`MonitorPlayer`) implements
+  `jstream_platform::AudioOutputHandler` and goes to `AudioIo::open_output` as the
+  stream's handler, and its `control` reads `MonitorStats` (blocks, renders, underrun
+  frames, re-anchors, failure). The player maps stereo onto the device: both channels
+  averaged into mono, the front pair of anything wider, the rest silent. See
+  [Real-time design](#realtime) for its clock.
 - `InputControl` and `BusControl` set the fader (linear or dB, 0 to +24 dB) and mute,
   ramped over one block. They read meters (per channel, post-fader, so an input's is
   before its sends: the peak held until read, and the last block's RMS) and counters
@@ -124,7 +139,8 @@ stamped on the clock, and no device is the master.
   ([Filters](#filters)).
 
 **Errors** (`AudioError`): an invalid configuration (including a loudness meter's
-rate, or a filter's rate or settings), an unsupported input rate or sample layout, a
+rate, or a filter's rate or settings), an unsupported input or monitor device rate or
+sample layout, a
 wrong output length, more than 64 inputs, 16 buses, 16 output taps or 8 filters in a
 chain, an input, bus, output tap or filter already removed, a full command queue, or a collector thread that could
 not start. No variant allocates.
@@ -154,6 +170,15 @@ not start. No variant allocates.
   input and bus lines up, and `pts` moves back by the total, then returns when they are
   removed), a delay filter's output stamped later by its delay, and the limits and
   rejected edits;
+- monitor taps: a bus before its filters and after them, both through its fader and
+  mute and before the master chain, silent when muted, and gone with the bus;
+- monitors (`monitor.rs`): a 48 kHz device playing the bus at its level with no
+  re-anchor or underrun once playing; 44.1 kHz mono, 96 kHz 5.1 and 16 kHz stereo
+  devices at the right level on each channel; a device clock ±1000 ppm off steered out
+  over two minutes with no re-anchor; a feed that stops played as silence and picked up
+  where the player stands; a stalled device moving forward onto the target; silence
+  before the first block; a stream failure reported; device rates and planar formats
+  refused; and the ring freed on the collector from both ends;
 - the master chain and output taps: the master chain on the master bus and on a
   tapped bus but not before monitoring, a master filter's edit reaching every copy and
   a bus added later, an output tap's own chain and stamp, a tap reading silence once
@@ -179,7 +204,8 @@ be.
 `tests/no_alloc.rs` is R-RT-001's `callback_does_not_allocate`: the real-time calls
 under `assert_no_alloc`, through the same kinds of glitches and live input, bus, send,
 filter, master-chain, output-tap and CLAP-filter changes, reading each output tap's and
-each input's block after every block
+each input's block after every block, feeding two monitors (before and after the
+master's filters) and rendering their devices every tick
 ([Real-time design](#realtime)).
 `tests/cost.rs` is an ignored measurement of what a block costs
 ([Real-time design](#realtime)).
@@ -219,6 +245,19 @@ frames that arrive behind the mixer's read position as late. `unsafe` is forbidd
 producer publishes the end of the write it is about to make before a release fence, and
 the reader re-reads it after an acquire fence. No workspace crate provides a ring
 indexed by time with these policies.
+
+**Monitors** (`monitor.rs`). The mixer thread writes each monitored block into a ring
+of the same kind, under its engine frames, and the output device's audio thread reads
+it through `MonitorPlayer::render`: in 64-frame stages, through a resampler from the
+engine rate to the device's, steered by the inputs' controller and smoothing so that it
+reads a fixed distance behind the newest frame written. That target is 1.5 blocks plus
+20 ms (1680 frames at the defaults): the distance swings by a block as the mixer writes
+them, and the rest covers a device period and the look-ahead. More than 50 ms above the
+target (the device stalled) moves the read position forward onto it, counted as a
+re-anchor. More than 50 ms below (the feed stalled or stopped) leaves the player
+reading on into silence, counted as underrun, with the controller held: moving back
+would replay what was already heard. Both ends hand the ring and counters to the
+collector when dropped.
 
 **Downmix** (`downmix.rs`), before resampling, so 5.1 costs no more than stereo:
 
@@ -278,8 +317,10 @@ not rubato's output ratio.
 compensation delay, ramps its fader and meters it, copies it into the input's own
 block with its activity gain ramped (`input_block`; the block is allocated with the
 input on the control plane, travels in its add command and goes to the collector with
-it), then adds it into every bus it sends to, ramping each send's gain. For each bus it then runs the bus chain and compensation
-delay, ramps the bus fader, replaces any non-finite sample with 0 and meters the output.
+it), then adds it into every bus it sends to, ramping each send's gain. For each bus it
+then copies the sum into a third buffer (the `PreFilters` monitor block), runs the bus
+chain and compensation delay, ramps the bus fader on both, replaces any non-finite
+sample with 0 and meters the output.
 Each bus that feeds an output then runs its copy of the master chain on a second
 buffer, so the first keeps the pre-master output for monitoring (`bus_block`), and each
 output tap copies its bus's post-master block and runs its own chain. The master's

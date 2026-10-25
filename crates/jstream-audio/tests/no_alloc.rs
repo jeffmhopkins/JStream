@@ -11,7 +11,9 @@
 //! the input, bus, master and output-tap filter chains) and a read of each output tap's
 //! block and of each input's own block (a drawn source's scope, #459), then a keyed
 //! compressor and the meters on each mixed block, as the mixer thread will run them
-//! (ADR-0028; sidechain keys and meters aren't in the mixer yet).
+//! (ADR-0028; sidechain keys and meters aren't in the mixer yet). Two bus monitors take
+//! each block, one before the master's filters and one after, and their devices' audio
+//! threads (`AudioOutputHandler::render`) play a tick's worth each tick.
 //! Control-plane work (adding and removing inputs, buses, output taps, sends and
 //! filters, filter edits, gain and mute changes) runs between ticks, outside the scope,
 //! as it does on the control thread.
@@ -36,11 +38,13 @@ use assert_no_alloc::{AllocDisabler, assert_no_alloc, reset_violation_count, vio
 use jstream_audio::filter::{AudioFilter, Compressor, CompressorParams, GateParams, LimiterParams};
 use jstream_audio::meter::{LoudnessMeter, TruePeakMeter};
 use jstream_audio::{
-    FilterParams, FilterSpec, HostMemory, InputControl, InputProducer, Mixer, MixerConfig,
-    OutputTapId,
+    BusId, FilterParams, FilterSpec, HostMemory, InputControl, InputProducer, Mixer, MixerConfig,
+    Monitor, MonitorTap, OutputTapId,
 };
 use jstream_media::{AudioFormat, ChannelLayout, MediaTime, SampleFormat, Timebase};
-use jstream_platform::{AudioInputHandler, AudioPacket, AudioPacketFlags};
+use jstream_platform::{
+    AudioInputHandler, AudioOutputHandler, AudioPacket, AudioPacketFlags, AudioRenderBuffer,
+};
 use jstream_plugin_proto::{Config, DEFAULT_DEPTH, Shared, first_useful};
 use std::sync::Arc;
 
@@ -306,6 +310,9 @@ struct Sim {
     input_blocks: u64,
     /// The mixer thread does not run until this tick (a stall).
     mixer_stalled_until: u64,
+    /// Bus monitors (ADR-0028, D22): each one's tap, and its device's buffer for one
+    /// tick, which its player fills every tick.
+    monitors: Vec<(Monitor, MonitorTap, Vec<f32>)>,
 }
 
 impl Sim {
@@ -318,13 +325,13 @@ impl Sim {
             return;
         }
         let now = clock(T0 + (tick + 1) as f64 * TICK_S);
-        while self
-            .mixer
-            .poll(now, &mut self.out)
-            .expect("right length")
-            .is_some()
-        {
+        while let Some(mixed) = self.mixer.poll(now, &mut self.out).expect("right length") {
             self.chain.process(&mut self.out);
+            for (monitor, tap, _) in &mut self.monitors {
+                if let Some(block) = self.mixer.monitor_block(BusId::MASTER, *tap) {
+                    monitor.feed.push(mixed.frame, block);
+                }
+            }
             for &tap in &self.taps {
                 if let Some((_, block)) = self.mixer.output_block(tap) {
                     std::hint::black_box(block);
@@ -337,6 +344,14 @@ impl Sim {
                     self.input_blocks += 1;
                 }
             }
+        }
+        // Each monitor device's audio thread, once a tick.
+        for (monitor, _, buf) in &mut self.monitors {
+            monitor.player.render(&mut AudioRenderBuffer {
+                samples: buf,
+                device_position: tick,
+                time: None,
+            });
         }
     }
 }
@@ -398,7 +413,19 @@ mod rt {
             tap_blocks: 0,
             input_blocks: 0,
             mixer_stalled_until: 0,
+            monitors: Vec::new(),
         };
+        // Monitors on the master, before and after its filters, on a 44.1 kHz mono
+        // device and a 48 kHz 5.1 one.
+        for (rate, layout, tap) in [
+            (44_100, ChannelLayout::Mono, MonitorTap::PreFilters),
+            (48_000, ChannelLayout::Surround51, MonitorTap::PostFilters),
+        ] {
+            let format = fmt(rate, layout);
+            let monitor = sim.mixer.control().add_monitor(format).expect("supported");
+            let buf = vec![0.0; rate as usize / 100 * format.channels()];
+            sim.monitors.push((monitor, tap, buf));
+        }
         let control = sim.mixer.control();
         let bus = sim.mixer.bus();
         let limiter = |lookahead_ms| FilterSpec::Limiter {
@@ -678,6 +705,10 @@ mod rt {
         assert!(sim.input_blocks > 4 * 1_300, "{}", sim.input_blocks);
         // 45 s of 1024-frame blocks at 48 kHz, minus the stall's.
         assert!(bus.blocks > 2_000, "{bus:?}");
+        for (monitor, _, _) in &sim.monitors {
+            let stats = monitor.control.stats();
+            assert!(stats.blocks > 2_000 && stats.renders > 4_000, "{stats:?}");
+        }
     }
 }
 
