@@ -20,8 +20,11 @@ test('a duplicate shows a toast that hides by itself', async ({ page, daemon }) 
   await expect.poll(() => rev(page)).toBe(before + 1);
   const toast = page.locator('.toast');
   await expect(toast).toHaveText("Added a clone. Changes to it don't affect the original.");
-  await expect(toast).toHaveAttribute('role', 'status');
+  // The live region stays in the page, so each toast is announced.
+  await expect(page.locator('.toast-region')).toHaveAttribute('role', 'status');
+  await expect(page.locator('.toast-region')).toContainText('Added a clone.');
   await expect(toast).toBeHidden({ timeout: 7000 });
+  await expect(page.locator('.toast-region')).toHaveCount(1);
 });
 
 test('a section stays folded across items and reloads', async ({ page, daemon }) => {

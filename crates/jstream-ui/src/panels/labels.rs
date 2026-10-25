@@ -275,9 +275,22 @@ pub fn LabelPicker(
         });
         send(studio, session, edit.into_iter().collect());
     };
+    let button = NodeRef::<leptos::html::Button>::new();
+    // Escape closes the popover whether focus is on the tag button or inside it, and
+    // leaves focus on the button.
+    let escape = move |event: leptos::ev::KeyboardEvent| {
+        if event.key() == "Escape" && open.get_untracked() {
+            event.stop_propagation();
+            open.set(false);
+            if let Some(button) = button.get_untracked() {
+                let _ = button.focus();
+            }
+        }
+    };
     view! {
-        <div class="label-picker">
+        <div class="label-picker" on:keydown=escape>
             <button
+                node_ref=button
                 type="button"
                 class="tree-tool tag-button"
                 class:hov=!always
@@ -295,12 +308,6 @@ pub fn LabelPicker(
                     class="label-pop"
                     role="group"
                     aria-label="Labels"
-                    on:keydown=move |event| {
-                        if event.key() == "Escape" {
-                            event.stop_propagation();
-                            open.set(false);
-                        }
-                    }
                 >
                     {move || {
                         let rows = rows();

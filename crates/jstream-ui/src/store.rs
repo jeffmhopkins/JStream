@@ -280,6 +280,9 @@ pub struct Studio {
     refresh: StoredValue<(bool, bool)>,
     /// The counter [`fresh_id`] continues from.
     next_id: StoredValue<u64>,
+    /// The number the next toast takes. It only grows, so a timer left from an earlier
+    /// toast never matches a later one.
+    next_toast: StoredValue<u64>,
 }
 
 impl Studio {
@@ -296,6 +299,7 @@ impl Studio {
             keys_changed: RwSignal::new(0),
             refresh: StoredValue::new((false, false)),
             next_id: StoredValue::new(0),
+            next_toast: StoredValue::new(0),
         }
     }
 
@@ -469,9 +473,8 @@ impl Studio {
 
     /// Shows `text` in the toast, in place of the one shown.
     pub fn notify(&self, text: impl Into<String>) {
-        let n = self
-            .toast
-            .with_untracked(|t| t.as_ref().map_or(0, |(n, _)| n + 1));
+        let n = self.next_toast.get_value();
+        self.next_toast.set_value(n + 1);
         self.toast.set(Some((n, text.into())));
     }
 

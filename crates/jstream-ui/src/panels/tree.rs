@@ -96,6 +96,22 @@ pub fn SearchBar(
     let studio = use_context::<Studio>();
     let manager = use_context::<LabelManager>().filter(|_| labels);
     let open = RwSignal::new(false);
+    // A deleted label leaves the filter, so it can't hide every row with nothing to uncheck.
+    if let Some(studio) = studio.filter(|_| labels) {
+        Effect::new(move |_| {
+            let known: Vec<LabelId> = studio.collection.with(|c| {
+                c.as_ref()
+                    .map(|c| c.labels.iter().map(|l| l.label_id.clone()).collect())
+                    .unwrap_or_default()
+            });
+            if filter
+                .labels
+                .with_untracked(|l| l.iter().any(|id| !known.contains(id)))
+            {
+                filter.labels.update(|l| l.retain(|id| known.contains(id)));
+            }
+        });
+    }
     let placeholder = format!("Search {what}");
     let clear = move |_| {
         filter.clear();

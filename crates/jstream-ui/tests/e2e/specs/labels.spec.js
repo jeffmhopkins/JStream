@@ -88,6 +88,13 @@ test('a label goes on a source, shows as chips, filters rows and comes off', asy
   // The popover stays open, showing the label on.
   await expect(objects(page).locator('.label-pop').getByRole('button', { name: 'Overlay' })).toHaveAttribute('aria-pressed', 'true');
   await closePopover(page);
+  // Escape closes it with focus still on the tag button, and leaves focus there.
+  const tag = backdrop(page).getByRole('button', { name: 'Labels for Backdrop' });
+  await tag.click();
+  await expect(objects(page).locator('.label-pop')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(objects(page).locator('.label-pop')).toBeHidden();
+  await expect(tag).toBeFocused();
 
   // The Inspector's header shows the chip and its own tag button.
   await backdrop(page).locator('.row-main').click();
@@ -128,9 +135,19 @@ test('deleting a label takes it off its sources in one edit', async ({ page, dae
   await closePopover(page);
   await expect(backdrop(page).getByRole('img', { name: 'New label' })).toBeVisible();
 
+  // A label checked in the filter leaves it when deleted, so no row stays hidden.
+  const rows = await objects(page).locator('li.row').count();
+  await objects(page).getByRole('button', { name: 'Filter' }).click();
+  await objects(page).locator('.tree-pop').getByRole('button', { name: 'New label' }).click();
+  await expect(objects(page).locator('li.row')).toHaveCount(1);
+  await page.keyboard.press('Escape');
+  await expect(objects(page).locator('.tree-pop')).toBeHidden();
+
   before = await rev(page);
   await manager(page).getByRole('button', { name: 'Delete label New label' }).click();
   await expect.poll(() => rev(page)).toBe(before + 1);
   await expect(manager(page).getByRole('textbox', { name: 'Label name' })).toHaveCount(0);
   await expect(backdrop(page).getByRole('img', { name: 'New label' })).toHaveCount(0);
+  await expect(objects(page).locator('li.row')).toHaveCount(rows);
+  await expect(objects(page).locator('.tree-filter-count')).toHaveCount(0);
 });

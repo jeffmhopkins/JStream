@@ -168,7 +168,8 @@ pub enum Depth3 {
 }
 
 /// The perspective the prototype draws 3D with when an item sets none, in pixels; the
-/// first 3D change sets it, since without one the engine draws 3D flat (ADR-0050).
+/// first 3D change sets it, since without one the engine draws 3D orthographically, where
+/// Depth has no effect (ADR-0050).
 pub const DEFAULT_PERSPECTIVE: f32 = 1200.0;
 
 impl Depth3 {

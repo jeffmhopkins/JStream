@@ -323,6 +323,13 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
 }
 
 /* A confirmation (spec-workspace.md 6.7): bottom centre, over the panels, until it hides. */
+/* The toast's live region stays in the page, out of the flow. */
+.toast-region {
+  position: fixed;
+  width: 0;
+  height: 0;
+}
+
 .toast {
   position: fixed;
   bottom: 24px;

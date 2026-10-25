@@ -226,7 +226,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   W/H link, on by default, keeps the aspect ratio when either side changes), 3D (folded
   at first: Tilt, Turn, Depth and Perspective, also `item.set_geometry`; Perspective
   shows the prototype's 1200 px while the item has none, and the first change that puts
-  the item in 3D sets it, since without one the engine draws 3D flat), Crop
+  the item in 3D sets it, since without one the engine draws 3D orthographically, where
+  Depth has no effect), Crop
   (`item.set_crop`, in source pixels), Blending (the nine modes, of which the engine
   draws only Normal so the others are disabled, and Opacity, `item.set_opacity`) and
   Properties, the source's settings form. A scene shows its object count, the scenes

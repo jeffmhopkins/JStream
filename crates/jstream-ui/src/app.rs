@@ -233,10 +233,12 @@ fn Toast() -> impl IntoView {
             std::time::Duration::from_millis(TOAST_MS),
         );
     });
-    move || {
-        studio.toast.get().map(|(_, text)| {
-            view! { <div class="toast" role="status">{text}</div> }
-        })
+    // The live region stays in the page and only its text changes, so screen readers
+    // announce each toast.
+    view! {
+        <div class="toast-region" role="status">
+            {move || studio.toast.get().map(|(_, text)| view! { <div class="toast">{text}</div> })}
+        </div>
     }
 }
 
