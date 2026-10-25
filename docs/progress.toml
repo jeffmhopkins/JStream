@@ -815,8 +815,8 @@ id = "E2b"
 milestone = "M2"
 title = "Privacy screen and encoder sharing key"
 status = "planned"
-prs = [317]
-note = "on/off privacy covering every output, the encoder owner key and cost reporting (#317) landed with wave/m1-3 (#754); the look setting, the slate and muted sources to build"
+prs = [317, 804]
+note = "on/off privacy covering every output, the encoder owner key and cost reporting (#317) landed with wave/m1-3 (#754); muting the microphones, the default muted set (#804), in review; the look setting, the slate and choosing the muted sources to build"
 needs = ["build"]
 
 [[item]]
