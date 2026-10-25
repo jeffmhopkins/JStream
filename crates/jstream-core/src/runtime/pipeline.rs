@@ -48,8 +48,8 @@ use std::time::{Duration, Instant};
 
 use jstream_audio::{BusControl, Mixer, MixerConfig, OutputTapId};
 use jstream_encode::{
-    AudioInput, AudioSession, PushError, SessionOptions, SessionRegistry, SessionStats, StreamEnd,
-    SubscriberStats, Subscription, VideoInput, VideoPath, VideoSession,
+    AudioInput, AudioSession, EncodeError, PushError, SessionOptions, SessionRegistry,
+    SessionStats, StreamEnd, SubscriberStats, Subscription, VideoInput, VideoPath, VideoSession,
 };
 use jstream_media::{
     AudioBuffer, AudioFormat, ChannelLayout, Codec, ColorInfo, ColorRange, ColorSpace, FrameSize,
@@ -1920,12 +1920,33 @@ fn codec_name(codec: Codec) -> &'static str {
     }
 }
 
+/// Why opening a video encoder for `config` failed with `err`, as `output.start`
+/// reports it. A missing component keeps the platform's own error, whose remedy (a
+/// driver package, the OpenH264 download) says more than any list could (ADR-0060 §6).
+/// Otherwise, when the platform's encoder list explains the failure, that names what the
+/// machine lacks ([`check_video_encoder`]), and else the open's error stands.
+fn video_open_failure(
+    codecs: &dyn Codecs,
+    config: &VideoEncoderConfig,
+    err: &EncodeError,
+) -> String {
+    let opening = format!("opening the video encoder: {err}");
+    if matches!(
+        err,
+        EncodeError::Open(jstream_platform::PlatformError::MissingComponent { .. })
+    ) {
+        return opening;
+    }
+    check_video_encoder(codecs, config).err().unwrap_or(opening)
+}
+
 /// Why `codecs` can't encode `config`'s codec with its hardware preference, from the
-/// encoders the platform lists, so that `output.start` names what the machine lacks
-/// ("this machine has no hardware AV1 encoder") rather than how an open failed. The
-/// codec in a profile is collection state, valid on any machine, so this is checked
-/// when an output starts, not when the profile is edited. A platform that can't list
-/// its codecs passes: opening the encoder reports the failure instead.
+/// encoders the platform lists, so that a failed `output.start` names what the machine
+/// lacks ("this machine has no hardware AV1 encoder") rather than how an open failed.
+/// The codec in a profile is collection state, valid on any machine, so this is only
+/// consulted when an output's encoder fails to open, never when the profile is edited,
+/// and never before the open, which stays the authority. A platform that can't list its
+/// codecs passes.
 fn check_video_encoder(codecs: &dyn Codecs, config: &VideoEncoderConfig) -> Result<(), String> {
     let Ok(list) = codecs.list() else {
         return Ok(());
@@ -1991,9 +2012,8 @@ fn open_video(
     profile: &EncoderProfile,
 ) -> Result<VideoSession, String> {
     let config = video_config(feed, profile)?;
-    check_video_encoder(codecs, &config)?;
     let session = VideoSession::open_on(codecs, context, config, SessionOptions::default())
-        .map_err(|err| format!("opening the video encoder: {err}"))?;
+        .map_err(|err| video_open_failure(codecs, &config, &err))?;
     match session.path() {
         VideoPath::Gpu => tracing::info!("the video encoder takes GPU frames"),
         VideoPath::Cpu {
@@ -3593,8 +3613,9 @@ mod tests {
             AudioEncoder, AudioEncoderConfig, CodecInfo, CodecRole, Codecs, PlatformError,
             VideoDecoder, VideoDecoderConfig, VideoEncoder, VideoEncoderConfig, fake::FakeCodecs,
         };
-        /// Lists `encoders` (codec, hardware) and opens nothing.
-        struct Listed(Result<Vec<(Codec, bool)>, ()>);
+        /// Lists `encoders` (codec, hardware) and opens nothing: its open fails as
+        /// unsupported, or, with `missing`, as a missing component with a remedy.
+        struct Listed(Result<Vec<(Codec, bool)>, ()>, bool);
         impl Codecs for Listed {
             fn list(&self) -> Result<Vec<CodecInfo>, PlatformError> {
                 let listed = self.0.clone().map_err(|()| PlatformError::Os {
@@ -3622,7 +3643,14 @@ mod tests {
                 &self,
                 _: &VideoEncoderConfig,
             ) -> Result<Box<dyn VideoEncoder>, PlatformError> {
-                Err(PlatformError::Unsupported { what: "x".into() })
+                Err(if self.1 {
+                    PlatformError::MissingComponent {
+                        component: "Cisco's OpenH264 (software H.264)",
+                        remedy: "download it from Cisco through JStream".into(),
+                    }
+                } else {
+                    PlatformError::Unsupported { what: "x".into() }
+                })
             }
             fn audio_encoder(
                 &self,
@@ -3649,11 +3677,14 @@ mod tests {
             ..video_config(&feed, &EncoderProfile::DEFAULT).expect("default")
         };
         use HardwarePreference::{Avoid, Prefer, Require};
-        let mf = Listed(Ok(vec![
-            (Codec::H264, true),
-            (Codec::H264, false),
-            (Codec::Hevc, true),
-        ]));
+        let mf = Listed(
+            Ok(vec![
+                (Codec::H264, true),
+                (Codec::H264, false),
+                (Codec::Hevc, true),
+            ]),
+            false,
+        );
         for hardware in [Prefer, Require, Avoid] {
             assert_eq!(
                 check_video_encoder(&mf, &config(Codec::H264, hardware)),
@@ -3681,7 +3712,7 @@ mod tests {
             check_video_encoder(&mf, &config(Codec::Av1, Prefer)),
             Err("this machine has no AV1 encoder".into())
         );
-        let software = Listed(Ok(vec![(Codec::H264, false)]));
+        let software = Listed(Ok(vec![(Codec::H264, false)]), false);
         assert_eq!(
             check_video_encoder(&software, &config(Codec::H264, Require)),
             Err(
@@ -3691,7 +3722,7 @@ mod tests {
             )
         );
         // A platform that can't list its codecs leaves it to the open.
-        let unlisted = Listed(Err(()));
+        let unlisted = Listed(Err(()), false);
         assert_eq!(
             check_video_encoder(&unlisted, &config(Codec::Av1, Require)),
             Ok(())
@@ -3701,19 +3732,61 @@ mod tests {
             check_video_encoder(&FakeCodecs, &config(Codec::H264, Prefer)),
             Ok(())
         );
-        // And `open_video` refuses before opening.
-        let err = open_video(&software, None, &feed, &{
+        // `open_video` names what the machine lacks when the open fails...
+        let require = {
             let mut profile = EncoderProfile::DEFAULT;
             profile.video.hardware = ProfileHardware::Require;
             profile
-        })
-        .err();
+        };
+        let err = open_video(&software, None, &feed, &require).err();
         assert_eq!(
             err.as_deref(),
             Some(
                 "this machine has no hardware H.264 encoder, and the encoder profile requires one"
             )
         );
+        // ...but a missing component keeps the platform's remedy (ADR-0060 §6), even
+        // when the list has no encoder at all: Linux without a VA-API H.264 driver and
+        // without OpenH264 (#807 B1).
+        let bare = Listed(Ok(vec![]), true);
+        let Err(err) = open_video(&bare, None, &feed, &EncoderProfile::DEFAULT) else {
+            panic!("refused");
+        };
+        assert!(
+            err.contains("download it from Cisco through JStream"),
+            "{err}"
+        );
+        // The open fails for a reason the list doesn't explain: its own error stands.
+        let Err(err) = open_video(&mf, None, &feed, &EncoderProfile::DEFAULT) else {
+            panic!("refused");
+        };
+        assert!(err.starts_with("opening the video encoder:"), "{err}");
+        // And the list never blocks an encoder that opens: here one it doesn't name.
+        struct Unlisting;
+        impl Codecs for Unlisting {
+            fn list(&self) -> Result<Vec<CodecInfo>, PlatformError> {
+                Ok(Vec::new())
+            }
+            fn video_encoder(
+                &self,
+                config: &VideoEncoderConfig,
+            ) -> Result<Box<dyn VideoEncoder>, PlatformError> {
+                FakeCodecs.video_encoder(config)
+            }
+            fn audio_encoder(
+                &self,
+                config: &AudioEncoderConfig,
+            ) -> Result<Box<dyn AudioEncoder>, PlatformError> {
+                FakeCodecs.audio_encoder(config)
+            }
+            fn video_decoder(
+                &self,
+                config: &VideoDecoderConfig,
+            ) -> Result<Box<dyn VideoDecoder>, PlatformError> {
+                FakeCodecs.video_decoder(config)
+            }
+        }
+        assert!(open_video(&Unlisting, None, &feed, &EncoderProfile::DEFAULT).is_ok());
     }
 
     /// #433: the program renders and encodes at the canvas, rounded down to even sizes
