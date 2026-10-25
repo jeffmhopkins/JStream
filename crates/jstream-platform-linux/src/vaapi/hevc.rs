@@ -840,6 +840,8 @@ mod tests {
         assert_eq!(s.crop(), (0, 4));
         // 60 x 34 coding trees of 32x32.
         assert_eq!(s.ctus(), 60 * 34);
+        // Room for an uncompressed 4:2:0 picture and the headers.
+        assert_eq!(s.coded_buffer_size(), 1920 * 1088 * 3 / 2 + 64 * 1024);
         assert_eq!(s.rate.fps, (30_000, 1001));
         assert_eq!(s.tick, (1001, 30_000));
         assert_eq!(

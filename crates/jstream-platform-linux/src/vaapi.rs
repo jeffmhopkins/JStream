@@ -25,13 +25,8 @@ mod ffi;
     )
 )]
 mod h264;
-#[cfg_attr(
-    not(target_os = "linux"),
-    allow(
-        dead_code,
-        reason = "used by the Linux session; built elsewhere for its tests"
-    )
-)]
+// Used by the Linux session; built elsewhere for its tests, which use all of it.
+#[cfg(any(target_os = "linux", test))]
 mod hevc;
 #[cfg(target_os = "linux")]
 mod session;
