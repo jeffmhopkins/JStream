@@ -1921,7 +1921,8 @@ fn codec_name(codec: Codec) -> &'static str {
 /// reports it. A missing component keeps the platform's own error, whose remedy (a
 /// driver package, the OpenH264 download) says more than any list could (ADR-0060 §6).
 /// Otherwise, when the platform's encoder list explains the failure, that names what the
-/// machine lacks ([`check_video_encoder`]), and else the open's error stands.
+/// machine lacks ([`check_video_encoder`]), with the open's own error logged, and else
+/// the open's error stands.
 fn video_open_failure(
     codecs: &dyn Codecs,
     config: &VideoEncoderConfig,
@@ -1934,7 +1935,15 @@ fn video_open_failure(
     ) {
         return opening;
     }
-    check_video_encoder(codecs, config).err().unwrap_or(opening)
+    match check_video_encoder(codecs, config) {
+        Err(lacks) => {
+            // The list's message replaces the open's error for the user; log the open's
+            // own so a list that disagrees with the open (#812) still shows the cause.
+            tracing::warn!(error = %err, "{lacks}");
+            lacks
+        }
+        Ok(()) => opening,
+    }
 }
 
 /// Why `codecs` can't encode `config`'s codec with its hardware preference, from the

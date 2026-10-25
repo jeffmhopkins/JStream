@@ -1569,7 +1569,8 @@ package, or the OpenH264 download ([ADR-0060](../../docs/adr/0060-linux-platform
 §6). Otherwise `check_video_encoder` reads the platform's `codecs.list()`, and if no
 encoder there fits the profile, the start fails naming what the machine lacks:
 `this machine has no AV1 encoder`, or no hardware one for `hardware: require`, or no
-software one for `avoid`. When the list explains nothing, or can't be read, the open's
+software one for `avoid`, and the open's own error goes to the log at `warn`, so a list
+that disagrees with the open still shows the real cause. When the list explains nothing, or can't be read, the open's
 own error stands. A profile's codec is collection state, valid on any machine, so this
 is only consulted at a failed start, never at the edit, and an encoder the list leaves
 out still opens.
