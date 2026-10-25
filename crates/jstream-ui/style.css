@@ -281,6 +281,21 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
 .tab-close:hover:not(:disabled), .strip-close:hover:not(:disabled) { background: var(--hover); color: var(--text); }
 .tab-close.armed, .strip-close.armed { opacity: 1; font-weight: 700; color: #ff5c63; }
 .group.collapsed .strip-close { display: none; }
+.strip-tool {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  margin-right: 2px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--muted);
+}
+.strip-tool .icon { stroke-width: 2; }
+.strip-tool:hover:not(:disabled) { background: var(--hover); color: var(--text); }
 .group-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px; }
 .group.collapsed .group-body { display: none; }
 .zone.vertical .group-body.drop-before { box-shadow: inset 0 3px 0 var(--accent); }
@@ -773,6 +788,73 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .mix-row button.mute { padding: 0.2rem 0.6rem; }
 .mix-row button.mute.on { background: var(--problem); border-color: var(--problem); color: var(--panel); }
 .mix-row .routing[open] { flex: 1 0 100%; }
+/* Vertical meters (M2, M5): strips side by side, scrolling sideways. */
+.mix-strips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.mix-columns { display: flex; gap: 6px; }
+.mix-columns[hidden] { display: none; }
+.mix-divider { flex: 0 0 2px; align-self: stretch; border-radius: 1px; background: var(--border); }
+.mix-column-list { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; }
+.master-strip, .mix-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 4px;
+  border-radius: 6px;
+}
+.master-strip { flex: 0 0 84px; border: 1px solid var(--border); background: var(--menu); }
+/* Heard by a screen reader, not shown. */
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+.mix-column { flex: 0 0 64px; box-sizing: border-box; width: 64px; border: 1px solid var(--line); background: var(--raised); }
+.mix-column.off { opacity: 0.55; }
+.mixer-panel .master-strip .master-fold { flex: none; gap: 4px; font-size: 11px; font-weight: 600; }
+.master-strip .master-fold .caret { width: auto; font-size: 9px; }
+.master-strip .master-count, .master-strip .master-unit { color: var(--dim); font-size: 10px; }
+.master-strip .master-unit { margin-top: -4px; }
+.master-strip .master-value { flex: none; text-align: center; font-size: 11px; }
+.master-strip .master-value.over { color: var(--problem); }
+.master-strip .fx-button, .master-strip .ghost-button { width: 60px; padding: 3px 0; font-size: 11px; }
+.master-strip .ghost-button { font-size: 10px; }
+.level-column { position: relative; width: 14px; height: 150px; border-radius: 5px; background: #22262d; overflow: hidden; }
+.level-column .level-fill { position: absolute; left: 0; right: 0; bottom: 0; }
+.level-column .level-target { top: auto; left: -2px; right: -2px; width: auto; height: 2px; }
+.column-name { width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; font-size: 11px; color: #c9ced6; }
+.mix-column .hint { color: var(--muted); font-size: 10px; }
+.meter.vertical { display: flex; gap: 1px; width: 10px; height: 150px; }
+.meter.vertical .meter-bar { flex: 1 1 0; height: auto; background: #22262d; }
+.meter.vertical .meter-peak, .meter.vertical .meter-rms { inset: auto 0 0 0; }
+.meter.vertical .meter-hold { top: auto; left: 0; right: 0; width: auto; height: 2px; margin: 0 0 -2px; }
+.number-field.vertical { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.mixer-panel .number-field.vertical button {
+  width: 48px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--menu);
+  color: var(--muted);
+}
+.number-field.vertical input {
+  box-sizing: border-box;
+  width: 52px;
+  height: 24px;
+  padding: 0 2px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--app);
+  color: var(--text);
+  text-align: center;
+  font-size: 11px;
+  cursor: ns-resize;
+  touch-action: none;
+}
+.number-field.vertical input:focus { border-color: var(--accent); cursor: text; }
+.number-field.vertical .unit { color: var(--dim); font-size: 10px; }
+.mix-column button.mute { width: 48px; padding: 2px 0; font-size: 10px; }
+.mix-column button.mute.on { background: var(--problem); border-color: var(--problem); color: var(--panel); }
 .strips { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; }
 .strip {
   display: grid;

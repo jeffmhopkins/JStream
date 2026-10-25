@@ -52,9 +52,11 @@ state machine. Contents:
   empty, as it is until the maintainer fills it in; `YoutubeSetup::new` takes another
   client, for a developer override. `YoutubeSetup::with_secret_hook` hands the
   account's client a `jstream_youtube::SecretHook`, which it calls with each token and
-  stream key it gets, a `youtube` output's key included, so the host can redact them
-  from crash reports (#353). A sign-in's two tokens go to the hook as soon as the code
-  is exchanged, so even a grant that is abandoned or that the store refuses is redacted. It holds one `jstream-youtube` `LiveClient`
+  stream key it gets and its `SecretKind`, a `youtube` output's key included, so the
+  host can redact them from crash reports (#353). A sign-in's two tokens go to the hook as soon as the code
+  is exchanged, so even a grant that is abandoned or that the store refuses is redacted.
+  Its access token goes as `SignInAccessToken`, which supersedes nothing, since a
+  refused grant leaves the current client using its own (#844). It holds one `jstream-youtube` `LiveClient`
   (one account, its refresh token stored under the fixed opaque ID `TOKEN_ACCOUNT`, so
   no email or other personal detail names the credential) and runs the `youtube.*`
   actions and queries with no engine lock held. `youtube.sign_in` asks for the full
@@ -321,6 +323,11 @@ state machine. Contents:
   absolute on this machine, no `.part` file left by a failed start), recording while
   streaming on one shared encoder session (and separate sessions on separate
   profiles, and on a half-rate video mix held to its rate without being starved), a
+  second hardware session refused as `hardware_session_limit` naming the holder, under
+  `prefer` or `require`, with `avoid` opening software beside it and `prefer` still
+  falling back when no hardware session is open, and an HEVC start the machine lists no
+  hardware encoder for kept at `prefer` and failing as `action_failed`
+  (`src/tests/cpu_pipeline/hardware_sessions.rs`), a
   virtual camera publishing the program as BGRA at the canvas size (fitted into a canvas of another size, started again after a stop, running beside
   a stream, refused without a camera in the backends or while another output uses
   it, a refused start keeping the sink, a failed publish failing only that output, black under the privacy screen), a render panic failing both outputs, overload drops from a
@@ -501,7 +508,8 @@ feature and `jstream-protocol`'s `fixtures` feature (the differential and parity
 tests), `jstream-platform`'s `fake` feature (the pipeline test and
 `tests/scenarios.rs`, and the CLAP fake hosts), `jstream-youtube`'s `fake` feature
 (`src/tests/youtube.rs`), `jstream-browser`'s `fake` feature (the browser pages in
-`src/tests/audio.rs`), `zune-jpeg` (decoding the preview's JPEG pictures in tests),
+`src/tests/audio.rs`), `jstream-crash` (the crash redaction's `Secrets` fed by the
+YouTube secret hook, in `src/tests/youtube.rs`), `zune-jpeg` (decoding the preview's JPEG pictures in tests),
 `insta` (the built-in kinds' snapshot, `schema/kinds.snap`) and `jstream-mcp`
 (`tests/mcp.rs`); the tests also use `serde_json`
 for settings values and saved collection files. All of them
@@ -1540,8 +1548,20 @@ other outputs on the same session, whether its video encoder is a hardware one
 its first frame reports software) and whether the session is `dedicated` to it, plus
 the video sessions and hardware sessions open
 ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)); it does not
-guess a hardware cap. A hardware session limit fails the start with the encoder's own
-error for now, not a session-limit code.
+guess a hardware cap. Instead, while any running output holds a hardware video
+session, a new video session opens with `require` in place of `prefer` (`avoid` stays
+software), so a refusal can't fall back to software. That refusal fails the start with
+`hardware_session_limit`, naming the outputs that hold hardware sessions and keeping the
+encoder's message (0.44, `StartError`; ADR-0027 §3, #443). This holds only for a codec
+the platform lists a hardware encoder for, or when it can't list them: a held session
+can't be what refuses a codec the machine has no hardware encoder for (HEVC or AV1 on
+many GPUs), so that session opens with its own preference, `prefer` falls back, and a
+failure stays `action_failed` with what the machine lacks. An output that joins an
+open session opens nothing, so it is never refused. With no hardware session open,
+`prefer` still falls back to software when hardware refuses (ADR-0031). A hardware
+encoder that takes the session and then refuses its first frame no longer falls back
+either (its fallback is `prefer`'s only), but that comes after `output.start` has
+answered: the output settles `failed` with the encoder's reason, not this code.
 
 **Video mixes.** The render thread keeps one frame per video mix the running sessions
 are fed from, each at its session's size, and counts base ticks (1/30 s). On a tick it
@@ -1654,7 +1674,8 @@ lavapipe can open slower than that on a loaded CI runner. When others are runnin
 theirs. It then gets the encoder session for its key (opening one if no running
 output has it), opens its sink, subscribes to the session and starts its output
 thread, and returns once that thread has started the sink. Success emits `active`.
-Failure emits `failed` and `action_failed`, and drops a one-shot publish target so
+Failure emits `failed` and `action_failed` (`hardware_session_limit` when a new
+hardware session is refused, as above), and drops a one-shot publish target so
 the host sets another before retrying (an opener is kept); the other outputs keep
 running. `output.stop` on an `active` output emits `stopping`, drops its pipeline
 outside the lock (the program stage and an encoder session stop with the last output

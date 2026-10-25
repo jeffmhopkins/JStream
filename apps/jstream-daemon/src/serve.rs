@@ -156,7 +156,9 @@ fn with_youtube(engine: Engine, client: Option<youtube::Client>, secrets: &Secre
         match jstream_core::YoutubeSetup::built_in(transport, tokens) {
             Some(setup) => {
                 tracing::info!("YouTube sign-in is available");
-                engine.with_youtube(setup.with_secret_hook(secrets.hook()))
+                engine.with_youtube(
+                    setup.with_secret_hook(secrets.hook(jstream_youtube::SecretKind::slot)),
+                )
             }
             None => engine,
         }

@@ -757,9 +757,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   dedicated to it because of its own video chain (0.33), plus the sessions and hardware
   sessions in use. A profile's settings and the output's video mix at start
   count, so an output started after `encoder.update` gets a session of its own, and
-  outputs on different mixes never share one. Planned: when the encoder refuses a
-  session, `output.start` fails with a stable session-limit error code naming the
-  outputs that hold sessions, with no fallback to a software encoder
+  outputs on different mixes never share one. While any output holds a hardware
+  session, a new one for a codec the machine lists a hardware encoder for opens with
+  `require`, and when the encoder refuses it
+  `output.start` fails with `hardware_session_limit` (0.44) naming the outputs that hold
+  hardware sessions, with no fallback to a software encoder
   ([ADR-0027](adr/0027-program-master-and-output-chains.md)).
 - **Queries** (`state.get` → state + `rev`, the canvas included, `scene.list`, `source.list`, `item.list`,
   `output.list`, `output.status`, `encoder.list` (protocol 0.13), `video_mix.list`
@@ -1037,8 +1039,10 @@ reports the loss as an error rather than panicking. The third loss within
 60 s fails the output instead. Each loss is logged and counted in the output's stats
 ([jstream-core › Design](../crates/jstream-core/README.md#design)). Not built yet: the
 engine event for a loss (a protocol change), attributing a loss to the effect pack that
-was drawing, and quarantining that pack, all of which wait for packs to be drawn in the
-engine (X1).
+was drawing, quarantining that pack, and the GPU-time guard (timestamp queries that
+quarantine an effect whose pass runs over half the frame budget for 30 frames running,
+before Windows' TDR fires), all of which wait for packs to be drawn in the engine (V0's
+effect-pack kinds).
 
 **Transitions** ([ADR-0029](adr/0029-transitions.md), with
 [ADR-0052](adr/0052-transition-mechanics-and-studio-preview.md)'s mechanics). A Move is not a texture blend:
