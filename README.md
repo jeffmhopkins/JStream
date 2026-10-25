@@ -51,16 +51,16 @@ in, and **What's left** lists each unfinished item with the steps it still needs
 |---|---|---|---|---|
 | [M0: Foundation and risk spikes](ROADMAP.md#m0) | `██████████` 100% | 11 | 0 | 0 |
 | [M1a: Thin slice to YouTube](ROADMAP.md#m1) | `██████████` 100% | 18 | 0 | 0 |
-| [M1b: Scenes and mixing](ROADMAP.md#m1) | `█████████░` 92% | 36 | 1 | 2 |
+| [M1b: Scenes and mixing](ROADMAP.md#m1) | `█████████░` 92% | 36 | 3 | 0 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `█████████░` 91% | 10 | 1 | 0 |
-| [M2: UI](ROADMAP.md#m2) | `████████░░` 82% | 23 | 2 | 3 |
+| [M2: UI](ROADMAP.md#m2) | `█████████░` 86% | 24 | 4 | 0 |
 | [M3: Depth and reach](ROADMAP.md#m3) | `████░░░░░░` 38% | 6 | 2 | 8 |
 
-111 of 130 items are merged; 11 of those still wait on a run on Windows hardware.
+112 of 130 items are merged; 11 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 30 items, by next step: 🔨 build 19, 🌊 its wave lands 1, 🧪 Windows run 8, 👤 maintainer 2</summary>
+<summary><b>What's left</b>: 29 items, by next step: 🔨 build 18, 🌊 its wave lands 1, 🧪 Windows run 8, 👤 maintainer 2</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
@@ -72,20 +72,19 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | C5 | Audio sources | M1b | 🧪 Windows run | the WASAPI device tests on real devices (#778, item 18 of the Windows hardware pass) | #238 |
 | C8 | Browser source (CEF) | M1b | 🔨 build, then 🧪 Windows run | the Windows runs #335 (steps 1 to 4) and #336 passed; #341 passed except its refused-request count (2, not 1), so page_check needs to name the refused URLs, then a rerun; Ctrl-C with CEF running skips the graceful stop (#436), a fix to build, then #335's step 5 runs again | #283, #289, #298, #326 |
 | V0 | Video filter chain runtime | M1b | 🔨 build | part 1 runs the built-in kinds, part 2 loads apply_lut and image_mask assets, part 3 gives scene_mask its scene, part 4 pools scratch layers and each draw's uniform buffers, and #730 uploads LUT tables directly; then effect-pack kinds. No bounds inset: on a source chain shadow, outline and glow draw within the frame (ADR-0065 §5) | #595, #607, #626, #712, #717, #718, #730 |
-| V4 | Scene filter chains and item effects | M1b | 🔨 build | ADR-0065 designs a video chain owned by a scene or by one placement, and ADR-0068 puts item effects in v1; built after V0: the scene and item owners in the protocol, graph, core and render, then the UI's scene filters (FL-06). The engine rejects both owners today (#529) |  |
-| D9 | Audio monitoring: a bus's monitor device and tap point | M1b | 🔨 build | ADR-0028 gives a bus a monitor, a device and a tap point before or after its filters (decision register D22); nothing in the protocol yet, and the mixer's Hear: before or after FX row (MX-05) waits on it |  |
+| V4 | Scene filter chains and item effects | M1b | 🔨 build, then 🌊 its wave lands | ADR-0065 designs a video chain owned by a scene or by one placement, and ADR-0068 puts item effects in v1; built after V0: the scene and item owners in the protocol, graph, core and render, then the UI's scene filters (FL-06). Part of #529: a built-in vignette filter (#802) and the scene and item owners in the protocol (#813, protocol 0.43, still refused by the graph) are in review into wave/m1-5; the graph model, core and render parts follow | #802, #813 |
+| D9 | Audio monitoring: a bus's monitor device and tap point | M1b | 🔨 build, then 🌊 its wave lands | ADR-0028 gives a bus a monitor, a device and a tap point before or after its filters (decision register D22); bus monitor taps and the monitor player (#801, part 1) and the monitor device and tap point in the protocol (#816, part 2, protocol 0.42) are in review into wave/m1-5; the mixer's Hear: before or after FX row (MX-05) waits on them | #801, #816 |
 | G2 | vcam media source DLL | M1c | 🧪 Windows run | the pacing rerun (#777, with item 6 of the Windows hardware pass) | #174, #195, #200, #229 |
 | G3c | --register-vcam | M1c | 🧪 Windows run | Windows run (#563) | #235, #565 |
 | H8 | Hardware acceleration by default, with GPU fallback and device-loss recovery | M1d | 🧪 Windows run | #437 on main; the encoder's software fallback (#568), the mid-run GPU capture fallback (#569, #580), device-loss recovery (#604) and sessions after a fallback (#708) landed with wave/m1-3 (#754); Windows runs: the mid-run fallback (#576) and a forced TDR (#620); open follow-ups #734, #443 and #667 | #437, #568, #569, #580, #604, #708 |
 | Q6 | Threat-model follow-ups | M1d | 🔨 build, then 🌊 its wave lands, then 🧪 Windows run | from the Q5 threat model: user-only token, devices and log files (#548) and crash reports (#662) on Windows, browser pages refused every permission and local-network requests decided by policy (#535, #549, #714, #729), the vcam's owner checks (#540), local redacted desktop crash reports (#552) and a warning on cleartext rtmp:// (#555) landed with wave/m1-3 (#754); in review: the audit log and collection file user-only (#574, for #547), the rtmp:// flag in output.status (#653, for #562) and the CLAP IPC hardening (#573, for #351); open: #344, #347, #349 (with X1) and #353; Windows runs #546 and #557 | #535, #540, #548, #549, #552, #555, #662, #714, #729, #573, #574, #653 |
 | U4p | Live preview on canvas | M2 | 🧪 Windows run | the canvas's H.264 preview path on Windows (#380) | #302 |
 | T1 | Studio mode and transitions | M2 | 🧪 Windows run | #260 landed with wave/m1-3 (#754); the transition node's per-tick cost is still to measure on S1 hardware (#357, ADR-0029) | #260 |
-| E2b | Privacy screen and encoder sharing key | M2 | 🔨 build | on/off privacy covering every output, the encoder owner key and cost reporting (#317) landed with wave/m1-3 (#754); the look setting, the slate and muted sources to build | #317 |
+| E2b | Privacy screen and encoder sharing key | M2 | 🔨 build, then 🌊 its wave lands | on/off privacy covering every output, the encoder owner key and cost reporting (#317) landed with wave/m1-3 (#754); the privacy screen muting the microphones (#804) is in review into wave/m1-5; the look setting and the slate to build | #317, #804 |
 | C9 | Media file source | M2 | 🔨 build, then 🧪 Windows run | the media file run passed on main (#382) except an MP3's loop seam, a 56 ms gap at each wrap (#445): a fix to build, then a rerun | #245, #322 |
 | K1 | Keyframe scenes, folders, organisation metadata and hotkeys | M2 | 🔨 build, then 🌊 its wave lands | hotkeys #319 landed with wave/m1-2 (#545); organisation metadata #323 landed with wave/m1-3 (#754); keyframe scenes part 1, in the protocol, graph and engine (#720, protocol 0.39), is in review into wave/m1-4; a group's children and the UI follow (#702) | #319, #720 |
 | U6 | Desktop UI as a 1:1 match of the UI prototype | M2 | 🔨 build, then 🌊 its wave lands, then 👤 maintainer | #748; docs/UI-FEATURES.md tracks it row by row. Theme and header (#495), docking (#496), the canvas (#615, #637), the Inspector (#659) and the Transform panel (#664) landed with wave/m1-3 (#754); menus, dialogs and live drag (#766, #747) are in wave/m1-4; the Scenes and Scene objects panels (#770) are in review; the filters, mixer and keyboard batches are still to build. Rows that wait on the engine follow B12, C2b, V4, D9, E2b, K1, X1 and Y4, and on two gaps with no item yet: previews of any scene or source (decision register D36) and the audit log over the protocol (D38); the bundled IBM Plex fonts are a licensing call for the maintainer (WS-02) | #495, #496, #615, #637, #659, #664, #766, #770 |
-| B12 | Source sizes as runtime state (source.sizes) | M2 | 🔨 build | ADR-0022 decision 4, accepted and not built: the source.sizes query and source.size_changed event, a protocol bump; it unblocks crop by dragging (CV-08), size in % (IN-03) and native-size placement |  |
-| C2b | Crisp text at any item scale | M2 | 🔨 build | #749: a scaled text item resamples its bitmap; sources don't see their item's scale, so it starts with an agent-tier ADR |  |
+| B12 | Source sizes as runtime state (source.sizes) | M2 | 🔨 build, then 🌊 its wave lands | ADR-0022 decision 4: the source.sizes query and source.size_changed event (#806, protocol 0.40) are in review into wave/m1-5; it unblocks crop by dragging (CV-08), size in % (IN-03) and native-size placement | #806 |
 | Y4 | YouTube chat, metadata, health and audience stats | M3 | 🔨 build, then 🌊 its wave lands, then 👤 maintainer | chat reading and the featured message (#363, landed with wave/m1-2, #545); chat preset of the browser source (#375, landed with wave/m1); audience stats in jstream-youtube (#594, landed with wave/m3-2, #663); the engine's stats polling, the youtube.stats event and query, and the quota estimate (#696, protocol 0.38, in review into wave/m1-4); the chat rate waits on the engine polling chat; signed-in features need the OAuth client (ADR-0058) | #363, #375, #594, #696 |
 | CL1 | CLAP plugin host | M3 | 🔨 build, then 🧪 Windows run | parts 1 to 3 merged (wave/m3 landed in #477): the shared-memory contract, the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; the host's Windows run passed in #342; CLAP filters in a source's audio chain, part 4 (#488), is in review into wave/m3-4, and the IPC hardening (#573, for #351) is stacked on it; then a live-audio Windows run (new issue once CLAP filters run) | #272, #281, #407, #488, #573 |
 | WA1 | WASM automation plugins | M3 | 🔨 build | WASM host #486 landed with wave/m3-2 (#663); its wall-time deadlines #623, the cap of 50 commands a second #722, the 1,000-event queue #725 and the wire half #642 (protocol 0.35) landed with wave/m3-3 (#786); the engine side to build | #486, #623, #642, #722, #725 |
@@ -186,8 +185,8 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | F2b | Record output kind | ✅ merged | #170 |
 | F3 | Encoder profiles and sharing | ✅ merged | #208 |
 | I2 | Live values | ✅ merged | #244 |
-| V4 | Scene filter chains and item effects | ⏳ planned: ADR-0065 designs a video chain owned by a scene or by one placement, and ADR-0068 puts item effects in v1; built after V0: the scene and item owners in the protocol, graph, core and render, then the UI's scene filters (FL-06). The engine rejects both owners today (#529) |  |
-| D9 | Audio monitoring: a bus's monitor device and tap point | ⏳ planned: ADR-0028 gives a bus a monitor, a device and a tap point before or after its filters (decision register D22); nothing in the protocol yet, and the mixer's Hear: before or after FX row (MX-05) waits on it |  |
+| V4 | Scene filter chains and item effects | 🔍 in review: ADR-0065 designs a video chain owned by a scene or by one placement, and ADR-0068 puts item effects in v1; built after V0: the scene and item owners in the protocol, graph, core and render, then the UI's scene filters (FL-06). Part of #529: a built-in vignette filter (#802) and the scene and item owners in the protocol (#813, protocol 0.43, still refused by the graph) are in review into wave/m1-5; the graph model, core and render parts follow | #802, #813 |
+| D9 | Audio monitoring: a bus's monitor device and tap point | 🔍 in review: ADR-0028 gives a bus a monitor, a device and a tap point before or after its filters (decision register D22); bus monitor taps and the monitor player (#801, part 1) and the monitor device and tap point in the protocol (#816, part 2, protocol 0.42) are in review into wave/m1-5; the mixer's Hear: before or after FX row (MX-05) waits on them | #801, #816 |
 
 </details>
 
@@ -226,7 +225,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 </details>
 
 <details>
-<summary><b>M2</b> UI: 23 of 28 merged</summary>
+<summary><b>M2</b> UI: 24 of 28 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -247,7 +246,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | T1 | Studio mode and transitions | 🧪 merged, Windows run pending: #260 landed with wave/m1-3 (#754); the transition node's per-tick cost is still to measure on S1 hardware (#357, ADR-0029) | #260 |
 | T1u | Studio-mode UI | ✅ merged: #304 landed with wave/m1-3 (#754) | #304 |
 | E2 | Video mixes | ✅ merged | #259 |
-| E2b | Privacy screen and encoder sharing key | ⏳ planned: on/off privacy covering every output, the encoder owner key and cost reporting (#317) landed with wave/m1-3 (#754); the look setting, the slate and muted sources to build | #317 |
+| E2b | Privacy screen and encoder sharing key | 🔍 in review: on/off privacy covering every output, the encoder owner key and cost reporting (#317) landed with wave/m1-3 (#754); the privacy screen muting the microphones (#804) is in review into wave/m1-5; the look setting and the slate to build | #317, #804 |
 | D8 | Master and output audio chains | ✅ merged | #249, #303 |
 | D8p | Audio chain protocol fields | ✅ merged | #303 |
 | C9 | Media file source | 🧪 merged, Windows run pending: the media file run passed on main (#382) except an MP3's loop seam, a 56 ms gap at each wrap (#445): a fix to build, then a rerun | #245, #322 |
@@ -256,8 +255,8 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | K1 | Keyframe scenes, folders, organisation metadata and hotkeys | 🔍 in review: hotkeys #319 landed with wave/m1-2 (#545); organisation metadata #323 landed with wave/m1-3 (#754); keyframe scenes part 1, in the protocol, graph and engine (#720, protocol 0.39), is in review into wave/m1-4; a group's children and the UI follow (#702) | #319, #720 |
 | K2 | Keyframe scenes: model and evaluator | ✅ merged | #350 |
 | U6 | Desktop UI as a 1:1 match of the UI prototype | 🔍 in review: #748; docs/UI-FEATURES.md tracks it row by row. Theme and header (#495), docking (#496), the canvas (#615, #637), the Inspector (#659) and the Transform panel (#664) landed with wave/m1-3 (#754); menus, dialogs and live drag (#766, #747) are in wave/m1-4; the Scenes and Scene objects panels (#770) are in review; the filters, mixer and keyboard batches are still to build. Rows that wait on the engine follow B12, C2b, V4, D9, E2b, K1, X1 and Y4, and on two gaps with no item yet: previews of any scene or source (decision register D36) and the audit log over the protocol (D38); the bundled IBM Plex fonts are a licensing call for the maintainer (WS-02) | #495, #496, #615, #637, #659, #664, #766, #770 |
-| B12 | Source sizes as runtime state (source.sizes) | ⏳ planned: ADR-0022 decision 4, accepted and not built: the source.sizes query and source.size_changed event, a protocol bump; it unblocks crop by dragging (CV-08), size in % (IN-03) and native-size placement |  |
-| C2b | Crisp text at any item scale | ⏳ planned: #749: a scaled text item resamples its bitmap; sources don't see their item's scale, so it starts with an agent-tier ADR |  |
+| B12 | Source sizes as runtime state (source.sizes) | 🔍 in review: ADR-0022 decision 4: the source.sizes query and source.size_changed event (#806, protocol 0.40) are in review into wave/m1-5; it unblocks crop by dragging (CV-08), size in % (IN-03) and native-size placement | #806 |
+| C2b | Crisp text at any item scale | ✅ merged: #749: ADR-0073 (agent tier, accepted) draws a source at the density its most enlarged item needs, and the text kind draws at it; built in #781, landed with wave/m1-4 (#810) | #781 |
 
 </details>
 

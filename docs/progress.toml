@@ -535,19 +535,19 @@ prs = [244]
 id = "V4"
 milestone = "M1b"
 title = "Scene filter chains and item effects"
-status = "planned"
-prs = []
-note = "ADR-0065 designs a video chain owned by a scene or by one placement, and ADR-0068 puts item effects in v1; built after V0: the scene and item owners in the protocol, graph, core and render, then the UI's scene filters (FL-06). The engine rejects both owners today (#529)"
-needs = ["build"]
+status = "review"
+prs = [802, 813]
+note = "ADR-0065 designs a video chain owned by a scene or by one placement, and ADR-0068 puts item effects in v1; built after V0: the scene and item owners in the protocol, graph, core and render, then the UI's scene filters (FL-06). Part of #529: a built-in vignette filter (#802) and the scene and item owners in the protocol (#813, protocol 0.43, still refused by the graph) are in review into wave/m1-5; the graph model, core and render parts follow"
+needs = ["build", "wave"]
 
 [[item]]
 id = "D9"
 milestone = "M1b"
 title = "Audio monitoring: a bus's monitor device and tap point"
-status = "planned"
-prs = []
-note = "ADR-0028 gives a bus a monitor, a device and a tap point before or after its filters (decision register D22); nothing in the protocol yet, and the mixer's Hear: before or after FX row (MX-05) waits on it"
-needs = ["build"]
+status = "review"
+prs = [801, 816]
+note = "ADR-0028 gives a bus a monitor, a device and a tap point before or after its filters (decision register D22); bus monitor taps and the monitor player (#801, part 1) and the monitor device and tap point in the protocol (#816, part 2, protocol 0.42) are in review into wave/m1-5; the mixer's Hear: before or after FX row (MX-05) waits on them"
+needs = ["build", "wave"]
 
 # M1c
 
@@ -814,10 +814,10 @@ prs = [259]
 id = "E2b"
 milestone = "M2"
 title = "Privacy screen and encoder sharing key"
-status = "planned"
-prs = [317]
-note = "on/off privacy covering every output, the encoder owner key and cost reporting (#317) landed with wave/m1-3 (#754); the look setting, the slate and muted sources to build"
-needs = ["build"]
+status = "review"
+prs = [317, 804]
+note = "on/off privacy covering every output, the encoder owner key and cost reporting (#317) landed with wave/m1-3 (#754); the privacy screen muting the microphones (#804) is in review into wave/m1-5; the look setting and the slate to build"
+needs = ["build", "wave"]
 
 [[item]]
 id = "D8"
@@ -886,19 +886,18 @@ needs = ["build", "wave", "maintainer"]
 id = "B12"
 milestone = "M2"
 title = "Source sizes as runtime state (source.sizes)"
-status = "planned"
-prs = []
-note = "ADR-0022 decision 4, accepted and not built: the source.sizes query and source.size_changed event, a protocol bump; it unblocks crop by dragging (CV-08), size in % (IN-03) and native-size placement"
-needs = ["build"]
+status = "review"
+prs = [806]
+note = "ADR-0022 decision 4: the source.sizes query and source.size_changed event (#806, protocol 0.40) are in review into wave/m1-5; it unblocks crop by dragging (CV-08), size in % (IN-03) and native-size placement"
+needs = ["build", "wave"]
 
 [[item]]
 id = "C2b"
 milestone = "M2"
 title = "Crisp text at any item scale"
-status = "planned"
-prs = []
-note = "#749: a scaled text item resamples its bitmap; sources don't see their item's scale, so it starts with an agent-tier ADR"
-needs = ["build"]
+status = "done"
+prs = [781]
+note = "#749: ADR-0073 (agent tier, accepted) draws a source at the density its most enlarged item needs, and the text kind draws at it; built in #781, landed with wave/m1-4 (#810)"
 
 # M3
 
