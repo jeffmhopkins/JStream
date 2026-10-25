@@ -236,7 +236,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   than that draws nothing, and the engine logs it at `debug`. A scene with a scene
   filter is drawn once per frame as if it were the program scene, so the count restarts
   below it ([ADR-0065](adr/0065-scene-chains-and-item-effects.md)), as it does below a
-  scene a `scene_mask` reads.
+  scene a `scene_mask` reads or an item with effects shows.
 - **Groups and keyframe scenes** ([ADR-0024](adr/0024-scene-structure.md)):
   - A **group** is a scene with `role = group`. The role changes no engine behaviour: a
     group renders, nests and takes filters like any scene, and clients hide groups from
@@ -300,8 +300,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   ([ADR-0065](adr/0065-scene-chains-and-item-effects.md); item effects are in v1 under
   [ADR-0068](adr/0068-item-effects-in-v1.md)). A reference in them is an edge of the
   scene, so it counts for cycles and blocks deleting its target. A keyframe scene has
-  none of its own. The engine runs a scene's filters on its composite; it refuses the
-  `item` owner until it renders item effects.
+  none of its own. The engine runs a scene's filters on its composite, and an item's
+  effects over its box in a layer grown by their outset, before its opacity and blend.
 - **Settings:** a source's `settings`, each filter's, and each transition preset's are a
   map of values described by its kind's descriptor, which the engine reports and
   validates against. References to scenes, sources, buses and asset files inside
@@ -669,8 +669,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   [ADR-0027](adr/0027-program-master-and-output-chains.md), protocol 0.29). Since 0.43
   the owners `scene` and `item`, `SceneInfo.filters`, `ItemInfo.effects` and a
   descriptor's `max_outset_px` are in the protocol
-  ([ADR-0065](adr/0065-scene-chains-and-item-effects.md)). The engine runs scene
-  filters, and refuses the `item` owner on `owner` until it renders item effects.
+  ([ADR-0065](adr/0065-scene-chains-and-item-effects.md)). The engine runs both.
   `source.set_audio`, `bus.create`, `bus.rename`, `bus.set_fader`, `bus.delete`,
   `send.set` and `send.remove` edit sources' audio, the buses and the send matrix
   ([ADR-0028](adr/0028-audio-model-v2.md), protocol 0.19), and `bus.set_monitor` a
@@ -758,9 +757,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   dedicated to it because of its own video chain (0.33), plus the sessions and hardware
   sessions in use. A profile's settings and the output's video mix at start
   count, so an output started after `encoder.update` gets a session of its own, and
-  outputs on different mixes never share one. Planned: when the encoder refuses a
-  session, `output.start` fails with a stable session-limit error code naming the
-  outputs that hold sessions, with no fallback to a software encoder
+  outputs on different mixes never share one. While any output holds a hardware
+  session, a new one for a codec the machine lists a hardware encoder for opens with
+  `require`, and when the encoder refuses it
+  `output.start` fails with `hardware_session_limit` (0.44) naming the outputs that hold
+  hardware sessions, with no fallback to a software encoder
   ([ADR-0027](adr/0027-program-master-and-output-chains.md)).
 - **Queries** (`state.get` → state + `rev`, the canvas included, `scene.list`, `source.list`, `item.list`,
   `output.list`, `output.status`, `encoder.list` (protocol 0.13), `video_mix.list`
@@ -1016,7 +1017,7 @@ import, a browser page's included) into a premultiplied `Rgba16Float` layer, of 
 ([jstream-render › Filters](../crates/jstream-render/README.md#filters));
 `apply_filter_into` draws into a layer the caller keeps, which is how `jstream-core`'s
 chain runtime runs a source's video chain before placement, and a scene's over its
-composite once per frame wherever the scene shows
+composite once per frame wherever the scene shows, and an item's effects over its box
 ([ADR-0065](adr/0065-scene-chains-and-item-effects.md)), without allocating per
 frame. Still outside this crate: the render
 thread (in `jstream-core`), P010, loading effect packs (`jstream-effects`; this
@@ -1038,8 +1039,10 @@ reports the loss as an error rather than panicking. The third loss within
 60 s fails the output instead. Each loss is logged and counted in the output's stats
 ([jstream-core › Design](../crates/jstream-core/README.md#design)). Not built yet: the
 engine event for a loss (a protocol change), attributing a loss to the effect pack that
-was drawing, and quarantining that pack, all of which wait for packs to be drawn in the
-engine (X1).
+was drawing, quarantining that pack, and the GPU-time guard (timestamp queries that
+quarantine an effect whose pass runs over half the frame budget for 30 frames running,
+before Windows' TDR fires), all of which wait for packs to be drawn in the engine (V0's
+effect-pack kinds).
 
 **Transitions** ([ADR-0029](adr/0029-transitions.md), with
 [ADR-0052](adr/0052-transition-mechanics-and-studio-preview.md)'s mechanics). A Move is not a texture blend:

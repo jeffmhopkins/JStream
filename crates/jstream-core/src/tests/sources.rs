@@ -819,7 +819,8 @@ fn a_video_filters_asset_is_loaded_for_its_chain() {
     let _ = fs::remove_dir_all(dir);
 }
 
-/// ADR-0065: a scene's video filter gets the file it reads too, as a source's does.
+/// ADR-0065: a scene's video filter and an item's effect get the file they read too,
+/// as a source's filter does.
 #[test]
 fn a_scene_filters_asset_is_loaded_for_its_chain() {
     let dir = temp_dir("scene-filter-asset");
@@ -846,6 +847,17 @@ fn a_scene_filters_asset_is_loaded_for_its_chain() {
                 chain: jstream_protocol::FilterChain::Video,
                 filter_id: jstream_protocol::FilterId::new("grade"),
                 kind: "apply_lut".into(),
+                settings: settings(&[("lut", lut.clone())]),
+                enabled: None,
+                index: None,
+            },
+            Edit::FilterAdd {
+                owner: jstream_protocol::FilterOwner::Item {
+                    item_id: ItemId::new("i1"),
+                },
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new("look"),
+                kind: "apply_lut".into(),
                 settings: settings(&[("lut", lut)]),
                 enabled: None,
                 index: None,
@@ -862,6 +874,14 @@ fn a_scene_filters_asset_is_loaded_for_its_chain() {
     assert!(
         chain.filters[0].reference.is_some(),
         "the scene's LUT is loaded"
+    );
+    let effects = snapshot
+        .shot()
+        .item_chain(&SceneId::new("a"), &ItemId::new("i1"))
+        .expect("the item's effects");
+    assert!(
+        effects.filters[0].reference.is_some(),
+        "the item's LUT is loaded"
     );
     let _ = fs::remove_dir_all(dir);
 }
