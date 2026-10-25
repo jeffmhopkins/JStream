@@ -768,7 +768,11 @@ tests check:
   doesn't survive a round trip through its `f32` texture coordinate;
 - that two crops of one source get a chain each;
 - that a cropped floor minified onto coarse levels shows nothing of a red border just
-  past its crop (red 160 with the chain built from the whole source).
+  past its crop (red 160 with the chain built from the whole source);
+- that a slightly tilted item of a 128² image placed as 64² and cropped in those pixels
+  samples its crop's texels: each half of the crop where it belongs and nothing past it
+  (`Region::in_texels` at its call site; fails with the crop read as texels, the extent
+  and texels swapped, or the UV remap divided by the extent).
 
 Accepted means drawable (protocol 0.34's `check_drawable`): over 3D geometries from a
 fixed seed, every input spread from 0.1 to f32's limit, each one `check_drawable` accepts
