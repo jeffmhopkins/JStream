@@ -3,6 +3,9 @@ resolver = "3"
 members = ["apps/*", "crates/*", "crates/jstream-ui/tests/e2e/mock-daemon", "xtask"]
 
 [workspace.package]
+# The release version, which the apps in the portable zip take (`version.workspace`); a
+# release tag is `v` and this (docs/runbooks/release.md). Libraries stay at 0.0.0.
+version = "0.1.0-alpha.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/jeffmhopkins/JStream"
@@ -91,6 +94,7 @@ jstream-platform-macos = { path = "crates/jstream-platform-macos" }
 jstream-platform-windows = { path = "crates/jstream-platform-windows" }
 jstream-plugin-clap = { path = "crates/jstream-plugin-clap" }
 jstream-plugin-proto = { path = "crates/jstream-plugin-proto" }
+jstream-plugin-wasm = { path = "crates/jstream-plugin-wasm" }
 jstream-protocol = { path = "crates/jstream-protocol" }
 jstream-render = { path = "crates/jstream-render" }
 jstream-server = { path = "crates/jstream-server" }

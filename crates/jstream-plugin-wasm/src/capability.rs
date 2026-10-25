@@ -14,6 +14,8 @@ use std::collections::BTreeSet;
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Capabilities {
     granted: BTreeSet<String>,
+    /// Every command is granted ([`Capabilities::every`]).
+    every: bool,
 }
 
 impl Capabilities {
@@ -31,15 +33,26 @@ impl Capabilities {
     {
         Capabilities {
             granted: names.into_iter().map(Into::into).collect(),
+            every: false,
+        }
+    }
+
+    /// Grants every command, for a caller whose `Control` checks each call itself, as
+    /// `jstream-core` does against the plugin's protocol grant (ADR-0069). A call that
+    /// names no command is still denied.
+    pub fn every() -> Self {
+        Capabilities {
+            granted: BTreeSet::new(),
+            every: true,
         }
     }
 
     /// Whether the command `name` is granted.
     pub fn allows(&self, name: &str) -> bool {
-        self.granted.contains(name)
+        self.every || self.granted.contains(name)
     }
 
-    /// The granted command names, sorted.
+    /// The command names granted by name, sorted: none for [`Capabilities::every`].
     pub fn names(&self) -> impl Iterator<Item = &str> {
         self.granted.iter().map(String::as_str)
     }
@@ -141,6 +154,26 @@ mod tests {
             ends_gesture: None,
         });
         assert_eq!(caps.check(&empty), Err(Vec::new()));
+    }
+
+    #[test]
+    fn every_grants_each_command_but_not_a_call_that_names_none() {
+        let caps = Capabilities::every();
+        assert_eq!(caps.check(&query(Query::SceneList)), Ok(()));
+        let start = Call::Action {
+            action: Action::OutputStart {
+                output_id: OutputId::from("main"),
+            },
+        };
+        assert_eq!(caps.check(&start), Ok(()));
+        let empty = Call::Batch(Batch {
+            edits: Vec::new(),
+            expected_rev: None,
+            idempotency_key: None,
+            ends_gesture: None,
+        });
+        assert_eq!(caps.check(&empty), Err(Vec::new()));
+        assert_eq!(caps.names().count(), 0);
     }
 
     #[test]

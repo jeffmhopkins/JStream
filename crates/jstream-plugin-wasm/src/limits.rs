@@ -4,6 +4,12 @@
 //! 1 s for its load, 64 MiB of linear memory and 10,000 table elements, plus a fuel
 //! budget. A plugin's configuration can lower them, never raise them: each setter keeps
 //! the smaller of the current value and the one asked for.
+//!
+//! Growing memory or the table past its cap traps ([`Caps`]): ADR-0069 treats a plugin
+//! that reaches a cap as having trapped, and the trap is [`Error::MemoryLimit`], so the
+//! engine can say `memory_limit`.
+//!
+//! [`Error::MemoryLimit`]: crate::Error::MemoryLimit
 
 use std::time::Duration;
 
@@ -128,6 +134,79 @@ impl Limits {
     /// The most commands the plugin may send to `Control` in any second.
     pub fn commands_per_second(&self) -> u32 {
         self.commands_per_second
+    }
+}
+
+/// A plugin store's resource limiter: one instance, one memory and one table, and a growth
+/// of memory or the table past its cap is a trap carrying [`CapReached`], never the −1 or
+/// failed `table.grow` a plugin could ignore. A growth past the module's own declared
+/// maximum, below the cap, fails as WASM says, since that is the plugin's own limit.
+pub(crate) struct Caps {
+    memory_bytes: usize,
+    table_elements: usize,
+}
+
+impl Caps {
+    pub(crate) fn new(limits: &Limits) -> Self {
+        Caps {
+            memory_bytes: limits.memory_bytes(),
+            table_elements: limits.table_elements(),
+        }
+    }
+}
+
+/// Why a growth trapped: it asked for more than the plugin's cap.
+#[derive(Debug, thiserror::Error)]
+#[error("the plugin asked for {desired} {unit}, past its cap of {cap}")]
+pub(crate) struct CapReached {
+    desired: usize,
+    cap: usize,
+    unit: &'static str,
+}
+
+impl wasmtime::ResourceLimiter for Caps {
+    fn memory_growing(
+        &mut self,
+        _current: usize,
+        desired: usize,
+        maximum: Option<usize>,
+    ) -> wasmtime::Result<bool> {
+        if desired > self.memory_bytes {
+            return Err(wasmtime::Error::new(CapReached {
+                desired,
+                cap: self.memory_bytes,
+                unit: "bytes of memory",
+            }));
+        }
+        Ok(maximum.is_none_or(|max| desired <= max))
+    }
+
+    fn table_growing(
+        &mut self,
+        _current: usize,
+        desired: usize,
+        maximum: Option<usize>,
+    ) -> wasmtime::Result<bool> {
+        if desired > self.table_elements {
+            return Err(wasmtime::Error::new(CapReached {
+                desired,
+                cap: self.table_elements,
+                unit: "table elements",
+            }));
+        }
+        Ok(maximum.is_none_or(|max| desired <= max))
+    }
+
+    fn instances(&self) -> usize {
+        1
+    }
+
+    fn tables(&self) -> usize {
+        1
+    }
+
+    fn memories(&self) -> usize {
+        1
     }
 }
 

@@ -120,7 +120,6 @@ test('a drag is one undoable edit', async ({ page, daemon }) => {
   // The page measures its stage in whole pixels, so allow half a screen pixel.
   const halfPixel = 0.5 / from.scale;
   await expectCorners(page, shifted(before, by.x / from.scale, by.y / from.scale), halfPixel);
-  // The box moves when the drop is sent; the header hears the revision after it.
   await expect.poll(() => rev(page)).toBe(startRev + 1);
   const moved = await corners(page);
 

@@ -25,7 +25,7 @@ use crate::privacy::Privacy;
 use crate::runtime::{
     Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, MixKey, OpenPublish,
     OutputEncode, OutputStats, Pending, PipelineEvent, Release, RenderHub, Running, SizeChange,
-    VcamOut, launch, launch_program, launch_vcam, parts_from,
+    StartError, VcamOut, launch, launch_program, launch_vcam, parts_from,
 };
 use crate::session::InProcessControl;
 use crate::snapshot::{
@@ -109,6 +109,36 @@ struct Shared {
     youtube: Mutex<Option<Arc<Youtube>>>,
     /// The preview thread, which draws and encodes every session's preview streams.
     previews: PreviewHub,
+    /// The WASM automation plugins installed this run (ADR-0069). On its own lock,
+    /// never taken with the collection lock held, nor while a plugin runs.
+    #[cfg(feature = "wasm-plugins")]
+    automation: crate::plugins::automation::Registry,
+}
+
+/// A handle to an [`Engine`] that doesn't keep it alive: what a plugin's thread holds,
+/// so an engine with plugins installed still ends when its last handle and session go.
+#[cfg(feature = "wasm-plugins")]
+#[derive(Clone)]
+pub(crate) struct WeakEngine {
+    shared: Weak<Shared>,
+    media: Option<Weak<MediaHost>>,
+    drops: Weak<Mutex<DropLedger>>,
+}
+
+#[cfg(feature = "wasm-plugins")]
+impl WeakEngine {
+    /// The engine, while any handle or session keeps it alive.
+    pub(crate) fn upgrade(&self) -> Option<Engine> {
+        let media = match &self.media {
+            Some(media) => Some(media.upgrade()?),
+            None => None,
+        };
+        Some(Engine {
+            shared: self.shared.upgrade()?,
+            media,
+            drops: self.drops.upgrade()?,
+        })
+    }
 }
 
 impl Default for Engine {
@@ -132,6 +162,8 @@ impl Default for Engine {
                 audio_scopes,
                 youtube: Mutex::new(None),
                 previews: PreviewHub::default(),
+                #[cfg(feature = "wasm-plugins")]
+                automation: crate::plugins::automation::Registry::default(),
             }),
             media: None,
             drops: Arc::new(Mutex::new(DropLedger::default())),
@@ -265,6 +297,28 @@ impl Engine {
     pub fn with_audit(self, sink: Arc<dyn AuditSink>) -> Self {
         self.shared.audit.set(sink);
         self
+    }
+
+    /// Saves the installed WASM plugins and their grants in `plugins.json` in the folder
+    /// `dir` from now on, after every install, grant, enable and disable, and loads the
+    /// ones saved there now: each that was enabled is loaded again, as `plugin.enable`
+    /// loads it (ADR-0076). The folder and file are created if missing. A file that can't
+    /// be read, or that a newer version wrote, is logged at `error` and left as it is, and
+    /// then no plugin is loaded or saved this run. Built without the `wasm-plugins`
+    /// feature, the engine runs no plugins and this does nothing.
+    ///
+    /// Call it once the engine is built, after [`with_backends`](Self::with_backends)
+    /// and the other `with_` methods: a plugin it loads holds a handle to the engine as
+    /// it is at this call, so one opened earlier would act on an engine without its
+    /// media host. A second call is logged and ignored.
+    pub fn open_plugin_dir(&self, dir: impl Into<PathBuf>) {
+        #[cfg(feature = "wasm-plugins")]
+        crate::plugins::automation::open_dir(self, dir.into());
+        #[cfg(not(feature = "wasm-plugins"))]
+        {
+            let _ = dir.into();
+            tracing::debug!("built without WASM plugins: no plugin folder to open");
+        }
     }
 
     /// Loads the collection from the file at `path` and saves it there after every
@@ -698,6 +752,30 @@ impl Engine {
         InProcessControl::new(self.clone())
     }
 
+    /// A handle to this engine that doesn't keep it alive.
+    #[cfg(feature = "wasm-plugins")]
+    pub(crate) fn downgrade(&self) -> WeakEngine {
+        WeakEngine {
+            shared: Arc::downgrade(&self.shared),
+            media: self.media.as_ref().map(Arc::downgrade),
+            drops: Arc::downgrade(&self.drops),
+        }
+    }
+
+    /// Sends `event` to every subscriber, outside any call.
+    #[cfg(feature = "wasm-plugins")]
+    pub(crate) fn emit(&self, event: &Event) {
+        let mut wake = Vec::new();
+        lock(&self.shared.state).subscribers.emit(event, &mut wake);
+        wake_all(wake);
+    }
+
+    /// The installed WASM automation plugins.
+    #[cfg(feature = "wasm-plugins")]
+    pub(crate) fn automation(&self) -> &crate::plugins::automation::Registry {
+        &self.shared.automation
+    }
+
     /// The current state revision.
     pub fn rev(&self) -> Rev {
         lock(&self.shared.state).graph.rev()
@@ -856,7 +934,9 @@ impl Engine {
             } => Some(output_id.clone()),
             _ => None,
         };
-        let result = if let Some(result) = self.youtube_call(&call) {
+        let result = if let Some(result) = self.plugin_call(&call) {
+            result
+        } else if let Some(result) = self.youtube_call(&call) {
             result
         } else if let Call::Action {
             action: action @ (Action::OutputSetKey { .. } | Action::OutputClearKey { .. }),
@@ -933,6 +1013,22 @@ impl Engine {
             sink.record(pending.finish(client_id, request_id, &result));
         }
         Executed::Ready(Box::new(result))
+    }
+
+    /// `plugin.install`, `plugin.grant` and `plugin.enable`, or `None` for any other call
+    /// or without the `wasm-plugins` feature. They run with no engine lock held: a plugin
+    /// loads, and may call back into the engine, while its install waits.
+    #[cfg(feature = "wasm-plugins")]
+    fn plugin_call(&self, call: &Call) -> Option<Result<CallResult, ProtocolError>> {
+        match call {
+            Call::Action { action } => crate::plugins::automation::action(self, action),
+            _ => None,
+        }
+    }
+
+    #[cfg(not(feature = "wasm-plugins"))]
+    fn plugin_call(&self, _: &Call) -> Option<Result<CallResult, ProtocolError>> {
+        None
     }
 
     /// The YouTube actions and queries, or `None` for any other call. They run with no
@@ -1310,7 +1406,7 @@ impl Engine {
             None => None,
         };
         let mut wake = Vec::new();
-        let (parts, publish, generation, program, key, own_audio) = loop {
+        let (parts, publish, generation, program, key, own_audio, hardware_held) = loop {
             // A failed pipeline may still be joining. When it held the program stage,
             // wait that out before opening devices, and do not hold the collection
             // lock across the wait.
@@ -1427,11 +1523,27 @@ impl Engine {
                     return Err(err);
                 }
             }
+            // The outputs holding hardware video sessions now: while there is one, a
+            // new session that hardware refuses is the session limit (ADR-0027 §3).
+            let hardware_held: Vec<OutputId> = gate
+                .running
+                .iter()
+                .filter(|(_, running)| running.encoders().is_some_and(|e| e.hardware()))
+                .map(|(id, _)| id.clone())
+                .collect();
             // A running program stage is shared; holding it here keeps it running
             // until this start has its own hold, or gives up. Taken last, so no early
             // return drops it under the locks.
             let program = gate.program();
-            break (parts, publish, generation, program, key, own_audio);
+            break (
+                parts,
+                publish,
+                generation,
+                program,
+                key,
+                own_audio,
+                hardware_held,
+            );
         };
         wake_all(std::mem::take(&mut wake));
 
@@ -1443,36 +1555,45 @@ impl Engine {
         };
         let (fail_tx, fail_rx) = mpsc::channel();
         let mut health = None;
-        let launched = publish.open(&output_id).and_then(|(opened, watch)| {
-            health = watch;
-            let program = match program {
-                Some(program) => program,
-                None => {
-                    let program = launch_program(self, parts)?;
-                    lock(&host.gate).set_program(&program);
-                    program
-                }
-            };
-            match opened {
-                Opened::Muxed(destination) => launch(
-                    self,
-                    program,
-                    OutputEncode { key, own_audio },
-                    destination,
-                    output_id.clone(),
-                    generation,
-                    fail_tx,
-                ),
-                Opened::Vcam(vcam, canvas) => launch_vcam(
-                    program,
-                    vcam,
-                    canvas,
-                    output_id.clone(),
-                    generation,
-                    fail_tx,
-                ),
-            }
-        });
+        let launched =
+            publish
+                .open(&output_id)
+                .map_err(StartError::from)
+                .and_then(|(opened, watch)| {
+                    health = watch;
+                    let program = match program {
+                        Some(program) => program,
+                        None => {
+                            let program = launch_program(self, parts)?;
+                            lock(&host.gate).set_program(&program);
+                            program
+                        }
+                    };
+                    match opened {
+                        Opened::Muxed(destination) => launch(
+                            self,
+                            program,
+                            OutputEncode {
+                                key,
+                                own_audio,
+                                hardware_held,
+                            },
+                            destination,
+                            output_id.clone(),
+                            generation,
+                            fail_tx,
+                        ),
+                        Opened::Vcam(vcam, canvas) => launch_vcam(
+                            program,
+                            vcam,
+                            canvas,
+                            output_id.clone(),
+                            generation,
+                            fail_tx,
+                        )
+                        .map_err(StartError::from),
+                    }
+                });
         // A link change the output thread reported before `active` is replayed once
         // the start settles; the watcher takes every later one.
         let mut link_down = false;
@@ -1505,7 +1626,10 @@ impl Engine {
                             );
                             // Joined below, outside the locks. A new start waits.
                             gate.draining += 1;
-                            StartOutcome::Failed(Some(running), reason)
+                            StartOutcome::Failed(
+                                Some(running),
+                                ProtocolError::ActionFailed { reason },
+                            )
                         }
                         Ok(PipelineEvent::LinkDown | PipelineEvent::LinkUp)
                         | Err(TryRecvError::Disconnected) => {
@@ -1519,7 +1643,11 @@ impl Engine {
                             gate.draining += 1;
                             StartOutcome::Failed(
                                 Some(running),
-                                "the output thread ended before the pipeline was active".into(),
+                                ProtocolError::ActionFailed {
+                                    reason: "the output thread ended before the pipeline was \
+                                             active"
+                                        .into(),
+                                },
                             )
                         }
                         Err(TryRecvError::Empty) => {
@@ -1572,15 +1700,17 @@ impl Engine {
                                     gate.draining += 1;
                                     StartOutcome::Failed(
                                         Some(running),
-                                        format!("starting the publish watcher: {err}"),
+                                        ProtocolError::ActionFailed {
+                                            reason: format!("starting the publish watcher: {err}"),
+                                        },
                                     )
                                 }
                             }
                         }
                     },
-                    Err(reason) => {
+                    Err(err) => {
                         abandon_start(&mut state, &mut gate, &mut inflight, &output_id, &mut wake);
-                        StartOutcome::Failed(None, reason)
+                        StartOutcome::Failed(None, err.into())
                     }
                 }
             }
@@ -1600,13 +1730,13 @@ impl Engine {
                     reason: format!("output `{output_id}` stopped while starting"),
                 })
             }
-            StartOutcome::Failed(running, reason) => {
+            StartOutcome::Failed(running, err) => {
                 // `failed` is already out and `pending` cleared, so `draining` (set
                 // above when there is a pipeline) holds a new start off until this
                 // join ends, including when it unwinds.
                 let _clear_drain = ClearDrain::arm(Arc::clone(host), running.is_some());
                 drop(running);
-                Err(ProtocolError::ActionFailed { reason })
+                Err(err)
             }
         }
     }
@@ -1994,7 +2124,7 @@ enum StartOutcome {
     /// Stop won. Any threads `launch` opened are dropped before the in-flight
     /// generation is cleared, so stop can settle `stopped`.
     Cancelled(Option<Running>),
-    Failed(Option<Running>, String),
+    Failed(Option<Running>, ProtocolError),
 }
 
 /// Clears `pending` on drop unless the start already settled.
@@ -2671,12 +2801,18 @@ impl State {
             other @ (Action::PairingStart | Action::DeviceRevoke { .. }) => {
                 return Err(served_by_the_server(other.name()));
             }
-            // This engine hosts no plugins yet (WA1, ADR-0069).
-            other @ (Action::PluginInstall { .. }
-            | Action::PluginGrant { .. }
-            | Action::PluginEnable { .. }) => {
+            // Built without the `wasm-plugins` feature, the engine can't run a plugin, so
+            // none is ever installed. With it, `Engine::execute` answers these before
+            // taking the collection lock.
+            other @ Action::PluginInstall { .. } => {
                 return Err(ProtocolError::Unsupported {
                     call: other.name().into(),
+                });
+            }
+            Action::PluginGrant { plugin_id, .. } | Action::PluginEnable { plugin_id } => {
+                return Err(ProtocolError::NotFound {
+                    entity: EntityKind::Plugin,
+                    id: plugin_id.to_string(),
                 });
             }
             Action::PrivacySet { on } => {
