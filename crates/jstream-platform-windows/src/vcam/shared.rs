@@ -11,6 +11,7 @@ use windows::Win32::Foundation::{
 };
 use windows::Win32::Security::Authorization::{
     ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
+    SE_KERNEL_OBJECT,
 };
 use windows::Win32::Security::{
     GetTokenInformation, PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES, TOKEN_QUERY, TOKEN_USER,
@@ -29,7 +30,7 @@ use crate::com::OsResult;
 
 /// Closes a handle on drop. A named object keeps its name only while a handle to it is
 /// open, so the producer holds one for each.
-pub(super) struct Handle(pub(super) HANDLE);
+pub(crate) struct Handle(pub(crate) HANDLE);
 
 // SAFETY: a handle names a kernel object; closing it from any thread is sound, and
 // `Handle` owns it exclusively.
@@ -49,13 +50,13 @@ impl Drop for Handle {
 }
 
 /// A `SECURITY_ATTRIBUTES` built from an SDDL string. Frees the descriptor on drop.
-pub(super) struct SecurityAttributes {
+pub(crate) struct SecurityAttributes {
     sd: PSECURITY_DESCRIPTOR,
     sa: SECURITY_ATTRIBUTES,
 }
 
 impl SecurityAttributes {
-    pub(super) fn from_sddl(sddl: &str) -> Result<Self, PlatformError> {
+    pub(crate) fn from_sddl(sddl: &str) -> Result<Self, PlatformError> {
         let mut sd = PSECURITY_DESCRIPTOR::default();
         // SAFETY: `sddl` is a valid wide string for the call; `sd` is a valid out-pointer,
         // freed with LocalFree on drop.
@@ -79,7 +80,7 @@ impl SecurityAttributes {
     }
 
     /// The attributes, valid while `self` lives.
-    pub(super) fn as_ptr(&self) -> *const SECURITY_ATTRIBUTES {
+    pub(crate) fn as_ptr(&self) -> *const SECURITY_ATTRIBUTES {
         &self.sa
     }
 }
@@ -148,6 +149,13 @@ impl Mapping {
         })
     }
 
+    /// The mapping's owner and DACL, as SDDL text. The producer's handle carries
+    /// `READ_CONTROL`: `CreateFileMappingW` opens an existing mapping with full access or
+    /// fails.
+    pub(super) fn security(&self) -> Result<String, PlatformError> {
+        crate::security::sddl_of(self._handle.0, SE_KERNEL_OBJECT)
+    }
+
     pub(super) fn control(&self) -> &Control {
         // SAFETY: the view is MAPPING_SIZE bytes, page-aligned and mapped until `self`
         // drops; `Control` is all atomics, so any bit pattern is valid.
@@ -165,7 +173,7 @@ impl Drop for Mapping {
 }
 
 /// This process's user SID as a string (`S-1-5-21-…`), for the contract's DACL.
-pub(super) fn user_sid() -> Result<String, PlatformError> {
+pub(crate) fn user_sid() -> Result<String, PlatformError> {
     let mut token = HANDLE::default();
     // SAFETY: `token` is a valid out-pointer; the pseudo-handle needs no closing.
     unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) }

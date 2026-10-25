@@ -1,6 +1,6 @@
 //! The `Source` and `SourceKind` seams, and what a source is created with.
 
-use crate::{AudioScopes, MediaAudio, SourceError};
+use crate::{AudioScopes, CaptureSpec, MediaAudio, SourceError};
 use jstream_browser::BrowserBackend;
 use jstream_media::{AudioFormat, MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_platform::{AudioInputHandler, AudioStream, GpuFrame, MediaDecoders};
@@ -19,8 +19,8 @@ use std::sync::Arc;
 /// thread can hold one past the next update. Most make their frames when created or
 /// updated; a `media` file decodes them ahead on a thread of its own and hands each
 /// over under a short lock; a source whose frames follow something live (the
-/// `waveform` and `spectrum` kinds) draws them in its [`Painter`] instead, and `frame`
-/// hands out the one painted last.
+/// `waveform`, `spectrum` and `chat_message` kinds) draws them in its [`Painter`]
+/// instead, and `frame` hands out the one painted last.
 pub trait Source: Send {
     /// The frame to show at `at`, the time since the source started on the media clock
     /// (ADR-0014, docs/adr/0014-media-clock.md). A time before the start shows the
@@ -62,6 +62,20 @@ pub trait Source: Send {
     /// [`SourceError::Setting`] when a value doesn't have its descriptor's type.
     fn update(&mut self, settings: &Settings) -> Result<(), SourceError>;
 
+    /// What the platform captures for this source, for a `display` or `window` source;
+    /// `None`, the default, for a source that makes its own frames. A capture source's
+    /// frames come from the platform's capture backend on the engine's render thread,
+    /// so its [`frame`](Self::frame) is [`SourceError::Captured`].
+    fn capture(&self) -> Option<&CaptureSpec> {
+        None
+    }
+
+    /// Whether the pointer shows in this source's [`capture`](Self::capture): its
+    /// `show_cursor` setting. `true`, the default, for every other source.
+    fn show_cursor(&self) -> bool {
+        true
+    }
+
     /// What draws this source's frames ahead of [`frame`](Self::frame), for a source
     /// whose frames follow something live; `None` (the default) for one whose frames are
     /// made on create and update.
@@ -92,8 +106,9 @@ pub trait Source: Send {
 /// Drawing a frame can take milliseconds (a whole frame's pixels, an FFT), so a host
 /// that asks for frames under a lock calls `paint` before it takes that lock, when
 /// [`Source::next_change`] said the frame is due, and `frame` then hands the painted
-/// frame out at once. Painting allocates only while the source's pool of frames grows,
-/// or when every frame in it is still held.
+/// frame out at once. The `waveform` and `spectrum` painters allocate only while their
+/// pool of frames grows, or when every frame in it is still held; `chat_message`'s
+/// allocates when it redraws for a newly featured message.
 pub trait Painter: Send + Sync {
     /// Draws the frame to show at `at`, on the same clock as [`Source::frame`].
     fn paint(&self, at: MediaTime);
@@ -130,7 +145,8 @@ pub trait SourceKind: Send + Sync {
 }
 
 /// What sources are created with: where asset references point, how much a decoded
-/// asset may take, and the platform backends the kinds that need one play through.
+/// asset may take, the platform backends the kinds that need one play through, and the
+/// featured chat message.
 #[derive(Clone, Default)]
 pub struct Context {
     /// The folders behind asset roots.
@@ -148,6 +164,8 @@ pub struct Context {
     /// until the host injects one; `browser` sources then fail with
     /// [`SourceError::NoBackend`].
     pub browser: Option<Arc<dyn BrowserBackend>>,
+    /// The featured chat message `chat_message` sources draw. Clones share it.
+    pub chat: crate::ChatFeature,
 }
 
 impl std::fmt::Debug for Context {
@@ -158,6 +176,7 @@ impl std::fmt::Debug for Context {
             .field("audio", &self.audio)
             .field("media", &self.media.as_ref().map(|_| "MediaDecoders"))
             .field("browser", &self.browser.as_ref().map(|_| "BrowserBackend"))
+            .field("chat", &self.chat)
             .finish()
     }
 }

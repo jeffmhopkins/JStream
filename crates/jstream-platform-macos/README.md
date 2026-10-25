@@ -65,13 +65,60 @@ It has:
   buffers from the session's own IOSurface-backed pool, and forces a keyframe on request.
   VideoToolbox's output callback, which catches any panic, converts each sample on its
   own thread and hands it over a channel that `poll` drains without blocking; at most
-  four frames are in flight, after which `can_accept` says no. It also lists and opens
+  four frames are in flight, after which `can_accept` says no. The session's maximum
+  frame delay is three, so the encoder can't hold all four while it waits for input that
+  `can_accept` keeps out; VideoToolbox's default is no limit. An encoder without the
+  property (Apple's software H.264 encoder) keeps its own and may hold all four, so there
+  `encode`, once four are queued, completes frames up to the oldest one's `pts`
+  (`VTCompressionSessionCompleteFrames`), and its `CodecInfo` name says so (`software,
+  oldest frame completed when full`). Either way,
+  `encode` may wait for the oldest to be emitted. It also lists and opens
   the **AudioToolbox AAC-LC encoder** for a configuration `aac_settings` accepts: an
   `AudioConverter` from interleaved `f32` PCM (planar input is interleaved first) at
   constant bit rate, at the rate it offers nearest the configured one
   (`nearest_bit_rate`). Its magic cookie must carry the `AudioSpecificConfig` the muxers
   write from the format (`aac_lc_config`, read with `asc_from_magic_cookie`), or opening
-  fails. Decoding reports `Unsupported`.
+  fails. It also opens a **VideoToolbox H.264 or HEVC decoder** for a configuration
+  **`vt_decoder_settings`** accepts (NV12 or BGRA output, P010 from HEVC; the hardware
+  decoder enabled, required, or avoided as the preference says). VideoToolbox has no list
+  of decoders, so `list` reports H.264 and HEVC ones (**`vt_decoder_list`**, named by
+  **`vt_decoder_name`**): a hardware one where `VTIsHardwareDecodeSupported` says this Mac
+  has one, and Apple's software one, which is always there. The same call checks a
+  required hardware decoder when the decoder is made (**`vt_decoder_hardware`**), so a Mac
+  without one refuses it at once with `Unsupported`. Once the session opens, a required
+  decoder that still can't be had for this stream (**`vt_no_decoder`**: no decoder
+  matched) is `Unsupported` too, and any other session failure, such as a bad parameter
+  set, is reported as the call failing. The `VTDecompressionSession` opens on the first
+  packet with a complete set of parameter sets, and again whenever a keyframe brings
+  different ones; packets before that are dropped. Each packet is decoded synchronously,
+  and the output callback, which catches any panic, copies each frame into a **CPU
+  frame** in the configured format. Frames come out in presentation order, and `poll`
+  never blocks. A packet of another codec is refused, and so is use after `finish`. A
+  `finish` that fails still releases the frames already decoded, so a second `finish`
+  hands them out.
+- **`split_access_unit`**: an Annex B packet as its parameter sets (VPS, SPS, then PPS,
+  as Core Media takes them) and a sample of 4-byte length-prefixed NAL units, without
+  access unit delimiters (**`annexb_units`** finds the units, and **`sets_complete`**
+  says whether the sets make a format description). **`Reorder`** holds decoded frames
+  until no later packet can present earlier: up to the newest packet's `dts`, and all of
+  them at the end.
+- **`AvMediaDecoders`** (`MediaDecoders`) plays local media files through AVFoundation,
+  for the cross-platform media-file source in `jstream-sources`: an `AVURLAsset` whose
+  first video and audio tracks (loaded with `loadTracksWithMediaType`, waited on) an
+  `AVAssetReader` demuxes and decodes. So it plays what AVFoundation does: MP4, MOV and
+  M4V, and H.264, HEVC and ProRes video, among others, but not MKV or WebM. Video is read
+  as BGRA or NV12 (**`av_reader_settings`**); RGBA, which the source asks for, is read as
+  BGRA and its red and blue swapped (**`bgra_to_rgba`**). The first frame is read when
+  the file opens, for the size of every frame. Audio is read as interleaved `f32` at the
+  track's own rate, mono, or mixed down to stereo by AVFoundation for anything wider
+  (**`audio_layout`**). Seeking starts a new reader from the seek target to the end. A
+  missing file is `NotFound`, a container or codec AVFoundation doesn't play is
+  `Unsupported` (**`av_error_is_unsupported`**), and so is a hardware preference other
+  than `Prefer`, since AVFoundation picks the decoder itself. A file whose sound
+  AVFoundation won't read in that format (its reader refuses the audio output, or won't
+  start with it, as `Unsupported`) opens again without it and plays its picture alone,
+  with no audio in its `MediaInfo`, as on Windows. A file of sound alone, opened without
+  audio, has nothing to play and is `Unsupported` too.
 - **`AacFramer`**: the AAC encoder's input and packet timing, as on Linux and Windows.
   The converter pulls the queued input through its input proc (which catches any panic)
   one raw access unit at a time, with no ADTS. The last unit is padded with silence. Each
@@ -88,7 +135,9 @@ It has:
   `Display <id>`, the main one primary) and the on-screen windows of other applications
   at layer 0 as `window:<CGWindowID>` (named by title, else application), each with its
   size in pixels (the content's points times its scale). `start` captures one through an
-  `SCStream` in BGRA, sRGB, with the cursor, at that size; a resized window is scaled to
+  `SCStream` in BGRA, sRGB, with the cursor, at that size (`start_with` and
+  `CursorCapture::Hidden` turn `showsCursor` off; `Metadata` draws the pointer in, as
+  this backend doesn't send it apart yet); a resized window is scaled to
   fit, keeping its aspect ratio. Frames arrive on the stream's serial dispatch queue,
   whose callbacks catch panics. Each complete frame (`SCStreamFrameInfoStatus`; idle,
   blank and suspended frames are skipped) is converted to NV12, BT.709 limited range,
@@ -161,30 +210,90 @@ It has:
   from the stream's first output sample time) and the host time its first frame is
   expected to play, on `MachClock`. The handler's channels go to the planned device
   channels, and the rest stay silent; a buffer list the plan doesn't match plays
-  silence until the watcher re-plans. Desktop and application audio are refused before
-  14.2 (`check_input`) and, like `processes`, report `Unsupported` for now.
+  silence until the watcher re-plans. **`processes`** lists, on 14.2 and later, the
+  processes Core Audio knows as audio clients (`kAudioHardwarePropertyProcessObjectList`),
+  which are the ones a process tap can record, not every process as on Windows. Each has
+  its PID, its parent's PID and its executable's file name, read from the kernel by PID
+  (`proc_pidpath`, and `proc_pidinfo`'s short BSD info, which the kernel gives for other
+  users' processes such as system daemons too), falling back to the kernel's short name,
+  the bundle ID, then the PID; one that exits while being read is left out. Before 14.2 it is
+  `MissingComponent` naming the update. **Desktop and application audio** are
+  `MissingComponent` before 14.2 too (`check_input`); from 14.2 they record a Core
+  Audio process tap (`CATapDescription`, `AudioHardwareCreateProcessTap`), always a
+  stereo mixdown, through a private aggregate device the stream makes and destroys. The
+  aggregate is clocked by the tapped output, or by the default output, and records the
+  tap as its last two input channels with the same IOProc and watcher as an input. It
+  is left out of the device list. `DefaultOutputLoopback` taps every process except
+  JStream's own, on any output, so JStream's monitoring isn't recorded back;
+  `OutputLoopback` taps what every process except JStream plays on that device's first
+  output stream; `ProcessLoopback` taps the one process, which must be one `processes`
+  lists (else `NotFound`). Its child processes aren't included, unlike Windows' process
+  loopback of a process tree. The stream ends with `DeviceLost` when the aggregate
+  stops working, the output it is clocked by goes (the tapped one, or for desktop and
+  application audio the default output when the tap opened, even if the aggregate
+  lives on), or the tapped process exits. No Microphone
+  permission is checked: a tap needs the system audio recording permission, which has
+  no public API to read. macOS asks when a tap first runs, and without the grant the
+  tap records silence. JStream accepts that, with no guessing from the samples and no
+  reading of the private TCC database, and logs a hint naming System Settings ›
+  Privacy & Security › Screen & System Audio Recording when a tap opens.
+  `input_format` for a tap makes one for a moment to read its format.
+- **`AvFoundationVideoDevices`** (`VideoDevices`, ADR-0063 §10) checks the floor when
+  created. **`devices`** lists the built-in, Continuity and external (USB) cameras an
+  `AVCaptureDeviceDiscoverySession` finds, under their `uniqueID`s. A camera's `audio`
+  is the one audio capture device with the same `modelID`, whose `uniqueID` is its Core
+  Audio UID, so `CoreAudioIo` opens it. A USB webcam's camera and microphone share a
+  model; a Mac's built-in ones don't, so they stay unpaired, as does a model two audio
+  devices share. **`formats`** lists, in the camera's order, one entry per format and
+  frame-rate range at that range's highest rate, each `Raw(Nv12)`: AVFoundation
+  converts every native format, and decodes MJPEG itself, to the NV12 the backend asks
+  for. A camera's YUY2 and MJPEG formats of the same size and rate are therefore one
+  entry, and no format needs a `CaptureDecoder`. **`open`** checks the Camera permission
+  the way `open_input` checks the Microphone one: it asks once, then returns a
+  `PlatformError::Os` naming System Settings › Privacy & Security › Camera. Listing
+  needs no permission. It then runs an `AVCaptureSession` with the camera's input, its
+  active format and frame duration set to the chosen ones, and an
+  `AVCaptureVideoDataOutput` that asks for NV12 in video range and drops late frames.
+  Each frame is copied out on the output's serial queue into the capture mailbox,
+  reusing a frame the reader skipped. Its `pts` is the sample's presentation time on
+  `MachClock`, and its colour is BT.601 below 720 lines and BT.709 from there, in
+  limited range, as on Windows. A watcher thread checks every 500 ms that the camera is
+  still connected and the session still running, and otherwise the stream reports
+  `DeviceLost`.
+
+- **`NoGpuInterop`** (`GpuInterop`) stands in for the interop not built yet, so a host
+  can build a whole `Backends` (the daemon does): its `open_device` is `Unsupported`,
+  so the engine opens a device of its own and takes the CPU frame paths. The Metal
+  interop replaces it.
 
 Not here yet, in roughly the order they follow:
 - capture frames as IOSurfaces imported into Metal and wgpu (GPU frames), once a spike
-  proves the synchronisation;
-- process taps for desktop and application audio;
+  proves the synchronisation, in place of `NoGpuInterop`;
 - IOSurface encode targets (GPU frames) for the VideoToolbox encoder once the Metal
   spike lands;
-- AVFoundation webcams;
-- video decode and the media-file source.
+- GPU frames (IOSurface pixel buffers imported into Metal) from the VideoToolbox decoder
+  and the media-file reader, once the Metal spike lands.
 
 The virtual camera is out of scope (`Backends::vcam` is `None` on macOS) until its own
 ADR.
 
 Tests run on every platform where they can: the capture's target IDs, names, sizes, frame
-layouts and statuses, permission steps, the keychain item names and the error mapping are
-platform independent. The macOS ones (the clock, reading the release, encoding with
+layouts and statuses, permission steps, process names and parents, the keychain item
+names, the error mapping and the decoder list and hardware check are platform
+independent. The macOS ones (the clock, reading the release, encoding with
 VideoToolbox, which falls back to Apple's software encoder on a Mac without a hardware
-one, encoding AAC with AudioToolbox, opening the capture backend, round trips through
+one, decoding what the VideoToolbox encoder produced, from the start and from a later
+keyframe, a required hardware decoder opening exactly where one is listed, playing a
+system sound as an audio-only media file and refusing a missing or unreadable one,
+encoding AAC with AudioToolbox, opening the capture backend, round trips through
 the login keychain with uniquely named items, deleted afterwards, listing audio
-devices and their input formats, refusing an unknown output, and reading the Microphone
-status without prompting) need no permission, so they run in the `macos` CI job. The
-`hw-tests` feature is for tests that need the Screen Recording, Camera, Microphone or
-system audio recording permission (listing and capturing a display, the
-missing-permission error, and recording the default input), speakers (playing a tone on
-the default output), or the hardware encoders, which run by hand on a Mac.
+devices and their input formats, refusing an unknown output, reading the Microphone
+status without prompting, listing processes, refusing to tap an unknown output or
+process, and listing cameras and their formats) need no permission, so they run in the `macos` CI job. The `hw-tests` feature
+is for tests that need the Screen Recording, Camera, Microphone or system audio
+recording permission (listing and capturing a display, the missing-permission error,
+recording the default input, and recording desktop audio, the default output and the
+test's own process playing a tone through taps, and capturing NV12 frames from the
+first camera), speakers (playing a tone on the default output), or the hardware
+encoders, which run by hand on a Mac. So do the media-file tests that need a video
+file, which play the one `JSTREAM_TEST_MEDIA` names.

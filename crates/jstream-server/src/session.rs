@@ -10,7 +10,18 @@
 //! (close code 1008, ADR-0044), or the handshake hasn't succeeded by its deadline
 //! (`ServerConfig::handshake_timeout`, counted from when the connection was accepted;
 //! close code 1008), even if the client's `hello` is still waiting for the engine's
-//! answer; dropping the session then ends its event streams.
+//! answer, or the client stays silent too long (below); dropping the session then ends
+//! its event streams and expires the client's open live-value gestures (ADR-0032).
+//!
+//! **Liveness.** The task pings the client every `ServerConfig::ping_interval`, and
+//! anything it reads from the client (a message, or the pong a live client's WebSocket
+//! layer answers with) counts as hearing from it. A connection the task hasn't heard
+//! from for `ServerConfig::liveness_timeout` is closed (close code 1008), so one that
+//! died without a close frame, which no read or write may report for a long time,
+//! doesn't keep its session. While the task itself has stopped reading (see *Slow
+//! clients*) the silence doesn't count, since a pong would wait unread behind the
+//! requests. A ping goes out before the next queued message, once the send in progress
+//! completes.
 //!
 //! **Logging.** The task runs in its connection's `connection` span. It logs the
 //! handshake's outcome (the `client_id`, or the refusal's code) and why the connection
@@ -40,7 +51,9 @@
 //! a `state.changed` this connection's call caused still follows that call's response.
 //! While [`REPLY_BACKLOG`] replies wait unsent, the task stops reading requests, so a
 //! client that sends requests without reading the answers is held back by the socket as
-//! before.
+//! before. The same goes for calls the engine hasn't answered yet: while
+//! [`MAX_IN_FLIGHT`] are in flight, the task reads nothing more until one completes, so a
+//! client can't pile up unbounded work in the session (#354).
 
 use crate::preview::{self, Frames};
 use axum::extract::ws::{CloseFrame, Message, WebSocket, close_code};
@@ -56,7 +69,7 @@ use std::collections::VecDeque;
 use std::pin::Pin;
 use std::time::Duration;
 use tokio::sync::watch;
-use tokio::time::{Instant, Sleep};
+use tokio::time::{Instant, MissedTickBehavior, Sleep};
 
 /// How many session-to-wire request ID pairs a connection remembers. A `state.changed`
 /// event normally arrives within a few calls of its answer.
@@ -86,6 +99,14 @@ const EVENT_BUFFER: usize = 1024;
 /// the client reads some answers. Replies are never dropped, so this is what bounds them.
 const REPLY_BACKLOG: usize = 1024;
 
+/// How many calls may be in flight on one connection (forwarded to the session and not
+/// answered yet) before the connection stops reading, until one completes (#354).
+///
+/// Each one holds its parsed request, read from at most 4 MiB of message text, so a
+/// client that never waits for answers can make the server hold about 64 times the
+/// message limit, while a UI that pipelines its calls stays far below it.
+pub(crate) const MAX_IN_FLIGHT: usize = 64;
+
 /// The connection ended (the client went away or a send failed).
 struct Closed;
 
@@ -110,14 +131,26 @@ async fn handshake(
     }
 }
 
+/// How often a connection is pinged and how long it may stay silent
+/// (`ServerConfig::ping_interval` and `ServerConfig::liveness_timeout`).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Liveness {
+    /// How often the client is pinged.
+    pub(crate) ping_every: Duration,
+    /// How long the client may go unheard while the task reads it.
+    pub(crate) timeout: Duration,
+}
+
 /// Runs one connection until it ends. A connection whose handshake hasn't succeeded by
-/// `hello_by` is closed, and so is one whose device `revoked` signals.
+/// `hello_by` is closed, and so is one whose device `revoked` signals, and one not heard
+/// from within `liveness`'s timeout.
 pub(crate) async fn run(
     socket: WebSocket,
     control: Box<dyn Control>,
     mut shutdown: watch::Receiver<bool>,
     mut revoked: Option<watch::Receiver<bool>>,
     hello_by: Instant,
+    liveness: Liveness,
 ) {
     let (sink, mut incoming) = socket.split();
     let mut writer = Writer::new(sink);
@@ -130,7 +163,18 @@ pub(crate) async fn run(
     let mut ids = IdMap::default();
     let handshake_deadline = tokio::time::sleep_until(hello_by);
     tokio::pin!(handshake_deadline);
+    let mut pings =
+        tokio::time::interval_at(Instant::now() + liveness.ping_every, liveness.ping_every);
+    pings.set_missed_tick_behavior(MissedTickBehavior::Delay);
+    let silence = tokio::time::sleep(liveness.timeout);
+    tokio::pin!(silence);
     let end: Result<Option<CloseFrame>, Closed> = loop {
+        let reading = outbox.reads_requests() && calls.len() < MAX_IN_FLIGHT;
+        if !reading {
+            // The client can't be heard while nothing reads it: its silence counts again
+            // from when reading resumes.
+            silence.as_mut().reset(Instant::now() + liveness.timeout);
+        }
         if writer.start(&mut outbox, &mut frames).is_err() {
             break Err(Closed);
         }
@@ -142,18 +186,25 @@ pub(crate) async fn run(
             () = &mut handshake_deadline, if ids.client_id.is_none() => {
                 break Ok(Some(close(close_code::POLICY, "no handshake in time")));
             }
+            () = &mut silence, if reading => {
+                break Ok(Some(close(close_code::POLICY, "no answer to pings in time")));
+            }
+            _ = pings.tick() => writer.ping = true,
             sent = writer.sent() => {
                 if sent.is_err() {
                     break Err(Closed);
                 }
             }
-            message = incoming.next(), if outbox.reads_requests() => {
+            message = incoming.next(), if reading => {
                 // `select!` picks among ready branches at random, so a message can be
                 // taken here although the shutdown is ready too. Once the server is
                 // shutting down nothing read is handled: a request is not answered
                 // after `serve_with_shutdown` has returned (#294).
                 if stopped(&shutdown) {
                     break Ok(Some(shutting_down()));
+                }
+                if let Some(Ok(_)) = message {
+                    silence.as_mut().reset(Instant::now() + liveness.timeout);
                 }
                 let text = match message {
                     None | Some(Err(_)) | Some(Ok(Message::Close(_))) => break Err(Closed),
@@ -162,7 +213,8 @@ pub(crate) async fn run(
                         outbox.push(malformed(None, "the server reads no binary messages"));
                         continue;
                     }
-                    // Pings are answered by the WebSocket layer.
+                    // Pings are answered by the WebSocket layer; a pong has done its job
+                    // by being read.
                     Some(Ok(_)) => continue,
                 };
                 match ClientMessage::parse(text.as_str()) {
@@ -364,8 +416,9 @@ impl IdMap {
     }
 }
 
-/// The client and request an event names as its cause: `state.changed` and
-/// `studio.changed`. Their request IDs are the session's, rewritten to the wire's.
+/// The client and request an event names as its cause: `state.changed`,
+/// `studio.changed` and `privacy.changed`. Their request IDs are the session's,
+/// rewritten to the wire's.
 fn caused_by(event: &mut Event) -> Option<(&ClientId, &mut Option<RequestId>)> {
     match event {
         Event::StateChanged {
@@ -374,6 +427,11 @@ fn caused_by(event: &mut Event) -> Option<(&ClientId, &mut Option<RequestId>)> {
             ..
         }
         | Event::StudioChanged {
+            client_id,
+            request_id,
+            ..
+        }
+        | Event::PrivacyChanged {
             client_id,
             request_id,
             ..
@@ -508,6 +566,8 @@ struct Writer {
     idle: Option<Sink>,
     /// The send in progress.
     sending: Option<SendFuture<'static, (Sink, Result<(), Closed>)>>,
+    /// Whether a ping is due: it goes before the next queued message.
+    ping: bool,
 }
 
 impl Writer {
@@ -515,11 +575,12 @@ impl Writer {
         Writer {
             idle: Some(sink),
             sending: None,
+            ping: false,
         }
     }
 
-    /// Starts sending the outbox's next message, or if it is empty the next binary
-    /// frame, unless a send is in progress or there is nothing to send.
+    /// Starts sending a due ping, else the outbox's next message, or if it is empty the
+    /// next binary frame, unless a send is in progress or there is nothing to send.
     fn start(&mut self, outbox: &mut Outbox, frames: &mut Frames) -> Result<(), Closed> {
         if self.sending.is_some() {
             return Ok(());
@@ -527,15 +588,19 @@ impl Writer {
         let Some(mut sink) = self.idle.take() else {
             return Err(Closed);
         };
-        let message = match outbox.pop() {
-            Some(message) => Message::Text(encode(&message)?.into()),
-            None => match frames.pop() {
-                Some(bytes) => Message::Binary(bytes.into()),
-                None => {
-                    self.idle = Some(sink);
-                    return Ok(());
-                }
-            },
+        let message = if std::mem::take(&mut self.ping) {
+            Message::Ping(Vec::new().into())
+        } else {
+            match outbox.pop() {
+                Some(message) => Message::Text(encode(&message)?.into()),
+                None => match frames.pop() {
+                    Some(bytes) => Message::Binary(bytes.into()),
+                    None => {
+                        self.idle = Some(sink);
+                        return Ok(());
+                    }
+                },
+            }
         };
         self.sending = Some(Box::pin(async move {
             let sent = sink.send(message).await.map_err(|_| Closed);
@@ -563,6 +628,7 @@ impl Writer {
         outbox: &mut Outbox,
         frame: Option<CloseFrame>,
     ) -> Result<(), Closed> {
+        self.ping = false;
         loop {
             if self.sending.is_some() {
                 self.sent().await?;

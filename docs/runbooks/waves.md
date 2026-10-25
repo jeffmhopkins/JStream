@@ -50,6 +50,11 @@ depends_on = ["docs/DOCS.md#verification"]
 A PR into a wave merges its wave, not `main`:
 `cargo xtask docs merge-main --from wave/m1`. It resolves stamp conflicts and `@generated`
 block conflicts the same way and lists the sections to re-read and verify. Merge, never rebase.
+Verify each one with `docs verify --merge`, which keeps the note this PR already wrote on
+an entry and adds what the merge changed. A plain `--note` replaces that note, so the
+ledger no longer covers the PR's own change ([DOCS › notes](../DOCS.md#notes)). To correct
+a note on a section that is already fresh, use `--renote` with `--from wave/<name>`; a
+stacked PR names the branch it is stacked on, `--from <base branch>`.
 
 Everything else in [CLAUDE.md](../../CLAUDE.md#pr-loop) holds: auto-merge (squash) on once the
 PR leaves draft, every blocking finding answered, and `docs/progress.toml` updated with the
@@ -66,7 +71,7 @@ The coordinator names one thread as the owner of each wave. The owner:
 1. Creates the wave branch from `main`, with the GitHub MCP tool `create_branch`.
 2. Keeps the wave current with `main`. A `wave/*` branch only takes PRs, so the owner
    branches off the wave, runs `cargo xtask docs merge-main`, verifies the stale
-   sections, and opens a **sync PR** into the wave titled `chore(wave): merge main into
+   sections as [Keeping a PR current](#current) says, and opens a **sync PR** into the wave titled `chore(wave): merge main into
    wave/m1`. Turn on auto-merge with `mergeMethod: MERGE`, never squash: a squashed sync
    leaves `main` out of the wave's history, and the same conflicts come back at the next
    sync. Do this whenever another wave lands, before cutting.
@@ -99,7 +104,8 @@ maintainer, and at least one PR has merged into it. Then:
    the wave were reviewed already. Every check runs, then the after-review Windows, macOS
    and end-to-end jobs.
 5. Once it merges, open a PR on `main` that moves the wave's rows in `docs/progress.toml`
-   from `review` to `done` (or `hardware`, naming the pending run in `note`), since the cut
+   from `review` to `done` (or `hardware`, naming the pending run in `note`), and drops or
+   updates each row's `needs`, since the cut
    wave takes no more commits. A row keeps `review` while one of its PRs is still open.
 6. GitHub deletes the wave branch when it merges. Every PR into it is already merged or
    moved; one still open would be moved to `main` without a CI run.

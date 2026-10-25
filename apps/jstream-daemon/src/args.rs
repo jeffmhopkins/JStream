@@ -29,9 +29,21 @@ Options:
                        directory); created if missing
   --log-level <spec>   the log filter, as `target=level` directives and an
                        optional default level (default: RUST_LOG, else info)
-  --register-vcam      Windows: register the virtual camera (the DLL beside the
-                       daemon) for this machine, then exit. Asks for
-                       administrator rights once; takes no other options
+  --youtube-client <path>
+                       Windows, for developers: a Google OAuth client to use
+                       for YouTube sign-in instead of JStream's built-in one,
+                       the JSON Google Cloud gives for a Desktop app client
+                       (default: JSTREAM_YOUTUBE_CLIENT_ID and
+                       JSTREAM_YOUTUBE_CLIENT_SECRET, else the built-in client)
+  --register-vcam      Windows, optional: register the virtual camera for this
+                       machine, then exit. Copies the DLL beside the daemon to
+                       an administrators-only folder under Program Files and
+                       registers that copy; run it again after an update to
+                       refresh the copy. Asks for administrator rights once;
+                       takes no other options
+  --unregister-vcam    Windows: remove the virtual camera's registration and its
+                       copy, then exit. Asks for administrator rights once;
+                       takes no other options
   -V, --version        print the daemon and protocol versions
   -h, --help           print this help
 
@@ -60,6 +72,10 @@ pub struct Options {
     pub log_dir: Option<String>,
     /// `--log-level`, unparsed: `main` parses it, and reads `RUST_LOG` without it.
     pub log_level: Option<String>,
+    /// `--youtube-client`: a developer's OAuth client file, overriding the built-in
+    /// client. Without it `main` reads `JSTREAM_YOUTUBE_CLIENT_ID` and
+    /// `JSTREAM_YOUTUBE_CLIENT_SECRET`.
+    pub youtube_client: Option<String>,
     /// `--ui-dir`: the web UI's built files. Without it no UI is served.
     pub ui_dir: Option<String>,
 }
@@ -73,6 +89,8 @@ pub enum Invocation {
     Version,
     /// Register the virtual camera, then exit.
     RegisterVcam,
+    /// Unregister the virtual camera and delete its copy, then exit.
+    UnregisterVcam,
     /// Run the engine and serve it.
     Serve(Options),
 }
@@ -82,6 +100,7 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
     let mut options = Options::default();
     let mut port = None;
     let mut register_vcam = false;
+    let mut unregister_vcam = false;
     let mut rest = args.iter();
     while let Some(arg) = rest.next() {
         let mut value = || rest.next().ok_or_else(|| format!("`{arg}` needs a value"));
@@ -89,6 +108,7 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
             "-h" | "--help" => return Ok(Invocation::Help),
             "-V" | "--version" => return Ok(Invocation::Version),
             "--register-vcam" => register_vcam = true,
+            "--unregister-vcam" => unregister_vcam = true,
             "--token-file" => {
                 let path = value()?;
                 if options.token_file.replace(path.clone()).is_some() {
@@ -117,6 +137,12 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
                     return Err(format!("`{arg}` given twice"));
                 }
             }
+            "--youtube-client" => {
+                let path = value()?;
+                if options.youtube_client.replace(path.clone()).is_some() {
+                    return Err(format!("`{arg}` given twice"));
+                }
+            }
             "--collection" => {
                 let path = value()?;
                 if options.collection.replace(path.clone()).is_some() {
@@ -138,6 +164,12 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
             return Err("`--register-vcam` takes no other options".to_owned());
         }
         return Ok(Invocation::RegisterVcam);
+    }
+    if unregister_vcam {
+        if args.len() > 1 {
+            return Err("`--unregister-vcam` takes no other options".to_owned());
+        }
+        return Ok(Invocation::UnregisterVcam);
     }
     options.port = port.unwrap_or(0);
     Ok(Invocation::Serve(options))
@@ -176,7 +208,8 @@ mod tests {
     fn options_are_read_in_any_order() {
         let options = serve(
             "--output out_1 --log-level debug --port 4455 --token-file /tmp/t \
-             --collection /tmp/c.json --log-dir /tmp/logs --output out_2 --ui-dir /tmp/dist",
+             --collection /tmp/c.json --log-dir /tmp/logs --output out_2 --ui-dir /tmp/dist \
+             --youtube-client /tmp/yt.json",
         );
         assert_eq!(
             options,
@@ -187,6 +220,7 @@ mod tests {
                 outputs: vec![OutputId::new("out_1"), OutputId::new("out_2")],
                 log_dir: Some("/tmp/logs".to_owned()),
                 log_level: Some("debug".to_owned()),
+                youtube_client: Some("/tmp/yt.json".to_owned()),
                 ui_dir: Some("/tmp/dist".to_owned()),
             }
         );
@@ -210,6 +244,14 @@ mod tests {
         assert_eq!(error("--collection"), "`--collection` needs a value");
         assert_eq!(error("--ui-dir"), "`--ui-dir` needs a value");
         assert_eq!(error("--ui-dir a --ui-dir b"), "`--ui-dir` given twice");
+        assert_eq!(
+            error("--youtube-client"),
+            "`--youtube-client` needs a value"
+        );
+        assert_eq!(
+            error("--youtube-client a --youtube-client b"),
+            "`--youtube-client` given twice"
+        );
         assert_eq!(
             error("--collection a.json --collection b.json"),
             "`--collection` given twice"
@@ -255,5 +297,25 @@ mod tests {
             "`--register-vcam` takes no other options"
         );
         assert_eq!(parse(&args("--register-vcam --help")), Ok(Invocation::Help));
+    }
+
+    #[test]
+    fn unregister_vcam_stands_alone() {
+        assert_eq!(
+            parse(&args("--unregister-vcam")),
+            Ok(Invocation::UnregisterVcam)
+        );
+        assert_eq!(
+            error("--unregister-vcam --port 1"),
+            "`--unregister-vcam` takes no other options"
+        );
+        assert_eq!(
+            error("--register-vcam --unregister-vcam"),
+            "`--register-vcam` takes no other options"
+        );
+        assert_eq!(
+            parse(&args("--unregister-vcam --help")),
+            Ok(Invocation::Help)
+        );
     }
 }
