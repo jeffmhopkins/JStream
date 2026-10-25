@@ -435,16 +435,18 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   cuts until a client adds another.
   Audio (protocol 0.19): an audio source's `audio` (`enabled`, `follow`, fader and
   mute; a nested scene source has no fader or mute), the master bus and up to 15
-  others with their faders, and the post-fader sends, a new channel source sending to
-  the master at 0 dB. A send always runs from a source to a bus, and filters have no
-  sidechain keys yet, so no edit can close an audio cycle. The engine routes these into
-  the program stage's mixer while it runs.
+  others with their faders and (protocol 0.42) each bus's optional monitor, an output
+  device and a tap point before or after its filters (`bus.set_monitor`), and the
+  post-fader sends, a new channel source sending to the master at 0 dB. A send always
+  runs from a source to a bus, and filters have no sidechain keys yet, so no edit can
+  close an audio cycle. The engine routes these into the program stage's mixer while it
+  runs, apart from the monitors, which it doesn't play yet (#822).
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
   and hotkey bindings (protocol 0.25), as the organisation bullet above describes.
   Not yet: settings migrations between kind versions (a source saved at another
   version is refused on load), blend modes
   other than `normal`,
-  bus monitors, per-placement effects, a keyframe scene's overrides of a group's
+  per-placement effects, a keyframe scene's overrides of a group's
   children (so `scene.set_role` and removing or retargeting a group's item drop none
   yet, #702), `background`, output audio buses and chains, the `YouTube` kind, a virtual
   camera's video mix (it always shows the program), and everything outside `sources`,
@@ -661,7 +663,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   [ADR-0027](adr/0027-program-master-and-output-chains.md), protocol 0.29).
   `source.set_audio`, `bus.create`, `bus.rename`, `bus.set_fader`, `bus.delete`,
   `send.set` and `send.remove` edit sources' audio, the buses and the send matrix
-  ([ADR-0028](adr/0028-audio-model-v2.md), protocol 0.19).
+  ([ADR-0028](adr/0028-audio-model-v2.md), protocol 0.19), and `bus.set_monitor` a
+  bus's monitor, an output device and a tap point (protocol 0.42).
   `hotkey.set` and `hotkey.clear` bind a key chord to an action and unbind it
   ([ADR-0024](adr/0024-scene-structure.md) §5, protocol 0.25). Deleting the scene,
   output or transition preset an action names removes its bindings in the same edit, the batch result lists
@@ -875,7 +878,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 709 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 721 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking

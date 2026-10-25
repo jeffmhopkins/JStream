@@ -16,11 +16,11 @@
 use crate::model::MASTER_NAME;
 use crate::{Graph, Placement, audio};
 use jstream_protocol::{
-    Action, BlendMode, BusId, Canvas, Chord, Crop, Easing, Edit, EncoderProfile, EncoderProfileId,
-    FilterChain, FilterId, FilterOwner, Finite32, FolderId, INITIAL_PRESET, ItemGeometry, ItemId,
-    ItemOverride, ItemTransform, ItemTransition, LabelId, OutputId, OutputKind, ProtocolError, Rev,
-    SceneId, SceneMeta, SceneRole, Settings, SourceAudio, SourceId, SourceKind, SourceMeta,
-    TransitionPresetId, VideoMix, VideoMixId,
+    Action, BlendMode, BusId, BusMonitor, Canvas, Chord, Crop, Easing, Edit, EncoderProfile,
+    EncoderProfileId, FilterChain, FilterId, FilterOwner, Finite32, FolderId, INITIAL_PRESET,
+    ItemGeometry, ItemId, ItemOverride, ItemTransform, ItemTransition, LabelId, OutputId,
+    OutputKind, ProtocolError, Rev, SceneId, SceneMeta, SceneRole, Settings, SourceAudio, SourceId,
+    SourceKind, SourceMeta, TransitionPresetId, VideoMix, VideoMixId,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -379,6 +379,9 @@ struct FileBus {
     name: String,
     gain_db: Finite32,
     muted: bool,
+    /// The bus's monitor; omitted for none (and in files from before monitors).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    monitor: Option<BusMonitor>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -661,6 +664,7 @@ fn file_buses(state: &crate::State) -> Vec<FileBus> {
             name: bus.name().to_owned(),
             gain_db: bus.gain_db(),
             muted: bus.muted(),
+            monitor: bus.monitor().cloned(),
         })
         .collect();
     if buses == [default_master()] {
@@ -677,6 +681,7 @@ fn default_master() -> FileBus {
         name: MASTER_NAME.to_owned(),
         gain_db: Finite32::ZERO,
         muted: false,
+        monitor: None,
     }
 }
 
@@ -1210,9 +1215,9 @@ fn file_filter_version(
     filters.iter().find(|f| &f.id == filter_id)?.kind_version
 }
 
-/// Pushes the edits that give the rebuilt collection `file`'s buses and their faders,
-/// before its sources: a bus depends on nothing, and a source's settings may refer to
-/// one (a `waveform`'s `audio`).
+/// Pushes the edits that give the rebuilt collection `file`'s buses, their faders and
+/// monitors, before its sources: a bus depends on nothing, and a source's settings may
+/// refer to one (a `waveform`'s `audio`).
 fn rebuild_buses(file: &File, edits: &mut Vec<(String, Edit)>) {
     let default = default_master();
     for bus in &file.buses {
@@ -1243,6 +1248,15 @@ fn rebuild_buses(file: &File, edits: &mut Vec<(String, Edit)>) {
                     bus_id: bus.id.clone(),
                     gain_db: Some(bus.gain_db),
                     muted: Some(bus.muted),
+                },
+            ));
+        }
+        if let Some(monitor) = &bus.monitor {
+            edits.push((
+                format!("bus `{}`", bus.id),
+                Edit::BusSetMonitor {
+                    bus_id: bus.id.clone(),
+                    monitor: Some(monitor.clone()),
                 },
             ));
         }

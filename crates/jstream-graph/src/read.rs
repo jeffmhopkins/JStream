@@ -299,6 +299,7 @@ impl Bus {
             name: self.name.clone(),
             gain_db: self.gain_db,
             muted: self.muted,
+            monitor: self.monitor.clone(),
         }
     }
 }
@@ -436,6 +437,7 @@ mod tests {
                     name: "Master".into(),
                     gain_db: jstream_protocol::Finite32::ZERO,
                     muted: false,
+                    monitor: None,
                 }],
                 sends: vec![],
                 master: Default::default(),

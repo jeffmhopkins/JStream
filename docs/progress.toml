@@ -545,8 +545,8 @@ id = "D9"
 milestone = "M1b"
 title = "Audio monitoring: a bus's monitor device and tap point"
 status = "review"
-prs = [801]
-note = "ADR-0028 gives a bus a monitor, a device and a tap point before or after its filters (decision register D22). #801 is the mixer's monitor taps and player; the protocol's bus monitor, its edits and the engine wiring come next, and the mixer's Hear: before or after FX row (MX-05) waits on them"
+prs = [801, 816]
+note = "ADR-0028 gives a bus a monitor, a device and a tap point before or after its filters (decision register D22). #801 is the mixer's monitor taps and player, #816 the protocol's bus monitor and bus.set_monitor (0.42); the engine opening the device comes next, and the mixer's Hear: before or after FX row (MX-05) waits on it"
 needs = ["build"]
 
 # M1c
