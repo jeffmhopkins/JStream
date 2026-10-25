@@ -579,7 +579,13 @@ mod tests {
             let out = git(dir, &["merge", "-q", "main"]);
             let clean = out.status.success();
             // A failed merge must be a conflict in the ledger, not some other refusal.
-            let unmerged = git(dir, &["ls-files", "-u"]).stdout;
+            let listed = git(dir, &["ls-files", "-u"]);
+            assert!(
+                listed.status.success(),
+                "git ls-files -u failed: {}",
+                String::from_utf8_lossy(&listed.stderr)
+            );
+            let unmerged = listed.stdout;
             assert!(
                 clean || !unmerged.is_empty(),
                 "git merge failed without a conflict: {}{}",
