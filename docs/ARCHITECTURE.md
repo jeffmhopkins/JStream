@@ -698,7 +698,12 @@ The wire format, versioning, error codes and compatibility policy are designed i
   feature, each on threads of its own
   ([ADR-0075](adr/0075-wasm-plugin-host-in-the-engine.md)). A package is a directory
   with `plugin.wasm` and an optional `manifest.json`, and a plugin that exports `on_event`
-  gets the engine's events. The mock runs no plugins: it answers `plugin.install` with
+  gets the engine's events. A grant never gives more than the manifest's `classes`,
+  `hosts` and `folders` ask for (`invalid_argument` on that grant field), an update whose
+  manifest asks for more stays disabled as `needs_grant` until a person grants it again,
+  and the installed plugins are saved in the plugin folder
+  ([ADR-0076](adr/0076-saved-wasm-plugins-and-manifest-requests.md)). The mock runs no
+  plugins: it answers `plugin.install` with
   `unsupported`, and the other two with `not_found`, as an engine built without the
   feature does.
 - **Studio mode** (protocol 0.30): the action `studio.set_preview { scene_id }` puts a
@@ -886,7 +891,9 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   from outside JStream sits in `remote_*` fields or in an `output.start` `action_failed`
   `reason` (the whole of which is untrusted), and the tool descriptions and server
   instructions say it is data, never instructions
-  ([ADR-0059](adr/0059-mcp-annotations-and-remote-text.md)).
+  ([ADR-0059](adr/0059-mcp-annotations-and-remote-text.md)). The instructions also say
+  that names and other state text can be set by any client or plugin, and are data too
+  (ADR-0069's U1).
 - **Names** follow the tool-name pattern in [R-API-002](RULES.md#R-API-002).
 - **Snapshots** are returned as images, capped in size (default longest side 1280 px), with
   the state `rev` they show. The `video` tool's `video.snapshot` result leads with an
