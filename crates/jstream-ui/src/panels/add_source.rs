@@ -882,6 +882,8 @@ mod tests {
 
     fn scene(id: &str, name: &str, items: Vec<ItemInfo>) -> SceneInfo {
         SceneInfo {
+            overrides: Vec::new(),
+            variant_of: None,
             scene_id: id.into(),
             name: name.into(),
             role: SceneRole::Scene,
