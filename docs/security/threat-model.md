@@ -457,7 +457,7 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 | #780 | Server | The desktop app's log file only inherits its folder's ACL on Windows and gets the umask's mode on Unix | Low |
 | #345 | Files | `absolute` asset paths accept UNC and device paths | Medium |
 | #347 | Browser | Permissions Chromium grants without a prompt; public names resolving locally (`*.nip.io`, DNS rebinding) and requests the handler doesn't see | Medium |
-| #348 | WASM | ADR-0069's capability checks on a plugin's calls, grants and untrusted-output handling are decided but not built; the protocol's command classes, `PluginGrant` and `forbidden` error are (#642), and so are the host's CPU and memory limits, command cap and event queue | Medium |
+| #348 | WASM | ADR-0069's capability checks on a plugin's calls, installing and granting plugins, disabling a failing plugin and untrusted-output handling are decided but not built; the protocol's command classes, `PluginGrant` and `forbidden` error are (#642), and so are the host's CPU and memory limits, command cap and event queue | Medium |
 | #349 | WGSL | No GPU-hang or device-lost handling | Medium |
 | #351 | CLAP | Shared section naming, and validation of what the host sends back | Medium |
 | #353 | Secrets | Crash reports miss a YouTube-bound key and the access token | Low |
