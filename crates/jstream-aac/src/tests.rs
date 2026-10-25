@@ -15,10 +15,11 @@ use symphonia_core::packet::Packet;
 use symphonia_core::units::{Duration, Timestamp};
 
 use crate::bits::BitWriter;
-use crate::encoder::{Sequence, write_ics};
+use crate::encoder::{Sequence, write_ics, write_ics_info};
 use crate::huffman::{ESC_HCB, Section, ZERO_HCB};
+use crate::intensity::{self, INTENSITY_HCB, INTENSITY_HCB2};
 use crate::mdct::WindowShape;
-use crate::quant::{Channel, Shape};
+use crate::quant::{Channel, Quantizer, Shape};
 use crate::tables::SWB_LONG;
 use crate::{Config, DELAY, Encoder, Error, FRAME_LEN};
 
@@ -326,8 +327,9 @@ fn hostile_input_never_panics_and_stays_in_bounds() {
             } else {
                 WindowShape::Sine
             },
-            // TNS off in a quarter of the rounds.
+            // TNS off in a quarter of the rounds, intensity stereo in a fifth.
             tns: round % 4 != 3,
+            intensity: round % 5 != 2,
             ..Config::new(rate, channels, per_channel * u32::from(channels))
         };
         let mut enc = Encoder::new(config).expect("valid");
@@ -385,15 +387,26 @@ fn hostile_input_never_panics_and_stays_in_bounds() {
 }
 
 /// Over a long, demanding signal (full-scale white noise), the stream's rate never
-/// exceeds the target: the reservoir lends only what earlier frames saved.
+/// exceeds the target: the reservoir lends only what earlier frames saved. That holds
+/// with intensity stereo too, on noise panned between the channels at a rate that uses it.
 #[test]
 fn rate_stays_within_the_target() {
     let mut rng = Rng(42);
-    for (channels, rate) in [(2u8, 128_000u32), (2, 192_000), (1, 64_000)] {
+    for (channels, rate, panned) in [
+        (2u8, 128_000u32, false),
+        (2, 192_000, false),
+        (1, 64_000, false),
+        (2, 64_000, true),
+    ] {
         let frames = 48_000 * 4;
-        let input: Vec<f32> = (0..frames * usize::from(channels))
+        let mut input: Vec<f32> = (0..frames * usize::from(channels))
             .map(|_| rng.unit())
             .collect();
+        if panned {
+            for f in input.chunks_exact_mut(2) {
+                f[1] = -0.4 * f[0];
+            }
+        }
         let units = encode(Config::new(48_000, channels, rate), &input);
         let bits: usize = units.iter().map(|u| u.len() * 8).sum();
         let seconds = (units.len() * FRAME_LEN) as f64 / 48_000.0;
@@ -427,4 +440,211 @@ fn delay_is_one_frame() {
         .map(|(i, _)| i)
         .expect("samples");
     assert_eq!(peak, 3000 + DELAY);
+}
+
+/// A long-window CPE with a common window and no M/S: the left channel holds `values`
+/// with the escape book over bands `first..last` at `gain`, and the right channel codes
+/// each of those bands as intensity stereo with `positions[b - first]` and `books`.
+fn cpe_with_intensity(
+    values: &[i32],
+    (first, last): (usize, usize),
+    gain: i32,
+    positions: &[i32],
+    books: &[u8],
+) -> Vec<u8> {
+    let bands = 49;
+    let frame = Shape {
+        offsets: &SWB_LONG,
+        bands,
+        windows: 1,
+        lines: 1024,
+    };
+    let mut l = Channel::new();
+    l.q.copy_from_slice(values);
+    l.sections[0][..3].copy_from_slice(&[
+        Section {
+            book: ZERO_HCB,
+            start: 0,
+            end: first as u8,
+        },
+        Section {
+            book: ESC_HCB,
+            start: first as u8,
+            end: last as u8,
+        },
+        Section {
+            book: ZERO_HCB,
+            start: last as u8,
+            end: bands as u8,
+        },
+    ]);
+    l.section_count[0] = 3;
+    l.global_gain = gain;
+    l.sf[..bands].fill(gain);
+    let mut r = Channel::new();
+    r.sections[0][0] = Section {
+        book: ZERO_HCB,
+        start: 0,
+        end: first as u8,
+    };
+    let mut count = 1;
+    for b in first..last {
+        r.is_book[b] = books[b - first];
+        r.is_position[b] = positions[b - first];
+        r.sections[0][count] = Section {
+            book: books[b - first],
+            start: b as u8,
+            end: b as u8 + 1,
+        };
+        count += 1;
+    }
+    r.sections[0][count] = Section {
+        book: ZERO_HCB,
+        start: last as u8,
+        end: bands as u8,
+    };
+    r.section_count[0] = count + 1;
+    r.global_gain = 100;
+    let mut out = Vec::new();
+    let mut w = BitWriter::new(&mut out);
+    w.put(1, 3); // ID_CPE
+    w.put(0, 4);
+    w.bit(true); // common_window
+    write_ics_info(&mut w, Sequence::OnlyLong, WindowShape::Sine, &frame);
+    w.put(0, 2); // ms_mask_present
+    write_ics(&mut w, &l, &frame, None);
+    write_ics(&mut w, &r, &frame, None);
+    w.put(7, 3); // ID_END
+    w.finish();
+    out
+}
+
+/// Intensity bands through the reference decoder: the right channel comes out as the left
+/// band scaled by `0.5^(is_position/4)` per band, in phase for `INTENSITY_HCB` and
+/// inverted for `INTENSITY_HCB2`, with positions coded as differences from 0 (both
+/// signs, the extremes ±30 and the largest steps between them).
+#[test]
+fn intensity_bands_decode_to_their_level_and_sign() {
+    let bands = (30usize, 46usize);
+    let lo = usize::from(SWB_LONG[bands.0]);
+    let hi = usize::from(SWB_LONG[bands.1]);
+    let mut values = vec![0i32; 1024];
+    let mut rng = Rng(9);
+    for v in &mut values[lo..hi] {
+        *v = rng.below(41) as i32 - 20;
+    }
+    let positions = [0, 4, -4, 30, -30, 30, 7, -1, 12, -9, 2, 0, -17, 25, 3, -6];
+    let books: Vec<u8> = (0..bands.1 - bands.0)
+        .map(|i| {
+            if i % 3 == 1 {
+                INTENSITY_HCB2
+            } else {
+                INTENSITY_HCB
+            }
+        })
+        .collect();
+    let gain = 150;
+    let units = vec![
+        cpe_with_intensity(&values, bands, gain, &positions, &books),
+        cpe_with_intensity(&[0; 1024], bands, gain, &positions, &books),
+    ];
+    let pcm = decode([0x11, 0x90], &units).expect("decodes");
+    let g = 2f64.powf(0.25 * f64::from(gain - 100));
+    let mut left = vec![0.0f64; 1024];
+    for (s, &q) in left.iter_mut().zip(&values) {
+        *s = f64::from(q.signum()) * f64::from(q.unsigned_abs()).powf(4.0 / 3.0) * g;
+    }
+    let mut right = vec![0.0f64; 1024];
+    for b in bands.0..bands.1 {
+        let dir = if books[b - bands.0] == INTENSITY_HCB {
+            1.0
+        } else {
+            -1.0
+        };
+        let scale = dir * f64::from(intensity::scale(positions[b - bands.0]));
+        for k in usize::from(SWB_LONG[b])..usize::from(SWB_LONG[b + 1]) {
+            right[k] = scale * left[k];
+        }
+    }
+    for (c, spectrum) in [left, right].iter().enumerate() {
+        let want = synthesis(spectrum);
+        let peak = want.iter().fold(0.0f64, |a, b| a.max(b.abs()));
+        assert!(peak > 1e-4, "channel {c}: silent");
+        let err = pcm
+            .iter()
+            .skip(c)
+            .step_by(2)
+            .zip(&want)
+            .fold(0.0f64, |a, (&p, &w)| a.max((f64::from(p) - w).abs()));
+        assert!(err < 1e-5 * peak, "channel {c}: error {err} against {peak}");
+    }
+}
+
+/// With intensity bands in a channel, its quantized result writes in exactly the bits
+/// the loops counted for it: sections that never merge an intensity band with another
+/// kind, the positions' own chain of differences, and no spectrum for those bands.
+#[test]
+fn intensity_bits_match_what_was_counted() {
+    let mut rng = Rng(21);
+    for (round, short) in [false, true, false, true].into_iter().enumerate() {
+        let frame = if short {
+            Shape {
+                offsets: &crate::tables::SWB_SHORT,
+                bands: 14,
+                windows: 8,
+                lines: 128,
+            }
+        } else {
+            Shape {
+                offsets: &SWB_LONG,
+                bands: 49,
+                windows: 1,
+                lines: 1024,
+            }
+        };
+        let mut ch = Channel::new();
+        for i in 0..frame.count() {
+            let band = i % frame.bands;
+            let range = frame.range(i);
+            if band * 3 > frame.bands * 2 && rng.below(3) != 0 {
+                ch.is_book[i] = [INTENSITY_HCB, INTENSITY_HCB2][rng.below(2) as usize];
+                ch.is_position[i] = rng.below(61) as i32 - 30;
+                ch.spec[range].fill(0.0);
+                ch.energy[i] = 0.0;
+                ch.thr[i] = 1.0;
+                continue;
+            }
+            let level = 3000.0 / (1.0 + band as f32);
+            let mut e = 0.0;
+            for k in range {
+                ch.spec[k] = rng.unit() * level;
+                e += ch.spec[k] * ch.spec[k];
+            }
+            ch.energy[i] = e;
+            ch.thr[i] = e / 300.0;
+        }
+        let budget = [3000, 800, 1500, 400][round];
+        let counted = Quantizer::new().run(&mut ch, &frame, budget);
+        let n = frame.count();
+        assert!(ch.is_book[..n].iter().any(|&b| b != 0), "round {round}");
+        // Every intensity band is its own kind of section, with no spectrum.
+        for g in 0..frame.windows {
+            for s in &ch.sections[g][..ch.section_count[g]] {
+                for b in s.start..s.end {
+                    let i = g * frame.bands + usize::from(b);
+                    if ch.is_book[i] != 0 {
+                        assert_eq!(s.book, ch.is_book[i], "round {round} band {i}");
+                        assert!(ch.q[frame.range(i)].iter().all(|&q| q == 0));
+                    } else {
+                        assert!(!intensity::is_intensity(s.book));
+                    }
+                }
+            }
+        }
+        let mut out = Vec::new();
+        let mut w = BitWriter::new(&mut out);
+        write_ics(&mut w, &ch, &frame, None);
+        // global_gain, then the pulse, TNS and gain control flags.
+        assert_eq!(w.bits() as u32, counted + 8 + 3, "round {round}");
+    }
 }
