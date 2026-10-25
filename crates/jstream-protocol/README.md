@@ -1306,9 +1306,14 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   them, no plugin is granted them and no hotkey binds them. `PluginGrant` is
   `{classes, hosts, folders}`, each omitted while empty: hosts as `scheme://host:port`
   (`http`, `https`, `ws`, `wss`), folders as absolute paths on the engine's machine. A
-  grant `problem` refuses is `invalid_argument` on `grant.hosts.N` or `grant.folders.N`.
-  An unknown plugin is `not_found` with entity `plugin`; an engine that hosts no plugins
-  answers `unsupported`, as the engine and the mock do today.
+  grant `problem` refuses is `invalid_argument` on `grant.hosts.N` or `grant.folders.N`,
+  and so is a grant that gives more than the package's manifest asks for, on
+  `grant.classes.N`, `grant.hosts.N` or `grant.folders.0` (R-SEC-003). A
+  `plugin.grant` acknowledges what the manifest asks for now, so a plugin disabled as
+  `needs_grant` can be re-enabled after it. An unknown plugin is `not_found` with entity
+  `plugin`; an engine that can't run plugins
+  answers `plugin.install` with `unsupported`, as the mock and an engine built without
+  its `wasm-plugins` feature do.
 - **`plugin.state_changed {plugin_id, state, reason?, remote_name?}`** reports a plugin
   `enabled` or `disabled`. The engine disables a plugin that runs past a limit or traps
   (`reason`: `cpu_limit`, `memory_limit`, `trap`), or whose update asks for more than

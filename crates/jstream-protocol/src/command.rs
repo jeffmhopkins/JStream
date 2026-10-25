@@ -1283,8 +1283,11 @@ pub enum Action {
     /// ADR-0069). It starts enabled, and `plugin.state_changed` reports it. For a person
     /// only: no MCP tool carries it, and no plugin is ever granted it. Fails with
     /// `already_exists` for a plugin ID in use, `invalid_argument` for a grant whose
-    /// `problem` names a field (`grant.hosts.0`) or a package that isn't a plugin, and
-    /// `unsupported` from an engine that hosts no plugins.
+    /// `problem` names a field (`grant.hosts.0`), a grant that gives more than the
+    /// manifest asks for (`grant.classes.0`, `grant.hosts.0`, `grant.folders.0`), or a
+    /// package that isn't a plugin, `action_failed` for a module whose `start` function
+    /// traps or runs past its limits, and `unsupported` from an engine that hosts no
+    /// plugins.
     #[serde(rename = "plugin.install")]
     PluginInstall {
         /// The ID to install it under.
@@ -1294,11 +1297,12 @@ pub enum Action {
         /// The classes, hosts and folders the person granted it.
         grant: PluginGrant,
     },
-    /// Replaces an installed plugin's grant, widening or narrowing it (0.35). A plugin
-    /// disabled because an update asks for more (`needs_grant`) stays disabled until a
-    /// grant covers the difference and it is re-enabled. For a person only, like
-    /// `plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin that isn't
-    /// installed.
+    /// Replaces an installed plugin's grant, widening or narrowing it (0.35), never past
+    /// what its manifest asks for (`invalid_argument`, as for `plugin.install`). The
+    /// person grants it knowing what the manifest asks for now, so a plugin disabled
+    /// because an update asks for more (`needs_grant`) can then be re-enabled. For a
+    /// person only, like `plugin.install`. Fails with `not_found` (entity `plugin`) for a
+    /// plugin that isn't installed.
     #[serde(rename = "plugin.grant")]
     PluginGrant {
         /// The plugin.

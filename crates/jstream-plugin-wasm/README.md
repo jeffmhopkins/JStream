@@ -32,10 +32,15 @@ wasn't granted:
   on the list (each edit of a batch, or the one action, query or history operation).
   Names match exactly, with no wildcards. A denied call never reaches `Control`: the
   plugin gets `STATUS_DENIED` and the names that were refused. **The list is empty by
-  default.** Which commands are safe to grant, and how a user grants them, is issue
-  #348's decision (ADR-0069, accepted on `wave/m1-3` in #584): capability classes checked
-  against a table in the protocol crate, and grants by people only. Neither is built
-  here yet.
+  default.** `Capabilities::every()` grants every command, for a caller whose `Control`
+  checks each call itself: `jstream-core` holds its plugins to ADR-0069's capability
+  classes and grants that way, in the scoped session it lends each plugin (ADR-0075). A
+  call that names no command is denied either way.
+- **Refusals** (`PluginConfig::refusals`). `Refusals::Statuses`, the default, answers a
+  denied call with `STATUS_DENIED` and one past the cap of commands a second with
+  `STATUS_LIMITED`. `Refusals::Forbidden` answers both with `STATUS_FAILED` and the
+  protocol's `forbidden` wire error (its `call` is the refused command, or the call's
+  first), which is what ADR-0069 gives a plugin and what `jstream-core` picks.
 - **Limits** (`Limits`). Each invocation, and the module's `start` function at load, runs
   on a fuel budget, by default 10,000,000 units (one per WASM instruction, roughly);
   running out stops the plugin with `Error::OutOfFuel`, and the next invocation gets a
@@ -52,8 +57,12 @@ wasn't granted:
   Running past the deadline stops the plugin with `Error::Deadline`. This catches what
   fuel misses, such as a plugin whose few instructions are slow. The ticker runs while
   the host or any plugin loaded on it lives. Linear memory is capped at 64 MiB and tables
-  at 10,000 elements by default; `memory.grow` past the cap answers −1, and a module whose memory starts above
-  it is refused. One instance, one memory and one table per plugin. The WASM stack is
+  at 10,000 elements by default (`limits::Caps`, the store's resource limiter). Growing
+  either past its cap is a trap the plugin can't catch, `Error::MemoryLimit` (ADR-0069
+  treats reaching a cap as a trap; the engine reports it as `memory_limit`, ADR-0076), and
+  so is a module whose memory starts above it, at load. A growth past the module's own
+  declared maximum, below the cap, answers −1 as WASM says. One instance, one memory and
+  one table per plugin. The WASM stack is
   capped at 512 KiB for every plugin. A plugin may send at most 50 commands to
   `Control` in any second (ADR-0069), counted over a sliding window. Every edit of a
   batch is a command (ADR-0013), as is a call's one action, query or history operation.
@@ -68,15 +77,16 @@ instantiates one module with its `PluginConfig` (capabilities and limits) and th
 exported `() -> ()` function, with `input` readable by the plugin. A plugin's calls are
 answered synchronously: the thread running it parks until the `Control` future
 completes, so plugins run on threads that may block, never on an async executor's
-worker. **Events.** `Plugin::events` gives the `EventSender` the engine queues events
+worker. `Plugin::has_entry(entry)` says whether the plugin exports `entry` as a
+`() -> ()` function, without running any of its code. **Events.** `Plugin::events` gives the `EventSender` the engine queues events
 for the plugin with, from any thread; `Plugin::deliver_event(entry)` hands the oldest to
 the plugin, invoking `entry` with the protocol `Event` as JSON for its input. The queue
 holds at most 1,000 events (`MAX_QUEUED_EVENTS`, ADR-0069): an event that finds it full
 drops the queued ones, and the plugin is next handed one `events.dropped` notice with
 their count (overflows before it is handed out add to it), then the events that came
 after, as a WebSocket client that reads too slowly gets. After a trap, fuel exhaustion or a missed deadline the caller decides what to do
-with the plugin. Under #348's decision it disables the plugin until a person
-re-enables it. That policy needs the plugin state event, which is not built yet.
+with the plugin. Under ADR-0069 `jstream-core` disables it, with
+`plugin.state_changed`, until a person re-enables it.
 
 **Dependencies.** wasmtime with only `cranelift`, `runtime` and `std`: no async, WASI,
 component model, GC, threads, cache or profiling. Its `runtime` build script compiles a
@@ -91,7 +101,9 @@ against the deadline; with fuel unmetered, an endless loop and a spinning `start
 function miss the default and a lowered deadline, even after the host is dropped, and a
 host call in `start` re-arms the load's deadline, not an invocation's; an endless loop
 runs out of fuel under the default and a lowered budget, in an invocation and in
-`start`; memory can't grow past the default or a lowered cap, nor start above it; a
+`start`; growing memory past the default or a lowered cap, or the table past a lowered
+one, is `Error::MemoryLimit`, as is a memory that starts above the cap, while growing
+past the module's own maximum answers −1; a
 result read outside memory traps; of sixty calls in one invocation the first fifty reach
 `Control` and the rest are limited without stopping the plugin, a lowered cap holds
 across invocations and frees a second later, denied calls don't use it, each edit of a
@@ -100,18 +112,21 @@ does, and the window admits again as commands age and a cap of zero admits nothi
 (`rate.rs`); queued events reach the plugin as JSON in order, from another thread, a
 1,001st event reaches it as one `events.dropped` notice of 1,000 and then itself,
 overflows before a notice is handed out add up, and a failed delivery still takes its
-event (`events.rs`).
+event (`events.rs`); with `Refusals::Forbidden`, a denied call and calls past the cap
+fail with the `forbidden` wire error instead, still without reaching `Control` or
+stopping the plugin; `Capabilities::every` grants every command but not a call that
+names none.
 
-**Not here:** finding, installing and listing plugins, the manifest that declares what a
-plugin asks for, the user's grant, pumping the plugin's session's events into its queue
-and choosing which entry handles them, and reporting a failed plugin (an error event, disabling it). Those need protocol commands first
-([R-ARCH-001](../../docs/RULES.md#R-ARCH-001)), and ADR-0069 (#348) sets the policy. So
-do any limits on what a plugin may write into names and other strings the UI and agents
-show. ADR-0069 decides one more item, which is not built yet: the `forbidden` error code
-that a call outside the plugin's classes, or past the cap of commands a second, fails
-with. Until the engine side
-answers `forbidden` (#642 adds the code), a call past the cap gets the ABI's own
-`STATUS_LIMITED`.
+**Not here:** installing plugins, the package and its manifest, the person's grant and
+the scoped session that holds a plugin to it, pumping a plugin's events into its queue
+and the entry that handles them (`on_event`), and disabling a failed plugin with
+`plugin.state_changed`, saving the installed plugins and holding a grant to what the
+manifest asks for. `jstream-core` does all of these
+([ADR-0075](../../docs/adr/0075-wasm-plugin-host-in-the-engine.md),
+[ADR-0076](../../docs/adr/0076-saved-wasm-plugins-and-manifest-requests.md)). Not
+anywhere yet: a private data folder per plugin and the file imports it would need, and
+any limits on what a plugin may write into names and other strings the UI and agents
+show.
 
 <a id="abi"></a>
 ## Plugin ABI
@@ -149,6 +164,12 @@ The statuses, and the result each leaves:
 
 An entry point is any exported function of type `() -> ()`, run by `Plugin::invoke`, or
 by `Plugin::deliver_event` with one protocol `Event` as JSON for its input (an
-`events.dropped` notice among them after an overflow).
+`events.dropped` notice among them after an overflow). The engine hands its plugins
+their events through an export named `on_event` (ADR-0075).
+
+Under `Refusals::Forbidden`, the setting the engine uses, a plugin never sees
+`STATUS_DENIED` or `STATUS_LIMITED`: a denied call and one past the cap get
+`STATUS_FAILED`, with the `forbidden` wire error as the result.
+
 The host never calls `hello` for a plugin: it lends the plugin a session the host opened,
 and a plugin can't subscribe to events or open the binary channel.

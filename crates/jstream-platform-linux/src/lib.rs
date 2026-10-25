@@ -7,7 +7,7 @@
 //! stream's DMA-BUF frames into the engine's device (`LinuxGpu`), run-time loading of
 //! libpipewire (`PipeWire`) with audio input, output and loopback through it
 //! (`PipeWireAudio`), ALSA audio input and output as ADR-0060 §4's fallback
-//! (`AlsaAudio`, libasound loaded at run time), libva, VA-API H.264 encoding from CPU
+//! (`AlsaAudio`, libasound loaded at run time), libva, VA-API H.264 and HEVC encoding from CPU
 //! frames behind `VaapiCodecs`, Cisco's OpenH264 binary as the software H.264 encoder,
 //! downloaded only on the user's request and checked against its pin (`OpenH264Store`,
 //! `OpenH264Encoder`, ADR-0061), and AAC encoding on JStream's own AAC-LC encoder
@@ -90,4 +90,4 @@ pub use session::{Session, SessionKind, SupportTier};
 pub use v4l2::V4l2Devices;
 #[cfg(target_os = "linux")]
 pub use vaapi::probe_encoders;
-pub use vaapi::{H264Profile, VaEncoder, VaEntrypoint};
+pub use vaapi::{H264Profile, VaEncoder, VaEntrypoint, VaProfile};
