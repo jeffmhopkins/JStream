@@ -47,7 +47,7 @@ pub use rt::bus::MAX_BUSES;
 pub use rt::chain::{FilterParams, FilterSpec};
 pub use rt::host::HostMemory;
 pub use rt::input::InputProducer;
-pub use rt::mixer::{Block, Mixer, MixerConfig, MixerControl, MonitorTap};
+pub use rt::mixer::{Block, Mixer, MixerConfig, MixerControl, MonitorTap, PRIVACY_MARGIN_S};
 pub use rt::monitor::{
     Monitor, MonitorControl, MonitorFeed, MonitorPlayer, MonitorPlug, MonitorSocket, MonitorStats,
     monitor_socket,

@@ -6,11 +6,12 @@
 //!
 //! It produces the MPEG-4 AAC-LC object type (audio object type 2) with only tools of
 //! the MPEG-2 AAC LC profile (ISO/IEC 13818-7, 1997): the MDCT filterbank with sine and
-//! KBD windows, block switching, M/S stereo, scalefactors, quantization and Huffman
-//! coding. It never emits PNS, SBR, parametric stereo or any later tool, and there is no
-//! decoder. Each encoder technique names its pre-2003 source where it is implemented: the
-//! psychoacoustic model and attack detector in `psy`, the quantization loops in `quant`,
-//! rate control and M/S in `encoder`, sectioning in `huffman`, the filterbank in `mdct`.
+//! KBD windows, block switching, TNS, M/S and intensity stereo, scalefactors, quantization
+//! and Huffman coding. It never emits PNS, SBR, parametric stereo or any later tool, and
+//! there is no decoder. Each encoder technique names its pre-2003 source where it is
+//! implemented: the psychoacoustic model and attack detector in `psy`, the quantization
+//! loops in `quant`, rate control and M/S in `encoder`, TNS in `tns`, intensity stereo in
+//! `intensity`, sectioning in `huffman`, the filterbank in `mdct`.
 //!
 //! JStream holds no AAC patent licence. Via Licensing Alliance (Via LA) administers the
 //! AAC patent pool; ADR-0062 records what is and isn't known about the patents.
@@ -47,6 +48,7 @@
 mod bits;
 mod encoder;
 mod huffman;
+mod intensity;
 mod mdct;
 mod psy;
 mod quant;
@@ -86,10 +88,14 @@ pub struct Config {
     /// temporal noise shaping, so their quantization noise follows the signal's envelope
     /// in time. On by default.
     pub tns: bool,
+    /// Whether a stereo stream codes upper bands whose channels differ mainly in level
+    /// once, as intensity stereo, where the error is masked. Only at 64 kbps per channel
+    /// and below, from 6 kHz up at 32 kbps and from 10 kHz up at 64 kbps. On by default.
+    pub intensity: bool,
 }
 
 impl Config {
-    /// A configuration with the sine window and temporal noise shaping.
+    /// A configuration with the sine window, temporal noise shaping and intensity stereo.
     pub fn new(sample_rate: u32, channels: u8, bit_rate: u32) -> Self {
         Self {
             sample_rate,
@@ -97,6 +103,7 @@ impl Config {
             bit_rate,
             window_shape: WindowShape::Sine,
             tns: true,
+            intensity: true,
         }
     }
 

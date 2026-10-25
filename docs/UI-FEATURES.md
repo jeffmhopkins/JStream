@@ -57,12 +57,12 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Theme and shared controls](#theme) | 8 | 3 | 3 | 1 | 0 | 1 |
 | [Header bar](#header) | 9 | 4 | 2 | 1 | 2 | 0 |
 | [Docking and layouts](#docking) | 10 | 8 | 2 | 0 | 0 | 0 |
-| [Canvas](#canvas) | 18 | 11 | 3 | 1 | 3 | 0 |
+| [Canvas](#canvas) | 18 | 11 | 3 | 2 | 2 | 0 |
 | [Context menus](#menus) | 8 | 0 | 5 | 2 | 1 | 0 |
 | [Dialogs and windows](#dialogs) | 8 | 4 | 1 | 0 | 3 | 0 |
 | [Scenes panel](#scenes) | 10 | 4 | 3 | 2 | 1 | 0 |
 | [Scene objects panel](#objects) | 9 | 6 | 1 | 1 | 1 | 0 |
-| [Inspector](#inspector) | 10 | 5 | 2 | 1 | 2 | 0 |
+| [Inspector](#inspector) | 10 | 5 | 2 | 2 | 1 | 0 |
 | [Transform panel](#transform) | 4 | 4 | 0 | 0 | 0 | 0 |
 | [Filters](#filters) | 8 | 5 | 0 | 0 | 3 | 0 |
 | [Mixer](#mixer) | 7 | 4 | 0 | 2 | 1 | 0 |
@@ -70,7 +70,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Transitions](#transitions) | 6 | 3 | 2 | 0 | 1 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
 | [Keyboard](#keyboard) | 7 | 1 | 3 | 1 | 2 | 0 |
-| **Total** | **130** | **62** | **28** | **12** | **27** | **1** |
+| **Total** | **130** | **62** | **28** | **14** | **25** | **1** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -158,7 +158,7 @@ Spec: [workspace › canvas structure](../design/ui-prototype/spec-workspace.md#
 | CV-05 | Move with snapping | Drag moves; snaps edges and centres to the canvas and other items within 6px, with magenta guides; Ctrl turns snapping off for the drag. | ✅ | A rotated item doesn't snap, as in the prototype. The live picture follows the drag through live values ([ADR-0032](adr/0032-live-edits-and-undo.md), #747), and the drop is one undoable edit. |
 | CV-06 | Resize | Handles keep the aspect ratio; Ctrl stretches; Shift halves pointer speed; minimum 10px. | ✅ | A corner follows the axis that snapped, else the larger change; an edge scales the other axis about the centre. |
 | CV-07 | Rotate | Knob rotates; Ctrl steps 45°; snaps to 0/90/180 within 3°. | ✅ | Off the 90° snap, the angle rounds to 0.1°. |
-| CV-08 | Crop | Alt-drag a handle, or any handle in crop mode, crops; amber handles and a dashed amber ghost of the uncropped extent. | 🔒 | `item.set_crop` is in source pixels, and turning a dragged edge into source pixels needs the source's size: runtime source sizes (`source.sizes`, [ADR-0022](adr/0022-item-transform-and-canvas.md)) aren't in the protocol. |
+| CV-08 | Crop | Alt-drag a handle, or any handle in crop mode, crops; amber handles and a dashed amber ghost of the uncropped extent. | ⬜ | `item.set_crop` is in source pixels, and turning a dragged edge into source pixels needs the source's size: runtime source sizes are in the protocol since 0.40 (`source.sizes` and `source.size_changed`, [ADR-0022](adr/0022-item-transform-and-canvas.md), B12); a capture source has one while an output runs and its capture has a frame. |
 | CV-09 | Multi-select | Shift-click adds or removes; Ctrl+A selects all; the group gets a dashed box with its own handles to scale and rotate. | ✅ | The group box can reach past the frame; the pointer is followed over the whole canvas area so its handles stay reachable. A corner scales by the larger change (as a single item's resize does), where the prototype takes the larger factor; they differ only when shrinking. |
 | CV-10 | Box select | Drag on empty canvas draws a marquee; Shift adds; a click on empty canvas selects the scene. | ✅ | A marquee can start on the dark margin too. Hits use each item's axis-aligned bounds. |
 | CV-11 | Floating toolbar | Top right: Move/resize (V), Crop (C), then Snapping. | 🟡 | Move/resize and Snapping are built; Crop waits on CV-08. |
@@ -207,7 +207,7 @@ Spec: [workspace › dialogs and floating windows](../design/ui-prototype/spec-w
 | DL-03 | Scene properties | Transition in and out, hotkey, background colour, multiview, "Include its audio when nested". | 🔒 | Transitions are T1; hotkeys K1. |
 | DL-04 | Filter settings dialog | Live-preview settings with an on/off switch; Cancel restores; Defaults; Remove. | ✅ | `filters.rs`, 460 wide, over the Properties dialog when opened from it: the kind's settings form, each change a `filter.set_settings` at once, the switch a `filter.set_enabled`. Cancel, Escape and the backdrop send one batch putting back the settings and the switch it opened with, including any the dialog sent that the engine hasn't reported back yet; Defaults resets every setting but a scene input's scene; Remove sends `filter.remove`. The hint line is the prototype's for the kinds it knows. |
 | DL-05 | Add filter dialog | 720 × 520: searchable catalogue grouped by chain and group, details pane, "Uses the scene" picker for scene-input filters. | ✅ | `filters.rs`. The catalogue is `kind.list`'s filter kinds for the source's chains, not the prototype's wish list: the prototype's groups, names and hints for the kinds it knows, the engine's pixelate, aspect ratio and image mask in the groups they fit, effect-pack kinds under Effect packs and anything else under Other. A kind with a scene setting (the scene mask) needs its scene first, from the scenes that don't show the source. A filter with more than three settings, or whose kind isn't described yet, opens DL-04 once added; one with fewer opens in place in the panel. Add is off while the chain holds its eight filters. |
-| DL-06 | Add source dialog | 720 wide: types grouped Capture, Audio, Media and web, Generated, Scenes; "Create new" with a name, or add an existing source as a reference; new sources placed at native size and their Properties opened. | 🟡 | Built and opened from the right-click menus, with the prototype's names, icons and descriptions for the engine's kinds. A kind the prototype doesn't name goes under Other, and a placed source whose kind the engine doesn't list can be added again but not created. Native sizes are the prototype's per-type table, as boxes with the `fit` mode, because the protocol has no source sizes (see [CV-08](#canvas)). A new source's item is selected and its Properties dialog (DL-02) opens once the engine has accepted it; a placement of an existing source is selected with the Inspector shown. A blank name becomes "<type> N", counting that kind's sources. |
+| DL-06 | Add source dialog | 720 wide: types grouped Capture, Audio, Media and web, Generated, Scenes; "Create new" with a name, or add an existing source as a reference; new sources placed at native size and their Properties opened. | 🟡 | Built and opened from the right-click menus, with the prototype's names, icons and descriptions for the engine's kinds. A kind the prototype doesn't name goes under Other, and a placed source whose kind the engine doesn't list can be added again but not created. Native sizes are the prototype's per-type table, as boxes with the `fit` mode, because the UI doesn't read source sizes yet (`source.sizes`, protocol 0.40; see [CV-08](#canvas)). A new source's item is selected and its Properties dialog (DL-02) opens once the engine has accepted it; a placement of an existing source is selected with the Inspector shown. A blank name becomes "<type> N", counting that kind's sources. |
 | DL-07 | Pop-out and projectors | A scene or source in a floating window, or full screen on a monitor. | 🔒 | Previews of any scene or source (decision register D36). |
 | DL-08 | Create YouTube stream | Title, description, visibility, latency, start now or schedule, category, DVR, made for kids. | 🔒 | Y4 and the OAuth client ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)). |
 
@@ -267,7 +267,7 @@ in the Inspector until the Inspector's own rows say otherwise.
 |---|---|---|---|---|
 | IN-01 | Header | Type icon, name (italic for a reference), kind, "+N" for more selected, labels and favourite. | 🟡 | Name (italic when the source is placed in another scene too), kind, "+N" and the favourite star (`source.set_meta`, `scene.set_meta`) are built. Type icons and labels wait on SC-08's icons and label manager. |
 | IN-02 | Parameters | X, Y, W, H in px, and Rotation, as number fields bound to the canvas. | ✅ | Each change is one `item.set_geometry`. X and Y are the unrotated box's top-left corner. The fields show committed values, so a canvas drag shows in them once dropped. |
-| IN-03 | Size in % | W % and H % of the source's own size. | 🔒 | Source sizes as runtime state (`source.sizes`, [ADR-0022](adr/0022-item-transform-and-canvas.md)) aren't in the protocol. |
+| IN-03 | Size in % | W % and H % of the source's own size. | ⬜ | Source sizes as runtime state are in the protocol since 0.40 (`source.sizes`, [ADR-0022](adr/0022-item-transform-and-canvas.md), B12); a capture source has one while an output runs and its capture has a frame. |
 | IN-04 | W/H link | Link toggle keeps the aspect ratio while editing W or H. | ✅ | On by default, kept while the panel is shown. |
 | IN-05 | 3D | Tilt, Turn, Depth, Perspective, folded by default. | ⬜ | `item.set_geometry` takes any 3D it can draw from protocol 0.34 ([ADR-0050](adr/0050-3d-transforms-rendering.md)). |
 | IN-06 | Crop | Left, Right, Top, Bottom in px. | ✅ | `item.set_crop`, in source pixels. The canvas doesn't draw crop yet (CV-08). |
@@ -450,8 +450,8 @@ starts when the one before it has passed review.
 3. **Canvas:** edits the selected scene with one shared selection, frame and chrome,
    floating toolbar, multi-select, box select, the prototype's modifier keys
    (CV-01, CV-02, CV-04 to CV-07, CV-09 to CV-13, CV-18, KB-01, KB-02). The context
-   menu (CV-14) comes with the other menus in batch 5, and crop (CV-08) once the
-   protocol reports source sizes.
+   menu (CV-14) comes with the other menus in batch 5, and crop (CV-08) once the UI
+   reads source sizes (`source.sizes`, protocol 0.40).
 4. **Inspector and Transform:** the shared number field, placement fields, W/H link,
    crop, blending, scene section and transitions (WS-05, IN-01, IN-02, IN-04, IN-06 to
    IN-09), then align, distribute and arrange (TF-01 to TF-04).

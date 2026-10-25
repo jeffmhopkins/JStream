@@ -70,6 +70,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("scene.list", Class(R)),
     ("output.status", Class(R)),
     ("source.list", Class(R)),
+    ("source.sizes", Class(R)),
     ("item.list", Class(R)),
     ("state.get", Class(R)),
     ("kind.list", Class(R)),

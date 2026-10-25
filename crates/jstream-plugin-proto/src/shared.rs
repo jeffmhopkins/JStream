@@ -13,7 +13,7 @@ use crate::{
 #[repr(C)]
 #[derive(Debug, Default)]
 pub struct Shared {
-    /// Configuration, the host's state and both sides' counters.
+    /// Configuration, the host's state and counters, and the engine's requests.
     pub status: Status,
     /// The mixer's dry blocks, written by the mixer and read by the host.
     pub input: BlockRing,
@@ -140,8 +140,6 @@ impl Shared {
             &s.heartbeat,
             &s.processed,
             &s.host_skipped,
-            &s.mixer_misses,
-            &s.mixer_miss_run,
         ] {
             field.store(0, Ordering::Relaxed);
         }
@@ -265,12 +263,12 @@ mod tests {
         assert!(shared.input.write(0, &[0.5; 512]));
         assert!(shared.params_in.push(ParamEvent { id: 1, value: 1.0 }));
         shared.publish_ready(64);
-        shared.status.mixer_misses.store(9, Ordering::Relaxed);
+        shared.status.host_skipped.store(9, Ordering::Relaxed);
         shared.init(CONFIG).unwrap();
         assert_eq!(shared.input.head(), 0);
         assert_eq!(shared.params_in.pop(), None);
         assert_eq!(shared.ready_latency(), None);
-        assert_eq!(shared.status.mixer_misses.load(Ordering::Relaxed), 0);
+        assert_eq!(shared.status.host_skipped.load(Ordering::Relaxed), 0);
     }
 
     #[test]

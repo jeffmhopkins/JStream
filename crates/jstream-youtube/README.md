@@ -85,6 +85,10 @@ Contents:
     broadcast) and the monitor stream on (`testing` needs it). `NewStream::new` asks for
     a reusable RTMP stream with variable resolution and frame rate.
   - A stream's key (`cdn.ingestionInfo.streamName`) parses straight into a `Secret`.
+  - `LiveClient::with_secret_hook` hands a `SecretHook` (a `Fn(&str)`) the refresh
+    token and access token at once, then each access token, rotated refresh token and
+    stream key (from `list_streams`, `stream` and `insert_stream`) as the client gets
+    them, so the host can register them with its crash reports' redaction (#353).
 - **`chat`:** reading a broadcast's live chat (ADR-0041 §2, §5).
   `LiveClient::chat_messages(live_chat_id, page_token)` reads one page of
   `liveChatMessages.list` (`part=id,snippet,authorDetails`, up to 2000 messages, oldest

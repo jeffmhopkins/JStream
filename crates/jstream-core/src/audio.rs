@@ -59,6 +59,7 @@ use jstream_sources::{AudioScope, AudioScopes};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::time::Instant;
 
 // The mixer has a bus slot for every bus a collection may hold, and no more: the
 // engine's limit and the protocol's are one number (#372).
@@ -309,7 +310,7 @@ impl AudioRouting {
             .map_err(|err| format!("output tap: {err}"))?;
         let mut chain = Chain::default();
         if let Some(output) = state.output(output_id) {
-            for reason in chain.apply(&control, &chain_of(output.filters())) {
+            for reason in chain.apply(&control, &chain_of(output.filters()), None, Instant::now()) {
                 tracing::warn!(output_id = %output_id, reason, "output filter not applied");
             }
         }
@@ -360,10 +361,12 @@ impl AudioRouting {
         };
         attached.removing.retain(|bus| !bus.remove());
         attached.removing_taps.retain(|tap| !tap.remove());
-        for reason in attached
-            .master_chain
-            .apply(&attached.control.master(), &chain_of(state.master()))
-        {
+        for reason in attached.master_chain.apply(
+            &attached.control.master(),
+            &chain_of(state.master()),
+            None,
+            Instant::now(),
+        ) {
             tracing::warn!(reason, "master filter not applied");
         }
         for (output_id, tap) in &mut attached.output_taps {
@@ -372,7 +375,12 @@ impl AudioRouting {
             let Some(output) = state.output(output_id) else {
                 continue;
             };
-            for reason in tap.chain.apply(&tap.control, &chain_of(output.filters())) {
+            for reason in tap.chain.apply(
+                &tap.control,
+                &chain_of(output.filters()),
+                None,
+                Instant::now(),
+            ) {
                 tracing::warn!(output_id = %output_id, reason, "output filter not applied");
             }
         }
