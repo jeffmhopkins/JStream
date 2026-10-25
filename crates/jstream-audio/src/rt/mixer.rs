@@ -118,6 +118,17 @@ impl MixerConfig {
     }
 }
 
+/// Where a bus monitor listens (ADR-0028, D22): before or after the bus's filter chain.
+/// Both are after the bus's fader and mute, and before the master chain.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum MonitorTap {
+    /// The bus's sum before its filters ("Hear: before FX").
+    PreFilters,
+    /// The bus's output after its filters ("Hear: after FX").
+    #[default]
+    PostFilters,
+}
+
 /// One mixed block's place on the engine time line.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Block {
@@ -194,6 +205,10 @@ pub struct Mixer {
     /// Each bus slot's output after the master chain, for the buses that feed an
     /// output: `block_frames` frames per slot.
     post: Box<[[f32; 2]]>,
+    /// Each bus slot's sum before its filter chain, through its fader and mute: what a
+    /// `pre_filters` monitor hears ([`Mixer::monitor_block`]). `block_frames` frames
+    /// per slot.
+    pre: Box<[[f32; 2]]>,
     taps: Vec<Tap>,
     /// The longest input chain's latency, frames: every input is delayed to it.
     input_latency: usize,
@@ -247,6 +262,7 @@ impl Mixer {
             scratch: vec![[0.0; 2]; config.block_frames].into_boxed_slice(),
             acc: vec![[0.0; 2]; MAX_BUSES * config.block_frames].into_boxed_slice(),
             post: vec![[0.0; 2]; MAX_BUSES * config.block_frames].into_boxed_slice(),
+            pre: vec![[0.0; 2]; MAX_BUSES * config.block_frames].into_boxed_slice(),
             taps: Vec::with_capacity(MAX_OUTPUT_TAPS),
             input_latency: 0,
             bus_latency: 0,
@@ -362,6 +378,26 @@ impl Mixer {
             .map(<[[f32; 2]]>::as_flattened)
     }
 
+    /// What a monitor on bus `bus` hears in the last block mixed (interleaved stereo),
+    /// or silence before the first: at `tap`, before or after the bus's filter chain,
+    /// in both cases through its fader and mute and before the master chain (ADR-0028,
+    /// D22). [`MonitorTap::PostFilters`] is [`Self::bus_block`]. A `PreFilters` block
+    /// skips the bus chain's latency and its compensation, so it is that many frames
+    /// ahead of the `PostFilters` one: a monitor wants the earliest signal. `None` when
+    /// the mixer does not hold that bus, as for [`Self::bus_block`].
+    pub fn monitor_block(&self, bus: BusId, tap: MonitorTap) -> Option<&[f32]> {
+        let post = self.bus_block(bus)?;
+        match tap {
+            MonitorTap::PostFilters => Some(post),
+            MonitorTap::PreFilters => {
+                let n = self.config.block_frames;
+                self.pre
+                    .get(bus.slot * n..(bus.slot + 1) * n)
+                    .map(<[[f32; 2]]>::as_flattened)
+            }
+        }
+    }
+
     /// Input `input`'s signal in the last block mixed (interleaved stereo): after its
     /// filter chain, fader, mute and activity gain, before its sends, so what it
     /// contributes to the mix before each send's gain. Silence before the first block.
@@ -449,6 +485,7 @@ impl Mixer {
             scratch,
             acc,
             post,
+            pre,
             taps,
             input_latency,
             bus_latency,
@@ -493,14 +530,23 @@ impl Mixer {
                 slot.send_now[k] = target;
             }
         }
-        for (bus, sum) in buses.iter_mut().zip(acc.chunks_exact_mut(n)) {
+        for ((bus, sum), pre) in buses
+            .iter_mut()
+            .zip(acc.chunks_exact_mut(n))
+            .zip(pre.chunks_exact_mut(n))
+        {
             let Some(bus) = bus else { continue };
+            // A `pre_filters` monitor hears the sum before the chain, through the same
+            // fader and mute: only the filters differ between the two monitor taps.
+            pre.copy_from_slice(sum);
             let comp = bus_latency - bus.chain.latency().min(bus_latency);
             bus.chain.process(sum, comp);
             let target = bus.shared.gain.effective();
             apply_gain(sum, bus.gain_now, target);
+            apply_gain(pre, bus.gain_now, target);
             bus.gain_now = target;
             zero_non_finite(sum);
+            zero_non_finite(pre);
             let (peak, rms) = levels(sum);
             bus.shared.meter.publish(peak, rms);
             bus.shared.blocks.add(1);
@@ -896,6 +942,30 @@ impl MixerControl {
     /// The master chain's control handle, as [`Mixer::master`].
     pub fn master(&self) -> MasterControl {
         MasterControl::new(Arc::clone(&self.plane))
+    }
+
+    /// A monitor that plays on an output device of `device`'s format (the device's own
+    /// rate and layout, interleaved `f32`, as
+    /// [`AudioStream::format`](jstream_platform::AudioStream::format) reports it). The
+    /// mixer thread pushes each block the monitor hears ([`Mixer::monitor_block`]) into
+    /// its [`feed`](super::monitor::Monitor::feed), and its
+    /// [`player`](super::monitor::Monitor::player) goes to `AudioIo::open_output` as the
+    /// stream's handler. Allocates on the caller; the mixer itself holds nothing of it.
+    ///
+    /// # Errors
+    /// [`AudioError::UnsupportedFormat`] for planar samples, and
+    /// [`AudioError::UnsupportedRate`] for a device rate more than 6 times above or 4
+    /// times below the engine rate.
+    pub fn add_monitor(
+        &self,
+        device: jstream_media::AudioFormat,
+    ) -> Result<super::monitor::Monitor, AudioError> {
+        super::monitor::monitor(
+            device,
+            self.plane.sample_rate(),
+            self.plane.block_frames(),
+            self.plane.retirer(),
+        )
     }
 
     /// Adds an output tap on `bus` while the mixer is running: the bus after the master
@@ -1526,6 +1596,42 @@ mod tests {
         let blk = m.mix(41_920, &mut out).unwrap();
         assert_eq!(m.latency_frames(), 0);
         assert_eq!(blk.pts.ticks(), 41_920);
+    }
+
+    /// ADR-0028 (D22): a monitor hears a bus before or after its filters, through its
+    /// fader and mute either way, and before the master chain.
+    #[test]
+    fn monitor_taps_hear_the_bus_before_or_after_its_filters() {
+        use crate::{FilterSpec, MonitorTap};
+        let mut m = Mixer::new(config(480)).unwrap();
+        let (mut a, ca) = m.add_input(stereo48()).unwrap();
+        feed(&mut a, 0.5, 0.5, 1.0);
+        let aux = m.add_bus().unwrap();
+        ca.set_send(aux.id(), 1.0);
+        aux.add_filter(FilterSpec::Gain { gain_db: -6.0 }).unwrap();
+        aux.set_gain(0.5);
+        m.master()
+            .add_filter(FilterSpec::Gain { gain_db: -20.0 })
+            .unwrap();
+        let mut out = vec![0.0; 960];
+        // The send ramps in over the first block.
+        m.mix(40_000, &mut out).unwrap();
+        m.mix(40_480, &mut out).unwrap();
+        let g6 = 10f32.powf(-6.0 / 20.0);
+        let pre = m.monitor_block(aux.id(), MonitorTap::PreFilters).unwrap();
+        assert_frames(pre, [0.25; 2], "before the filters, after the fader");
+        let post = m.monitor_block(aux.id(), MonitorTap::PostFilters).unwrap();
+        assert_frames(post, [0.25 * g6; 2], "after the filters and the fader");
+        assert_eq!(Some(post), m.bus_block(aux.id()));
+        aux.set_muted(true);
+        m.mix(40_960, &mut out).unwrap();
+        m.mix(41_440, &mut out).unwrap();
+        for tap in [MonitorTap::PreFilters, MonitorTap::PostFilters] {
+            assert_frames(m.monitor_block(aux.id(), tap).unwrap(), [0.0; 2], "muted");
+        }
+        assert!(aux.remove());
+        m.mix(41_920, &mut out).unwrap();
+        assert!(m.monitor_block(aux.id(), MonitorTap::PreFilters).is_none());
     }
 
     /// ADR-0027: the master chain runs after each bus that feeds an output (the master
