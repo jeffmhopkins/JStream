@@ -47,6 +47,9 @@ pub(crate) struct Node {
     client: Option<u32>,
     /// From the node's info, once read (see the module doc).
     channels: Option<u32>,
+    /// The ALSA sound card it records from or plays to, from its info: for pairing a
+    /// video device with its microphone (`crate::pairing`).
+    card: Option<u32>,
 }
 
 /// One client from the registry: whose process a stream node is.
@@ -85,6 +88,7 @@ impl Node {
             app_name: get("application.name"),
             client: number(props, "client.id"),
             channels: None,
+            card: None,
         })
     }
 
@@ -212,8 +216,9 @@ impl Graph {
         self.nodes.get(&id).is_some_and(Node::is_device)
     }
 
-    /// Takes a node's info properties, for its channel count: `audio.channels`, else the
-    /// number of `audio.position` entries (`[FL FR]` or `FL,FR`).
+    /// Takes a node's info properties, for its channel count (`audio.channels`, else the
+    /// number of `audio.position` entries, `[FL FR]` or `FL,FR`) and its ALSA card
+    /// (`api.alsa.pcm.card`, else `alsa.card` or `api.alsa.card`).
     pub(crate) fn set_node_info(&mut self, id: u32, props: &[(String, String)]) {
         let Some(node) = self.nodes.get_mut(&id) else {
             return;
@@ -229,6 +234,21 @@ impl Graph {
         if channels.is_some() {
             node.channels = channels;
         }
+        let card = ["api.alsa.pcm.card", "alsa.card", "api.alsa.card"]
+            .into_iter()
+            .find_map(|key| number(props, key));
+        if card.is_some() {
+            node.card = card;
+        }
+    }
+
+    /// The inputs on an ALSA sound card, by card index, in id order.
+    pub(crate) fn card_inputs(&self) -> Vec<(u32, DeviceId)> {
+        self.nodes
+            .values()
+            .filter(|n| n.records())
+            .filter_map(|n| Some((n.card?, DeviceId::new(n.name.clone()))))
+            .collect()
     }
 
     /// Adds or replaces a client from a `global` event.
@@ -734,6 +754,28 @@ mod tests {
         // A count with no layout of its own (here 4) is planned as stereo.
         g.set_node_info(43, &props(&[("audio.channels", "4")]));
         assert_eq!(layout(&g, "bluez_headset"), ChannelLayout::Stereo);
+    }
+
+    /// Inputs list their ALSA card from their info; outputs and nodes on no card
+    /// don't, and a later info without a card keeps the one known.
+    #[test]
+    fn inputs_on_a_sound_card_come_from_node_info() {
+        let mut g = graph();
+        assert_eq!(g.card_inputs(), Vec::new());
+        g.set_node_info(40, &props(&[("api.alsa.pcm.card", "0")]));
+        g.set_node_info(41, &props(&[("api.alsa.pcm.card", "0")]));
+        g.set_node_info(43, &props(&[("alsa.card", "2")]));
+        g.set_node_info(43, &props(&[("audio.channels", "1")]));
+        assert_eq!(
+            g.card_inputs(),
+            vec![
+                (
+                    0,
+                    DeviceId::new("alsa_input.pci-0000_00_1f.3.analog-stereo")
+                ),
+                (2, DeviceId::new("bluez_headset")),
+            ]
+        );
     }
 
     #[test]
