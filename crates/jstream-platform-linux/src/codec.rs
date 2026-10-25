@@ -1,12 +1,13 @@
 //! Codecs on Linux (ADR-0060 §6, §7).
 //!
-//! Video encode goes through VA-API. Software H.264 is Cisco's OpenH264 binary, once the
-//! user has downloaded it (`crate::openh264`, ADR-0061): it serves
-//! [`HardwarePreference::Avoid`], and `Prefer` on a machine with no VA-API encoder.
+//! Video encode goes through VA-API, H.264 or HEVC. Software H.264 is Cisco's OpenH264
+//! binary, once the user has downloaded it (`crate::openh264`, ADR-0061): it serves
+//! [`HardwarePreference::Avoid`], and `Prefer` on a machine with no VA-API H.264
+//! encoder. There is no software HEVC encoder: HEVC is VA-API's alone.
 //! Audio encode is JStream's own AAC-LC encoder (`crate::aac`, ADR-0061 and ADR-0062),
 //! unless the `aac-encoder` feature is off.
 //! [`VaapiCodecs`] lists the encoders the probe finds, picks one for a configuration
-//! and opens a VA-API H.264 session on it. On the engine's GPU context
+//! and opens a VA-API session on it. On the engine's GPU context
 //! (`Codecs::on_context`) it keeps the encoders on that device's render node, whose
 //! sessions take the context's encode targets.
 
@@ -15,36 +16,44 @@ use jstream_platform::{HardwarePreference, PlatformError, VideoEncoderConfig};
 
 use crate::VaEncoder;
 
-/// The VA-API encoder to open for `config`, out of `encoders` (the probe's order).
+/// The VA-API encoder to open for `config`, out of `encoders` (the probe's order): the
+/// first that encodes its codec.
 ///
 /// # Errors
-/// [`PlatformError::Unsupported`] for a codec other than H.264 and for
-/// [`HardwarePreference::Avoid`] (software H.264 is OpenH264's, not VA-API's);
-/// [`PlatformError::MissingComponent`], with the distributions' remedy, when no driver
-/// encodes H.264 (ADR-0060 §6).
+/// [`PlatformError::Unsupported`] for a codec other than H.264 and HEVC and for
+/// [`HardwarePreference::Avoid`] (software H.264 is OpenH264's, not VA-API's, and there
+/// is no software HEVC); [`PlatformError::MissingComponent`], with the distributions'
+/// remedy, when no driver encodes the codec (ADR-0060 §6).
 pub fn choose_encoder<'a>(
     encoders: &'a [VaEncoder],
     config: &VideoEncoderConfig,
 ) -> Result<&'a VaEncoder, PlatformError> {
-    if config.codec != Codec::H264 {
-        return Err(PlatformError::Unsupported {
-            what: format!(
-                "{:?} encoding on Linux (H.264 only, ADR-0060)",
-                config.codec
-            ),
-        });
-    }
+    let component = match config.codec {
+        Codec::H264 => "a VA-API driver with H.264 encode",
+        Codec::Hevc => "a VA-API driver with HEVC encode",
+        other => {
+            return Err(PlatformError::Unsupported {
+                what: format!("{other:?} encoding on Linux (H.264 and HEVC only, ADR-0060)"),
+            });
+        }
+    };
     if config.hardware == HardwarePreference::Avoid {
         return Err(PlatformError::Unsupported {
-            what: "a software H.264 encoder through VA-API (software H.264 on Linux is \
-                   Cisco's OpenH264, ADR-0061)"
-                .into(),
+            what: match config.codec {
+                Codec::H264 => "a software H.264 encoder through VA-API (software H.264 on \
+                                Linux is Cisco's OpenH264, ADR-0061)"
+                    .into(),
+                other => {
+                    format!("a software {other:?} encoder (Linux encodes it through VA-API only)")
+                }
+            },
         });
     }
     encoders
-        .first()
+        .iter()
+        .find(|e| e.profile.codec() == config.codec)
         .ok_or_else(|| PlatformError::MissingComponent {
-            component: "a VA-API driver with H.264 encode",
+            component,
             remedy: "on Intel, install intel-media-va-driver-non-free (Debian, Ubuntu) or \
                  intel-media-driver (Fedora); on AMD with Fedora's Mesa, install \
                  mesa-va-drivers-freeworld from RPM Fusion."
@@ -73,7 +82,7 @@ mod backend {
     use crate::openh264::{
         OPENH264_COMPONENT, OpenH264Store, openh264_encoder_info, wants_software,
     };
-    use crate::vaapi::VaapiH264Encoder;
+    use crate::vaapi::VaapiEncoder;
     use crate::{VaEncoder, probe_encoders};
 
     /// The `(major, minor)` of the device file at `node`.
@@ -85,16 +94,21 @@ mod backend {
 
     /// How an encoder is listed and reported.
     fn info(e: &VaEncoder) -> CodecInfo {
+        let codec = e.profile.codec();
+        let label = match codec {
+            Codec::Hevc => "HEVC",
+            _ => "H.264",
+        };
         CodecInfo {
-            name: format!("VA-API H.264 ({}, {})", e.vendor, e.node),
-            codec: Codec::H264,
+            name: format!("VA-API {label} ({}, {})", e.vendor, e.node),
+            codec,
             role: CodecRole::VideoEncoder,
             hardware: true,
         }
     }
 
-    /// Codecs through VA-API (ADR-0060 §6): H.264 encode sessions on the probe's
-    /// encoders, on CPU frames, or on the GPU context's encode targets for the backend
+    /// Codecs through VA-API (ADR-0060 §6): H.264 and HEVC encode sessions on the
+    /// probe's encoders, on CPU frames, or on the GPU context's encode targets for the backend
     /// [`Codecs::on_context`] returns. And the Rust AAC-LC encoder.
     #[derive(Clone, Debug)]
     pub struct VaapiCodecs {
@@ -174,11 +188,16 @@ mod backend {
             &self,
             config: &VideoEncoderConfig,
         ) -> Result<Box<dyn VideoEncoder>, PlatformError> {
-            let hardware = self.encoders.as_ref().map_or(0, Vec::len);
+            // OpenH264 stands in for the VA-API H.264 encoders only.
+            let hardware = self.encoders.as_ref().map_or(0, |e| {
+                e.iter()
+                    .filter(|e| e.profile.codec() == Codec::H264)
+                    .count()
+            });
             if self.gpu.is_some() && config.hardware == HardwarePreference::Avoid {
                 // OpenH264 reads CPU frames; the engine opens it on the CPU backend.
                 return Err(PlatformError::Unsupported {
-                    what: "a software H.264 encoder on GPU frames".into(),
+                    what: format!("a software {:?} encoder on GPU frames", config.codec),
                 });
             }
             if self.gpu.is_none() && wants_software(hardware, config) {
@@ -186,7 +205,7 @@ mod backend {
             }
             let encoders = self.encoders.as_ref().map_err(Clone::clone)?;
             let encoder = choose_encoder(encoders, config)?;
-            Ok(Box::new(VaapiH264Encoder::open_on(
+            Ok(Box::new(VaapiEncoder::open_on(
                 encoder,
                 config,
                 info(encoder),
@@ -265,7 +284,7 @@ mod tests {
     use jstream_platform::{HardwarePreference, PlatformError, RateControl, VideoEncoderConfig};
 
     use super::choose_encoder;
-    use crate::{H264Profile, VaEncoder, VaEntrypoint};
+    use crate::{H264Profile, VaEncoder, VaEntrypoint, VaProfile};
 
     fn config(codec: Codec, hardware: HardwarePreference) -> VideoEncoderConfig {
         VideoEncoderConfig {
@@ -283,8 +302,24 @@ mod tests {
         VaEncoder {
             node: "/dev/dri/renderD128".into(),
             vendor: "Intel iHD driver".into(),
-            profile: H264Profile::High,
+            profile: VaProfile::H264(H264Profile::High),
             entrypoint: VaEntrypoint::EncSliceLp,
+        }
+    }
+
+    fn intel_hevc() -> VaEncoder {
+        VaEncoder {
+            profile: VaProfile::HevcMain,
+            ..intel()
+        }
+    }
+
+    fn amd_hevc() -> VaEncoder {
+        VaEncoder {
+            node: "/dev/dri/renderD129".into(),
+            vendor: "Mesa Gallium driver".into(),
+            profile: VaProfile::HevcMain,
+            entrypoint: VaEntrypoint::EncSlice,
         }
     }
 
@@ -300,21 +335,59 @@ mod tests {
     }
 
     #[test]
+    fn each_codec_picks_its_first_encoder() {
+        // The probe lists a node's H.264 encoder before its HEVC one.
+        let encoders = [intel(), intel_hevc(), amd_hevc()];
+        let h264 = choose_encoder(&encoders, &config(Codec::H264, HardwarePreference::Prefer))
+            .expect("an H.264 encoder");
+        assert_eq!(h264, &intel());
+        let hevc = choose_encoder(&encoders, &config(Codec::Hevc, HardwarePreference::Require))
+            .expect("an HEVC encoder");
+        assert_eq!(hevc, &intel_hevc());
+        let other_node = [intel(), amd_hevc()];
+        let hevc = choose_encoder(
+            &other_node,
+            &config(Codec::Hevc, HardwarePreference::Prefer),
+        )
+        .expect("an HEVC encoder");
+        assert_eq!(hevc.node, "/dev/dri/renderD129");
+        // An HEVC-only machine has no H.264 encoder to give.
+        assert!(matches!(
+            choose_encoder(
+                &[amd_hevc()],
+                &config(Codec::H264, HardwarePreference::Prefer)
+            ),
+            Err(PlatformError::MissingComponent { .. })
+        ));
+    }
+
+    #[test]
     fn refusals_say_why() {
-        let encoders = [intel()];
+        let encoders = [intel(), intel_hevc()];
         for (codec, hw) in [
-            (Codec::Hevc, HardwarePreference::Prefer),
+            (Codec::Av1, HardwarePreference::Prefer),
             (Codec::H264, HardwarePreference::Avoid),
+            // There is no software HEVC encoder on Linux.
+            (Codec::Hevc, HardwarePreference::Avoid),
         ] {
             assert!(matches!(
                 choose_encoder(&encoders, &config(codec, hw)),
                 Err(PlatformError::Unsupported { .. })
             ));
         }
-        // No H.264 encode driver is something to install (ADR-0060 §6).
-        assert!(matches!(
-            choose_encoder(&[], &config(Codec::H264, HardwarePreference::Prefer)),
-            Err(PlatformError::MissingComponent { .. })
-        ));
+        // No encode driver for the codec is something to install (ADR-0060 §6).
+        for codec in [Codec::H264, Codec::Hevc] {
+            let refused = choose_encoder(&[], &config(codec, HardwarePreference::Prefer));
+            assert!(matches!(
+                refused,
+                Err(PlatformError::MissingComponent { .. })
+            ));
+        }
+        match choose_encoder(&[intel()], &config(Codec::Hevc, HardwarePreference::Prefer)) {
+            Err(PlatformError::MissingComponent { component, .. }) => {
+                assert_eq!(component, "a VA-API driver with HEVC encode");
+            }
+            other => panic!("unexpected: {other:?}"),
+        }
     }
 }

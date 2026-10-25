@@ -49,6 +49,63 @@ impl RcMode {
     }
 }
 
+/// The rate control and frame rate of a configuration, checked: what the rate
+/// controller's misc buffers carry, for either codec.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Rate {
+    pub(crate) rc: RcMode,
+    /// The peak rate asked for, in kb/s (the rate for CBR).
+    pub(crate) peak_kbps: u32,
+    /// The peak rate for VBR and the rate for CBR, in bits per second.
+    pub(crate) bits_per_second: u32,
+    /// The mean rate, in bits per second (the peak for CBR).
+    pub(crate) target_bits_per_second: u32,
+    /// The mean as a percentage of the peak (100 for CBR).
+    pub(crate) target_percentage: u32,
+    /// Frames per second as a reduced fraction, numerator first.
+    pub(crate) fps: (u32, u32),
+}
+
+/// Checks a configuration's rate control and frame period.
+///
+/// # Errors
+/// [`PlatformError::Unsupported`] for rate control other than CBR and VBR, a zero bit
+/// rate, a VBR peak below its mean, and a frame period with a zero numerator.
+pub(crate) fn rate(config: &VideoEncoderConfig) -> Result<Rate, PlatformError> {
+    let unsupported = |what: String| Err(PlatformError::Unsupported { what });
+    let (rc, kbps, peak_kbps) = match config.rate_control {
+        RateControl::Cbr { kbps } => (RcMode::Cbr, kbps, kbps),
+        RateControl::Vbr { kbps, max_kbps } => (RcMode::Vbr, kbps, max_kbps),
+        other => return unsupported(format!("rate control {other:?}")),
+    };
+    if kbps == 0 || peak_kbps < kbps {
+        return unsupported(format!("rate control {:?}", config.rate_control));
+    }
+    let target_percentage =
+        u32::try_from((u64::from(kbps) * 100 + u64::from(peak_kbps) / 2) / u64::from(peak_kbps))
+            .unwrap_or(100)
+            .clamp(1, 100);
+    // A frame lasts num/den seconds: den/num frames per second.
+    let period = config.frame_period;
+    let (pn, pd) = (u64::from(period.num()), u64::from(period.den()));
+    if pn == 0 {
+        return unsupported("a frame period of 0".into());
+    }
+    let g = gcd(pn, pd);
+    let (pn, pd) = (pn / g, pd / g);
+    Ok(Rate {
+        rc,
+        peak_kbps,
+        bits_per_second: peak_kbps.saturating_mul(1000),
+        target_bits_per_second: kbps.saturating_mul(1000),
+        target_percentage,
+        fps: (
+            u32::try_from(pd).unwrap_or(u32::MAX),
+            u32::try_from(pn).unwrap_or(u32::MAX),
+        ),
+    })
+}
+
 /// A checked configuration and everything derived from it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Settings {
@@ -175,35 +232,17 @@ pub(crate) fn check(
             config.keyframe_interval
         ));
     }
-    let (rc, kbps, peak_kbps) = match config.rate_control {
-        RateControl::Cbr { kbps } => (RcMode::Cbr, kbps, kbps),
-        RateControl::Vbr { kbps, max_kbps } => (RcMode::Vbr, kbps, max_kbps),
-        other => return unsupported(format!("rate control {other:?}")),
-    };
-    if kbps == 0 || peak_kbps < kbps {
-        return unsupported(format!("rate control {:?}", config.rate_control));
-    }
-    let bits_per_second = peak_kbps.saturating_mul(1000);
-    let target_bits_per_second = kbps.saturating_mul(1000);
-    let target_percentage =
-        u32::try_from((u64::from(kbps) * 100 + u64::from(peak_kbps) / 2) / u64::from(peak_kbps))
-            .unwrap_or(100)
-            .clamp(1, 100);
-    // A frame lasts num/den seconds: den/num frames per second, and two ticks of
-    // num/(2 den) seconds.
-    let period = config.frame_period;
-    let (pn, pd) = (u64::from(period.num()), u64::from(period.den()));
-    if pn == 0 {
-        return unsupported("a frame period of 0".into());
-    }
-    let g = gcd(pn, pd);
-    let (pn, pd) = (pn / g, pd / g);
-    let fps = (
-        u32::try_from(pd).unwrap_or(u32::MAX),
-        u32::try_from(pn).unwrap_or(u32::MAX),
-    );
-    let Ok(time_scale) = u32::try_from(2 * pd) else {
-        return unsupported(format!("a frame period of {}/{}", pn, pd));
+    let Rate {
+        rc,
+        peak_kbps,
+        bits_per_second,
+        target_bits_per_second,
+        target_percentage,
+        fps,
+    } = rate(config)?;
+    // Two ticks of num/(2 den) seconds per frame.
+    let Some(time_scale) = fps.0.checked_mul(2) else {
+        return unsupported(format!("a frame period of {}/{}", fps.1, fps.0));
     };
     let tick = (fps.1, time_scale);
     let (width_mbs, height_mbs) = (width.div_ceil(16), height.div_ceil(16));
@@ -529,11 +568,20 @@ pub(crate) fn slice(
 
 /// The rate controller's settings, with a one-second window.
 pub(crate) fn rate_control(s: &Settings) -> MiscParam<RateControlParam> {
+    rate_control_buffer(s.bits_per_second, s.target_percentage)
+}
+
+/// The rate controller's settings for a peak of `bits_per_second` and a mean of
+/// `target_percentage` of it, with a one-second window. Either codec's.
+pub(crate) fn rate_control_buffer(
+    bits_per_second: u32,
+    target_percentage: u32,
+) -> MiscParam<RateControlParam> {
     MiscParam {
         kind: misc::RATE_CONTROL,
         data: RateControlParam {
-            bits_per_second: s.bits_per_second,
-            target_percentage: s.target_percentage,
+            bits_per_second,
+            target_percentage,
             window_size: 1000,
             rc_flags: rc_flags(),
             ..RateControlParam::default()
@@ -543,11 +591,16 @@ pub(crate) fn rate_control(s: &Settings) -> MiscParam<RateControlParam> {
 
 /// The coded picture buffer: one second at the peak rate, starting three quarters full.
 pub(crate) fn hrd(s: &Settings) -> MiscParam<HrdParam> {
+    hrd_buffer(s.bits_per_second)
+}
+
+/// [`hrd`] for a peak of `bits_per_second`. Either codec's.
+pub(crate) fn hrd_buffer(bits_per_second: u32) -> MiscParam<HrdParam> {
     MiscParam {
         kind: misc::HRD,
         data: HrdParam {
-            initial_buffer_fullness: s.bits_per_second / 4 * 3,
-            buffer_size: s.bits_per_second,
+            initial_buffer_fullness: bits_per_second / 4 * 3,
+            buffer_size: bits_per_second,
             va_reserved: [0; 4],
         },
     }
@@ -573,10 +626,15 @@ pub(crate) fn va_framerate((num, den): (u32, u32)) -> u32 {
 
 /// The rate controller's frame rate.
 pub(crate) fn frame_rate(s: &Settings) -> MiscParam<FrameRateParam> {
+    frame_rate_buffer(s.fps)
+}
+
+/// The rate controller's frame rate, `fps` frames per second. Either codec's.
+pub(crate) fn frame_rate_buffer(fps: (u32, u32)) -> MiscParam<FrameRateParam> {
     MiscParam {
         kind: misc::FRAME_RATE,
         data: FrameRateParam {
-            framerate: va_framerate(s.fps),
+            framerate: va_framerate(fps),
             framerate_flags: 0,
             va_reserved: [0; 4],
         },
@@ -651,8 +709,15 @@ impl BitWriter {
 /// An Annex B NAL unit: a four-byte start code, the header, and `rbsp` with emulation
 /// prevention bytes inserted.
 pub(crate) fn nal(nal_ref_idc: u8, nal_unit_type: u8, rbsp: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(rbsp.len() + rbsp.len() / 64 + 5);
-    out.extend_from_slice(&[0, 0, 0, 1, (nal_ref_idc & 3) << 5 | (nal_unit_type & 0x1F)]);
+    annex_b(&[(nal_ref_idc & 3) << 5 | (nal_unit_type & 0x1F)], rbsp)
+}
+
+/// An Annex B NAL unit of either codec: a four-byte start code, `header` (H.264's one
+/// byte or HEVC's two), and `rbsp` with emulation prevention bytes inserted.
+pub(crate) fn annex_b(header: &[u8], rbsp: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(rbsp.len() + rbsp.len() / 64 + 4 + header.len());
+    out.extend_from_slice(&[0, 0, 0, 1]);
+    out.extend_from_slice(header);
     let mut zeros = 0;
     for &b in rbsp {
         if zeros >= 2 && b <= 3 {

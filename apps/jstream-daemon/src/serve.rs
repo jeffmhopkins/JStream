@@ -89,6 +89,11 @@ pub fn engine(
     );
     #[cfg(not(any(windows, target_os = "macos")))]
     let engine = Arc::new(engine);
+    if let Some(dir) = &options.plugin_dir {
+        // Last, once the engine is built: a saved plugin keeps a handle to the engine as
+        // it is now, so it sees the loaded collection and acts through the backends.
+        engine.open_plugin_dir(dir);
+    }
     #[cfg(windows)]
     scan_clap_plugins(&engine);
     Ok(engine)
@@ -234,7 +239,8 @@ fn macos_backends() -> anyhow::Result<Backends> {
 ///
 /// CEF runs only in the sandboxed browser helper (ADR-0048), which starts when the first
 /// page opens: the helper (`jstream-browser-helper.exe` and its DLL) and CEF's runtime
-/// files go next to the daemon's exe, CEF's cache in the data directory's `cef` folder
+/// files go in the `browser` folder beside the daemon's exe (or next to it), CEF's cache
+/// in the data directory's `cef` folder
 /// and its log in the log directory's `cef.log`. Neither a
 /// missing data directory nor a device that won't open stops the daemon: without a
 /// device, pages still play their audio and only their frames are dropped, and when the
