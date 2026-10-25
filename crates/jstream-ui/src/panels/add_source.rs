@@ -874,6 +874,7 @@ mod tests {
             geometry,
             crop: Crop::NONE,
             visible: true,
+            effects: Vec::new(),
             opacity: Finite32::ONE,
             blend: Default::default(),
             transition: jstream_control::protocol::ItemTransition::default(),
@@ -883,6 +884,7 @@ mod tests {
     fn scene(id: &str, name: &str, items: Vec<ItemInfo>) -> SceneInfo {
         SceneInfo {
             overrides: Vec::new(),
+            filters: Default::default(),
             variant_of: None,
             scene_id: id.into(),
             name: name.into(),

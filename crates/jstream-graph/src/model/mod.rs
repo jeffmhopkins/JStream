@@ -34,8 +34,11 @@
 //! - Every output's video mix exists, every mix passes `VideoMix::problem`, and the
 //!   scene a `scene` mix shows exists.
 //! - Every item's opacity is in [0, 1], and its blend mode is one the compositor draws
-//!   (`normal` so far). Its `effects[]` is empty: per-placement effects are reserved
-//!   (ADR-0023 §1), and [`Effect`] has no values yet.
+//!   (`normal` so far).
+//! - A scene's filters and an item's effects (ADR-0065) are video chains: their audio
+//!   chains are empty, each holds at most [`MAX_CHAIN_FILTERS`] filters of
+//!   `video_filter` kinds, and filter IDs are unique within the owner. A keyframe scene
+//!   has no filters of its own.
 //! - There is at least one transition preset, and the default names one of them. Every
 //!   preset's kind is a transition kind the graph's kinds describe, with exactly its
 //!   parameters, and a duration of at most [`MAX_DURATION_MS`]. Every scene's
@@ -487,7 +490,8 @@ impl Source {
     }
 }
 
-/// A source's two filter chains, each first filter first (ADR-0026).
+/// An owner's two filter chains, each first filter first (ADR-0026): a source's, the master
+/// stage's, an output's, a scene's or an item's (ADR-0027, ADR-0065).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Chains {
     pub(crate) video: Vec<Filter>,
@@ -666,6 +670,9 @@ pub struct Scene {
     pub(crate) variant_of: Option<SceneId>,
     /// A keyframe scene's overrides; always empty for any other scene.
     pub(crate) overrides: Overrides,
+    /// Its filters (ADR-0065), run on its composite: a video chain only, and always
+    /// empty for a keyframe scene.
+    pub(crate) filters: Chains,
 }
 
 impl Scene {
@@ -718,6 +725,12 @@ impl Scene {
     /// A keyframe scene's overrides of its parent's items; empty for any other scene.
     pub fn overrides(&self) -> &Overrides {
         &self.overrides
+    }
+
+    /// Its filters (ADR-0065), which run on its whole composite. Only the video chain
+    /// holds any, and a keyframe scene has none: it shows its parent's.
+    pub fn filters(&self) -> &Chains {
+        &self.filters
     }
 }
 
@@ -808,7 +821,9 @@ pub struct Item {
     pub(crate) visible: bool,
     pub(crate) opacity: Finite32,
     pub(crate) blend: BlendMode,
-    pub(crate) effects: Vec<Effect>,
+    /// Its effects (ADR-0065): a video chain, whose audio chain is always empty. Kept as
+    /// [`Chains`] so the filter edits address it as they address any owner's.
+    pub(crate) effects: Chains,
     pub(crate) transition: ItemTransition,
 }
 
@@ -848,10 +863,10 @@ impl Item {
         self.blend
     }
 
-    /// Its per-placement effects: always empty, since item effects are reserved
-    /// (ADR-0023 §1).
-    pub fn effects(&self) -> &[Effect] {
-        &self.effects
+    /// Its effects (ADR-0065), first first: the video filters that run on this
+    /// placement's cropped, fitted box, before its opacity and blend.
+    pub fn effects(&self) -> &[Filter] {
+        &self.effects.video
     }
 
     /// Its transition settings (ADR-0029 §6).
@@ -869,12 +884,6 @@ impl Item {
         }
     }
 }
-
-/// One per-placement effect. Reserved (ADR-0023 §1): the model carries an item's
-/// `effects[]` so that item effects can come later without a migration, but there are
-/// none yet, so this type has no values and every item's list is empty.
-#[derive(Clone, Debug, PartialEq)]
-pub enum Effect {}
 
 /// One output's configuration: what it is and where it sends. Whether it runs is runtime
 /// state, kept by the engine, and its stream key is in the OS credential store.

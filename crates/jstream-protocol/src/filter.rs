@@ -7,9 +7,10 @@
 //!
 //! Sources own chains, and so do the master stage and each output (ADR-0027). The
 //! master's and an output's chains are audio only until video mixes run their video
-//! chains.
+//! chains. Since 0.43 a scene and an item also name a video chain (ADR-0065): a scene's
+//! filters run on its whole composite, and an item's effects on its cropped, fitted box.
 
-use crate::id::{FilterId, OutputId, SourceId};
+use crate::id::{FilterId, ItemId, OutputId, SceneId, SourceId};
 use crate::settings::Settings;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -18,7 +19,7 @@ use serde::{Deserialize, Serialize};
 pub const MAX_CHAIN_FILTERS: usize = 8;
 
 /// What owns a filter chain. Serialized with an internal `type` tag. Sources, the master
-/// stage and outputs own chains so far; buses and scenes will be further variants.
+/// stage, outputs, scenes and items own chains so far; buses may be further variants.
 #[derive(
     Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
 )]
@@ -42,6 +43,23 @@ pub enum FilterOwner {
         /// The output.
         output_id: OutputId,
     },
+    /// A scene's filters, which run on the scene's whole composite wherever it renders
+    /// (ADR-0065 §5, since 0.43). A video chain only: `chain: "audio"` is
+    /// `invalid_argument` on `chain`. Never a keyframe scene, which shows its parent's.
+    /// The engine refuses this owner with `invalid_argument` on `owner` until scene
+    /// chains are built.
+    Scene {
+        /// The scene.
+        scene_id: SceneId,
+    },
+    /// An item's effects, which run on that one placement's cropped, fitted box, before
+    /// its opacity and blend (ADR-0065 §5, since 0.43). A video chain only. Item IDs are
+    /// unique across scenes, so no scene is named. The engine refuses this owner with
+    /// `invalid_argument` on `owner` until item effects are built.
+    Item {
+        /// The item.
+        item_id: ItemId,
+    },
 }
 
 impl FilterOwner {
@@ -49,7 +67,10 @@ impl FilterOwner {
     pub fn source_id(&self) -> Option<&SourceId> {
         match self {
             FilterOwner::Source { source_id } => Some(source_id),
-            FilterOwner::Master | FilterOwner::Output { .. } => None,
+            FilterOwner::Master
+            | FilterOwner::Output { .. }
+            | FilterOwner::Scene { .. }
+            | FilterOwner::Item { .. } => None,
         }
     }
 }

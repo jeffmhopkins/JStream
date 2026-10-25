@@ -135,6 +135,10 @@ state machine. Contents:
     settings); a new mixer filter when a restarted plugin reports a new latency; the
     plugin's editor; rescanning; and stopping a removed filter's host off the
     `jstream-audio-sources` thread (now each stop waits up to `STOP_GRACE` there).
+- **Not yet: scene filters and item effects** (ADR-0065, ADR-0068). The graph holds
+  them, but nothing renders them, so the engine refuses a `filter.*` edit whose owner is
+  a scene or an item (`invalid_argument` on `edits.N.owner`). It validates the batch
+  first, so a batch the graph refuses gets the graph's answer.
 - **Live sources** (`live.rs`): a running `jstream-sources` source for every source
   in the collection, built when it is created, rebuilt when its settings change and
   dropped when it is deleted, on the engine's `jstream-sources` thread. The program

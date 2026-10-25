@@ -39,6 +39,7 @@ fn kinds() -> Vec<KindDescriptor> {
             version: 1,
             video: true,
             audio: false,
+            max_outset_px: None,
             params: vec![
                 param(
                     "color",
@@ -74,6 +75,7 @@ fn kinds() -> Vec<KindDescriptor> {
             version: 1,
             video: false,
             audio: true,
+            max_outset_px: None,
             params: vec![],
         },
         KindDescriptor {
@@ -83,6 +85,7 @@ fn kinds() -> Vec<KindDescriptor> {
             version: 1,
             video: true,
             audio: false,
+            max_outset_px: None,
             params: vec![param("audio", ParamType::Bus, Value::Null)],
         },
         KindDescriptor {
@@ -92,6 +95,7 @@ fn kinds() -> Vec<KindDescriptor> {
             version: 1,
             video: true,
             audio: false,
+            max_outset_px: None,
             params: vec![
                 param(
                     "amount",
@@ -113,6 +117,7 @@ fn kinds() -> Vec<KindDescriptor> {
             version: 1,
             video: false,
             audio: true,
+            max_outset_px: None,
             params: vec![param(
                 "gain_db",
                 ParamType::Float {
@@ -1139,8 +1144,30 @@ mod property {
         let outputs: Vec<String> = state.outputs().map(|o| o.id().to_string()).collect();
         let encoders: Vec<String> = state.encoders().map(|e| e.id().to_string()).collect();
         let mixes: Vec<String> = state.video_mixes().map(|m| m.id().to_string()).collect();
-        // Every filter with its owner: sources', outputs' and the master's.
+        // Every filter with its owner: sources', outputs', the master's, scenes' and
+        // items'.
         let mut filters: Vec<(jstream_protocol::FilterOwner, String)> = Vec::new();
+        for scene in state.scenes() {
+            let owner = jstream_protocol::FilterOwner::Scene {
+                scene_id: scene.id().clone(),
+            };
+            filters.extend(
+                scene
+                    .filters()
+                    .all()
+                    .map(|(_, f)| (owner.clone(), f.id().to_string())),
+            );
+            for item in scene.items() {
+                let owner = jstream_protocol::FilterOwner::Item {
+                    item_id: item.id().clone(),
+                };
+                filters.extend(
+                    item.effects()
+                        .iter()
+                        .map(|f| (owner.clone(), f.id().to_string())),
+                );
+            }
+        }
         for source in state.sources() {
             let owner = jstream_protocol::FilterOwner::Source {
                 source_id: source.id().clone(),
@@ -1536,8 +1563,18 @@ mod property {
                 item_id: ItemId::new(item(rng)),
                 blend: blend(rng),
             },
+            // A tint on a source, a scene or an item (ADR-0065), whose mask may close a
+            // cycle through the scene.
             40 => Edit::FilterAdd {
-                owner: owner(source(rng)),
+                owner: match rng.below(3) {
+                    0 => owner(source(rng)),
+                    1 => jstream_protocol::FilterOwner::Scene {
+                        scene_id: SceneId::new(scene(rng)),
+                    },
+                    _ => jstream_protocol::FilterOwner::Item {
+                        item_id: ItemId::new(item(rng)),
+                    },
+                },
                 chain: jstream_protocol::FilterChain::Video,
                 filter_id: jstream_protocol::FilterId::new(pool(rng, "f")),
                 kind: "tint".into(),
@@ -1559,10 +1596,11 @@ mod property {
                     },
                     2 => Edit::FilterSetSettings {
                         patch: match &owner {
-                            jstream_protocol::FilterOwner::Source { .. } => {
-                                super::settings(&[("mask", mask(rng))])
+                            jstream_protocol::FilterOwner::Master
+                            | jstream_protocol::FilterOwner::Output { .. } => {
+                                super::settings(&[("gain_db", json!(-3.0))])
                             }
-                            _ => super::settings(&[("gain_db", json!(-3.0))]),
+                            _ => super::settings(&[("mask", mask(rng))]),
                         },
                         owner,
                         filter_id,
@@ -4260,6 +4298,7 @@ fn a_filter_kind_cannot_be_created_as_a_source() {
         version: 1,
         video: false,
         audio: true,
+        max_outset_px: None,
         params: vec![],
     }]);
     let (field, reason) = invalid_reason(apply_err(

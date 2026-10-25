@@ -179,9 +179,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 │                  SourceAudio { enabled, follow: Always | WhenShown, gain_db, muted }
 ├── scenes         Scene { id, name, role: scene | group, variant_of?, overrides, folder?, background?,
 │                          icon, color, favourite, show_in_multiview, transition_in?, transition_out?,
-│                          items[] }   flat display order
+│                          filters { video[] }, items[] }   flat display order
 │                  SceneItem { id, source_id, geometry: ItemGeometry, crop, visible, opacity, blend,
-│                              effects[] (reserved, empty until built), transition }
+│                              effects[] (video filters), transition }
 ├── folders        Folder { id, name, parent? }   ordered; a tree; organising only
 ├── labels         Label { id, name, icon?, color }   ordered
 ├── hotkeys        [{ chord, action }]   chord → protocol action request
@@ -292,10 +292,13 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   hold filters until video mixes run the video ones, and their filters can't hold a
   reference (a scene, source, bus or asset) yet. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
   multiplier in [0, 1]) and `blend` (default `normal`; a mode is rejected until the
-  compositor draws it). `SceneItem.effects[]` is reserved for per-placement effects, which
-  are in v1 ([ADR-0068](adr/0068-item-effects-in-v1.md), designed in
-  [ADR-0065](adr/0065-scene-chains-and-item-effects.md)), and stays empty until they are
-  built; the slot means the collection already has a place for them.
+  compositor draws it). A scene's `filters` and a placement's `effects[]` are video filter
+  chains, the owners `scene` and `item` of `filter.*`
+  ([ADR-0065](adr/0065-scene-chains-and-item-effects.md); item effects are in v1 under
+  [ADR-0068](adr/0068-item-effects-in-v1.md)). A reference in them is an edge of the
+  scene, so it counts for cycles and blocks deleting its target. A keyframe scene has
+  none of its own. The graph holds them; the engine refuses both owners until it renders
+  them.
 - **Settings:** a source's `settings`, each filter's, and each transition preset's are a
   map of values described by its kind's descriptor, which the engine reports and
   validates against. References to scenes, sources, buses and asset files inside
@@ -377,8 +380,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   scene, with `settings` checked against the kind's descriptor and stored complete, and
   its video and audio filter chains, each filter's settings checked the same way),
   scenes in display order, and items in stacking order with `source_id`, a placement,
-  `crop`, `visible`, `opacity` and `blend` (only `normal` is accepted), and the reserved
-  `effects[]`, which a collection file must leave empty. The placement is a `geometry` or, until 1.0, a
+  `crop`, `visible`, `opacity` and `blend` (only `normal` is accepted), and its
+  `effects[]`, a scene's `filters` beside them. The placement is a `geometry` or, until 1.0, a
   legacy placement (protocol 0.3's 2D transform as written), and the collection has
   its `canvas` (protocol 0.11); any 3D geometry the compositor can draw is accepted from
   protocol 0.34. Scenes have
@@ -446,8 +449,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   and hotkey bindings (protocol 0.25), as the organisation bullet above describes.
   Not yet: settings migrations between kind versions (a source saved at another
   version is refused on load), blend modes
-  other than `normal`,
-  per-placement effects, a keyframe scene's overrides of a group's
+  other than `normal`, a keyframe scene's overrides of a group's
   children (so `scene.set_role` and removing or retargeting a group's item drop none
   yet, #702), `background`, output audio buses and chains, the `YouTube` kind, a virtual
   camera's video mix (it always shows the program), and everything outside `sources`,
@@ -661,7 +663,12 @@ The wire format, versioning, error codes and compatibility policy are designed i
   master stage or an output, addressed by an `owner` and a filter ID;
   `SourceInfo.filters`, `OutputInfo.filters` and `state.get`'s `master` report them
   ([ADR-0026](adr/0026-source-filter-chains.md), protocol 0.22;
-  [ADR-0027](adr/0027-program-master-and-output-chains.md), protocol 0.29).
+  [ADR-0027](adr/0027-program-master-and-output-chains.md), protocol 0.29). Since 0.43
+  the owners `scene` and `item`, `SceneInfo.filters`, `ItemInfo.effects` and a
+  descriptor's `max_outset_px` are in the protocol
+  ([ADR-0065](adr/0065-scene-chains-and-item-effects.md)). The graph holds them, and
+  the engine refuses both owners on `owner` until it renders scene filters and item
+  effects.
   `source.set_audio`, `bus.create`, `bus.rename`, `bus.set_fader`, `bus.delete`,
   `send.set` and `send.remove` edit sources' audio, the buses and the send matrix
   ([ADR-0028](adr/0028-audio-model-v2.md), protocol 0.19), and `bus.set_monitor` a
@@ -879,7 +886,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 721 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 728 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking
@@ -1177,8 +1184,9 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   version verbatim and is saved back as it was; the engine bypasses it until its kind
   appears.
   A placement's `opacity` and `blend` are written only when they differ from 1 and
-  `normal`, a geometry's `flip_h` and `flip_v` only when true, a disabled filter's `enabled` only when false, and the reserved `effects[]`
-  must be empty.
+  `normal`, a geometry's `flip_h` and `flip_v` only when true, a disabled filter's `enabled` only when false. Schema version 2 adds a scene's
+  `filters` and an item's `effects`, each omitted while empty; the migration from 1
+  changes nothing, and refuses a version 1 file that holds either.
 - **App settings:** `jstream.toml` in the platform config directory.
 - **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store. On
   Linux, where no Secret Service is reachable, they are kept in a `0600` `secrets` file

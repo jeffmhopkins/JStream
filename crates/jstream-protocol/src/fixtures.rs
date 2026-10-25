@@ -623,6 +623,28 @@ fn filter_edits() -> Vec<Edit> {
             enabled: None,
             index: None,
         },
+        Edit::FilterAdd {
+            owner: FilterOwner::Scene {
+                scene_id: SceneId::new("scn_1"),
+            },
+            chain: FilterChain::Video,
+            filter_id: FilterId::new("flt_grade"),
+            kind: "vignette".into(),
+            settings: Settings::new(),
+            enabled: Some(false),
+            index: None,
+        },
+        Edit::FilterAdd {
+            owner: FilterOwner::Item {
+                item_id: ItemId::new("itm_1"),
+            },
+            chain: FilterChain::Video,
+            filter_id: FilterId::new("flt_frame"),
+            kind: "vignette".into(),
+            settings: Settings::new(),
+            enabled: None,
+            index: None,
+        },
     ]
 }
 
@@ -1132,6 +1154,7 @@ fn color_kind() -> KindDescriptor {
         version: 1,
         video: true,
         audio: false,
+        max_outset_px: None,
         params: vec![
             ParamDescriptor {
                 description: Some("Fill colour.".into()),
@@ -1336,6 +1359,12 @@ fn item_infos() -> Vec<ItemInfo> {
             opacity: Finite32::new(0.5).expect("finite"),
             blend: BlendMode::Normal,
             transition: ItemTransition::default(),
+            effects: vec![FilterInfo {
+                filter_id: FilterId::new("flt_frame"),
+                kind: "vignette".into(),
+                enabled: true,
+                settings: vignette(),
+            }],
         },
         ItemInfo {
             item_id: ItemId::new("itm_2"),
@@ -1361,8 +1390,19 @@ fn item_infos() -> Vec<ItemInfo> {
                 glide: Glide::Never,
                 ..ItemTransition::default()
             },
+            effects: Vec::new(),
         },
     ]
+}
+
+/// A vignette's settings, complete as the engine reports them.
+fn vignette() -> Settings {
+    let mut settings = Settings::new();
+    settings.insert("strength", json!(0.5));
+    settings.insert("radius", json!(0.5));
+    settings.insert("softness", json!(0.5));
+    settings.insert("color", json!("#000000ff"));
+    settings
 }
 
 fn transitions_info() -> TransitionsInfo {
@@ -1441,6 +1481,15 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             scenes: vec![
                 SceneInfo {
                     overrides: Vec::new(),
+                    filters: FilterChains {
+                        video: vec![FilterInfo {
+                            filter_id: FilterId::new("flt_grade"),
+                            kind: "vignette".into(),
+                            enabled: false,
+                            settings: vignette(),
+                        }],
+                        audio: Vec::new(),
+                    },
                     variant_of: None,
                     scene_id: SceneId::new("scn_1"),
                     name: "Main".into(),
@@ -1453,6 +1502,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 },
                 SceneInfo {
                     overrides: item_overrides(),
+                    filters: Default::default(),
                     variant_of: Some(SceneId::new("scn_1")),
                     scene_id: SceneId::new("scn_1_wide"),
                     name: "Main, wide".into(),
@@ -1465,6 +1515,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 },
                 SceneInfo {
                     overrides: Vec::new(),
+                    filters: Default::default(),
                     variant_of: None,
                     scene_id: SceneId::new("scn_intro"),
                     name: "Intro".into(),

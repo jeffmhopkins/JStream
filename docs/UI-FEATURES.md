@@ -313,7 +313,7 @@ Outputs panel can pick them (FL-07).
 | FL-03 | Edit in place or in a dialog | Filters with three settings or fewer expand in place; others open the settings dialog; double-click always does. | ✅ | In place, the kind's settings form in two columns under the row, each change a `filter.set_settings`; a refusal shows under its field, or in the problem bar once the row has closed. A filter just added opens in place. |
 | FL-04 | Add filter | "+ Add filter…" opens DL-05. | ✅ | Under the chains, and in the Properties dialog. |
 | FL-05 | Settings from descriptors | Each filter's settings come from its kind descriptor ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). | ✅ | The Inspector's form (`properties.rs`) on `kind.describe`'s descriptor. The prototype's catalogue is a wish list; the engine lists gain, noise gate, compressor, limiter and delay, its built-in video filters and effect-pack kinds. A scene setting's select is the form's, listing every scene with None, not F8's "Choose a scene…" over the allowed scenes. |
-| FL-06 | Scene filters | A scene's video chain. | 🔒 | Filter owners are sources only today. |
+| FL-06 | Scene filters | A scene's video chain. | 🔒 | The protocol has the `scene` owner and `SceneInfo.filters` since 0.43 ([ADR-0065](adr/0065-scene-chains-and-item-effects.md)), but the engine refuses it until scene chains are built (#529). |
 | FL-07 | Program and output chains | Master chain on the program output, one chain per output. | 🔒 | D8p (#303), [ADR-0027](adr/0027-program-master-and-output-chains.md). |
 | FL-08 | CLAP plugin filter | Host a CLAP audio effect. | 🔒 | [ADR-0035](adr/0035-clap-plugins-out-of-process.md): hidden until CL1 lands in M3. |
 

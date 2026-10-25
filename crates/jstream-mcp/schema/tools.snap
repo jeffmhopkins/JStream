@@ -2766,7 +2766,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "string"
           },
           "FilterOwner": {
-            "description": "What owns a filter chain. Serialized with an internal `type` tag. Sources, the master\nstage and outputs own chains so far; buses and scenes will be further variants.",
+            "description": "What owns a filter chain. Serialized with an internal `type` tag. Sources, the master\nstage, outputs, scenes and items own chains so far; buses may be further variants.",
             "oneOf": [
               {
                 "description": "A source's chains, which apply wherever it is placed (ADR-0023).",
@@ -2814,6 +2814,42 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "output_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A scene's filters, which run on the scene's whole composite wherever it renders\n(ADR-0065 §5, since 0.43). A video chain only: `chain: \"audio\"` is\n`invalid_argument` on `chain`. Never a keyframe scene, which shows its parent's.\nThe engine refuses this owner with `invalid_argument` on `owner` until scene\nchains are built.",
+                "properties": {
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene."
+                  },
+                  "type": {
+                    "const": "scene",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "An item's effects, which run on that one placement's cropped, fitted box, before\nits opacity and blend (ADR-0065 §5, since 0.43). A video chain only. Item IDs are\nunique across scenes, so no scene is named. The engine refuses this owner with\n`invalid_argument` on `owner` until item effects are built.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item."
+                  },
+                  "type": {
+                    "const": "item",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
                 ],
                 "type": "object"
               }
@@ -4634,7 +4670,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "string"
           },
           "FilterOwner": {
-            "description": "What owns a filter chain. Serialized with an internal `type` tag. Sources, the master\nstage and outputs own chains so far; buses and scenes will be further variants.",
+            "description": "What owns a filter chain. Serialized with an internal `type` tag. Sources, the master\nstage, outputs, scenes and items own chains so far; buses may be further variants.",
             "oneOf": [
               {
                 "description": "A source's chains, which apply wherever it is placed (ADR-0023).",
@@ -4684,11 +4720,51 @@ source: crates/jstream-mcp/src/tests.rs
                   "output_id"
                 ],
                 "type": "object"
+              },
+              {
+                "description": "A scene's filters, which run on the scene's whole composite wherever it renders\n(ADR-0065 §5, since 0.43). A video chain only: `chain: \"audio\"` is\n`invalid_argument` on `chain`. Never a keyframe scene, which shows its parent's.\nThe engine refuses this owner with `invalid_argument` on `owner` until scene\nchains are built.",
+                "properties": {
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene."
+                  },
+                  "type": {
+                    "const": "scene",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "An item's effects, which run on that one placement's cropped, fitted box, before\nits opacity and blend (ADR-0065 §5, since 0.43). A video chain only. Item IDs are\nunique across scenes, so no scene is named. The engine refuses this owner with\n`invalid_argument` on `owner` until item effects are built.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item."
+                  },
+                  "type": {
+                    "const": "item",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
+                ],
+                "type": "object"
               }
             ]
           },
           "IdempotencyKey": {
             "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
+            "type": "string"
+          },
+          "ItemId": {
+            "description": "A scene item: one placement of a source inside a scene. Unique across scenes.",
             "type": "string"
           },
           "OutputId": {
@@ -4700,6 +4776,10 @@ source: crates/jstream-mcp/src/tests.rs
             "format": "uint64",
             "minimum": 0,
             "type": "integer"
+          },
+          "SceneId": {
+            "description": "A scene in the collection.",
+            "type": "string"
           },
           "Settings": {
             "additionalProperties": true,
@@ -7911,7 +7991,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "string"
           },
           "FilterOwner": {
-            "description": "What owns a filter chain. Serialized with an internal `type` tag. Sources, the master\nstage and outputs own chains so far; buses and scenes will be further variants.",
+            "description": "What owns a filter chain. Serialized with an internal `type` tag. Sources, the master\nstage, outputs, scenes and items own chains so far; buses may be further variants.",
             "oneOf": [
               {
                 "description": "A source's chains, which apply wherever it is placed (ADR-0023).",
@@ -7959,6 +8039,42 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "output_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A scene's filters, which run on the scene's whole composite wherever it renders\n(ADR-0065 §5, since 0.43). A video chain only: `chain: \"audio\"` is\n`invalid_argument` on `chain`. Never a keyframe scene, which shows its parent's.\nThe engine refuses this owner with `invalid_argument` on `owner` until scene\nchains are built.",
+                "properties": {
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene."
+                  },
+                  "type": {
+                    "const": "scene",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "An item's effects, which run on that one placement's cropped, fitted box, before\nits opacity and blend (ADR-0065 §5, since 0.43). A video chain only. Item IDs are\nunique across scenes, so no scene is named. The engine refuses this owner with\n`invalid_argument` on `owner` until item effects are built.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item."
+                  },
+                  "type": {
+                    "const": "item",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
                 ],
                 "type": "object"
               }
@@ -12667,7 +12783,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "string"
           },
           "FilterOwner": {
-            "description": "What owns a filter chain. Serialized with an internal `type` tag. Sources, the master\nstage and outputs own chains so far; buses and scenes will be further variants.",
+            "description": "What owns a filter chain. Serialized with an internal `type` tag. Sources, the master\nstage, outputs, scenes and items own chains so far; buses may be further variants.",
             "oneOf": [
               {
                 "description": "A source's chains, which apply wherever it is placed (ADR-0023).",
@@ -12715,6 +12831,42 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "output_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A scene's filters, which run on the scene's whole composite wherever it renders\n(ADR-0065 §5, since 0.43). A video chain only: `chain: \"audio\"` is\n`invalid_argument` on `chain`. Never a keyframe scene, which shows its parent's.\nThe engine refuses this owner with `invalid_argument` on `owner` until scene\nchains are built.",
+                "properties": {
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene."
+                  },
+                  "type": {
+                    "const": "scene",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "An item's effects, which run on that one placement's cropped, fitted box, before\nits opacity and blend (ADR-0065 §5, since 0.43). A video chain only. Item IDs are\nunique across scenes, so no scene is named. The engine refuses this owner with\n`invalid_argument` on `owner` until item effects are built.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item."
+                  },
+                  "type": {
+                    "const": "item",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
                 ],
                 "type": "object"
               }

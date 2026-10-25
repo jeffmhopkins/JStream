@@ -11,7 +11,7 @@ use std::fmt;
 /// bumps `major`, needs an ADR, and needs a minor release that deprecates it first.
 pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion {
     major: 0,
-    minor: 42,
+    minor: 43,
 };
 
 /// A protocol version: `major.minor`. Patch releases never change the wire format, so

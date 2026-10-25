@@ -333,6 +333,12 @@ impl Touched {
                     FilterOwner::Output { output_id } => {
                         self.uses.insert(Object::Output(output_id.clone()));
                     }
+                    FilterOwner::Scene { scene_id } => {
+                        self.uses.insert(Object::Scene(scene_id.clone()));
+                    }
+                    FilterOwner::Item { item_id } => {
+                        self.uses.insert(Object::Item(item_id.clone()));
+                    }
                     // The master stage always exists.
                     _ => {}
                 }

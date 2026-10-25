@@ -44,6 +44,7 @@ pub fn kinds() -> Vec<KindDescriptor> {
             version: 1,
             video: true,
             audio: true,
+            max_outset_px: None,
             params: vec![ParamDescriptor {
                 id: "device".into(),
                 ty: ParamType::String {
@@ -70,6 +71,7 @@ pub fn kinds() -> Vec<KindDescriptor> {
             version: 1,
             video: true,
             audio: false,
+            max_outset_px: None,
             params: vec![
                 ParamDescriptor {
                     id: "target".into(),
@@ -109,6 +111,7 @@ pub fn kinds() -> Vec<KindDescriptor> {
             version: 1,
             video: false,
             audio: true,
+            max_outset_px: None,
             params: vec![],
         },
         KindDescriptor {
@@ -118,6 +121,7 @@ pub fn kinds() -> Vec<KindDescriptor> {
             version: 1,
             video: false,
             audio: true,
+            max_outset_px: None,
             params: vec![],
         },
         KindDescriptor {
@@ -127,6 +131,7 @@ pub fn kinds() -> Vec<KindDescriptor> {
             version: 1,
             video: false,
             audio: true,
+            max_outset_px: None,
             params: vec![ParamDescriptor {
                 id: "gain_db".into(),
                 ty: ParamType::Float {
@@ -573,6 +578,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                 scenes: vec![
                     SceneInfo {
                         overrides: Vec::new(),
+                        filters: Default::default(),
                         variant_of: None,
                         scene_id: scene("b"),
                         name: "B".into(),
@@ -585,6 +591,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                     },
                     SceneInfo {
                         overrides: Vec::new(),
+                        filters: Default::default(),
                         variant_of: None,
                         scene_id: scene("a"),
                         name: "A".into(),
@@ -1246,6 +1253,60 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 "the master stage's and outputs' video chains are not available yet; only \
                  their audio chains hold filters",
             ),
+        ),
+        // A scene's filters and an item's effects (0.43, ADR-0065): a video chain only,
+        // on a scene or item that exists.
+        (
+            Batch::single(gain_on(
+                FilterOwner::Scene {
+                    scene_id: SceneId::new("a"),
+                },
+                "s",
+                FilterChain::Audio,
+                0.0,
+            )),
+            invalid(
+                "edits.0.chain",
+                "scene `a` has no audio chain: a scene's audio is its bus's",
+            ),
+        ),
+        (
+            Batch::single(gain_on(
+                FilterOwner::Item {
+                    item_id: ItemId::new("i1"),
+                },
+                "e",
+                FilterChain::Audio,
+                0.0,
+            )),
+            invalid(
+                "edits.0.chain",
+                "item `i1` has no audio chain: its effects are video only",
+            ),
+        ),
+        (
+            Batch::single(Edit::FilterRemove {
+                owner: FilterOwner::Item {
+                    item_id: ItemId::new("ghost"),
+                },
+                filter_id: FilterId::new("e"),
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Item,
+                id: "ghost".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::FilterRemove {
+                owner: FilterOwner::Scene {
+                    scene_id: SceneId::new("ghost"),
+                },
+                filter_id: FilterId::new("s"),
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Scene,
+                id: "ghost".into(),
+            },
         ),
         (
             Batch::single(gain_on(
@@ -2192,6 +2253,7 @@ fn items_of_a() -> Vec<ItemInfo> {
         geometry: None,
         crop: Crop::NONE,
         visible: true,
+        effects: Vec::new(),
         opacity: Finite32::ONE,
         blend: BlendMode::Normal,
         transition: ItemTransition::default(),
@@ -2205,6 +2267,7 @@ fn items_of_a() -> Vec<ItemInfo> {
             geometry: None,
             crop: CROP,
             visible: false,
+            effects: Vec::new(),
             opacity: QUARTER,
             blend: BlendMode::Normal,
             transition: ItemTransition::default(),
@@ -2224,6 +2287,7 @@ fn items_of_b() -> Vec<ItemInfo> {
         geometry: Some(BOXED),
         crop: Crop::NONE,
         visible: true,
+        effects: Vec::new(),
         opacity: HALF,
         blend: BlendMode::Normal,
         transition: ItemTransition::default(),

@@ -69,9 +69,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   optional `ends_gesture` commits a gesture; and the `Command`/`CommandClass`
   classification view.
 - **Filters** (`filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
-  `FilterOwner` (tagged `type`: `source`, `master` and `output`), `FilterChain`
-  (`video`, `audio`), `FilterInfo` and `FilterChains`, the chains `SourceInfo` and
-  `OutputInfo` report, and `MAX_CHAIN_FILTERS` (8). `MasterInfo` (`query.rs`) is the
+  `FilterOwner` (tagged `type`: `source`, `master`, `output`, `scene` and `item`),
+  `FilterChain` (`video`, `audio`), `FilterInfo` and `FilterChains`, the chains
+  `SourceInfo`, `OutputInfo` and `SceneInfo` report (`ItemInfo.effects` is one video
+  chain), and `MAX_CHAIN_FILTERS` (8). `MasterInfo` (`query.rs`) is the
   master stage as `state.get` reports it
   ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
 - **Outputs** (`output.rs`): `OutputKind` (`rtmp`, `record` and `virtual_cam` so far), `RtmpTarget`
@@ -182,11 +183,14 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.42 because of bus monitors
-  (`bus.set_monitor`, `BusInfo`'s `monitor`, `BusMonitor` and `MonitorTap`); 0.41 added
-  the `VideoCodec` values `hevc` and `av1`, which an encoder profile now accepts; 0.40
-  added runtime source sizes (the `source.sizes` query and the `source.size_changed`
-  event, `SourceSize`); 0.39 added keyframe
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.43 because of scene filters
+  and item effects ([ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md):
+  `FilterOwner`'s `scene` and `item`, `SceneInfo.filters`, `ItemInfo.effects` and
+  `KindDescriptor.max_outset_px`); 0.42 added bus monitors (`bus.set_monitor`,
+  `BusInfo`'s `monitor`, `BusMonitor` and `MonitorTap`); 0.41 added the `VideoCodec`
+  values `hevc` and `av1`, which an encoder profile now accepts; 0.40 added runtime
+  source sizes (the `source.sizes` query and the `source.size_changed` event,
+  `SourceSize`); 0.39 added keyframe
   scenes (`scene.create_variant`, `item.clear_override`, `SceneInfo`'s `variant_of` and
   `overrides`, the batch result's `dropped_overrides`, and placement edits whose
   `scene_id` names a keyframe scene); 0.38 added YouTube audience stats and the quota
@@ -608,6 +612,23 @@ carries no audio (a `virtual_cam`). A missing output is `not_found` with entity
 references. `output.delete`'s
 inverse re-adds the output's filters. `OutputInfo.filters` and `state.get`'s
 `master { filters }` report them, each omitted while empty.
+
+From 0.43 a scene and an item name chains too
+([ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md)), with the owners
+`{"type":"scene","scene_id":…}` and `{"type":"item","item_id":…}` and the same edits. A
+scene's filters run on its whole composite, wherever it renders; an item's effects run
+on that one placement's cropped, fitted box, before its opacity and blend. Both have a
+video chain only. `SceneInfo.filters` and `ItemInfo.effects` (a list of `FilterInfo`)
+report them, each omitted while empty, so an older server's answer parses as none. A
+`video_filter` descriptor's optional `max_outset_px` is the most the kind draws beyond
+each edge of its input at any settings, which pads an item's effects layer. A scene's
+or an item's audio chain is `invalid_argument` on `edits.N.chain`, and a keyframe scene
+as the owner on `edits.N.owner`, since it shows its parent's filters. References in
+them are edges of the scene, or of the item's scene: a blocker names them as
+`filters.<filter_id>.<param>` of the scene or `effects.<filter_id>.<param>` of the item.
+The engine checks such an edit as the graph does, and then refuses it with
+`invalid_argument` on `edits.N.owner` until it renders scene filters and item effects,
+so `filters` and `effects` stay empty for now.
 
 Every float on the wire (`Vec2`, `ItemTransform`, `ItemGeometry`, an opacity) is a `Finite32`:
 an `f32` that is never NaN or infinite. Computed geometry results use plain `f32`. serde

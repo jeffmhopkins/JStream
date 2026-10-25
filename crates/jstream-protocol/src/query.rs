@@ -4,7 +4,7 @@ use crate::audio::{BusInfo, SendInfo, SourceAudio};
 use crate::command::{BlendMode, Crop, Edit, ItemTransform, SceneRole, SourceKind};
 use crate::encoder::{EncoderProfileInfo, EncoderSessionInfo};
 use crate::event::OutputState;
-use crate::filter::FilterChains;
+use crate::filter::{FilterChains, FilterInfo};
 use crate::finite::Finite32;
 use crate::geometry::{Canvas, ItemGeometry, PlacementForm};
 use crate::hotkey::HotkeyBinding;
@@ -715,6 +715,13 @@ pub struct SceneInfo {
     /// when there are none, and for every scene that is not a variant.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub overrides: Vec<ItemOverride>,
+    /// Its filter chains (ADR-0065, since 0.43), which `filter.*` edits with the owner
+    /// `{"type":"scene","scene_id":…}`. They run on the scene's composite. Only the video
+    /// chain holds filters, and a keyframe scene has none of its own, since it shows its
+    /// parent's. Omitted while both are empty, so missing (also from an older server)
+    /// parses as none.
+    #[serde(default, skip_serializing_if = "FilterChains::is_empty")]
+    pub filters: FilterChains,
     /// Its items, in stacking order: the first is at the bottom. Always empty for a
     /// keyframe scene, which shows its parent's.
     pub items: Vec<ItemInfo>,
@@ -756,6 +763,12 @@ pub struct ItemInfo {
     /// was added with.
     #[serde(default, skip_serializing_if = "ItemTransition::is_default")]
     pub transition: ItemTransition,
+    /// Its effects (ADR-0065, since 0.43): a video chain, first filter first, which
+    /// `filter.*` edits with the owner `{"type":"item","item_id":…}`. They run on this
+    /// placement's cropped, fitted box, before its opacity and blend. Omitted while
+    /// empty, so missing (also from an older server) parses as none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effects: Vec<FilterInfo>,
 }
 
 fn opaque() -> Finite32 {
