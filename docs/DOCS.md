@@ -511,8 +511,8 @@ holds**. The note says what was checked and why it still holds, e.g.:
   (`--note`, `--merge` or `--renote`) that rewrites an entry the merged side (main or the
   wave) re-verified since the branch left it ends the new note with that side's note, word
   for word, after ` | kept from the merged side: `. The notes the branch's earlier note
-  kept that way are carried too. Each kept segment (the text between two marks) appears
-  once (#842): a segment the new text or another segment already holds in full is left
+  kept that way are carried too. Each kept segment (the text after each mark, up to the
+  next one) appears once (#842): a segment the new text or another segment already holds in full is left
   out, and a newer one that holds older ones in full takes the first one's place. So a
   record both sides kept isn't copied again, and a merged note that repeats records
   the branch kept may appear split into its segments rather than as one block. Write

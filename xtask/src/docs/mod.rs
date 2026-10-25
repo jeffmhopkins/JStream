@@ -1920,6 +1920,11 @@ mod tests {
             ledger::keep_notes("new", Some(&both), Some("W1, W2 and W3")),
             format!("new{k}W1, W2 and W3")
         );
+        // A shorter segment met after a kept one that holds it is left out (#849 r1 N1).
+        assert_eq!(
+            ledger::keep_notes("new", Some(&format!("o{k}W1 and W2")), Some("W2")),
+            format!("new{k}W1 and W2")
+        );
         // A kept segment the new text already holds is left out, the rest stay.
         assert_eq!(
             ledger::keep_notes("new, W2", Some(&both), None),
