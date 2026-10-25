@@ -70,9 +70,12 @@ protocol message" now reads: one `state` fits in one request, and a request that
 fit is refused with `too_large`.
 
 **5. MCP.** The MCP endpoint takes the same two limits. A body over the request limit
-and at or under the frame limit is answered with a JSON-RPC error, code `-32023` (in the
-server-error range, beside the endpoint's `-32022`), whose `data` is
-`{ "code": "too_large", "size_bytes", "limit_bytes" }`. The server never parses an
+and at or under the frame limit is answered with a JSON-RPC error with code `-32000`,
+JSON-RPC's generic server error, whose `data` is
+`{ "code": "too_large", "size_bytes", "limit_bytes" }`. The specific integer is not the
+promise: MCP assigns codes in the server-error range (`-32022` is its
+`UnsupportedProtocolVersion`), so a code next to it could collide with a later MCP
+revision. Clients match on `data.code`, which is the stable part. The server never parses an
 oversized body, so it answers the request's `id` when it can read one, and can't tell
 whether the body was a `tools/call`: the agent gets a JSON-RPC error it can act on, not a
 tool result with `isError`. A body
