@@ -2353,14 +2353,17 @@ pub(crate) fn one_gpu_test_at_a_time() -> MutexGuard<'static, ()> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-/// The output states among the buffered events. `stats.tick` and `meters.tick` are
-/// skipped: the pipeline emits them while it runs, and a final `stats.tick` when it stops.
+/// The output states among the buffered events. `stats.tick`, `meters.tick` and
+/// `source.size_changed` are skipped: the pipeline emits the ticks while it runs, and a
+/// final `stats.tick` when it stops, and a capture source's size as its capture's
+/// frames come and go, at any point of a start or stop.
 fn output_steps(events: &mut EventStream) -> Vec<OutputState> {
     drain(events)
         .into_iter()
         .filter_map(|event| match event {
             Event::OutputStateChanged { state, .. } => Some(state),
             Event::StatsTick { .. } | Event::MetersTick { .. } => None,
+            Event::SourceSizeChanged { .. } => None,
             other => panic!("unexpected event {other:?}"),
         })
         .collect()
