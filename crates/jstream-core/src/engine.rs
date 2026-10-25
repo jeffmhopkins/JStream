@@ -24,11 +24,13 @@ use crate::preview::{Opening, PreviewHub, PreviewSource, SessionPreviews};
 use crate::privacy::Privacy;
 use crate::runtime::{
     Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, MixKey, OpenPublish,
-    OutputEncode, OutputStats, Pending, PipelineEvent, Release, RenderHub, Running, VcamOut,
-    launch, launch_program, launch_vcam, parts_from,
+    OutputEncode, OutputStats, Pending, PipelineEvent, Release, RenderHub, Running, SizeChange,
+    StartError, VcamOut, launch, launch_program, launch_vcam, parts_from,
 };
 use crate::session::InProcessControl;
-use crate::snapshot::{self, Frame, Look, SnapshotReply, SnapshotWorker, SourceFrameError};
+use crate::snapshot::{
+    self, CaptureKey, Frame, Look, SnapshotReply, SnapshotWorker, SourceFrameError,
+};
 use crate::studio::{self, Studio};
 use crate::transition;
 use crate::youtube::{NO_YOUTUBE_CLIENT, Youtube, YoutubeSetup};
@@ -510,6 +512,31 @@ impl Engine {
     #[cfg(test)]
     pub(crate) fn audio_scope(&self) -> Arc<jstream_sources::AudioScope> {
         Arc::clone(self.shared.audio_scopes.program())
+    }
+
+    /// The body of the program stage's `jstream-capture-sizes` thread: records each
+    /// capture's size as the render thread reports it, and announces the sources whose
+    /// size it changes (ADR-0022 §4). When the render thread lets go of its captures,
+    /// every capture's size is forgotten. It holds the shared collection, not the
+    /// [`MediaHost`], like the ticker.
+    pub(crate) fn capture_sizes_watch(
+        &self,
+        changes: Receiver<SizeChange>,
+    ) -> impl FnOnce() + Send + 'static {
+        let shared = Arc::clone(&self.shared);
+        move || {
+            for change in changes {
+                shared.capture_sizes(|sizes| match change.size {
+                    Some(size) => {
+                        sizes.insert(change.key, size);
+                    }
+                    None => {
+                        sizes.remove(&change.key);
+                    }
+                });
+            }
+            shared.capture_sizes(BTreeMap::clear);
+        }
     }
 
     /// A thread that emits `stats.tick` about once a second until `stop` is set.
@@ -1283,7 +1310,7 @@ impl Engine {
             None => None,
         };
         let mut wake = Vec::new();
-        let (parts, publish, generation, program, key, own_audio) = loop {
+        let (parts, publish, generation, program, key, own_audio, hardware_held) = loop {
             // A failed pipeline may still be joining. When it held the program stage,
             // wait that out before opening devices, and do not hold the collection
             // lock across the wait.
@@ -1378,7 +1405,7 @@ impl Engine {
                     Arc::clone(&state.render),
                     state.audio.wanted(),
                     canvas_size(&state.graph),
-                    state.privacy.flag(),
+                    &state.privacy,
                 )
             };
             let generation = host.next_generation.fetch_add(1, Ordering::Relaxed);
@@ -1400,11 +1427,27 @@ impl Engine {
                     return Err(err);
                 }
             }
+            // The outputs holding hardware video sessions now: while there is one, a
+            // new session that hardware refuses is the session limit (ADR-0027 §3).
+            let hardware_held: Vec<OutputId> = gate
+                .running
+                .iter()
+                .filter(|(_, running)| running.encoders().is_some_and(|e| e.hardware()))
+                .map(|(id, _)| id.clone())
+                .collect();
             // A running program stage is shared; holding it here keeps it running
             // until this start has its own hold, or gives up. Taken last, so no early
             // return drops it under the locks.
             let program = gate.program();
-            break (parts, publish, generation, program, key, own_audio);
+            break (
+                parts,
+                publish,
+                generation,
+                program,
+                key,
+                own_audio,
+                hardware_held,
+            );
         };
         wake_all(std::mem::take(&mut wake));
 
@@ -1416,36 +1459,45 @@ impl Engine {
         };
         let (fail_tx, fail_rx) = mpsc::channel();
         let mut health = None;
-        let launched = publish.open(&output_id).and_then(|(opened, watch)| {
-            health = watch;
-            let program = match program {
-                Some(program) => program,
-                None => {
-                    let program = launch_program(self, parts)?;
-                    lock(&host.gate).set_program(&program);
-                    program
-                }
-            };
-            match opened {
-                Opened::Muxed(destination) => launch(
-                    self,
-                    program,
-                    OutputEncode { key, own_audio },
-                    destination,
-                    output_id.clone(),
-                    generation,
-                    fail_tx,
-                ),
-                Opened::Vcam(vcam, canvas) => launch_vcam(
-                    program,
-                    vcam,
-                    canvas,
-                    output_id.clone(),
-                    generation,
-                    fail_tx,
-                ),
-            }
-        });
+        let launched =
+            publish
+                .open(&output_id)
+                .map_err(StartError::from)
+                .and_then(|(opened, watch)| {
+                    health = watch;
+                    let program = match program {
+                        Some(program) => program,
+                        None => {
+                            let program = launch_program(self, parts)?;
+                            lock(&host.gate).set_program(&program);
+                            program
+                        }
+                    };
+                    match opened {
+                        Opened::Muxed(destination) => launch(
+                            self,
+                            program,
+                            OutputEncode {
+                                key,
+                                own_audio,
+                                hardware_held,
+                            },
+                            destination,
+                            output_id.clone(),
+                            generation,
+                            fail_tx,
+                        ),
+                        Opened::Vcam(vcam, canvas) => launch_vcam(
+                            program,
+                            vcam,
+                            canvas,
+                            output_id.clone(),
+                            generation,
+                            fail_tx,
+                        )
+                        .map_err(StartError::from),
+                    }
+                });
         // A link change the output thread reported before `active` is replayed once
         // the start settles; the watcher takes every later one.
         let mut link_down = false;
@@ -1478,7 +1530,10 @@ impl Engine {
                             );
                             // Joined below, outside the locks. A new start waits.
                             gate.draining += 1;
-                            StartOutcome::Failed(Some(running), reason)
+                            StartOutcome::Failed(
+                                Some(running),
+                                ProtocolError::ActionFailed { reason },
+                            )
                         }
                         Ok(PipelineEvent::LinkDown | PipelineEvent::LinkUp)
                         | Err(TryRecvError::Disconnected) => {
@@ -1492,7 +1547,11 @@ impl Engine {
                             gate.draining += 1;
                             StartOutcome::Failed(
                                 Some(running),
-                                "the output thread ended before the pipeline was active".into(),
+                                ProtocolError::ActionFailed {
+                                    reason: "the output thread ended before the pipeline was \
+                                             active"
+                                        .into(),
+                                },
                             )
                         }
                         Err(TryRecvError::Empty) => {
@@ -1545,15 +1604,17 @@ impl Engine {
                                     gate.draining += 1;
                                     StartOutcome::Failed(
                                         Some(running),
-                                        format!("starting the publish watcher: {err}"),
+                                        ProtocolError::ActionFailed {
+                                            reason: format!("starting the publish watcher: {err}"),
+                                        },
                                     )
                                 }
                             }
                         }
                     },
-                    Err(reason) => {
+                    Err(err) => {
                         abandon_start(&mut state, &mut gate, &mut inflight, &output_id, &mut wake);
-                        StartOutcome::Failed(None, reason)
+                        StartOutcome::Failed(None, err.into())
                     }
                 }
             }
@@ -1573,13 +1634,13 @@ impl Engine {
                     reason: format!("output `{output_id}` stopped while starting"),
                 })
             }
-            StartOutcome::Failed(running, reason) => {
+            StartOutcome::Failed(running, err) => {
                 // `failed` is already out and `pending` cleared, so `draining` (set
                 // above when there is a pipeline) holds a new start off until this
                 // join ends, including when it unwinds.
                 let _clear_drain = ClearDrain::arm(Arc::clone(host), running.is_some());
                 drop(running);
-                Err(ProtocolError::ActionFailed { reason })
+                Err(err)
             }
         }
     }
@@ -1718,6 +1779,15 @@ impl Engine {
         source_id: &SourceId,
     ) -> Option<crate::audio_sources::AudioStatus> {
         lock(&self.shared.state).audio.status(source_id)
+    }
+
+    /// How the program stage fares with bus `bus_id`'s monitor, for tests.
+    #[cfg(test)]
+    pub(crate) fn monitor_status(
+        &self,
+        bus_id: &jstream_protocol::BusId,
+    ) -> Option<crate::audio_sources::AudioStatus> {
+        lock(&self.shared.state).audio.monitor_status(bus_id)
     }
 
     /// The packets the mixer input of `source_id` has received, for tests.
@@ -1958,7 +2028,7 @@ enum StartOutcome {
     /// Stop won. Any threads `launch` opened are dropped before the in-flight
     /// generation is cleared, so stop can settle `stopped`.
     Cancelled(Option<Running>),
-    Failed(Option<Running>, String),
+    Failed(Option<Running>, ProtocolError),
 }
 
 /// Clears `pending` on drop unless the start already settled.
@@ -2294,6 +2364,9 @@ struct State {
     /// announced it (ADR-0022 §4): runtime state, not part of `rev`. A source with no
     /// size has no entry.
     sizes: BTreeMap<SourceId, FrameSize>,
+    /// The size of each capture the program stage runs, as its render thread reports
+    /// it: what a `display`, `window` or `webcam` source's size comes from.
+    capture_sizes: BTreeMap<CaptureKey, FrameSize>,
 }
 
 impl State {
@@ -2824,6 +2897,7 @@ impl State {
             frames,
             live,
             sizes,
+            capture_sizes,
             subscribers,
             ..
         } = self;
@@ -2848,7 +2922,9 @@ impl State {
             let source_id = source.id();
             let now = match frames.get(source_id) {
                 Some(frame) => frame.extent(),
-                None => live.size(source_id),
+                None => live
+                    .size(source_id)
+                    .or_else(|| capture_sizes.get(&live.capture_key(source_id)?).copied()),
             };
             if sizes.get(source_id) == now.as_ref() {
                 continue;
@@ -3081,6 +3157,18 @@ impl PreviewSource for Shared {
 }
 
 impl Shared {
+    /// Changes the captures' sizes and announces the sources whose size that changes,
+    /// waking the subscribers once the collection lock is released.
+    fn capture_sizes(&self, change: impl FnOnce(&mut BTreeMap<CaptureKey, FrameSize>)) {
+        let mut wake = Vec::new();
+        {
+            let mut state = lock(&self.state);
+            change(&mut state.capture_sizes);
+            state.sync_sizes(&mut wake);
+        }
+        wake_all(wake);
+    }
+
     /// Re-plans now and announces the sizes that changed, waking the subscribers once
     /// the collection lock is released.
     fn replan_and_sync(&self) {

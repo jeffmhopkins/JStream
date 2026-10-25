@@ -447,6 +447,7 @@ mod tests {
             geometry: None,
             crop: Crop::NONE,
             visible,
+            effects: Vec::new(),
             opacity: Finite32::ONE,
             blend: Default::default(),
             transition: jstream_control::protocol::ItemTransition::default(),
@@ -470,6 +471,7 @@ mod tests {
             }],
             scenes: vec![SceneInfo {
                 overrides: Vec::new(),
+                filters: Default::default(),
                 variant_of: None,
                 scene_id: "main".into(),
                 name: "Main".into(),

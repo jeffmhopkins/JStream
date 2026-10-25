@@ -20,7 +20,10 @@ use crate::{
     SceneSummary, Size, SourceId, SourceInfo, SourceKind, TransitionsInfo, Vec2, VideoCodec,
     VideoEncoding,
 };
-use crate::{AudioFollow, BusId, BusInfo, MAX_BUSES, SendInfo, SourceAudio};
+use crate::{
+    AudioFollow, BusId, BusInfo, BusMonitor, MAX_BUSES, MAX_MONITOR_DEVICE_LEN, MonitorTap,
+    SendInfo, SourceAudio,
+};
 use crate::{MixInput, MixResolution, VideoMix, VideoMixId, VideoMixInfo};
 
 /// The revision of a collection that started empty at rev 0 once [`collection`] has been
@@ -41,6 +44,7 @@ pub fn kinds() -> Vec<KindDescriptor> {
             version: 1,
             video: true,
             audio: true,
+            max_outset_px: None,
             params: vec![ParamDescriptor {
                 id: "device".into(),
                 ty: ParamType::String {
@@ -67,6 +71,7 @@ pub fn kinds() -> Vec<KindDescriptor> {
             version: 1,
             video: true,
             audio: false,
+            max_outset_px: None,
             params: vec![
                 ParamDescriptor {
                     id: "target".into(),
@@ -106,6 +111,7 @@ pub fn kinds() -> Vec<KindDescriptor> {
             version: 1,
             video: false,
             audio: true,
+            max_outset_px: None,
             params: vec![],
         },
         KindDescriptor {
@@ -115,6 +121,7 @@ pub fn kinds() -> Vec<KindDescriptor> {
             version: 1,
             video: false,
             audio: true,
+            max_outset_px: None,
             params: vec![],
         },
         KindDescriptor {
@@ -124,6 +131,7 @@ pub fn kinds() -> Vec<KindDescriptor> {
             version: 1,
             video: false,
             audio: true,
+            max_outset_px: None,
             params: vec![ParamDescriptor {
                 id: "gain_db".into(),
                 ty: ParamType::Float {
@@ -393,8 +401,35 @@ pub fn collection() -> Batch {
                 bus_id: BusId::new("drums"),
                 gain_db: finite(-12.0),
             },
+            Edit::BusSetMonitor {
+                bus_id: BusId::new("drums"),
+                monitor: Some(BusMonitor::default()),
+            },
             Edit::BusDelete {
                 bus_id: BusId::new("drums"),
+            },
+            // A monitor set, changed and taken away (0.42); the master's is gone again.
+            Edit::BusSetMonitor {
+                bus_id: BusId::master(),
+                monitor: Some(BusMonitor::default()),
+            },
+            Edit::BusSetMonitor {
+                bus_id: BusId::new("vod"),
+                monitor: Some(BusMonitor {
+                    device: "headphones".into(),
+                    tap: MonitorTap::PostFilters,
+                }),
+            },
+            Edit::BusSetMonitor {
+                bus_id: BusId::new("vod"),
+                monitor: Some(BusMonitor {
+                    device: "headphones".into(),
+                    tap: MonitorTap::PreFilters,
+                }),
+            },
+            Edit::BusSetMonitor {
+                bus_id: BusId::master(),
+                monitor: None,
             },
             Edit::BusRename {
                 bus_id: BusId::new("vod"),
@@ -543,6 +578,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                 scenes: vec![
                     SceneInfo {
                         overrides: Vec::new(),
+                        filters: Default::default(),
                         variant_of: None,
                         scene_id: scene("b"),
                         name: "B".into(),
@@ -555,6 +591,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                     },
                     SceneInfo {
                         overrides: Vec::new(),
+                        filters: Default::default(),
                         variant_of: None,
                         scene_id: scene("a"),
                         name: "A".into(),
@@ -1217,6 +1254,60 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                  their audio chains hold filters",
             ),
         ),
+        // A scene's filters and an item's effects (0.43, ADR-0065): a video chain only,
+        // on a scene or item that exists.
+        (
+            Batch::single(gain_on(
+                FilterOwner::Scene {
+                    scene_id: SceneId::new("a"),
+                },
+                "s",
+                FilterChain::Audio,
+                0.0,
+            )),
+            invalid(
+                "edits.0.chain",
+                "scene `a` has no audio chain: a scene's audio is its bus's",
+            ),
+        ),
+        (
+            Batch::single(gain_on(
+                FilterOwner::Item {
+                    item_id: ItemId::new("i1"),
+                },
+                "e",
+                FilterChain::Audio,
+                0.0,
+            )),
+            invalid(
+                "edits.0.chain",
+                "item `i1` has no audio chain: its effects are video only",
+            ),
+        ),
+        (
+            Batch::single(Edit::FilterRemove {
+                owner: FilterOwner::Item {
+                    item_id: ItemId::new("ghost"),
+                },
+                filter_id: FilterId::new("e"),
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Item,
+                id: "ghost".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::FilterRemove {
+                owner: FilterOwner::Scene {
+                    scene_id: SceneId::new("ghost"),
+                },
+                filter_id: FilterId::new("s"),
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Scene,
+                id: "ghost".into(),
+            },
+        ),
         (
             Batch::single(gain_on(
                 FilterOwner::Output {
@@ -1441,6 +1532,43 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 id: "ghost".into(),
             },
         ),
+        // Monitors (0.42): the bus must exist, and `BusMonitor::problem` decides the rest.
+        (
+            Batch::single(Edit::BusSetMonitor {
+                bus_id: BusId::new("ghost"),
+                monitor: None,
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Bus,
+                id: "ghost".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::BusSetMonitor {
+                bus_id: BusId::master(),
+                monitor: Some(BusMonitor {
+                    device: String::new(),
+                    tap: MonitorTap::Unknown,
+                }),
+            }),
+            invalid(
+                "edits.0.monitor.tap",
+                "is not a tap point this engine knows",
+            ),
+        ),
+        (
+            Batch::single(Edit::BusSetMonitor {
+                bus_id: BusId::new("vod"),
+                monitor: Some(BusMonitor {
+                    device: "d".repeat(MAX_MONITOR_DEVICE_LEN + 1),
+                    tap: MonitorTap::PreFilters,
+                }),
+            }),
+            invalid(
+                "edits.0.monitor.device",
+                &format!("must be at most {MAX_MONITOR_DEVICE_LEN} bytes"),
+            ),
+        ),
         // Hotkeys (ADR-0024 §5): one spelling per chord, one binding per chord, and only
         // actions that name objects that exist and keep no secret.
         (
@@ -1615,12 +1743,17 @@ fn buses() -> Vec<BusInfo> {
             name: "Master".into(),
             gain_db: finite(-1.0),
             muted: false,
+            monitor: None,
         },
         BusInfo {
             bus_id: BusId::new("vod"),
             name: "VOD track".into(),
             gain_db: finite(-6.0),
             muted: true,
+            monitor: Some(BusMonitor {
+                device: "headphones".into(),
+                tap: MonitorTap::PreFilters,
+            }),
         },
     ]
 }
@@ -2120,6 +2253,7 @@ fn items_of_a() -> Vec<ItemInfo> {
         geometry: None,
         crop: Crop::NONE,
         visible: true,
+        effects: Vec::new(),
         opacity: Finite32::ONE,
         blend: BlendMode::Normal,
         transition: ItemTransition::default(),
@@ -2133,6 +2267,7 @@ fn items_of_a() -> Vec<ItemInfo> {
             geometry: None,
             crop: CROP,
             visible: false,
+            effects: Vec::new(),
             opacity: QUARTER,
             blend: BlendMode::Normal,
             transition: ItemTransition::default(),
@@ -2152,6 +2287,7 @@ fn items_of_b() -> Vec<ItemInfo> {
         geometry: Some(BOXED),
         crop: Crop::NONE,
         visible: true,
+        effects: Vec::new(),
         opacity: HALF,
         blend: BlendMode::Normal,
         transition: ItemTransition::default(),

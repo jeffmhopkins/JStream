@@ -535,9 +535,9 @@ prs = [244]
 id = "V4"
 milestone = "M1b"
 title = "Scene filter chains and item effects"
-status = "planned"
-prs = []
-note = "ADR-0065 designs a video chain owned by a scene or by one placement, and ADR-0068 puts item effects in v1; built after V0: the scene and item owners in the protocol, graph, core and render, then the UI's scene filters (FL-06). The engine rejects both owners today (#529)"
+status = "review"
+prs = [802, 813, 815, 823, 824]
+note = "ADR-0065 designs a video chain owned by a scene or by one placement, and ADR-0068 puts item effects in v1 (#529). In review into wave/m1-5: a vignette kind (#802), the protocol part, the scene and item owners at 0.43 (#813), the graph and mock holding them at collection schema 2 (#815), the engine running scene filters over the scene's composite (#823), and item effects over each item's box (#824); then stats.tick's counts and goldens, and the UI's scene filters (FL-06) and effects"
 needs = ["build"]
 
 [[item]]
@@ -545,8 +545,8 @@ id = "D9"
 milestone = "M1b"
 title = "Audio monitoring: a bus's monitor device and tap point"
 status = "review"
-prs = [801]
-note = "ADR-0028 gives a bus a monitor, a device and a tap point before or after its filters (decision register D22). #801 is the mixer's monitor taps and player; the protocol's bus monitor, its edits and the engine wiring come next, and the mixer's Hear: before or after FX row (MX-05) waits on them"
+prs = [801, 816, 822]
+note = "ADR-0028 gives a bus a monitor, a device and a tap point before or after its filters (decision register D22). #801 is the mixer's monitor taps and player, #816 the protocol's bus monitor and bus.set_monitor (0.42), and #822 the engine playing it on its device; the mixer's Hear: before or after FX row (MX-05) can then be built"
 needs = ["build"]
 
 # M1c
@@ -673,8 +673,8 @@ id = "H8"
 milestone = "M1d"
 title = "Hardware acceleration by default, with GPU fallback and device-loss recovery"
 status = "hardware"
-prs = [437, 568, 569, 580, 604, 708]
-note = "#437 on main; the encoder's software fallback (#568), the mid-run GPU capture fallback (#569, #580), device-loss recovery (#604) and sessions after a fallback (#708) landed with wave/m1-3 (#754); Windows runs: the mid-run fallback (#576) and a forced TDR (#620); open follow-ups #734, #443 and #667"
+prs = [437, 568, 569, 580, 604, 708, 829]
+note = "#437 on main; the encoder's software fallback (#568), the mid-run GPU capture fallback (#569, #580), device-loss recovery (#604) and sessions after a fallback (#708) landed with wave/m1-3 (#754); in review into wave/m1-5: a full hardware session limit failing output.start with hardware_session_limit instead of falling back (#829, #443 case 2, protocol 0.44); Windows runs: the mid-run fallback (#576) and a forced TDR (#620); open follow-ups #734, #443 and #667"
 needs = ["hardware"]
 
 [[item]]
@@ -815,8 +815,8 @@ id = "E2b"
 milestone = "M2"
 title = "Privacy screen and encoder sharing key"
 status = "planned"
-prs = [317]
-note = "on/off privacy covering every output, the encoder owner key and cost reporting (#317) landed with wave/m1-3 (#754); the look setting, the slate and muted sources to build"
+prs = [317, 804]
+note = "on/off privacy covering every output, the encoder owner key and cost reporting (#317) landed with wave/m1-3 (#754); muting the microphones, the default muted set (#804), in review; the look setting, the slate and choosing the muted sources to build"
 needs = ["build"]
 
 [[item]]
@@ -863,7 +863,7 @@ milestone = "M2"
 title = "Keyframe scenes, folders, organisation metadata and hotkeys"
 status = "planned"
 prs = [319, 720]
-note = "hotkeys #319 landed with wave/m1-2 (#545); organisation metadata #323 landed with wave/m1-3 (#754); keyframe scenes part 1, in the protocol, graph and engine (#720, protocol 0.39), landed with wave/m1-4 (#810); a group's children and the UI follow (#702)"
+note = "hotkeys #319 landed with wave/m1-2 (#545); organisation metadata #323 landed with wave/m1-3 (#754); keyframe scenes part 1, in the protocol, graph and engine (#720, protocol 0.39), landed with wave/m1-4 (#810); a group's children, live values on a keyframe scene and the UI follow (#846)"
 needs = ["build"]
 
 [[item]]
@@ -887,8 +887,8 @@ id = "B12"
 milestone = "M2"
 title = "Source sizes as runtime state (source.sizes)"
 status = "review"
-prs = [806]
-note = "ADR-0022 decision 4: part 1, the source.sizes query and source.size_changed event with the engine's sizes of stored frames and live sources (#806, protocol 0.40), is in review into wave/m1-5; capture sources' sizes follow (#805); it unblocks crop by dragging (CV-08), size in % (IN-03) and native-size placement"
+prs = [806, 826]
+note = "ADR-0022 decision 4: the source.sizes query and source.size_changed event with the engine's sizes of stored frames and live sources (#806, protocol 0.40) landed in wave/m1-5; capture sources' sizes from the render thread (#826, #805) are in review into wave/m1-5; it unblocks crop by dragging (CV-08), size in % (IN-03) and native-size placement"
 needs = ["build", "wave"]
 
 [[item]]

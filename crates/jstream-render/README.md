@@ -489,7 +489,10 @@ defaults pass its descriptor, and that they build its pass.
 
 **Where they run.** `jstream-core`'s chain runtime (roadmap V0,
 [core › Design](../jstream-core/README.md#design)) keeps a `VideoFilter` per enabled
-filter of a source's video chain and runs them in order before placement, each into a
+filter of a source's video chain and runs them in order before placement, of a
+scene's over its composite, and of an item's effects over its box, drawn into a layer
+grown by their summed `max_outset_px`
+([ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md)), each into a
 cached layer with `apply_filter_into`. `video_filter_descriptors()` is how its
 `kind.list` gets these kinds.
 
@@ -654,7 +657,8 @@ glow is cut away whole; on a shape with transparent margins (a keyed camera, a l
 they show inside them. A drop shadow and a glow still blur the shape in a scratch
 frame grown by the blur radius, so the blur fades out instead of stopping at the
 frame's edge. An effect that hangs outside a placement is an item effect, whose layer
-ADR-0065 pads by the chain's `max_outset_px` (not built yet).
+ADR-0065 pads by the chain's `max_outset_px`; these kinds don't declare one yet, so
+their layer is the box and the part past it is cut there too.
 
 Assets and references (V3), in `filter/assets/`: `apply_lut`, `image_mask` and
 `scene_mask`. Each reads one external image that the chain runtime hands over with

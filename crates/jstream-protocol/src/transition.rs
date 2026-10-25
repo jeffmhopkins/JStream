@@ -281,6 +281,7 @@ pub fn builtin_kinds() -> Vec<KindDescriptor> {
         version: 1,
         video: true,
         audio: false,
+        max_outset_px: None,
         params,
     };
     let per_item = || {
