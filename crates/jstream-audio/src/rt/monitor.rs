@@ -74,7 +74,7 @@ pub struct MonitorStats {
     /// Engine frames the player read before the feed had written them, played as
     /// silence.
     pub underrun_frames: u64,
-    /// Times the player moved its read position back onto the target distance.
+    /// Times the player moved its read position forward onto the target distance.
     pub reanchors: u64,
     /// Whether the device stream failed and plays nothing more.
     pub failed: bool,
@@ -397,13 +397,22 @@ impl AudioOutputHandler for MonitorSocket {
     }
 }
 
+/// The monitor's own ring size, independent of the inputs' rings: room for twice the
+/// farthest the player keeps reading behind the newest frame (the target, a block's
+/// swing and the re-anchor threshold), so that only a real stall reaches the ring's
+/// half-capacity guard in `steer`.
+fn monitor_ring_frames(target: i64, block_frames: usize, engine_rate: u32) -> usize {
+    let threshold = (f64::from(engine_rate) * REANCHOR_ERROR_S).ceil() as usize;
+    let reach = usize::try_from(target).unwrap_or(0) + block_frames + threshold;
+    (2 * reach).next_power_of_two()
+}
+
 /// Builds a monitor playing on a device of `device`'s format, for a mixer at
-/// `engine_rate` Hz with `block_frames`-frame blocks and `ring_frames`-frame rings.
+/// `engine_rate` Hz with `block_frames`-frame blocks.
 pub(crate) fn monitor(
     device: AudioFormat,
     engine_rate: u32,
     block_frames: usize,
-    ring_frames: usize,
     retirer: &Retirer,
 ) -> Result<Monitor, AudioError> {
     if device.sample_format() != SampleFormat::F32Interleaved {
@@ -419,9 +428,10 @@ pub(crate) fn monitor(
             engine: engine_rate,
         });
     }
+    let target = (block_frames + block_frames / 2) as i64 + i64::from(engine_rate / 50);
+    let ring_frames = monitor_ring_frames(target, block_frames, engine_rate);
     let ring = Arc::new(FrameRing::new(ring_frames));
     let shared = Arc::new(MonitorShared::default());
-    let target = (block_frames + block_frames / 2) as i64 + i64::from(engine_rate / 50);
     let feed = MonitorFeed {
         writer: Some(RingWriter::new(Arc::clone(&ring))),
         shared: Some(Arc::clone(&shared)),
@@ -531,6 +541,34 @@ mod tests {
                 "{what}: sample {i} is {s}, want {want}"
             );
         }
+    }
+
+    /// A mixer at the smallest ring its config allows, with a short latency, still
+    /// gives the monitor a ring that holds the target: the player settles and never
+    /// re-anchors.
+    #[test]
+    fn the_monitor_ring_holds_the_target_at_the_smallest_mixer_ring() {
+        let m = Mixer::new(MixerConfig {
+            block_frames: BLOCK,
+            latency_frames: 480,
+            ring_frames: 2048,
+            ..MixerConfig::default()
+        })
+        .unwrap();
+        let format = device(ENGINE, ChannelLayout::Stereo);
+        let mut monitor = m.control().add_monitor(format).unwrap();
+        // Target 1680; 2 * (1680 + 480 + 2400) = 9120, so 16384.
+        assert_eq!(super::monitor_ring_frames(1680, BLOCK, ENGINE), 16_384);
+        let run = run(&mut monitor, format, 5.0, 0.0, [0.5, -0.25], |_| true);
+        let settled = &run.played[2 * ENGINE as usize..];
+        for f in settled.chunks_exact(2) {
+            assert!(
+                (f[0] - 0.5).abs() < 1e-3 && (f[1] + 0.25).abs() < 1e-3,
+                "{f:?}"
+            );
+        }
+        let stats = monitor.control.stats();
+        assert_eq!(stats.reanchors, 0, "{stats:?}");
     }
 
     /// A 48 kHz stereo device plays the feed after the target delay, at its level, and

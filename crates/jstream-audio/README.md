@@ -254,11 +254,14 @@ the reader re-reads it after an acquire fence. No workspace crate provides a rin
 indexed by time with these policies.
 
 **Monitors** (`monitor.rs`). The mixer thread writes each monitored block into a ring
-of the same kind, under its engine frames, and the output device's audio thread reads
+of the same kind, under its engine frames. The ring is sized for the monitor, not from
+the inputs' `ring_frames`: twice the target plus a block and the 50 ms threshold,
+rounded up to a power of two, so a short mixer ring can't push a steady read past the
+ring's half-capacity guard. The output device's audio thread reads
 it through `MonitorPlayer::render`: in 64-frame stages, through a resampler from the
 engine rate to the device's, steered by the inputs' controller and smoothing so that it
 reads a fixed distance behind the newest frame written. That target is 1.5 blocks plus
-20 ms (1680 frames at the defaults): the distance swings by a block as the mixer writes
+20 ms (2496 frames, 52 ms, at the default 1024-frame block): the distance swings by a block as the mixer writes
 them, and the rest covers a device period and the look-ahead. More than 50 ms above the
 target (the device stalled) moves the read position forward onto it, counted as a
 re-anchor. More than 50 ms below (the feed stalled or stopped) leaves the player
