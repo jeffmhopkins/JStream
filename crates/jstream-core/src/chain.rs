@@ -237,6 +237,9 @@ pub(crate) struct Chains {
     running: BTreeMap<ChainOwner, Vec<Running>>,
     /// The owners whose chain failed to draw this frame, which draw nothing.
     failed: BTreeSet<ChainOwner>,
+    /// The items whose effects layer failed to be made or drawn and has been logged, so
+    /// one that keeps failing logs once; a frame it draws clears it.
+    box_warned: BTreeSet<ChainOwner>,
     /// Filters no shot runs any more, on their way to the cache.
     retired: Vec<VideoFilter>,
     /// The frame of the cache the chains last ran in. Every mix a tick draws shares one
@@ -415,6 +418,25 @@ impl Chains {
     /// nothing: an item whose box couldn't be drawn.
     pub(crate) fn fail(&mut self, owner: &ChainOwner) {
         self.failed.insert(owner.clone());
+    }
+
+    /// Marks the effects layer of `owner` as failed this frame, as [`Self::fail`] does,
+    /// and logs `error` once until a frame draws it: a failed layer blanks only its
+    /// item, as a failed chain blanks only its owner.
+    pub(crate) fn fail_box(&mut self, owner: &ChainOwner, error: &RenderError) {
+        self.fail(owner);
+        if self.box_warned.insert(owner.clone()) {
+            tracing::warn!(
+                owner = %owner,
+                %error,
+                "item effects layer can't be made or drawn; the item draws nothing"
+            );
+        }
+    }
+
+    /// Records that `owner`'s effects layer drew, so a later failure logs again.
+    pub(crate) fn drew_box(&mut self, owner: &ChainOwner) {
+        self.box_warned.remove(owner);
     }
 
     /// Whether `key`, an image a layer shows, is a chain output that failed this frame.

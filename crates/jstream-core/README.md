@@ -877,7 +877,9 @@ with its fit and flips, and its live values applied. Then the chain runs into
 `GpuKey::Filtered`. The item's layer in its scene shows that output, stretched over the
 item's box grown by the outset in proportion, and turned and projected as the box is,
 before its opacity and blend. So a live resize draws the same layer, scaled, until
-the plan is made again. What the item shows is read as the chain phase draws it: a
+the plan is made again. A layer that can't be made or drawn (too large for the
+adapter) blanks only its item that frame, logged once until a frame draws it, as a
+failed chain blanks only its owner. What the item shows is read as the chain phase draws it: a
 source's frame or chain output, a capture, or a nested scene through its own chain or
 drawn as a `scene_mask`'s scene is, at depth 1, so the nesting count restarts below
 it. A legacy transform has the box its quad covers, so

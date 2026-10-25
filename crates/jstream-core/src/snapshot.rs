@@ -2499,14 +2499,18 @@ fn run_chains(
             }
             ChainStep::Box(owner) => {
                 if let Some(boxed) = shot.boxes.get(owner) {
-                    draw_box(
+                    // A layer too large for the adapter blanks its item, not the frame.
+                    match draw_box(
                         compositor,
                         (&mut *cache, &mut *chains),
                         shot,
                         owner,
                         boxed,
                         live,
-                    )?;
+                    ) {
+                        Ok(()) => chains.drew_box(owner),
+                        Err(error) => chains.fail_box(owner, &error),
+                    }
                 }
             }
             ChainStep::Pass(pass) => {
@@ -2629,12 +2633,13 @@ pub(crate) fn claim_layers(
                 if let (ChainOwner::Item(scene, item), Some(boxed)) = (owner, shot.boxes.get(owner))
                 {
                     let [width, height] = boxed.boxed.layer;
-                    cache.layer(
+                    // One that can't be made fails its item when the chains next draw.
+                    let _ = cache.layer(
                         compositor,
                         &GpuKey::ItemBox(scene.clone(), item.clone()),
                         width,
                         height,
-                    )?;
+                    );
                 }
             }
             ChainStep::Run(_) => {}
