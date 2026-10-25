@@ -1334,7 +1334,8 @@ fn ChannelStrip(panel: Panel, source_id: SourceId) -> AnyView {
 }
 
 /// One audio source's strip in the vertical mixer (spec-panels.md M5): its short name
-/// (marked while the privacy screen mutes it), a meter filling upwards, its gain stacked + over − and scrubbed up and down, and mute.
+/// (marked while the privacy screen mutes it), a meter filling upwards, its gain stacked +
+/// over − and scrubbed up and down, and mute.
 /// Its routing is in the horizontal mixer.
 #[component]
 fn ChannelColumn(panel: Panel, source_id: SourceId) -> AnyView {
