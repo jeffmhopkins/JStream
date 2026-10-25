@@ -280,7 +280,12 @@ impl Ring {
             pass.set_bind_group(0, &bind, &[]);
             pass.draw(0..3, 0..1);
         }
-        let index = queue.submit([encoder.finish()]);
+        // Under the context's submit lock, so this copy can't take the wait or signal
+        // render staged for its own next submit (#667).
+        let index = {
+            let _submitting = self.shared.submit_lock().lock();
+            queue.submit([encoder.finish()])
+        };
         let info = VideoFrameInfo {
             size,
             format: PixelFormat::Rgba8,
@@ -443,5 +448,42 @@ mod tests {
                 Err(PlatformError::InvalidState { .. })
             ));
         }
+    }
+
+    /// The copy submits under the context's submit lock (#667): while render holds it,
+    /// between staging a frame and its submit, the PipeWire thread's copy waits, and it
+    /// goes on once the lock is free.
+    #[test]
+    fn the_copy_waits_for_the_contexts_submit_lock() {
+        let context = match LinuxGpu::with_software().open_device() {
+            Ok(context) => context,
+            Err(PlatformError::Unsupported { .. }) => return,
+            Err(e) => panic!("{e}"),
+        };
+        let shared = Shared::of(&context, "test").expect("ours");
+        let texture = source(context.device(), context.queue());
+        let mut ring = Ring::new(Arc::clone(&shared));
+        let held = context.submit_lock().lock();
+        let (done, copied) = std::sync::mpsc::channel();
+        let thread = std::thread::spawn(move || {
+            let whole = Source {
+                texture: &texture,
+                visible: (0, 0, 4, 2),
+                padded: false,
+            };
+            let copy = ring.copy(whole, MediaTime::new(0, timebase()));
+            done.send(copy.map(|c| c.is_some()))
+                .expect("the test waits");
+        });
+        assert!(
+            copied.recv_timeout(Duration::from_millis(200)).is_err(),
+            "the copy submitted while the context's submit lock was held"
+        );
+        drop(held);
+        let copied = copied
+            .recv_timeout(Duration::from_secs(30))
+            .expect("the copy goes on once the lock is free");
+        assert!(copied.expect("copies"), "a free slot");
+        thread.join().expect("no panic");
     }
 }

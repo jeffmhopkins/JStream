@@ -243,6 +243,75 @@ fn filter_kind<'a>(
     }
 }
 
+/// Puts a filter whose kind this graph doesn't describe on its chain, as a collection
+/// file saved it: a pack kind that isn't installed, or a CLAP kind before the scan that
+/// describes it (ADR-0035). Its settings are kept verbatim and unchecked, and
+/// `kind_version` is kept for the next save, so loading in a build without the kind
+/// destroys nothing (ADR-0025 › Versioning a kind). The engine reports such a filter as
+/// an error and bypasses it until its kind appears. Only a load does this: `filter.add`
+/// refuses a kind it can't check.
+pub(crate) fn add_unknown_kind(
+    state: &mut State,
+    kinds: &Kinds,
+    edit: &Edit,
+    kind_version: Option<u32>,
+) -> Result<(), ProtocolError> {
+    let Edit::FilterAdd {
+        owner,
+        chain,
+        filter_id,
+        kind,
+        settings,
+        enabled,
+        index: None,
+    } = edit
+    else {
+        return Err(ProtocolError::Internal {
+            reason: "invariant: a load adds filters with `filter.add`, last".into(),
+        });
+    };
+    let filters = chains(state, owner)?;
+    check_id(filter_id.as_str(), 0, "filter_id")?;
+    if filters.find(filter_id).is_some() {
+        return Err(already_exists(EntityKind::Filter, filter_id.as_str()));
+    }
+    check_chain(state, kinds, owner, *chain, 0)?;
+    if filters.chain(*chain).len() >= MAX_CHAIN_FILTERS {
+        return Err(invalid(
+            0,
+            "chain",
+            format!("a chain holds at most {MAX_CHAIN_FILTERS} filters"),
+        ));
+    }
+    check_no_references(owner, settings, 0, "settings")?;
+    // Unchecked settings may still name objects: each must exist, as a checked
+    // reference's must, so deletes and the cycle check see a whole graph.
+    for (param, reference) in settings.references() {
+        if let Some(node) = deps::reference_node(&reference) {
+            let exists = match &node {
+                Node::Scene(id) => state.scene(id).is_some(),
+                Node::Source(id) => state.source(id).is_some(),
+                Node::Bus(id) => state.bus(id).is_some(),
+            };
+            if !exists {
+                return Err(invalid(
+                    0,
+                    &format!("settings.{param}"),
+                    format!("{node} doesn't exist"),
+                ));
+            }
+        }
+    }
+    chains_mut(state, owner)?.chain_mut(*chain).push(Filter {
+        id: filter_id.clone(),
+        kind: kind.clone(),
+        enabled: enabled.unwrap_or(true),
+        settings: settings.clone(),
+        unknown_kind_version: kind_version,
+    });
+    check_cycles(state, owner, filter_id, 0, "settings")
+}
+
 /// Applies `filter.add` (`edit`) and returns its inverse, `filter.remove`.
 fn add(
     state: &mut State,
@@ -293,6 +362,7 @@ fn add(
             kind: kind.clone(),
             enabled,
             settings,
+            unknown_kind_version: None,
         },
     );
     check_cycles(state, owner, filter_id, at, "settings")?;

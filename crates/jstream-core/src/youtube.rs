@@ -6,7 +6,11 @@
 //! **Secrets (R-SEC-001).** The refresh token goes from the code exchange straight to
 //! the host's [`OAuthTokenStore`], and the stream key from the Live API straight to the
 //! RTMPS connection. Neither is returned, emitted or logged: protocol errors carry
-//! `jstream-youtube`'s errors, which never hold a token.
+//! `jstream-youtube`'s errors, which never hold a token. A host that redacts its crash
+//! reports gives the setup a [`SecretHook`]
+//! ([`with_secret_hook`](YoutubeSetup::with_secret_hook)), and each account's client hands
+//! it the refresh and access tokens and every stream key it gets, including the key a
+//! `youtube` output publishes with (#353).
 //!
 //! **One account.** JStream signs in to one Google account at a time, so its refresh
 //! token sits under the fixed, opaque account ID [`TOKEN_ACCOUNT`] in the store. No
@@ -44,7 +48,7 @@ use jstream_youtube::live::{
 };
 use jstream_youtube::{
     BUILT_IN_CLIENT_ID, BUILT_IN_CLIENT_SECRET, HttpTransport, LiveClient, LoopbackRedirect,
-    MAX_REMOTE_TEXT, OAuthClient, Scope, YoutubeError,
+    MAX_REMOTE_TEXT, OAuthClient, Scope, SecretHook, YoutubeError,
 };
 use std::collections::BTreeMap;
 use std::fmt;
@@ -114,6 +118,7 @@ pub struct YoutubeSetup {
     stats_interval: Duration,
     daily_quota: u64,
     clock: WallClock,
+    secret_hook: Option<SecretHook>,
 }
 
 impl fmt::Debug for YoutubeSetup {
@@ -179,6 +184,33 @@ impl YoutubeSetup {
             stats_interval: STATS_INTERVAL,
             daily_quota: DAILY_QUOTA,
             clock: Arc::new(SystemTime::now),
+            secret_hook: None,
+        }
+    }
+
+    /// Hands `hook` every secret the account's client holds or gets: the refresh token,
+    /// each access token and each stream key, such as the one a `youtube` output
+    /// publishes with. A host registers them with its crash reports' redaction (#353).
+    #[must_use]
+    pub fn with_secret_hook(mut self, hook: SecretHook) -> Self {
+        self.secret_hook = Some(hook);
+        self
+    }
+
+    /// Hands a finished sign-in's two tokens to the hook, if there is one, before
+    /// anything decides whether the grant is kept, revoked or dropped.
+    fn saw_grant(&self, grant: &jstream_youtube::Grant) {
+        if let Some(hook) = &self.secret_hook {
+            hook(grant.refresh.expose());
+            hook(grant.access.secret().expose());
+        }
+    }
+
+    /// `client`, with the secret hook if there is one.
+    fn hooked(&self, client: LiveClient) -> LiveClient {
+        match &self.secret_hook {
+            Some(hook) => client.with_secret_hook(Arc::clone(hook)),
+            None => client,
         }
     }
 
@@ -291,8 +323,13 @@ impl Youtube {
     /// Starts signed in when the store holds a refresh token from an earlier sign-in.
     pub(crate) fn new(setup: YoutubeSetup, emit: Emit) -> Self {
         let client = match setup.tokens.get(TOKEN_ACCOUNT) {
-            Ok(token) => token
-                .map(|token| LiveClient::new(Arc::clone(&setup.transport), setup.oauth(), token)),
+            Ok(token) => token.map(|token| {
+                setup.hooked(LiveClient::new(
+                    Arc::clone(&setup.transport),
+                    setup.oauth(),
+                    token,
+                ))
+            }),
             Err(err) => {
                 tracing::error!(error = %err, "reading the YouTube token from the credential store");
                 None
@@ -409,6 +446,10 @@ impl Youtube {
         generation: u64,
         outcome: Result<jstream_youtube::Grant, YoutubeError>,
     ) {
+        // Even a grant that is abandoned, or that the store refuses, is redacted.
+        if let Ok(grant) = &outcome {
+            self.setup.saw_grant(grant);
+        }
         let mut auth = lock(&self.auth);
         if auth.pending.as_ref().map(|p| p.generation) != Some(generation) {
             drop(auth);
@@ -437,11 +478,11 @@ impl Youtube {
             }) {
                 Ok(old) => {
                     replaced = old.filter(|old| old.expose() != grant.refresh.expose());
-                    *client = Some(LiveClient::from_grant(
+                    *client = Some(self.setup.hooked(LiveClient::from_grant(
                         Arc::clone(&self.setup.transport),
                         self.setup.oauth(),
                         grant,
-                    ));
+                    )));
                     None
                 }
                 Err(err) => Some(format!(

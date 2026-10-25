@@ -75,6 +75,10 @@ pub(crate) struct Channel {
     pub(crate) global_gain: i32,
     /// The TNS filters `spec` was filtered with, per window.
     pub(crate) tns: Tns,
+    /// Per band, the intensity codebook (`INTENSITY_HCB` or `INTENSITY_HCB2`) for a band
+    /// a CPE's right channel codes as intensity stereo, else 0, and its `is_position`.
+    pub(crate) is_book: [u8; MAX_BANDS],
+    pub(crate) is_position: [i32; MAX_BANDS],
     // Scratch.
     xp: Vec<f32>,
     amp: [i32; MAX_BANDS],
@@ -96,6 +100,8 @@ impl Channel {
             section_count: [0; 8],
             global_gain: SF_OFFSET,
             tns: Tns::default(),
+            is_book: [0; MAX_BANDS],
+            is_position: [0; MAX_BANDS],
             xp: vec![0.0; 1024],
             amp: [0; MAX_BANDS],
             best_amp: [0; MAX_BANDS],
@@ -157,7 +163,22 @@ impl Quantizer {
         let mut first_sf = None;
         let mut last_sf: Option<i32> = None;
         let mut sf_bits = 0;
+        // Intensity positions are coded differentially too, in their own chain from 0.
+        let mut last_position = 0;
         for i in 0..n {
+            let book = ch.is_book[i];
+            if book != 0 {
+                // No spectrum: the decoder rebuilds the band from the left channel's.
+                for k in shape.range(i) {
+                    ch.q[k] = 0;
+                }
+                let c = &mut ch.costs[i];
+                c.fill(NEVER);
+                c[usize::from(book)] = 0;
+                sf_bits += huffman::sf_bits(ch.is_position[i] - last_position);
+                last_position = ch.is_position[i];
+                continue;
+            }
             let sf = Self::sf_of(ch, i, g);
             ch.sf[i] = sf;
             Self::quantize_band(ch, shape, i, sf);

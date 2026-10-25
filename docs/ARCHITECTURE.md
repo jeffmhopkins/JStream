@@ -145,7 +145,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 2 | `jstream-youtube` | OAuth plus the YouTube Live API client (broadcasts, streams, health, chat reading and sending as the channel, audience stats; [ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)). No media code. | no |
 | 2 | `jstream-platform-windows` | WGC capture, MF webcam and capture-card capture (with MJPEG decode), WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, Credential Manager store for stream keys, vcam sink side, CLAP plugin-host launcher (job object, scrubbed environment) and shared block | **yes** |
 | 2 | `jstream-platform-macos` | ScreenCaptureKit, Core Audio (incl. process taps), AVFoundation webcams, VideoToolbox/AudioToolbox, AVFoundation media files, IOSurface↔Metal, Keychain store for stream keys and OAuth tokens (M3; [ADR-0063](adr/0063-macos-platform-support.md); Apple frameworks through the objc2 crates) | **yes** |
-| 2 | `jstream-platform-linux` | PipeWire, VAAPI, dmabuf↔Vulkan, the OpenH264 loader, AAC encoding through `jstream-aac` (M3; [ADR-0060](adr/0060-linux-platform-support.md), [ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md); a crate loading its system libraries at run time) | **yes** |
+| 2 | `jstream-platform-linux` | PipeWire, with ALSA as the audio fallback, V4L2 webcams and capture cards paired with their microphones, VAAPI, dmabuf↔Vulkan, the OpenH264 loader, AAC encoding through `jstream-aac`, secrets in the Secret Service with a `0600` file fallback (M3; [ADR-0060](adr/0060-linux-platform-support.md), [ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md), [ADR-0071](adr/0071-linux-secret-store.md); a crate loading its system libraries at run time) | **yes** |
 | 2 | `jstream-plugin-clap` | Safe wrapper over the CLAP plugin ABI ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): loading a plugin file, its stereo audio effects, parameters, latency and saved state, and real-time processing. Only `jstream-plugin-host` links it | **yes** |
 | 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0066](adr/0066-portable-windows-distribution-v2.md)). Depends only on L0 and `windows`, so it logs through its own sink (the debugger and a capped file in the host account's profile), not `tracing`: no subscriber exists inside Frame Server. | **yes** |
 | 3 | `jstream-encode` | Encoder sessions: outputs with no video chain share one per (mix, encoder profile), and an output with a video chain gets its own ([ADR-0027](adr/0027-program-master-and-output-chains.md)); rate control; fan-out of packet streams | no |
@@ -347,8 +347,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   slate) and which sources it mutes, by default every audio input-device source,
   independently of each source's own mute. While on, it covers every output and every
   preview stream of a post-master stage. Built so far: on and off, covering every
-  output's video with the default blur. The look setting, the slate and the muted
-  sources are not built yet.
+  output's video with the default blur and muting the default set, every audio input
+  device. The look setting, the slate and choosing the muted sources are not built
+  yet.
 - **Audio** ([ADR-0028](adr/0028-audio-model-v2.md)): sources feed buses through the send
   matrix; buses feed outputs and monitors, never other buses. Every audio source gets a
   send to the master bus ("Program output") at 0 dB. Per source: stream → audio filters →
@@ -420,7 +421,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   `VirtualCam`, which has no settings and ignores its profile. A stream
   key is never collection state: it lives in the OS credential store
   ([R-SEC-001](RULES.md#R-SEC-001)). Encoder profiles, ordered by ID, each a name and an
-  H.264 and AAC encoding (rate control, keyframe interval, hardware preference, audio bit
+  H.264, HEVC or AV1 and AAC encoding (rate control, keyframe interval, hardware preference, audio bit
   rate), checked against the ranges the protocol states. An output with no profile uses
   the engine's default; a profile an output uses can't be deleted. Video mixes
   (protocol 0.28), ordered by ID, each with a name besides the fields above: the
@@ -491,8 +492,9 @@ model; a change that would contradict it edits it in the same PR.
 (`jstream-plugin-proto`), the mixer's side of it (`jstream-audio`) and the host
 process (`jstream-plugin-host`) are built, and so are starting hosts
 (`jstream-platform-windows`) and watching and restarting them on a control thread
-(`jstream-core`'s `HostSupervisor`); running a CLAP filter from the graph, which would
-start that supervisor, and the `stats.tick` count are not yet. Each CLAP filter
+(`jstream-core`'s `HostSupervisor`), and a source's audio chain runs CLAP filters, each
+with its own supervisor; CLAP filters on the master's and outputs' chains, and the
+`stats.tick` count, are not yet. Each CLAP filter
 instance runs in its own `jstream-plugin-host` process, on a real-time thread registered
 with MMCSS "Pro Audio" and woken by its own timer on the media clock, which both
 processes read from the same OS counter (not built yet: for now the host sleeps a
@@ -500,8 +502,8 @@ quarter block between passes). Audio crosses through shared-memory rings, and
 the mixer never waits on the host: it writes block *n* and reads the processed block
 *n − d* (by default *d* is two engine blocks), with no syscall or lock for the plugin
 ([R-RT-001](RULES.md#R-RT-001)). A late block is bypassed with a short crossfade, by
-the dry signal delayed the same amount, and counted in the shared block for
-`stats.tick`. The filter's latency is *d* plus the plugin's own, and latency
+the dry signal delayed the same amount, and counted for `stats.tick` in the engine's
+own memory beside the block (`EngineBlock`), where the host can't reset it. The filter's latency is *d* plus the plugin's own, and latency
 compensation keeps audio and video in sync. A host that dies is restarted by the control
 thread with backoff while the mixer bypasses it.
 
@@ -601,8 +603,18 @@ the next tick: the engine stores it with release ordering under its lock, and th
 loads it with acquire ordering at the start of each tick. The blur pass's layers are
 kept whenever a mix is drawn, so turning privacy on allocates nothing on a real-time
 thread. The flag fails closed: a tick under privacy that couldn't draw pushes black,
-never the last frame. The mixer thread will read it the same way once privacy mutes
-sources; not built yet.
+never the last frame. The mixer reads a count of the screen's changes instead (odd
+while it is on, stored after the flag), with acquire ordering at each poll, so a screen
+turned on and off again between two polls still reaches it. It silences the inputs it
+mutes from the next block, before their filter chains (so no delay line holds what
+they captured meanwhile) and through their activity gain, so that takes a field store
+and allocates nothing either. Those inputs' audio threads load the count with acquire
+ordering too, and zero each packet as it arrives, before the input's ring, while it is
+odd or the mixer has not yet acted on it. Turning it off follows the capture
+time: blocks mixed late by the mixer's latency that start before the clock's frame at
+the first poll after it went off, plus 40 ms for an input's timing error, stay covered,
+and the audio threads zero a packet that its stamp, the input's timing of it or its
+placement starts before that frame, an atomic the mixer stores.
 
 <a id="protocol"></a>
 ## Control protocol
@@ -748,8 +760,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   label) with everything
   that refers to it, and the `rev` it was planned at, plus the hotkey bindings it removes (protocol 0.25); `bus.list` (protocol 0.19) → the buses and sends;
   `capture.targets` (protocol 0.27) → the displays and windows a `display` or `window`
-  source's `target` can name; audio levels are the `meters.tick` event, not a query).
-- **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops}`, `meters.tick`, …).
+  source's `target` can name; `source.sizes` (protocol 0.40) → each source's current
+  size, runtime state ([ADR-0022](adr/0022-item-transform-and-canvas.md) §4); audio
+  levels are the `meters.tick` event, not a query).
+- **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops}`, `meters.tick`,
+  `source.size_changed` (protocol 0.40), …).
   `stats.tick` (protocol 0.6) carries the pipeline's running drop totals
   ([R-RT-004](RULES.md#R-RT-004)), and `meters.tick` (protocol 0.19, about ten a second
   while the mixer runs) every source's and bus's levels and the master's loudness,
@@ -861,7 +876,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 718 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 721 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking
@@ -964,8 +979,9 @@ thread composites on the platform's `GpuContext`, and capture moves onto it thro
 sampled with no CPU copy, its alpha read as 1 as on the CPU path, the frame's fence hold is staged on each submit that reads it
 and dropped when the frame ends, and the submit hands the texture back in `PRESENT`.
 Staging attaches to the queue's next submit, so render holds the context's
-`SubmitLock` from staging through its submit, and other threads that submit on that
-queue (the browser source's copies) take it too.
+`SubmitLock` from staging through its submit (the composite's and the NV12
+conversion's), and other threads that submit on that queue (the browser source's
+copies, Linux's PipeWire capture copies) take it too.
 Without a context, or a capture that can deliver on it, the engine keeps CPU frames
 (step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). A
 browser source's page paints on the same context and is imported the same way, read
@@ -1153,6 +1169,10 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   version, migrated on load like the collection
   ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). Until kinds ship settings
   migrations, a source, filter or preset saved at another version is refused on load.
+  A filter whose kind the engine doesn't describe (a pack that isn't installed, or a
+  CLAP plugin before the scan that runs after the load) loads with its settings and
+  version verbatim and is saved back as it was; the engine bypasses it until its kind
+  appears.
   A placement's `opacity` and `blend` are written only when they differ from 1 and
   `normal`, a geometry's `flip_h` and `flip_v` only when true, a disabled filter's `enabled` only when false, and the reserved `effects[]`
   must be empty.

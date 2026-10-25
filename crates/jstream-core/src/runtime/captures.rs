@@ -15,8 +15,14 @@
 //! streams it no longer reads, through channels it never waits on (R-RT-002,
 //! R-RT-003). A capture that fails to start, or whose target goes away, keeps showing
 //! its last frame and is started again after [`RETRY_MS`]. When the render thread leaves
-//! the GPU path mid-run ([`RenderCaptures::leave_gpu`]), every capture restarts on the
-//! CPU path.
+//! the GPU path mid-run ([`RenderCaptures::leave_gpu`]), every display and window
+//! capture restarts on the CPU path. A webcam or capture card, already there, runs on.
+//!
+//! Each capture's frame size, which `source.sizes` reports for its sources (ADR-0022
+//! §4), goes back to the engine as a [`SizeChange`] on a channel the render thread never
+//! waits on, only when it changes: its first frame, a resize, and `None` once it is no
+//! longer captured. Nothing is sent, and nothing allocated, while the size holds. A
+//! capture restarting on the CPU path keeps the size it had until a frame says otherwise.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -71,8 +77,21 @@ struct Started {
     epoch: u32,
 }
 
-/// Starts the `jstream-capture` thread, and returns the render thread's side of it.
-pub(crate) fn spawn(backends: Backends, clock: Timebase) -> Result<RenderCaptures, String> {
+/// A capture's frame size changed: `Some` for its first frame and for each frame of a new
+/// size, `None` once it is no longer captured.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SizeChange {
+    pub(crate) key: CaptureKey,
+    pub(crate) size: Option<FrameSize>,
+}
+
+/// Starts the `jstream-capture` thread, and returns the render thread's side of it,
+/// which sends each capture's size changes on `sizes`.
+pub(crate) fn spawn(
+    backends: Backends,
+    clock: Timebase,
+    sizes: Sender<SizeChange>,
+) -> Result<RenderCaptures, String> {
     let (requests, rx) = mpsc::channel();
     let (tx, started) = mpsc::channel();
     let thread = std::thread::Builder::new()
@@ -87,6 +106,7 @@ pub(crate) fn spawn(backends: Backends, clock: Timebase) -> Result<RenderCapture
         requests: Some(requests),
         started,
         thread: Some(thread),
+        sizes: Some(sizes),
         on_gpu: false,
         retry,
         ended: CaptureStats::default(),
@@ -322,6 +342,9 @@ pub(crate) struct RenderCaptures {
     requests: Option<Sender<Request>>,
     started: Receiver<Started>,
     thread: Option<JoinHandle<()>>,
+    /// Where each capture's size changes go; `None` once [`stop`](Self::stop) has run,
+    /// so the engine's side ends.
+    sizes: Option<Sender<SizeChange>>,
     /// Whether the compositor is on the platform's GPU context, so GPU frames can be
     /// sampled. Off, a GPU frame is unusable.
     on_gpu: bool,
@@ -337,6 +360,18 @@ pub(crate) struct RenderCaptures {
     epoch: u32,
 }
 
+impl RenderCaptures {
+    /// Asks the `jstream-capture` thread to start `spec`, for `slot`, at the current
+    /// epoch.
+    fn request_start(&self, spec: &CaptureKey, slot: &mut Slot) {
+        if let Some(requests) = &self.requests {
+            let _ = requests.send(Request::Start(spec.clone(), self.epoch));
+        }
+        slot.epoch = self.epoch;
+        slot.state = State::Starting;
+    }
+}
+
 struct Slot {
     state: State,
     /// The latest frame. Kept while the capture restarts, so it goes on showing.
@@ -346,6 +381,13 @@ struct Slot {
     /// The latest CPU frame's pixels, reused from frame to frame.
     rgba: Vec<u8>,
     warned_format: bool,
+    /// The epoch of the slot's latest start: an answer to an earlier one is stopped
+    /// again. A video device keeps its epoch when the render thread leaves the GPU path,
+    /// since it isn't restarted.
+    epoch: u32,
+    /// The size last sent for it, [`SizeChange`]. Kept when the render thread leaves the
+    /// GPU path, so a capture restarting there sends nothing until its size changes.
+    reported: Option<FrameSize>,
 }
 
 enum State {
@@ -373,31 +415,42 @@ impl RenderCaptures {
     /// Moves every capture onto the CPU path, for a compositor that leaves the platform's
     /// GPU context mid-run (#451): lets go of the frames held, tells the
     /// `jstream-capture` thread to drop its GPU backend, and stops and starts again every
-    /// capture that is running or starting. Never waits; the streams and the backend drop
-    /// on that thread, which ends before the context goes ([`stop`](Self::stop)). A
-    /// capture keeps no frame until its CPU stream delivers one.
+    /// display and window capture that is running or starting. Never waits; the streams
+    /// and the backend drop on that thread, which ends before the context goes
+    /// ([`stop`](Self::stop)). Such a capture keeps no frame until its CPU stream
+    /// delivers one. A webcam or capture card is on the CPU path already: it runs on and
+    /// keeps its frame, and one still starting takes the answer it is waiting for, since
+    /// most devices open only once (#734).
     pub(crate) fn leave_gpu(&mut self) {
         self.on_gpu = false;
-        self.release_frames();
-        let Some(requests) = &self.requests else {
+        let Some(requests) = self.requests.clone() else {
+            self.release_frames();
             return;
         };
         let _ = requests.send(Request::CpuOnly);
         self.epoch = self.epoch.wrapping_add(1);
-        for (spec, slot) in &mut self.slots {
+        let mut slots = std::mem::take(&mut self.slots);
+        for (spec, slot) in &mut slots {
+            if matches!(spec.spec, CaptureSpec::Device(_)) {
+                // Only a GPU frame uses the compositor's device; a device delivers none.
+                if matches!(slot.frame, Some(Latest::Gpu(_))) {
+                    slot.frame = None;
+                }
+                continue;
+            }
+            slot.frame = None;
             match std::mem::replace(&mut slot.state, State::Starting) {
                 State::Running { stream, .. } => {
                     add(&mut self.ended, stream.stats());
                     let _ = requests.send(Request::Stop(stream));
-                    let _ = requests.send(Request::Start(spec.clone(), self.epoch));
+                    self.request_start(spec, slot);
                 }
-                State::Starting => {
-                    let _ = requests.send(Request::Start(spec.clone(), self.epoch));
-                }
+                State::Starting => self.request_start(spec, slot),
                 // Started again, on the CPU path, when it is due.
                 failed @ State::Failed { .. } => slot.state = failed,
             }
         }
+        self.slots = slots;
     }
 
     /// Starts what `wanted` captures and isn't running, stops what it no longer
@@ -408,47 +461,52 @@ impl RenderCaptures {
             return;
         };
         let ended = &mut self.ended;
+        let sizes = &self.sizes;
         self.slots.retain(|spec, slot| {
             let keep = wanted.contains(spec);
-            if !keep
-                && let State::Running { stream, .. } =
+            if !keep {
+                if let State::Running { stream, .. } =
                     std::mem::replace(&mut slot.state, State::Starting)
-            {
-                add(ended, stream.stats());
-                let _ = requests.send(Request::Stop(stream));
+                {
+                    add(ended, stream.stats());
+                    let _ = requests.send(Request::Stop(stream));
+                }
+                if slot.reported.is_some() {
+                    send_size(sizes, spec, None);
+                }
             }
             keep
         });
+        let mut slots = std::mem::take(&mut self.slots);
         for spec in wanted {
-            match self.slots.get_mut(spec) {
+            match slots.get_mut(spec) {
                 None => {
-                    let _ = requests.send(Request::Start(spec.clone(), self.epoch));
-                    self.slots.insert(spec.clone(), Slot::new());
+                    let mut slot = Slot::new();
+                    self.request_start(spec, &mut slot);
+                    slots.insert(spec.clone(), slot);
                 }
                 Some(slot) => {
                     if let State::Failed { at } = slot.state
                         && at.checked_add(self.retry).is_ok_and(|due| due <= now)
                     {
-                        let _ = requests.send(Request::Start(spec.clone(), self.epoch));
-                        slot.state = State::Starting;
+                        self.request_start(spec, slot);
                     }
                 }
             }
         }
+        self.slots = slots;
         while let Ok(Started {
             spec,
             stream,
             epoch,
         }) = self.started.try_recv()
         {
-            if epoch != self.epoch {
+            match (self.slots.get_mut(&spec), stream) {
                 // Asked for before the GPU path was left: started again since.
-                if let Some(stream) = stream {
+                (Some(slot), Some(stream)) if epoch != slot.epoch => {
                     let _ = requests.send(Request::Stop(stream));
                 }
-                continue;
-            }
-            match (self.slots.get_mut(&spec), stream) {
+                (Some(slot), None) if epoch != slot.epoch => {}
                 (Some(slot), Some(stream)) if matches!(slot.state, State::Starting) => {
                     slot.state = State::Running {
                         stream,
@@ -515,6 +573,23 @@ impl RenderCaptures {
                 }
             }
         }
+        self.report_sizes();
+    }
+
+    /// Sends the size of each capture whose frame changed size since the last one sent.
+    fn report_sizes(&mut self) {
+        for (spec, slot) in &mut self.slots {
+            let size = match &slot.frame {
+                Some(Latest::Cpu(size)) => *size,
+                Some(Latest::Gpu(frame)) => frame.info().size,
+                // A capture restarting keeps the size it had until a frame says otherwise.
+                None => continue,
+            };
+            if slot.reported != Some(size) {
+                slot.reported = Some(size);
+                send_size(&self.sizes, spec, Some(size));
+            }
+        }
     }
 
     /// The counters of every capture this pipeline ran, added up.
@@ -555,6 +630,8 @@ impl RenderCaptures {
             }
         }
         drop(requests);
+        // The engine's side forgets every capture's size when this closes.
+        self.sizes.take();
         if let Some(thread) = self.thread.take()
             && thread.join().is_err()
         {
@@ -598,7 +675,20 @@ impl Slot {
             version: 0,
             rgba: Vec::new(),
             warned_format: false,
+            epoch: 0,
+            reported: None,
         }
+    }
+}
+
+/// Sends one capture's size change. The engine's side is gone only while the stage is
+/// torn down, when there is no one to tell.
+fn send_size(sizes: &Option<Sender<SizeChange>>, key: &CaptureKey, size: Option<FrameSize>) {
+    if let Some(sizes) = sizes {
+        let _ = sizes.send(SizeChange {
+            key: key.clone(),
+            size,
+        });
     }
 }
 
@@ -718,17 +808,21 @@ impl Yuv {
 
 #[cfg(test)]
 mod tests {
-    use super::{Backends, MAX_DEVICE_PIXELS, device_format, rgba_from_surface, start};
+    use super::{Backends, MAX_DEVICE_PIXELS, device_format, rgba_from_surface, spawn, start};
+    use crate::snapshot::{CaptureKey, Captures};
     use jstream_media::{FrameSize, PixelFormat, Timebase};
     use jstream_platform::fake::{
         FAKE_CAPTURE_CARD, FAKE_WEBCAM, FakeCapture, FakeClock, FakeCodecs, FakeVideoDevices,
     };
     use jstream_platform::{
-        AudioEncoder, AudioEncoderConfig, CaptureEncoding, CodecInfo, Codecs, PlatformError,
-        VideoDecoder, VideoDecoderConfig, VideoDeviceFormat, VideoEncoder, VideoEncoderConfig,
+        AudioEncoder, AudioEncoderConfig, CaptureEncoding, CodecInfo, Codecs, MediaClock,
+        PlatformError, VideoDecoder, VideoDecoderConfig, VideoDeviceFormat, VideoEncoder,
+        VideoEncoderConfig,
     };
     use jstream_sources::CaptureSpec;
+    use std::collections::BTreeSet;
     use std::sync::Arc;
+    use std::time::{Duration, Instant};
 
     fn format(width: u32, height: u32, fps: u32, encoding: CaptureEncoding) -> VideoDeviceFormat {
         VideoDeviceFormat {
@@ -874,5 +968,83 @@ mod tests {
             jstream_protocol::SourceId::new("cam"),
         );
         assert!(start(&backends, &nope).is_err());
+    }
+
+    /// Leaving the GPU path restarts a display capture on the CPU path, but not a
+    /// webcam, which is on it already: a running one keeps its stream and its frame, and
+    /// one still starting takes its first answer rather than opening the device a second
+    /// time (#734). Each capture's size is sent once: a restart keeps it (B12).
+    #[test]
+    fn leaving_the_gpu_path_leaves_a_webcam_running() {
+        let clock = FakeClock::new(Timebase::MICROS);
+        let devices = FakeVideoDevices::new(clock.clone());
+        let (size_tx, size_rx) = std::sync::mpsc::channel();
+        let mut captures = spawn(
+            backends(&clock, &devices, Arc::new(FakeCodecs)),
+            Timebase::MICROS,
+            size_tx,
+        )
+        .expect("the capture thread starts");
+        let webcam = CaptureKey::for_source(
+            CaptureSpec::Device(Some(FAKE_WEBCAM.into())),
+            jstream_protocol::SourceId::new("cam"),
+        );
+        let display = CaptureKey::primary();
+        let wanted = BTreeSet::from([webcam.clone(), display.clone()]);
+        // Ticks until `done` holds, never seeing the webcam opened twice.
+        let tick_until = |captures: &mut super::RenderCaptures,
+                          done: &dyn Fn(&super::RenderCaptures) -> bool|
+         -> bool {
+            let deadline = Instant::now() + Duration::from_secs(10);
+            while Instant::now() < deadline {
+                clock.advance(1_000);
+                captures.tick(&wanted, clock.now());
+                assert!(devices.open_streams() <= 1, "the webcam opened twice");
+                if done(captures) {
+                    return true;
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            false
+        };
+        let both = |captures: &super::RenderCaptures| {
+            captures.frame(&webcam).is_some() && captures.frame(&display).is_some()
+        };
+        // The first tick asks for both; the GPU path is left before either answers.
+        captures.tick(&wanted, clock.now());
+        captures.leave_gpu();
+        assert!(tick_until(&mut captures, &both), "both capture");
+        assert_eq!(devices.open_streams(), 1);
+        let version = captures.frame(&webcam).expect("a frame").version;
+        // Left again while both run: the display's frame goes, the webcam's stays.
+        captures.leave_gpu();
+        assert!(captures.frame(&display).is_none(), "restarted");
+        assert_eq!(
+            captures.frame(&webcam).map(|frame| frame.version),
+            Some(version),
+            "the webcam keeps its frame"
+        );
+        assert!(
+            tick_until(&mut captures, &both),
+            "the display captures again"
+        );
+        assert!(
+            tick_until(&mut captures, &|captures| captures
+                .frame(&webcam)
+                .is_some_and(|frame| frame.version > version)),
+            "the webcam's stream delivers on"
+        );
+        assert_eq!(devices.open_streams(), 1, "the same stream");
+        let mut sent: Vec<CaptureKey> = size_rx.try_iter().map(|change| change.key).collect();
+        sent.sort();
+        let mut each = vec![webcam.clone(), display.clone()];
+        each.sort();
+        assert_eq!(sent, each, "one size each, kept through the restarts");
+        captures.stop();
+        assert_eq!(devices.open_streams(), 0);
+        assert!(
+            size_rx.recv().is_err(),
+            "stopping closes the channel, sending nothing more"
+        );
     }
 }

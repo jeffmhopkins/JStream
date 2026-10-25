@@ -29,8 +29,11 @@
 //! latency, so the compensation delays move), master filters added to every bus's copy,
 //! edited and removed, output taps added (one with its own chain, on a bus that is
 //! later removed) and removed, and a CLAP filter whose host keeps up, then goes missing
-//! and comes back (its blocks bypassed and crossfaded), then is removed. The test
-//! asserts afterwards that each path actually ran.
+//! and comes back (its blocks bypassed and crossfaded), then is removed, and the privacy
+//! screen going on and off over the microphone (through the engine's count of its
+//! changes, `Mixer::with_privacy_signal`, which each poll and the microphone's packets
+//! read). The test asserts afterwards that each path actually
+//! ran.
 //!
 //! Dropping an input's producer frees its resampler state, so a producer is dropped
 //! outside the checked scope: that is stream teardown, not steady state.
@@ -46,8 +49,9 @@ use jstream_media::{AudioFormat, ChannelLayout, MediaTime, SampleFormat, Timebas
 use jstream_platform::{
     AudioInputHandler, AudioOutputHandler, AudioPacket, AudioPacketFlags, AudioRenderBuffer,
 };
-use jstream_plugin_proto::{Config, DEFAULT_DEPTH, Shared, first_useful};
+use jstream_plugin_proto::{Config, DEFAULT_DEPTH, EngineBlock, Shared, first_useful};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 #[global_allocator]
 static ALLOC: AllocDisabler = AllocDisabler;
@@ -277,6 +281,8 @@ impl BusChain {
 /// step processes every input block the mixer can still read (a gain of 0.5).
 struct FakeHost {
     shared: Arc<Shared>,
+    /// The engine's side of the block, where the mixer counts its misses.
+    memory: HostMemory,
     next: u64,
     buf: Vec<f32>,
     processed: u64,
@@ -311,6 +317,11 @@ struct Sim {
     input_blocks: u64,
     /// The mixer thread does not run until this tick (a stall).
     mixer_stalled_until: u64,
+    /// The engine's count of privacy screen changes (odd while it is on), which the
+    /// mixer reads at each poll and the microphone's packets at each push, and the
+    /// blocks mixed while it was on.
+    privacy: Arc<AtomicU64>,
+    private_blocks: u64,
     /// Bus monitors (ADR-0028, D22): each one's feed and counters, the socket its
     /// device stream plays (its player plugged in), its tap, and its device's buffer
     /// for one tick, which the socket fills every tick.
@@ -334,6 +345,7 @@ impl Sim {
         }
         let now = clock(T0 + (tick + 1) as f64 * TICK_S);
         while let Some(mixed) = self.mixer.poll(now, &mut self.out).expect("right length") {
+            self.private_blocks += self.privacy.load(Ordering::Relaxed) % 2;
             self.chain.process(&mut self.out);
             for (feed, _, _, tap, _) in &mut self.monitors {
                 if let Some(block) = self.mixer.monitor_block(BusId::MASTER, *tap) {
@@ -370,7 +382,9 @@ mod rt {
 
     #[test]
     fn callback_does_not_allocate() {
-        let mut mixer = Mixer::new(MixerConfig::default()).expect("valid config");
+        let privacy = Arc::new(AtomicU64::new(0));
+        let mut mixer = Mixer::with_privacy_signal(MixerConfig::default(), Arc::clone(&privacy))
+            .expect("valid config");
         let fmt = |rate, layout| {
             AudioFormat::new(rate, layout, SampleFormat::F32Interleaved).expect("valid format")
         };
@@ -421,8 +435,12 @@ mod rt {
             tap_blocks: 0,
             input_blocks: 0,
             mixer_stalled_until: 0,
+            privacy,
+            private_blocks: 0,
             monitors: Vec::new(),
         };
+        // The privacy screen mutes the microphone (ADR-0027 §4).
+        sim.devices[0].control.set_privacy_muted(true);
         // Monitors on the master, before and after its filters, on a 44.1 kHz mono
         // device and a 48 kHz 5.1 one.
         for (rate, layout, tap) in [
@@ -540,15 +558,16 @@ mod rt {
                         })
                         .expect("valid config");
                     shared.publish_ready(0);
-                    let memory: HostMemory = Arc::new(Arc::clone(&shared));
+                    let memory: HostMemory = Arc::new(EngineBlock::new(Arc::clone(&shared)));
                     clap = Some(
                         sim.devices[1]
                             .control
-                            .insert_host_filter(usize::MAX, memory)
+                            .insert_host_filter(usize::MAX, Arc::clone(&memory))
                             .expect("a ready host"),
                     );
                     host = Some(FakeHost {
                         shared,
+                        memory,
                         next: 0,
                         buf: vec![0.0; 2 * block],
                         processed: 0,
@@ -641,6 +660,10 @@ mod rt {
                 sim.devices[0]
                     .control
                     .set_activity_gain(if tick % 400 == 0 { 0.0 } else { 1.0 });
+                // The privacy screen goes on and off.
+                if (tick % 300 == 100) != (sim.privacy.load(Ordering::Relaxed) % 2 == 1) {
+                    sim.privacy.fetch_add(1, Ordering::Release);
+                }
                 bus.set_gain_db(db / 2.0);
                 for d in &sim.devices {
                     let _ = (d.control.take_meter(), d.control.stats());
@@ -694,12 +717,13 @@ mod rt {
             "{added:?}"
         );
         assert!(removed.packets > 0, "{removed:?}");
+        assert!(sim.private_blocks > 0, "no block under the privacy screen");
         assert!(bus.skipped_frames > 0, "{bus:?}");
         let host = host.expect("added");
         let misses = host
-            .shared
-            .status
-            .mixer_misses
+            .memory
+            .misses()
+            .total
             .load(std::sync::atomic::Ordering::Relaxed);
         assert!(
             host.processed > 100 && misses > 10,

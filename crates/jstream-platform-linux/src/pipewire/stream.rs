@@ -1,5 +1,6 @@
 //! A PipeWire video stream on the portal's remote, putting each frame into the capture
-//! mailbox (ADR-0060 §3).
+//! mailbox (ADR-0060 §3), and, when the portal session sends it, the pointer from each
+//! buffer's cursor metadata into a second mailbox, on either path.
 //!
 //! On the CPU path the stream takes shared-memory buffers and copies each frame out.
 //! On the GPU path (a stream connected with the context's [`gpu::Shared`]) it first
@@ -25,7 +26,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use jstream_platform::mailbox::Mailbox;
-use jstream_platform::{MediaClock, PlatformError, VideoSurface};
+use jstream_platform::{CaptureCursor, CursorImage, MediaClock, PlatformError, VideoSurface};
 
 use super::ffi::{
     CHUNK_SKIP, FLAG_AUTOCONNECT, FLAG_MAP_BUFFERS, Fns, PW_DIRECTION_INPUT,
@@ -37,8 +38,8 @@ use crate::dl::SystemLibrary;
 use crate::gpu::blit::{self, Ring};
 use crate::gpu::{self, dmabuf};
 use crate::spa::{
-    self, Chunk, Crop, DATA_DMA_BUF, META_HEADER, META_HEADER_SIZE, META_REGION_SIZE,
-    META_VIDEO_CROP, PARAM_FORMAT, Pod, VideoFormat,
+    self, Chunk, Crop, CursorBitmap, CursorMeta, DATA_DMA_BUF, META_CURSOR, META_HEADER,
+    META_HEADER_SIZE, META_REGION_SIZE, META_VIDEO_CROP, PARAM_FORMAT, Pod, VideoFormat,
 };
 
 /// `struct spa_meta_header` in <spa/buffer/meta.h>.
@@ -70,6 +71,8 @@ const HEADER_CORRUPTED: u32 = 1 << 1;
 pub(crate) struct Shared {
     /// The newest frame.
     pub(crate) mailbox: Mailbox<VideoSurface>,
+    /// The pointer, when it changed since it was last taken; only with cursor metadata.
+    pub(crate) cursor: Mailbox<CaptureCursor>,
     pub(crate) captured: AtomicU64,
     pub(crate) skipped: AtomicU64,
     lost: AtomicBool,
@@ -93,6 +96,7 @@ impl Shared {
     pub(crate) fn new() -> Self {
         Self {
             mailbox: Mailbox::new(),
+            cursor: Mailbox::new(),
             captured: AtomicU64::new(0),
             skipped: AtomicU64::new(0),
             lost: AtomicBool::new(false),
@@ -157,6 +161,61 @@ struct Callbacks {
     /// Set up once PipeWire settles on a DMA-BUF format.
     dma: Option<DmaPath>,
     streaming: bool,
+    /// The pointer so far, when the stream asks for cursor metadata.
+    cursor: Option<CursorTrack>,
+}
+
+/// The pointer as the buffers so far give it: the last picture (a buffer only carries
+/// one when it changes) and the state last put in the mailbox.
+#[derive(Debug, Default)]
+struct CursorTrack {
+    image: Option<Arc<CursorImage>>,
+    last: CaptureCursor,
+}
+
+impl CursorTrack {
+    /// The pointer after a buffer's `meta`, in the frame's pixels (the buffer's less the
+    /// crop's origin), or `None` when it is as it was.
+    fn update(&mut self, meta: CursorMeta, crop: Option<Crop>) -> Option<CaptureCursor> {
+        let now = match meta {
+            CursorMeta::Hidden => CaptureCursor::Hidden,
+            CursorMeta::At { x, y, bitmap } => {
+                match bitmap {
+                    CursorBitmap::Unchanged => {}
+                    CursorBitmap::Empty => self.image = None,
+                    CursorBitmap::Image(image) => self.image = Some(Arc::new(image)),
+                }
+                let (dx, dy) = match crop {
+                    Some(c) if c.width > 0 && c.height > 0 => (c.x.max(0), c.y.max(0)),
+                    _ => (0, 0),
+                };
+                match &self.image {
+                    Some(image) => CaptureCursor::Shown {
+                        x: x.saturating_sub(dx),
+                        y: y.saturating_sub(dy),
+                        image: Arc::clone(image),
+                    },
+                    None => CaptureCursor::Hidden,
+                }
+            }
+        };
+        let same = match (&now, &self.last) {
+            (
+                CaptureCursor::Shown { x, y, image },
+                CaptureCursor::Shown {
+                    x: lx,
+                    y: ly,
+                    image: li,
+                },
+            ) => x == lx && y == ly && Arc::ptr_eq(image, li),
+            (now, last) => now == last,
+        };
+        if same {
+            return None;
+        }
+        self.last = now.clone();
+        Some(now)
+    }
 }
 
 /// The header's time and the crop, from a buffer's metadata; `None` for a frame the
@@ -255,6 +314,9 @@ impl Callbacks {
             self.dma = None;
         }
         self.params = spa::buffer_params(dma).into();
+        if self.cursor.is_some() {
+            self.params.push(spa::cursor_param());
+        }
         let mut ptrs: Vec<*const c_void> = self.params.iter().map(Pod::as_ptr).collect();
         // SAFETY: `pw_stream_update_params` (see `Fns`), on this callback's own stream,
         // from its thread; `ptrs` points at `params.len()` pods kept alive in `self`.
@@ -290,6 +352,8 @@ impl Callbacks {
         if b.is_null() {
             return;
         }
+        // SAFETY: a dequeued buffer, queued back below.
+        unsafe { self.note_cursor(&*b) };
         let mut failed = None;
         let frame = if self.format.is_some_and(|f| f.modifier.is_some()) {
             // SAFETY: as below. The GPU copy is finished before the buffer goes back.
@@ -458,6 +522,53 @@ impl Callbacks {
         Ok(Some(VideoSurface::Gpu(frame)))
     }
 
+    /// Notes the pointer in `b`'s cursor metadata, when the stream asks for it, on
+    /// either path and before the frame is read: a buffer can carry a pointer move and
+    /// no frame, or a frame the producer marked corrupted.
+    ///
+    /// # Safety
+    /// `b` is a dequeued buffer of this stream, not yet queued back.
+    unsafe fn note_cursor(&mut self, b: &PwBuffer) {
+        let Some(track) = &mut self.cursor else {
+            return;
+        };
+        if b.buffer.is_null() {
+            return;
+        }
+        // SAFETY: the caller's contract; non-null.
+        let buf = unsafe { &*b.buffer };
+        let metas: &[SpaMeta] = if buf.metas.is_null() {
+            &[]
+        } else {
+            // SAFETY: `metas` holds `n_metas` entries.
+            unsafe { std::slice::from_raw_parts(buf.metas, buf.n_metas as usize) }
+        };
+        let meta_entry = |ty: u32, size: u32| {
+            metas
+                .iter()
+                .find(|m| m.type_ == ty && m.size >= size && !m.data.is_null())
+        };
+        let Some(m) = meta_entry(META_CURSOR, 1) else {
+            return;
+        };
+        let crop = meta_entry(META_VIDEO_CROP, META_REGION_SIZE).map(|r| {
+            // SAFETY: a region meta of at least its struct's size.
+            let r = unsafe { r.data.cast::<SpaMetaRegion>().read_unaligned() };
+            Crop {
+                x: r.x,
+                y: r.y,
+                width: r.width,
+                height: r.height,
+            }
+        });
+        // SAFETY: a meta's `data` holds `size` bytes for the buffer's lifetime;
+        // `parse_cursor` checks every offset in them.
+        let bytes = unsafe { std::slice::from_raw_parts(m.data.cast::<u8>(), m.size as usize) };
+        if let Some(update) = spa::parse_cursor(bytes).and_then(|c| track.update(c, crop)) {
+            self.shared.cursor.put(update);
+        }
+    }
+
     /// The frame in `b`, copied out.
     ///
     /// # Safety
@@ -591,7 +702,8 @@ fn pw_failed(call: &'static str) -> PlatformError {
 impl VideoStream {
     /// Connects to node `node_id` on the PipeWire remote `fd` (from the portal's
     /// `OpenPipeWireRemote`), delivering frames into `shared`: on `gpu`'s device when it
-    /// is given (the GPU path, falling back to CPU frames), else as CPU frames.
+    /// is given (the GPU path, falling back to CPU frames), else as CPU frames; and the
+    /// pointer too when `cursor_metadata` (the portal session sends it as metadata).
     ///
     /// # Errors
     /// [`PlatformError::MissingComponent`] when libpipewire lacks a function, and
@@ -602,6 +714,7 @@ impl VideoStream {
         node_id: u32,
         shared: Arc<Shared>,
         gpu: Option<Arc<gpu::Shared>>,
+        cursor_metadata: bool,
     ) -> Result<Self, PlatformError> {
         let fns = Fns::load(lib)?;
         let clock = MonotonicClock::new()?;
@@ -632,6 +745,7 @@ impl VideoStream {
                 gpu,
                 dma: None,
                 streaming: false,
+                cursor: cursor_metadata.then(CursorTrack::default),
             }),
             _lib: lib.clone(),
         };
@@ -783,5 +897,89 @@ mod tests {
         s.lose("first");
         s.lose("second");
         assert_eq!(s.lost().as_deref(), Some("first"));
+    }
+}
+
+#[cfg(test)]
+mod cursor_tests {
+    use std::sync::Arc;
+
+    use jstream_platform::media::FrameSize;
+    use jstream_platform::{CaptureCursor, CursorImage};
+
+    use super::CursorTrack;
+    use crate::spa::{Crop, CursorBitmap, CursorMeta};
+
+    fn image(red: u8) -> CursorImage {
+        CursorImage::new(FrameSize::new(1, 1).expect("size"), vec![red, 0, 0, 255]).expect("image")
+    }
+
+    fn at(x: i32, y: i32, bitmap: CursorBitmap) -> CursorMeta {
+        CursorMeta::At { x, y, bitmap }
+    }
+
+    #[test]
+    fn the_pointer_keeps_its_picture_and_reports_only_changes() {
+        let mut track = CursorTrack::default();
+        // A position before any picture is an invisible pointer.
+        assert_eq!(
+            track.update(at(5, 5, CursorBitmap::Unchanged), None),
+            Some(CaptureCursor::Hidden)
+        );
+        let Some(CaptureCursor::Shown { x, y, image: first }) =
+            track.update(at(5, 6, CursorBitmap::Image(image(1))), None)
+        else {
+            panic!("shown");
+        };
+        assert_eq!((x, y), (5, 6));
+        // The same place and picture is no change, so nothing is put in the mailbox.
+        assert_eq!(track.update(at(5, 6, CursorBitmap::Unchanged), None), None);
+        // A move keeps the picture, shared rather than copied.
+        let Some(CaptureCursor::Shown { image: moved, .. }) =
+            track.update(at(9, 6, CursorBitmap::Unchanged), None)
+        else {
+            panic!("shown");
+        };
+        assert!(Arc::ptr_eq(&first, &moved));
+        // An empty picture hides it, and so does a pointer that leaves the stream.
+        assert_eq!(
+            track.update(at(9, 6, CursorBitmap::Empty), None),
+            Some(CaptureCursor::Hidden)
+        );
+        assert!(
+            track
+                .update(at(9, 6, CursorBitmap::Image(image(2))), None)
+                .is_some()
+        );
+        assert_eq!(
+            track.update(CursorMeta::Hidden, None),
+            Some(CaptureCursor::Hidden)
+        );
+        assert_eq!(track.update(CursorMeta::Hidden, None), None);
+    }
+
+    #[test]
+    fn the_pointer_is_placed_in_the_cropped_frame() {
+        let mut track = CursorTrack::default();
+        let crop = Crop {
+            x: 100,
+            y: 40,
+            width: 640,
+            height: 480,
+        };
+        let Some(CaptureCursor::Shown { x, y, .. }) =
+            track.update(at(150, 50, CursorBitmap::Image(image(1))), Some(crop))
+        else {
+            panic!("shown");
+        };
+        assert_eq!((x, y), (50, 10));
+        // An empty crop is ignored, as the frame copy ignores it.
+        let empty = Crop { width: 0, ..crop };
+        let Some(CaptureCursor::Shown { x, y, .. }) =
+            track.update(at(150, 50, CursorBitmap::Unchanged), Some(empty))
+        else {
+            panic!("shown");
+        };
+        assert_eq!((x, y), (150, 50));
     }
 }

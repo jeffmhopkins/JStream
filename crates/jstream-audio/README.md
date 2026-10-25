@@ -30,8 +30,8 @@ compensates their latency. It also has
 [ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)'s audio half: a
 master chain on every bus that feeds an output, output taps with their own chains for
 outputs that encode their own audio, and each bus's output before the master chain for
-monitoring. Each input has an activity gain (audio that follows the program) before
-its sends. A bus monitor (ADR-0028's D22) hears the bus before or after its filters and
+monitoring, and the privacy screen's mute. Each input has an activity gain (audio that
+follows the program) before its sends. A bus monitor (ADR-0028's D22) hears the bus before or after its filters and
 plays on an output device through a monitor player; `jstream-core` doesn't open one yet,
 though the protocol has bus monitors since 0.42. Sidechain keys in the mixer come later. The true-peak and loudness meters
 ([Meters](#meters)) exist as DSP but don't run in the mixer yet; `jstream-core`'s
@@ -72,6 +72,34 @@ stamped on the clock, and no device is the master.
   after its fader, mute and meter: ADR-0028's activity gain, which `jstream-core` sets
   from what the Program mix shows. It ramps over one block with the sends, and a new
   input starts at 1.
+- `InputControl::set_privacy_muted` marks an input as one the privacy screen mutes
+  ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)), and
+  `Mixer::set_privacy` turns the screen on or off (the thread that polls a mixer made
+  with `Mixer::new` calls it before each poll), and turning it on covers the next
+  block mixed. While it
+  is on, a marked input's audio thread zeroes each packet as it arrives, before its
+  ring, and the mixer silences it where it leaves its ring, before its filter chain,
+  and gives it an activity gain of 0 in place of its own. So nothing it captures
+  meanwhile reaches its ring, a delay filter's line or its compensation delay to be
+  heard after the screen goes off; what the chain held from before ramps out over one
+  block. `Mixer::with_privacy_signal` makes a mixer that follows the engine's count of
+  the screen's changes (odd while it is on) at each poll, with no `set_privacy` call,
+  turning it on and off again when it changed twice between two polls. Its inputs'
+  audio threads read the count too, so they cover a packet from the moment the engine
+  changes it until the next poll has acted on the change. Turning it off follows
+  the capture time: until the next `poll` everything stays covered, and that poll sets
+  the end to the engine frame of its clock plus 40 ms (`PRIVACY_MARGIN_S`, twice the
+  20 ms timing error at which an input re-anchors). The blocks that start before it,
+  mixed late by the latency, stay covered, and the audio thread zeroes a packet that
+  its own stamp, the input's timing of it or its placement starts before it, so a
+  stamp the drift fit rejects is covered by its capture time. Only a packet that
+  arrives after that poll and that all three date at least 40 ms after the screen went
+  off is heard. It feeds no
+  bus, its own block is silent and its meter reads silence. Its mute, sends and
+  activity gain are left as they are, so turning the screen off brings it back as it
+  was. A new input is unmarked;
+  `MixerControl::add_input_with` marks one before the mixer can install it, so it
+  starts silent under the screen.
 - `InputControl::add_filter` / `insert_filter` and the same on `BusControl` add a
   filter (`FilterSpec`: gain, noise gate, compressor, limiter or delay, built at the
   engine rate) to the chain, and return a `FilterControl` whose `set(FilterParams)`
@@ -80,8 +108,10 @@ stamped on the clock, and no device is the master.
   on `InputControl`, `BusControl` and `OutputTapControl` adds a CLAP filter instead:
   the mixer's side of an out-of-process plugin host, through its shared block
   (`HostMemory`, a [`jstream-plugin-proto`](../jstream-plugin-proto/README.md)
-  `Shared` however it is mapped). The block must be initialised for the mixer's rate
-  and block size and its host ready; the master chain refuses one, since each bus's
+  `EngineBlock`: the `Shared` block however it is mapped, and the miss counts beside
+  it). The block must be initialised for the mixer's rate
+  and block size (`InputControl::mixer_rate`, `mixer_block_frames`) and its host
+  ready, with one filter on it at a time; the master chain refuses one, since each bus's
   copy would need its own host. `Mixer::latency_frames` is the
   chains' latency the mixer compensates, and each block's `pts` is its first frame minus
   it, the master chain's included.
@@ -162,13 +192,28 @@ not start. No variant allocates.
 - the mixer's gains, ramps, meters, under- and overrun counters, and clocked polling;
 - each input's own block after its fader, mute and activity gain, unaffected by its
   send gains, and gone once the input is removed;
+- the privacy screen silencing only the inputs it mutes, from the next block, metering
+  silence, with their sends, mute and activity gains untouched, an input added while it
+  is on starting silent, and nothing captured under it heard afterwards through a delay
+  filter or the compensation delay (`audio_from_under_the_privacy_screen_is_never_heard`)
+  or in the blocks mixed just after it goes off (`the_privacy_screen_ends_at_the_capture_time`),
+  also from an input placed 10 ms late (`the_privacy_screen_covers_an_input_placed_late`)
+  and from stamps the drift fit rejects as outliers, placed 300 ms late
+  (`the_privacy_screen_covers_stamps_the_fit_rejects`); a mixer given the engine's
+  count of changes following it with no `set_privacy` call
+  (`the_mixer_follows_the_engine_signal`), and covering a screen turned on and off
+  again between two polls, whether the packet captured meanwhile arrives before the
+  next poll or after it, even placed 102 ms late
+  (`a_screen_on_and_off_between_two_polls_still_covers_it`);
 - the send matrix: post-fader sends into each bus, each bus's own fader, mute and
   meter, sends ramping in and out, a muted input feeding no bus, buses added from
   another thread and removed, a send to a removed bus not reaching the bus that reuses
   its buffer, the 16-bus limit, and a removed bus's state freed once its handle is gone;
 - CLAP filters (`host.rs`): the host's output heard `depth` blocks late, a missing
-  host bypassed with the same latency and each miss counted, the crossfades both ways,
-  non-finite host samples as silence, a reset passed on to the host, and blocks that
+  host bypassed with the same latency and each miss counted, a host rewriting the
+  status block leaving the miss counts alone, the crossfades both ways,
+  non-finite host samples as silence, a reset passed on to the host, a new filter on a
+  block an earlier one used carrying on its numbers with no miss, and blocks that
   aren't ready or don't match refused;
 - filter chains: an input's chain before its fader and a bus's on its sum, edits and
   removal applied live, latency compensation (a limiter on one input and one bus: every
@@ -209,10 +254,10 @@ be.
 
 `tests/no_alloc.rs` is R-RT-001's `callback_does_not_allocate`: the real-time calls
 under `assert_no_alloc`, through the same kinds of glitches and live input, bus, send,
-filter, master-chain, output-tap and CLAP-filter changes, reading each output tap's and
-each input's block after every block, feeding two monitors (before and after the
-master's filters) and rendering their devices every tick through the sockets their
-players are plugged into
+filter, master-chain, output-tap and CLAP-filter changes and the privacy screen,
+reading each output tap's and each input's block after every block, feeding two
+monitors (before and after the master's filters) and rendering their devices every
+tick through the sockets their players are plugged into
 ([Real-time design](#realtime)).
 `tests/cost.rs` is an ignored measurement of what a block costs
 ([Real-time design](#realtime)).
@@ -232,9 +277,13 @@ Everything that runs on a real-time thread lives in `src/rt/`
 ([ARCH › Threads, clock and sync](../../docs/ARCHITECTURE.md#threading)). Each input's
 **audio thread** (the platform backend's, one per stream) calls
 `InputProducer::push_packet`. That call downmixes, tracks the device clock, resamples,
-and writes into the input's ring. The **mixer thread** calls `Mixer::poll`, which reads
+and writes into the input's ring, zeroing a packet of an input the privacy screen
+covers (it reads the mixer's end of the screen and, from `Mixer::with_privacy_signal`,
+the engine's count of its changes and the last count the mixer acted on, all atomics). The **mixer thread** calls `Mixer::poll`, which reads
 every ring for the block's window, applies faders, activity gains and sends, sums each
-bus and meters.
+bus and meters. An input the privacy screen mutes while it is on (a plain field
+`Mixer::set_privacy` sets on that thread) is zeroed after its ring read, before its
+chain, and takes an activity gain of 0.
 Neither allocates,
 locks, blocks or logs after setup ([R-RT-001](../../docs/RULES.md#R-RT-001)). They
 share only the rings and atomics: gains, sends, meters and counters
@@ -255,7 +304,7 @@ indexed by time with these policies.
 
 **Monitors** (`monitor.rs`). The mixer thread writes each monitored block into a ring
 of the same kind, under its engine frames. The ring is sized for the monitor, not from
-the inputs' `ring_frames`: twice the target plus a block and the 50 ms threshold,
+the inputs' `ring_frames`: twice the sum of the target, a block and the 50 ms threshold,
 rounded up to a power of two, so a short mixer ring can't push a steady read past the
 ring's half-capacity guard. The output device's audio thread reads
 it through `MonitorPlayer::render`: in 64-frame stages, through a resampler from the
@@ -389,14 +438,20 @@ it writes its dry input into the input ring as block `n` and reads the host's bl
 or wait. Its latency, fixed when it is built, is `depth` blocks plus the plugin's own
 reported latency, so the chain compensates it like any filter's. When the host's block
 isn't there (late, hung or dead), the filter passes its own dry signal delayed by that
-same latency, so timing doesn't jump, and counts the miss in the block's status
-(`mixer_misses`, and `mixer_miss_run` for misses in a row) for the control thread to
-report. Switching between the two is a crossfade over 2 ms (at most one block): dry to
+same latency, so timing doesn't jump, and counts the miss for the control thread to
+report: `MixerMisses`' `total`, and `run` for misses in a row. They are in the
+engine's memory beside the mapping (`EngineBlock`), not in the shared block, so a host
+can't reset them to hide a degraded filter (#351). Switching between the two is a crossfade over 2 ms (at most one block): dry to
 the plugin's output when it comes back, and from the plugin's last frame to dry when it
 goes missing, since the missing block can't be faded. The host's samples are another
 process's data, so non-finite ones become 0. A chain reset clears the dry delay and
 bumps `reset_seq` for the host to reset the plugin; block numbers carry on, so the
-rings stay in step. The shared block (`HostMemory`) is dropped on the collector like
+rings stay in step. A filter numbers its blocks on from the input ring's head, so when
+a chain is rebuilt a new filter can go on a block whose filter was removed and the host
+carries on without a restart. The head is read when the new filter is built, after the
+old one's removal is queued but maybe before the mixer applies it, so a block the old
+filter writes in between can be written again under the same number: a one-block
+glitch, only on a rebuild, which resets the built-in filters anyway. The shared block (`HostMemory`) is dropped on the collector like
 any removed filter.
 
 **Master chain and output taps** (`tap.rs`,
@@ -448,8 +503,10 @@ limiter and removed, filters on an input and the master edited every 0.5 s, and 
 limiter added to and removed from an input (so the compensation delays move), master
 filters edited every 0.5 s and one added to both fed buses and removed, an output tap
 on the aux bus with its own chain (edited every 0.5 s, outliving its bus) whose block is
-read after each mix, a tap on the master added and removed, and every input's own
-block read after each mix. The test
+read after each mix, a tap on the master added and removed, every input's own
+block read after each mix, and the privacy screen going on and off over the microphone
+(through the count of changes `Mixer::with_privacy_signal` reads, at each poll and in
+each of the microphone's packets). The test
 checks that each of those paths ran. Control-plane calls and dropping a producer (stream teardown) run
 outside the scope. Locks, blocking and logging are still left to review.
 
@@ -620,14 +677,14 @@ descriptors and the protocol. The kernels' cost in the mixer is measured in
   master bus and subscribed buses and sources) with their meter-stream fields and
   `audio.reset_loudness`, and monitor devices that play `bus_block`; and render-side
   resampling for output devices.
-- **The privacy screen's mute** from ADR-0027's audio half (the master chain and output
-  taps are driven by `jstream-core`).
 - **The engine side of CLAP filters**
   ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)): the mixer's side is
   here (`insert_host_filter`), and starting and watching the host process are built
-  (`jstream-platform`'s `PluginHosts`, `jstream-core`'s `HostSupervisor`), but running a
-  CLAP filter from the graph, reporting `mixer_misses` in `stats.tick` and the degraded
-  event, and live changes to the plugin's parameters are not.
+  (`jstream-platform`'s `PluginHosts`, `jstream-core`'s `HostSupervisor`), and
+  `jstream-core` runs a CLAP filter from a source's chain and sends its settings as
+  parameter changes, and the miss counts are kept on the engine's side of the block
+  (#351), but reporting them in `stats.tick` and the degraded event in the protocol
+  are not.
 - **A CPU measurement** of the mixer on Windows hardware, and of resampling
   ([Real-time design](#realtime) has a cloud machine's numbers for the mix).
 - **Feeding the fitted drift forward** into the controller, which would shorten the
