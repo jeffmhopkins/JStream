@@ -442,15 +442,18 @@ fn delay_is_one_frame() {
     assert_eq!(peak, 3000 + DELAY);
 }
 
-/// A long-window CPE with a common window and no M/S: the left channel holds `values`
-/// with the escape book over bands `first..last` at `gain`, and the right channel codes
-/// each of those bands as intensity stereo with `positions[b - first]` and `books`.
+/// A long-window CPE with a common window: the left channel holds `values` with the
+/// escape book over bands `from..last` at `gain`, and the right channel codes bands
+/// `first..last` as intensity stereo with `positions[b - first]` and `books`, and is
+/// silent below them. An empty `ms` writes `ms_mask_present = 0`; otherwise it is 1 and
+/// `ms[b]` is each band's `ms_used`.
 fn cpe_with_intensity(
     values: &[i32],
-    (first, last): (usize, usize),
+    (from, first, last): (usize, usize, usize),
     gain: i32,
     positions: &[i32],
     books: &[u8],
+    ms: &[bool],
 ) -> Vec<u8> {
     let bands = 49;
     let frame = Shape {
@@ -465,11 +468,11 @@ fn cpe_with_intensity(
         Section {
             book: ZERO_HCB,
             start: 0,
-            end: first as u8,
+            end: from as u8,
         },
         Section {
             book: ESC_HCB,
-            start: first as u8,
+            start: from as u8,
             end: last as u8,
         },
         Section {
@@ -511,7 +514,14 @@ fn cpe_with_intensity(
     w.put(0, 4);
     w.bit(true); // common_window
     write_ics_info(&mut w, Sequence::OnlyLong, WindowShape::Sine, &frame);
-    w.put(0, 2); // ms_mask_present
+    if ms.is_empty() {
+        w.put(0, 2); // ms_mask_present
+    } else {
+        w.put(1, 2);
+        for &used in &ms[..bands] {
+            w.bit(used);
+        }
+    }
     write_ics(&mut w, &l, &frame, None);
     write_ics(&mut w, &r, &frame, None);
     w.put(7, 3); // ID_END
@@ -522,19 +532,16 @@ fn cpe_with_intensity(
 /// Intensity bands through the reference decoder: the right channel comes out as the left
 /// band scaled by `0.5^(is_position/4)` per band, in phase for `INTENSITY_HCB` and
 /// inverted for `INTENSITY_HCB2`, with positions coded as differences from 0 (both
-/// signs, the extremes ±30 and the largest steps between them).
+/// signs, the extremes ±30 and the largest steps between them). It holds with
+/// `ms_mask_present` 0, and with 1 and M/S bands below the intensity bands, whose
+/// `ms_used` is 0 there as the encoder writes it. With `ms_used` set on intensity bands,
+/// the decoder inverts their sign (14496-3's `invert_intensity`), which is why the
+/// encoder never sets it.
 #[test]
 fn intensity_bands_decode_to_their_level_and_sign() {
-    let bands = (30usize, 46usize);
-    let lo = usize::from(SWB_LONG[bands.0]);
-    let hi = usize::from(SWB_LONG[bands.1]);
-    let mut values = vec![0i32; 1024];
-    let mut rng = Rng(9);
-    for v in &mut values[lo..hi] {
-        *v = rng.below(41) as i32 - 20;
-    }
+    let (first, last) = (30usize, 46usize);
     let positions = [0, 4, -4, 30, -30, 30, 7, -1, 12, -9, 2, 0, -17, 25, 3, -6];
-    let books: Vec<u8> = (0..bands.1 - bands.0)
+    let books: Vec<u8> = (0..last - first)
         .map(|i| {
             if i % 3 == 1 {
                 INTENSITY_HCB2
@@ -544,39 +551,70 @@ fn intensity_bands_decode_to_their_level_and_sign() {
         })
         .collect();
     let gain = 150;
-    let units = vec![
-        cpe_with_intensity(&values, bands, gain, &positions, &books),
-        cpe_with_intensity(&[0; 1024], bands, gain, &positions, &books),
-    ];
-    let pcm = decode([0x11, 0x90], &units).expect("decodes");
     let g = 2f64.powf(0.25 * f64::from(gain - 100));
-    let mut left = vec![0.0f64; 1024];
-    for (s, &q) in left.iter_mut().zip(&values) {
-        *s = f64::from(q.signum()) * f64::from(q.unsigned_abs()).powf(4.0 / 3.0) * g;
+    let mut ms_below = [false; 49];
+    ms_below[20..first].fill(true);
+    let mut ms_inverted = ms_below;
+    for b in (first..last).step_by(2) {
+        ms_inverted[b] = true;
     }
-    let mut right = vec![0.0f64; 1024];
-    for b in bands.0..bands.1 {
-        let dir = if books[b - bands.0] == INTENSITY_HCB {
-            1.0
-        } else {
-            -1.0
-        };
-        let scale = dir * f64::from(intensity::scale(positions[b - bands.0]));
-        for k in usize::from(SWB_LONG[b])..usize::from(SWB_LONG[b + 1]) {
-            right[k] = scale * left[k];
+    for (from, ms) in [
+        (first, &[][..]),
+        (20, &ms_below[..]),
+        (20, &ms_inverted[..]),
+    ] {
+        let lo = usize::from(SWB_LONG[from]);
+        let hi = usize::from(SWB_LONG[last]);
+        let mut values = vec![0i32; 1024];
+        let mut rng = Rng(9);
+        for v in &mut values[lo..hi] {
+            *v = rng.below(41) as i32 - 20;
         }
-    }
-    for (c, spectrum) in [left, right].iter().enumerate() {
-        let want = synthesis(spectrum);
-        let peak = want.iter().fold(0.0f64, |a, b| a.max(b.abs()));
-        assert!(peak > 1e-4, "channel {c}: silent");
-        let err = pcm
-            .iter()
-            .skip(c)
-            .step_by(2)
-            .zip(&want)
-            .fold(0.0f64, |a, (&p, &w)| a.max((f64::from(p) - w).abs()));
-        assert!(err < 1e-5 * peak, "channel {c}: error {err} against {peak}");
+        let bands = (from, first, last);
+        let units = vec![
+            cpe_with_intensity(&values, bands, gain, &positions, &books, ms),
+            cpe_with_intensity(&[0; 1024], bands, gain, &positions, &books, ms),
+        ];
+        let pcm = decode([0x11, 0x90], &units).expect("decodes");
+        let mut left = vec![0.0f64; 1024];
+        for (s, &q) in left.iter_mut().zip(&values) {
+            *s = f64::from(q.signum()) * f64::from(q.unsigned_abs()).powf(4.0 / 3.0) * g;
+        }
+        let mut right = vec![0.0f64; 1024];
+        for b in from..last {
+            let used = ms.get(b).copied().unwrap_or(false);
+            let scale = if b < first {
+                // M/S with a silent side channel: both channels are M.
+                if used { 1.0 } else { 0.0 }
+            } else {
+                let dir = if books[b - first] == INTENSITY_HCB {
+                    1.0
+                } else {
+                    -1.0
+                };
+                let invert = if used { -1.0 } else { 1.0 };
+                invert * dir * f64::from(intensity::scale(positions[b - first]))
+            };
+            for k in usize::from(SWB_LONG[b])..usize::from(SWB_LONG[b + 1]) {
+                right[k] = scale * left[k];
+            }
+        }
+        for (c, spectrum) in [left, right].iter().enumerate() {
+            let want = synthesis(spectrum);
+            let peak = want.iter().fold(0.0f64, |a, b| a.max(b.abs()));
+            assert!(peak > 1e-4, "from {from}, channel {c}: silent");
+            let err = pcm
+                .iter()
+                .skip(c)
+                .step_by(2)
+                .zip(&want)
+                .fold(0.0f64, |a, (&p, &w)| a.max((f64::from(p) - w).abs()));
+            assert!(
+                err < 1e-5 * peak,
+                "from {from}, mask {}, channel {c}: error {err} against {peak}",
+                !ms.is_empty()
+            );
+        }
     }
 }
 

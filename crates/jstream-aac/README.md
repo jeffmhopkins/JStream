@@ -31,8 +31,7 @@ check found and what it could not confirm. Nothing here says AAC-LC is free of p
   MPEG-2 AAC LC profile (ISO/IEC 13818-7, 1997). This crate uses the filterbank with sine
   and KBD windows, block switching, TNS, M/S and intensity stereo, scalefactors,
   quantization and Huffman coding. PNS, SBR, parametric stereo and every later tool are
-  never emitted. Adding one needs a new maintainer-tier
-  ADR.
+  never emitted. Adding one needs a new maintainer-tier ADR.
 - **Techniques.** Each technique cites its pre-2003 source in the module that implements
   it. The psychoacoustic model is Johnston (1988) with Zwicker and Terhardt's Bark scale,
   Schroeder et al.'s spreading function and Terhardt's threshold in quiet, plus 13818-7
@@ -111,32 +110,33 @@ reflection coefficients past its order), filters on clicks and none on noise or 
 the range's limits, and `tns_data`'s written bits against counted bits, for analysed
 filters and for hand-made ones of every shape (the most coefficients of each window
 length, compressed or not, the most negative index, windows without a filter). The
-intensity tests check a panned band coding exactly (sign and position), energies carrying
-over, the refusals (uncorrelated, unmasked, empty and non-finite bands), clamped positions,
-and, for long and short windows, that a channel with intensity bands writes exactly the
-bits the loops counted, with those bands in sections of their own. Through the
+intensity tests check a panned band coding exactly (sign and position), energies
+carrying over, the refusals (uncorrelated, unmasked, empty and non-finite bands), clamped
+positions, and, for long and short windows, that a channel with intensity bands writes
+exactly the bits the loops counted, with those bands in sections of their own. Through the
 reference decoder: **every codeword of every codebook** (signs and escapes too) decodes to
 the standard's synthesis of the values written, and intensity bands of both books and
 positions from -30 to 30 decode to the left band scaled by `0.5^(position/4)`, with
-their sign. The output also lags by exactly `DELAY`,
-and planar and interleaved input give the same stream. Hostile input (NaN, infinities,
-huge values, DC, square waves, clicks) in random buffer sizes, at every rate, layout and
-window shape, with TNS on and (in a quarter of the rounds) off and intensity stereo on
-and (in a fifth) off, never panics, keeps every
+their sign, both without M/S and beside M/S bands. With `ms_used` set on an intensity
+band, the decoder inverts its sign, which is why the encoder never sets it there. The
+output also lags by exactly `DELAY`, and planar and interleaved input give the same
+stream. Hostile input (NaN, infinities, huge values, DC, square waves, clicks) in random
+buffer sizes, at every rate, layout and window shape, with TNS on and (in a quarter of
+the rounds) off and intensity stereo on and (in a fifth) off, never panics, keeps every
 unit within the decoder's buffer, and decodes. Four seconds of full-scale noise at 64, 128
 and 192 kbps, and of noise panned between the channels at 64 kbps, stay at or under the
-target rate and within 10 % of it. The quality tests
-check waveform SNR floors on tones and a synthetic music signal at 128 and 192 kbps, the
-spectral envelope of noise (within 2.5 dB per third octave), the window sequences (long on
-steady signals, short around attacks, and only legal transitions), and pre-echo below an
-attack. With TNS, the noise between a click train's clicks drops by at least 2 dB at 64
-and 128 kbps against TNS off, and tones keep their SNR within 0.5 dB. Clicks every 512
-samples stay on long windows, get TNS in at least nine units of ten (none with it off),
-and keep the temporal envelope (64-sample block energies) within 3.6 dB of the input's, at
-least 1.8 dB closer than without TNS, at 96 and 128 kbps. A high band panned to the left
-(in and out of phase) uses intensity stereo in at least nine units of ten at 64 and 96
-kbps, keeps each channel's level within 1 dB and the right channel's sign, and lifts the
-left channel's SNR by at least 3 dB against intensity stereo off. `tests/no_alloc.rs`
-checks that steady-state encoding doesn't allocate, panned stereo included.
+target rate and within 10 % of it. The quality tests check waveform SNR floors on tones
+and a synthetic music signal at 128 and 192 kbps, the spectral envelope of noise (within
+2.5 dB per third octave), the window sequences (long on steady signals, short around
+attacks, and only legal transitions), and pre-echo below an attack. With TNS, the noise
+between a click train's clicks drops by at least 2 dB at 64 and 128 kbps against TNS off,
+and tones keep their SNR within 0.5 dB. Clicks every 512 samples stay on long windows,
+get TNS in at least nine units of ten (none with it off), and keep the temporal envelope
+(64-sample block energies) within 3.6 dB of the input's, at least 1.8 dB closer than
+without TNS, at 96 and 128 kbps. A high band panned to the left (in and out of phase)
+uses intensity stereo in at least nine units of ten at 64 and 96 kbps, keeps each
+channel's level within 1 dB and the right channel's sign, and lifts the left channel's
+SNR by at least 3 dB against intensity stereo off. `tests/no_alloc.rs` checks that
+steady-state encoding doesn't allocate, panned stereo included.
 
 Not built yet: short-window grouping, and more than two channels.
