@@ -679,3 +679,62 @@ fn a_malformed_response_is_reported_without_quoting_it() {
     ));
     assert!(!shown.contains("abcd-leak"), "{shown}");
 }
+
+/// A hook that keeps what it is handed, for the tests.
+fn recording_hook() -> (SecretHook, Arc<std::sync::Mutex<Vec<String>>>) {
+    let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let keep = Arc::clone(&seen);
+    let hook: SecretHook = Arc::new(move |secret: &str| {
+        keep.lock().unwrap().push(secret.to_owned());
+    });
+    (hook, seen)
+}
+
+#[test]
+fn the_secret_hook_sees_every_token_and_stream_key_the_client_gets() {
+    let transport = FakeTransport::new();
+    transport
+        .respond(200, include_str!("../../fixtures/token_exchange.json"))
+        .respond(200, STREAMS);
+    let (hook, seen) = recording_hook();
+    let mut client = LiveClient::new(
+        Arc::new(transport.clone()),
+        oauth(),
+        Secret::new("1//0gold"),
+    )
+    .with_secret_hook(hook);
+    assert_eq!(
+        *seen.lock().unwrap(),
+        ["1//0gold"],
+        "the refresh token at once"
+    );
+
+    client
+        .stream("UCfixturechannel000000000fixturestream1")
+        .unwrap();
+    assert_eq!(
+        *seen.lock().unwrap(),
+        [
+            "1//0gold",
+            "1//0gfixture-refresh-token",
+            "ya29.a0AfH6SMfixture-access-1",
+            "abcd-efgh-ijkl-mnop-qrst",
+        ],
+        "the rotated refresh token and the access token as the client refreshes, then the key"
+    );
+}
+
+#[test]
+fn the_secret_hook_sees_a_grants_tokens_and_a_new_streams_key() {
+    let transport = FakeTransport::new();
+    transport.respond(200, NEW_STREAM);
+    let (hook, seen) = recording_hook();
+    let mut client = signed_in(&transport, vec![Scope::Manage]).with_secret_hook(hook);
+    assert_eq!(*seen.lock().unwrap(), ["1//0grefresh", "ya29.current"]);
+
+    client.insert_stream(&NewStream::new("Main")).unwrap();
+    assert_eq!(
+        seen.lock().unwrap().last().map(String::as_str),
+        Some("wxyz-1234-5678-9abc-defg")
+    );
+}
