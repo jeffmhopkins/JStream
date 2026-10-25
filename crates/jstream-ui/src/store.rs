@@ -8,9 +8,10 @@
 use crate::session::Session;
 use jstream_control::ControlError;
 use jstream_control::protocol::{
-    Batch, BusInfo, Call, CallResult, Canvas, DeleteTarget, Edit, Event, ItemId, ItemInfo,
-    KindDescriptor, KindSummary, OutputInfo, Query, QueryResult, Rev, SceneId, SceneInfo,
-    SceneRole, SourceId, SourceInfo, SourceKind,
+    Action, Batch, BusInfo, Call, CallResult, Canvas, DeleteTarget, Edit, Event, HotkeyBinding,
+    ItemId, ItemInfo, KindDescriptor, KindSummary, OutputInfo, Query, QueryResult, Rev, SceneId,
+    SceneInfo, SceneRole, SourceId, SourceInfo, SourceKind, TransitionPresetId,
+    TransitionPresetInfo, TransitionsInfo,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -32,6 +33,10 @@ pub struct Collection {
     /// Every audio bus, ordered by ID, the master among them: what a `bus` parameter
     /// picks from.
     pub buses: Vec<BusInfo>,
+    /// The transition presets and which one is the default.
+    pub transitions: TransitionsInfo,
+    /// Every hotkey binding, ordered by chord.
+    pub hotkeys: Vec<HotkeyBinding>,
 }
 
 impl Collection {
@@ -45,6 +50,8 @@ impl Collection {
                 scenes,
                 outputs,
                 buses,
+                hotkeys,
+                transitions,
                 ..
             } => Some(Collection {
                 rev,
@@ -53,6 +60,8 @@ impl Collection {
                 scenes,
                 outputs,
                 buses,
+                transitions: *transitions,
+                hotkeys,
             }),
             _ => None,
         }
@@ -83,6 +92,27 @@ impl Collection {
     /// (ADR-0024), since they are shown under the items that place them.
     pub fn listed_scenes(&self) -> impl Iterator<Item = &SceneInfo> {
         self.scenes.iter().filter(|s| s.role == SceneRole::Scene)
+    }
+
+    /// The transition preset with this ID.
+    pub fn preset(&self, preset_id: &TransitionPresetId) -> Option<&TransitionPresetInfo> {
+        self.transitions
+            .presets
+            .iter()
+            .find(|p| &p.preset_id == preset_id)
+    }
+
+    /// A preset's display name, falling back to its ID.
+    pub fn preset_name(&self, preset_id: &TransitionPresetId) -> String {
+        self.preset(preset_id)
+            .map_or_else(|| preset_id.to_string(), |p| p.name.clone())
+    }
+
+    /// The chord bound to switching to this scene (`scene.switch` naming it), if any.
+    pub fn scene_hotkey(&self, scene_id: &SceneId) -> Option<&HotkeyBinding> {
+        self.hotkeys.iter().find(|binding| {
+            matches!(binding.action(), Some(Action::SceneSwitch { scene_id: id, .. }) if &id == scene_id)
+        })
     }
 
     /// A source's display name, falling back to its ID.
@@ -196,6 +226,27 @@ impl Selection {
     }
 }
 
+/// What a click on `scene_id` in the scene list sends: in studio mode a
+/// `studio.set_preview`, else a `scene.switch` that lets the engine choose the preset.
+/// `None` when the scene is already where the click would put it.
+pub fn scene_click(
+    studio_mode: bool,
+    program: Option<&SceneId>,
+    preview: Option<&SceneId>,
+    scene_id: &SceneId,
+) -> Option<Action> {
+    if studio_mode {
+        (preview != Some(scene_id)).then(|| Action::StudioSetPreview {
+            scene_id: scene_id.clone(),
+        })
+    } else {
+        (program != Some(scene_id)).then(|| Action::SceneSwitch {
+            scene_id: scene_id.clone(),
+            preset_id: None,
+        })
+    }
+}
+
 /// A short account of what a `delete.plan` does beyond deleting its target, for the
 /// confirmation: `None` when it deletes the target alone.
 pub fn plan_summary(edits: &[Edit]) -> Option<String> {
@@ -257,6 +308,12 @@ pub struct Studio {
     pub collection: RwSignal<Option<Collection>>,
     /// The scene on program.
     pub program: RwSignal<Option<SceneId>>,
+    /// The scene on preview.
+    pub preview: RwSignal<Option<SceneId>>,
+    /// Whether studio mode is on: clicking a scene puts it on preview, and the
+    /// Transitions panel shows preview and program. The engine has no such switch, so
+    /// this is the page's, kept in the browser's storage.
+    pub studio_mode: RwSignal<bool>,
     /// What is selected.
     pub selection: RwSignal<Selection>,
     /// The source kinds `kind.list` reported, once it answered.
@@ -280,6 +337,8 @@ impl Studio {
         Studio {
             collection: RwSignal::new(None),
             program: RwSignal::new(None),
+            preview: RwSignal::new(None),
+            studio_mode: RwSignal::new(false),
             selection: RwSignal::new(Selection::default()),
             kinds: RwSignal::new(None),
             descriptors: RwSignal::new(HashMap::new()),
@@ -294,6 +353,7 @@ impl Studio {
     pub fn reset(&self) {
         self.collection.set(None);
         self.program.set(None);
+        self.preview.set(None);
         self.selection.set(Selection::default());
         self.kinds.set(None);
         self.descriptors.set(HashMap::new());
@@ -306,10 +366,13 @@ impl Studio {
         let studio = *self;
         let first = session.clone();
         spawn_local(async move {
-            if let Ok(QueryResult::StudioGet { program_scene, .. }) =
-                query(&first, Query::StudioGet).await
+            if let Ok(QueryResult::StudioGet {
+                program_scene,
+                preview_scene,
+            }) = query(&first, Query::StudioGet).await
             {
                 studio.program.set(program_scene);
+                studio.preview.set(preview_scene);
             }
             // The state is read after the program scene, so the first selection is the
             // scene on program.
@@ -344,8 +407,13 @@ impl Studio {
                 }
             }
             Event::EventsDropped { .. } => self.refresh(session),
-            Event::StudioChanged { program_scene, .. } => {
+            Event::StudioChanged {
+                program_scene,
+                preview_scene,
+                ..
+            } => {
                 self.program.set(program_scene.clone());
+                self.preview.set(preview_scene.clone());
                 self.reconcile();
             }
             _ => {}
@@ -398,6 +466,18 @@ impl Studio {
         {
             self.selection.set(next);
         }
+    }
+
+    /// What a click on a scene in the list does besides selecting it: in studio mode it
+    /// goes on preview, else on program (with the transition the engine resolves).
+    /// `None` when it is there already.
+    pub fn click_action(&self, scene_id: &SceneId) -> Option<Action> {
+        scene_click(
+            self.studio_mode.get_untracked(),
+            self.program.get_untracked().as_ref(),
+            self.preview.get_untracked().as_ref(),
+            scene_id,
+        )
     }
 
     /// Selects a scene, and no item.
@@ -458,7 +538,7 @@ impl Studio {
     }
 
     /// Runs an action, reporting a failure in the problem bar.
-    pub fn act(&self, session: &Session, action: jstream_control::protocol::Action) {
+    pub fn act(&self, session: &Session, action: Action) {
         let studio = *self;
         let session = session.clone();
         spawn_local(async move {
@@ -554,7 +634,7 @@ fn unexpected(what: &str) -> ControlError {
 
 #[cfg(test)]
 mod tests {
-    use super::{Collection, Selection, Studio, fresh_id, list_kinds, plan_summary};
+    use super::{Collection, Selection, Studio, fresh_id, list_kinds, plan_summary, scene_click};
     use crate::session::Session;
     use jstream_control::protocol::{
         Batch, Call, CallResult, Edit, Hello, ItemId, Query, QueryResult, Response, SceneId,
@@ -836,5 +916,55 @@ mod tests {
         let taken = |id: &str| id == "scene-c1-1";
         assert_eq!(fresh_id("scene", "c1", &mut next, taken), "scene-c1-2");
         assert_eq!(fresh_id("scene", "c1", &mut next, taken), "scene-c1-3");
+    }
+
+    /// Outside studio mode a click puts the scene on program; in it, on preview; and
+    /// nothing is sent for a scene already there.
+    #[test]
+    fn a_click_on_a_scene_switches_or_previews_it() {
+        use jstream_control::protocol::Action;
+        let (a, b) = (SceneId::new("a"), SceneId::new("b"));
+        assert_eq!(
+            scene_click(false, Some(&a), None, &b),
+            Some(Action::SceneSwitch {
+                scene_id: b.clone(),
+                preset_id: None
+            })
+        );
+        assert_eq!(scene_click(false, Some(&b), None, &b), None);
+        assert_eq!(
+            scene_click(true, Some(&a), None, &b),
+            Some(Action::StudioSetPreview {
+                scene_id: b.clone()
+            })
+        );
+        assert_eq!(scene_click(true, Some(&a), Some(&b), &b), None);
+        // On program already, it still goes on preview in studio mode.
+        assert_eq!(
+            scene_click(true, Some(&a), Some(&b), &a),
+            Some(Action::StudioSetPreview { scene_id: a })
+        );
+    }
+
+    #[test]
+    fn a_scene_s_hotkey_is_the_binding_that_switches_to_it() {
+        use jstream_control::protocol::{Action, Chord, HotkeyBinding};
+        let switch = |id: &str| Action::SceneSwitch {
+            scene_id: SceneId::new(id),
+            preset_id: None,
+        };
+        let c = Collection {
+            hotkeys: vec![
+                HotkeyBinding::new(Chord::new("F1"), &switch("a")),
+                HotkeyBinding::new(Chord::new("F2"), &switch("b")),
+            ],
+            ..Collection::default()
+        };
+        let chord = |id: &str| {
+            c.scene_hotkey(&SceneId::new(id))
+                .map(|b| b.chord.as_str().to_owned())
+        };
+        assert_eq!(chord("b").as_deref(), Some("F2"));
+        assert_eq!(chord("c"), None);
     }
 }

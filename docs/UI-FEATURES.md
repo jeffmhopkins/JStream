@@ -55,22 +55,22 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | Area | Rows | ✅ | 🟡 | ⬜ | 🔒 | ⏸ |
 |---|---|---|---|---|---|---|
 | [Theme and shared controls](#theme) | 8 | 3 | 3 | 1 | 0 | 1 |
-| [Header bar](#header) | 9 | 4 | 2 | 1 | 2 | 0 |
+| [Header bar](#header) | 9 | 5 | 2 | 0 | 2 | 0 |
 | [Docking and layouts](#docking) | 10 | 8 | 2 | 0 | 0 | 0 |
 | [Canvas](#canvas) | 18 | 11 | 3 | 2 | 2 | 0 |
-| [Context menus](#menus) | 8 | 0 | 5 | 2 | 1 | 0 |
-| [Dialogs and windows](#dialogs) | 8 | 4 | 1 | 0 | 3 | 0 |
-| [Scenes panel](#scenes) | 10 | 4 | 3 | 2 | 1 | 0 |
+| [Context menus](#menus) | 8 | 1 | 5 | 2 | 0 | 0 |
+| [Dialogs and windows](#dialogs) | 8 | 4 | 2 | 0 | 2 | 0 |
+| [Scenes panel](#scenes) | 10 | 5 | 3 | 2 | 0 | 0 |
 | [Scene objects panel](#objects) | 9 | 6 | 1 | 1 | 1 | 0 |
-| [Inspector](#inspector) | 10 | 5 | 2 | 2 | 1 | 0 |
+| [Inspector](#inspector) | 10 | 7 | 1 | 2 | 0 | 0 |
 | [Transform panel](#transform) | 4 | 4 | 0 | 0 | 0 | 0 |
 | [Filters](#filters) | 8 | 5 | 0 | 0 | 3 | 0 |
 | [Mixer](#mixer) | 7 | 4 | 0 | 2 | 1 | 0 |
 | [Outputs](#outputs) | 4 | 0 | 1 | 0 | 3 | 0 |
-| [Transitions](#transitions) | 6 | 3 | 2 | 0 | 1 | 0 |
+| [Transitions](#transitions) | 6 | 6 | 0 | 0 | 0 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
 | [Keyboard](#keyboard) | 7 | 1 | 3 | 1 | 2 | 0 |
-| **Total** | **130** | **62** | **28** | **14** | **25** | **1** |
+| **Total** | **130** | **70** | **26** | **13** | **20** | **1** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -110,7 +110,7 @@ Spec: [workspace › header bar](../design/ui-prototype/spec-workspace.md#header
 | HD-03 | Layout menu | "Layout: <name>", saved layouts with "current", "Save current layout as new", "Reset to default". | ✅ | |
 | HD-04 | Stats readout | Mono "60 fps · 0 dropped · CPU 3%". | 🟡 | "N dropped" built from `stats.tick` (frames dropped since the page connected). fps and CPU need engine stats (decision register D39). |
 | HD-05 | Privacy button | "Privacy" / "Privacy on" (red); blurs every output and mutes the mic; Pause toggles it. | 🔒 | Privacy screen is E2b (#317). |
-| HD-06 | Studio mode button | Turns studio mode (preview and program) on and off. | ⬜ | UI only: the engine has no studio-mode switch, so the Transitions panel (#304) always shows preview and program; the button would hide them. |
+| HD-06 | Studio mode button | Turns studio mode (preview and program) on and off. | ✅ | A page setting, since the engine has no studio-mode switch: off at first, kept by the browser, and pressed (blue) while on. On, a click on a scene puts it on preview ([SC-10](#scenes)) and the Transitions panel shows preview and program ([TR-06](#transitions)); off, a click puts it on program and the panel shows only the presets. |
 | HD-07 | Record button | Starts and stops recording. | ✅ | Starts every stopped or failed recording output; "Stop recording" while any runs; disabled with none. |
 | HD-08 | Broadcast picker | Shows the YouTube broadcast Go Live uses; menu lists broadcasts and "+ Create new stream…". | 🔒 | YouTube sign-in needs the OAuth client (A6b, Y4, [ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)). |
 | HD-09 | Go Live / End stream | Red "Go Live", dark red "End stream" while live, at the right end of the header. | ✅ | Starts every stopped or failed stream output whose key is set. |
@@ -163,7 +163,7 @@ Spec: [workspace › canvas structure](../design/ui-prototype/spec-workspace.md#
 | CV-10 | Box select | Drag on empty canvas draws a marquee; Shift adds; a click on empty canvas selects the scene. | ✅ | A marquee can start on the dark margin too. Hits use each item's axis-aligned bounds. |
 | CV-11 | Floating toolbar | Top right: Move/resize (V), Crop (C), then Snapping. | 🟡 | Move/resize and Snapping are built; Crop waits on CV-08. |
 | CV-12 | Nudge | Arrows move 1px, Shift 10px. | ✅ | |
-| CV-13 | Double-click | Opens the item's Properties (a reference opens its source's). | ✅ | Selects the item alone and opens its source's Properties dialog ([DL-02](#dialogs)), which is the same for every placement of the source. A nested scene's properties are the scene's ([DL-03](#dialogs)), so it shows in the Inspector until that dialog exists. |
+| CV-13 | Double-click | Opens the item's Properties (a reference opens its source's). | ✅ | Selects the item alone and opens its source's Properties dialog ([DL-02](#dialogs)), which is the same for every placement of the source. A nested scene opens the scene's Properties dialog ([DL-03](#dialogs)). |
 | CV-14 | Right-click | Opens the canvas context menu ([menus](#menus)). | ✅ | On an item, the selected items' menu, after selecting the item alone unless it was selected; on the frame and the margin, theirs ([CM-02](#menus)). |
 | CV-15 | Opacity, blend and 3D drawn | Items draw with their opacity, blend mode and 3D tilt. | 🔒 | The picture comes from the engine; it accepts only the `normal` blend, and 3D it can draw from protocol 0.34 (X1). |
 | CV-16 | Keyframe banner | "◆ Keyframe of “<parent>”: only placement and visibility can change" while editing a keyframe. | ⬜ | Keyframe scenes are in the protocol since 0.39 (K1): `variant_of`, `overrides` and placement edits addressed to the keyframe. |
@@ -184,18 +184,18 @@ on the canvas and in Scene objects but for its last lines.
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
 | CM-01 | Menu mechanics | One menu at the pointer, kept on screen; check column, colour swatch, label, shortcut hint, submenu arrow; Windows-style submenus that open on hover; full keyboard navigation; any outside press closes. | 🟡 | Built but for the colour swatch column, which comes with the label menus that use it. Items the UI or the engine can't do yet show disabled, as the prototype's "(dis)" items do. |
-| CM-02 | Canvas menus | Item: Properties, Edit filters, Pop out, reference/clone, layer order, Center/Fit/Stretch, Reset rotation, Clear crop, Crop, Duplicate as reference/clone, Remove, Select all. Empty canvas and margin: Select all, snapping, Add source, scene transitions and Properties. | 🟡 | Built, with an Audio check for a source with sound and the prototype's shorter menus for a nested scene and an audio-only source. Properties opens the Properties dialog ([DL-02](#dialogs)), and Edit filters selects the item and shows the Filters panel ([FL-01](#filters)). Reference and clone wait on [CM-06](#menus), Crop on [CV-08](#canvas), Group selection on [OB-04](#objects), and Pop out, the transitions and the scene's Properties on [DL-07](#dialogs), [CM-07](#menus) and [DL-03](#dialogs), so they show disabled. Remove from scene works, though the prototype shows it disabled. |
-| CM-03 | Scene row menu | Rename, Transition in ▸, Transition out ▸, Properties, Edit filters, Pop out ▸, New scene, New keyframe, New folder, Duplicate scene, Delete scene. | 🟡 | Built. Show in preview (`studio.set_preview`), Rename, New scene and Delete scene work, though the prototype shows all but New scene disabled. Transitions wait on T1, New keyframe (`scene.create_variant`, K1) on the keyframe rows ([SC-07](#scenes)), folders on [SC-06](#scenes), Properties on [DL-03](#dialogs), Edit filters on [FL-06](#filters), and Duplicate scene on an engine edit that copies a scene, so they show disabled. |
+| CM-02 | Canvas menus | Item: Properties, Edit filters, Pop out, reference/clone, layer order, Center/Fit/Stretch, Reset rotation, Clear crop, Crop, Duplicate as reference/clone, Remove, Select all. Empty canvas and margin: Select all, snapping, Add source, scene transitions and Properties. | 🟡 | Built, with an Audio check for a source with sound and the prototype's shorter menus for a nested scene and an audio-only source. Properties opens the Properties dialog ([DL-02](#dialogs)), and Edit filters selects the item and shows the Filters panel ([FL-01](#filters)). The margin's Transition in and out ([CM-07](#menus)) and Scene properties… ([DL-03](#dialogs)) work on the scene the canvas shows. Reference and clone wait on [CM-06](#menus), Crop on [CV-08](#canvas), Group selection on [OB-04](#objects), Pop out on [DL-07](#dialogs) and Edit scene filters on [FL-06](#filters), so they show disabled. Remove from scene works, though the prototype shows it disabled. |
+| CM-03 | Scene row menu | Rename, Transition in ▸, Transition out ▸, Properties, Edit filters, Pop out ▸, New scene, New keyframe, New folder, Duplicate scene, Delete scene. | 🟡 | Built. Show in preview (`studio.set_preview`), Rename, Transition in and out ([CM-07](#menus)), Properties… ([DL-03](#dialogs)), New scene and Delete scene work, though the prototype shows Show in preview, Rename and Delete scene disabled. New keyframe (`scene.create_variant`, K1) waits on the keyframe rows ([SC-07](#scenes)), folders on [SC-06](#scenes), Edit filters on [FL-06](#filters), and Duplicate scene on an engine edit that copies a scene, so they show disabled. |
 | CM-04 | Scene object row menu | Audio on/off, Properties, Edit filters, Pop out, reference/clone, layer order, Add source, New group, Remove from scene. | 🟡 | The selected items' menu of [CM-02](#menus), ending with Add source and New group instead of Select all; New group waits on [OB-04](#objects). |
 | CM-05 | Empty panel menus | Scenes: New scene, New folder, Paste scene. Scene objects: Add source, Add scene as source, New group, Select all, Paste. | 🟡 | Both are built. New folder ([SC-06](#scenes)), New group ([OB-04](#objects)) and the two Pastes (decision register D43) show disabled. |
 | CM-06 | Reference ↔ clone | A placement of a shared source toggles between "Reference to original" and "Independent clone". | ⬜ | `item.set_source` and `source.duplicate` exist ([ADR-0023](adr/0023-placements-references-and-clones.md)). |
-| CM-07 | Transition in/out submenus | Default (preset), then each preset, then "Manage presets…". | 🔒 | T1 (#260). |
+| CM-07 | Transition in/out submenus | Default (preset), then each preset, then "Manage presets…". | ✅ | On a scene row and the canvas margin. The opener's hint names the override or "Default"; the submenu has "Default (<the default preset>)", checked with no override, an "Override" head, each preset with its kind and duration ("Fade 300 ms", "Cut"), checked on the override, and "Manage presets…", which shows the Transitions panel. A choice sends `scene.set_transitions`, keeping the other direction. Keyframe rows ([CM-08](#menus)) get them with those rows. |
 | CM-08 | Keyframe and folder menus | Switch to it, Reset to parent, New keyframe, Delete keyframe; New folder, Rename, Delete folder / Ungroup. | ⬜ | K1: Reset to parent is a batch of `item.clear_override`s; Delete keyframe is `scene.delete`. |
 
 <a id="dialogs"></a>
 ## Dialogs and windows
 <!-- @section
-covers = ["crates/jstream-ui/src/panels/confirm.rs", "crates/jstream-ui/src/dialog.rs", "crates/jstream-ui/src/panels/add_source.rs", "crates/jstream-ui/src/panels/source_properties.rs"]
+covers = ["crates/jstream-ui/src/panels/confirm.rs", "crates/jstream-ui/src/dialog.rs", "crates/jstream-ui/src/panels/add_source.rs", "crates/jstream-ui/src/panels/source_properties.rs", "crates/jstream-ui/src/panels/scene_properties.rs"]
 -->
 
 Spec: [workspace › dialogs and floating windows](../design/ui-prototype/spec-workspace.md#dialogs-and-floating-windows).
@@ -204,7 +204,7 @@ Spec: [workspace › dialogs and floating windows](../design/ui-prototype/spec-w
 |---|---|---|---|---|
 | DL-01 | Modal dialog frame | Centred dialog over a dim backdrop; Esc and the backdrop cancel, Enter presses the primary button. | ✅ | `dialog.rs`. Enter isn't taken from a text area, a button or a select; from a field, it blurs the field first so its value is committed. The inline delete confirmation stays. |
 | DL-02 | Properties dialog | 860 × 640: Name and the source's settings on the left, its video and audio filters on the right; Defaults, Cancel, OK; settings change only on OK. Opens on double-click and after Add source. | ✅ | Built (`source_properties.rs`): the Inspector's settings form (from `kind.describe`) editing a draft, sent with the name as one batch on OK, holding only what the user changed since it opened; Defaults empties the draft, so OK sends `null` for each value the dialog opened with. Also opened by Properties… in the item menus. The subtitle is the source's name, as the engine names no capture backend. The filter column is the Filters panel's chains (`filters.rs`), whose changes apply at once: a double-click on a row opens the Filter settings dialog ([DL-04](#dialogs)) over it, and "+ Add filter…" the Add filter dialog ([DL-05](#dialogs)). |
-| DL-03 | Scene properties | Transition in and out, hotkey, background colour, multiview, "Include its audio when nested". | 🔒 | Transitions are T1; hotkeys K1. |
+| DL-03 | Scene properties | Transition in and out, hotkey, background colour, multiview, "Include its audio when nested". | 🟡 | `scene_properties.rs`, 460 wide: Name, Transition in and out with the spec's notes, and a Hotkey field that takes the next key press as the chord (Backspace clears it), all a draft until OK, which sends what changed as one batch (`scene.rename`, `scene.set_transitions`, `hotkey.clear` and `hotkey.set` of a `scene.switch`); a chord bound to something else is refused. Defaults clears the overrides and the hotkey. Opens on a double click on a scene row, the row menu's Properties…, the canvas margin's Scene properties… and a nested scene's Properties. The engine has no scene background colour, multiview or scene-wide "Include its audio when nested" (a nested placement's Audio check is [CM-02](#menus)'s), so those are left out; the filter column waits on the scene chain ([FL-06](#filters)). |
 | DL-04 | Filter settings dialog | Live-preview settings with an on/off switch; Cancel restores; Defaults; Remove. | ✅ | `filters.rs`, 460 wide, over the Properties dialog when opened from it: the kind's settings form, each change a `filter.set_settings` at once, the switch a `filter.set_enabled`. Cancel, Escape and the backdrop send one batch putting back the settings and the switch it opened with, including any the dialog sent that the engine hasn't reported back yet; Defaults resets every setting but a scene input's scene; Remove sends `filter.remove`. The hint line is the prototype's for the kinds it knows. |
 | DL-05 | Add filter dialog | 720 × 520: searchable catalogue grouped by chain and group, details pane, "Uses the scene" picker for scene-input filters. | ✅ | `filters.rs`. The catalogue is `kind.list`'s filter kinds for the source's chains, not the prototype's wish list: the prototype's groups, names and hints for the kinds it knows, the engine's pixelate, aspect ratio and image mask in the groups they fit, effect-pack kinds under Effect packs and anything else under Other. A kind with a scene setting (the scene mask) needs its scene first, from the scenes that don't show the source. A filter with more than three settings, or whose kind isn't described yet, opens DL-04 once added; one with fewer opens in place in the panel. Add is off while the chain holds its eight filters. |
 | DL-06 | Add source dialog | 720 wide: types grouped Capture, Audio, Media and web, Generated, Scenes; "Create new" with a name, or add an existing source as a reference; new sources placed at native size and their Properties opened. | 🟡 | Built and opened from the right-click menus, with the prototype's names, icons and descriptions for the engine's kinds. A kind the prototype doesn't name goes under Other, and a placed source whose kind the engine doesn't list can be added again but not created. Native sizes are the prototype's per-type table, as boxes with the `fit` mode, because the UI doesn't read source sizes yet (`source.sizes`, protocol 0.40; see [CV-08](#canvas)). A new source's item is selected and its Properties dialog (DL-02) opens once the engine has accepted it; a placement of an existing source is selected with the Inspector shown. A blank name becomes "<type> N", counting that kind's sources. |
@@ -225,12 +225,12 @@ Spec: [panels › scenes](../design/ui-prototype/spec-panels.md#scenes-panel).
 | SC-02 | "program" badge | The scene on program shows "program" in red after its name. | ✅ | |
 | SC-03 | Search | "Search scenes" filters by name, keeping parents of matches. | ✅ | Case-insensitive, on the name. Parents of matches wait on folders (SC-06). |
 | SC-04 | Drag to reorder | Drag rows before or after others, or into a folder. | 🟡 | Rows drag before or after others (`scene.reorder`), with the prototype's drop line, and not while filtering. Into a folder waits on SC-06. A pointer drag rather than HTML drag and drop, as for the dock's tabs. |
-| SC-05 | Rename, delete, new | Rename (F2 or menu), delete with the plan's summary, New scene. | ✅ | F2 or the menu's Rename renames in place, Del or Delete scene asks with the plan's summary, and the menus' New scene adds one with its name open. A double click renames too, until scenes have their Properties dialog (DL-03). |
+| SC-05 | Rename, delete, new | Rename (F2 or menu), delete with the plan's summary, New scene. | ✅ | F2 or the menu's Rename renames in place, Del or Delete scene asks with the plan's summary, and the menus' New scene adds one with its name open. A double click opens the scene's Properties dialog ([DL-03](#dialogs)), which renames too. |
 | SC-06 | Folders | Folders organise scenes; collapsible. | ⬜ | `folder.*` and `scene.set_folder`; folders nest ([ADR-0024](adr/0024-scene-structure.md) §3, [ADR-0064](adr/0064-nested-scene-folders.md), #323). |
 | SC-07 | Keyframe rows | Keyframes nest under their scene with a purple diamond icon. | ⬜ | `SceneInfo.variant_of` names the parent (K1). |
 | SC-08 | Labels and favourites | Label chips and a favourite star per row; label manager (name, colour, icon). | 🟡 | The favourite star is built (`scene.set_meta`). Labels wait on the label manager. |
 | SC-09 | Filter by favourites and labels | Funnel button with a count badge; "Favorites only", labels (any of), Clear, Edit labels. | 🟡 | The funnel with its count, Favorites only and Clear are built, client-side; the labels part waits on SC-08's labels. |
-| SC-10 | Put on program | Clicking a scene switches to it (or, in studio mode, puts it on preview). | 🔒 | Clicking a scene selects it, as in the prototype. Until T1's studio mode, a hover button (broadcast icon) puts the scene on program, and the row menu's Show in preview sends `studio.set_preview`. |
+| SC-10 | Put on program | Clicking a scene switches to it (or, in studio mode, puts it on preview). | ✅ | A click selects the scene and sends `scene.switch` (the engine picks the transition), or, in studio mode ([HD-06](#header)), `studio.set_preview`; nothing for a scene already there. In studio mode a hover button (broadcast icon) puts the scene on program. The row menu's Show in preview works in either mode. |
 
 <a id="objects"></a>
 ## Scene objects panel
@@ -272,9 +272,9 @@ in the Inspector until the Inspector's own rows say otherwise.
 | IN-05 | 3D | Tilt, Turn, Depth, Perspective, folded by default. | ⬜ | `item.set_geometry` takes any 3D it can draw from protocol 0.34 ([ADR-0050](adr/0050-3d-transforms-rendering.md)). |
 | IN-06 | Crop | Left, Right, Top, Bottom in px. | ✅ | `item.set_crop`, in source pixels. The canvas doesn't draw crop yet (CV-08). |
 | IN-07 | Blending | Mode (9 modes) and Opacity %. | ✅ | Opacity is `item.set_opacity`. The select lists all nine modes; the engine accepts only `normal`, so the others are disabled until it draws them. |
-| IN-08 | Scene section | Objects count, "Used as a source in", hotkey. | 🟡 | Objects and "Used as a source in" are built. The hotkey row waits on K1. |
-| IN-09 | Scene transitions | Transition in and out selects, with the "next scene's in wins" note. | ✅ | `scene.set_transitions`, with "Default (<name>)" for none and the folded hint. The presets are read with `state.get` when the collection changes. |
-| IN-10 | Scene switches per item | Delay, easing, glide, appear and disappear effects. | 🔒 | T1 (`item.set_transition`). |
+| IN-08 | Scene section | Objects count, "Used as a source in", hotkey. | ✅ | Objects, "Used as a source in", and the Hotkey: the chord bound to `scene.switch` of the scene (as "Ctrl+1" or "F1"), or "none". It is set in the scene's Properties ([DL-03](#dialogs)); pressing it waits on [KB-07](#keyboard). |
+| IN-09 | Scene transitions | Transition in and out selects, with the "next scene's in wins" note. | ✅ | `scene.set_transitions`, with "Default (<name>)" for none and the folded hint. The presets come from the shared collection. |
+| IN-10 | Scene switches per item | Delay, easing, glide, appear and disappear effects. | ✅ | The "Scene switches" section, folded, with "customised" while any value differs from the default: Delay (0–3000 ms, step 10), Easing (Inherit, Ease in-out, Ease out, Linear, Spring), Glide to other scenes (Auto, Never), Appear and Disappear (Inherit, Fade, Scale, Slide, None). Each change sends `item.set_transition` with the whole settings. Hiding it in a keyframe waits on the keyframe rows ([SC-07](#scenes)). |
 
 <a id="transform"></a>
 ## Transform panel
@@ -356,21 +356,23 @@ doesn't show; that stays ([Beyond](#beyond)).
 <a id="transitions"></a>
 ## Transitions
 <!-- @section
+covers = ["crates/jstream-ui/src/panels/studio.rs"]
 -->
 
 Spec: [panels › transitions](../design/ui-prototype/spec-panels.md#transitions-panel),
 [workspace › transitions](../design/ui-prototype/spec-workspace.md#scenes-keyframes-transitions).
-The engine side is T1 (#260); T1u (#304) builds the Transitions panel: the studio bar,
-with the presets and each scene's overrides in a section under it.
+The engine side is T1 (#260); T1u (#304) built the Transitions panel: the studio bar in
+studio mode, then the preset picker and editor, with each scene's overrides folded
+under them.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| TR-01 | Presets panel | Preset picker ("Name — Kind · N ms", default marked, "+ New preset…"), Name, Cut/Fade/Move. | 🟡 | A list of presets under the studio bar, each with its name, a line such as "Fade, 300 ms, ease in and out" (a cut shows only its kind) and a "Default" badge on the default, then an "Add a preset" form. It is not the spec's picker. |
+| TR-01 | Presets panel | Preset picker ("Name — Kind · N ms", default marked, "+ New preset…"), Name, Cut/Fade/Move. | ✅ | "Presets" with the spec's help text, then the picker ("Name — Cut" or "Name — Fade · 300 ms", " (default)" on the default, then "+ New preset…", which adds "New preset", a 500 ms fade, and picks it), then the picked preset's Name and a Cut / Fade / Move segmented control. It starts on the studio bar's chosen preset, else the selected scene's transition in, else the default. Each change is sent at once (`transition.update`). Each scene's overrides are also in a folded table under it. |
 | TR-02 | Preset fields | Duration; Move: stagger, items in one scene only (Fade, Scale, Slide); easing (Ease in-out, Ease out, Linear, Spring). | ✅ | The kind's own fields come from `kind.describe`. |
-| TR-03 | Default and delete | Make default, Delete (not the default); override counts. | 🟡 | Make default and Delete are built (Delete is off for the default); no override counts yet. |
+| TR-03 | Default and delete | Make default, Delete (not the default); override counts. | ✅ | Make default and Delete, hidden for the default, as in the spec; Delete goes back to the picker's starting preset. The note reads "[The default: used unless a scene overrides it. ]Overrides: N in, M out." |
 | TR-04 | Resolution order | Next scene's "in", then current scene's "out", then the default. | ✅ | The engine resolves it ([ADR-0029](adr/0029-transitions.md)); the studio bar names the preset it will use and why. |
-| TR-05 | Move transition | Pairs items by source, interpolates placement, retargets mid-transition; unmatched items fade, scale or slide. | 🔒 | Engine side of T1. |
-| TR-06 | Studio mode | Preview and program, Transition and Cut. | ✅ | With "Swap" putting the old program scene on preview. |
+| TR-05 | Move transition | Pairs items by source, interpolates placement, retargets mid-transition; unmatched items fade, scale or slide. | ✅ | The engine pairs by source, interpolates, retargets from what is on screen and fades, scales or slides the unmatched ([ADR-0029](adr/0029-transitions.md)); the program preview shows it. The page edits it: Move in the preset editor with its stagger and unmatched effect ([TR-02](#transitions)), and each item's glide and effects ([IN-10](#inspector)). |
+| TR-06 | Studio mode | Preview and program, Transition and Cut. | ✅ | With "Swap" putting the old program scene on preview. Shown only in studio mode ([HD-06](#header)). |
 
 <a id="live-panels"></a>
 ## Stream stats, live chat and agent activity

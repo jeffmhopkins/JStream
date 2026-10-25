@@ -10,15 +10,16 @@
 
 use super::Properties;
 use super::number::NumberField;
+use super::scene_properties::chord_label;
 use super::studio;
 use crate::app::SessionContext;
 use crate::store::{Collection, Studio};
 use jstream_control::protocol::{
-    BlendMode, Crop, Edit, Finite32, ItemGeometry, ItemId, ItemInfo, PlacementForm, SceneId,
-    SourceKind, TransitionPresetId, TransitionsInfo,
+    BlendMode, Crop, Edit, Finite32, Glide, ItemEasing, ItemGeometry, ItemId, ItemInfo,
+    ItemTransition, MAX_DELAY_MS, PlacementForm, SceneId, SourceKind, TransitionEffect,
+    TransitionPresetId, TransitionsInfo,
 };
 use leptos::prelude::*;
-use leptos::task::spawn_local;
 
 /// One of the box's number fields.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -232,6 +233,112 @@ pub fn transition_options(transitions: &TransitionsInfo) -> Vec<(String, String)
                 .map(|p| (p.preset_id.to_string(), p.name.clone())),
         )
         .collect()
+}
+
+/// The longest delay the Scene switches field offers, in milliseconds (the engine takes
+/// up to [`MAX_DELAY_MS`]).
+pub const SWITCH_DELAY_MAX: u32 = 3_000;
+
+/// The item easings, as `(value, label)`, in the order the select lists them.
+pub const ITEM_EASINGS: [(ItemEasing, &str, &str); 5] = [
+    (ItemEasing::Inherit, "inherit", "Inherit"),
+    (ItemEasing::EaseInOut, "ease_in_out", "Ease in-out"),
+    (ItemEasing::EaseOut, "ease_out", "Ease out"),
+    (ItemEasing::Linear, "linear", "Linear"),
+    (ItemEasing::Spring, "spring", "Spring"),
+];
+
+/// Whether an item may glide, as `(value, label)`.
+pub const GLIDES: [(Glide, &str, &str); 2] = [
+    (Glide::Auto, "auto", "Auto"),
+    (Glide::Never, "never", "Never"),
+];
+
+/// The appear and disappear effects, as `(value, label)`.
+pub const EFFECTS: [(TransitionEffect, &str, &str); 5] = [
+    (TransitionEffect::Inherit, "inherit", "Inherit"),
+    (TransitionEffect::Fade, "fade", "Fade"),
+    (TransitionEffect::Scale, "scale", "Scale"),
+    (TransitionEffect::Slide, "slide", "Slide"),
+    (TransitionEffect::None, "none", "None"),
+];
+
+/// The `(value, label)` pairs of one of the lists above.
+pub fn option_pairs<T>(
+    list: &[(T, &'static str, &'static str)],
+) -> Vec<(&'static str, &'static str)> {
+    list.iter()
+        .map(|(_, value, name)| (*value, *name))
+        .collect()
+}
+
+/// One field of an item's scene-switch settings, with the value its select gives.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SwitchField {
+    /// The easing.
+    Easing,
+    /// Whether it glides to other scenes.
+    Glide,
+    /// How it appears.
+    Appear,
+    /// How it disappears.
+    Disappear,
+}
+
+/// The option value a field shows for `transition`.
+pub fn switch_value(transition: &ItemTransition, field: SwitchField) -> &'static str {
+    let find = |list: &[(TransitionEffect, &'static str, &str)], e: TransitionEffect| {
+        list.iter()
+            .find(|(v, ..)| *v == e)
+            .map_or("inherit", |(_, n, _)| *n)
+    };
+    match field {
+        SwitchField::Easing => ITEM_EASINGS
+            .iter()
+            .find(|(v, ..)| *v == transition.easing)
+            .map_or("inherit", |(_, n, _)| n),
+        SwitchField::Glide => GLIDES
+            .iter()
+            .find(|(v, ..)| *v == transition.glide)
+            .map_or("auto", |(_, n, _)| n),
+        SwitchField::Appear => find(&EFFECTS, transition.appear),
+        SwitchField::Disappear => find(&EFFECTS, transition.disappear),
+    }
+}
+
+/// `transition` with `field` set to the option `value`, or `None` for a value the field
+/// has no option for.
+pub fn with_switch(
+    transition: &ItemTransition,
+    field: SwitchField,
+    value: &str,
+) -> Option<ItemTransition> {
+    let mut next = *transition;
+    let effect = || {
+        EFFECTS
+            .iter()
+            .find(|(_, n, _)| *n == value)
+            .map(|(v, ..)| *v)
+    };
+    match field {
+        SwitchField::Easing => {
+            next.easing = ITEM_EASINGS.iter().find(|(_, n, _)| *n == value)?.0;
+        }
+        SwitchField::Glide => next.glide = GLIDES.iter().find(|(_, n, _)| *n == value)?.0,
+        SwitchField::Appear => next.appear = effect()?,
+        SwitchField::Disappear => next.disappear = effect()?,
+    }
+    Some(next)
+}
+
+/// `transition` with a delay of `ms`, rounded and kept between 0 and the field's
+/// maximum.
+pub fn with_delay(transition: &ItemTransition, ms: f64) -> ItemTransition {
+    let mut next = *transition;
+    next.delay_ms = ms
+        .round()
+        .clamp(0.0, f64::from(SWITCH_DELAY_MAX.min(MAX_DELAY_MS))) as u32;
+    next
 }
 
 /// What the Inspector shows: only which thing, so an edit to it doesn't rebuild the
@@ -592,6 +699,58 @@ fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoV
             });
         }
     };
+    // How the item moves when the program switches scenes (`item.set_transition`).
+    let transition = Memo::new(move |_| current.with(|i| i.as_ref().map(|i| i.transition)));
+    let send_transition = move |next: ItemTransition| {
+        if transition.get_untracked() == Some(next) {
+            return false;
+        }
+        send(Edit::ItemSetTransition {
+            item_id: ids.get_value().0,
+            transition: next,
+        });
+        true
+    };
+    let delay = Signal::derive(move || transition.get().map(|t| f64::from(t.delay_ms)));
+    let send_delay = move |ms: f64| {
+        transition
+            .get_untracked()
+            .is_some_and(|t| send_transition(with_delay(&t, ms)))
+    };
+    let switch_select = move |field: SwitchField,
+                              label: &'static str,
+                              options: Vec<(&'static str, &'static str)>| {
+        view! {
+            <label class="select-field">
+                <span class="field-label">{label}</span>
+                <select
+                    aria-label=label
+                    prop:value=move || transition.get().map_or("", |t| switch_value(&t, field))
+                    on:change=move |event| {
+                        let value = event_target_value(&event);
+                        if let Some(next) = transition
+                            .get_untracked()
+                            .and_then(|t| with_switch(&t, field, &value))
+                        {
+                            send_transition(next);
+                        }
+                    }
+                >
+                    {options
+                        .into_iter()
+                        .map(|(value, name)| view! { <option value=value>{name}</option> })
+                        .collect_view()}
+                </select>
+            </label>
+        }
+    };
+    let switch_hint = Signal::derive(move || {
+        if transition.get().is_some_and(|t| !t.is_default()) {
+            "customised".to_owned()
+        } else {
+            String::new()
+        }
+    });
     let blend_hint = Signal::derive(move || {
         blend
             .get()
@@ -650,6 +809,16 @@ fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoV
                     min=0.0 max=100.0 send=send_opacity />
             </div>
         </Fold>
+        <Fold title="Scene switches" open=false hint=switch_hint>
+            <div class="field-grid">
+                <NumberField label="Delay" unit="ms" value=delay step=10.0 decimals=0 min=0.0
+                    max=f64::from(SWITCH_DELAY_MAX) send=send_delay />
+                {switch_select(SwitchField::Easing, "Easing", option_pairs(&ITEM_EASINGS))}
+                {switch_select(SwitchField::Glide, "Glide to other scenes", option_pairs(&GLIDES))}
+                {switch_select(SwitchField::Appear, "Appear", option_pairs(&EFFECTS))}
+                {switch_select(SwitchField::Disappear, "Disappear", option_pairs(&EFFECTS))}
+            </div>
+        </Fold>
     }
 }
 
@@ -695,18 +864,22 @@ fn SceneSections(scene: SceneId) -> impl IntoView {
         }
     };
 
-    // The presets, read with the scenes (`state.get`) whenever the collection changes.
-    let transitions = RwSignal::new(None::<TransitionsInfo>);
-    let rev = Memo::new(move |_| studio.collection.with(|c| c.as_ref().map(|c| c.rev)));
-    Effect::new(move |_| {
-        rev.track();
-        let Some(s) = session.get() else { return };
-        spawn_local(async move {
-            if let Ok(snapshot) = studio::load(&*s.control).await {
-                transitions.set(Some(snapshot.transitions));
-            }
-        });
+    // The presets, from the shared collection.
+    let transitions = Memo::new(move |_| {
+        studio
+            .collection
+            .with(|c| c.as_ref().map(|c| c.transitions.clone()))
     });
+    let hotkey = move || {
+        studio
+            .collection
+            .with(|c| {
+                c.as_ref()
+                    .and_then(|c| c.scene_hotkey(&id.get_value()))
+                    .map(|b| chord_label(&b.chord))
+            })
+            .unwrap_or_else(|| "none".to_owned())
+    };
     let overrides = move || {
         info.with(|s| {
             s.as_ref()
@@ -787,6 +960,7 @@ fn SceneSections(scene: SceneId) -> impl IntoView {
         <Fold title="Scene" open=true>
             <div class="key-value"><span class="key">"Objects"</span><span>{objects}</span></div>
             <div class="key-value"><span class="key">"Used as a source in"</span><span>{used}</span></div>
+            <div class="key-value"><span class="key">"Hotkey"</span><span class="mono">{hotkey}</span></div>
         </Fold>
         <Fold title="Transitions" open=true hint=hint>
             {select(true, "Transition in")}
@@ -886,5 +1060,30 @@ mod tests {
         unique.sort_unstable();
         unique.dedup();
         assert_eq!(unique.len(), names.len());
+    }
+
+    #[test]
+    fn scene_switch_fields_read_and_write_the_item_s_settings() {
+        let t = ItemTransition::default();
+        for field in [
+            SwitchField::Easing,
+            SwitchField::Appear,
+            SwitchField::Disappear,
+        ] {
+            assert_eq!(switch_value(&t, field), "inherit");
+        }
+        assert_eq!(switch_value(&t, SwitchField::Glide), "auto");
+        let next = with_switch(&t, SwitchField::Glide, "never").expect("an option");
+        assert_eq!(next.glide, Glide::Never);
+        let next = with_switch(&next, SwitchField::Appear, "slide").expect("an option");
+        assert_eq!(next.appear, TransitionEffect::Slide);
+        assert_eq!(switch_value(&next, SwitchField::Appear), "slide");
+        let next = with_switch(&next, SwitchField::Easing, "spring").expect("an option");
+        assert_eq!(next.easing, ItemEasing::Spring);
+        assert_eq!(with_switch(&t, SwitchField::Disappear, "spin"), None);
+        assert!(!next.is_default());
+        assert_eq!(with_delay(&t, 152.4).delay_ms, 152);
+        assert_eq!(with_delay(&t, 9000.0).delay_ms, SWITCH_DELAY_MAX);
+        assert_eq!(with_delay(&t, -5.0).delay_ms, 0);
     }
 }

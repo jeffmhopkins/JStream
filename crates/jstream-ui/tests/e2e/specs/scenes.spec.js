@@ -1,10 +1,10 @@
-// The Scenes and Scene objects panels: the seed's scenes and items, switching program,
-// renaming a scene with F2 and reordering rows by dragging, the search box and the
+// The Scenes and Scene objects panels: the seed's scenes and items, a click switching
+// program (or, in studio mode, preview), renaming a scene with F2 and reordering rows by dragging, the search box and the
 // favourites filter, showing and hiding an item, placing an existing source through the
 // Add source dialog and removing it with Del, and a second client seeing the changes.
 // The mock engine lists no kinds and makes no delete plans, so creating a source of a new
 // kind and deleting are covered natively.
-import { test, expect, connect, openAddSource } from '../fixtures.js';
+import { test, expect, connect, openAddSource, showPanel } from '../fixtures.js';
 
 /** The row of scene `name` in the scene list. */
 function scene(page, name) {
@@ -44,16 +44,38 @@ test('the seed scenes show with the program scene marked', async ({ page, daemon
   await expect(page.locator('.sources-panel .tree-caption')).toHaveText('In “Main”, top to bottom');
 });
 
-test('a scene goes on program, and another client follows', async ({ page, context, daemon }) => {
+test('a click puts a scene on program, and another client follows', async ({ page, context, daemon }) => {
   const other = await context.newPage();
   await connect(page, daemon);
   await connect(other, daemon);
 
-  await scene(page, 'Intro').hover();
-  await scene(page, 'Intro').getByRole('button', { name: 'Program' }).click();
+  // Studio mode is off: a click selects the scene and switches to it.
+  await expect(scene(page, 'Intro').getByRole('button', { name: 'Program' })).toHaveCount(0);
+  await scene(page, 'Intro').locator('.row-main').click();
+  await expect(scene(page, 'Intro')).toHaveClass(/selected/);
   await expect(scene(page, 'Intro')).toHaveAttribute('aria-current', 'true');
   await expect(scene(other, 'Intro')).toHaveAttribute('aria-current', 'true');
   await expect(scene(other, 'Main')).not.toHaveAttribute('aria-current', 'true');
+});
+
+test('in studio mode a click puts a scene on preview, and its hover button on program', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  const button = page.locator('header.app-header').getByRole('button', { name: 'Studio mode' });
+  await button.click();
+  await expect(button).toHaveAttribute('aria-pressed', 'true');
+  await scene(page, 'Intro').locator('.row-main').click();
+  await expect(scene(page, 'Intro')).toHaveClass(/selected/);
+  await expect(scene(page, 'Main')).toHaveAttribute('aria-current', 'true');
+  await showPanel(page, 'Transitions');
+  await expect(page.getByLabel('Scene on preview')).toHaveValue('intro');
+
+  await scene(page, 'Intro').hover();
+  await scene(page, 'Intro').getByRole('button', { name: 'Program' }).click();
+  await expect(scene(page, 'Intro')).toHaveAttribute('aria-current', 'true');
+  // Kept by the browser: a fresh page starts in studio mode.
+  await page.reload();
+  await page.getByRole('button', { name: 'Connect' }).click();
+  await expect(page.locator('header.app-header').getByRole('button', { name: 'Studio mode' })).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('F2 renames a scene, and a drag reorders it', async ({ page, context, daemon }) => {

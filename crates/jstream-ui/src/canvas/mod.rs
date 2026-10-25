@@ -670,6 +670,7 @@ pub fn Canvas() -> impl IntoView {
     // A right-click opens the canvas menu: the frame's, or the margin's around it.
     let menus = use_context::<Menus>();
     let adder = use_context::<AddSourceDialog>();
+    let scene_dialog = use_context::<crate::panels::scene_properties::SceneDialog>();
     let on_context = move |event: ev::MouseEvent| {
         let Some(menus) = menus else {
             return;
@@ -732,16 +733,36 @@ pub fn Canvas() -> impl IntoView {
                 Entry::unavailable("Paste").hint("Ctrl+V"),
             ]
         } else {
+            // The scene's transitions and Properties, for the scene the canvas shows.
+            let transitions = |into: bool| match (&scene, session) {
+                (Some(scene), Some(session)) => {
+                    crate::panels::studio::override_submenu(studio, session, dock, scene, into)
+                }
+                _ => Entry::submenu(
+                    if into {
+                        "Transition in"
+                    } else {
+                        "Transition out"
+                    },
+                    Vec::new(),
+                ),
+            };
+            let props_scene = scene.clone();
             vec![
                 Entry::submenu("Pop out", Vec::new()),
                 Entry::Sep,
                 select,
                 snap,
                 Entry::Sep,
-                Entry::submenu("Transition in", Vec::new()),
-                Entry::submenu("Transition out", Vec::new()),
+                transitions(true),
+                transitions(false),
                 Entry::Sep,
-                Entry::unavailable("Scene properties…"),
+                Entry::item("Scene properties…", move || {
+                    if let (Some(dialog), Some(scene)) = (scene_dialog, props_scene.clone()) {
+                        dialog.open(scene);
+                    }
+                })
+                .disabled_if(scene_dialog.is_none() || !has_scene),
                 Entry::unavailable("Edit scene filters…"),
             ]
         };

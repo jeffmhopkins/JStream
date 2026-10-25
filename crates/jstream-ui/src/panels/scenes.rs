@@ -1,10 +1,11 @@
 //! The Scenes panel (spec-panels.md 1): the collection's scenes in display order, under
 //! a search box and a favourites filter, each row with its icon, a "program" badge on
-//! the scene on program and a favourite star. Selecting a scene shows it in Scene
-//! objects and the canvas; the hover button puts it on program (`scene.switch`). Rows
-//! are reordered by dragging them (`scene.reorder`), renamed in place (F2 or a double
-//! click) and deleted (Del or the menu) through `delete.plan`, so the user sees what
-//! else goes. A right-click on a scene opens its menu, and one on the panel's empty
+//! the scene on program and a favourite star. Clicking a scene shows it in Scene
+//! objects and the canvas and puts it on program (`scene.switch`), or, in studio mode,
+//! on preview (`studio.set_preview`), where a hover button puts it on program. A double
+//! click opens its Properties dialog. Rows are reordered by dragging them
+//! (`scene.reorder`), renamed in place (F2) and deleted (Del or the menu) through
+//! `delete.plan`, so the user sees what else goes. A right-click on a scene opens its menu, and one on the panel's empty
 //! space opens the panel's (spec-workspace.md 5.2.3 and 5.2.7).
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#scenes
@@ -13,8 +14,11 @@ use crate::app::SessionContext;
 use crate::icons::{Icon, named};
 use crate::menu::{Entry, Menus};
 use crate::panels::confirm::{Confirm, Pending};
+use crate::panels::scene_properties::SceneDialog;
+use crate::panels::studio::override_submenu;
 use crate::panels::tree::{Filter, Reorder, SearchBar, Side, Star, dropped_at};
 use crate::store::{Collection, Studio, apply, plan_delete, plan_summary};
+use crate::workspace::DockState;
 use jstream_control::protocol::{Action, DeleteTarget, Edit, SceneId};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -57,6 +61,8 @@ pub fn Scenes() -> impl IntoView {
     let reorder = Reorder::new();
 
     let menus = use_context::<Menus>();
+    let dock = use_context::<DockState>();
+    let scene_dialog = use_context::<SceneDialog>();
     let all_rows = move || {
         studio
             .collection
@@ -160,9 +166,16 @@ pub fn Scenes() -> impl IntoView {
             let id = scene_id.clone();
             move || renaming.with(|r| r.as_ref() == Some(&id))
         };
+        // A click selects the scene, and puts it on program, or on preview in studio
+        // mode.
         let select = {
             let id = scene_id.clone();
-            move |_| studio.select_scene(id.clone())
+            move |_| {
+                studio.select_scene(id.clone());
+                if let (Some(s), Some(action)) = (session.get(), studio.click_action(&id)) {
+                    studio.act(&s, action);
+                }
+            }
         };
         let to_program = {
             let id = scene_id.clone();
@@ -192,9 +205,13 @@ pub fn Scenes() -> impl IntoView {
                 }
             }
         };
-        let start_rename = {
+        let open_properties = {
             let id = scene_id.clone();
-            move |_| renaming.set(Some(id.clone()))
+            move |_| {
+                if let Some(dialog) = scene_dialog {
+                    dialog.open(id.clone());
+                }
+            }
         };
         // F2 renames and Del deletes, the keys the menu's hints name.
         let on_key = {
@@ -238,6 +255,7 @@ pub fn Scenes() -> impl IntoView {
                 let Some(menus) = menus else { return };
                 let rename_id = id.clone();
                 let preview_id = id.clone();
+                let props_id = id.clone();
                 let (delete_id, delete_name) = (id.clone(), name.clone());
                 menus.open(
                     &event,
@@ -255,10 +273,16 @@ pub fn Scenes() -> impl IntoView {
                         Entry::item("Rename", move || renaming.set(Some(rename_id.clone())))
                             .hint("F2"),
                         Entry::Sep,
-                        Entry::submenu("Transition in", Vec::new()),
-                        Entry::submenu("Transition out", Vec::new()),
+                        override_submenu(studio, session, dock, &id, true),
+                        override_submenu(studio, session, dock, &id, false),
                         Entry::Sep,
-                        Entry::unavailable("Properties…").hint("Double-click"),
+                        Entry::item("Properties…", move || {
+                            if let Some(dialog) = scene_dialog {
+                                dialog.open(props_id.clone());
+                            }
+                        })
+                        .hint("Double-click")
+                        .disabled_if(scene_dialog.is_none()),
                         Entry::unavailable("Edit filters…"),
                         Entry::submenu("Pop out", Vec::new()),
                         Entry::Sep,
@@ -319,7 +343,7 @@ pub fn Scenes() -> impl IntoView {
                     fallback=move || {
                         let name = shown_name.clone();
                         view! {
-                            <button class="row-main" on:click=select.clone() on:dblclick=start_rename.clone()>
+                            <button class="row-main" on:click=select.clone() on:dblclick=open_properties.clone()>
                                 <Icon name=icon size=15 />
                                 <span class="tree-label">{name}</span>
                                 <Show when=move || on_program.get()>
@@ -331,7 +355,7 @@ pub fn Scenes() -> impl IntoView {
                 >
                     <RenameField value=name.clone() done=rename.clone() />
                 </Show>
-                <Show when=move || !on_program.get()>
+                <Show when=move || studio.studio_mode.get() && !on_program.get()>
                     <button
                         type="button"
                         class="hov tree-tool"

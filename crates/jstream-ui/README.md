@@ -31,8 +31,8 @@ Contents ([Design](#design) explains the choices):
 - **Header** (`header.rs`): `Header`, the bar along the top: the brand, the File menu
   (the connection's details and Disconnect), the Edit menu (Undo, Redo), the View menu
   (show or hide each panel) and the Layout menu (saved layouts), the frames dropped
-  since the page connected, Record, and Go Live / End stream. `RecordButton` and
-  `Dropped` are its logic, tested natively.
+  since the page connected, Studio mode (kept in the browser's storage), Record, and Go
+  Live / End stream. `RecordButton` and `Dropped` are its logic, tested natively.
 - **Dock** (`dock.rs`): `Dock`, the model of which panel sits where: eight `Zone`s
   around the canvas, each holding `Group`s of tabbed `PanelId`s, the zones' sizes, and
   the saved layouts (`Layout`, with Editing and Live built in). Every change goes
@@ -51,8 +51,9 @@ Contents ([Design](#design) explains the choices):
   and `engine_url_for_page`, the engine URL the connect form offers.
 - **Store** (`store.rs`): `Studio`, the state the scene, sources and properties panels
   share: the collection as `state.get` last reported it (`Collection`, with its buses
-  for the bus picker), the program
-  scene, the `Selection`, the source kinds and the kind descriptors read so far, and the
+  for the bus picker, its transition presets and its hotkeys), the program and preview
+  scenes, whether studio mode is on (and `scene_click`, what a click on a scene sends
+  in either mode), the `Selection`, the source kinds and the kind descriptors read so far, and the
   last failed call, and `keys_changed`, which the outputs panel bumps when a stream key
   is set or cleared. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
   `plan_summary` and `fresh_id`.
@@ -65,11 +66,15 @@ Contents ([Design](#design) explains the choices):
   (`sources.rs`), what those two share (`tree.rs`: the search box, the favourites
   filter, the star and drag reordering, with the matching and the drop's index tested
   natively), the Inspector (`inspector.rs`: the selected item's box, crop,
-  blending and settings, or the selected scene's objects, uses and transitions), the
+  blending, scene switches and settings, or the selected scene's objects, uses, hotkey
+  and transitions), the
   properties form inside it (`properties.rs`), the Add source dialog (`add_source.rs`:
   `AddSource` and the `AddSourceDialog` context that opens it, with its type list and
   the edits it sends, tested natively), the Properties dialog (`source_properties.rs`:
-  `SourceProperties` and the `PropertiesDialog` context that opens it), the Filters
+  `SourceProperties` and the `PropertiesDialog` context that opens it), the scene
+  Properties dialog (`scene_properties.rs`: `SceneProperties` and the `SceneDialog`
+  context that opens it, with the edits OK sends and the hotkey chords tested
+  natively), the Filters
   panel and its dialogs (`filters.rs`: `Filters`, `Chains`, which the Properties dialog
   shows too, `AddFilter`, `FilterSettings` and the `FilterDialogs` context that opens
   them, with the catalogue, the row summaries, the choice of in place or dialog and
@@ -81,8 +86,10 @@ Contents ([Design](#design) explains the choices):
   audio mixer (the master card with its loudness and true peak, the channels folded
   under it with their meters, faders, dB fields, mutes and routing, and the buses),
   also tested natively against `MockEngine`; and `studio.rs`:
-  `StudioMode`, the Transitions panel (preview, program, Transition and Cut, the
-  transition presets and each scene's overrides; [Design](#design)); and
+  `StudioMode`, the Transitions panel (preview, program, Transition and Cut in studio
+  mode, the preset picker and editor, and each scene's overrides; [Design](#design)),
+  and the scene's Transition in and out submenus the menus share
+  (`override_submenu`); and
   `transform.rs`: `Transform`, the Transform panel (align, distribute and arrange the
   selected items).
 - **Pairing** (`pairing.rs`): `Pairing`, the pairing panel under the properties in the
@@ -131,7 +138,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **Events and the shared state.** One task reads the session's event stream. It keeps
   the header's revision current and hands each event to `Studio`, which re-reads
   the state with `state.get` after a `state.changed` newer than its copy (or after
-  `events.dropped`), and follows `studio.changed` for the program scene. Reads coalesce:
+  `events.dropped`), and follows `studio.changed` for the program and preview scenes. Reads coalesce:
   while one `state.get` is in flight, any number of further changes cost one more read.
   Panels never edit the copy: they send edits and the copy follows from the
   `state.changed` that comes back, so every client's change shows the same way. When
@@ -150,8 +157,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   its row and opens its properties, and every selected item's row is highlighted.
 - **Scenes and sources.** The Scenes and Scene objects panels are the prototype's
   trees (spec-panels.md 1 and 2), without folders and groups yet. The scene list shows
-  scenes in display order and leaves out groups (ADR-0024), marks the program scene
-  "program", and puts a scene on program with `scene.switch` from a hover button. The
+  scenes in display order and leaves out groups (ADR-0024) and marks the program scene
+  "program". A click selects a scene and puts it on program (`scene.switch`, naming no
+  preset, so the engine resolves the transition); in studio mode it goes on preview
+  instead (`studio.set_preview`), and a hover button puts it on program. Nothing is
+  sent for a scene already there. Studio mode is the page's own, since the engine has
+  no such switch: the header's button turns it on and off, and the browser keeps it
+  (`jstream.studio-mode`). The
   sources list shows the selected scene's items with the top of the stack first, each
   with its source's type icon, in italics when the source is placed in another scene
   too, and an eye that shows or hides it. Each panel has a search box and a filter for
@@ -159,7 +171,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   rows drag before or after each other (`scene.reorder`, `item.reorder`, counted in the
   whole list so a hidden row doesn't shift the index) with pointer events, but not
   while a filter is on. F2 renames a row in place and Del deletes a scene (through its
-  plan) or removes an item; a double click on an item opens its Properties dialog. New scenes, sources and items get IDs from `fresh_id`, which includes
+  plan) or removes an item; a double click on a scene or an item opens its Properties
+  dialog. New scenes, sources and items get IDs from `fresh_id`, which includes
   the session's client ID so two UIs on one engine don't pick the same one. Sources
   are added through the Add source dialog (below). Deleting a scene, or a source
   everywhere, reads `delete.plan` first,
@@ -173,8 +186,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the focus with the arrows, Home and End, and closes on a choice, a press outside,
   Escape or Tab. The canvas opens the empty canvas or margin menu, the scene and
   sources lists their panels' menus, and a scene row its scene's (Show in preview,
-  Rename, New scene and Delete scene work; the rest waits on folders, keyframes,
-  transitions and the scene Properties dialog). A right-click on an item, on the canvas or its row, selects it
+  Rename, Transition in and out, Properties…, New scene and Delete scene work; the rest
+  waits on folders, keyframes and scene filters). The Transition in and out submenus,
+  on a scene row and on the canvas margin for the scene it shows
+  (`studio::override_submenu`), start with "Default (<the default preset>)", checked
+  with no override, then list each preset with its kind and duration, checked on the
+  scene's override, and end with "Manage presets…", which shows the Transitions panel;
+  a choice sends `scene.set_transitions` with the other direction kept. A right-click on an item, on the canvas or its row, selects it
   unless it was selected and opens `item_menu.rs`'s menu for the selection: Properties
   (the Properties dialog), the Audio check (`source.set_audio`), layer order
   (`item.reorder`s that keep the selected items' order), Center, Fit and Stretch to
@@ -208,9 +226,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   W/H link, on by default, keeps the aspect ratio when either side changes), Crop
   (`item.set_crop`, in source pixels), Blending (the nine modes, of which the engine
   draws only Normal so the others are disabled, and Opacity, `item.set_opacity`) and
-  Properties, the source's settings form. A scene shows its object count, the scenes
-  that use it as a source, and its Transition in and out (`scene.set_transitions`, with
-  the presets read by `state.get` whenever the collection changes). The panel is built
+  Scene switches (folded: the item's delay, easing, glide and appear and disappear
+  effects, each change one `item.set_transition` with the whole settings, "customised"
+  while they differ from the defaults) and Properties, the source's settings form. A
+  scene shows its object count, the scenes that use it as a source, the hotkey that
+  switches to it, and its Transition in and out (`scene.set_transitions`, with the
+  presets from the shared collection). The panel is built
   once per selected item or scene and each field follows the collection, so an edit
   doesn't rebuild it or take the focus. The fields show committed values: a canvas drag
   shows in them once it is dropped.
@@ -258,7 +279,19 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   field blurs it before pressing OK, so the field's `change` reaches the draft first.
   The filter chains are the Filters panel's rows (below), which apply at once. A double click on
   an item and Properties… in the item menus open it for the item's source; a nested
-  scene's item shows in the Inspector instead, until scenes have their dialog.
+  scene's item opens the scene's Properties dialog instead.
+- **The scene Properties dialog** (`scene_properties.rs`) opens from a double click on a
+  scene row, the row menu's Properties…, the canvas margin's Scene properties… and a
+  nested scene's item. It edits a draft of the name, Transition in and out and the
+  hotkey: the hotkey field takes the next key press as a chord (the modifiers in the
+  protocol's order, then the key's `code`; Backspace or Delete clears it, and Tab,
+  Escape and Enter keep their dialog meaning). OK sends what changed as one batch:
+  `scene.rename`, `scene.set_transitions`, and `hotkey.clear` of the old chord before
+  `hotkey.set` of the new one, bound to a `scene.switch` naming no preset. A chord bound
+  to anything else is refused before sending. The scene's hotkey is the first binding
+  whose action switches to it. Defaults clears the overrides and the hotkey. The engine
+  has no scene background colour, multiview or scene-wide "include its audio", so the
+  dialog leaves them out, and scene filters wait on the Filters panel's scene chain.
 - **Filters** ([UI features › filters](../../docs/UI-FEATURES.md#filters)). The
   Filters panel shows the primary selected item's source's chains (ADR-0026): video
   unless the source is audio-only, audio when it has a mixer channel and isn't a
@@ -360,10 +393,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **Studio mode** ([ADR-0029](../../docs/adr/0029-transitions.md)).
   The Transitions panel (a tab beside Outputs in the Editing layout, under the canvas
   in Live) reads the scenes (groups left out) and presets with
-  `state.get` and the studio state with `studio.get` into a copy of its own, since
-  `Studio` keeps neither the presets nor preview, re-reads them on `state.changed` and
-  `events.dropped`, and takes `studio.changed` in place. The engine has no
-  studio-mode switch, so the panel always shows preview and program. Picking a scene sends
+  `state.get` and the studio state with `studio.get` into a copy of its own,
+  re-reads them on `state.changed` and
+  `events.dropped`, and takes `studio.changed` in place. The studio bar (preview,
+  program, Transition and Cut) shows only in studio mode; with it off a line says that
+  a click on a scene puts it on program. Picking a scene sends
   `studio.set_preview`. "Transition" sends `scene.switch` for the preview scene, naming
   the preset picked beside it, or none so the engine resolves it; a line under the
   button names the preset the engine will use and why, in the engine's order (the
@@ -375,17 +409,24 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   shows an indeterminate progress bar for the `duration_ms` `studio.changed` reported;
   a cut, or program moving without a transition, clears it at once. A preview scene
   the list doesn't show (a group) reads "Choose a scene".
-  The presets section lists each preset, adds one (ID from its name, `-2`, `-3`… when
-  taken; a 300 ms ease-in-out fade by default), edits one with a `transition.update`
-  naming only what changed (after a kind change, the patch is against the new kind's
-  defaults, as the engine applies it), makes one the default and deletes any other.
-  The kind's parameters come from `kind.list` and `kind.describe` (category
-  `transition`), or the built-in `cut`, `fade` and `move` when the engine can't list
-  them; enum, boolean, number and text parameters are editable, others read-only. A
-  value the form refuses keeps the preset from being saved until it is fixed.
-  Each scene's `transition_in` and `transition_out` are set with
-  `scene.set_transitions`. Items' own transition settings (`item.set_transition`) are
-  not edited here; they belong to the properties panel, which doesn't edit them yet.
+  The presets section is the prototype's (spec-panels.md 10): a picker listing each
+  preset as "<name> — <Kind> · N ms" (a cut shows only its kind), the default marked,
+  then "+ New preset…", which adds "New preset", a 500 ms ease-in-out fade (ID from its
+  name, `-2`, `-3`… when taken), and picks it. Until a preset is picked the editor shows
+  the one the switch names, else the selected scene's transition in, else the default.
+  The editor sends each change at once, as a `transition.update` naming only what
+  changed (after a kind change, the patch is against the new kind's defaults, as the
+  engine applies it): Name, the kind as a Cut / Fade / Move segmented control, and for
+  every kind but a cut the duration, the kind's parameters and the easing. Under them a
+  note counts the scenes that override with it ("Overrides: N in, M out."), and Make
+  default and Delete show for every preset but the default. The engine's preset wins:
+  each change it reports resets the fields to it. The kind's parameters come from
+  `kind.list` and `kind.describe` (category `transition`), or the built-in `cut`,
+  `fade` and `move` when the engine can't list them; enum, boolean, number and text
+  parameters are editable, others read-only. A value the editor refuses is not sent.
+  Each scene's `transition_in` and `transition_out` can also be set in a folded table
+  under the editor. The engine runs the transitions, `move` pairing and gliding items,
+  and the program preview shows them, so the page draws none itself.
 - **The stream key is write-only** ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Its
   password field is not bound to a signal: the panel reads it only on save, wraps it in
   a `SecretString` at once (trimming a pasted newline), empties the field and sends
@@ -446,7 +487,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`session.rs`, `store.rs`, `panels/outputs.rs`, `panels/mixer.rs`) and in plain functions the panels are built on (the rows,
   the trees' search and drop index,
   the Add source dialog's types and edits, the menu's placement and keys, the item
-  menu's layer moves and arrangements, the Properties dialog's draft patch, the form's
+  menu's layer moves and arrangements, the Properties dialog's draft patch, the scene
+  dialog's edits and chords, the Transitions panel's picker, submenus and counts, the
+  Inspector's scene switches, the form's
   sections, parsing and checks); only the components
   themselves need a browser.
 - **Debug bundle size.** A leptos view's type spells out every element and closure

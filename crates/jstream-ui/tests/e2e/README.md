@@ -47,7 +47,10 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   on; given `refuse`, it also holds back the requests that function names and refuses
   them, as `invalid_argument`, when the test calls the `release()` it returns.
   `meterTicks` routes it too, passing everything on, and returns a function that
-  sends the page a `meters.tick`, which the mock engine never sends.
+  sends the page a `meters.tick`, which the mock engine never sends. `recordCalls`
+  routes it too, passing everything on, and its `sent(type)` lists every edit or
+  action of that type the page has sent, for the transition edits the mock engine
+  refuses.
 - **Console errors fail a test.** Every console error and uncaught exception on a
   test's pages fails it, unless the test allows that message. A Content-Security-Policy
   violation is a console error, so a style or script the policy refuses fails too.
@@ -72,7 +75,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   although Chromium sends that socket an `error` event and no `close` (#305).
 - **Scenes and sources** (`scenes.spec.js`): the seed's scenes in order with the
   program scene's "program" badge, selected, and its item listed under the scene's
-  caption; putting a scene on program, which a second client follows; F2 renaming a
+  caption; a click putting a scene on program, which a second client follows, and in
+  studio mode on preview, with the hover button putting it on program and the mode
+  kept over a reload; F2 renaming a
   scene in place (Del inside the field deletes a character, not the scene) and a drag reordering the scenes, which a second client follows and
   which doesn't select the dragged row; the search boxes and the favourites filter
   with its count, Favorites only and Clear; hiding and showing an item with its eye,
@@ -165,11 +170,22 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   Ctrl+Z undoes, and Reset rotation and Clear crop sending nothing when nothing
   changes; with two items, Selection on, Distribute off, and Match width and height
   giving both the primary item's size.
-- **Studio mode** (`studio.spec.js`, on the Transitions tab): a scene picked for
-  preview goes to program with Transition, and the old program scene comes back on
-  preview; Transition and Cut are off while preview is the program scene; a value the
-  preset form refused keeps the preset from being added. The mock engine refuses
-  preset edits, so the edits the preset form sends are tested natively.
+- **Studio mode** (`studio.spec.js`, on the Transitions tab): in studio mode a scene
+  picked for preview goes to program with Transition, and the old program scene comes
+  back on preview; Transition and Cut are off while preview is the program scene; the
+  studio bar shows only in studio mode; the preset picker lists the default with its
+  kind and "+ New preset…", the default's editor has no duration, Delete or Make
+  default and counts its overrides, and choosing Fade and "+ New preset…" send their
+  `transition.update` and `transition.create`. The mock engine refuses preset edits,
+  so the panel after an edit is tested natively.
+- **Scene transitions** (`transitions.spec.js`): a scene row's Transition in submenu
+  checks "Default (Cut)", lists the Cut preset with its kind, and sends
+  `scene.set_transitions`, and Manage presets… shows the Transitions tab; a double click
+  opens the scene's Properties dialog, whose hotkey field takes a chord, clears on
+  Backspace, and with a new name is saved by OK, read back by the Inspector and the
+  dialog; the canvas margin's Scene properties… opens it for the shown scene; the
+  Inspector's Scene switches send `item.set_transition` with the whole settings. The
+  mock engine refuses the transition edits after the page has sent them.
 
 <a id="running"></a>
 ## Running them
