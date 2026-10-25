@@ -457,6 +457,18 @@ impl LiveSources {
         }
     }
 
+    /// The first loaded asset again, as a finished load of the version wanted now, for
+    /// a test that replays an install.
+    #[cfg(test)]
+    pub(crate) fn reload_asset(&self) -> Option<LoadedAsset> {
+        let (key, entry) = self.assets.iter().next()?;
+        Some(LoadedAsset {
+            key: key.clone(),
+            ticket: entry.ticket,
+            result: Ok(entry.loaded.as_ref()?.loaded.clone()),
+        })
+    }
+
     /// Rebuilds what plans read from the loaded assets.
     fn share_assets(&mut self) {
         self.loaded = Arc::new(
@@ -582,14 +594,14 @@ impl LiveSources {
         }
     }
 
-    /// Starts a plan of the program mix: the [`look`](Self::look) calls until the next
-    /// one are the sources it reaches.
     /// The size `source.sizes` reports for `source_id`'s live instance, if it runs and
     /// has made a frame.
     pub(crate) fn size(&self, source_id: &SourceId) -> Option<FrameSize> {
         self.entries.get(source_id)?.running.as_ref()?.size
     }
 
+    /// Starts a plan of the program mix: the [`look`](Self::look) calls until the next
+    /// one are the sources it reaches.
     pub(crate) fn begin_plan(&mut self) {
         self.plan += 1;
     }

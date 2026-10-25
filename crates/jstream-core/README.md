@@ -969,7 +969,8 @@ all, keeps its density.
 which `source.sizes` reports, under the collection lock, and brings it up to date after
 every plan (`sync_sizes`): after a batch, undo or redo (following its `state.changed`, so
 a deleted source's unknown size comes after its deletion), a switch, a
-`set_source_frame`, a live source's install and every re-plan. Each change is one
+`set_source_frame`, a live source's install, a video filter asset's install and every
+re-plan an animation asks for. Each change is one
 `source.size_changed`; a plan that changes no size sends none. A source's size is its
 stored frame's when `set_source_frame` gave one, as that frame is what it shows, else its
 live source's: the first frame's, which the `jstream-sources` thread reads when it
@@ -979,7 +980,9 @@ source drawn at a density reports its extent, the size its frames are placed at
 ([ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)). A capture
 (`display`, `window`, `webcam`) has no size yet: its frames reach only the render
 thread (*Not yet*, #805). Nor does a source that failed to build, an audio-only one, or a
-deleted one.
+deleted one. A source of a video kind with nothing to show (an `image` or `media` source
+with no file, or a `media` file with no video stream) shows one transparent pixel, and so
+reports 1×1.
 
 **Audio sources.** `audio_sources::AudioSources` holds, under the collection lock, the
 `jstream_sources::AudioTarget` of every audio-only source, and each running source's own

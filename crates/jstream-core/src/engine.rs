@@ -1719,6 +1719,24 @@ impl Engine {
         worker.settled(Duration::from_secs(10))
     }
 
+    /// Forgets every source's size without telling anyone, as if plans had taken new
+    /// frames since the last `sync_sizes`, so a test sees which re-plan catches up.
+    #[cfg(test)]
+    pub(crate) fn forget_sizes(&self) {
+        lock(&self.shared.state).sizes.clear();
+    }
+
+    /// Hands the first video filter asset back to the engine as if its load had just
+    /// finished, through [`LiveHost::install_asset`]. Returns whether there was one.
+    #[cfg(test)]
+    pub(crate) fn reinstall_asset(&self) -> bool {
+        let Some(loaded) = lock(&self.shared.state).live.reload_asset() else {
+            return false;
+        };
+        LiveHost::install_asset(&*self.shared, loaded);
+        true
+    }
+
     /// Runs the live sources on `clock`, for tests that move time by hand.
     #[cfg(test)]
     pub(crate) fn set_source_clock(&self, clock: Arc<dyn jstream_platform::MediaClock>) {
@@ -3080,10 +3098,16 @@ impl LiveHost for Shared {
     }
 
     fn install_asset(&self, loaded: LoadedAsset) {
-        let mut state = lock(&self.state);
-        if state.live.install_asset(loaded) {
-            state.publish_render();
+        let mut wake = Vec::new();
+        {
+            let mut state = lock(&self.state);
+            if state.live.install_asset(loaded) {
+                // The plan can take a source's new frame, and so a new size.
+                state.publish_render();
+                state.sync_sizes(&mut wake);
+            }
         }
+        wake_all(wake);
     }
 
     fn replan(&self) {

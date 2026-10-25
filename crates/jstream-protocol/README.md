@@ -868,7 +868,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   Added in 0.33.
 - `source.sizes`: every source, ordered by ID, with its current `size` in pixels,
   omitted while the source has no video frame (it hasn't started, it is audio-only, or
-  it failed). A source drawn at a density reports its own size, the size its frames are
+  it failed). A source of a video kind with nothing to show, such as an `image` or
+  `media` source with no file or a `media` file with no video stream, draws a 1×1
+  transparent frame and reports that size. A source drawn at a density reports its own size, the size its frames are
   placed at, not their pixels
   ([ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)). With
   `source.size_changed` it is what a client needs to draw a legacy placement's box, crop
