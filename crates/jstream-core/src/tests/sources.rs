@@ -3,11 +3,14 @@
 //! deleted, and the program mix shows its frames, advancing animations on the clock, or
 //! what the pipeline captures for it.
 
-use super::{add, batch, connected, create, edits};
+use super::{add, batch, connected, create, drain, edits};
 use crate::Engine;
+use jstream_control::Control;
 use jstream_media::{FrameSize, Timebase};
 use jstream_platform::fake::{FakeClip, FakeClock, FakeMediaDecoders};
-use jstream_protocol::{AssetRoot, Batch, Edit, ItemId, Reference, Settings, SourceId, SourceKind};
+use jstream_protocol::{
+    AssetRoot, Batch, Edit, Event, ItemId, PixelSize, Reference, Settings, SourceId, SourceKind,
+};
 use jstream_sources::CaptureSpec;
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -812,6 +815,64 @@ fn a_video_filters_asset_is_loaded_for_its_chain() {
     point("again.cube");
     let again = chain_asset(&engine, "pic").expect("the other table is loaded");
     assert_ne!(again, first, "another file is another load");
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// B12: a filter asset's install re-plans, and that plan can take a source's new frame,
+/// so it announces the sizes that changed at once, as every other re-plan does.
+#[test]
+fn an_asset_install_announces_the_sizes_its_plan_changed() {
+    let dir = temp_dir("asset-sizes");
+    fs::write(dir.join("invert.cube"), INVERT).expect("the table");
+    let engine = Engine::new()
+        .with_collection_file(dir.join("scenes.json"))
+        .expect("collection file");
+    let control = connected(&engine);
+    let mut events = control.events();
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source("pic", "color", color("#ffffff")),
+            add("a", "i1", "pic"),
+            Edit::FilterAdd {
+                owner: jstream_protocol::FilterOwner::Source {
+                    source_id: SourceId::new("pic"),
+                },
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new("grade"),
+                kind: "apply_lut".into(),
+                settings: settings(&[(
+                    "lut",
+                    Reference::Asset {
+                        root: AssetRoot::Collection,
+                        path: "invert.cube".into(),
+                    }
+                    .to_value(),
+                )]),
+                enabled: None,
+                index: None,
+            },
+        ]),
+    )
+    .expect("created");
+    assert!(chain_asset(&engine, "pic").is_some(), "the table is loaded");
+    drain(&mut events);
+
+    // Plans took frames the size table hasn't caught up with; the install's plan does.
+    engine.forget_sizes();
+    assert!(engine.reinstall_asset(), "there is an asset to install");
+    let sized = SourceId::new("pic");
+    assert_eq!(
+        drain(&mut events),
+        vec![Event::SourceSizeChanged {
+            source_id: sized,
+            size: Some(PixelSize {
+                width: 2,
+                height: 2,
+            }),
+        }]
+    );
     let _ = fs::remove_dir_all(dir);
 }
 

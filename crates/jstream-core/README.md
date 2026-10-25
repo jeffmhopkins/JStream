@@ -90,17 +90,20 @@ state machine. Contents:
   `FilterSpec` and `FilterParams`, and `Chain`, which keeps one mixer input's, the
   master's or an output tap's filters in line with its owner's audio chain.
 - **CLAP plugins** (`plugins/`, [ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)):
-  - `Engine::scan_clap_plugins(&dyn PluginHosts)` scans the CLAP search directories
+  - `Engine::scan_clap_plugins(Arc<dyn PluginHosts>)` scans the CLAP search directories
     (recursively, for `.clap` entries, each scanned in its own host process) and adds
     every audio effect found to the graph's kinds as an audio-filter kind,
     `clap/<plugin id>` (`CLAP_KIND_PREFIX`), so `kind.list` and `kind.describe` report
     it. Its settings are the plugin's parameters, by CLAP id in decimal, all live: a
     stepped one is an `int`, any other a `float`, both with the plugin's range; hidden,
     read-only and bypass parameters and ones without a finite range are left out. When
-    two files offer one plugin id, the first found wins. The scan returns a `ClapScan`
+    two files offer one plugin id, the first found wins. A plugin's names reach clients
+    through `plugin_text` (#351): control characters become spaces, trimmed, at most 128
+    characters. The scan returns a `ClapScan`
     with each kind's file and plugin id, and the files that failed. Kinds stay until
     the engine ends. It is slow, so a host calls it on a worker thread; the engine's
-    lock is held only to add the kinds.
+    lock is held only to add the kinds and hand the audio thread a `ClapCatalog` (the
+    hosts, and each kind's file and plugin id, added to earlier scans').
   - `HostSupervisor` keeps one CLAP filter instance's host process running, on a
     control thread, driven by `tick(now)`, which returns `HostEvent`s. A host is
     `Ready` (with its block and latency) once its block says so. One that exits, isn't
@@ -112,14 +115,26 @@ state machine. Contents:
     supervisor asks for the plugin's state whenever the plugin marks it changed, keeps
     the latest (`saved_state`, `StateSaved`) and restarts with it. A run of
     `degraded_after` consecutive late blocks in the mixer is `Degraded`, and its end
-    `Recovered`. `stop` asks the host to stop and kills it after `STOP_GRACE`.
-  - **Not yet:** running a CLAP filter. The engine refuses a `filter.add` of a `clap/`
-    kind (`invalid_argument` on its `kind`), since nothing would run it: the mixer's
-    filter chain skips every kind that isn't a built-in audio filter. A collection
-    holding one also wouldn't load at the next start, because the file is read before
-    the scan describes the kind. So nothing hosts a CLAP filter, keeps its saved state,
-    runs a supervisor or reports its events. Also not yet: the plugin's editor, and
-    rescanning.
+    `Recovered`; the mixer counts them in the engine's memory (`EngineBlock`), where
+    the host can't reset them. What the host sends back is checked first (#351):
+    parameter descriptions with a non-finite or inverted range, a default outside it,
+    or a repeated id are dropped from `Params`; a parameter change, from a control
+    message or the block's `params_out` ring (read only once the run's first `Params`
+    has arrived), must name a parameter of the last `Params` and be finite and within its range to become `ParamChanged`; and a saved
+    state over `MAX_STATE` (2 MiB) is ignored. Each dropped reply counts in `rejected`,
+    and the first of each host run is an `Error`. `stop` asks the host to stop and
+    kills it after `STOP_GRACE`.
+  - A CLAP filter in a source's audio chain runs as `plugins::filter::ClapFilter`,
+    one per filter, owned by the input's `filters::Chain` (see *Audio sources*). A
+    collection holding one loads before the scan describes its kind (the graph keeps
+    such a filter verbatim), and the filter is bypassed until then. One on the master
+    stage's or an output's audio chain is logged once and bypassed for now.
+  - **Not yet:** writing the plugin's own parameter changes and saved state back to the
+    filter's settings (the supervisor keeps the state for its restarts only, so a new
+    host after an engine restart starts from the plugin's defaults and the filter's
+    settings); a new mixer filter when a restarted plugin reports a new latency; the
+    plugin's editor; rescanning; and stopping a removed filter's host off the
+    `jstream-audio-sources` thread (now each stop waits up to `STOP_GRACE` there).
 - **Live sources** (`live.rs`): a running `jstream-sources` source for every source
   in the collection, built when it is created, rebuilt when its settings change and
   dropped when it is deleted, on the engine's `jstream-sources` thread. The program
@@ -265,8 +280,8 @@ state machine. Contents:
   on program from the fake video devices, shared between sources, closed when it leaves
   or the output stops, and closed when unplugged with the output staying up
   (`src/tests/cpu_pipeline/captures.rs`), the format a webcam opens in, with and
-  without an MJPEG decoder, and its frames, decoded or not, read as RGBA
-  (`runtime/captures.rs`), which capture path an output takes and each
+  without an MJPEG decoder, its frames, decoded or not, read as RGBA, and a webcam
+  left running, and not opened twice, when the GPU path is left (`runtime/captures.rs`), which capture path an output takes and each
   fallback, an output compositing GPU capture frames (opaque, whatever alpha the
   texture holds), a browser page painting on
   the stage's context, composited as premultiplied red and given back the device when
@@ -329,7 +344,12 @@ state machine. Contents:
   (`a_source_a_source_draws_feeds_its_scope_after_its_fader`)), the audio filter kinds
   and their kernels (`filters.rs`: defaults, range edges, and a chain updated in place
   or rebuilt on a real mixer, and new settings a full command queue refuses kept off
-  the record and tried again), item opacity in linear light through a nested scene
+  the record and tried again; a CLAP filter bypassed until its fake host is ready, kept
+  on the same host when the chain is rebuilt, kept on a crashed host's block until the
+  restart, a missing plugin reported once, a running host told to stop when its filter
+  is dropped, a disabled filter taken off its block and not restarted, and one on the
+  master chain bypassed; `plugins/filter.rs`: settings sent to a ready host's
+  parameter ring once each, and only CLAP ids with finite values), item opacity in linear light through a nested scene
   (`snapshot.rs`), the output edits and the
   stream-key actions against `jstream-platform`'s `MemoryKeyStore` (with `secrets_are_redacted`,
   which captures the engine's traces and audit entries), the audit entries of a run of
@@ -499,10 +519,8 @@ dropped any threads it opened, then settles `stopped`. The start answers
 `action_failed` and does not settle `active`. Once the pipeline is `active`, stop
 takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locking*.
 
-- **Batches** go to `jstream_graph::Graph::apply_batch`, which owns every edit rule
-  (except, until CLAP filters run, the engine's own refusal of a `clap/` `filter.add`,
-  `invalid_argument` on its `kind`, checked before the graph and so before
-  `expected_rev`): `rev_conflict` for a stale `expected_rev`, checked before `empty_batch`; then the
+- **Batches** go to `jstream_graph::Graph::apply_batch`, which owns every edit rule:
+  `rev_conflict` for a stale `expected_rev`, checked before `empty_batch`; then the
   edits in order on a working copy, the first failure aborting with `not_found`,
   `already_exists` or `invalid_argument` (`edits.<n>.<field>`) and nothing applied; on
   success `rev` goes up by exactly one, and the batch result lists the hotkey bindings
@@ -532,6 +550,9 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   `live.list` is a query answered from the gesture table.
 - **`studio.get`** reads the program and preview scenes under the collection lock, and
   **`privacy.get`** the privacy screen.
+- **`source.sizes`** reads each source's size, and every plan sends a
+  `source.size_changed` for each one that changed, under the collection lock (see
+  *Source sizes* in *Snapshots*).
 - **`capture.targets`** lists the platform capture backend's displays, then its
   windows, with no engine lock held, since listing windows calls the OS. With no
   backends it answers `action_failed`, and so it does when the OS refuses the list.
@@ -966,6 +987,25 @@ layers their input's. A source with a build in flight is not asked for another; 
 that installs it measures again. A source drawn only in a transition's tracks, or not at
 all, keeps its density.
 
+**Source sizes** (ADR-0022 §4, protocol 0.40). The engine keeps each source's size,
+which `source.sizes` reports, under the collection lock, and brings it up to date after
+every plan (`sync_sizes`): after a batch, undo or redo (following its `state.changed`, so
+a deleted source's unknown size comes after its deletion), a switch, a
+`set_source_frame`, a live source's install, a video filter asset's install and every
+re-plan an animation asks for. Each change is one
+`source.size_changed`; a plan that changes no size sends none. A source's size is its
+stored frame's when `set_source_frame` gave one, as that frame is what it shows, else its
+live source's: the first frame's, which the `jstream-sources` thread reads when it
+builds the source (its frame at time zero, which a plan shows first anyway), then each
+new frame's that a plan takes, so a source no plan reaches keeps its first size. A
+source drawn at a density reports its extent, the size its frames are placed at
+([ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)). A capture
+(`display`, `window`, `webcam`) has no size yet: its frames reach only the render
+thread (*Not yet*, #805). Nor does a source that failed to build, an audio-only one, or a
+deleted one. A source of a video kind with nothing to show (an `image` or `media` source
+with no file, or a `media` file with no video stream) shows one transparent pixel, and so
+reports 1×1.
+
 **Audio sources.** `audio_sources::AudioSources` holds, under the collection lock, the
 `jstream_sources::AudioTarget` of every audio-only source, and each running source's own
 audio, or none while the source's audio is off (ADR-0028: off, the engine doesn't open its stream); `sync` runs beside the live
@@ -976,16 +1016,38 @@ stage starts, its `AudioInputs` opens one mixer input per audio source that is o
 sets it up as the collection says; the default microphone and desktop inputs send to
 the master bus at unity, as every new input does. Each source's input runs the
 source's audio filter chain ([ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
-`sync` also records each source's enabled filters of a built-in kind, in order
-(`filters::chain_of`; a disabled filter or a pack kind is left out, so bypassed), and
-on every pass the thread brings the input's filters in line (`filters::Chain::apply`).
+`sync` also records each source's enabled filters of a built-in or `clap/` kind, in
+order (`filters::chain_of`; a disabled filter or a pack kind is left out, so
+bypassed), and on every pass the thread brings the input's filters in line
+(`filters::Chain::apply`).
 The filters run before the fader and sends the routing sets, which leave them alone.
 When only settings changed, each changed filter is updated in place
 (`FilterControl::set`), so a gate's envelope or a delay line carries on; a new kind, a
 reorder, or a limiter's look-ahead (its latency) rebuilds the chain. A filter the mixer
 refuses to add is bypassed, and new settings it refuses (a full command queue) leave
 the filter on its old ones until the next pass tries again; each refusal is logged at
-`warn`, never an edit failure, and a reopened input gets its chain again. Each input is opened by asking the platform
+`warn`, never an edit failure, and a reopened input gets its chain again.
+
+A CLAP filter ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)) gets a
+`ClapFilter` from the `ClapCatalog` the scan gave (`AudioSources::add_clap_plugins`):
+a `HostSupervisor` whose host runs on a block at the mixer's rate and block size
+(`InputControl::mixer_rate`, `mixer_block_frames`) and `DEFAULT_DEPTH`. Every pass
+ticks it. It is bypassed until its host is `Ready`, then the chain is rebuilt with the
+mixer's CLAP filter on the host's block (`insert_host_filter`). When the host crashes
+the mixer filter stays on the dead block and passes the dry signal itself, delayed by
+the same latency, so the input's latency doesn't change during the restart backoff;
+the restarted host's new block rebuilds the chain onto it, and a disabled filter is
+removed (bypassed, its latency gone). A chain rebuilt around it (a filter added,
+removed or moved) puts a new mixer filter on the same block, so the host keeps
+running; no new filter goes on a block until its old one's removal is queued. Its
+settings go to the plugin as parameter changes on the block's ring, never through a
+rebuild: each setting whose ID is a CLAP parameter id with a finite number, when it
+differs from what the host was sent, all of them when a new host is ready. A CLAP
+filter with no plugin for its kind (no scan yet, or the plugin is gone) is logged once
+and bypassed, as is one on the master stage's or an output's chain, whose `FilterHost`
+has no `clap_input`; one removed from the chain, or on a closed input, stops its host. Host
+crashes, a disabled filter, host errors (as `plugin_text`) and a degraded or recovered
+host are logged at `warn` like refusals. Each input is opened by asking the platform
 for the format the device delivers (`AudioIo::input_format`), adding the mixer input
 in that format, and opening the stream with the input's producer as its handler; a
 stream that opens in another format is closed and tried again. An `audio_input`
@@ -1092,8 +1154,9 @@ references resolve in the collection file's folder; without a collection file, a
 for every `app` reference, the asset is unreadable and the source draws nothing.
 
 `Engine::set_source_frame` stores the latest straight sRGB RGBA8 frame for a source
-id. It changes no `rev` and emits no event, and a frame may arrive before the source
-exists. An applied `source.delete` drops the deleted source's frame, unless the same
+id. It changes no `rev`, emits no event but a `source.size_changed` when the frame
+changes the source's size (*Source sizes* below), and a frame may arrive before the
+source exists. An applied `source.delete` drops the deleted source's frame, unless the same
 batch created a source under that id again, and then has the capture backend forget
 what it keeps for that source (`Capture::forget_source`, such as the portal's restore
 token), so a new source given the id asks again. So does a source an undo brings back:
@@ -1526,9 +1589,21 @@ stream: a stand-in Baseline 3.0 SPS with no frame size made Windows refuse the
 recordings and YouTube drop the publish. Only the fake encoder sends a bare first
 H.264 keyframe; until the muxer has a decoder configuration, such a keyframe gets
 stand-in parameter sets in front (`with_parameter_sets`). A later one goes out as it
-is, since a stand-in SPS would replace the encoder's own, which shares its id. The protocol's `VideoCodec` names
-only H.264 so far, so a profile can't select HEVC or AV1 yet. MP4 recording takes H.264
-only: another codec fails the start with `recording … is not supported yet`.
+is, since a stand-in SPS would replace the encoder's own, which shares its id. The
+protocol's `VideoCodec` names H.264, HEVC and AV1 (the last two since 0.41), and each
+maps to the platform codec of the same name. MP4 recording takes H.264 only: another
+codec fails the start with `recording … is not supported yet`. The open decides
+whether a video encoder is there. When it fails (`video_open_failure`), a missing
+component keeps the platform's own error and its remedy: a VA-API driver package, or
+the OpenH264 download ([ADR-0060](../../docs/adr/0060-linux-platform-support.md) §6).
+Otherwise `check_video_encoder` reads the platform's `codecs.list()`, and if no
+encoder there fits the profile, the start fails naming what the machine lacks:
+`this machine has no AV1 encoder`, or no hardware one for `hardware: require`, or no
+software one for `avoid`, and the open's own error goes to the log at `warn`, so a list
+that disagrees with the open still shows the real cause. When the list explains
+nothing, or can't be read, the open's own error stands. A profile's codec is collection
+state, valid on any machine, so this is only consulted at a failed start, never at the
+edit, and an encoder the list leaves out still opens.
 
 **Virtual camera.** `with_backends` takes the backends' `VcamSink` out and keeps it for
 the engine's life. When the collection's output is `VirtualCam`, the start takes that
@@ -1921,6 +1996,9 @@ history, idempotency keys and the program and preview scenes are not saved (see 
   `set_source_frame`.
 - Keeping a window source on its window across restarts (its target ID names a window
   handle, which a new session of the app doesn't keep).
+- The size of a capture source (`display`, `window`, `webcam`) in `source.sizes`: its
+  frames arrive on the render thread, which would hand their sizes back to the engine
+  through a lock-free queue (R-RT-003, #805). Until then it reports none.
 
 <a id="runtime"></a>
 ## Runtime
@@ -1985,9 +2063,11 @@ a row on the context, a third of a second, the render thread leaves it once. A
 takes the collection lock) and opens the compositor on a device of its own, while the
 render thread keeps repeating the last frames (black under the privacy screen, which
 fails closed) and adopting snapshots. Then the render
-thread lets go of the frames it holds, has the `jstream-capture` thread drop its GPU
-backend and start every capture again on the CPU path (a start asked for before is
-stopped when it comes back), and takes the new compositor. Until the re-planned snapshot
+thread lets go of the frames it holds on the context's device, has the `jstream-capture` thread drop its GPU
+backend and start every display and window capture again on the CPU path (a start asked
+for before is stopped when it comes back), and takes the new compositor. A webcam or
+capture card is on the CPU path already, so it keeps running and keeps its frame, and
+one still starting takes the stream it asked for: most devices open only once (#734). Until the re-planned snapshot
 arrives, the pages' frames, carrying the context's key, draw nothing on it. The fallback
 is logged as a warning and counted (`OutputStats::gpu_fallbacks`). The output fails at
 once if the compositor can't open on its own device, the fallback panics, or it isn't
