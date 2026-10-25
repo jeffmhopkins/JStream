@@ -747,8 +747,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   label) with everything
   that refers to it, and the `rev` it was planned at, plus the hotkey bindings it removes (protocol 0.25); `bus.list` (protocol 0.19) → the buses and sends;
   `capture.targets` (protocol 0.27) → the displays and windows a `display` or `window`
-  source's `target` can name; audio levels are the `meters.tick` event, not a query).
-- **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops}`, `meters.tick`, …).
+  source's `target` can name; `source.sizes` (protocol 0.40) → each source's current
+  size, runtime state ([ADR-0022](adr/0022-item-transform-and-canvas.md) §4); audio
+  levels are the `meters.tick` event, not a query).
+- **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops}`, `meters.tick`,
+  `source.size_changed` (protocol 0.40), …).
   `stats.tick` (protocol 0.6) carries the pipeline's running drop totals
   ([R-RT-004](RULES.md#R-RT-004)), and `meters.tick` (protocol 0.19, about ten a second
   while the mixer runs) every source's and bus's levels and the master's loudness,
@@ -860,7 +863,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 706 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 707 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking

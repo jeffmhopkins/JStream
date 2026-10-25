@@ -528,6 +528,9 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   `live.list` is a query answered from the gesture table.
 - **`studio.get`** reads the program and preview scenes under the collection lock, and
   **`privacy.get`** the privacy screen.
+- **`source.sizes`** reads each source's size, and every plan sends a
+  `source.size_changed` for each one that changed, under the collection lock (see
+  *Source sizes* in *Snapshots*).
 - **`capture.targets`** lists the platform capture backend's displays, then its
   windows, with no engine lock held, since listing windows calls the OS. With no
   backends it answers `action_failed`, and so it does when the OS refuses the list.
@@ -962,6 +965,25 @@ layers their input's. A source with a build in flight is not asked for another; 
 that installs it measures again. A source drawn only in a transition's tracks, or not at
 all, keeps its density.
 
+**Source sizes** (ADR-0022 §4, protocol 0.40). The engine keeps each source's size,
+which `source.sizes` reports, under the collection lock, and brings it up to date after
+every plan (`sync_sizes`): after a batch, undo or redo (following its `state.changed`, so
+a deleted source's unknown size comes after its deletion), a switch, a
+`set_source_frame`, a live source's install, a video filter asset's install and every
+re-plan an animation asks for. Each change is one
+`source.size_changed`; a plan that changes no size sends none. A source's size is its
+stored frame's when `set_source_frame` gave one, as that frame is what it shows, else its
+live source's: the first frame's, which the `jstream-sources` thread reads when it
+builds the source (its frame at time zero, which a plan shows first anyway), then each
+new frame's that a plan takes, so a source no plan reaches keeps its first size. A
+source drawn at a density reports its extent, the size its frames are placed at
+([ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)). A capture
+(`display`, `window`, `webcam`) has no size yet: its frames reach only the render
+thread (*Not yet*, #805). Nor does a source that failed to build, an audio-only one, or a
+deleted one. A source of a video kind with nothing to show (an `image` or `media` source
+with no file, or a `media` file with no video stream) shows one transparent pixel, and so
+reports 1×1.
+
 **Audio sources.** `audio_sources::AudioSources` holds, under the collection lock, the
 `jstream_sources::AudioTarget` of every audio-only source, and each running source's own
 audio, or none while the source's audio is off (ADR-0028: off, the engine doesn't open its stream); `sync` runs beside the live
@@ -1088,8 +1110,9 @@ references resolve in the collection file's folder; without a collection file, a
 for every `app` reference, the asset is unreadable and the source draws nothing.
 
 `Engine::set_source_frame` stores the latest straight sRGB RGBA8 frame for a source
-id. It changes no `rev` and emits no event, and a frame may arrive before the source
-exists. An applied `source.delete` drops the deleted source's frame, unless the same
+id. It changes no `rev`, emits no event but a `source.size_changed` when the frame
+changes the source's size (*Source sizes* below), and a frame may arrive before the
+source exists. An applied `source.delete` drops the deleted source's frame, unless the same
 batch created a source under that id again, and then has the capture backend forget
 what it keeps for that source (`Capture::forget_source`, such as the portal's restore
 token), so a new source given the id asks again. So does a source an undo brings back:
@@ -1915,6 +1938,9 @@ history, idempotency keys and the program and preview scenes are not saved (see 
   `set_source_frame`.
 - Keeping a window source on its window across restarts (its target ID names a window
   handle, which a new session of the app doesn't keep).
+- The size of a capture source (`display`, `window`, `webcam`) in `source.sizes`: its
+  frames arrive on the render thread, which would hand their sizes back to the engine
+  through a lock-free queue (R-RT-003, #805). Until then it reports none.
 
 <a id="runtime"></a>
 ## Runtime

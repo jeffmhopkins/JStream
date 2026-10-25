@@ -36,6 +36,7 @@ pub(crate) struct AssetKey {
 }
 
 /// A loaded asset.
+#[cfg_attr(test, derive(Clone))]
 pub(crate) enum Loaded {
     Lut(Lut),
     Image(StillImage),

@@ -886,10 +886,10 @@ needs = ["build", "wave", "maintainer"]
 id = "B12"
 milestone = "M2"
 title = "Source sizes as runtime state (source.sizes)"
-status = "planned"
-prs = []
-note = "ADR-0022 decision 4, accepted and not built: the source.sizes query and source.size_changed event, a protocol bump; it unblocks crop by dragging (CV-08), size in % (IN-03) and native-size placement"
-needs = ["build"]
+status = "review"
+prs = [806]
+note = "ADR-0022 decision 4: part 1, the source.sizes query and source.size_changed event with the engine's sizes of stored frames and live sources (#806, protocol 0.40), is in review into wave/m1-5; capture sources' sizes follow (#805); it unblocks crop by dragging (CV-08), size in % (IN-03) and native-size placement"
+needs = ["build", "wave"]
 
 [[item]]
 id = "C2b"
@@ -978,8 +978,8 @@ id = "MAC1"
 milestone = "M3"
 title = "macOS platform crate"
 status = "planned"
-prs = [511, 513, 533, 543, 554, 566, 570, 583, 586, 589, 599, 608, 618, 625, 639]
-note = "ADR-0063 accepted (#511); crate part 1 (#513); VideoToolbox H.264/HEVC encoder, part 2 (#533); AudioToolbox AAC-LC encoder, part 3 (#543); ScreenCaptureKit display and window capture with the Screen Recording permission check, part 4 (#554); Keychain store for stream keys and OAuth tokens, part 5 (#566); Core Audio devices and input recording, part 6 (#570); Microphone permission check and the daemon's embedded Info.plist, part 7 (#583); Core Audio output playback, part 8 (#586); all landed with wave/m3-2 (#663); with wave/m3-3 (#786): the list of processes Core Audio knows, part 9 (#589); desktop and application audio through Core Audio process taps, part 10 (#599); AVFoundation webcams behind the Camera permission, part 11 (#608); VideoToolbox H.264/HEVC decoder on CPU frames (#618); media files through AVFoundation's asset reader (#625); the daemon live on macOS (#639); the rest of the crate to build"
+prs = [511, 513, 533, 543, 554, 566, 570, 583, 586, 589, 599, 608, 618, 625, 639, 646]
+note = "ADR-0063 accepted (#511); crate part 1 (#513); VideoToolbox H.264/HEVC encoder, part 2 (#533); AudioToolbox AAC-LC encoder, part 3 (#543); ScreenCaptureKit display and window capture with the Screen Recording permission check, part 4 (#554); Keychain store for stream keys and OAuth tokens, part 5 (#566); Core Audio devices and input recording, part 6 (#570); Microphone permission check and the daemon's embedded Info.plist, part 7 (#583); Core Audio output playback, part 8 (#586); all landed with wave/m3-2 (#663); with wave/m3-3 (#786): the list of processes Core Audio knows, part 9 (#589); desktop and application audio through Core Audio process taps, part 10 (#599); AVFoundation webcams behind the Camera permission, part 11 (#608); VideoToolbox H.264/HEVC decoder on CPU frames (#618); media files through AVFoundation's asset reader (#625); the daemon live on macOS (#639); spike S6, IOSurface and Metal interop and its synchronisation, for ADR-0063 decision 8 (#646, its Mac run in #648); the rest of the crate to build"
 needs = ["build"]
 
 [[item]]
