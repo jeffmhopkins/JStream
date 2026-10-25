@@ -5,6 +5,8 @@
 
 mod audio;
 mod audio_routing;
+#[cfg(feature = "wasm-plugins")]
+mod automation;
 mod collection;
 mod gpu_capture;
 mod history;
@@ -1631,16 +1633,17 @@ fn the_engine_answers_like_the_mock() {
                 gesture_id: GestureId::new("g9"),
             },
         },
-        // Neither hosts plugins yet (ADR-0069): both answer `unsupported`.
+        // No plugin is installed (ADR-0069): both answer `not_found`. `plugin.install`
+        // isn't sent: the engine loads the package, which the mock can't
+        // (`tests/automation.rs`).
         Call::Action {
             action: Action::PluginEnable {
                 plugin_id: jstream_protocol::PluginId::new("plg_1"),
             },
         },
         Call::Action {
-            action: Action::PluginInstall {
+            action: Action::PluginGrant {
                 plugin_id: jstream_protocol::PluginId::new("plg_1"),
-                path: "/plugins/one".into(),
                 grant: jstream_protocol::PluginGrant::default(),
             },
         },
