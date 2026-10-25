@@ -2,14 +2,14 @@
 id = "ADR-0074"
 title = "A too_large error for oversized requests"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0074: A too_large error for oversized requests
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 <a id="context"></a>

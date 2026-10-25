@@ -60,7 +60,7 @@ in, and **What's left** lists each unfinished item with the steps it still needs
 110 of 130 items are merged; 11 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 31 items, by next step: 🔨 build 17, 🌊 its wave lands 4, 🧪 Windows run 8, 👤 maintainer 2</summary>
+<summary><b>What's left</b>: 31 items, by next step: 🔨 build 18, 🌊 its wave lands 4, 🧪 Windows run 8, 👤 maintainer 1</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
@@ -96,7 +96,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | LNX3 | AAC-LC encoder in Rust, patent check first (ADR-0061) | M3 | 🌊 its wave lands, then 🔨 build | patent check ADR-0062 accepted (#508); encoder and Linux wiring (#518), landed with wave/m3-2 (#663); TNS (#723, more tests #727) in wave/m3-3; intensity stereo later; before the Linux app ships the encoder its licence information must say JStream holds no AAC patent licence and name Via LA (ADR-0062) | #508, #518, #723, #727 |
 | F6b | Choose HEVC or AV1 from a client | M3 | 🔨 build | F6 built the encoders, but an encoder profile accepts only h264 (EncoderProfile::problem refuses the rest), so no client can pick them yet |  |
 | F7 | Direct NVENC and AMF encoders, if measurements justify them | M3 | 🔨 build | ROADMAP M3: measure Media Foundation's hardware encoders against direct NVENC and AMF first, and build the direct ones only where the numbers say so |  |
-| CL2 | A too_large error for oversized plugin state | M3 | 👤 maintainer, then 🔨 build | ROADMAP M3 and #102: ADR-0074 (#794, proposed, maintainer tier) amends ADR-0037's state clause with a stable too_large error, so a batch carrying two 2 MiB CLAP states fails cleanly instead of closing the connection; the build, a protocol minor, waits on the maintainer's decision | #794 |
+| CL2 | A too_large error for oversized plugin state | M3 | 🔨 build | ROADMAP M3 and #102: ADR-0074 (#794, accepted by the maintainer, maintainer tier) amends ADR-0037's state clause with a stable too_large error, so a batch carrying two 2 MiB CLAP states fails cleanly instead of closing the connection; the build, a protocol minor, follows | #794 |
 
 </details>
 
@@ -282,7 +282,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | LNX3 | AAC-LC encoder in Rust, patent check first (ADR-0061) | 🔍 in review: patent check ADR-0062 accepted (#508); encoder and Linux wiring (#518), landed with wave/m3-2 (#663); TNS (#723, more tests #727) in wave/m3-3; intensity stereo later; before the Linux app ships the encoder its licence information must say JStream holds no AAC patent licence and name Via LA (ADR-0062) | #508, #518, #723, #727 |
 | F6b | Choose HEVC or AV1 from a client | ⏳ planned: F6 built the encoders, but an encoder profile accepts only h264 (EncoderProfile::problem refuses the rest), so no client can pick them yet |  |
 | F7 | Direct NVENC and AMF encoders, if measurements justify them | ⏳ planned: ROADMAP M3: measure Media Foundation's hardware encoders against direct NVENC and AMF first, and build the direct ones only where the numbers say so |  |
-| CL2 | A too_large error for oversized plugin state | 🔍 in review: ROADMAP M3 and #102: ADR-0074 (#794, proposed, maintainer tier) amends ADR-0037's state clause with a stable too_large error, so a batch carrying two 2 MiB CLAP states fails cleanly instead of closing the connection; the build, a protocol minor, waits on the maintainer's decision | #794 |
+| CL2 | A too_large error for oversized plugin state | 🔍 in review: ROADMAP M3 and #102: ADR-0074 (#794, accepted by the maintainer, maintainer tier) amends ADR-0037's state clause with a stable too_large error, so a batch carrying two 2 MiB CLAP states fails cleanly instead of closing the connection; the build, a protocol minor, follows | #794 |
 
 </details>
 <!-- @generated end progress -->
