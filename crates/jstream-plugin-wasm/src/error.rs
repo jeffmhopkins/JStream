@@ -36,6 +36,10 @@ pub enum Error {
     /// The invocation (or the `start` function) used up its fuel and was stopped.
     #[error("the plugin ran out of fuel")]
     OutOfFuel,
+    /// The invocation (or the load) ran past its wall-time deadline and was interrupted
+    /// (ADR-0069's `cpu_limit`).
+    #[error("the plugin ran past its time limit")]
+    Deadline,
     /// The plugin trapped: a WASM trap, a host function it misused (a pointer outside its
     /// memory), or a stack overflow. Its state may be inconsistent.
     #[error("the plugin trapped")]
@@ -44,12 +48,13 @@ pub enum Error {
 
 impl Error {
     /// Classifies a wasmtime error from running plugin code: fuel exhaustion is
-    /// [`Error::OutOfFuel`], anything else is `other`.
+    /// [`Error::OutOfFuel`], an epoch interrupt [`Error::Deadline`], anything else is
+    /// `other`.
     pub(crate) fn from_run(error: wasmtime::Error, other: fn(Source) -> Error) -> Error {
-        if error.downcast_ref::<wasmtime::Trap>() == Some(&wasmtime::Trap::OutOfFuel) {
-            Error::OutOfFuel
-        } else {
-            other(error.into())
+        match error.downcast_ref::<wasmtime::Trap>() {
+            Some(wasmtime::Trap::OutOfFuel) => Error::OutOfFuel,
+            Some(wasmtime::Trap::Interrupt) => Error::Deadline,
+            _ => other(error.into()),
         }
     }
 }

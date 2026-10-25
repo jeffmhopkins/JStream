@@ -6,12 +6,14 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use jstream_media::{ColorInfo, FrameSize, MediaTime, PixelFormat, Timebase, VideoFrameInfo};
-use jstream_platform::{FrameSync, GpuFrame, PlatformError};
+use jstream_platform::{AdapterId, FrameSync, GpuContext, GpuFrame, PlatformError, SubmitLock};
 
 use crate::{
     Color, Compositor, Crop, Image, Item, LegacyTransform, OpenOptions, Placement, RenderError,
     ResourceCache, Scene, Snapshot,
 };
+
+mod three_d;
 
 /// A compositor whose device drops before the WARP lock.
 ///
@@ -183,6 +185,48 @@ fn crop_keeps_the_uncut_texels() {
     near(&snapshot, 0, 0, [0, 255, 0, 255], 0);
     near(&snapshot, 1, 1, [0, 255, 0, 255], 0);
     near(&snapshot, 2, 0, [0, 0, 0, 255], 0);
+}
+
+#[test]
+fn an_image_is_placed_at_its_extent() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    // 8x4 texels, each row red for its first quarter and green for the rest, standing
+    // for a 4x2 image (ADR-0073): it places as 4x2, and its crop counts in those pixels.
+    let mut pixels = Vec::new();
+    for _row in 0..4 {
+        for x in 0..8 {
+            let rgba = if x < 4 {
+                [255, 0, 0, 255]
+            } else {
+                [0, 255, 0, 255]
+            };
+            pixels.extend_from_slice(&rgba);
+        }
+    }
+    let mut image = opened.compositor.upload_rgba8(8, 4, &pixels).unwrap();
+    assert_eq!(image.extent(), (8, 4));
+    image.set_extent(FrameSize::new(4, 2).unwrap());
+    assert_eq!((image.width(), image.height()), (8, 4));
+    // One extent pixel off the left is two texels: what is left is one pixel of red
+    // and two of green, three pixels wide.
+    let items = [item(
+        &image,
+        Placement::IDENTITY,
+        Crop {
+            left: 1,
+            top: 0,
+            right: 0,
+            bottom: 0,
+        },
+        1.0,
+    )];
+    let snapshot = draw(&mut opened.compositor, 4, 2, Color::BLACK, &items);
+    near(&snapshot, 0, 0, [255, 0, 0, 255], 0);
+    near(&snapshot, 1, 1, [0, 255, 0, 255], 0);
+    near(&snapshot, 2, 0, [0, 255, 0, 255], 0);
+    near(&snapshot, 3, 1, [0, 0, 0, 255], 0);
 }
 
 #[test]
@@ -717,6 +761,83 @@ fn a_refused_readback_stages_and_keeps_no_hold() {
     opened.compositor.render(&scene, false).expect("render");
     assert_eq!(count.load(Ordering::SeqCst), 1);
     assert_eq!(Arc::strong_count(&sync), holders);
+}
+
+/// A [`FrameSync`] that records, each time it is staged, whether `lock` was held then.
+#[derive(Debug)]
+pub(crate) struct LockSync {
+    pub(crate) lock: SubmitLock,
+    pub(crate) held: std::sync::Mutex<Vec<bool>>,
+}
+
+impl FrameSync for LockSync {
+    fn stage(&self, _queue: &wgpu::Queue) -> Result<(), PlatformError> {
+        let held = self.lock.try_lock().is_none();
+        self.held
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(held);
+        Ok(())
+    }
+}
+
+/// On a platform context, render holds the context's submit lock while it stages a
+/// frame and lets it go after the submit, so a platform thread that submits on the same
+/// queue under that lock can't take the staged wait and signal (#667).
+#[test]
+fn a_frame_is_staged_under_the_contexts_submit_lock() {
+    let Some(opened) = open() else {
+        return;
+    };
+    // The opened compositor's device as a platform context, so no second device is
+    // created under the WARP lock. Declared after `opened`, so it drops first.
+    let context = GpuContext::new(
+        opened.compositor.adapter().clone(),
+        opened.compositor.device().clone(),
+        opened.compositor.queue().clone(),
+        AdapterId {
+            luid: None,
+            vendor: 0,
+        },
+        None,
+    );
+    let mut compositor = Compositor::on_context(&context);
+    let sync = Arc::new(LockSync {
+        lock: context.submit_lock().clone(),
+        held: std::sync::Mutex::new(Vec::new()),
+    });
+    let info = VideoFrameInfo {
+        size: FrameSize::new(2, 2).unwrap(),
+        format: PixelFormat::Rgba8,
+        color: ColorInfo::default(),
+        pts: MediaTime::zero(Timebase::NANOS),
+    };
+    let srgb = srgb_texture(&compositor, 2, 2, [255, 0, 0, 255]);
+    let frame = GpuFrame::new(srgb, info, Arc::clone(&sync) as Arc<dyn FrameSync>);
+    let image = compositor.import_frame(&frame).unwrap();
+    let items = [item(&image, Placement::IDENTITY, Crop::NONE, 1.0)];
+    let scene = Scene {
+        canvas: FrameSize::new(2, 2).unwrap(),
+        background: Color::BLACK,
+        items: &items,
+    };
+    compositor
+        .render(&scene, true)
+        .expect("render with readback");
+    compositor.render(&scene, false).expect("render");
+    let layer = compositor.layer(2, 2).expect("layer");
+    compositor
+        .render_into(&scene, &layer)
+        .expect("render into a layer");
+    assert_eq!(
+        *sync.held.lock().unwrap(),
+        [true, true, true],
+        "each stage happened with the context's submit lock held"
+    );
+    assert!(
+        context.submit_lock().try_lock().is_some(),
+        "render lets the lock go after its submit"
+    );
 }
 
 /// A straight-alpha `Rgba8UnormSrgb` texture, the kind `import` takes, filled with one colour.
@@ -1385,6 +1506,82 @@ fn a_rotated_geometry_turns_about_its_centre() {
     // Vertical after the turn: (32, 16) is inside, (16, 32) is not.
     near(&snapshot, 32, 16, [255, 0, 0, 255], 1);
     near(&snapshot, 16, 32, [0, 0, 0, 255], 0);
+}
+
+/// Sources an edit may place, thin ones included (a 1-texel-wide colour source is valid),
+/// for the "accepted means drawable" tests (#629 round 2 B4).
+pub(crate) const SOURCES: [(u32, u32); 5] =
+    [(64, 36), (8192, 1), (1, 8192), (16384, 1), (1, 16384)];
+
+/// `count` non-neutral 3D geometries from a fixed seed, every input (centre, size, depth
+/// and perspective) spread over magnitudes from 0.1 to f32's limit, far past
+/// `MAX_DRAWN_PX`, at every angle, flipped or not, plus each input at exactly
+/// `MAX_DRAWN_PX`. Callers keep the ones `check_drawable` accepts.
+pub(crate) fn extreme_geometries(count: usize) -> Vec<jstream_protocol::ItemGeometry> {
+    use jstream_protocol::{Finite32, FitMode, ItemGeometry, MAX_DRAWN_PX, Size, Vec2};
+    let mut state = 0x9e37_79b9_7f4a_7c15_u64;
+    let mut next = move || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        (state >> 11) as f64 / (1u64 << 53) as f64
+    };
+    let finite = |value: f32| Finite32::new(value).expect("finite");
+    let mut out = Vec::with_capacity(count + 8);
+    let bound = MAX_DRAWN_PX;
+    for (tilt, turn) in [(60.0, 0.0), (-127.0, -14.5), (13.0, -15.8), (89.0, 89.0)] {
+        for perspective in [0.28, bound] {
+            out.push(ItemGeometry {
+                center: Vec2::new(bound, -bound).expect("finite"),
+                size: Size::try_new(bound, bound).expect("positive"),
+                fit_mode: FitMode::Fit,
+                rotation_deg: finite(206.9),
+                tilt_deg: finite(tilt),
+                turn_deg: finite(turn),
+                depth_px: finite(-bound),
+                perspective_px: Some(finite(perspective)),
+                flip_h: true,
+                flip_v: false,
+            });
+        }
+    }
+    while out.len() < count {
+        // Half the geometries reach f32's limit (10^-1 to 10^38), so the bound is what
+        // refuses them; the other half stay near it (10^-1 to 10^16), so many pass.
+        let top = if next() < 0.5 { 39.0 } else { 17.0 };
+        let magnitude = |next: &mut dyn FnMut() -> f64| {
+            10f64.powf(next() * top - 1.0).min(f64::from(f32::MAX)) as f32
+        };
+        let sign = |next: &mut dyn FnMut() -> f64| if next() < 0.5 { -1.0 } else { 1.0 };
+        let cx = sign(&mut next) * magnitude(&mut next);
+        let cy = sign(&mut next) * magnitude(&mut next);
+        let w = magnitude(&mut next);
+        let h = magnitude(&mut next);
+        let depth = sign(&mut next) * magnitude(&mut next);
+        let perspective = (next() < 0.8).then(|| magnitude(&mut next));
+        let angle = |next: &mut dyn FnMut() -> f64| (next() * 360.0 - 180.0) as f32;
+        let fit_mode = [FitMode::Fit, FitMode::Fill, FitMode::Stretch][(next() * 3.0) as usize % 3];
+        let tilt = angle(&mut next);
+        let turn = angle(&mut next);
+        let rotation = angle(&mut next);
+        let (flip_h, flip_v) = (next() < 0.5, next() < 0.5);
+        let Ok(size) = Size::try_new(w, h) else {
+            continue;
+        };
+        out.push(ItemGeometry {
+            center: Vec2::new(cx, cy).expect("finite"),
+            size,
+            fit_mode,
+            rotation_deg: finite(rotation),
+            tilt_deg: finite(tilt),
+            turn_deg: finite(turn),
+            depth_px: finite(depth),
+            perspective_px: perspective.map(finite),
+            flip_h,
+            flip_v,
+        });
+    }
+    out
 }
 
 /// A lost device (#349) is reported by `lost`, and drawing on it fails instead of

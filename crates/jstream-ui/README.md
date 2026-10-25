@@ -56,11 +56,25 @@ Contents ([Design](#design) explains the choices):
   last failed call, and `keys_changed`, which the outputs panel bumps when a stream key
   is set or cleared. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
   `plan_summary` and `fresh_id`.
+- **Menus, dialogs and icons**: `menu.rs` (`ContextMenu`, the right-click menu, and
+  `Menus`, the context that opens it with a list of `Entry`s), `item_menu.rs` (the
+  selected items' entries, which the canvas and the sources list share, with the
+  layer moves and canvas arrangements they send, tested natively), `dialog.rs` (`Modal`,
+  the modal dialog frame) and `icons.rs` (`Icon`, the prototype's stroke icons).
 - **Panels** (`panels/`): the scene list (`scenes.rs`), the sources list
-  (`sources.rs`), the Inspector (`inspector.rs`: the selected item's box, crop,
+  (`sources.rs`), what those two share (`tree.rs`: the search box, the favourites
+  filter, the star and drag reordering, with the matching and the drop's index tested
+  natively), the Inspector (`inspector.rs`: the selected item's box, crop,
   blending and settings, or the selected scene's objects, uses and transitions), the
-  properties form inside it (`properties.rs`), the number field the panels share
-  (`number.rs`) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
+  properties form inside it (`properties.rs`), the Add source dialog (`add_source.rs`:
+  `AddSource` and the `AddSourceDialog` context that opens it, with its type list and
+  the edits it sends, tested natively), the Properties dialog (`source_properties.rs`:
+  `SourceProperties` and the `PropertiesDialog` context that opens it), the Filters
+  panel and its dialogs (`filters.rs`: `Filters`, `Chains`, which the Properties dialog
+  shows too, `AddFilter`, `FilterSettings` and the `FilterDialogs` context that opens
+  them, with the catalogue, the row summaries, the choice of in place or dialog and
+  Cancel's restore patch tested natively), the number
+  field the panels share (`number.rs`) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
   (creating, editing and deleting streams, recordings and the virtual camera, their
   stream keys, start and stop, and the pipeline's health), and the calls and
   logic behind it and the header's Go Live, tested natively against `MockEngine`; and `mixer.rs`: `Mixer`, the
@@ -133,19 +147,57 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   item that left the scene is dropped, the next selected one becoming primary. The
   canvas edits the same scene and selects the same items, so a click on a box selects
   its row and opens its properties, and every selected item's row is highlighted.
-- **Scenes and sources.** The scene list shows scenes in display order and leaves out
-  groups (ADR-0024), marks the program scene, and puts a scene on program with
-  `scene.switch`. The sources list shows the selected scene's items with the top of the
-  stack first. New scenes, sources and items get IDs from `fresh_id`, which includes
-  the session's client ID so two UIs on one engine don't pick the same one. "Add"
-  creates a source of a kind `kind.list` reports, or places an existing source or
-  another scene (a `scene` source), as one batch, with a geometry covering the canvas
-  (ADR-0022). An engine that lists no kinds (the mock) offers no new kinds, only
-  existing sources and scenes. A `kind.list` that fails does the same, and its
-  error shows as any failed call's does. Deleting a scene, or a source everywhere, reads `delete.plan` first,
+- **Scenes and sources.** The Scenes and Scene objects panels are the prototype's
+  trees (spec-panels.md 1 and 2), without folders and groups yet. The scene list shows
+  scenes in display order and leaves out groups (ADR-0024), marks the program scene
+  "program", and puts a scene on program with `scene.switch` from a hover button. The
+  sources list shows the selected scene's items with the top of the stack first, each
+  with its source's type icon, in italics when the source is placed in another scene
+  too, and an eye that shows or hides it. Each panel has a search box and a filter for
+  favourites (the star, `scene.set_meta` or `source.set_meta`), applied in the page;
+  rows drag before or after each other (`scene.reorder`, `item.reorder`, counted in the
+  whole list so a hidden row doesn't shift the index) with pointer events, but not
+  while a filter is on. F2 renames a row in place and Del deletes a scene (through its
+  plan) or removes an item; a double click on an item opens its Properties dialog. New scenes, sources and items get IDs from `fresh_id`, which includes
+  the session's client ID so two UIs on one engine don't pick the same one. Sources
+  are added through the Add source dialog (below). Deleting a scene, or a source
+  everywhere, reads `delete.plan` first,
   shows what else it takes, and sends the plan's edits expecting the plan's revision,
   so a change in between makes the engine refuse it rather than delete more than the
   user saw. Removing an item from its scene is a plain `item.remove`.
+- **Right-click menus and dialogs.** `menu.rs` draws the one right-click menu, which
+  the shell provides as `Menus` context: a component opens a list of entries (items
+  with a check, a shortcut hint or a submenu, heads and separators) at the pointer, and
+  the menu keeps itself on screen, opens submenus on hover or the right arrow, moves
+  the focus with the arrows, Home and End, and closes on a choice, a press outside,
+  Escape or Tab. The canvas opens the empty canvas or margin menu, the scene and
+  sources lists their panels' menus, and a scene row its scene's (Show in preview,
+  Rename, New scene and Delete scene work; the rest waits on folders, keyframes,
+  transitions and the scene Properties dialog). A right-click on an item, on the canvas or its row, selects it
+  unless it was selected and opens `item_menu.rs`'s menu for the selection: Properties
+  (the Properties dialog), the Audio check (`source.set_audio`), layer order
+  (`item.reorder`s that keep the selected items' order), Center, Fit and Stretch to
+  canvas and Reset rotation (`item.set_geometry`), Clear crop, Duplicate as reference
+  (`item.add` of the same source, 40 pixels down and right, just above the original)
+  or as clone (`source.duplicate` first), and Remove from scene, each one batch; in
+  the sources list, one item's menu ends with deleting its source everywhere. A
+  nested scene and an audio-only source get the prototype's shorter menus; the first
+  can be opened. The scene and object lists fill their dock group, so the space under
+  their rows opens the panel's menu. `dialog.rs` is the modal frame: Escape and the
+  backdrop cancel, and Enter presses the button marked `data-primary`. The Add source
+  dialog (`panels/add_source.rs`, opened through `AddSourceDialog` context) lists the
+  source kinds `kind.list` reports, under the prototype's groups, names, icons and
+  descriptions, plus the kinds of placed sources it didn't report, which can be
+  placed again but not created, and Scene. "Create new" sends `source.create` and
+  `item.add` as one batch, with a box of the prototype's native size for the type,
+  centred and scaled down to fit the canvas (ADR-0022's `fit` keeps the picture's
+  aspect within it). An existing source is placed again 40 pixels right of and below
+  its first placement. A scene is nested through a `scene` source, reusing one that
+  already shows it. The new item is selected; a new source's Properties dialog opens
+  once the engine has accepted the batch, waiting for the collection to list the
+  source, and a placement of an existing one shows in the Inspector. A `kind.list`
+  that fails leaves only the placed kinds and Scene, and its error shows as any failed
+  call's does.
 - **The Inspector** ([UI features › inspector](../../docs/UI-FEATURES.md#inspector))
   shows the primary selected item, or with none the selected scene, under a header with
   its name, kind, "+N" for the other selected items and a favourite star
@@ -194,6 +246,37 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   then sent as a one-parameter `source.set_settings` patch, and Reset sends `null` for
   the default. The descriptor's or the engine's reason shows under the field. A
   `scene` source has no settings.
+- **The Properties dialog** (`source_properties.rs`) is the prototype's: the name and the
+  same form on the left, on a draft instead of the stored settings, and the source's
+  filter chains on the right. OK sends only what the user changed since the dialog
+  opened, so another client's edit meanwhile stays: a rename (unless the name is blank
+  or as it opened) and one `source.set_settings` with each changed value and `null` for
+  each one the draft dropped (`draft_patch`), as one batch, and closes once the engine
+  accepts it;
+  Cancel, Escape and the backdrop drop the draft; Defaults empties it. Enter in a
+  field blurs it before pressing OK, so the field's `change` reaches the draft first.
+  The filter chains are the Filters panel's rows (below), which apply at once. A double click on
+  an item and Properties… in the item menus open it for the item's source; a nested
+  scene's item shows in the Inspector instead, until scenes have their dialog.
+- **Filters** ([UI features › filters](../../docs/UI-FEATURES.md#filters)). The
+  Filters panel shows the primary selected item's source's chains (ADR-0026): video
+  unless the source is audio-only, audio when it has a mixer channel and isn't a
+  nested scene. Each row's eye sends `filter.set_enabled`, its × `filter.remove`, and a
+  drag within its chain `filter.reorder` (the tree rows' pointer drag). Its summary and
+  its settings come from the kind's descriptor, read once per kind and kept; a kind the
+  engine doesn't describe shows its name alone. A filter with three settings or fewer
+  opens the properties form under its row, any other opens the Filter settings dialog,
+  and a double-click always does; each field's change is a one-parameter
+  `filter.set_settings`. The dialog applies every change at once and, on Cancel, Escape
+  or the backdrop, sends one batch putting back the settings and the switch it opened
+  with, including each one it sent whose change the engine hasn't reported yet; an
+  edit that fails after the dialog, or the row edited in place, has closed shows in the
+  problem bar. Defaults resets each setting but a scene input's scene. The Add filter
+  dialog offers `kind.list`'s filter kinds for the source's chains under the prototype's
+  groups, names and hints for the kinds it knows, and sends `filter.add` with an ID from
+  `fresh_id`; the new filter opens in place, or in the settings dialog when it has more
+  than three settings or isn't described yet. Edit filters… in the item menus selects the item and shows the
+  panel. Names come from the prototype's catalogue, then `kind.list`, then the kind's ID.
 - **The shell** is the header bar over the workspace. A failed call shows in a
   dismissable bar. The look follows the UI prototype ([UI features](../../docs/UI-FEATURES.md)): dark only, with the
   prototype's palette as CSS variables in `style.css`. The font stack names IBM Plex
@@ -203,9 +286,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   ([UI features › docking](../../docs/UI-FEATURES.md#docking)): eight zones nest around
   the canvas, outer columns, full-width top and bottom, sidebars, and above and below
   the canvas. A zone stacks groups (columns top to bottom, rows side by side); a group
-  shows one panel with its title, or tabs. Panels are the seven the UI has: Scenes,
+  shows one panel with its title, or tabs. Panels are the eight the UI has: Scenes,
   Scene objects (`Sources`), the Inspector (`Inspector`, with `Pairing` under it), the
-  Transform, Audio mixer, Outputs and Transitions (`StudioMode`); `panel_view` maps
+  Transform, Filters, Audio mixer, Outputs and Transitions (`StudioMode`); `panel_view` maps
   each to its component, and a new panel adds a `PanelId` and a line there. The
   panels' own `h2` headings are hidden, since the tab is the title. Narrow windows
   stack the zones, without splitters.
@@ -312,8 +395,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **Plain `rtmp://` gets a warning.** A stream output whose server URL is `rtmp://` to
   a host other than `localhost` or a loopback address shows, under its target, that
   the key is sent unencrypted and to use `rtmps://` if the service offers it
-  (`cleartext_warning`, #353). The panel works it out from the URL `state.get`
-  reports. `output.status` carries no such flag, so a client of its own does the same.
+  (`cleartext_warning`, #353). The panel shows it when `output.status` reports
+  `cleartext` (from 0.37, #562), so the rule is the engine's alone.
 - **Mixer** ([ADR-0028](../../docs/adr/0028-audio-model-v2.md)). The panel reads
   the audio sources (those `state.get` reports with `audio`), the buses and the sends
   into a copy of its own, not `Studio`'s, and re-reads them on `state.changed` and
@@ -351,7 +434,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **Native builds.** The crate is a workspace member, so `cargo clippy` and
   `cargo test` build it natively. Its logic is tested there against `MockEngine`
   (`session.rs`, `store.rs`, `panels/outputs.rs`, `panels/mixer.rs`) and in plain functions the panels are built on (the rows,
-  what "Add" sends, the form's sections, parsing and checks); only the components
+  the trees' search and drop index,
+  the Add source dialog's types and edits, the menu's placement and keys, the item
+  menu's layer moves and arrangements, the Properties dialog's draft patch, the form's
+  sections, parsing and checks); only the components
   themselves need a browser.
 - **Debug bundle size.** A leptos view's type spells out every element and closure
   inside it, and an unstripped build names each function with those types in the
@@ -403,16 +489,16 @@ browser, and `mod.rs` is the component.
   canvas's own fit, so the picture lies exactly under the boxes. If the decoder fails, the canvas closes the stream and subscribes
   again for JPEG only. If the engine refuses or ends the stream, the background says
   why. WebCodecs is reached through `js_sys::Reflect`, because `web-sys` has it only
-  behind the `web_sys_unstable_apis` build flag. Without live values (below), the
-  preview shows a drag once it is committed.
+  behind the `web_sys_unstable_apis` build flag. A drag's live values (below) reach
+  the output as it moves, so the preview follows the drag.
 - **Selecting and dragging.** A press selects the topmost box under the pointer and
   drags it, or, on a box already selected, drags every selected box. Shift-click adds
   a box to the selection (and drags them all) or takes a selected one out. A press on
   empty canvas, or on the dark margin around the frame, draws a marquee that selects
   every box whose bounds it touches (Shift keeps what was selected); a click there
   clears the selection. Ctrl+A selects every box. The shared selection follows each of
-  these. A double click selects a box alone and shows the Inspector, in place of the
-  prototype's Properties dialog, which the UI doesn't have yet. The pointer is
+  these. A double click selects a box alone and opens its source's Properties dialog
+  ([Design](#design)). The pointer is
   followed over the whole canvas area, so handles reaching past the frame can be
   grabbed. The cursor shows what a press would do. The selected box has
   a 2 px outline, eight resize handles, a rotate knob on a stem above its top edge, and
@@ -442,19 +528,26 @@ browser, and `mod.rs` is the component.
   using each box's axis-aligned bounds; the lines it lands on are drawn as guides. An
   upright box's resized edges snap the same way. Ctrl moves without snapping, a
   rotated box never snaps, and the Snapping button in the floating tools (top right)
-  turns it off.
-- **Undoable edits.** A drag changes nothing in the engine until it ends: the overlay
-  draws the gesture locally, and on release one batch with an `item.set_geometry` per
-  item it changed commits it, so each gesture (and each nudge) is one undo step. The
+  turns it off. So does the canvas's right-click menu: on the frame it offers Select
+  all, the snapping toggle and Add source, on the margin around the frame the scene's
+  menu, and on an item the selected items' menu ([Design](#design)).
+- **Undoable edits.** A drag changes no stored state until it ends: the overlay draws
+  the gesture locally, and on release one batch with an `item.set_geometry` per item it
+  changed commits it, so each gesture (and each nudge) is one undo step. Meanwhile the
+  drag opens a gesture (`live.rs`) whose `live.set` carries the same edits as live
+  values ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), so the output and
+  the preview follow the drag without changing `rev`. The calls go one at a time, the
+  values that arrive while one is in flight collapsing into the newest; the committing
+  batch follows them with `ends_gesture` (or none, if no `live.set` got through), on
+  the gesture's own scene, and Escape sends `live.cancel` instead, as does a commit
+  that fails or can't be sent, so the output doesn't keep the dragged geometry.
+  Gesture IDs come from `fresh_id`, so they are unique for the session. The
   local geometries stay drawn until no commit is in flight and the collection has
   caught up with the last one's revision; a later drag replaces only its own items',
   so a nudge still in flight isn't lost. A commit that fails shows its error and stops
   drawing its geometries, unless a later gesture has replaced them. It carries no
   `expected_rev`: a drag is last writer wins per field
-  ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). Live values
-  (`live.set` with `ends_gesture` on the committing batch), which would show the drag
-  on the output while it happens, are in the protocol but the canvas doesn't send them
-  yet. Undo and redo (Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y while the canvas has focus, and
+  ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). Undo and redo (Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y while the canvas has focus, and
   the Edit menu) are `history.undo` and `history.redo`; nothing left to undo is
   silent, and an `undo_conflict` is explained in the problem bar.
 - **Styles** are classes in `style.css`. The hosts' Content Security Policy has no

@@ -46,6 +46,15 @@ updates:
       # allowlist (R-DEP-002). Held at 0.7 until that is decided (#431; PR #398 failed).
       - dependency-name: criterion
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      # wasmtime 49 depends on mach2 0.6; 0.7 here is a second mach2, which cargo-deny's
+      # bans refuse (R-DEP-005; PR #759 B1). Move with wasmtime.
+      - dependency-name: mach2
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      # Held at the wasm-tools release wasmtime 49 is built on (Cargo.toml): a later wat
+      # brings a second wasm-encoder and wasmparser (R-DEP-005; PR #759 B2). Move with
+      # wasmtime.
+      - dependency-name: wat
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
     commit-message:
       prefix: build
       include: scope

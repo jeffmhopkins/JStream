@@ -272,6 +272,7 @@
       },
       "kind_version": 1,
       "settings": {
+        "show_cursor": true,
         "target": ""
       }
     },

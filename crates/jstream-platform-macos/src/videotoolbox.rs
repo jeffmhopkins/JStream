@@ -1034,8 +1034,8 @@ mod tests {
         VideoFrameInfo,
     };
     use jstream_platform::{
-        Codecs, HardwarePreference, PlatformError, RateControl, VideoEncoder, VideoEncoderConfig,
-        VideoSurface,
+        CodecRole, Codecs, HardwarePreference, PlatformError, RateControl, VideoEncoder,
+        VideoEncoderConfig, VideoSurface,
     };
 
     use crate::{VideoToolboxCodecs, timebase};
@@ -1140,7 +1140,11 @@ mod tests {
     #[test]
     fn h264_encoders_are_listed() {
         let list = VideoToolboxCodecs::new().list().expect("list");
-        assert!(list.iter().any(|c| c.codec == Codec::H264), "{list:?}");
+        assert!(
+            list.iter()
+                .any(|c| c.codec == Codec::H264 && c.role == CodecRole::VideoEncoder),
+            "{list:?}"
+        );
     }
 
     #[test]
@@ -1174,7 +1178,11 @@ mod tests {
     fn hevc_encodes_where_an_encoder_is_listed() {
         let codecs = VideoToolboxCodecs::new();
         let list = codecs.list().expect("list");
-        if !list.iter().any(|c| c.codec == Codec::Hevc) {
+        // Decoders are listed too, Apple's software HEVC one on every Mac.
+        if !list
+            .iter()
+            .any(|c| c.codec == Codec::Hevc && c.role == CodecRole::VideoEncoder)
+        {
             return;
         }
         let config = config(Codec::Hevc, PixelFormat::Nv12);

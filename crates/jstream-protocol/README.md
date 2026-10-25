@@ -62,7 +62,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`,
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
-  `live.set`, `live.cancel`), with `Action::named_objects` and `Action::bind_problem`,
+  `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`), with
+  `Action::named_objects` and `Action::bind_problem`,
   which every implementation uses to check and follow a hotkey's action; `Batch`, whose
   optional `ends_gesture` commits a gesture; and the `Command`/`CommandClass`
   classification view.
@@ -112,7 +113,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   the item's `placement` form and its `geometry`, `SceneInfo` a scene's transition
   overrides, `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
   returns the program mix as a PNG. `youtube.status`, `youtube.list_broadcasts` and
-  `youtube.list_streams` read the YouTube account.
+  `youtube.list_streams` read the YouTube account, and `youtube.stats` the running
+  `youtube` outputs' audience and the day's quota estimate.
 - **Keyframe scenes** (`keyframe.rs`, [ADR-0024](../../docs/adr/0024-scene-structure.md)
   §2, [ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)):
   `ItemOverride`, what a keyframe scene overrides for one item as `SceneInfo.overrides`
@@ -120,7 +122,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `DroppedOverride`, an override a batch dropped.
 - **YouTube** (`youtube.rs`, [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)):
   `YoutubeAuth`, `BroadcastInfo`, `StreamInfo` and the enums they carry, mirroring the
-  Live API with an `other` value for anything newer.
+  Live API with an `other` value for anything newer, and `AudienceStatsInfo`,
+  `QuotaInfo` and `StatsPolling` (0.38).
 - **Transitions** (`transition.rs`, [ADR-0029](../../docs/adr/0029-transitions.md),
   [ADR-0037](../../docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md)): the
   built-in transition kinds (`cut`, `fade`, `move`) and their descriptors, `Easing` with
@@ -141,7 +144,15 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   (program, preview and the transition a switch started), `privacy.changed`,
   `events.dropped`,
   `stats.tick`, `meters.tick`, `youtube.status_changed`, `youtube.health_changed`,
-  `live.changed` and `live.ended`.
+  `youtube.stats`, `live.changed`, `live.ended` and `plugin.state_changed`.
+- **Plugins** (`plugin.rs`, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)): `PluginClass` (`read`,
+  `edit`, `live`, `outputs`), `PLUGIN_SCOPES`, the table that places every command in
+  one class or under "never", with `plugin_scope` and `plugin_classes` (a call's
+  classes, adding a `hotkey.set`'s bound action and a `live.set`'s edits, or the
+  `PluginDenial` no grant overrides), `PluginGrant` (the classes, hosts and folders a
+  person grants, with `check`, which returns the `forbidden` error, and `problem`),
+  `settings_reach` and `Reach` (the hosts and files a settings map names),
+  `plugin_may_bind`, `PluginState` and `PluginDisabledReason` ([Plugins](#design)).
 - **Preview streams** (`preview.rs`, [ADR-0045](../../docs/adr/0045-leptos-web-ui.md)):
   `PreviewCodec` (`h264`, `jpeg`), `PreviewSettings` (`preview.subscribe`'s fields with
   their defaults and range checks, which the engine applies), and the binary
@@ -162,15 +173,27 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)). `project` places the
   box, rotation about its centre, with the 3D fields in the formula and defaulting to
   neutral. `content` maps a cropped source with `stretch`, `fit` or `fill`, and
-  `flip_h` and `flip_v` mirror it in the box.
+  `flip_h` and `flip_v` mirror it in the box. `drawn_polygon` and `unplace` are
+  ADR-0050's 3D polygon and inverse map, and `check_drawable` whether an edit may store
+  a geometry ([Item geometry](#design)).
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
   reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.39 because of keyframe
   scenes (`scene.create_variant`, `item.clear_override`, `SceneInfo`'s `variant_of` and
   `overrides`, the batch result's `dropped_overrides`, and placement edits whose
-  `scene_id` names a keyframe scene). 0.34 to 0.38 are assigned to other open bumps
-  (#629, #642, #682, #653 and #696). 0.33 added the
+  `scene_id` names a keyframe scene); 0.38 added YouTube audience stats and the quota
+  estimate (the `youtube.stats` event and query, `AudienceStatsInfo`, `QuotaInfo`,
+  `StatsPolling`); 0.37 added
+  `output.status`'s `cleartext` (#562); 0.36 added
+  the `show_cursor` setting of the `display` and `window` kinds (whether the pointer
+  shows in the capture; on by default, which is what those kinds did before); 0.35
+  added WASM plugins ([Plugins](#design): `plugin.install`, `plugin.grant`, `plugin.enable`,
+  `plugin.state_changed`, the `forbidden` error and the `plugin` entity kind); 0.34 made
+  the engine accept non-neutral 3D (`tilt_deg`, `turn_deg`, `depth_px` and
+  `perspective_px`, which earlier minors rejected with `invalid_argument`, are stored and
+  drawn (ADR-0050) when the compositor can draw them (`check_drawable`); the wire form is
+  unchanged, so a client that sends only neutral 3D sees no difference); 0.33 added the
   privacy screen (`privacy.set`, `privacy.get`, `privacy.changed`) and the `dedicated`
   flag on an output's encoder session; 0.32 added the geometry flips (`ItemGeometry`'s
   `flip_h` and `flip_v`); 0.31 added folders, labels and organisation metadata (the `folder.*` and `label.*` edits,
@@ -271,8 +294,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":33},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":33},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":37},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":37},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -661,9 +684,10 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
   would be stored in the collection, [R-SEC-001](../../docs/RULES.md#R-SEC-001)), nor
   can the preview actions (they serve only the sending session), `live.set` and
   `live.cancel` (their gesture belongs to the sending session), `pairing.start` and
-  `device.revoke` (the server answers them for the client that asks), or the
+  `device.revoke` (the server answers them for the client that asks), the
   `youtube.*` actions (YouTube is driven through the UI,
-  [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)): each is
+  [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)), or the
+  `plugin.*` actions (a person installs and grants plugins): each is
   `invalid_argument` on `action.type`. A scene, output or preset the action names must
   exist, else `not_found`.
 - **`hotkey.clear {chord}`** removes a binding, or is `not_found` (entity `hotkey`); its
@@ -817,8 +841,12 @@ Queries read and never change `rev`. Those that read the collection state carry 
   never be shared; `encoder_sessions` and
   `hardware_sessions` count the video sessions open across every output, since
   hardware encoders cap them per GPU vendor and driver and the engine doesn't guess
-  the cap (0.13; missing, they parse as absent and 0). None of it is collection state,
-  so it carries no `rev`.
+  the cap (0.13; missing, they parse as absent and 0). `cleartext` says whether
+  publishing sends the stream key across the network unencrypted: a generic RTMP
+  target whose URL is plain `rtmp://` to a host other than `localhost` or a loopback
+  address (`OutputKind::sends_key_in_cleartext`; 0.37, missing it parses as `false`).
+  The engine still publishes; a client shows it as a warning. None of it is
+  collection state, so it carries no `rev`.
 - `kind.list` and `kind.describe {kind_id}`: the kinds the engine describes, above.
   Not collection state, so no `rev`.
 - `studio.get`: the scene on program (`program_scene`) and on preview
@@ -1104,7 +1132,11 @@ After `welcome`, the server pushes every event to every client.
   audio above the absolute gate. Each tick is a full reading, so a client that misses
   one loses nothing; nothing numbers them.
 - `youtube.status_changed {auth}` and `youtube.health_changed {output_id, broadcast_id,
-  stream_id, status, health, issues}` (0.23) are described under [YouTube](#design).
+  stream_id, status, health, issues}` (0.23), and `youtube.stats {output_id,
+  broadcast_id, concurrent_viewers?, likes?, views?}` (0.38), are described under
+  [YouTube](#design).
+- `plugin.state_changed {plugin_id, state, reason?, remote_name?}` (0.35) is described
+  under [Plugins](#design).
 
 ### YouTube
 
@@ -1136,13 +1168,89 @@ YouTube is for people, not agents (ADR-0058 §3):
 - An output with the `youtube {broadcast_id}` target publishes to the `rtmps://`
   ingest of its broadcast's bound stream. While it runs, the engine polls the stream's
   health and sends `youtube.health_changed` when it changes.
+- While it runs, the engine also reads the broadcast's audience about once a minute
+  (ADR-0041 §3) and sends `youtube.stats {output_id, broadcast_id,
+  concurrent_viewers?, likes?, views?}` when a reading differs from the last. A count
+  YouTube doesn't report (hidden by the owner, no viewers now, or the broadcast ended)
+  is omitted. The chat rate ADR-0041 §3 also names comes with the engine's chat
+  polling, as a later optional field.
+- `youtube.stats` (the query, 0.38) returns `outputs`, the last reading of each running
+  `youtube` output that has one, by output ID, and `quota {used, daily, exhausted?,
+  stats}`: the engine's count of the day's API units, the units it assumes a day has,
+  whether YouTube has refused a call for quota since the day began, and how audience
+  stats are polled (`normal`, `slowed` once less than a fifth of the day is left, or
+  `stopped` below a tenth or once exhausted) (ADR-0041 §5). It never calls YouTube.
+  The count is an estimate at YouTube's published costs and starts again at midnight
+  Pacific Time; YouTube's own count, shared with anything else on the same Google
+  project, can differ.
 - A Live API failure is `action_failed`, queries included, and a used-up quota says so
   in its reason (ADR-0041 §5, kept by ADR-0058).
 
 Values mirrored from YouTube (`life_cycle`, `privacy`, `status`, `health`, `severity`)
 have an `other` value, so a value YouTube adds later still parses. Text from YouTube is
-untrusted and shown as plain text. Chat, the featured message and audience stats come
-later.
+untrusted and shown as plain text. Chat and the featured message come later.
+
+### Plugins
+
+WASM automation plugins (0.35, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)) call the API through
+a scoped `Control`, which checks every call against the plugin's grant before it reaches
+the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
+
+- **Classes.** A person grants a plugin classes: `read` (the queries; always granted),
+  `edit` (scene, item, source, filter, transition, bus, send, canvas, hotkey and studio
+  edits, among them a scene's folder, metadata and transitions, a source's metadata, an
+  item's transition settings, the `transition.*` presets and `studio.set_preview`,
+  `live.set` and `live.cancel`, and `undo`/`redo` on the plugin's own session), `live`
+  (`scene.switch`) and `outputs` (`output.start`, `output.stop`). Everything else is
+  never granted: creating, deleting and retargeting outputs, their encoders and stream
+  keys, video mixes, `video.snapshot` and previews (a capture's pixels could leave
+  through a granted host), `audio.reset_loudness`, folders and labels themselves
+  (`folder.*`, `label.*`), which ADR-0069 names in no class, `privacy.set` (a plugin
+  never lifts the privacy screen), `youtube.*`, pairing and devices, and `plugin.*`
+  itself.
+  `PLUGIN_SCOPES` places every command; a command it doesn't name is "never".
+  `every_command_has_a_plugin_scope` fails until a new command is placed, so a new
+  command can't reach plugins unreviewed.
+- **Checking a call.** `plugin_classes` collects the class of every command a call
+  carries: each edit of a batch, each edit a `live.set` carries, and for `hotkey.set`
+  the class of the action it binds, since a person's key press runs it: with `edit`
+  alone a plugin can't bind `output.start`. A call needing a class outside the grant,
+  naming a never command, or an empty batch is `forbidden` (`PluginGrant::check`), with
+  the call's first command as `call`.
+- **Reach.** A class never widens network or filesystem reach (ADR-0069 S2): a
+  `browser` source's URL and a media or image source's file need the grant's `hosts` or
+  `folders` beside `edit`. `PluginGrant::check` reads the settings of `source.create`,
+  `source.set_settings`, `filter.add`, `filter.set_settings`, `transition.create` and
+  `transition.update` (in a batch or a `live.set`) with `settings_reach`, which needs no
+  kind descriptor:
+  - an asset reference under the `absolute` root must be inside a granted folder;
+  - a string that starts as `scheme://` (after trimming ASCII spaces, control
+    characters and Unicode white space from both ends, and dropping tabs and newlines,
+    which covers what both a URL parser and the engine's `str::trim` remove) must be
+    an `http`, `https`, `ws` or `wss` URL whose `scheme://host:port` (default port
+    filled in, host compared without case) is granted. Text with an address later in
+    it, such as a caption that ends with a link, is no URL and reaches nothing.
+  Anything neither rule lets through is `forbidden`: a file under the collection's or the
+  app's folder, another scheme, credentials in the URL, and a path with a `.` or `..`
+  segment. A grant's folders can't have one either. A value the engine would resolve to
+  a host without `://` (a `youtube_chat` video ID) isn't found, and the host's own
+  network and filesystem checks still apply. Both path forms pass `problem`, since the
+  client may not share the engine's OS, so an engine also refuses a folder its OS
+  doesn't read as absolute (`/data` on Windows).
+- **`plugin.install {plugin_id, path, grant}`**, **`plugin.grant {plugin_id, grant}`**
+  and **`plugin.enable {plugin_id}`** are actions for a person: no MCP tool carries
+  them, no plugin is granted them and no hotkey binds them. `PluginGrant` is
+  `{classes, hosts, folders}`, each omitted while empty: hosts as `scheme://host:port`
+  (`http`, `https`, `ws`, `wss`), folders as absolute paths on the engine's machine. A
+  grant `problem` refuses is `invalid_argument` on `grant.hosts.N` or `grant.folders.N`.
+  An unknown plugin is `not_found` with entity `plugin`; an engine that hosts no plugins
+  answers `unsupported`, as the engine and the mock do today.
+- **`plugin.state_changed {plugin_id, state, reason?, remote_name?}`** reports a plugin
+  `enabled` or `disabled`. The engine disables a plugin that runs past a limit or traps
+  (`reason`: `cpu_limit`, `memory_limit`, `trap`), or whose update asks for more than
+  its grant (`needs_grant`), and never re-enables one by itself. `remote_name` is the
+  name the plugin's manifest gives itself: the plugin's text, never an instruction
+  ([ADR-0059](../../docs/adr/0059-mcp-annotations-and-remote-text.md)).
 
 ### Errors
 
@@ -1163,7 +1271,8 @@ people and agents. Clients match on `code`, never on `message`.
 | `undo_conflict` | An undo or redo would overwrite another client's later work; the step is dropped | `step_rev`, `client_id`, `rev` |
 | `history_empty` | Nothing to undo or redo | `direction` |
 | `action_failed` | An accepted action could not be carried out | `reason` |
-| `unsupported` | A valid call this implementation doesn't serve (the pairing calls without a server in front; 0.21) | `call` |
+| `unsupported` | A valid call this implementation doesn't serve (the pairing calls without a server in front, 0.21; the `plugin.*` calls from an engine that hosts no plugins, 0.35) | `call` |
+| `forbidden` | A plugin's call is outside its grant, or is never granted to a plugin; it never reaches the engine (0.35) | `call`, `reason` |
 | `internal` | An engine bug or unexpected condition; may be retried | `reason` |
 
 An error that isn't tied to a request (a failed handshake, or a message too broken to
@@ -1259,6 +1368,28 @@ function in this crate so the compositor and the UI share one implementation.
   A negative scale is not refused: it becomes the box's `flip_h` or `flip_v`, so the
   box draws the same pixels. Projecting that box gives its outline, not the reflected
   corner order, which `legacy_quad` keeps.
+- `drawn_polygon` and `unplace` (`geometry/drawn.rs`,
+  [ADR-0050](../../docs/adr/0050-3d-transforms-rendering.md) decisions 1 to 3) are what
+  a compositor draws in 3D, and its inverse. `drawn_polygon` clips `content`'s rectangle
+  to the box, then by the near plane `w ≥ NEAR_W` (1/256: nothing magnified more than 256
+  times), both in the local frame where texture coordinates are linear. It returns three
+  to five `DrawnVertex`es, each with its canvas point (`place` of its local point), local
+  point, texture coordinate and `w = (p − z) / p` (1 without perspective), so the GPU
+  can interpolate texture coordinates perspective-correctly. It returns nothing when the
+  content misses the box, the whole item is past the near plane, it is seen edge-on, or
+  it covers under 0.01 px².
+  Edge-on is decided by the plane's facing (the z of its unit normal under a millionth:
+  through the viewer with perspective, side-on without), whatever the item's size, and
+  `unplace` makes the same test, so the two agree.
+  With neutral 3D it is the 2D quad, its texture coordinates clipped to the box.
+  `unplace` maps a canvas point back to the local point it shows: a 2×2 solve, in
+  `f64`, with nothing returned edge-on or past the near plane. It doesn't check the box,
+  so a hit test compares the point with it. `drawn_vertex` gives the vertex of one
+  local point (canvas point, texture coordinate and `w`, as the polygon's own), or
+  nothing past the near plane: the compositor uses it for the corners it pushes out
+  for edge coverage. All three allocate nothing, for the render thread. They are pure
+  functions with no wire form. `jstream-render` draws from them, and from 0.34 the
+  engine accepts the 3D they can draw (`check_drawable`, Validation below).
 
 **On the wire (0.11).** ADR-0022 names these additions as 0.4, which had already
 shipped with `events.dropped`, so they ship as 0.11, an additive minor under
@@ -1278,10 +1409,21 @@ shipped with `events.dropped`, so they ship as 0.11, an additive minor under
   transform. Each one's inverse restores the previous placement in its own form.
 - **Validation.** A stored geometry has a size greater than zero
   (`edits.N.geometry.size`), a `perspective_px` greater than zero if present
-  (`edits.N.geometry.perspective_px`), and finite corners (`edits.N.geometry`). Until
-  the compositor draws 3D, a non-neutral `tilt_deg`, `turn_deg`, `depth_px` or any
-  `perspective_px` is `invalid_argument` naming that field; `is_neutral_3d` is that
-  predicate. Accepting them later is not a breaking change.
+  (`edits.N.geometry.perspective_px`), and finite corners (`edits.N.geometry`). From
+  0.34 any `tilt_deg`, `turn_deg`, `depth_px` and `perspective_px` is accepted and
+  drawn, provided the compositor can draw it: `ItemGeometry::check_drawable`, which the
+  engine and the mock share, also bounds a non-neutral one by `MAX_DRAWN_PX` (10^15
+  canvas pixels). Its centre's coordinates, its width and height, `|depth_px|` and
+  `perspective_px` must be at most that, and so must every vertex of the polygon its
+  whole box draws. Otherwise the edit is `invalid_argument` on `edits.N.geometry`
+  (`TooFar`, or `NotFinite` for a vertex that overflows). Bounding the inputs is what
+  keeps every content's polygon finite: in f32 the whole box's polygon doesn't bound a
+  thin source's, and a huge item on an 8192×1 source would otherwise overflow while it
+  is drawn and fail its whole frame. An item wholly behind the viewer or seen edge-on is
+  valid and draws nothing.
+  Before 0.34 a non-neutral one was `invalid_argument` naming that field, with
+  `is_neutral_3d` as the predicate. ADR-0022 said accepting them is not a breaking
+  change.
 - **Reads.** `ItemInfo.placement` is `legacy` or `geometry` (missing from a pre-0.11
   server, it parses as `legacy`). A legacy item reports its transform exactly as
   written and no `geometry`, because its box depends on the source's runtime size. A

@@ -3,10 +3,11 @@
 use crate::audio::{BusMeter, SourceMeter};
 use crate::command::Edit;
 use crate::history::HistoryDirection;
-use crate::id::{ClientId, GestureId, OutputId, RequestId, Rev, SceneId};
+use crate::id::{ClientId, GestureId, OutputId, PluginId, RequestId, Rev, SceneId};
 use crate::live::LiveOutcome;
+use crate::plugin::{PluginDisabledReason, PluginState};
 use crate::transition::TransitionStarted;
-use crate::youtube::{HealthIssue, StreamHealth, StreamStatus, YoutubeAuth};
+use crate::youtube::{AudienceStatsInfo, HealthIssue, StreamHealth, StreamStatus, YoutubeAuth};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -162,6 +163,16 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         issues: Vec<HealthIssue>,
     },
+    /// A running `youtube` output's audience (ADR-0041 §3, 0.38): sent when a reading
+    /// differs from the last one, and once on the first. The engine reads it about once
+    /// a minute while the output runs, less often or not at all when the day's quota
+    /// runs low (the `youtube.stats` query says which).
+    #[serde(rename = "youtube.stats")]
+    YoutubeStats {
+        /// The output, its broadcast and the counts.
+        #[serde(flatten)]
+        stats: AudienceStatsInfo,
+    },
     /// The mixer's levels (ADR-0028): sent about ten times a second while the mixer runs
     /// (an output is running), and never while it doesn't. Runtime state: a client that
     /// misses one just shows the next. Until event subscriptions exist, every client
@@ -174,6 +185,24 @@ pub enum Event {
         /// Each bus, ordered by ID, the master among them.
         #[serde(default)]
         buses: Vec<BusMeter>,
+    },
+    /// A plugin was installed, enabled or disabled (0.35, ADR-0069). The engine disables
+    /// a plugin that runs past a limit or traps, says why, and never re-enables it by
+    /// itself.
+    #[serde(rename = "plugin.state_changed")]
+    PluginStateChanged {
+        /// The plugin.
+        plugin_id: PluginId,
+        /// Whether it runs.
+        state: PluginState,
+        /// Why the engine disabled it. Omitted when it is enabled, or when a person
+        /// disabled it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<PluginDisabledReason>,
+        /// The name the plugin's manifest gives itself: the plugin's own text, never an
+        /// instruction (ADR-0059). Omitted when it gives none.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        remote_name: Option<String>,
     },
     /// An event this version of the protocol doesn't know. Never sent; produced only when
     /// parsing an event from a newer server.
@@ -194,7 +223,9 @@ impl Event {
             Event::LiveEnded { .. } => Some("live.ended"),
             Event::YoutubeStatusChanged { .. } => Some("youtube.status_changed"),
             Event::YoutubeHealthChanged { .. } => Some("youtube.health_changed"),
+            Event::YoutubeStats { .. } => Some("youtube.stats"),
             Event::MetersTick { .. } => Some("meters.tick"),
+            Event::PluginStateChanged { .. } => Some("plugin.state_changed"),
             Event::StudioChanged { .. } => Some("studio.changed"),
             Event::PrivacyChanged { .. } => Some("privacy.changed"),
             Event::Unknown => None,

@@ -127,8 +127,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   - reorder and `item.move` indices out of range (`item.move` into another scene may
     name one past its top);
   - a placement edit's `scene_id` naming a scene other than the item's own;
-  - both `transform` and `geometry` on `item.add`, a geometry that is not positive,
-    not finite or not neutral in 3D, and a canvas side of 0 or over 8192;
+  - both `transform` and `geometry` on `item.add`, a geometry that is not positive or
+    not finite or that the compositor can't draw (`ItemGeometry::check_drawable`; any
+    other 3D is accepted, as the engine does from protocol 0.34), and a
+    canvas side of 0 or over 8192;
   - deleting a source that an item places, or a scene that a scene source or a video
     mix shows, or either while a source's settings refer to it;
   - nesting cycles from `item.add`, `item.set_source` and `item.move`;
@@ -207,11 +209,14 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   the way `Engine::with_output` does: it can be started, stopped and read with
   `output.status`, but it is not in the collection, so `output.list` and `state.get`
   don't report it and `output.set_key` answers `not_found` for it. It runs no
-  encoders, so `output.status` reports no encoder session and zero sessions;
+  encoders, so `output.status` reports no encoder session and zero sessions; its
+  `cleartext` follows the output's kind by the engine's rule;
 - the pairing calls (`pairing.start`, `device.list`, `device.revoke`) answered with
   `unsupported`, as the in-process engine answers them: only a server in front of a
   session serves them
   ([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md));
+- the plugin actions (`plugin.install`, `plugin.grant`, `plugin.enable`) answered with
+  `unsupported`, as the engine answers them: neither hosts plugins yet;
 - the stream-key actions with the engine's checks and errors. `output.set_key` answers
   `not_found` for an output not in the collection, then `invalid_argument` (field
   `key`) for an empty or over-long key, or one with whitespace, control or non-ASCII
