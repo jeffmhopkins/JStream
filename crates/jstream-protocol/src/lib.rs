@@ -19,6 +19,7 @@ mod geometry;
 mod history;
 mod hotkey;
 mod id;
+mod keyframe;
 mod kind;
 mod live;
 mod mix;
@@ -67,6 +68,7 @@ pub use id::{
     ItemId, LabelId, OutputId, PluginId, RequestId, Rev, SceneId, SourceId, TransitionPresetId,
     VideoMixId,
 };
+pub use keyframe::{DroppedOverride, ItemOverride, OverrideField};
 pub use kind::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf, check_asset_path,
@@ -78,7 +80,10 @@ pub use mix::{MixInput, MixResolution, VideoMix, VideoMixInfo};
 pub use organise::{
     FolderInfo, LabelInfo, MAX_ICON_LEN, SceneMeta, SourceMeta, check_color, check_icon,
 };
-pub use output::{OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString};
+pub use output::{
+    OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString,
+    rtmp_url_sends_key_in_cleartext,
+};
 pub use plugin::{
     PLUGIN_SCOPES, PluginClass, PluginDenial, PluginDisabledReason, PluginGrant, PluginScope,
     PluginState, Reach, plugin_classes, plugin_may_bind, plugin_scope, settings_reach,
@@ -101,8 +106,9 @@ pub use transition::{
 };
 pub use version::{PROTOCOL_VERSION, ProtocolVersion};
 pub use youtube::{
-    BroadcastInfo, BroadcastLifeCycle, BroadcastListStatus, BroadcastPrivacy, BroadcastTransition,
-    BroadcastType, HealthIssue, IssueSeverity, StreamHealth, StreamInfo, StreamStatus, YoutubeAuth,
+    AudienceStatsInfo, BroadcastInfo, BroadcastLifeCycle, BroadcastListStatus, BroadcastPrivacy,
+    BroadcastTransition, BroadcastType, HealthIssue, IssueSeverity, QuotaInfo, StatsPolling,
+    StreamHealth, StreamInfo, StreamStatus, YoutubeAuth,
 };
 
 #[cfg(test)]

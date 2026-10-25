@@ -64,6 +64,22 @@ pub fn value_of<'a>(param: &'a ParamDescriptor, settings: &'a Settings) -> &'a V
     settings.get(&param.id).unwrap_or(&param.default)
 }
 
+/// The `source.set_settings` patch of what the user changed in `draft` from `base`, the
+/// settings the draft started from: each value that differs, and `null` (the default)
+/// for each one the draft no longer has. A field the user left alone is not in it, so a
+/// change another client made meanwhile stays.
+pub fn draft_patch(base: &Settings, draft: &Settings) -> Settings {
+    let mut patch: Settings = draft
+        .iter()
+        .filter(|(id, value)| base.get(id) != Some(*value))
+        .map(|(id, value)| (id, value.clone()))
+        .collect();
+    for (id, _) in base.iter().filter(|(id, _)| draft.get(id).is_none()) {
+        patch.insert(id, Value::Null);
+    }
+    patch
+}
+
 /// Whether a parameter is shown: always, unless its `visible_if` names another
 /// parameter whose current value differs.
 pub fn is_visible(param: &ParamDescriptor, kind: &KindDescriptor, settings: &Settings) -> bool {
@@ -259,8 +275,12 @@ pub fn Properties() -> impl IntoView {
                     }
                     Some(kind) => {
                         let source_id = source_id.clone();
+                        let settings = {
+                            let source_id = source_id.clone();
+                            Signal::derive(move || settings_of(studio, &source_id))
+                        };
                         view! {
-                            <Form kind=kind source_id=source_id errors=errors commit=commit />
+                            <Form kind=kind source_id=source_id settings=settings errors=errors commit=commit />
                         }
                         .into_any()
                     }
@@ -281,15 +301,23 @@ fn settings_of(studio: Studio, source_id: &SourceId) -> Settings {
     })
 }
 
-/// The fields for one kind's parameters.
+/// The fields for one kind's parameters, showing `settings`: the stored ones in the
+/// Inspector, a draft in the Properties dialog. `commit` gets each checked change, with
+/// `null` for the default.
 #[component]
-fn Form(
+pub fn Form(
+    /// The source's kind, whose parameters the form shows.
     kind: KindDescriptor,
+    /// The source, for its reference fields and for `commit`.
     source_id: SourceId,
+    /// The settings shown.
+    #[prop(into)]
+    settings: Signal<Settings>,
+    /// Field errors by parameter ID.
     errors: RwSignal<HashMap<String, String>>,
+    /// Takes each checked change.
     commit: impl Fn(SourceId, String, Value) + Copy + Send + Sync + 'static,
 ) -> impl IntoView {
-    let studio = expect_context::<Studio>();
     let sections = sections(&kind);
     sections
         .into_iter()
@@ -300,14 +328,13 @@ fn Form(
                 .map(|param| {
                     let kind = kind.clone();
                     let visible = {
-                        let source_id = source_id.clone();
                         let param = param.clone();
-                        move || is_visible(&param, &kind, &settings_of(studio, &source_id))
+                        move || settings.with(|s| is_visible(&param, &kind, s))
                     };
                     let source_id = source_id.clone();
                     view! {
                         <Show when=visible>
-                            <Field param=param.clone() source_id=source_id.clone() errors=errors commit=commit />
+                            <Field param=param.clone() source_id=source_id.clone() settings=settings errors=errors commit=commit />
                         </Show>
                     }
                 })
@@ -338,6 +365,7 @@ fn Form(
 fn Field(
     param: ParamDescriptor,
     source_id: SourceId,
+    settings: Signal<Settings>,
     errors: RwSignal<HashMap<String, String>>,
     commit: impl Fn(SourceId, String, Value) + Copy + Send + Sync + 'static,
 ) -> impl IntoView {
@@ -345,8 +373,7 @@ fn Field(
     let id = param.id.clone();
     let value = {
         let param = param.clone();
-        let source_id = source_id.clone();
-        move || value_of(&param, &settings_of(studio, &source_id)).clone()
+        move || settings.with(|s| value_of(&param, s).clone())
     };
     // Checks a typed value and sends it, or shows why it was refused.
     let send = {
@@ -655,7 +682,8 @@ fn asset_input(
 #[cfg(test)]
 mod tests {
     use super::{
-        asset_value, display, is_visible, offers, parse, rgb_part, sections, value_of, with_rgb,
+        asset_value, display, draft_patch, is_visible, offers, parse, rgb_part, sections, value_of,
+        with_rgb,
     };
     use jstream_control::protocol::{
         AssetRoot, EnumOption, KindCategory, KindDescriptor, ParamDescriptor, ParamType, Reference,
@@ -874,5 +902,52 @@ mod tests {
             scene_id: "s".into(),
         };
         assert!(mask.check(&scene.to_value()).is_ok());
+    }
+
+    #[test]
+    fn the_draft_patch_sends_changes_and_nulls_for_defaults() {
+        let stored: Settings = [
+            ("text", json!("Hi")),
+            ("size", json!(34)),
+            ("bold", json!(true)),
+        ]
+        .into_iter()
+        .collect();
+        // The text changed, the size went back to its default, a colour was set and
+        // the bold flag stayed.
+        let draft: Settings = [
+            ("text", json!("Hello")),
+            ("bold", json!(true)),
+            ("color", json!("#fff")),
+        ]
+        .into_iter()
+        .collect();
+        let patch = draft_patch(&stored, &draft);
+        let want: Settings = [
+            ("text", json!("Hello")),
+            ("size", Value::Null),
+            ("color", json!("#fff")),
+        ]
+        .into_iter()
+        .collect();
+        assert_eq!(patch, want);
+        assert!(draft_patch(&stored, &stored).is_empty());
+        // Defaults: an empty draft resets everything stored.
+        assert_eq!(draft_patch(&stored, &Settings::new()).iter().count(), 3);
+    }
+
+    #[test]
+    fn the_draft_patch_leaves_other_clients_changes_alone() {
+        // The dialog opened on `base`; meanwhile another client changed the text and set
+        // a colour. The user changed only the size, so only the size is sent.
+        let base: Settings = [("text", json!("A")), ("size", json!(34))]
+            .into_iter()
+            .collect();
+        let mut draft = base.clone();
+        draft.insert("size".to_owned(), json!(48));
+        let want: Settings = [("size", json!(48))].into_iter().collect();
+        assert_eq!(draft_patch(&base, &draft), want);
+        // Nothing changed: nothing is sent, whatever is stored now.
+        assert!(draft_patch(&base, &base).is_empty());
     }
 }

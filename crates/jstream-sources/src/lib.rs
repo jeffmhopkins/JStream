@@ -57,4 +57,5 @@ pub use scope::{AudioScope, AudioScopes, drawn_source};
 pub use source::{
     AssetRoots, Context, Limits, Painter, Source, SourceAudio, SourceKind, needs_restart,
 };
+pub use text::MAX_DENSITY;
 pub use youtube_chat::YOUTUBE_CHAT_CSS;

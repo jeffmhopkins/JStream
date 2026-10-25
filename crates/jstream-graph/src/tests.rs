@@ -3981,6 +3981,7 @@ fn item_add_takes_opacity_and_blend_and_remove_restores_them() {
 }
 
 mod filters;
+mod keyframes;
 
 fn tone_create(id: &str) -> Edit {
     Edit::SourceCreate {

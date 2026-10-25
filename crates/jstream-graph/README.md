@@ -16,10 +16,12 @@ depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
-no GPU, no I/O, no `unsafe`. It depends only on
+no GPU, no I/O, no `unsafe`. It depends on
 [`jstream-protocol`](../jstream-protocol/README.md): its edits are the protocol's `Edit`s,
 its IDs are the protocol's ID types, and its errors are the protocol's `ProtocolError`
-codes, so the engine passes them to clients unchanged.
+codes, so the engine passes them to clients unchanged. A keyframe scene's overrides are
+[`jstream-anim`](../jstream-anim/README.md)'s `Keyframe`, instantiated with the
+protocol's types (`Overrides`).
 
 **Model** (`model/`, [ARCH › Data model](../../docs/ARCHITECTURE.md#data-model)):
 - `Graph`: the `State` plus its `rev`, and the kind descriptors it validates `builtin`
@@ -54,7 +56,10 @@ codes, so the engine passes them to clients unchanged.
   labels and a favourite flag (ADR-0024 §4).
 - `Scene`: a name, a `role` (`scene` or `group`, ADR-0024 §1; it changes no behaviour
   here), its `transition_in` and `transition_out` overrides, the folder it is filed in,
-  if any, its `SceneMeta` and its items in stacking order, bottom first.
+  if any, its `SceneMeta` and its items in stacking order, bottom first. A keyframe
+  scene has `variant_of`, naming its parent, its `Overrides` and no items;
+  `State::shown_items` gives the items any scene draws, a keyframe scene's being its
+  parent's at their effective values.
 - `Folder` and `Label`: a folder has an ID, a name and an optional parent folder, and a
   label an ID, a name, a colour and an optional icon (ADR-0024 §3 and §4). They organise
   only.
@@ -250,11 +255,27 @@ the batch **touched**.
   within its own (a reorder), keeping the whole item, and is undone by `item.move`
   back. The placement edits (`item.set_geometry`, `item.set_transform`, `item.set_crop`,
   `item.set_visible`, `item.set_opacity`)
-  take an optional `scene_id`: absent or the item's own scene changes the item, another
-  scene is `invalid_argument` until keyframe scenes exist, and the inverse keeps the
-  addressing. No keyframe overrides exist yet, so no edit drops any
+  take an optional `scene_id`: absent or the item's own scene changes the item, a
+  keyframe scene of the item's scene writes its override, any other scene is
+  `invalid_argument`, and the inverse keeps the addressing.
+- **Keyframe scenes** (`keyframe.rs`, [ADR-0024](../../docs/adr/0024-scene-structure.md)
+  §2, [ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)):
+  `scene.create_variant` appends a variant of a scene that isn't one, undone by
+  `scene.delete`. A placement edit addressed to it writes one field of its override
+  through `Keyframe::write`, after the same checks as the item's own edit, and is undone
+  by `item.clear_override` of the field or by the old value. `item.clear_override` of an
+  absent field changes nothing and has no inverse. An override names one of the
+  parent's own items. A group's child is refused, naming #702. `item.add`, `item.move`
+  into a variant and `scene.set_folder` of one are refused. `item.remove` of a parent's
+  item and `item.move` of it out drop its overrides in every variant (`drop_unless`),
+  report them in `Applied::dropped_overrides`, and restore them in the inverse after the
+  item is back
   ([ADR-0040](../../docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)
-  §1 applies once they do).
+  §1). A role change orphans no override, since overrides name only a parent's own
+  items, so `scene.set_role` drops none. A variant's `scene.delete` is undone by
+  `scene.create_variant`, its role, position, transitions and metadata, then the writes
+  of its overrides. A parent's delete is blocked by its variants, and its
+  `delete.plan` deletes them (and the `scene` sources that show them) first.
 - **Folders, labels and metadata** (`organise.rs`,
   [ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4): folders and labels are
   ordered lists with unique, non-empty IDs and non-empty names. `folder.create` takes an
@@ -284,7 +305,8 @@ the batch **touched**.
   and the delete's inverse ends with a `hotkey.set` for each, after the object is back.
   The touched set names the hotkey, and the objects a `hotkey.set` action names as used.
 - **No cycles** (`deps.rs`). One function lists every dependency edge: a scene depends
-  on the sources its items place, a `scene` source on its scene, and a source on the
+  on the sources its items place, a keyframe scene on its parent, a `scene` source on its
+  scene, and a source on the
   scenes, sources and buses its settings, or its filters' settings, refer to. A bus
   depends on nothing, so an edge into one never closes a cycle; it only holds the bus
   against `bus.delete`. Asset references are not edges. Every edit that adds an edge
@@ -352,7 +374,9 @@ saved, so a webcam without it can only come from before webcams had audio (#716)
 orders, each omitted when empty. A scene's `folder`, `icon`, `color`, `favourite` and
 `show_in_multiview`, and a source's `labels` and `favourite`, are each omitted while
 they have their default, so a collection without them saves as it did before they
-existed and needs no schema bump. Loading creates the folders top level first, then
+existed and needs no schema bump. A keyframe scene writes `variant_of` and its
+`overrides` in item ID order, each omitted for any other scene, so it needs no schema
+bump either. Loading creates the folders top level first, then
 sets each nested one's parent, so a folder may come before its parent in the file;
 labels come before the sources that carry them. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
@@ -367,11 +391,14 @@ the engine's; this crate does no I/O.
 - **A loaded collection passes every edit check.** Rather than trust the file, loading
   rebuilds the state by applying the edits that create it, one at a time, to an empty
   graph with the caller's kinds: the canvas size, folders and labels, scenes with their
-  roles, folders and metadata, then the buses (the master renamed or faded as saved),
+  roles, folders and metadata (keyframe scenes after every other, then `scene.reorder`s
+  to the file's order if that moved one, so a variant may come before its parent), then
+  the buses (the master renamed or faded as saved),
   which a source's settings may refer to, then sources (each after the sources its
   settings refer to, then its labels and favourite), then every source's filters, then
   items in their placement form with their crop and visibility, opacity, blend and
-  transition settings, then encoder profiles, then the presets and the default (the
+  transition settings, then the keyframe scenes' overrides as placement edits addressed
+  to them, then encoder profiles, then the presets and the default (the
   initial `cut` is updated in place when the file has it, and deleted when it doesn't),
   then each scene's overrides, then video mixes, then outputs with their profiles, mixes
   and filters, then the master's filters, then each source's audio and the sends (with a
@@ -406,7 +433,12 @@ case per edge-adding edit), settings checks and defaults,
 placement conversions and their inverses, a flip set and undone through
 `item.set_geometry`, geometry and canvas validation,
 delete rejection by references, roles, moves and the grouping and ungrouping batches,
-`scene_id` addressing, output URL checks and the refused delete of a running
+`scene_id` addressing, keyframe scenes (`tests/keyframes.rs`: what a variant shows and
+its live follow of the parent, each write and clear inverse and the no-op clear, the
+edits it refuses, its parent's cycle, the overrides an item's removal or move drops and
+their restore, a parent deleted only with its variants, a variant's delete undone, and
+the collection file with a variant before its parent), output URL checks and the
+refused delete of a running
 output, encoder edits and their inverses (a profile freed and deleted in one batch),
 video mix edits and their inverses, a mix blocking its scene's delete and the plan
 pointing it at the program,
@@ -496,8 +528,7 @@ Planned, and kept possible by the private fields of the model types:
 - Blend modes other than `normal` on placements. Legacy placements go in 1.0, whose
   collection migration converts them
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md) decision 5).
-- Keyframe scenes (`variant_of`, per-item `overrides`, `item.clear_override`) and the
-  rest of ADR-0024: placement edits addressed to a variant will write its override, and
-  the edits ADR-0040 lists will drop orphaned overrides and restore them in their
-  inverses.
+- Overrides of a group's children in a keyframe scene (ADR-0024 §2), and the drops
+  ADR-0040 §1 then needs: `scene.set_role` of the group, and removing or retargeting
+  the item that places it (#702).
 - Item lookup is a linear scan over scenes. An ID index can come once collections grow.

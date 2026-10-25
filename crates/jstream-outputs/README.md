@@ -61,9 +61,9 @@ muxing, AVCC conversion, `onMetaData`) is `jstream-mux`'s job.
   and wraps at 2^32.
 - **Transport** (`transport`): `connect` opens TCP (Nagle off) for `rtmp://` and TLS
   over TCP for `rtmps://`, so over `rtmp://` the stream key in `publish` travels in
-  the clear. `RtmpUrl::sends_key_in_cleartext` says when that crosses the network:
-  plain `rtmp://` to a host other than `localhost` or a loopback address. The engine
-  logs a warning for it (#353). `connect` returns a `Transport` (TCP or TLS inside) that implements
+  the clear. That crosses the network for plain `rtmp://` to a host other than
+  `localhost` or a loopback address: the engine logs a warning and `output.status`
+  reports `cleartext` by `jstream-protocol`'s rule (#353, #562). `connect` returns a `Transport` (TCP or TLS inside) that implements
   `Read + Write`. TLS is rustls on the `ring` provider, TLS 1.3 and 1.2, no client
   certificate. The server name (SNI) is the URL's host, and the certificate must match
   it and chain to a root in the operating system's trust store, which

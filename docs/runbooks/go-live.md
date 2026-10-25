@@ -69,7 +69,9 @@ $cli = 'target\release\jstream-cli.exe'
    `& $cli --url ws://127.0.0.1:4460 output set-key live --key-file <path>`
    (or leave out `--key-file`, type the key, and press Ctrl-Z then Enter).
    Check: `output status live` says `stream key set`. The key is stored in Windows
-   Credential Manager as `JStream/stream-key/live`.
+   Credential Manager as `JStream/stream-key/live`. If the line ends with
+   `warning: plain rtmp://`, the key will cross the network unencrypted: use the
+   service's `rtmps://` server URL if it has one.
 4. **Watch the events** in a second terminal before going live:
    `& $cli --url ws://127.0.0.1:4460 events`. While the output runs, a `stats.tick` line
    comes about once a second. Its counters are running totals of dropped frames and

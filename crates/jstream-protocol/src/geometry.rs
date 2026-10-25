@@ -607,17 +607,25 @@ fn scaled_crop(
 
 /// Fitted content size. `inside` is fit; otherwise fill.
 ///
-/// The aspect comparison is a cross-multiply, so equal aspects take the width-limited
-/// branch and still produce the box exactly.
+/// Every step divides before it multiplies, so a box near `f32::MAX` does not
+/// overflow an intermediate product (#765). The aspects are compared as ratios:
+/// each is a correctly rounded quotient, so equal aspects compare equal and take the
+/// box exactly. A ratio may still overflow to infinity or round to zero for an
+/// extreme box, and the comparison still orders it correctly.
 fn fitted(cropped_w: u32, cropped_h: u32, box_w: f32, box_h: f32, inside: bool) -> (f32, f32) {
     let cropped_w = cropped_w as f32;
     let cropped_h = cropped_h as f32;
-    let source_wider = cropped_w * box_h >= cropped_h * box_w;
+    let source_aspect = cropped_w / cropped_h;
+    let box_aspect = box_w / box_h;
+    if source_aspect == box_aspect {
+        return (box_w, box_h);
+    }
+    let source_wider = source_aspect > box_aspect;
     let limit_by_width = if inside { source_wider } else { !source_wider };
     if limit_by_width {
-        (box_w, box_w * cropped_h / cropped_w)
+        (box_w, box_w * (cropped_h / cropped_w))
     } else {
-        (box_h * cropped_w / cropped_h, box_h)
+        (box_h * (cropped_w / cropped_h), box_h)
     }
 }
 
@@ -891,6 +899,41 @@ mod tests {
             .expect("content")
             .expect("drawn");
         assert_eq!(rotated, rect);
+    }
+
+    #[test]
+    fn a_huge_box_fits_and_fills_without_overflow() {
+        // #765: 8.9e35 × 1080 is past f32::MAX, so multiplying first overflowed.
+        let side = 8.9e35;
+        let mut geometry = box_at(0.0, 0.0, side, side);
+        for (mode, expected) in [
+            (FitMode::Fit, (side, side * (1080.0 / 1920.0))),
+            (FitMode::Fill, (side * (1920.0 / 1080.0), side)),
+        ] {
+            geometry.fit_mode = mode;
+            let rect = geometry
+                .content(1920, 1080, Crop::NONE)
+                .expect("content")
+                .expect("drawn");
+            assert_eq!((rect.width, rect.height), expected, "{mode:?}");
+            assert!(
+                rect.width.is_finite() && rect.height.is_finite(),
+                "{mode:?}"
+            );
+        }
+
+        // The aspect comparison used to cross-multiply too: 3e38 × 1080 overflows.
+        let wide = box_at(0.0, 0.0, 3.0e38, 1.0e38);
+        let mut geometry = wide;
+        geometry.fit_mode = FitMode::Fit;
+        let rect = geometry
+            .content(1920, 1080, Crop::NONE)
+            .expect("content")
+            .expect("drawn");
+        assert_eq!(
+            (rect.width, rect.height),
+            (1.0e38 * (1920.0 / 1080.0), 1.0e38)
+        );
     }
 
     #[test]

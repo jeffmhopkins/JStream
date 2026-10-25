@@ -955,31 +955,32 @@ impl Engine {
                 ),
                 _ => return None,
             },
-            Call::Query { query: q } => {
-                match q {
-                    Query::YoutubeStatus => Ok(CallResult::Query {
-                        result: youtube.map_or(
-                            QueryResult::YoutubeStatus {
-                                auth: YoutubeAuth::Unavailable,
-                            },
-                            |y| y.status(),
-                        ),
-                    }),
-                    Query::YoutubeListBroadcasts {
-                        status,
-                        broadcast_type,
-                        page_token,
-                    } => query(youtube.ok_or_else(unavailable).and_then(|y| {
-                        y.list_broadcasts(*status, *broadcast_type, page_token.clone())
-                    })),
-                    Query::YoutubeListStreams { page_token } => query(
-                        youtube
-                            .ok_or_else(unavailable)
-                            .and_then(|y| y.list_streams(page_token.clone())),
+            Call::Query { query: q } => match q {
+                Query::YoutubeStatus => Ok(CallResult::Query {
+                    result: youtube.map_or(
+                        QueryResult::YoutubeStatus {
+                            auth: YoutubeAuth::Unavailable,
+                        },
+                        |y| y.status(),
                     ),
-                    _ => return None,
+                }),
+                Query::YoutubeListBroadcasts {
+                    status,
+                    broadcast_type,
+                    page_token,
+                } => {
+                    query(youtube.ok_or_else(unavailable).and_then(|y| {
+                        y.list_broadcasts(*status, *broadcast_type, page_token.clone())
+                    }))
                 }
-            }
+                Query::YoutubeListStreams { page_token } => query(
+                    youtube
+                        .ok_or_else(unavailable)
+                        .and_then(|y| y.list_streams(page_token.clone())),
+                ),
+                Query::YoutubeStats => query(youtube.ok_or_else(unavailable).map(|y| y.audience())),
+                _ => return None,
+            },
             _ => return None,
         })
     }
@@ -1128,6 +1129,7 @@ impl Engine {
                     encoder: _,
                     encoder_sessions: _,
                     hardware_sessions: _,
+                    cleartext,
                 },
         }) = result
         else {
@@ -1152,6 +1154,7 @@ impl Engine {
                 encoder,
                 encoder_sessions,
                 hardware_sessions,
+                cleartext,
             },
         })
     }
@@ -1579,7 +1582,7 @@ impl Engine {
             return Err(not_implemented("output.stop"));
         };
         if let Some(youtube) = self.youtube() {
-            youtube.unwatch_health(&output_id);
+            youtube.unwatch(&output_id);
         }
         let mut wake = Vec::new();
         let (running, watcher, wait_for) = {
@@ -1647,8 +1650,8 @@ impl Engine {
         Ok(CallResult::action())
     }
 
-    /// Polls the health of the stream a `youtube` output started on, while the output
-    /// is `active` or `reconnecting`.
+    /// Polls the health of the stream a `youtube` output started on, and its
+    /// broadcast's audience, while the output is `active` or `reconnecting`.
     fn watch_health(&self, output_id: &OutputId, watch: HealthTarget) {
         let shared = Arc::downgrade(&self.shared);
         let watched = output_id.clone();
@@ -1660,7 +1663,7 @@ impl Engine {
                 )
             })
         });
-        watch.youtube.watch_health(
+        watch.youtube.watch(
             output_id.clone(),
             watch.broadcast_id,
             watch.stream_id,
@@ -2309,7 +2312,9 @@ impl State {
     /// Applies `batch` atomically through `Graph::apply_with_running`, which checks
     /// `expected_rev` (before rejecting an empty batch), applies every edit or none, and
     /// bumps `rev` by exactly one. The batch becomes one step of the client's undo
-    /// history, holding the inverse the graph returned, and clears what it could redo.
+    /// history, holding the inverse the graph returned, and clears what it could redo; a
+    /// batch that changed nothing, with an empty inverse, is no step. The result reports
+    /// the keyframe overrides the batch dropped (ADR-0040 §1).
     ///
     /// A batch whose idempotency key this client already used is not applied again: it
     /// gets the result of the first call with that key, and emits nothing. That check
@@ -2352,6 +2357,7 @@ impl State {
         let result = CallResult::Batch {
             rev: applied.rev,
             removed_hotkeys: applied.removed_hotkeys,
+            dropped_overrides: applied.dropped_overrides,
         };
         if let Some(keyed) = keyed {
             self.applied.insert(keyed, result.clone());
@@ -2634,6 +2640,11 @@ impl State {
                     encoder: None,
                     encoder_sessions: 0,
                     hardware_sessions: 0,
+                    cleartext: self
+                        .graph
+                        .state()
+                        .output(output_id)
+                        .is_some_and(|output| output.kind().sends_key_in_cleartext()),
                 },
                 Query::LiveList => QueryResult::LiveList {
                     gestures: self.gestures.list(),
@@ -2674,6 +2685,8 @@ impl State {
         let now = self.live.now();
         let running = match (run, from_scene) {
             (Some(run), Some(from_scene)) => {
+                let state = self.graph.state();
+                let by_item = state.family_of(&from_scene) == state.family_of(&scene_id);
                 let from = match self.studio.running() {
                     Some(running) => {
                         let Self {
@@ -2703,6 +2716,7 @@ impl State {
                     to: scene_id.clone(),
                     start: now,
                     run,
+                    by_item,
                 })
             }
             // Nothing on program yet: there is nothing to transition from.
@@ -2749,7 +2763,8 @@ impl State {
     /// to re-plan then. The program mix shows the program scene (ADR-0030), or the
     /// transition running toward it (ADR-0029), whose length in milliseconds it returns;
     /// a transition that has ended is let go. The shot lists the displays and windows the
-    /// program and every mix capture.
+    /// program and every mix capture. A source the shot shows enlarged is drawn again at
+    /// the density that keeps it sharp, when its kind can be (ADR-0073).
     fn publish_render(&mut self) -> Option<f32> {
         let Self {
             graph,
@@ -2775,6 +2790,7 @@ impl State {
             &assets,
         );
         live.end_plan();
+        live.densities(&planning.shot.scales());
         if let Some(sound) = live.take_audio() {
             audio.sync_live(sound);
         }
@@ -2800,6 +2816,17 @@ impl State {
         wake: &mut Vec<Waker>,
     ) -> Result<CallResult, ProtocolError> {
         self.gestures.check_set(client_id, gesture_id, &values)?;
+        // Live values are drawn per item, so one meant for a keyframe scene's override
+        // would move the parent's item wherever it shows (#702 builds them).
+        let state = self.graph.state();
+        if let Some(at) = values.iter().position(|value| {
+            live_scene(value).is_some_and(|scene| state.family_of(scene) != scene)
+        }) {
+            return Err(ProtocolError::invalid_argument(
+                format!("values.{at}.scene_id"),
+                "live values on a keyframe scene are not supported yet (#702); send the value in a batch",
+            ));
+        }
         self.graph
             .clone()
             .apply(&values, None)
@@ -3097,5 +3124,15 @@ fn served_by_the_server(call: &str) -> ProtocolError {
 fn not_implemented(what: &str) -> ProtocolError {
     ProtocolError::Internal {
         reason: format!("the engine does not implement {what} yet"),
+    }
+}
+
+/// The scene a live-adjustable setter names, if it names one.
+fn live_scene(value: &Edit) -> Option<&SceneId> {
+    match value {
+        Edit::ItemSetTransform { scene_id, .. }
+        | Edit::ItemSetGeometry { scene_id, .. }
+        | Edit::ItemSetCrop { scene_id, .. } => scene_id.as_ref(),
+        _ => None,
     }
 }
