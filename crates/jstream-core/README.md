@@ -1570,10 +1570,10 @@ package, or the OpenH264 download ([ADR-0060](../../docs/adr/0060-linux-platform
 encoder there fits the profile, the start fails naming what the machine lacks:
 `this machine has no AV1 encoder`, or no hardware one for `hardware: require`, or no
 software one for `avoid`, and the open's own error goes to the log at `warn`, so a list
-that disagrees with the open still shows the real cause. When the list explains nothing, or can't be read, the open's
-own error stands. A profile's codec is collection state, valid on any machine, so this
-is only consulted at a failed start, never at the edit, and an encoder the list leaves
-out still opens.
+that disagrees with the open still shows the real cause. When the list explains
+nothing, or can't be read, the open's own error stands. A profile's codec is collection
+state, valid on any machine, so this is only consulted at a failed start, never at the
+edit, and an encoder the list leaves out still opens.
 
 **Virtual camera.** `with_backends` takes the backends' `VcamSink` out and keeps it for
 the engine's life. When the collection's output is `VirtualCam`, the start takes that
