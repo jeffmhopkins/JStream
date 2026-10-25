@@ -5,7 +5,7 @@
 
 use super::{block_on, connected, create, edits};
 use crate::Engine;
-use crate::plugins::automation::{EVENT_ENTRY, MANIFEST_FILE, MODULE_FILE};
+use crate::plugins::automation::{EVENT_ENTRY, MANIFEST_FILE, MODULE_FILE, RUNNING_DELAY_MS};
 use jstream_control::{Control, ControlError, EventStream};
 use jstream_protocol::{
     Action, Call, CallResult, EntityKind, Event, PluginClass, PluginDisabledReason, PluginGrant,
@@ -13,6 +13,7 @@ use jstream_protocol::{
 };
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::Ordering;
 use std::task::{Context, Poll, Waker};
 use std::time::{Duration, Instant};
 
@@ -295,6 +296,56 @@ fn a_plugin_that_traps_is_disabled_until_a_person_enables_it() {
     assert_eq!(next_state(&mut events).1, PluginState::Enabled);
     call(&person, create_scene("c")).expect("applies");
     assert_eq!(next_state(&mut events).1, PluginState::Disabled);
+}
+
+/// #839 review B1: events that arrive while the plugin loads are held until its entry
+/// is `Running`, so one that traps on the first of them is disabled after it is enabled,
+/// and `plugin.enable` can load it again, instead of being left `Running` with no thread.
+#[test]
+fn a_plugin_that_traps_on_an_event_during_its_install_is_disabled() {
+    let engine = Engine::new();
+    let person = connected(&engine);
+    let mut events = person.events();
+    let dir = package("traps_early", TRAPS, None);
+    // Another session edits throughout the install, so events are queued for the plugin
+    // from the moment its subscription opens.
+    let busy = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let editor = {
+        let engine = engine.clone();
+        let busy = busy.clone();
+        std::thread::spawn(move || {
+            let other = connected(&engine);
+            let mut n = 0u32;
+            while busy.load(std::sync::atomic::Ordering::Relaxed) {
+                let _ = call(&other, create_scene(&format!("s{n}")));
+                n += 1;
+            }
+        })
+    };
+    std::thread::sleep(Duration::from_millis(20));
+    // Events reach the plugin's queue while `start` waits, so it faults on one at once
+    // if it is handed one before its entry is `Running`. Other tests' installs only get
+    // slower meanwhile.
+    RUNNING_DELAY_MS.store(200, Ordering::Relaxed);
+    let installed = call(&person, install("plg_early", &dir, PluginGrant::default()));
+    RUNNING_DELAY_MS.store(0, Ordering::Relaxed);
+    assert_eq!(installed, Ok(CallResult::action()));
+    let enabled = next_state(&mut events);
+    let disabled = next_state(&mut events);
+    busy.store(false, std::sync::atomic::Ordering::Relaxed);
+    editor.join().expect("the editor ends");
+    assert_eq!(enabled.1, PluginState::Enabled, "enabled first");
+    assert_eq!(
+        (disabled.1, disabled.2),
+        (PluginState::Disabled, Some(PluginDisabledReason::Trap)),
+        "then disabled by its first event"
+    );
+    assert_eq!(call(&person, enable("plg_early")), Ok(CallResult::action()));
+    assert_eq!(
+        next_state(&mut events).1,
+        PluginState::Enabled,
+        "a person can load it again"
+    );
 }
 
 #[test]

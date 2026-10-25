@@ -31,7 +31,9 @@ The host could run in three places:
 3. **In a process of its own**, as CLAP plugins are
    ([ADR-0035](0035-clap-plugins-out-of-process.md)). A native plugin can crash its host,
    so CLAP needs that. A WASM plugin can't: it has no native code, and every fault is a
-   trap the host catches. ADR-0035 already keeps WASM plugins in process for that reason.
+   trap the host catches. [ADR-0005](0005-plugins-wgsl-and-wasm.md) and ADR-0035 treat
+   WASM plugins as sandboxed code that can't crash the engine, though neither says where
+   the host runs.
 
 <a id="decision"></a>
 ## Decision
@@ -49,7 +51,11 @@ The host could run in three places:
   ignores fields it doesn't know, so a later version can add the classes a plugin asks
   for. Like the ABI, the layout is version 0 and unstable.
 - **Events.** A plugin that exports `on_event` gets each engine event, in order, as JSON
-  for that invocation's input. One that doesn't export it gets none.
+  for that invocation's input. One that doesn't export it gets none. That is every event
+  a client gets, the people-only nouns' (`youtube.*`, other plugins' `plugin.*`) among
+  them: ADR-0069 puts the event subscription under `read`, which every plugin has, and
+  none of these events carries a secret. Unlike MCP's feed for agents, the plugin feed
+  filters nothing.
 - **Refusals.** The engine's plugins get the protocol's `forbidden` error, not the ABI's
   `STATUS_DENIED` and `STATUS_LIMITED`, for a call outside their grant and past the cap
   of commands a second, as ADR-0069 says. The host offers both, and the engine picks
@@ -59,9 +65,9 @@ The host could run in three places:
 ## Consequences
 - Every build of the engine with the default features compiles wasmtime. It was already in
   the workspace for `jstream-plugin-wasm`, so the dependency tree doesn't change.
-- A bug in wasmtime itself could take down the engine. That is the risk ADR-0035 accepted
-  for WASM plugins, and moving the host out of process later would need no protocol
-  change.
+- A bug in wasmtime itself could take down the engine. That is the residual risk of
+  treating WASM plugins as sandboxed in-process code, and moving the host out of process
+  later would need no protocol change.
 - An installed plugin lasts for the engine's run. Saving installed plugins and their
   grants, the manifest's classes and the `needs_grant` check on an update, and each
   plugin's private data folder are later WA1 work.

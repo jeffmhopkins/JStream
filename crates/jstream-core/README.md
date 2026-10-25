@@ -1769,7 +1769,10 @@ none is saved yet.
   A plugin that exports `on_event` gets every engine event, in order, through a
   subscription of its own: a `jstream-plugin-events` thread moves each into the host's
   queue (at most 1,000, then `events.dropped`) and nudges the plugin's thread, which hands
-  them over one invocation at a time. One that doesn't export it gets none. Both threads
+  them over one invocation at a time. One that doesn't export it gets none. Events that
+  arrive while it loads wait in the queue until its entry is running and
+  `plugin.state_changed` (`enabled`) is out, so a plugin that faults on its first event
+  is disabled like any other, after it was enabled. Both threads
   hold the engine weakly, so installed plugins don't keep it alive: when it ends, its
   event streams close and the threads end.
 - **Session.** A plugin's calls go through a session of its own, registered as the client

@@ -453,7 +453,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Installs a WASM automation plugin from the package at `path` on the engine's\nmachine, with what the person granted it after seeing its manifest (0.35,\nADR-0069). It starts enabled, and `plugin.state_changed` reports it. For a person\nonly: no MCP tool carries it, and no plugin is ever granted it. Fails with\n`already_exists` for a plugin ID in use, `invalid_argument` for a grant whose\n`problem` names a field (`grant.hosts.0`) or a package that isn't a plugin, and\n`unsupported` from an engine that hosts no plugins.",
+                "description": "Installs a WASM automation plugin from the package at `path` on the engine's\nmachine, with what the person granted it after seeing its manifest (0.35,\nADR-0069). It starts enabled, and `plugin.state_changed` reports it. For a person\nonly: no MCP tool carries it, and no plugin is ever granted it. Fails with\n`already_exists` for a plugin ID in use, `invalid_argument` for a grant whose\n`problem` names a field (`grant.hosts.0`) or a package that isn't a plugin,\n`action_failed` for a module whose `start` function traps or runs past its limits,\nand `unsupported` from an engine that hosts no plugins.",
                 "properties": {
                   "grant": {
                     "$ref": "#/$defs/PluginGrant",
@@ -5458,7 +5458,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Installs a WASM automation plugin from the package at `path` on the engine's\nmachine, with what the person granted it after seeing its manifest (0.35,\nADR-0069). It starts enabled, and `plugin.state_changed` reports it. For a person\nonly: no MCP tool carries it, and no plugin is ever granted it. Fails with\n`already_exists` for a plugin ID in use, `invalid_argument` for a grant whose\n`problem` names a field (`grant.hosts.0`) or a package that isn't a plugin, and\n`unsupported` from an engine that hosts no plugins.",
+                "description": "Installs a WASM automation plugin from the package at `path` on the engine's\nmachine, with what the person granted it after seeing its manifest (0.35,\nADR-0069). It starts enabled, and `plugin.state_changed` reports it. For a person\nonly: no MCP tool carries it, and no plugin is ever granted it. Fails with\n`already_exists` for a plugin ID in use, `invalid_argument` for a grant whose\n`problem` names a field (`grant.hosts.0`) or a package that isn't a plugin,\n`action_failed` for a module whose `start` function traps or runs past its limits,\nand `unsupported` from an engine that hosts no plugins.",
                 "properties": {
                   "grant": {
                     "$ref": "#/$defs/PluginGrant",
@@ -10144,7 +10144,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Installs a WASM automation plugin from the package at `path` on the engine's\nmachine, with what the person granted it after seeing its manifest (0.35,\nADR-0069). It starts enabled, and `plugin.state_changed` reports it. For a person\nonly: no MCP tool carries it, and no plugin is ever granted it. Fails with\n`already_exists` for a plugin ID in use, `invalid_argument` for a grant whose\n`problem` names a field (`grant.hosts.0`) or a package that isn't a plugin, and\n`unsupported` from an engine that hosts no plugins.",
+                "description": "Installs a WASM automation plugin from the package at `path` on the engine's\nmachine, with what the person granted it after seeing its manifest (0.35,\nADR-0069). It starts enabled, and `plugin.state_changed` reports it. For a person\nonly: no MCP tool carries it, and no plugin is ever granted it. Fails with\n`already_exists` for a plugin ID in use, `invalid_argument` for a grant whose\n`problem` names a field (`grant.hosts.0`) or a package that isn't a plugin,\n`action_failed` for a module whose `start` function traps or runs past its limits,\nand `unsupported` from an engine that hosts no plugins.",
                 "properties": {
                   "grant": {
                     "$ref": "#/$defs/PluginGrant",

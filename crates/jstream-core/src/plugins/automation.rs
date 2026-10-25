@@ -47,6 +47,11 @@ pub(crate) const MODULE_FILE: &str = "plugin.wasm";
 /// The manifest in a plugin's package, which may be left out.
 pub(crate) const MANIFEST_FILE: &str = "manifest.json";
 
+/// For tests: how long [`start`] waits between a plugin's load and marking its entry
+/// `Running`, to widen the window in which events queue for it (#839 review B1).
+#[cfg(test)]
+pub(crate) static RUNNING_DELAY_MS: AtomicU64 = AtomicU64::new(0);
+
 /// The installed plugins, by ID.
 #[derive(Default)]
 pub(crate) struct Registry {
@@ -137,16 +142,9 @@ fn install(
             },
         );
     }
-    match start(engine, plugin_id, read.wasm) {
-        Ok(name) => {
-            enabled(engine, plugin_id, name);
-            Ok(())
-        }
-        Err(error) => {
-            lock(&registry.plugins).remove(plugin_id);
-            Err(error)
-        }
-    }
+    start(engine, plugin_id, read.wasm).inspect_err(|_| {
+        lock(&registry.plugins).remove(plugin_id);
+    })
 }
 
 fn set_grant(
@@ -186,10 +184,7 @@ fn enable(engine: &Engine, plugin_id: &PluginId) -> Result<(), ProtocolError> {
             start(engine, plugin_id, read.wasm)
         });
     match started {
-        Ok(name) => {
-            enabled(engine, plugin_id, name);
-            Ok(())
-        }
+        Ok(()) => Ok(()),
         Err(error) => {
             if let Some(entry) = lock(&registry.plugins).get_mut(plugin_id) {
                 entry.state = Run::Disabled(was);
@@ -268,12 +263,10 @@ fn read_package(package: &Path) -> Result<Package, ProtocolError> {
 }
 
 /// Loads `wasm` on a new thread for `plugin_id`, whose entry is `Starting`, and waits for
-/// the load. On success the entry is `Running` and the plugin's name is returned.
-fn start(
-    engine: &Engine,
-    plugin_id: &PluginId,
-    wasm: Vec<u8>,
-) -> Result<Option<String>, ProtocolError> {
+/// the load. On success the entry is `Running` and `plugin.state_changed` (`enabled`) has
+/// gone out, and only then is the plugin handed its first event: so a plugin that faults
+/// on it is disabled after it was enabled, never while it is still `Starting`.
+fn start(engine: &Engine, plugin_id: &PluginId, wasm: Vec<u8>) -> Result<(), ProtocolError> {
     let registry = engine.automation();
     let host = {
         let mut host = lock(&registry.host);
@@ -294,15 +287,21 @@ fn start(
     let run = registry.runs.fetch_add(1, Ordering::Relaxed);
     let (work, inbox) = mpsc::sync_channel(1);
     let (loaded_tx, loaded) = mpsc::channel();
+    let (go, wait) = mpsc::channel();
     let thread = Instance {
         engine: engine.downgrade(),
         plugin_id: plugin_id.clone(),
         run,
     };
-    let nudge = work.clone();
+    let channels = Channels {
+        nudge: work.clone(),
+        inbox,
+        loaded: loaded_tx,
+        go: wait,
+    };
     thread::Builder::new()
         .name("jstream-plugin".into())
-        .spawn(move || thread.run(&host, &wasm, grant, nudge, &inbox, &loaded_tx))
+        .spawn(move || thread.run(&host, &wasm, grant, channels))
         .map_err(|e| failed(&e))?;
     // The thread answers once the module has loaded (or failed to), within its load
     // deadline; if it panics first, the sender drops and this reports it.
@@ -311,6 +310,10 @@ fn start(
             reason: "the plugin's thread ended while it loaded".into(),
         })
     })?;
+    #[cfg(test)]
+    thread::sleep(std::time::Duration::from_millis(
+        RUNNING_DELAY_MS.load(Ordering::Relaxed),
+    ));
     if let Some(entry) = lock(&registry.plugins).get_mut(plugin_id) {
         entry.state = Run::Running(Running {
             run,
@@ -318,7 +321,11 @@ fn start(
             events,
         });
     }
-    Ok(name)
+    enabled(engine, plugin_id, name);
+    // Its thread starts delivering events now. If it has gone, its run ends as a fault
+    // would have ended it.
+    let _ = go.send(());
+    Ok(())
 }
 
 /// One run of a plugin, from its load until it is disabled or the engine ends.
@@ -328,16 +335,32 @@ struct Instance {
     run: u64,
 }
 
+/// How a run's thread hears from the engine.
+struct Channels {
+    /// The sender of `inbox`, for the event thread, if there is one.
+    nudge: SyncSender<()>,
+    /// One message for each batch of queued events.
+    inbox: Receiver<()>,
+    /// Where the load's outcome goes: the subscription to keep, or why it failed.
+    loaded: mpsc::Sender<Result<Option<QueueRef>, ProtocolError>>,
+    /// A message once the entry is `Running`, before which no event is handed over.
+    go: Receiver<()>,
+}
+
 impl Instance {
     fn run(
         &self,
         host: &PluginHost,
         wasm: &[u8],
         grant: Arc<Mutex<PluginGrant>>,
-        nudge: SyncSender<()>,
-        inbox: &Receiver<()>,
-        loaded: &mpsc::Sender<Result<Option<QueueRef>, ProtocolError>>,
+        channels: Channels,
     ) {
+        let Channels {
+            nudge,
+            inbox,
+            loaded,
+            go,
+        } = channels;
         let Some(engine) = self.engine.upgrade() else {
             return;
         };
@@ -369,7 +392,9 @@ impl Instance {
             drop(nudge);
             None
         };
-        if loaded.send(Ok(events)).is_err() {
+        // Events queue from the subscription on, but none is handed over until the entry
+        // is `Running`: a fault on the first one must find this run to disable.
+        if loaded.send(Ok(events)).is_err() || go.recv().is_err() {
             return;
         }
         // Each message is a nudge: hand over every event queued so far. Ends when the

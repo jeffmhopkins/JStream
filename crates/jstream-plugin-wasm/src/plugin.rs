@@ -403,7 +403,6 @@ fn call(state: &mut HostState, bytes: &[u8]) -> (i32, Vec<u8>) {
     encoded.unwrap_or_else(|e| (abi::STATUS_FAILED, e.to_string().into_bytes()))
 }
 
-/// The fuel a host call costs before its bytes, so a loop of empty calls still drains fuel.
 /// `forbidden` for `call` (its name, or a batch's first refused edit), as a failed call's
 /// status and wire error.
 fn forbidden(call: &str, reason: String) -> (i32, Vec<u8>) {
@@ -417,6 +416,7 @@ fn forbidden(call: &str, reason: String) -> (i32, Vec<u8>) {
     }
 }
 
+/// The fuel a host call costs before its bytes, so a loop of empty calls still drains fuel.
 pub(crate) const HOST_CALL_FUEL: u64 = 1_000;
 
 /// Takes the fuel for host work on `bytes` bytes (copying them, and parsing a call) from
@@ -459,6 +459,10 @@ fn write(memory: &mut [u8], at: usize, bytes: &[u8]) -> wasmtime::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{Plugin, PluginConfig, PluginHost};
+    use crate::{Error, Limits};
+    use jstream_control::{Control, MockEngine};
+    use std::sync::Arc;
+    use std::time::{Duration, Instant};
 
     #[test]
     fn a_refusal_as_forbidden_is_the_protocol_wire_error() {
@@ -474,10 +478,6 @@ mod tests {
             }
         );
     }
-    use crate::{Error, Limits};
-    use jstream_control::{Control, MockEngine};
-    use std::sync::Arc;
-    use std::time::{Duration, Instant};
 
     /// An endless loop, and the same loop as a module's `start` function.
     const SPIN: &str = r#"(module
