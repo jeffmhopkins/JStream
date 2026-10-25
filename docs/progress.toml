@@ -535,19 +535,19 @@ prs = [244]
 id = "V4"
 milestone = "M1b"
 title = "Scene filter chains and item effects"
-status = "review"
-prs = [802, 813]
-note = "ADR-0065 designs a video chain owned by a scene or by one placement, and ADR-0068 puts item effects in v1; built after V0: the scene and item owners in the protocol, graph, core and render, then the UI's scene filters (FL-06). Part of #529: a built-in vignette filter (#802) and the scene and item owners in the protocol (#813, protocol 0.43, still refused by the graph) are in review into wave/m1-5; the graph model, core and render parts follow"
-needs = ["build", "wave"]
+status = "planned"
+prs = []
+note = "ADR-0065 designs a video chain owned by a scene or by one placement, and ADR-0068 puts item effects in v1; built after V0: the scene and item owners in the protocol, graph, core and render, then the UI's scene filters (FL-06). The engine rejects both owners today (#529)"
+needs = ["build"]
 
 [[item]]
 id = "D9"
 milestone = "M1b"
 title = "Audio monitoring: a bus's monitor device and tap point"
-status = "review"
-prs = [801, 816]
-note = "ADR-0028 gives a bus a monitor, a device and a tap point before or after its filters (decision register D22); bus monitor taps and the monitor player (#801, part 1) and the monitor device and tap point in the protocol (#816, part 2, protocol 0.42) are in review into wave/m1-5; the mixer's Hear: before or after FX row (MX-05) waits on them"
-needs = ["build", "wave"]
+status = "planned"
+prs = []
+note = "ADR-0028 gives a bus a monitor, a device and a tap point before or after its filters (decision register D22); nothing in the protocol yet, and the mixer's Hear: before or after FX row (MX-05) waits on it"
+needs = ["build"]
 
 # M1c
 
@@ -814,10 +814,10 @@ prs = [259]
 id = "E2b"
 milestone = "M2"
 title = "Privacy screen and encoder sharing key"
-status = "review"
-prs = [317, 804]
-note = "on/off privacy covering every output, the encoder owner key and cost reporting (#317) landed with wave/m1-3 (#754); the privacy screen muting the microphones (#804) is in review into wave/m1-5; the look setting and the slate to build"
-needs = ["build", "wave"]
+status = "planned"
+prs = [317]
+note = "on/off privacy covering every output, the encoder owner key and cost reporting (#317) landed with wave/m1-3 (#754); the look setting, the slate and muted sources to build"
+needs = ["build"]
 
 [[item]]
 id = "D8"
@@ -861,10 +861,10 @@ note = "#323 landed with wave/m1-3 (#754)"
 id = "K1"
 milestone = "M2"
 title = "Keyframe scenes, folders, organisation metadata and hotkeys"
-status = "review"
+status = "planned"
 prs = [319, 720]
-note = "hotkeys #319 landed with wave/m1-2 (#545); organisation metadata #323 landed with wave/m1-3 (#754); keyframe scenes part 1, in the protocol, graph and engine (#720, protocol 0.39), is in review into wave/m1-4; a group's children and the UI follow (#702)"
-needs = ["build", "wave"]
+note = "hotkeys #319 landed with wave/m1-2 (#545); organisation metadata #323 landed with wave/m1-3 (#754); keyframe scenes part 1, in the protocol, graph and engine (#720, protocol 0.39), landed with wave/m1-4 (#810); a group's children and the UI follow (#702)"
+needs = ["build"]
 
 [[item]]
 id = "K2"
@@ -878,18 +878,18 @@ id = "U6"
 milestone = "M2"
 title = "Desktop UI as a 1:1 match of the UI prototype"
 status = "review"
-prs = [495, 496, 615, 637, 659, 664, 766, 770]
-note = "#748; docs/UI-FEATURES.md tracks it row by row. Theme and header (#495), docking (#496), the canvas (#615, #637), the Inspector (#659) and the Transform panel (#664) landed with wave/m1-3 (#754); menus, dialogs and live drag (#766, #747) are in wave/m1-4; the Scenes and Scene objects panels (#770) are in review; the filters, mixer and keyboard batches are still to build. Rows that wait on the engine follow B12, C2b, V4, D9, E2b, K1, X1 and Y4, and on two gaps with no item yet: previews of any scene or source (decision register D36) and the audit log over the protocol (D38); the bundled IBM Plex fonts are a licensing call for the maintainer (WS-02)"
+prs = [495, 496, 615, 637, 659, 664, 766, 770, 809]
+note = "#748; docs/UI-FEATURES.md tracks it row by row. Theme and header (#495), docking (#496), the canvas (#615, #637), the Inspector (#659) and the Transform panel (#664) landed with wave/m1-3 (#754); menus, dialogs and live drag (#766, #747) and the Scenes and Scene objects panels (#770) landed with wave/m1-4 (#810); vertical mixer strips (#809, MX-04) are in review into wave/m1-5; the filters, the rest of the mixer and the keyboard batches are still to build. Rows that wait on the engine follow B12, V4, D9, E2b, K1, X1 and Y4, and on two gaps with no item yet: previews of any scene or source (decision register D36) and the audit log over the protocol (D38); the bundled IBM Plex fonts are a licensing call for the maintainer (WS-02)"
 needs = ["build", "wave", "maintainer"]
 
 [[item]]
 id = "B12"
 milestone = "M2"
 title = "Source sizes as runtime state (source.sizes)"
-status = "review"
-prs = [806]
-note = "ADR-0022 decision 4: the source.sizes query and source.size_changed event (#806, protocol 0.40) are in review into wave/m1-5; it unblocks crop by dragging (CV-08), size in % (IN-03) and native-size placement"
-needs = ["build", "wave"]
+status = "planned"
+prs = []
+note = "ADR-0022 decision 4, accepted and not built: the source.sizes query and source.size_changed event, a protocol bump; it unblocks crop by dragging (CV-08), size in % (IN-03) and native-size placement"
+needs = ["build"]
 
 [[item]]
 id = "C2b"
@@ -949,10 +949,10 @@ prs = [360]
 id = "Y4"
 milestone = "M3"
 title = "YouTube chat, metadata, health and audience stats"
-status = "review"
+status = "planned"
 prs = [363, 375, 594, 696]
-note = "chat reading and the featured message (#363, landed with wave/m1-2, #545); chat preset of the browser source (#375, landed with wave/m1); audience stats in jstream-youtube (#594, landed with wave/m3-2, #663); the engine's stats polling, the youtube.stats event and query, and the quota estimate (#696, protocol 0.38, in review into wave/m1-4); the chat rate waits on the engine polling chat; signed-in features need the OAuth client (ADR-0058)"
-needs = ["build", "wave", "maintainer"]
+note = "chat reading and the featured message (#363, landed with wave/m1-2, #545); chat preset of the browser source (#375, landed with wave/m1); audience stats in jstream-youtube (#594, landed with wave/m3-2, #663); the engine's stats polling, the youtube.stats event and query, and the quota estimate (#696, protocol 0.38, landed with wave/m1-4, #810); the chat rate waits on the engine polling chat; signed-in features need the OAuth client (ADR-0058)"
+needs = ["build", "maintainer"]
 
 [[item]]
 id = "CL1"
