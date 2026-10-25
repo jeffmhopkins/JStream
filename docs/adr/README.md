@@ -87,6 +87,7 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0071](0071-linux-secret-store.md) | Linux secret store: the Secret Service, else a 0600 file | accepted | maintainer |  |
 | [ADR-0072](0072-linux-media-file-decoding.md) | Linux media-file decoding: VA-API and pure Rust first, the system's FFmpeg for the gaps | accepted | maintainer |  |
 | [ADR-0073](0073-sources-drawn-at-their-shown-size.md) | Sources drawn at the size they are shown | accepted | agent |  |
+| [ADR-0074](0074-too-large-requests.md) | A too_large error for oversized requests | accepted | maintainer |  |
 | [ADR-0075](0075-wasm-plugin-host-in-the-engine.md) | The WASM plugin host runs in the engine, and a plugin's package | accepted | agent |  |
 | [ADR-0076](0076-saved-wasm-plugins-and-manifest-requests.md) | Saved WASM plugins, what a manifest asks for, and updates that need a grant | accepted | agent |  |
 <!-- @generated end adr-index -->
