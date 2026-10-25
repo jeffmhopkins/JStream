@@ -53,7 +53,8 @@ state machine. Contents:
   client, for a developer override. `YoutubeSetup::with_secret_hook` hands the
   account's client a `jstream_youtube::SecretHook`, which it calls with each token and
   stream key it gets, a `youtube` output's key included, so the host can redact them
-  from crash reports (#353). It holds one `jstream-youtube` `LiveClient`
+  from crash reports (#353). A sign-in's two tokens go to the hook as soon as the code
+  is exchanged, so even a grant that is abandoned or that the store refuses is redacted. It holds one `jstream-youtube` `LiveClient`
   (one account, its refresh token stored under the fixed opaque ID `TOKEN_ACCOUNT`, so
   no email or other personal detail names the credential) and runs the `youtube.*`
   actions and queries with no engine lock held. `youtube.sign_in` asks for the full

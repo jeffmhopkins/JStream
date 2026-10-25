@@ -1281,3 +1281,64 @@ fn the_secret_hook_sees_the_tokens_and_a_youtube_outputs_key() {
     );
     drop(block_on(control.call(output_call("live", false))));
 }
+
+/// A client a sign-in makes has the hook too: it gets the grant's two tokens, and then
+/// the key of the stream a `youtube` output publishes to.
+#[test]
+fn the_secret_hook_sees_a_sign_ins_tokens_and_its_clients_stream_key() {
+    let transport = FakeTransport::new();
+    transport
+        .respond(200, EXCHANGE)
+        .respond(200, BROADCASTS)
+        .respond(200, STREAMS)
+        .respond(200, HEALTH);
+    let seen: Arc<Mutex<Vec<String>>> = Arc::default();
+    let hook = {
+        let seen = Arc::clone(&seen);
+        Arc::new(move |secret: &str| seen.lock().expect("lock").push(secret.to_owned()))
+    };
+    let tokens = MemoryTokenStore::new();
+    let engine = Engine::new()
+        .with_backends(backends())
+        .with_draw(cpu_draw())
+        .with_youtube(setup(&transport, &tokens).with_secret_hook(hook));
+    let publish = RecordingPublish::new();
+    engine
+        .youtube()
+        .expect("youtube")
+        .set_connect(Arc::new(move |_: &str, _: &Secret| {
+            Ok(Box::new(publish.clone()) as Box<dyn LivePublish>)
+        }));
+    let control = connected(&engine);
+    let mut events = control.events();
+    let Some(ActionResult::YoutubeSignIn { url }) =
+        action(&control, Action::YoutubeSignIn).expect("signs in")
+    else {
+        panic!("no consent URL");
+    };
+    let redirect_uri = param(&url, "redirect_uri").expect("redirect_uri");
+    let state = param(&url, "state").expect("state");
+    assert_eq!(statuses(&mut events), vec![YoutubeAuth::SigningIn]);
+    redirect(
+        &redirect_uri,
+        &format!("state={state}&code=4%2Ffixture-code"),
+    );
+    assert_eq!(
+        wait_for_status(&mut events, &mut Vec::new()),
+        YoutubeAuth::SignedIn
+    );
+    {
+        let seen = seen.lock().expect("lock");
+        assert!(seen.iter().any(|s| s == "1//0gfixture-signed-in-refresh"));
+        assert!(seen.iter().any(|s| s == "ya29.a0AfH6SMfixture-access-1"));
+        assert!(!seen.iter().any(|s| s == STREAM_KEY), "no key yet");
+    }
+
+    batch(&control, edits(vec![youtube_output("dQw4w9WgXcQ")])).expect("creates");
+    block_on(control.call(output_call("live", true))).expect("output.start");
+    assert!(
+        seen.lock().expect("lock").iter().any(|s| s == STREAM_KEY),
+        "the signed-in client's key"
+    );
+    drop(block_on(control.call(output_call("live", false))));
+}

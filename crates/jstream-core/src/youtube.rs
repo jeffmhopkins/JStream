@@ -197,6 +197,15 @@ impl YoutubeSetup {
         self
     }
 
+    /// Hands a finished sign-in's two tokens to the hook, if there is one, before
+    /// anything decides whether the grant is kept, revoked or dropped.
+    fn saw_grant(&self, grant: &jstream_youtube::Grant) {
+        if let Some(hook) = &self.secret_hook {
+            hook(grant.refresh.expose());
+            hook(grant.access.secret().expose());
+        }
+    }
+
     /// `client`, with the secret hook if there is one.
     fn hooked(&self, client: LiveClient) -> LiveClient {
         match &self.secret_hook {
@@ -437,6 +446,10 @@ impl Youtube {
         generation: u64,
         outcome: Result<jstream_youtube::Grant, YoutubeError>,
     ) {
+        // Even a grant that is abandoned, or that the store refuses, is redacted.
+        if let Ok(grant) = &outcome {
+            self.setup.saw_grant(grant);
+        }
         let mut auth = lock(&self.auth);
         if auth.pending.as_ref().map(|p| p.generation) != Some(generation) {
             drop(auth);

@@ -67,7 +67,8 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   the log directory ([Design](#design)).
 - **Tests** (`serve.rs`, `token.rs`, `args.rs` and `logs.rs` unit tests, the token
   registered for redaction, and the stream key registered through the live engine's
-  `Redacting` store; the real `connect_rtmp` failing against loopback servers without
+  `Redacting` store; `set_up` registering the stored YouTube token through the setup's
+  secret hook, in `youtube.rs`; the real `connect_rtmp` failing against loopback servers without
   naming the key, through `serve::live_redacting`, in `serve.rs`; the publish opener and
   the live engine on the platform fakes, in `live.rs`; `tests/daemon.rs`, the built binary driven by
   `jstream-control`'s WebSocket client, a raw HTTP MCP client and raw HTTP UI

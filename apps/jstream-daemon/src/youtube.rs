@@ -241,4 +241,35 @@ mod tests {
         );
         assert_eq!(auth(&engine).await, YoutubeAuth::SignedOut);
     }
+
+    /// The engine's YouTube hands its tokens to the crash reports' redaction: the
+    /// store here is not `Redacting`, so only the hook can register its token (#353).
+    #[test]
+    fn set_up_registers_the_accounts_token_with_the_crash_redaction() {
+        use super::{Client, set_up};
+        use jstream_core::{Engine, TOKEN_ACCOUNT};
+        use jstream_platform::fake::MemoryTokenStore;
+        use jstream_platform::{OAuthTokenStore, Secret};
+        use jstream_youtube::fake::FakeTransport;
+        use std::sync::Arc;
+
+        const STORED: &str = "1//0gfixture-daemon-stored-refresh";
+        let tokens = MemoryTokenStore::new();
+        tokens
+            .set(TOKEN_ACCOUNT, &Secret::new(STORED))
+            .expect("stores");
+        let secrets = jstream_crash::Secrets::new();
+        assert!(!secrets.is_registered(STORED));
+        let _engine = set_up(
+            Engine::new(),
+            Client {
+                id: ID.to_owned(),
+                secret: None,
+            },
+            Arc::new(FakeTransport::new()),
+            Arc::new(tokens),
+            &secrets,
+        );
+        assert!(secrets.is_registered(STORED));
+    }
 }
