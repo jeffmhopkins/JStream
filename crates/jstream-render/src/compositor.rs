@@ -192,7 +192,11 @@ impl Compositor {
         } else {
             None
         };
-        // Last, so no error between the staging and the submit it arms (#391).
+        // Last, so no error between the staging and the submit it arms (#391), and with
+        // the queue's submit lock held until that submit, so no other thread's submit
+        // takes what was staged.
+        let lock = self.gpu.submit.clone();
+        let submitting = lock.lock();
         self.stage_sources(scene)?;
         let mut encoder = self
             .gpu
@@ -232,6 +236,7 @@ impl Compositor {
         }
         self.record_release(&mut encoder);
         self.gpu.queue.submit([encoder.finish()]);
+        drop(submitting);
         // The platform reuses a frame's texture once nothing holds it.
         self.staged.clear();
         // wgpu validates the commands as they are recorded and submitted, so an error in
@@ -321,6 +326,9 @@ impl Compositor {
             });
         }
         self.load(scene)?;
+        // The submit lock is held from staging through the submit, as in `render`.
+        let lock = self.gpu.submit.clone();
+        let submitting = lock.lock();
         self.stage_sources(scene)?;
         let mut encoder = self
             .gpu
@@ -333,6 +341,7 @@ impl Compositor {
         self.record_release(&mut encoder);
         self.gpu.queue.submit([encoder.finish()]);
         target.mark_changed();
+        drop(submitting);
         // The platform reuses a frame's texture once nothing holds it.
         self.staged.clear();
         Ok(())
@@ -372,8 +381,9 @@ impl Compositor {
 
     /// [`Self::apply_filter`] into `output`, a [`Self::layer`] of the filter's
     /// [`VideoFilter::output_size`] for `input`, replacing what it held. The layer is
-    /// reused, so a chain that runs every frame allocates no output texture (a
-    /// multi-pass kind's scratch layers are still its own). Earlier submits that read
+    /// reused, so a chain that runs every frame allocates no output texture, and a
+    /// multi-pass kind keeps its scratch layers between calls at a steady size. Earlier
+    /// submits that read
     /// `output` are ordered before this one, so they keep its old contents.
     ///
     /// # Errors
@@ -415,6 +425,8 @@ impl Compositor {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("jstream-render-filter"),
             });
+        let (pass, scratch) = filter.parts();
+        scratch.begin();
         let mut ctx = filter::Ctx {
             gpu: &self.gpu,
             maker: Maker {
@@ -427,16 +439,21 @@ impl Compositor {
             encoder: &mut encoder,
             clock,
             holds: &mut self.staged,
+            scratch,
         };
         ctx.holds.clear();
-        if let Err(err) = filter.pass_mut().encode(&mut ctx, input, output) {
+        let encoded = pass.encode(&mut ctx, input, output);
+        ctx.hold(input);
+        ctx.scratch.end();
+        if let Err(err) = encoded {
             self.staged.clear();
             return Err(err);
         }
-        ctx.hold(input);
         // Staged only once recording succeeded, right before the submit it arms, and
         // handed back to the platform at the end of that submit, as `render` does: the
         // input's hold and those of the images the filter reads besides it, each once.
+        // The submit lock is held from staging through the submit, as in `render`.
+        let submitting = self.gpu.submit.lock();
         for (sync, _) in &self.staged {
             if let Err(err) = sync.stage(&self.gpu.queue) {
                 self.staged.clear();
@@ -445,6 +462,7 @@ impl Compositor {
         }
         self.record_release(&mut encoder);
         self.gpu.queue.submit([encoder.finish()]);
+        drop(submitting);
         // The platform reuses a frame's texture once nothing holds it.
         self.staged.clear();
         Ok(())
@@ -469,6 +487,12 @@ impl Compositor {
     /// The queue [`Self::render`] submits to.
     pub fn queue(&self) -> &wgpu::Queue {
         &self.gpu.queue
+    }
+
+    /// The lock held from staging a platform frame through the submit it arms on
+    /// [`Self::queue`]: the context's on a platform context, else the compositor's own.
+    pub(crate) fn submit_lock(&self) -> &jstream_platform::SubmitLock {
+        &self.gpu.submit
     }
 
     /// The adapter the device was opened on.
@@ -529,6 +553,7 @@ impl Compositor {
             max_buffer_size: self.gpu.max_buffer_size,
             context: self.gpu.context.clone(),
             faults: Arc::clone(&self.gpu.faults),
+            submit: self.gpu.submit.clone(),
         })
     }
 
@@ -612,12 +637,8 @@ impl Compositor {
                     detail: format!("{} is not a finite value in 0..=1", item.opacity),
                 });
             }
-            let mut shape = place::shape(
-                item.image.width(),
-                item.image.height(),
-                item.placement,
-                item.crop,
-            )?;
+            let (width, height) = item.image.extent();
+            let mut shape = place::shape(width, height, item.placement, item.crop)?;
             if !item.visible || item.opacity == 0.0 {
                 continue;
             }
@@ -635,9 +656,12 @@ impl Compositor {
             // mapped from the source's into the chain's.
             let mips = shape.is_3d().then(|| {
                 let image = item.image;
-                let region = shape
-                    .crop
-                    .unwrap_or_else(|| Region::whole(image.width(), image.height()));
+                let texels = (image.width(), image.height());
+                // The crop counts in the extent; the chain is built from texels.
+                let region = shape.crop.map_or_else(
+                    || Region::whole(texels.0, texels.1),
+                    |crop| crop.in_texels(image.extent(), texels),
+                );
                 let chain = self.chain_of(image, region);
                 let (w, h) = (image.width() as f32, image.height() as f32);
                 shape.remap_uv([

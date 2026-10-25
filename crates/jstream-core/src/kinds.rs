@@ -52,4 +52,21 @@ mod tests {
             assert!(kinds.contains(&kind), "{}", kind.kind_id);
         }
     }
+
+    /// Every built-in kind's descriptor, as `kind.list` serves it, snapshot-tested
+    /// (ADR-0025, "Kinds get their own snapshot"; #635): adding or changing a kind changes
+    /// no protocol schema, so this diff is where the audio filter kinds' settings, which
+    /// no other crate snapshots, are reviewed like an API. Regenerate it with
+    /// `INSTA_UPDATE=always cargo test -p jstream-core --lib kinds`.
+    #[test]
+    fn builtin_kinds_snapshot() {
+        let kinds = serde_json::to_string_pretty(&builtin()).expect("descriptors serialize");
+        insta::with_settings!({
+            snapshot_path => "../schema",
+            prepend_module_to_snapshot => false,
+            omit_expression => true,
+        }, {
+            insta::assert_snapshot!("kinds", kinds);
+        });
+    }
 }

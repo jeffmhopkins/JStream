@@ -248,8 +248,11 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   the call and its edits by name, the output an action names, the `rev` before and
   after, and the result code. Never a call's arguments, so never a stream key
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). When it would pass 8 MiB it becomes
-  `audit.1.jsonl`, replacing the one before. A log that can't be opened is a startup
-  failure (exit 1).
+  `audit.1.jsonl`, replacing the one before. Both files are created user-only (mode
+  `0600` on Unix, a protected DACL for SYSTEM and the user on Windows), and so is each
+  save of the collection file. A log that can't be opened is a startup failure (exit 1),
+  and so, on Windows, is an existing `audit.jsonl` whose owner or DACL lets anyone but
+  you, SYSTEM or Administrators in; the error says why.
 
 | Exit code | Meaning |
 |---|---|
@@ -285,8 +288,9 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   starts. A `jstream-clap-scan` thread then scans the CLAP plugins with
   `WindowsPluginHosts` (`Engine::scan_clap_plugins`), so they appear in `kind.list` as
   audio-filter kinds once found, and logs each file it couldn't scan; the daemon
-  serves meanwhile. Without `jstream-plugin-host.exe` beside the daemon every file
-  fails to scan, and is logged.
+  serves meanwhile. The engine keeps the hosts, and from then on starts a
+  `jstream-plugin-host.exe` for each CLAP filter in a source's audio chain. Without
+  `jstream-plugin-host.exe` beside the daemon every file fails to scan, and is logged.
 - **Live on macOS** (`serve.rs`). Under `cfg(target_os = "macos")` the engine gets
   the `jstream-platform-macos` backends built so far (`macos_backends`):
   - `MachClock`, `ScreenCaptureKitCapture`, `AvFoundationVideoDevices`, `CoreAudioIo`,

@@ -43,6 +43,35 @@ impl Region {
         }
     }
 
+    /// The region, given in an image's extent (the size it is placed at, ADR-0073), in
+    /// its texels: an image drawn with more pixels than its extent has more texels per
+    /// source pixel. Widened outwards to whole texels and kept inside the texture, so the
+    /// chain holds every texel the crop shows.
+    pub(crate) fn in_texels(self, extent: (u32, u32), texels: (u32, u32)) -> Self {
+        if extent == texels {
+            return self;
+        }
+        let span = |start: u32, len: u32, from: u32, to: u32| {
+            let (from, to) = (u64::from(from.max(1)), u64::from(to.max(1)));
+            let first = u64::from(start) * to / from;
+            let end = (u64::from(start) + u64::from(len)) * to;
+            let end = end.div_ceil(from).min(to);
+            let first = first.min(to - 1);
+            // Both fit in u32: they are at most `to`, a u32.
+            let first = u32::try_from(first).unwrap_or(u32::MAX);
+            let end = u32::try_from(end).unwrap_or(u32::MAX);
+            (first, end.saturating_sub(first).max(1))
+        };
+        let (x, width) = span(self.x, self.width, extent.0, texels.0);
+        let (y, height) = span(self.y, self.height, extent.1, texels.1);
+        Self {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+
     /// The region's `[u, v, width, height]` in the source's texture coordinates.
     fn uv(self, source_width: u32, source_height: u32) -> [f32; 4] {
         let (w, h) = (source_width as f32, source_height as f32);
@@ -354,7 +383,61 @@ impl Mips {
 
 #[cfg(test)]
 mod tests {
-    use super::level_count;
+    use super::{Region, level_count};
+
+    #[test]
+    fn a_region_in_the_extent_maps_onto_the_texels() {
+        let crop = Region {
+            x: 10,
+            y: 5,
+            width: 20,
+            height: 10,
+        };
+        // Same size: unchanged.
+        assert_eq!(crop.in_texels((100, 50), (100, 50)), crop);
+        // Drawn at twice the extent: every edge doubles.
+        assert_eq!(
+            crop.in_texels((100, 50), (200, 100)),
+            Region {
+                x: 20,
+                y: 10,
+                width: 40,
+                height: 20
+            }
+        );
+        // At 1.5 times, widened outwards to whole texels.
+        assert_eq!(
+            Region {
+                x: 1,
+                y: 1,
+                width: 1,
+                height: 1
+            }
+            .in_texels((3, 3), (4, 4)),
+            Region {
+                x: 1,
+                y: 1,
+                width: 2,
+                height: 2
+            }
+        );
+        // Never past the texture.
+        assert_eq!(
+            Region {
+                x: 99,
+                y: 49,
+                width: 1,
+                height: 1
+            }
+            .in_texels((100, 50), (150, 75)),
+            Region {
+                x: 148,
+                y: 73,
+                width: 2,
+                height: 2
+            }
+        );
+    }
 
     #[test]
     fn a_chain_goes_down_to_one_texel() {

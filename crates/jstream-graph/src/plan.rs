@@ -11,7 +11,7 @@ use crate::deps::{self, Node};
 use crate::model::Graph;
 use jstream_protocol::{
     DeleteTarget, Edit, EntityKind, FilterId, FilterOwner, HotkeyBinding, ItemId, MixInput,
-    ProtocolError, QueryResult, Settings, SourceId, SourceKind, VideoMix, VideoMixId,
+    ProtocolError, QueryResult, SceneId, Settings, SourceId, SourceKind, VideoMix, VideoMixId,
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -21,7 +21,8 @@ impl Graph {
     /// at the current revision. Applied as one batch with that `expected_rev`, they
     /// succeed. Fails with `not_found` if the target doesn't exist.
     ///
-    /// Deleting a scene also deletes the `scene` sources that show it. Deleting a source
+    /// Deleting a scene also deletes its keyframe scenes and the `scene` sources that show
+    /// it or them. Deleting a source
     /// never deletes a scene, so the cascade stops there. A bus is held only by settings
     /// values, which the plan clears; `bus.delete` takes its sends itself. The edits are, in order:
     /// - `item.remove` for each item that places a deleted source;
@@ -29,8 +30,9 @@ impl Graph {
     ///   object, setting each such parameter to `null`;
     /// - one `filter.set_settings` per remaining filter whose settings do, likewise;
     /// - `source.delete` for each `scene` source that shows a deleted scene;
-    /// - `video_mix.update` for each video mix that shows the deleted scene, keeping its
+    /// - `video_mix.update` for each video mix that shows a deleted scene, keeping its
     ///   name, resolution and rate and showing the program instead;
+    /// - `scene.delete` for each keyframe scene of a deleted scene;
     /// - the delete of the target.
     ///
     /// It also lists, ordered by chord, the hotkey bindings those deletes remove.
@@ -106,9 +108,17 @@ impl Graph {
         // show it. Those are leaves: deleting a source deletes nothing further.
         let mut deleted = vec![target.clone()];
         let mut shown_by = Vec::new();
+        let mut variants = Vec::new();
         if let Node::Scene(scene_id) = &target {
+            // A keyframe scene goes with its parent (ADR-0024 §2): it has no items of its
+            // own, so it is a leaf like a `scene` source.
+            variants.extend(state.variants_of(scene_id).map(|v| v.id.clone()));
+            let scenes: Vec<SceneId> = std::iter::once(scene_id.clone())
+                .chain(variants.iter().cloned())
+                .collect();
+            deleted.extend(variants.iter().cloned().map(Node::Scene));
             for source in state.sources() {
-                if matches!(&source.kind, SourceKind::Scene { scene_id: s } if s == scene_id) {
+                if matches!(&source.kind, SourceKind::Scene { scene_id: s } if scenes.contains(s)) {
                     shown_by.push(source.id.clone());
                     deleted.push(Node::Source(source.id.clone()));
                 }
@@ -127,6 +137,10 @@ impl Graph {
                 }
                 if blocker.entity == EntityKind::VideoMix {
                     repoints.push(VideoMixId::new(blocker.id));
+                    continue;
+                }
+                // A keyframe scene, already in `variants`.
+                if blocker.entity == EntityKind::Scene {
                     continue;
                 }
                 let source_id = SourceId::new(blocker.id);
@@ -187,6 +201,11 @@ impl Graph {
                 mix_id,
             })
         }));
+        edits.extend(
+            variants
+                .into_iter()
+                .map(|scene_id| Edit::SceneDelete { scene_id }),
+        );
         edits.push(last);
         let hotkeys = state
             .hotkeys()
@@ -220,7 +239,7 @@ fn not_found(entity: EntityKind, id: &str) -> ProtocolError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use jstream_protocol::{Rev, SceneId};
+    use jstream_protocol::Rev;
 
     #[test]
     fn a_missing_target_is_not_found() {

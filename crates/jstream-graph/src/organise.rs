@@ -50,7 +50,7 @@ pub(crate) fn apply(
         Edit::SceneSetFolder {
             scene_id,
             folder_id,
-        } => set_folder(state, scene_id, folder_id.as_ref()),
+        } => set_folder(state, scene_id, folder_id.as_ref(), at),
         Edit::SceneSetMeta { scene_id, meta } => set_scene_meta(state, scene_id, meta, at),
         Edit::LabelCreate {
             label_id,
@@ -320,6 +320,7 @@ fn set_folder(
     state: &mut State,
     scene_id: &SceneId,
     folder_id: Option<&FolderId>,
+    at: usize,
 ) -> Result<Vec<Edit>, ProtocolError> {
     let si = state
         .scene_index(scene_id)
@@ -327,8 +328,16 @@ fn set_folder(
     if let Some(folder_id) = folder_id {
         folder_index(state, folder_id)?;
     }
-    // Variants, which sit under their parent and never in a folder (ADR-0024 §3), don't
-    // exist yet; once they do, this refuses them.
+    // A keyframe scene sits under its parent, never in a folder (ADR-0024 §3).
+    if let Some(parent) = &state.scenes[si].variant_of {
+        return Err(invalid(
+            at,
+            "scene_id",
+            format!(
+                "scene `{scene_id}` is a keyframe scene of `{parent}` and sits under it, not in a folder"
+            ),
+        ));
+    }
     let old = std::mem::replace(&mut state.scenes[si].folder, folder_id.cloned());
     Ok(vec![Edit::SceneSetFolder {
         scene_id: scene_id.clone(),

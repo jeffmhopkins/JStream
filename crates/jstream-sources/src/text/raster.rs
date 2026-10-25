@@ -14,8 +14,20 @@ use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::{FontRef, GlyphId, MetadataProvider};
 use std::ops::Range;
 
-/// Lays `text` out with `style` in `font`, then draws it. Returns the frame's size and
-/// its packed RGBA8 pixels, straight alpha.
+/// What [`render`] draws.
+pub(crate) struct Drawn {
+    /// The frame's size in pixels.
+    pub(crate) size: FrameSize,
+    /// The size the frame stands for: its size at a density of 1, which it is placed at
+    /// (ADR-0073).
+    pub(crate) extent: FrameSize,
+    /// Packed RGBA8, straight alpha.
+    pub(crate) rgba: Vec<u8>,
+}
+
+/// Lays `text` out with `style` in `font`, then draws it `density` times as many pixels
+/// each way as `style` sizes it: the layout, its line breaks and the frame's own size
+/// (its [`Drawn::extent`]) are the same at any density, and only the drawing is finer.
 ///
 /// # Errors
 /// [`SourceError::Setting`] naming `text` when the drawn text would be larger than
@@ -24,8 +36,10 @@ pub(crate) fn render(
     font: &FontRef<'_>,
     text: &str,
     style: &Style,
+    density: f32,
     limits: &Limits,
-) -> Result<(FrameSize, Vec<u8>), SourceError> {
+) -> Result<Drawn, SourceError> {
+    let k = density;
     // `size` is the em size in pixels, which is skrifa's pixels per em.
     let size = Size::new(style.size);
     let metrics = font.metrics(size, LocationRef::default());
@@ -60,47 +74,65 @@ pub(crate) fn render(
     let box_width = wrap.unwrap_or(widest);
     let box_height = line_height + line_step * (lines.len().saturating_sub(1)) as f32;
     let outlines = font.outline_glyphs();
-    let mut glyphs = Vec::new();
-    for (i, (line, width)) in lines.into_iter().enumerate() {
-        let offset = match style.align {
-            Align::Left => 0.0,
-            Align::Center => (box_width - width) / 2.0,
-            Align::Right => box_width - width,
-        };
-        let baseline = metrics.ascent + line_step * i as f32;
-        for (id, x) in line {
-            let mut pen = Pen::new(x + offset, baseline);
-            // A glyph with no outline (a space) or one the font can't draw adds no ink.
-            let drawn = outlines.get(id).map(|g| {
-                g.draw(
-                    DrawSettings::unhinted(size, LocationRef::default()),
-                    &mut pen,
-                )
-            });
-            if matches!(drawn, Some(Ok(_))) {
-                pen.close();
-                if !pen.segments.is_empty() {
-                    glyphs.push(pen);
+    // Every glyph's outline, placed, at a density `d`: positions and the em size scaled
+    // alike.
+    let pens = |d: f32| {
+        let mut glyphs = Vec::new();
+        for (i, (line, width)) in lines.iter().enumerate() {
+            let offset = match style.align {
+                Align::Left => 0.0,
+                Align::Center => (box_width - width) / 2.0,
+                Align::Right => box_width - width,
+            };
+            let baseline = metrics.ascent + line_step * i as f32;
+            for &(id, x) in line {
+                let mut pen = Pen::new((x + offset) * d, baseline * d);
+                // A glyph with no outline (a space) or one the font can't draw adds no
+                // ink.
+                let drawn = outlines.get(id).map(|g| {
+                    g.draw(
+                        DrawSettings::unhinted(Size::new(style.size * d), LocationRef::default()),
+                        &mut pen,
+                    )
+                });
+                if matches!(drawn, Some(Ok(_))) {
+                    pen.close();
+                    if !pen.segments.is_empty() {
+                        glyphs.push(pen);
+                    }
                 }
             }
         }
-    }
+        glyphs
+    };
+    // The bounds come from the outlines at a density of 1, so the extent is the frame's
+    // size at 1 whatever the density: dividing the dense bounds back by it can land a
+    // pixel over (review B1 on #781).
+    let plain = pens(1.0);
+    let dense = (k != 1.0).then(|| pens(k));
 
     // The frame holds the text box with its padding, and every glyph's ink with the
-    // outline around it, which may reach past the box.
+    // outline around it, which may reach past the box. Its bounds are whole pixels at a
+    // density of 1, its extent, and the drawing covers them `k` times over.
     let pad = style.padding as f32;
     let reach = style.outline_width as f32;
     let (mut left, mut top) = (-pad, -pad);
     let (mut right, mut bottom) = (box_width + pad, box_height + pad);
-    for glyph in &glyphs {
+    for glyph in &plain {
         left = left.min(glyph.min.x - reach);
         top = top.min(glyph.min.y - reach);
         right = right.max(glyph.max.x + reach);
         bottom = bottom.max(glyph.max.y + reach);
     }
     let (left, top) = (left.floor(), top.floor());
-    let width = side(right.ceil() - left, limits)?;
-    let height = side(bottom.ceil() - top, limits)?;
+    let extent = FrameSize::new(
+        side(right.ceil() - left, limits)?,
+        side(bottom.ceil() - top, limits)?,
+    )?;
+    let width = side((extent.width() as f32 * k).ceil(), limits)?;
+    let height = side((extent.height() as f32 * k).ceil(), limits)?;
+    let (left, top) = (left * k, top * k);
+    let reach = reach * k;
     // The output and the fill coverage, and with an outline its distance field. The
     // distance transform's working rows and each glyph's raster are smaller.
     let per_pixel: u64 = if style.outline_width > 0 { 12 } else { 8 };
@@ -111,7 +143,7 @@ pub(crate) fn render(
     let (w, h) = (width as usize, height as usize);
 
     let mut fill = vec![0f32; w * h];
-    for glyph in &glyphs {
+    for glyph in dense.as_ref().unwrap_or(&plain) {
         glyph.draw(&mut fill, w, h, point(left, top));
     }
     let outline = (style.outline_width > 0).then(|| outline(&fill, w, h, reach));
@@ -126,7 +158,11 @@ pub(crate) fn render(
         px = over(premultiplied(style.color, coverage), px);
         rgba.extend_from_slice(&straight(px));
     }
-    Ok((FrameSize::new(width, height)?, rgba))
+    Ok(Drawn {
+        size: FrameSize::new(width, height)?,
+        extent,
+        rgba,
+    })
 }
 
 /// Splits one paragraph's glyphs (ID, advance, whether it is a space) into lines no
@@ -223,10 +259,14 @@ impl Pen {
     /// Rasterises the glyph and adds its coverage to `fill`, a `w` by `h` frame whose
     /// top left is at `frame` in layout pixels.
     fn draw(&self, fill: &mut [f32], w: usize, h: usize, frame: Point) {
-        // Whole pixels, so each raster pixel lands on one frame pixel.
-        let corner = point(self.min.x.floor(), self.min.y.floor());
-        let gw = (self.max.x.ceil() - corner.x) as usize;
-        let gh = (self.max.y.ceil() - corner.y) as usize;
+        // Whole pixels from the frame's corner, which a density puts between pixels,
+        // so each raster pixel lands on one frame pixel.
+        let corner = point(
+            (self.min.x - frame.x).floor() + frame.x,
+            (self.min.y - frame.y).floor() + frame.y,
+        );
+        let gw = (self.max.x - corner.x).ceil() as usize;
+        let gh = (self.max.y - corner.y).ceil() as usize;
         if gw == 0 || gh == 0 {
             // A flat outline covers nothing.
             return;
@@ -242,10 +282,17 @@ impl Pen {
                 }
             }
         }
-        let (gx, gy) = ((corner.x - frame.x) as usize, (corner.y - frame.y) as usize);
+        // Signed: a dense glyph's ink may start a rounding error before the frame.
+        let (gx, gy) = (
+            (corner.x - frame.x).round() as i64,
+            (corner.y - frame.y).round() as i64,
+        );
         raster.for_each_pixel_2d(|x, y, c| {
-            let (x, y) = (gx + x as usize, gy + y as usize);
-            if x < w && y < h {
+            let (x, y) = (gx + i64::from(x), gy + i64::from(y));
+            if let (Ok(x), Ok(y)) = (usize::try_from(x), usize::try_from(y))
+                && x < w
+                && y < h
+            {
                 let cell = &mut fill[y * w + x];
                 // Overlapping contours can take one glyph's coverage past 1.
                 *cell = (*cell + c).min(1.0);

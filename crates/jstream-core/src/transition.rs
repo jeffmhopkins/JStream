@@ -10,6 +10,8 @@
 //! [`Track`] per item in drawing order: everything leaving first, then the new scene
 //! bottom to top. `move` pairs items placing the same source, the k-th placement with the
 //! k-th in stacking order, unless either one's glide is `never`; `fade` pairs nothing.
+//! Between two members of one family (a scene and its keyframe scenes, ADR-0049 §3),
+//! `move` pairs by item instead: each item with itself on the other side.
 //! Everything else appears or disappears with its effect. The render thread only samples
 //! the tracks (R-RT-002).
 
@@ -18,8 +20,8 @@ use std::sync::Arc;
 use jstream_graph::Graph;
 use jstream_media::MediaTime;
 use jstream_protocol::{
-    Easing, EntityKind, FADE, Glide, ItemTransition, MOVE, ProtocolError, SceneId, SourceId,
-    TransitionEffect, TransitionPresetId, TransitionStarted,
+    Easing, EntityKind, FADE, Glide, ItemId, ItemTransition, MOVE, ProtocolError, SceneId,
+    SourceId, TransitionEffect, TransitionPresetId, TransitionStarted,
 };
 use jstream_render::transition::{Effect, Endpoint, Timing, Track};
 
@@ -95,6 +97,8 @@ pub(crate) fn resolve(
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Visual {
     pub(crate) image: SourceRef,
+    /// The item it draws, which pairing within a family matches.
+    pub(crate) item_id: ItemId,
     /// The source the item places, which pairing matches.
     pub(crate) source_id: SourceId,
     pub(crate) at: Endpoint,
@@ -119,6 +123,9 @@ pub(crate) struct Running {
     /// When it started, on the media clock.
     pub(crate) start: MediaTime,
     pub(crate) run: Run,
+    /// Whether it switches between members of one family, so `move` pairs by item
+    /// (ADR-0049 §3).
+    pub(crate) by_item: bool,
 }
 
 impl Running {
@@ -171,10 +178,11 @@ fn effect(effect: TransitionEffect, unmatched: TransitionEffect) -> Effect {
 /// `run` says, and returns the tracks in drawing order: the items leaving, then the new
 /// scene's.
 ///
-/// An item's progress starts after its delay plus, for the new scene's items,
+/// With `by_item`, the sides are members of one family and pair by item ID; otherwise
+/// by source. An item's progress starts after its delay plus, for the new scene's items,
 /// `stagger_ms` × its index; a pair follows the new item's settings. The transition ends
 /// when its last item does.
-pub(crate) fn plan(from: &[Visual], to: &[Visual], run: &Run) -> Planned {
+pub(crate) fn plan(from: &[Visual], to: &[Visual], run: &Run, by_item: bool) -> Planned {
     let duration_ms = run.duration_ms as f32;
     let timing = |settings: &ItemTransition, delay_ms: f32| Timing {
         delay_ms,
@@ -188,7 +196,12 @@ pub(crate) fn plan(from: &[Visual], to: &[Visual], run: &Run) -> Planned {
         let partner = (run.pairs && item.settings.glide == Glide::Auto)
             .then(|| {
                 from.iter().enumerate().position(|(j, f)| {
-                    !used[j] && f.source_id == item.source_id && f.settings.glide == Glide::Auto
+                    let same = if by_item {
+                        f.item_id == item.item_id
+                    } else {
+                        f.source_id == item.source_id
+                    };
+                    !used[j] && same && f.settings.glide == Glide::Auto
                 })
             })
             .flatten();
@@ -245,15 +258,21 @@ mod tests {
     use super::{Planned, Run, Visual, plan};
     use crate::snapshot::SourceRef;
     use jstream_protocol::{
-        Easing, Glide, ItemGeometry, ItemTransition, Size, SourceId, TransitionEffect,
+        Easing, Glide, ItemGeometry, ItemId, ItemTransition, Size, SourceId, TransitionEffect,
         TransitionPresetId, Vec2,
     };
     use jstream_render::Crop;
     use jstream_render::transition::{Effect, Endpoint, Track};
 
     fn visual(source: &str, x: f32) -> Visual {
+        item(&format!("{source}_{x}"), source, x)
+    }
+
+    /// `item_id` placing `source` at `x`.
+    fn item(item_id: &str, source: &str, x: f32) -> Visual {
         Visual {
             image: SourceRef::Frame(SourceId::new(source)),
+            item_id: ItemId::new(item_id),
             source_id: SourceId::new(source),
             at: Endpoint {
                 geometry: ItemGeometry::try_new(
@@ -299,7 +318,7 @@ mod tests {
     fn move_pairs_the_kth_placement_of_a_source_with_the_kth() {
         let from = [visual("cam", 0.0), visual("logo", 1.0), visual("cam", 2.0)];
         let to = [visual("cam", 10.0), visual("bg", 11.0)];
-        let planned = plan(&from, &to, &run(true));
+        let planned = plan(&from, &to, &run(true), false);
         assert_eq!(
             kinds(&planned),
             [
@@ -327,13 +346,13 @@ mod tests {
         let from = [visual("cam", 0.0)];
         let to = [visual("cam", 10.0)];
         assert_eq!(
-            kinds(&plan(&from, &to, &run(false))),
+            kinds(&plan(&from, &to, &run(false), false)),
             [("cam".into(), "disappear"), ("cam".into(), "appear")]
         );
         let mut never = visual("cam", 10.0);
         never.settings.glide = Glide::Never;
         assert_eq!(
-            kinds(&plan(&from, &[never], &run(true))),
+            kinds(&plan(&from, &[never], &run(true), false)),
             [("cam".into(), "disappear"), ("cam".into(), "appear")]
         );
     }
@@ -344,15 +363,48 @@ mod tests {
         let to = [visual("cam", 100.0)];
         let mut linear = run(true);
         linear.stagger_ms = 0;
-        let planned = plan(&from, &to, &linear);
+        let planned = plan(&from, &to, &linear, false);
         let on_screen = planned.on_screen(250.0, [1920.0, 1080.0]);
         assert_eq!(on_screen.len(), 1);
         assert_eq!(on_screen[0].at.geometry.center.x.get(), 50.0);
         // Going back pairs the half-way item with the original one.
-        let back = plan(&on_screen, &from, &linear);
+        let back = plan(&on_screen, &from, &linear, false);
         let Track::Pair { from: start, .. } = back.tracks[0].1 else {
             panic!("not paired");
         };
         assert_eq!(start.geometry.center.x.get(), 50.0);
+    }
+
+    #[test]
+    fn within_a_family_move_pairs_each_item_with_itself() {
+        // `cam` is placed twice; the keyframe swaps the two placements' positions.
+        let from = [item("a", "cam", 0.0), item("b", "cam", 50.0)];
+        let to = [item("b", "cam", 0.0), item("a", "cam", 50.0)];
+        let planned = plan(&from, &to, &run(true), true);
+        let moves: Vec<(String, f32, f32)> = planned
+            .tracks
+            .iter()
+            .map(|(visual, track)| {
+                let Track::Pair { from, to, .. } = track else {
+                    panic!("not paired: {track:?}");
+                };
+                let x = |e: &Endpoint| e.geometry.center.x.get();
+                (visual.item_id.to_string(), x(from), x(to))
+            })
+            .collect();
+        // By item, each placement moves to where the keyframe puts it; by source the
+        // k-th would pair with the k-th and neither would move.
+        assert_eq!(moves, [("b".into(), 50.0, 0.0), ("a".into(), 0.0, 50.0)]);
+        let by_source = plan(&from, &to, &run(true), false);
+        let Track::Pair { from: start, .. } = by_source.tracks[0].1 else {
+            panic!("not paired");
+        };
+        assert_eq!(start.geometry.center.x.get(), 0.0);
+        // An item hidden on one side appears or disappears.
+        let planned = plan(&from[..1], &to, &run(true), true);
+        assert_eq!(
+            kinds(&planned),
+            [("cam".into(), "appear"), ("cam".into(), "pair")]
+        );
     }
 }

@@ -40,7 +40,7 @@
 use std::any::Any;
 use std::collections::BTreeMap;
 use std::panic::{self, AssertUnwindSafe};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock, PoisonError, Weak};
 use std::thread::{self, JoinHandle};
@@ -48,8 +48,8 @@ use std::time::{Duration, Instant};
 
 use jstream_audio::{BusControl, Mixer, MixerConfig, OutputTapId};
 use jstream_encode::{
-    AudioInput, AudioSession, PushError, SessionOptions, SessionRegistry, SessionStats, StreamEnd,
-    SubscriberStats, Subscription, VideoInput, VideoPath, VideoSession,
+    AudioInput, AudioSession, EncodeError, PushError, SessionOptions, SessionRegistry,
+    SessionStats, StreamEnd, SubscriberStats, Subscription, VideoInput, VideoPath, VideoSession,
 };
 use jstream_media::{
     AudioBuffer, AudioFormat, ChannelLayout, Codec, ColorInfo, ColorRange, ColorSpace, FrameSize,
@@ -57,9 +57,9 @@ use jstream_media::{
 };
 use jstream_platform::wgpu;
 use jstream_platform::{
-    AudioEncoderConfig, AudioIo, Backends, Capture, Codecs, GpuContext, GpuFrame, GpuInterop,
-    HardwarePreference, MediaClock, RateControl, VcamFormat, VideoDevices, VideoEncoderConfig,
-    VideoSurface,
+    AudioEncoderConfig, AudioIo, Backends, Capture, CodecRole, Codecs, GpuContext, GpuFrame,
+    GpuInterop, HardwarePreference, MediaClock, RateControl, VcamFormat, VideoDevices,
+    VideoEncoderConfig, VideoSurface,
 };
 use jstream_protocol::{
     EncoderProfile, EncoderProfileId, HardwarePreference as ProfileHardware, OutputId, OutputKind,
@@ -561,10 +561,10 @@ pub(crate) struct Program {
     gpu_captures: Arc<AtomicU64>,
     gpu_fallbacks: Arc<AtomicU64>,
     gpu_losses: Arc<AtomicU64>,
-    /// Set by the render thread once it leaves the platform's context (a fallback or a
-    /// lost device), and never cleared: from then on a new video session opens on the
-    /// CPU path, since the render thread has no encode targets for it (#699).
-    off_context: Arc<AtomicBool>,
+    /// Whether a new video session may open on the platform's context: shut by the
+    /// render thread once it leaves it (#699), and claimed by each session that opens on
+    /// the GPU path until the thread has its tap (#733).
+    gpu_gate: Arc<GpuGate>,
     /// The mixer's inputs, one per audio source, and the thread that follows the
     /// collection. Closed in `drop` once the mixer thread has stopped. Behind a lock
     /// only so the program can be shared.
@@ -600,12 +600,14 @@ impl Program {
                 divisor: key.0.divisor,
                 owner: key.0.owner.clone(),
             };
-            let video = Arc::new(open_video(
-                self.codecs.as_ref(),
-                self.session_context(),
-                &feed,
-                &key.2,
-            )?);
+            // The claim keeps the render thread on the context until it has this
+            // session's tap, so a fallback can't land between the open and the attach.
+            let mut claim = self.context.as_ref().and_then(|_| self.gpu_gate.claim());
+            let context = claim.as_ref().and(self.context.as_deref());
+            let video = Arc::new(open_video(self.codecs.as_ref(), context, &feed, &key.2)?);
+            if *video.path() != VideoPath::Gpu {
+                claim = None;
+            }
             let ids = vec![engine.add_drop_source(VideoEncodeDrops::new(Arc::clone(&video)))];
             Ok(Encoders {
                 key,
@@ -613,19 +615,10 @@ impl Program {
                 video,
                 audio: Mutex::new(None),
                 attached: AtomicBool::new(false),
+                claim: Mutex::new(claim),
                 drop_guard: Some(DropGuard::new(engine.drop_ledger(), ids)),
             })
         })
-    }
-
-    /// The context a new video session may open on: none once the render thread has
-    /// left it, so a session opened after a fallback reads back on the CPU path instead
-    /// of asking for encode targets the render thread can't give, which would fail every
-    /// output on the stage (#699).
-    fn session_context(&self) -> Option<&GpuContext> {
-        self.context
-            .as_deref()
-            .filter(|_| !self.off_context.load(Ordering::Acquire))
     }
 
     /// The master bus's audio encode on `encoders`, shared by every output on them
@@ -685,6 +678,7 @@ impl Program {
         let tap = VideoTap {
             input: encoders.video.input(),
             gpu: *encoders.video.path() == VideoPath::Gpu,
+            claim: lock(&encoders.claim).take(),
         };
         let _ = self.video_taps.send((encoders.feed.clone(), tap));
     }
@@ -883,6 +877,9 @@ pub(crate) struct Encoders {
     audio: Mutex<Option<AudioEncode>>,
     /// Whether the render thread feeds the video yet.
     attached: AtomicBool,
+    /// A GPU-path session's claim on the context, until [`Program::attach`] hands it to
+    /// the render thread with the tap. Dropped with the encoders if never attached.
+    claim: Mutex<Option<GpuClaim>>,
     drop_guard: Option<DropGuard>,
 }
 
@@ -1362,7 +1359,7 @@ impl Nv12Passes {
                 }
             }
         };
-        converter.submit(compositor.queue(), &self.passes[at].2, frame)
+        converter.submit(compositor, &self.passes[at].2, frame)
     }
 }
 
@@ -1480,7 +1477,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
     let gpu_captures = Arc::new(AtomicU64::new(0));
     let gpu_fallbacks = Arc::new(AtomicU64::new(0));
     let gpu_losses = Arc::new(AtomicU64::new(0));
-    let off_context = Arc::new(AtomicBool::new(false));
+    let gpu_gate = Arc::new(GpuGate::default());
     let failures = Arc::new(Failures::default());
     let (ready_tx, ready_rx) = mpsc::channel();
     let (video_taps, video_inputs) = mpsc::channel();
@@ -1523,7 +1520,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             gpu_captures: Arc::clone(&gpu_captures),
             gpu_fallbacks: Arc::clone(&gpu_fallbacks),
             gpu_losses: Arc::clone(&gpu_losses),
-            off_context: Arc::clone(&off_context),
+            gpu_gate: Arc::clone(&gpu_gate),
             drops: capture_drops.clone(),
             fail: fail_tx.clone(),
         };
@@ -1582,7 +1579,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         gpu_captures,
         gpu_fallbacks,
         gpu_losses,
-        off_context,
+        gpu_gate,
         audio: Mutex::new(audio),
         capture_drops,
         bus,
@@ -1900,11 +1897,82 @@ fn gpu_capture(capture: &dyn Capture, context: &GpuContext) -> Option<Arc<dyn Ca
 }
 
 /// The codec `profile` encodes video in. HEVC and AV1 map here once the protocol's
-/// `VideoCodec` names them; the encoders (`MfCodecs`) and the FLV sink already take them.
+/// `VideoCodec` names them; the encoders (`MfCodecs`) and the FLV sink already take them,
+/// and [`check_video_encoder`] already names the ones a platform lacks.
 fn video_codec(profile: &EncoderProfile) -> Result<Codec, String> {
     match profile.video.codec {
         VideoCodec::H264 => Ok(Codec::H264),
         _ => Err("the encoder profile's video codec is not one this engine knows".into()),
+    }
+}
+
+/// A codec's name in a message.
+fn codec_name(codec: Codec) -> &'static str {
+    match codec {
+        Codec::H264 => "H.264",
+        Codec::Hevc => "HEVC",
+        Codec::Av1 => "AV1",
+        Codec::Aac => "AAC",
+        _ => "this codec",
+    }
+}
+
+/// Why opening a video encoder for `config` failed with `err`, as `output.start`
+/// reports it. A missing component keeps the platform's own error, whose remedy (a
+/// driver package, the OpenH264 download) says more than any list could (ADR-0060 §6).
+/// Otherwise, when the platform's encoder list explains the failure, that names what the
+/// machine lacks ([`check_video_encoder`]), with the open's own error logged, and else
+/// the open's error stands.
+fn video_open_failure(
+    codecs: &dyn Codecs,
+    config: &VideoEncoderConfig,
+    err: &EncodeError,
+) -> String {
+    let opening = format!("opening the video encoder: {err}");
+    if matches!(
+        err,
+        EncodeError::Open(jstream_platform::PlatformError::MissingComponent { .. })
+    ) {
+        return opening;
+    }
+    match check_video_encoder(codecs, config) {
+        Err(lacks) => {
+            // The list's message replaces the open's error for the user; log the open's
+            // own so a list that disagrees with the open (#812) still shows the cause.
+            tracing::warn!(error = %err, "{lacks}");
+            lacks
+        }
+        Ok(()) => opening,
+    }
+}
+
+/// Why `codecs` can't encode `config`'s codec with its hardware preference, from the
+/// encoders the platform lists, so that a failed `output.start` names what the machine
+/// lacks ("this machine has no hardware AV1 encoder") rather than how an open failed.
+/// The codec in a profile is collection state, valid on any machine, so this is only
+/// consulted when an output's encoder fails to open, never when the profile is edited,
+/// and never before the open, which stays the authority. A platform that can't list its
+/// codecs passes.
+fn check_video_encoder(codecs: &dyn Codecs, config: &VideoEncoderConfig) -> Result<(), String> {
+    let Ok(list) = codecs.list() else {
+        return Ok(());
+    };
+    let found: Vec<bool> = list
+        .iter()
+        .filter(|info| info.role == CodecRole::VideoEncoder && info.codec == config.codec)
+        .map(|info| info.hardware)
+        .collect();
+    let name = codec_name(config.codec);
+    let (hardware, software) = (found.contains(&true), found.contains(&false));
+    match config.hardware {
+        _ if found.is_empty() => Err(format!("this machine has no {name} encoder")),
+        HardwarePreference::Require if !hardware => Err(format!(
+            "this machine has no hardware {name} encoder, and the encoder profile requires one"
+        )),
+        HardwarePreference::Avoid if !software => Err(format!(
+            "this machine has no software {name} encoder, and the encoder profile avoids hardware"
+        )),
+        _ => Ok(()),
     }
 }
 
@@ -1949,13 +2017,9 @@ fn open_video(
     feed: &Feed,
     profile: &EncoderProfile,
 ) -> Result<VideoSession, String> {
-    let session = VideoSession::open_on(
-        codecs,
-        context,
-        video_config(feed, profile)?,
-        SessionOptions::default(),
-    )
-    .map_err(|err| format!("opening the video encoder: {err}"))?;
+    let config = video_config(feed, profile)?;
+    let session = VideoSession::open_on(codecs, context, config, SessionOptions::default())
+        .map_err(|err| video_open_failure(codecs, &config, &err))?;
     match session.path() {
         VideoPath::Gpu => tracing::info!("the video encoder takes GPU frames"),
         VideoPath::Cpu {
@@ -2018,6 +2082,69 @@ pub(crate) struct VideoTap {
     /// GPU frames: NV12 encode targets on the render thread's context
     /// ([`VideoPath::Gpu`]). Otherwise CPU RGBA8.
     gpu: bool,
+    /// A GPU session's claim on the context, released once the render thread has the
+    /// tap ([`Frames::add`]), from when [`Frames::feeds_gpu`] keeps it there.
+    claim: Option<GpuClaim>,
+}
+
+/// Whether video sessions may open on the platform's GPU context, shared by
+/// [`Program::encoders`] and the render thread.
+///
+/// A session that opens on the GPU path needs the render thread to stay on the context,
+/// but the thread learns of it only when it drains the session's tap. A fallback in
+/// between would leave it with no encode targets for the session, failing every output
+/// on the stage (#699, #733). So the session claims the context before it opens, and the
+/// claim lasts until the thread has the tap. A fallback shuts the gate first and then
+/// looks for claims: either the session sees the gate shut and opens on the CPU path, or
+/// the thread sees its claim and stays (every access is `SeqCst`, so one of the two
+/// sees the other's write).
+#[derive(Debug, Default)]
+pub(crate) struct GpuGate {
+    /// Set once the render thread has left the context, and never cleared after that.
+    shut: AtomicBool,
+    /// GPU sessions opened whose tap the render thread doesn't have yet.
+    claims: AtomicUsize,
+}
+
+/// One session's claim on the context ([`GpuGate`]), released when dropped.
+#[derive(Debug)]
+pub(crate) struct GpuClaim(Arc<GpuGate>);
+
+impl Drop for GpuClaim {
+    fn drop(&mut self) {
+        self.0.claims.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+impl GpuGate {
+    /// A claim for a session about to open on the context, or `None` once the render
+    /// thread has left it: the session then opens on the CPU path.
+    ///
+    /// It is taken before the encoder opens, since a later claim would reopen the race,
+    /// so it holds a composite-error fallback off for the whole open, also for an encoder
+    /// that ends up on the CPU path (whose claim is then dropped).
+    fn claim(self: &Arc<Self>) -> Option<GpuClaim> {
+        self.claims.fetch_add(1, Ordering::SeqCst);
+        let claim = GpuClaim(Arc::clone(self));
+        (!self.shut.load(Ordering::SeqCst)).then_some(claim)
+    }
+
+    /// Shuts the gate for a fallback, unless a session has claimed the context: then it
+    /// stays open and the render thread must stay on the context too. Returns whether
+    /// it shut.
+    fn leave(&self) -> bool {
+        self.shut.store(true, Ordering::SeqCst);
+        if self.claims.load(Ordering::SeqCst) == 0 {
+            return true;
+        }
+        self.shut.store(false, Ordering::SeqCst);
+        false
+    }
+
+    /// Shuts the gate whatever the claims: the context's device is lost.
+    fn shut(&self) {
+        self.shut.store(true, Ordering::SeqCst);
+    }
 }
 
 struct RenderJob {
@@ -2056,8 +2183,8 @@ struct RenderJob {
     gpu_captures: Arc<AtomicU64>,
     gpu_fallbacks: Arc<AtomicU64>,
     gpu_losses: Arc<AtomicU64>,
-    /// Set once the thread leaves the platform's context ([`Program::session_context`]).
-    off_context: Arc<AtomicBool>,
+    /// Shut once the thread leaves the platform's context ([`GpuGate`]).
+    gpu_gate: Arc<GpuGate>,
     drops: DropSnapshot,
     fail: Sender<PipelineEvent>,
 }
@@ -2121,7 +2248,9 @@ impl Frames {
 
     /// Feeds `input` the frames of `feed`, drawn alongside an existing session's with
     /// the same feed.
-    fn add(&mut self, feed: Feed, tap: VideoTap) {
+    fn add(&mut self, feed: Feed, mut tap: VideoTap) {
+        // From here `feeds_gpu` keeps the thread on the context, so the claim can go.
+        drop(tap.claim.take());
         let found = self.mixes.iter().position(|frame| {
             frame.mix == feed.mix
                 && frame.size == feed.size
@@ -2301,7 +2430,8 @@ impl Frames {
 /// row leave the GPU path once ([`Switch`]): while the compositor opens on a device of
 /// its own, the thread repeats the last frames, and the count starts again after it.
 /// No fallback starts while a session takes the context's GPU frames
-/// ([`Frames::feeds_gpu`]): the errors then run on to [`MAX_DRAW_ERRORS`].
+/// ([`Frames::feeds_gpu`]), or has claimed the context and its tap is on the way
+/// ([`GpuGate`]): the errors then run on to [`MAX_DRAW_ERRORS`].
 /// Fatal, reported on the failure channel: more composite errors than
 /// [`MAX_DRAW_ERRORS`], a lost context device while a session takes its GPU frames, an
 /// encode ring that cannot be had ([`EncodeRing::next`]), a fallback whose compositor
@@ -2345,7 +2475,7 @@ fn render_loop(job: RenderJob) {
         gpu_captures,
         gpu_fallbacks,
         gpu_losses,
-        off_context,
+        gpu_gate,
         drops,
         fail,
     } = job;
@@ -2542,7 +2672,7 @@ fn render_loop(job: RenderJob) {
                         Switch::start(&open, sources, open_timeout, why.clone(), leave_gpu)
                     };
                     on_context = false;
-                    off_context.store(true, Ordering::Release);
+                    gpu_gate.shut();
                     draw_errors = 0;
                     match started {
                         Ok(started) => switch = Some(started),
@@ -2561,9 +2691,12 @@ fn render_loop(job: RenderJob) {
                     // The CPU path has no encode targets for a session that takes the
                     // context's GPU frames, so while one runs there is no fallback: the
                     // errors run on to MAX_DRAW_ERRORS, as without one.
-                    if on_context && draw_errors >= GPU_FALLBACK_ERRORS && !frames.feeds_gpu() {
+                    if on_context
+                        && draw_errors >= GPU_FALLBACK_ERRORS
+                        && !frames.feeds_gpu()
+                        && gpu_gate.leave()
+                    {
                         on_context = false;
-                        off_context.store(true, Ordering::Release);
                         let why = SwitchWhy::Failing {
                             cause: err,
                             errors: draw_errors,
@@ -3317,9 +3450,9 @@ fn report_link(sink: &Sink, last: LinkState, fail: &FailLine) -> LinkState {
 #[cfg(test)]
 mod tests {
     use super::{
-        DrawFn, EncodeRing, Feed, Frames, GpuSources, MixFrame, OpenDraw, Switch, SwitchWhy,
-        VideoTap, catch_up, encode_ring_len, lock, open_video, output_size, push_each, stream_info,
-        video_config,
+        DrawFn, EncodeRing, Feed, Frames, GpuGate, GpuSources, MixFrame, OpenDraw, Switch,
+        SwitchWhy, VideoTap, catch_up, check_video_encoder, encode_ring_len, lock, open_video,
+        output_size, push_each, stream_info, video_config,
     };
     use crate::runtime::captures::rgba_from_surface;
     use crate::snapshot::{CaptureFrame, CaptureImage, Captures, LiveParams, Shot};
@@ -3547,6 +3680,190 @@ mod tests {
         assert!(stream_info(size, MediaTime::zero(Timebase::MICROS), &profile).is_err());
     }
 
+    /// The platform's encoder list decides which codec and hardware preference an
+    /// output can start with, and the refusal names what the machine lacks (F6b).
+    #[test]
+    fn a_missing_encoder_is_named() {
+        use jstream_platform::{
+            AudioEncoder, AudioEncoderConfig, CodecInfo, CodecRole, Codecs, PlatformError,
+            VideoDecoder, VideoDecoderConfig, VideoEncoder, VideoEncoderConfig, fake::FakeCodecs,
+        };
+        /// Lists `encoders` (codec, hardware) and opens nothing: its open fails as
+        /// unsupported, or, with `missing`, as a missing component with a remedy.
+        struct Listed(Result<Vec<(Codec, bool)>, ()>, bool);
+        impl Codecs for Listed {
+            fn list(&self) -> Result<Vec<CodecInfo>, PlatformError> {
+                let listed = self.0.clone().map_err(|()| PlatformError::Os {
+                    call: "listing",
+                    code: None,
+                    message: "refused".into(),
+                })?;
+                Ok(listed
+                    .into_iter()
+                    .map(|(codec, hardware)| CodecInfo {
+                        name: "listed".into(),
+                        codec,
+                        role: CodecRole::VideoEncoder,
+                        hardware,
+                    })
+                    .chain([CodecInfo {
+                        name: "a decoder".into(),
+                        codec: Codec::Av1,
+                        role: CodecRole::VideoDecoder,
+                        hardware: true,
+                    }])
+                    .collect())
+            }
+            fn video_encoder(
+                &self,
+                _: &VideoEncoderConfig,
+            ) -> Result<Box<dyn VideoEncoder>, PlatformError> {
+                Err(if self.1 {
+                    PlatformError::MissingComponent {
+                        component: "Cisco's OpenH264 (software H.264)",
+                        remedy: "download it from Cisco through JStream".into(),
+                    }
+                } else {
+                    PlatformError::Unsupported { what: "x".into() }
+                })
+            }
+            fn audio_encoder(
+                &self,
+                _: &AudioEncoderConfig,
+            ) -> Result<Box<dyn AudioEncoder>, PlatformError> {
+                Err(PlatformError::Unsupported { what: "x".into() })
+            }
+            fn video_decoder(
+                &self,
+                _: &VideoDecoderConfig,
+            ) -> Result<Box<dyn VideoDecoder>, PlatformError> {
+                Err(PlatformError::Unsupported { what: "x".into() })
+            }
+        }
+        let feed = Feed {
+            mix: None,
+            size: FrameSize::new(64, 36).expect("size"),
+            divisor: 1,
+            owner: None,
+        };
+        let config = |codec, hardware| VideoEncoderConfig {
+            codec,
+            hardware,
+            ..video_config(&feed, &EncoderProfile::DEFAULT).expect("default")
+        };
+        use HardwarePreference::{Avoid, Prefer, Require};
+        let mf = Listed(
+            Ok(vec![
+                (Codec::H264, true),
+                (Codec::H264, false),
+                (Codec::Hevc, true),
+            ]),
+            false,
+        );
+        for hardware in [Prefer, Require, Avoid] {
+            assert_eq!(
+                check_video_encoder(&mf, &config(Codec::H264, hardware)),
+                Ok(())
+            );
+        }
+        assert_eq!(
+            check_video_encoder(&mf, &config(Codec::Hevc, Prefer)),
+            Ok(())
+        );
+        assert_eq!(
+            check_video_encoder(&mf, &config(Codec::Hevc, Require)),
+            Ok(())
+        );
+        assert_eq!(
+            check_video_encoder(&mf, &config(Codec::Hevc, Avoid)),
+            Err(
+                "this machine has no software HEVC encoder, and the encoder profile avoids \
+                 hardware"
+                    .into()
+            )
+        );
+        // An AV1 decoder is no AV1 encoder.
+        assert_eq!(
+            check_video_encoder(&mf, &config(Codec::Av1, Prefer)),
+            Err("this machine has no AV1 encoder".into())
+        );
+        let software = Listed(Ok(vec![(Codec::H264, false)]), false);
+        assert_eq!(
+            check_video_encoder(&software, &config(Codec::H264, Require)),
+            Err(
+                "this machine has no hardware H.264 encoder, and the encoder profile \
+                 requires one"
+                    .into()
+            )
+        );
+        // A platform that can't list its codecs leaves it to the open.
+        let unlisted = Listed(Err(()), false);
+        assert_eq!(
+            check_video_encoder(&unlisted, &config(Codec::Av1, Require)),
+            Ok(())
+        );
+        // The fake platform lists the encoder it opens, so every engine test still starts.
+        assert_eq!(
+            check_video_encoder(&FakeCodecs, &config(Codec::H264, Prefer)),
+            Ok(())
+        );
+        // `open_video` names what the machine lacks when the open fails...
+        let require = {
+            let mut profile = EncoderProfile::DEFAULT;
+            profile.video.hardware = ProfileHardware::Require;
+            profile
+        };
+        let err = open_video(&software, None, &feed, &require).err();
+        assert_eq!(
+            err.as_deref(),
+            Some(
+                "this machine has no hardware H.264 encoder, and the encoder profile requires one"
+            )
+        );
+        // ...but a missing component keeps the platform's remedy (ADR-0060 §6), even
+        // when the list has no encoder at all: Linux without a VA-API H.264 driver and
+        // without OpenH264 (#807 B1).
+        let bare = Listed(Ok(vec![]), true);
+        let Err(err) = open_video(&bare, None, &feed, &EncoderProfile::DEFAULT) else {
+            panic!("refused");
+        };
+        assert!(
+            err.contains("download it from Cisco through JStream"),
+            "{err}"
+        );
+        // The open fails for a reason the list doesn't explain: its own error stands.
+        let Err(err) = open_video(&mf, None, &feed, &EncoderProfile::DEFAULT) else {
+            panic!("refused");
+        };
+        assert!(err.starts_with("opening the video encoder:"), "{err}");
+        // And the list never blocks an encoder that opens: here one it doesn't name.
+        struct Unlisting;
+        impl Codecs for Unlisting {
+            fn list(&self) -> Result<Vec<CodecInfo>, PlatformError> {
+                Ok(Vec::new())
+            }
+            fn video_encoder(
+                &self,
+                config: &VideoEncoderConfig,
+            ) -> Result<Box<dyn VideoEncoder>, PlatformError> {
+                FakeCodecs.video_encoder(config)
+            }
+            fn audio_encoder(
+                &self,
+                config: &AudioEncoderConfig,
+            ) -> Result<Box<dyn AudioEncoder>, PlatformError> {
+                FakeCodecs.audio_encoder(config)
+            }
+            fn video_decoder(
+                &self,
+                config: &VideoDecoderConfig,
+            ) -> Result<Box<dyn VideoDecoder>, PlatformError> {
+                FakeCodecs.video_decoder(config)
+            }
+        }
+        assert!(open_video(&Unlisting, None, &feed, &EncoderProfile::DEFAULT).is_ok());
+    }
+
     /// #433: the program renders and encodes at the canvas, rounded down to even sizes
     /// for NV12, whatever the display's size.
     #[test]
@@ -3667,7 +3984,11 @@ mod tests {
 
     /// A tap for a session on the CPU path.
     fn cpu_tap(input: jstream_encode::VideoInput) -> VideoTap {
-        VideoTap { input, gpu: false }
+        VideoTap {
+            input,
+            gpu: false,
+            claim: None,
+        }
     }
 
     /// A mix's size and divisor set the encoder's frame size and period, and its
@@ -3806,6 +4127,7 @@ mod tests {
             VideoTap {
                 input: session.input(),
                 gpu: true,
+                claim: None,
             },
         );
         assert_eq!(frames.schedule(0, false), 2);
@@ -3849,9 +4171,73 @@ mod tests {
             VideoTap {
                 input: session.input(),
                 gpu: true,
+                claim: None,
             },
         );
         assert!(frames.feeds_gpu());
+    }
+
+    /// #733: a session that claimed the context before a fallback keeps the render
+    /// thread on it until the thread has its tap, and a session that opens after the
+    /// fallback gets no claim, so it opens on the CPU path.
+    #[test]
+    fn a_claimed_context_holds_off_the_fallback_until_the_tap_arrives() {
+        let feed = || Feed {
+            mix: None,
+            size: FrameSize::new(2, 1).expect("size"),
+            divisor: 1,
+            owner: None,
+        };
+        let gate = Arc::new(GpuGate::default());
+        let claim = gate.claim().expect("open before a fallback");
+        let other = gate.claim().expect("a second session");
+        drop(other);
+        assert!(!gate.leave(), "a claimed context isn't left");
+        assert!(
+            gate.claim().is_some(),
+            "the gate stays open after holding off"
+        );
+
+        // The tap arrives with its claim: the thread takes it, and from then
+        // `feeds_gpu` is what keeps it on the context.
+        let mut frames = no_frames();
+        let session = open_video(
+            &jstream_platform::fake::FakeCodecs,
+            None,
+            &feed(),
+            &EncoderProfile::DEFAULT,
+        )
+        .expect("fake session");
+        frames.add(
+            feed(),
+            VideoTap {
+                input: session.input(),
+                gpu: true,
+                claim: Some(claim),
+            },
+        );
+        assert!(frames.feeds_gpu());
+        assert!(frames.targets[0].iter().all(|tap| tap.claim.is_none()));
+        assert_eq!(gate.claims.load(Ordering::SeqCst), 0);
+
+        assert!(gate.leave(), "no claim left");
+        assert!(gate.claim().is_none(), "after the fallback, the CPU path");
+        assert_eq!(
+            gate.claims.load(Ordering::SeqCst),
+            0,
+            "a refused claim is let go"
+        );
+    }
+
+    /// A lost device shuts the gate even while a session holds a claim.
+    #[test]
+    fn a_lost_device_shuts_the_gate_whatever_the_claims() {
+        let gate = Arc::new(GpuGate::default());
+        let claim = gate.claim().expect("open");
+        gate.shut();
+        assert!(gate.claim().is_none());
+        drop(claim);
+        assert_eq!(gate.claims.load(Ordering::SeqCst), 0);
     }
 
     /// The CPU stand-in draws a covered frame black whatever the capture's size, and
