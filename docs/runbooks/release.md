@@ -20,8 +20,9 @@ covers = ["Cargo.toml"]
 The release version is `[workspace.package] version` in the root `Cargo.toml`, following
 [SemVer](https://semver.org/spec/v2.0.0.html). The apps the portable zip ships take it
 with `version.workspace = true`: `jstream-desktop`, `jstream-daemon`, `jstream-cli`,
-`jstream-vcam-windows` and `jstream-browser-helper`. So it is what the daemon's and the CLI's `--version` print and
-what the logs and crash reports name. Libraries, unpublished, stay at `0.0.0`.
+`jstream-vcam-windows` and `jstream-browser-helper`. So it is what the daemon's and the
+CLI's `--version` print and what the logs and crash reports name. Libraries, unpublished,
+stay at `0.0.0`.
 
 Until the first stable release the version is `0.y.z`, and a build cut for testing has a
 pre-release part: `0.1.0-alpha.1`, `0.1.0-alpha.2`, then `0.1.0-beta.1`. Bump it in its
@@ -45,8 +46,8 @@ depends_on = ["docs/ARCHITECTURE.md#packaging", "docs/adr/0066-portable-windows-
    pushes a release tag.
 4. **The workflow** (`.github/workflows/release.yml`) runs on the tag:
    - `ui` fails unless the tag is `v` and the workspace version (every shipped app must
-     have it), then builds the web UI for release with the same pinned tools as
-     `after-review`'s `dist-ui`;
+     have it) and the tagged commit is on `main`, then builds the web UI for release with
+     the same pinned tools as `after-review`'s `dist-ui`;
    - `zip` runs `cargo xtask dist --revision v<version>` on `windows-latest` from a clean
      build, so the zip is `jstream-v<version>-windows-x64.zip`, browser helper and CEF
      runtime included, and writes its SHA-256 and the release notes: the getting-started

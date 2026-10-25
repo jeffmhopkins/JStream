@@ -27,8 +27,9 @@ env:
 
 jobs:
   # The web UI for release, as after-review.yml's `dist-ui` builds it, with the same pinned
-  # tools (keep the versions and hashes in step with it). First it checks the tag against
-  # the workspace version, so a mistyped tag stops before anything is built.
+  # tools (keep the versions and hashes in step with it). First it checks that the tag is
+  # on main and matches the workspace version, so a mistyped tag stops before anything is
+  # built.
   ui:
     runs-on: ubuntu-latest
     outputs:
@@ -42,7 +43,15 @@ jobs:
       BINARYEN_SHA256: 195ddc94f9bc89f45abdabb0b9eea86023d727ba90eac8b35b80f2544fc30572
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0   # all of main's history, for the check that the tag is on it
       - run: rustup toolchain install
+      - name: Check that the tagged commit is on main
+        run: |
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "::error::$GITHUB_REF_NAME is not on main: tag a commit of main (docs/runbooks/release.md)"
+            exit 1
+          fi
       - name: Check the tag against the shipped apps' version
         id: version
         env:

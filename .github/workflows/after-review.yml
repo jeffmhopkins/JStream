@@ -251,8 +251,6 @@ jobs:
         with:
           name: jstream-ui
           path: ui-dist
-      # Named after the commit tested: a dispatched run's branch tip, or a pull_request
-      # run's head rather than the merge commit it checks out.
       # The browser helper's build (cef-dll-sys) downloads the pinned CEF and builds its
       # C++ wrapper with CMake and Ninja. The image has CMake; when it has no Ninja on the
       # path, Visual Studio's own copy (its CMake tools) goes there. Nothing is downloaded.
@@ -264,6 +262,8 @@ jobs:
           $ninja = Join-Path $vs 'Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja'
           if (-not (Test-Path (Join-Path $ninja 'ninja.exe'))) { throw "no ninja.exe under $vs" }
           Add-Content -Path $env:GITHUB_PATH -Value $ninja
+      # Named after the commit tested: a dispatched run's branch tip, or a pull_request
+      # run's head rather than the merge commit it checks out.
       - shell: bash
         env:
           SHA: ${{ github.event.pull_request.head.sha || github.sha }}
