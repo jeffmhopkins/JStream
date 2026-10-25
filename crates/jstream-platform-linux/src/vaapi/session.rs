@@ -1282,6 +1282,8 @@ mod device_tests {
                 state: wgpu::TextureUses::PRESENT,
             }),
         );
+        // Staged and submitted under the context's submit lock, as render does (#667).
+        let _submitting = context.submit_lock().lock();
         target.stage(context.queue()).expect("stage");
         context.queue().submit([encoder.finish()]);
     }
