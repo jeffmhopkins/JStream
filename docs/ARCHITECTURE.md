@@ -383,8 +383,12 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   protocol 0.34. Scenes have
   a `role` (`scene` or `group`, set by `scene.create` or `scene.set_role`), and `item.move` moves an item
   to another scene keeping its id, under the same cycle check. The placement edits take
-  an optional `scene_id`, accepted only when it names the item's own scene until
-  variants exist (protocol 0.12). Items refer to sources; they never copy them, and
+  an optional `scene_id` (protocol 0.12): the item's own scene, or one of its keyframe
+  scenes (protocol 0.39). Keyframe scenes (`scene.create_variant`) are built with their
+  per-item overrides of the parent's own items, `item.clear_override`, the overrides
+  `item.remove` and `item.move` drop (reported in the batch result and restored by
+  undo), their parent's delete blocked by them and its `delete.plan` deleting them
+  first, and the switch within a family paired by item (ADR-0049 §3). Items refer to sources; they never copy them, and
   `item.set_source` retargets one, keeping its id, placement and stacking position.
   A source copied by `source.duplicate` records its original in `duplicated_from`, a
   plain link that reads as absent once the original is deleted. Scene and source
@@ -439,8 +443,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   Not yet: settings migrations between kind versions (a source saved at another
   version is refused on load), blend modes
   other than `normal`,
-  bus monitors, per-placement effects, variants and overrides (so no edit drops
-  any yet), `background`, output audio buses and chains, the `YouTube` kind, a virtual
+  bus monitors, per-placement effects, a keyframe scene's overrides of a group's
+  children (so `scene.set_role` and removing or retargeting a group's item drop none
+  yet, #702), `background`, output audio buses and chains, the `YouTube` kind, a virtual
   camera's video mix (it always shows the program), and everything outside `sources`,
   `scenes`, `outputs`, `encoders`, `video_mixes`, `audio`, `folders`, `labels`,
   `hotkeys` and `transitions`. The collection file saves everything built so far,
@@ -618,8 +623,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   batch increments `rev` by one. `item.move` moves an item between scenes keeping its
   id, `scene.set_role` (or, from protocol 0.17, `scene.create`'s optional `role`) marks a scene as a group, and placement edits take an optional
   `scene_id` so they can write a keyframe scene's override
-  ([ADR-0024](adr/0024-scene-structure.md), protocol 0.12). Until keyframe scenes are
-  built, `scene_id` may name only the item's own scene.
+  ([ADR-0024](adr/0024-scene-structure.md), protocol 0.12). Since 0.39,
+  `scene.create_variant` makes a keyframe scene, `item.clear_override` removes one
+  field of its override, `state.get` reports `variant_of` and `overrides`, and a batch
+  result lists the overrides it dropped (`dropped_overrides`, ADR-0040 §1).
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
   0.9, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
@@ -658,7 +665,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
   `output.status` reports only `key_set`. A key is bound to its output's server: an
   applied change that deletes the output or points it at another scheme, host or port
-  removes the key, so it never goes to a server it wasn't set for (#343).
+  removes the key, so it never goes to a server it wasn't set for (#343). From 0.37
+  `output.status` also reports `cleartext`: whether publishing sends the key across the
+  network unencrypted (plain `rtmp://` to a host other than loopback, #562).
 - **Actions** (`output.start`, `scene.switch`, `youtube.go_live`, …): side effects,
   never undoable or batchable. A *script* runs actions in sequence and returns a result
   for each step.
@@ -763,8 +772,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   the actions `youtube.chat.send { text }`, which posts to the bound broadcast's chat as
   the channel and goes to the audit log, and `youtube.chat.feature { message_id }`, which
   sets or clears the featured message (runtime state, reported by an event) that the chat
-  message source draws as plain text. Audience stats (concurrent viewers, likes, chat
-  rate) come in a low-rate `youtube.stats` event and a query.
+  message source draws as plain text. Since protocol 0.38 a running YouTube output's
+  audience (concurrent viewers, likes, views) comes in a low-rate `youtube.stats`
+  event, and the `youtube.stats` query lists the last readings with the engine's
+  estimate of the day's API quota, by which audience reads slow and stop first
+  (ADR-0041 §3 and §5); the chat rate follows with the engine's chat polling.
 - **Errors** carry a stable machine-readable `code`, detail fields and a message. A
   `scene.delete` or `source.delete` refused because something still refers to its
   target lists every such reference in `invalid_argument`'s `blockers` (protocol 0.15,
@@ -848,7 +860,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 687 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 706 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking
@@ -923,7 +935,10 @@ is evaluated with `jstream-protocol`'s shared formula in either of ADR-0022's fo
 geometry (crop in source pixels, fitted into the box by `stretch`, `fit` or `fill`,
 which is clipped to the box, mirrored by its flips, then rotated about the box centre), or a legacy 0.3
 transform through `legacy_quad` (crop, scale against the current source size,
-top-left at `position`, clockwise rotation about that corner). A geometry with
+top-left at `position`, clockwise rotation about that corner). Both count in the
+image's extent, its pixel size unless the caller gave another: a source drawn sharp for
+an item that shows it enlarged has more pixels than the size it is placed at
+([ADR-0073](adr/0073-sources-drawn-at-their-shown-size.md)). A geometry with
 non-neutral 3D draws [ADR-0050](adr/0050-3d-transforms-rendering.md)'s drawn polygon,
 clipped by the near plane, with a per-vertex `w` for perspective-correct texturing and
 analytic edge coverage, sampled from a mip chain of its cropped source (rebuilt on the
@@ -947,6 +962,9 @@ thread composites on the platform's `GpuContext`, and capture moves onto it thro
 `Capture::on_context`: each captured texture is imported once into the cache and
 sampled with no CPU copy, its alpha read as 1 as on the CPU path, the frame's fence hold is staged on each submit that reads it
 and dropped when the frame ends, and the submit hands the texture back in `PRESENT`.
+Staging attaches to the queue's next submit, so render holds the context's
+`SubmitLock` from staging through its submit, and other threads that submit on that
+queue (the browser source's copies) take it too.
 Without a context, or a capture that can deliver on it, the engine keeps CPU frames
 (step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). A
 browser source's page paints on the same context and is imported the same way, read
@@ -1124,8 +1142,8 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
 - **Collections:** JSON with a `schema_version` field and forward migrations in
   `jstream-graph`, which checks a loaded collection as it checks edits. A field added
   for new collection state (encoder profiles, hotkey bindings, transition presets and
-  settings, folders, labels and organisation metadata) is omitted when empty or at its
-  default (for presets, a new collection's one `cut`), so a file without it is still
+  settings, folders, labels and organisation metadata, keyframe scenes' `variant_of` and
+  `overrides`) is omitted when empty or at its default (for presets, a new collection's one `cut`), so a file without it is still
   valid at the same `schema_version`. `jstream-core`
   loads the file the host names and replaces it atomically after every change.
 - **Asset files** named in settings are stored relative to the collection folder or the

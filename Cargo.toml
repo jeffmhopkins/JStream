@@ -72,6 +72,7 @@ insta = { version = "1", default-features = false }
 # JavaScript built-ins (`Array`) for the browser WebSocket client. Part of wasm-bindgen.
 js-sys = { version = "0.3", default-features = false, features = ["std"] }
 jstream-aac = { path = "crates/jstream-aac" }
+jstream-anim = { path = "crates/jstream-anim" }
 jstream-audio = { path = "crates/jstream-audio" }
 jstream-browser = { path = "crates/jstream-browser" }
 jstream-control = { path = "crates/jstream-control" }
