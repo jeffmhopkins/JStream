@@ -1357,7 +1357,7 @@ impl Engine {
                     Arc::clone(&state.render),
                     state.audio.wanted(),
                     canvas_size(&state.graph),
-                    state.privacy.flag(),
+                    &state.privacy,
                 )
             };
             let generation = host.next_generation.fetch_add(1, Ordering::Relaxed);

@@ -165,7 +165,8 @@ state machine. Contents:
   with the new scene's items, one `jstream-render` `Track` per item (`plan`).
 - **Privacy** (`privacy.rs`): whether the privacy screen is on and which client turned
   it on, runtime state under the collection lock that `privacy.set` sets and
-  `privacy.get` reads, with the atomic flag the render and mixer threads read
+  `privacy.get` reads, with the atomic flag the render thread reads and the atomic
+  count of its changes the mixer and the microphones' audio threads read
   ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
 - **Runtime** (`runtime/`): the `output.start` pipeline. Every running output shares
   one program stage: the render thread reads the platform capture mailbox of each
@@ -743,13 +744,19 @@ It mutes the microphones: every input the program stage opens on an audio input 
 (the default microphone while the collection has no audio source, an `audio_input`
 source, and a webcam's paired input) is marked, before its stream starts, as one the
 privacy screen mutes. Desktop and application audio, a page's and a media file's sound
-play on. The mixer thread loads the same flag with acquire ordering before each poll
-and hands it to the mixer, which silences a marked input while it is on, from the next
-block: before the input's filter chain, so nothing said under the screen waits in a
-`delay` filter or the latency compensation to be heard once it is off, and through an
+play on. Next to the flag the render thread reads, `privacy.rs` keeps a count of the
+screen's changes (odd while it is on, incremented with release ordering), and the
+mixer is made with it (`Mixer::with_privacy_signal`). Each marked input's audio
+thread reads it with acquire ordering and zeroes its packets as they arrive while the
+screen is on, and after any change until the mixer has acted on it. The mixer reads it
+at each poll, so a screen turned on and off again between two polls still reaches it,
+and silences a marked input while the screen is on, from the next block: before the
+input's filter chain, so nothing said under the screen waits in a `delay` filter or
+the latency compensation to be heard once it is off, and through an
 activity gain of 0. Turning it off follows the capture time: the blocks the mixer
 mixes late by its latency that hold audio from under the screen stay silent, and so
-does a further 40 ms for an input's timing error (`InputControl::set_privacy_muted`
+does a further 40 ms for an input's timing error, and the audio thread zeroes a packet
+its own stamp, the input's timing of it or its placement dates before then (`InputControl::set_privacy_muted`
 in [jstream-audio › Purpose](../jstream-audio/README.md#purpose) says what that covers).
 It feeds no bus, its scope draws silence and its meter reads silence. Its own mute,
 fader, sends and follow mode are untouched, so turning privacy off brings it back as it
@@ -2085,9 +2092,10 @@ later on the media clock. The skips of every stream the pipeline ran are added u
 `capture_frames`. At the end of the render loop the captures are stopped and the
 `jstream-capture` thread joined, before the context is dropped.
 
-The mixer thread polls the media clock, loading the privacy flag before each poll so
-that the mixer silences the microphones under the privacy screen (see *Privacy screen*
-in Design), and pushes 48 kHz stereo
+The mixer thread builds its mixer with the count of privacy changes
+(`Mixer::with_privacy_signal`, which the mixer reads at each poll and the microphones'
+audio threads on each packet, so that the mixer silences the microphones under the
+privacy screen; see *Privacy screen* in Design), polls the media clock and pushes 48 kHz stereo
 blocks mixed from the audio sources' inputs, the pages' audio and the media files' sound (see *Audio
 sources* in Design; the microphone and the desktop loopback while the collection has
 no audio source), meters each master block's true peak and loudness, and also pushes

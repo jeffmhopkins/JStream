@@ -41,8 +41,8 @@
 //!
 //! Each input on an audio input device (a microphone: the default one, an
 //! `audio_input` source's, a webcam's paired input) is marked, before its stream
-//! starts, as one the privacy screen mutes (ADR-0027 §4's default set); the mixer
-//! thread silences it while the screen is on.
+//! starts, as one the privacy screen mutes (ADR-0027 §4's default set); its audio
+//! thread and the mixer thread silence it while the screen is on.
 //!
 //! Each source's open input (an audio source's, a page's or a media file's) is also
 //! listed in [`Routed`], where the engine's audio routing (`crate::audio`) finds it to

@@ -27,8 +27,9 @@
 //! edited and removed, output taps added (one with its own chain, on a bus that is
 //! later removed) and removed, and a CLAP filter whose host keeps up, then goes missing
 //! and comes back (its blocks bypassed and crossfaded), then is removed, and the privacy
-//! screen going on and off over the microphone (`Mixer::set_privacy` before each poll,
-//! as the mixer thread calls it). The test asserts afterwards that each path actually
+//! screen going on and off over the microphone (through the engine's count of its
+//! changes, `Mixer::with_privacy_signal`, which each poll and the microphone's packets
+//! read). The test asserts afterwards that each path actually
 //! ran.
 //!
 //! Dropping an input's producer frees its resampler state, so a producer is dropped
@@ -45,6 +46,7 @@ use jstream_media::{AudioFormat, ChannelLayout, MediaTime, SampleFormat, Timebas
 use jstream_platform::{AudioInputHandler, AudioPacket, AudioPacketFlags};
 use jstream_plugin_proto::{Config, DEFAULT_DEPTH, Shared, first_useful};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 #[global_allocator]
 static ALLOC: AllocDisabler = AllocDisabler;
@@ -308,9 +310,10 @@ struct Sim {
     input_blocks: u64,
     /// The mixer thread does not run until this tick (a stall).
     mixer_stalled_until: u64,
-    /// The privacy flag the mixer thread reads before each poll, and the blocks it
-    /// mixed while it was on.
-    privacy: bool,
+    /// The engine's count of privacy screen changes (odd while it is on), which the
+    /// mixer reads at each poll and the microphone's packets at each push, and the
+    /// blocks mixed while it was on.
+    privacy: Arc<AtomicU64>,
     private_blocks: u64,
 }
 
@@ -324,14 +327,13 @@ impl Sim {
             return;
         }
         let now = clock(T0 + (tick + 1) as f64 * TICK_S);
-        self.mixer.set_privacy(self.privacy);
         while self
             .mixer
             .poll(now, &mut self.out)
             .expect("right length")
             .is_some()
         {
-            self.private_blocks += u64::from(self.privacy);
+            self.private_blocks += self.privacy.load(Ordering::Relaxed) % 2;
             self.chain.process(&mut self.out);
             for &tap in &self.taps {
                 if let Some((_, block)) = self.mixer.output_block(tap) {
@@ -355,7 +357,9 @@ mod rt {
 
     #[test]
     fn callback_does_not_allocate() {
-        let mut mixer = Mixer::new(MixerConfig::default()).expect("valid config");
+        let privacy = Arc::new(AtomicU64::new(0));
+        let mut mixer = Mixer::with_privacy_signal(MixerConfig::default(), Arc::clone(&privacy))
+            .expect("valid config");
         let fmt = |rate, layout| {
             AudioFormat::new(rate, layout, SampleFormat::F32Interleaved).expect("valid format")
         };
@@ -406,7 +410,7 @@ mod rt {
             tap_blocks: 0,
             input_blocks: 0,
             mixer_stalled_until: 0,
-            privacy: false,
+            privacy,
             private_blocks: 0,
         };
         // The privacy screen mutes the microphone (ADR-0027 §4).
@@ -613,7 +617,9 @@ mod rt {
                     .control
                     .set_activity_gain(if tick % 400 == 0 { 0.0 } else { 1.0 });
                 // The privacy screen goes on and off.
-                sim.privacy = tick % 300 == 100;
+                if (tick % 300 == 100) != (sim.privacy.load(Ordering::Relaxed) % 2 == 1) {
+                    sim.privacy.fetch_add(1, Ordering::Release);
+                }
                 bus.set_gain_db(db / 2.0);
                 for d in &sim.devices {
                     let _ = (d.control.take_meter(), d.control.stats());

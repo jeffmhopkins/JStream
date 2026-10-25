@@ -602,13 +602,18 @@ the next tick: the engine stores it with release ordering under its lock, and th
 loads it with acquire ordering at the start of each tick. The blur pass's layers are
 kept whenever a mix is drawn, so turning privacy on allocates nothing on a real-time
 thread. The flag fails closed: a tick under privacy that couldn't draw pushes black,
-never the last frame. The mixer thread reads the same flag with acquire ordering before
-each poll, and the mixer silences the inputs it mutes from the next block, before their
-filter chains (so no delay line holds what they captured meanwhile) and through their
-activity gain, so that takes a field store and allocates nothing either. Turning it off
-follows the capture time: blocks mixed late by the mixer's latency that start before the
-clock's frame at the first poll after it went off, plus 40 ms for an input's timing
-error, stay covered.
+never the last frame. The mixer reads a count of the screen's changes instead (odd
+while it is on, stored after the flag), with acquire ordering at each poll, so a screen
+turned on and off again between two polls still reaches it. It silences the inputs it
+mutes from the next block, before their filter chains (so no delay line holds what
+they captured meanwhile) and through their activity gain, so that takes a field store
+and allocates nothing either. Those inputs' audio threads load the count with acquire
+ordering too, and zero each packet as it arrives, before the input's ring, while it is
+odd or the mixer has not yet acted on it. Turning it off follows the capture
+time: blocks mixed late by the mixer's latency that start before the clock's frame at
+the first poll after it went off, plus 40 ms for an input's timing error, stay covered,
+and the audio threads zero a packet that its stamp, the input's timing of it or its
+placement starts before that frame, an atomic the mixer stores.
 
 <a id="protocol"></a>
 ## Control protocol

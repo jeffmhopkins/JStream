@@ -266,14 +266,16 @@ impl InputControl {
     /// (docs/adr/0027-program-master-and-output-chains.md): while the mixer's privacy
     /// screen is on ([`Mixer::set_privacy`](crate::Mixer::set_privacy)), it is silenced
     /// before its filter chain and its activity gain is 0, so it feeds no bus, its own
-    /// block is silent and its meter reads silence. What it captured meanwhile is not
+    /// block is silent and its meter reads silence. Its audio thread also zeroes each
+    /// packet the screen covers as it arrives, so what it captured meanwhile is not
     /// heard once the screen goes off: not through its chain, and not in the blocks
-    /// [`Mixer::poll`](crate::Mixer::poll) mixes after, which stay covered for 40 ms
-    /// past the capture time the screen went off at, for the input's timing error. Only
-    /// a packet the input placed later than that is uncovered, which its drift fit
-    /// allows early in a segment and then re-anchors
-    /// ([`PRIVACY_MARGIN_S`](crate::PRIVACY_MARGIN_S)). It is independent of
-    /// [`Self::set_muted`] and of the activity gain, which it leaves as they are. A new input is not muted by it;
+    /// [`Mixer::poll`](crate::Mixer::poll) mixes after. Until the first poll after
+    /// the screen goes off it covers every packet; after it, a packet that its stamp,
+    /// the input's timing of it or its placement starts before 40 ms
+    /// ([`PRIVACY_MARGIN_S`](crate::PRIVACY_MARGIN_S)) past that poll's clock. So only
+    /// a packet that arrives after that poll and that all three date at least that late
+    /// is uncovered. It is independent of [`Self::set_muted`] and of the activity gain,
+    /// which it leaves as they are. A new input is not muted by it;
     /// [`MixerControl::add_input_with`](crate::MixerControl::add_input_with) marks one
     /// before the mixer installs it.
     pub fn set_privacy_muted(&self, muted: bool) {

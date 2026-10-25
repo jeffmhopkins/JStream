@@ -80,6 +80,7 @@ use crate::drops::{
 };
 use crate::engine::Engine;
 use crate::lock;
+use crate::privacy::Privacy;
 use crate::runtime::captures::{self, RenderCaptures};
 use crate::runtime::sink::{Destination, Sink, StreamInfo};
 use crate::runtime::vcam::{VcamOut, VcamSlot, VcamTap, camera_channels, run_camera};
@@ -1180,8 +1181,12 @@ pub(crate) struct Parts {
     /// size follows it ([`output_size`]).
     canvas: (u32, u32),
     /// Whether the privacy screen is on: the engine sets it, the render thread reads it
-    /// every tick and the mixer thread before every block, with no lock (ADR-0027 §4).
+    /// every tick, with no lock (ADR-0027 §4).
     privacy: Arc<AtomicBool>,
+    /// How many times the privacy screen has changed, odd while it is on: the engine
+    /// increments it, the mixer reads it before every block and the microphones' audio
+    /// threads on every packet, with no lock.
+    privacy_changes: Arc<AtomicU64>,
 }
 
 pub(crate) fn parts_from(
@@ -1191,7 +1196,7 @@ pub(crate) fn parts_from(
     render: Arc<RenderHub>,
     audio_sources: Arc<Wanted>,
     canvas: (u32, u32),
-    privacy: Arc<AtomicBool>,
+    privacy: &Privacy,
 ) -> Parts {
     Parts {
         canvas,
@@ -1205,7 +1210,8 @@ pub(crate) fn parts_from(
         open_timeout,
         render,
         audio_sources,
-        privacy,
+        privacy: privacy.flag(),
+        privacy_changes: privacy.changes(),
     }
 }
 
@@ -1450,7 +1456,12 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         .map(|context| GpuSourcesGuard(GpuSources::new(engine.use_gpu(context))));
     let captures = captures::spawn(backends, parts.clock.timebase())?;
     let format = engine_format()?;
-    let mixer = Mixer::new(MixerConfig::default()).map_err(|err| format!("mixer: {err}"))?;
+    // The mixer and its inputs' audio threads follow the engine's count of privacy
+    // changes, so a microphone's packets are zeroed from the moment privacy goes on, and
+    // a change between two polls is not missed (ADR-0027 §4).
+    let mixer =
+        Mixer::with_privacy_signal(MixerConfig::default(), Arc::clone(&parts.privacy_changes))
+            .map_err(|err| format!("mixer: {err}"))?;
     // On an early return this closes the inputs, each stream before its ring's last
     // handle, so no ring is freed on a real-time thread (docs/RULES.md#R-RT-003).
     let audio = AudioInputs::start(
@@ -1549,11 +1560,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             scopes: engine.audio_scopes(),
             taps: Arc::clone(&scope_taps),
         };
-        let mixing = Mixing {
-            mixer,
-            metering,
-            privacy: Arc::clone(&parts.privacy),
-        };
+        let mixing = Mixing { mixer, metering };
         move || mixer_thread(mixing, clock, &out, stop, fail, &collector)
     }) {
         Ok(handle) => handle,
@@ -3050,14 +3057,12 @@ fn mixer_thread(
     }
 }
 
-/// What the mixer thread owns: the mixer, and the master's true-peak and loudness
-/// meters, which it runs on every block, and the privacy flag it reads before each poll.
+/// What the mixer thread owns: the mixer, which follows the privacy screen itself
+/// (`Mixer::with_privacy_signal`), and the master's true-peak and loudness meters, which
+/// it runs on every block.
 struct Mixing {
     mixer: Mixer,
     metering: MasterMetering,
-    /// Whether the privacy screen is on: the engine sets it, the mixer thread reads it
-    /// lock-free before each poll, so it mutes the microphones from the next block.
-    privacy: Arc<AtomicBool>,
 }
 
 /// Mixes on the media clock, meters the master, and pushes each block into the program
@@ -3071,7 +3076,6 @@ fn mixer_loop(
     Mixing {
         mut mixer,
         mut metering,
-        privacy,
     }: Mixing,
     clock: &dyn MediaClock,
     out: &MixOut,
@@ -3094,7 +3098,6 @@ fn mixer_loop(
     let silence = vec![0.0f32; samples_len];
     let mut targets: Vec<AudioTap> = Vec::new();
     'mix: while !stop.load(Ordering::Relaxed) {
-        mixer.set_privacy(privacy.load(Ordering::Acquire));
         match mixer.poll(clock.now(), &mut samples) {
             Ok(Some(block)) => {
                 metering.process(&samples);
