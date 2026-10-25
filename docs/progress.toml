@@ -544,9 +544,10 @@ needs = ["build"]
 id = "D9"
 milestone = "M1b"
 title = "Audio monitoring: a bus's monitor device and tap point"
-status = "done"
+status = "hardware"
 prs = [801, 816, 822]
-note = "ADR-0028 gives a bus a monitor, a device and a tap point before or after its filters (decision register D22). #801 is the mixer's monitor taps and player, #816 the protocol's bus monitor and bus.set_monitor (0.42), and #822 the engine playing it on its device, all landed with wave/m1-5 (#877); the mixer's Hear: before or after FX row (MX-05) can then be built"
+note = "ADR-0028 gives a bus a monitor, a device and a tap point before or after its filters (decision register D22). #801 is the mixer's monitor taps and player, #816 the protocol's bus monitor and bus.set_monitor (0.42), and #822 the engine playing it on its device, all landed with wave/m1-5 (#877); the mixer's Hear: before or after FX row (MX-05) can then be built. #822 ran only against the simulated player and the fake device, so a run on a real output device (WASAPI, Core Audio, PipeWire) is still owed: playback, drift steering and an unplug mid-stream"
+needs = ["hardware"]
 
 # M1c
 
@@ -673,7 +674,7 @@ milestone = "M1d"
 title = "Hardware acceleration by default, with GPU fallback and device-loss recovery"
 status = "hardware"
 prs = [437, 568, 569, 580, 604, 708, 829]
-note = "#437 on main; the encoder's software fallback (#568), the mid-run GPU capture fallback (#569, #580), device-loss recovery (#604) and sessions after a fallback (#708) landed with wave/m1-3 (#754); landed with wave/m1-5 (#877): a full hardware session limit failing output.start with hardware_session_limit instead of falling back (#829, #443 case 2, protocol 0.44); Windows runs: the mid-run fallback (#576) and a forced TDR (#620); #734's webcam restart fixed by #796 in the same landing; open follow-ups #443 and #667"
+note = "#437 on main; the encoder's software fallback (#568), the mid-run GPU capture fallback (#569, #580), device-loss recovery (#604) and sessions after a fallback (#708) landed with wave/m1-3 (#754); landed with wave/m1-5 (#877): a full hardware session limit failing output.start with hardware_session_limit instead of falling back (#829, #443 case 2, protocol 0.44); Windows runs: the mid-run fallback (#576) and a forced TDR (#620); #734's webcam restart fixed by #796 in the same landing; open follow-up #443 (#667 fixed by #672 and #694)"
 needs = ["hardware"]
 
 [[item]]
