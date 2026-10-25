@@ -1204,11 +1204,15 @@ pub fn Canvas() -> impl IntoView {
             </div>
             <div class="canvas-caption">{caption}</div>
             {legacy_note}
-            <Show when=move || studio.privacy.get()>
-                <div class="privacy-notice" role="status">
-                    "Privacy screen on · output blurred · mic muted"
-                </div>
-            </Show>
+            // The live region is always there, so a screen reader announces the notice
+            // when it appears inside it.
+            <div class="privacy-live" role="status">
+                <Show when=move || studio.privacy.get()>
+                    <div class="privacy-notice">
+                        "Privacy screen on · output blurred · mic muted"
+                    </div>
+                </Show>
+            </div>
         </div>
     }
 }

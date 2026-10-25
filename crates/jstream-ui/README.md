@@ -136,7 +136,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the state with `state.get` after a `state.changed` newer than its copy (or after
   `events.dropped`), and follows `studio.changed` for the program scene and
   `privacy.changed` for the privacy screen (read with `privacy.get` when the session
-  opens and again after `events.dropped`, so the indicator is never left wrong). The
+  opens and again after `events.dropped`). The server may deliver another client's
+  `privacy.changed` ahead of the answer to a `privacy.get` computed before it, so an
+  answer is dropped when a `privacy.changed` arrived after it was asked
+  (`PrivacyReports`); otherwise a stale answer could show the outputs covered while
+  they are not. The
   privacy screen is runtime state with no `rev`; the header's button and the Pause key
   send `privacy.set` and show the state only once the engine reports it. Reads coalesce:
   while one `state.get` is in flight, any number of further changes cost one more read.

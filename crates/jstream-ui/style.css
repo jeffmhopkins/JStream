@@ -586,6 +586,8 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .stage-screen { position: absolute; pointer-events: none; }
 /* The privacy screen (§3.21): the frame blurred and dimmed, and a notice over it. */
 .stage.private { filter: blur(14px) brightness(0.6); }
+/* Always there, over the whole view, so the notice appears inside a live region. */
+.privacy-live { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
 .privacy-notice {
   position: absolute;
   left: 50%;

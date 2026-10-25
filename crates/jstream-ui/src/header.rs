@@ -423,6 +423,7 @@ pub fn Header(
             <button
                 class="header-button privacy"
                 class:on=private
+                aria-label="Privacy screen"
                 aria-pressed=move || if private() { "true" } else { "false" }
                 title="Privacy screen: blur the whole output and mute the mic (Pause)"
                 on:click=move |_| toggle_privacy()

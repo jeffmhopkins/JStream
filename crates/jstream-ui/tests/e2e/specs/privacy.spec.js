@@ -6,7 +6,7 @@
 import { test, expect, connect, showPanel } from '../fixtures.js';
 
 function privacyButton(page) {
-  return page.locator('header.app-header').getByRole('button', { name: /^Privacy/ });
+  return page.locator('header.app-header').getByRole('button', { name: 'Privacy screen' });
 }
 
 function notice(page) {
@@ -29,6 +29,7 @@ test('the Privacy button blurs the canvas and mutes the mic until pressed again'
   await expect(button).toHaveAttribute('aria-pressed', 'false');
   await expect(button).toHaveAttribute('title', 'Privacy screen: blur the whole output and mute the mic (Pause)');
   await expect(notice(page)).toHaveCount(0);
+  await expect(page.locator('.canvas-view [role="status"]')).toHaveCount(1);
   await expect(names).toHaveText(['Desktop audio', 'Mic · ES-9 Line']);
 
   await button.click();
@@ -36,7 +37,8 @@ test('the Privacy button blurs the canvas and mutes the mic until pressed again'
   await expect(button).toHaveAttribute('aria-pressed', 'true');
   await expect(button).toHaveClass(/\bon\b/);
   await expect(notice(page)).toHaveText('Privacy screen on · output blurred · mic muted');
-  await expect(notice(page)).toHaveAttribute('role', 'status');
+  // Inside a live region that is always there, so the change is announced.
+  await expect(page.locator('.canvas-view [role="status"]')).toContainText('Privacy screen on');
   await expect(page.locator('.canvas-view .stage')).toHaveClass(/\bprivate\b/);
   await expect(page.locator('.canvas-view .stage')).toHaveCSS('filter', 'blur(14px) brightness(0.6)');
   // Only the microphone: desktop audio isn't an input device.
