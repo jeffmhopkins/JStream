@@ -167,6 +167,16 @@ impl ControlPlane {
         }
     }
 
+    /// The mixer's sample rate.
+    pub(crate) fn sample_rate(&self) -> u32 {
+        self.sample_rate
+    }
+
+    /// Frames per mixer block.
+    pub(crate) fn block_frames(&self) -> usize {
+        self.block_frames
+    }
+
     /// This mixer's tag.
     pub(crate) fn tag(&self) -> u64 {
         self.tag

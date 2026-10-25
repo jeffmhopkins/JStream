@@ -1,10 +1,11 @@
 //! VA-API, loaded at run time (ADR-0060 §6, §8).
 //!
-//! [`probe_encoders`] opens each DRM render node through libva and lists the H.264
-//! encode entry points its driver offers, and `VaapiH264Encoder` is an encode session on
-//! one of them (`session`). The parameters it submits are built in `h264`, the structs
-//! libva reads are declared in `ffi`, and CPU frames are written into VA images by
-//! `upload`; those three are platform-independent and tested everywhere.
+//! [`probe_encoders`] opens each DRM render node through libva and lists the H.264 and
+//! HEVC encode entry points its driver offers, and `VaapiEncoder` is an encode session
+//! on one of them (`session`). The parameters it submits are built in `h264` and
+//! `hevc`, the structs libva reads are declared in `ffi`, and CPU frames are written
+//! into VA images by `upload`; those four are platform-independent and tested
+//! everywhere.
 
 #[cfg(target_os = "linux")]
 mod display;
@@ -24,6 +25,9 @@ mod ffi;
     )
 )]
 mod h264;
+// Used by the Linux session; built elsewhere for its tests, which use all of it.
+#[cfg(any(target_os = "linux", test))]
+mod hevc;
 #[cfg(target_os = "linux")]
 mod session;
 #[cfg_attr(
@@ -35,8 +39,10 @@ mod session;
 )]
 mod upload;
 
+use jstream_platform::media::Codec;
+
 #[cfg(target_os = "linux")]
-pub(crate) use session::VaapiH264Encoder;
+pub(crate) use session::VaapiEncoder;
 
 /// The H.264 profiles JStream encodes, with libva's `VAProfile` values.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -53,6 +59,33 @@ pub enum H264Profile {
 impl H264Profile {
     /// Every profile, in the order the probe prefers them.
     pub const ALL: [Self; 3] = [Self::High, Self::Main, Self::ConstrainedBaseline];
+}
+
+/// What a VA-API encoder encodes: a libva `VAProfile`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum VaProfile {
+    /// An H.264 profile.
+    H264(H264Profile),
+    /// `VAProfileHEVCMain`: HEVC Main, 8-bit 4:2:0.
+    HevcMain,
+}
+
+impl VaProfile {
+    /// libva's `VAProfile` value.
+    pub fn va(self) -> i32 {
+        match self {
+            Self::H264(profile) => profile as i32,
+            Self::HevcMain => 17,
+        }
+    }
+
+    /// The codec it encodes.
+    pub fn codec(self) -> Codec {
+        match self {
+            Self::H264(_) => Codec::H264,
+            Self::HevcMain => Codec::Hevc,
+        }
+    }
 }
 
 /// The encode entry points of libva's `VAEntrypoint`.
@@ -75,15 +108,15 @@ impl VaEntrypoint {
     }
 }
 
-/// One H.264 encoder a VA-API driver offers.
+/// One H.264 or HEVC encoder a VA-API driver offers.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VaEncoder {
     /// The DRM render node, such as `/dev/dri/renderD128`.
     pub node: String,
     /// The driver's vendor string.
     pub vendor: String,
-    /// The best profile it encodes.
-    pub profile: H264Profile,
+    /// The profile it encodes: the best H.264 profile, or HEVC Main.
+    pub profile: VaProfile,
     /// The entry point it encodes through.
     pub entrypoint: VaEntrypoint,
 }
@@ -93,16 +126,15 @@ pub use backend::probe_encoders;
 
 #[cfg(target_os = "linux")]
 mod backend {
-    use std::ffi::c_int;
-
     use jstream_platform::PlatformError;
 
     use super::display::{Display, Va};
-    use super::{H264Profile, VaEncoder, VaEntrypoint};
+    use super::{H264Profile, VaEncoder, VaEntrypoint, VaProfile};
 
-    /// The H.264 encoders every DRM render node's VA-API driver offers, one per node at
-    /// most. Empty when there is no render node or no driver encodes H.264 (Fedora's
-    /// stock Mesa, NVIDIA's driver).
+    /// The encoders every DRM render node's VA-API driver offers, in node order: on each
+    /// node its best H.264 profile, then HEVC Main, each when the driver encodes it.
+    /// Empty when there is no render node or no driver encodes either (Fedora's stock
+    /// Mesa, NVIDIA's driver).
     ///
     /// # Errors
     /// [`PlatformError::MissingComponent`] when libva isn't installed.
@@ -128,13 +160,18 @@ mod backend {
             let Ok(display) = Display::open(va.clone(), &node) else {
                 continue;
             };
-            let best = H264Profile::ALL.into_iter().find_map(|profile| {
-                VaEntrypoint::choose(&display.entrypoints(profile as c_int)).map(|e| (profile, e))
-            });
-            if let Some((profile, entrypoint)) = best {
+            let h264 = H264Profile::ALL
+                .into_iter()
+                .map(VaProfile::H264)
+                .find_map(|profile| {
+                    VaEntrypoint::choose(&display.entrypoints(profile.va())).map(|e| (profile, e))
+                });
+            let hevc = VaEntrypoint::choose(&display.entrypoints(VaProfile::HevcMain.va()))
+                .map(|e| (VaProfile::HevcMain, e));
+            for (profile, entrypoint) in h264.into_iter().chain(hevc) {
                 found.push(VaEncoder {
                     vendor: display.vendor(),
-                    node,
+                    node: node.clone(),
                     profile,
                     entrypoint,
                 });
@@ -146,13 +183,19 @@ mod backend {
 
 #[cfg(test)]
 mod tests {
-    use super::{H264Profile, VaEntrypoint};
+    use jstream_platform::media::Codec;
+
+    use super::{H264Profile, VaEntrypoint, VaProfile};
 
     #[test]
     fn values_match_libva() {
         assert_eq!(H264Profile::Main as i32, 6);
         assert_eq!(H264Profile::High as i32, 7);
         assert_eq!(H264Profile::ConstrainedBaseline as i32, 13);
+        assert_eq!(VaProfile::H264(H264Profile::High).va(), 7);
+        assert_eq!(VaProfile::HevcMain.va(), 17);
+        assert_eq!(VaProfile::H264(H264Profile::Main).codec(), Codec::H264);
+        assert_eq!(VaProfile::HevcMain.codec(), Codec::Hevc);
         assert_eq!(VaEntrypoint::EncSlice as i32, 6);
         assert_eq!(VaEntrypoint::EncSliceLp as i32, 8);
     }
