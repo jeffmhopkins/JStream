@@ -595,32 +595,65 @@ mod tests {
                 who,
             ))
         };
-        let dir = std::env::temp_dir().join(format!("xtask-ledger-git-{}", std::process::id()));
-        let git = |args: &[&str]| {
+        let root = std::env::temp_dir().join(format!("xtask-ledger-git-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        // Runs git in `dir` and returns its output. Auto-maintenance is off: from git 2.47
+        // a commit or merge starts it detached, so it could still be running in a
+        // repository when the next step reuses that path (#779).
+        let git = |dir: &std::path::Path, args: &[&str]| {
             std::process::Command::new("git")
                 .args(["-c", "user.name=t", "-c", "user.email=t@t"])
+                .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
                 .args(args)
-                .current_dir(&dir)
+                .current_dir(dir)
                 .output()
                 .expect("invariant: git runs")
         };
+        // Like `git`, but a failure panics with git's own message.
+        let ok = |dir: &std::path::Path, args: &[&str]| {
+            let out = git(dir, args);
+            assert!(
+                out.status.success(),
+                "git {args:?} failed: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+        };
+        let runs = std::cell::Cell::new(0);
         // Merges main into the branch and returns whether it was clean, and the ledger
-        // after taking main's side of any conflict.
+        // after taking main's side of any conflict. Each merge gets a repository of its
+        // own, so nothing a previous one left behind can reach it.
         let merge = |branch: &str, main: &str| -> (bool, Ledger) {
-            let _ = std::fs::remove_dir_all(&dir);
+            runs.set(runs.get() + 1);
+            let dir = root.join(runs.get().to_string());
             std::fs::create_dir_all(&dir).expect("invariant: temp dir is writable");
+            let dir = dir.as_path();
             let commit = |text: &str, name: &str| {
                 std::fs::write(dir.join("v.toml"), text).expect("invariant: writable");
-                git(&["checkout", "-q", "-B", name]);
-                git(&["add", "v.toml"]);
-                git(&["commit", "-q", "-m", name]);
+                ok(dir, &["checkout", "-q", "-B", name]);
+                ok(dir, &["add", "v.toml"]);
+                ok(dir, &["commit", "-q", "-m", name]);
             };
-            git(&["init", "-q"]);
+            ok(dir, &["init", "-q"]);
             commit(&render(base_stamp.clone()), "base");
             commit(main, "main");
-            git(&["checkout", "-q", "base"]);
+            ok(dir, &["checkout", "-q", "base"]);
             commit(branch, "branch");
-            let clean = git(&["merge", "-q", "main"]).status.success();
+            let out = git(dir, &["merge", "-q", "main"]);
+            let clean = out.status.success();
+            // A failed merge must be a conflict in the ledger, not some other refusal.
+            let listed = git(dir, &["ls-files", "-u"]);
+            assert!(
+                listed.status.success(),
+                "git ls-files -u failed: {}",
+                String::from_utf8_lossy(&listed.stderr)
+            );
+            let unmerged = listed.stdout;
+            assert!(
+                clean || !unmerged.is_empty(),
+                "git merge failed without a conflict: {}{}",
+                String::from_utf8_lossy(&out.stdout),
+                String::from_utf8_lossy(&out.stderr)
+            );
             let text = std::fs::read_to_string(dir.join("v.toml")).expect("invariant: written");
             let text = if clean {
                 text
@@ -694,7 +727,7 @@ mod tests {
                 Remove(k) => format!("remove {k}"),
             }
         }
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
