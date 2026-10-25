@@ -24,9 +24,9 @@ use jstream_platform::media::{Codec, PixelFormat};
 use jstream_platform::{PlatformError, VideoEncoderConfig};
 
 use super::ffi::{
-    ATTRIB_NOT_SUPPORTED, FrameRateParam, HrdParam, Id, MiscParam, PICTURE_HEVC_RPS_ST_CURR_BEFORE,
-    PREDICTION_DIRECTION_BI_NOT_EMPTY, PicParamHevc, PictureHevc, RateControlParam, SeqParamHevc,
-    SliceParamHevc,
+    ATTRIB_NOT_SUPPORTED, FEATURE_REQUIRED, FrameRateParam, HrdParam, Id, MiscParam,
+    PICTURE_HEVC_RPS_ST_CURR_BEFORE, PREDICTION_DIRECTION_BI_NOT_EMPTY, PicParamHevc, PictureHevc,
+    RateControlParam, SeqParamHevc, SliceParamHevc,
 };
 use super::h264::{
     BitWriter, Rate, annex_b, frame_rate_buffer, hrd_buffer, rate, rate_control_buffer,
@@ -140,6 +140,33 @@ impl Tools {
         t.gpb = prediction != ATTRIB_NOT_SUPPORTED
             && prediction & PREDICTION_DIRECTION_BI_NOT_EMPTY != 0;
         t
+    }
+
+    /// The first tool that a driver with this `VAConfigAttribEncHEVCFeatures` value
+    /// requires (`VA_FEATURE_REQUIRED`) but JStream's parameter sets turn off, so the
+    /// driver would code it while the headers say it is off. `None` when there is no
+    /// such tool, or the driver doesn't advertise its features.
+    pub(crate) fn required_but_off(features: u32) -> Option<&'static str> {
+        // The fields of `VAConfigAttribValEncHEVCFeatures` that `sps` and `pps` write
+        // as off (or, for deblocking, as not disabled).
+        const OFF: [(u32, &str); 10] = [
+            (0, "separate colour planes"),
+            (1, "scaling lists"),
+            (4, "PCM"),
+            (6, "strong intra smoothing"),
+            (7, "dependent slices"),
+            (8, "sign data hiding"),
+            (9, "constrained intra prediction"),
+            (12, "weighted prediction"),
+            (13, "transquant bypass"),
+            (14, "disabling the deblocking filter"),
+        ];
+        if features == ATTRIB_NOT_SUPPORTED {
+            return None;
+        }
+        OFF.iter()
+            .find(|&&(field, _)| (features >> (2 * field)) & 3 == FEATURE_REQUIRED)
+            .map(|&(_, tool)| tool)
     }
 }
 
@@ -461,8 +488,13 @@ pub(crate) fn picture(
         decoded_curr_pic: va_picture(recon, p, 0),
         reference_frames,
         coded_buf,
-        // The reference (list 0, entry 0) with temporal MVP; none without.
-        collocated_ref_pic_index: if t.temporal_mvp { 0 } else { 0xFF },
+        // The reference (list 0, entry 0) with temporal MVP; none without, or on an IDR
+        // frame, whose slices have no `slice_temporal_mvp_enabled_flag`.
+        collocated_ref_pic_index: if t.temporal_mvp && predicted.is_some() {
+            0
+        } else {
+            0xFF
+        },
         last_picture: 0,
         pic_init_qp: PIC_INIT_QP,
         diff_cu_qp_delta_depth: t.cu_qp_delta_depth as u8,
@@ -971,6 +1003,20 @@ mod tests {
         // Block sizes outside what HEVC allows are brought inside it: 8x8 coding trees
         // become 16x16, and the transforms stay below the coding blocks.
         let small = Tools::from_attributes(ATTRIB_NOT_SUPPORTED, 0, ATTRIB_NOT_SUPPORTED);
+        // A driver that requires a tool JStream's headers turn off is refused, by name;
+        // required SAO (`advertised`) is used.
+        assert_eq!(Tools::required_but_off(ATTRIB_NOT_SUPPORTED), None);
+        assert_eq!(Tools::required_but_off(4_195_728), None);
+        assert_eq!(
+            Tools::required_but_off(4_195_728 | 2 << 16),
+            Some("sign data hiding")
+        );
+        assert_eq!(
+            Tools::required_but_off(2 << 28),
+            Some("disabling the deblocking filter")
+        );
+        // Supported is not required.
+        assert_eq!(Tools::required_but_off(0x1555_5555), None);
         assert_eq!(
             (
                 small.log2_ctb,
@@ -1094,7 +1140,7 @@ mod tests {
         );
         assert_eq!(
             (pic.collocated_ref_pic_index, pic.diff_cu_qp_delta_depth),
-            (0, 3)
+            (0xFF, 3)
         );
         assert!(
             pic.reference_frames
@@ -1116,6 +1162,20 @@ mod tests {
             (11, 1)
         );
         assert_eq!(pic.nal_unit_type, 1);
+        // Temporal MVP from the reference.
+        assert_eq!(pic.collocated_ref_pic_index, 0);
+        // Without temporal MVP there is no collocated picture.
+        let no_tmvp = Settings {
+            tools: Tools {
+                temporal_mvp: false,
+                ..s.tools
+            },
+            ..s
+        };
+        assert_eq!(
+            picture(&no_tmvp, &p, 11, Some((10, &idr)), 98).collocated_ref_pic_index,
+            0xFF
+        );
         assert_eq!(
             (
                 pic.reference_frames[0].picture_id,

@@ -627,8 +627,9 @@ impl VaapiEncoder {
     /// # Errors
     /// [`PlatformError::Unsupported`] when the configuration is outside what
     /// [`h264::check`] or [`hevc::check`] accepts, a GPU session isn't configured for
-    /// NV12, or the driver lacks 4:2:0 surfaces or the rate-control mode,
-    /// [`PlatformError::MissingComponent`] when libva is missing, and
+    /// NV12, the driver lacks 4:2:0 surfaces or the rate-control mode, or, for HEVC, the
+    /// driver requires a tool JStream's parameter sets turn off
+    /// ([`hevc::Tools::required_but_off`]), [`PlatformError::MissingComponent`] when libva is missing, and
     /// [`PlatformError::Os`] when the node or the driver fails.
     pub(crate) fn open_on(
         encoder: &VaEncoder,
@@ -680,6 +681,11 @@ impl VaapiEncoder {
         };
         va.check("vaGetConfigAttributes", status)?;
         let stream = if hevc {
+            if let Some(tool) = hevc::Tools::required_but_off(offered[3].value) {
+                return Err(PlatformError::Unsupported {
+                    what: format!("HEVC encoding that requires {tool} on {}", info.name),
+                });
+            }
             let tools =
                 hevc::Tools::from_attributes(offered[3].value, offered[4].value, offered[5].value);
             stream.with_tools(config, tools)?
@@ -700,7 +706,8 @@ impl VaapiEncoder {
             });
         }
         let packed = has(offered[2], PACKED_HEADER_SEQUENCE);
-        let packed_slice = hevc && has(offered[2], PACKED_HEADER_SLICE);
+        // JStream's slice headers match its own parameter sets, not the driver's.
+        let packed_slice = packed && hevc && has(offered[2], PACKED_HEADER_SLICE);
         let mut wanted = vec![
             ConfigAttrib {
                 kind: attrib::RT_FORMAT,
