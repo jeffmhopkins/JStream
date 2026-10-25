@@ -47,6 +47,9 @@ pub(crate) const RC_VBR: u32 = 0x4;
 pub(crate) const PACKED_HEADER_SEQUENCE: u32 = 0x1;
 /// `VA_ENC_PACKED_HEADER_SLICE`.
 pub(crate) const PACKED_HEADER_SLICE: u32 = 0x4;
+/// `VA_FEATURE_REQUIRED`: a two-bit field of `VAConfigAttribValEncHEVCFeatures` whose
+/// tool the driver always codes.
+pub(crate) const FEATURE_REQUIRED: u32 = 2;
 /// `VA_PREDICTION_DIRECTION_BI_NOT_EMPTY`: the driver codes no P slices, so a P frame is
 /// coded as a B slice with the same reference in both lists.
 pub(crate) const PREDICTION_DIRECTION_BI_NOT_EMPTY: u32 = 0x4;

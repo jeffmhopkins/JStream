@@ -680,6 +680,11 @@ impl VaapiEncoder {
         };
         va.check("vaGetConfigAttributes", status)?;
         let stream = if hevc {
+            if let Some(tool) = hevc::Tools::required_but_off(offered[3].value) {
+                return Err(PlatformError::Unsupported {
+                    what: format!("HEVC encoding that requires {tool} on {}", info.name),
+                });
+            }
             let tools =
                 hevc::Tools::from_attributes(offered[3].value, offered[4].value, offered[5].value);
             stream.with_tools(config, tools)?
@@ -700,7 +705,8 @@ impl VaapiEncoder {
             });
         }
         let packed = has(offered[2], PACKED_HEADER_SEQUENCE);
-        let packed_slice = hevc && has(offered[2], PACKED_HEADER_SLICE);
+        // JStream's slice headers match its own parameter sets, not the driver's.
+        let packed_slice = packed && hevc && has(offered[2], PACKED_HEADER_SLICE);
         let mut wanted = vec![
             ConfigAttrib {
                 kind: attrib::RT_FORMAT,
