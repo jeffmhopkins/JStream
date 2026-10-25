@@ -560,6 +560,8 @@ struct Scene {
     /// The folder it is filed in, if any.
     folder: Option<jstream_protocol::FolderId>,
     meta: jstream_protocol::SceneMeta,
+    /// Its filters (ADR-0065), settings as given: a video chain only.
+    filters: jstream_protocol::FilterChains,
 }
 
 /// An item: the scene that holds it, the source it places, and every property an edit
@@ -575,6 +577,8 @@ struct Item {
     visible: bool,
     opacity: Finite32,
     blend: BlendMode,
+    /// Its effects (ADR-0065), settings as given: only the video chain holds any.
+    effects: jstream_protocol::FilterChains,
 }
 
 impl State {
@@ -1017,7 +1021,7 @@ impl State {
                     .iter()
                     .map(|scene| SceneInfo {
                         overrides: Vec::new(),
-                        filters: Default::default(),
+                        filters: scene.filters.clone(),
                         variant_of: None,
                         scene_id: scene.id.clone(),
                         name: scene.name.clone(),
@@ -1298,6 +1302,7 @@ impl Collection {
                     items: Vec::new(),
                     folder: None,
                     meta: Default::default(),
+                    filters: Default::default(),
                 });
                 vec![Edit::SceneDelete { scene_id }]
             }
@@ -1377,6 +1382,10 @@ impl Collection {
                         meta: scene.meta.clone(),
                     });
                 }
+                let owner = jstream_protocol::FilterOwner::Scene {
+                    scene_id: scene.id.clone(),
+                };
+                inverse.extend(filter::restore_all(&owner, scene.filters.clone()));
                 // Re-adding bottom to top puts each item back at its own index.
                 for (position, item_id) in scene.items.iter().enumerate() {
                     if let Some(item) = self.items.remove(item_id) {
@@ -1440,6 +1449,7 @@ impl Collection {
                         visible: true,
                         opacity,
                         blend,
+                        effects: Default::default(),
                     },
                 );
                 vec![Edit::ItemRemove { item_id }]
@@ -2081,12 +2091,21 @@ impl Collection {
     /// Whether any source's settings, or its filters' settings, hold a reference
     /// matching `is_target`.
     fn is_referred_to(&self, is_target: impl Fn(&Reference) -> bool) -> bool {
-        self.sources.values().any(|source| {
+        let refers = |settings: &Settings| settings.references().any(|(_, r)| is_target(&r));
+        let sources = self.sources.values().any(|source| {
             let filters = source.filters.video.iter().chain(&source.filters.audio);
             std::iter::once(&source.settings)
                 .chain(filters.map(|f| &f.settings))
-                .any(|settings| settings.references().any(|(_, r)| is_target(&r)))
-        })
+                .any(refers)
+        });
+        // A scene's filters and an item's effects refer too (ADR-0065 §3).
+        let scenes = self.scenes.iter().map(|s| &s.filters);
+        let items = self.items.values().map(|i| &i.effects);
+        sources
+            || scenes
+                .chain(items)
+                .flat_map(|chains| chains.video.iter().chain(&chains.audio))
+                .any(|f| refers(&f.settings))
     }
 
     /// Every source, ordered by ID, as queries report them.
@@ -2165,7 +2184,7 @@ impl Collection {
                     geometry: item.geometry,
                     crop: item.crop,
                     visible: item.visible,
-                    effects: Vec::new(),
+                    effects: item.effects.video.clone(),
                     opacity: item.opacity,
                     blend: item.blend,
                     transition: ItemTransition::default(),
@@ -2415,6 +2434,10 @@ fn restore_item(
             visible: false,
         });
     }
+    let owner = jstream_protocol::FilterOwner::Item {
+        item_id: item_id.clone(),
+    };
+    edits.extend(filter::restore_all(&owner, item.effects.clone()));
     Ok(edits)
 }
 

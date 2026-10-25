@@ -598,10 +598,14 @@ on that one placement's cropped, fitted box, before its opacity and blend. Both 
 video chain only. `SceneInfo.filters` and `ItemInfo.effects` (a list of `FilterInfo`)
 report them, each omitted while empty, so an older server's answer parses as none. A
 `video_filter` descriptor's optional `max_outset_px` is the most the kind draws beyond
-each edge of its input at any settings, which pads an item's effects layer. The engine
-refuses both owners with `invalid_argument` on `edits.N.owner` (`scene filters are not
-available yet`, `item effects are not available yet`) for every filter edit until their
-chains are built, so `filters` and `effects` stay empty for now.
+each edge of its input at any settings, which pads an item's effects layer. A scene's
+or an item's audio chain is `invalid_argument` on `edits.N.chain`, and a keyframe scene
+as the owner on `edits.N.owner`, since it shows its parent's filters. References in
+them are edges of the scene, or of the item's scene: a blocker names them as
+`filters.<filter_id>.<param>` of the scene or `effects.<filter_id>.<param>` of the item.
+The engine checks such an edit as the graph does, and then refuses it with
+`invalid_argument` on `edits.N.owner` until it renders scene filters and item effects,
+so `filters` and `effects` stay empty for now.
 
 Every float on the wire (`Vec2`, `ItemTransform`, `ItemGeometry`, an opacity) is a `Finite32`:
 an `f32` that is never NaN or infinite. Computed geometry results use plain `f32`. serde

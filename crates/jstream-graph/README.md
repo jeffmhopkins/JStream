@@ -59,14 +59,16 @@ protocol's types (`Overrides`).
   if any, its `SceneMeta` and its items in stacking order, bottom first. A keyframe
   scene has `variant_of`, naming its parent, its `Overrides` and no items;
   `State::shown_items` gives the items any scene draws, a keyframe scene's being its
-  parent's at their effective values.
+  parent's at their effective values. A scene's `filters` (ADR-0065) are `Chains` whose
+  audio chain is always empty; a keyframe scene has none.
 - `Folder` and `Label`: a folder has an ID, a name and an optional parent folder, and a
   label an ID, a name, a colour and an optional icon (ADR-0024 §3 and §4). They organise
   only.
 - `Item`: the source it places, a `Placement`, a `crop`, `visible`, an `opacity` from
   0 to 1 and a `BlendMode`, its `ItemTransition`
-  ([ADR-0029](../../docs/adr/0029-transitions.md)), and the reserved per-placement
-  `effects`, an uninhabited `Effect` list that is always empty. `Placement` is
+  ([ADR-0029](../../docs/adr/0029-transitions.md)), and its `effects`
+  ([ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md)), a video chain of
+  `Filter`s, which `Item::effects` returns in order, first first. `Placement` is
   one of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)'s two forms: a
   `Geometry` (a box on the canvas) or a `Legacy` 0.3 `ItemTransform`, kept exactly as
   written. Only an edit changes the form.
@@ -168,23 +170,30 @@ the batch **touched**.
   accept only `normal` until the compositor draws the other modes. Each is undone by
   the previous value, and removing an item restores both.
 - **Filters** (`filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
-  every filter edit first refuses the `scene` and `item` owners (protocol 0.43,
-  [ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md)) with
-  `invalid_argument` on `owner`, since the model holds no scene chains or item effects
-  yet. `filter.add` checks, in order, the owner (a source, an output or the master stage),
-  the filter ID (non-empty, unused on the owner), that the owner has the chain (a
-  source: video if its kind produces video, audio if it produces audio and it is not a
-  `scene` source; the master and an output that carries audio: audio only, ADR-0027),
-  that the chain has room, that the kind is a filter kind of that chain (`kind`), that
-  a master or output filter's settings hold no reference (a scene, source, bus or asset),
-  the settings
-  exactly as a source's, and the index; it is undone by `filter.remove`. `filter.remove` is undone by the
+  every filter edit first refuses a keyframe scene as the owner (`invalid_argument` on
+  `owner`: it shows its parent's filters). `filter.add` checks, in order, the owner (a
+  source, an output, the master stage, a scene or an item), the filter ID (non-empty,
+  unused on the owner), that the owner has the chain (a source: video if its kind
+  produces video, audio if it produces audio and it is not a `scene` source; the master
+  and an output that carries audio: audio only, ADR-0027; a scene and an item: video
+  only, [ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md)), that the
+  chain has room, that the kind is a filter kind of that chain (`kind`), that a master
+  or output filter's settings hold no reference (a scene, source, bus or asset), the
+  settings exactly as a source's, the index, and the cycle check (a source's filter's
+  references are edges of the source, a scene filter's and an item effect's of the
+  scene); it is undone by `filter.remove`. `filter.remove` is undone by the
   `filter.add` that puts the filter back where it was, with its switch and settings;
   `filter.set_enabled`, `filter.set_settings` (a patch, `null` resets) and
   `filter.reorder` by the previous values. `source.duplicate` copies both chains with
   their IDs, `source.delete`'s inverse re-adds every filter after `source.create`,
-  `output.delete`'s re-adds the output's after `output.create`, and `source.create`
-  refuses a filter kind.
+  `output.delete`'s re-adds the output's after `output.create`, `scene.delete`'s the
+  scene's after `scene.create` and `item.remove`'s the item's effects after `item.add`,
+  and `source.create` refuses a filter kind. An item's effects go with it through
+  `item.move` (which runs the cycle check on their references from the new scene) and
+  `item.set_source`. A reference in a scene's filter blocks a delete as
+  `filters.<filter_id>.<param>` of the scene, and one in an item's effect as
+  `effects.<filter_id>.<param>` of the item; `delete.plan` clears them with
+  `filter.set_settings` unless it deletes that scene or removes that item anyway.
 - **Outputs** (`target.rs` checks the URL): `output.create` and `output.set_target`
   reject, with `invalid_argument` and a fixed reason that never repeats the URL, one
   that isn't an `rtmp://` or `rtmps://` server URL with a host and an application
@@ -350,11 +359,12 @@ change nothing.
 
 **The collection file** (`persist/`, [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)):
 `Graph::to_collection_json` writes the collection as pretty JSON: `schema_version`
-(`SCHEMA_VERSION`, now 1), `rev`, the `canvas`, scenes in display order (a group with
-`role: "group"`, ADR-0024) with their items bottom first (each with its placement in
+(`SCHEMA_VERSION`, now 2), `rev`, the `canvas`, scenes in display order (a group with
+`role: "group"`, ADR-0024, and its `filters` as a source's, omitted while empty) with
+their items bottom first (each with its placement in
 its own form, a legacy `transform` or a `geometry`, exactly one of them, then its crop
-and `visible`, and its `opacity` and `blend` only when they differ from 1 and
-`normal`), sources ordered by ID (with `kind_version`, the descriptor version a
+and `visible`, its `opacity` and `blend` only when they differ from 1 and
+`normal`, and its `effects`, a list of filters, omitted while empty), sources ordered by ID (with `kind_version`, the descriptor version a
 `builtin` source's settings follow, ADR-0025, `duplicated_from` as stored, even
 when it names a deleted source, and `filters`, omitted while both chains are empty: each
 filter with its `kind_version` and settings, and `enabled` only when false), outputs ordered by ID (each with its
@@ -384,10 +394,12 @@ carry one ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Reading and writing the 
 the engine's; this crate does no I/O.
 - **Loading** (`Graph::with_collection_json`) parses the JSON, refuses a
   `schema_version` it has no path from (missing, 0, or newer), runs the forward
-  migrations from the file's version (`MIGRATIONS[n]` upgrades `n + 1` to `n + 2`;
-  there are none while the schema is at 1), and refuses unknown fields in the file's
-  own objects, so a newer field is never silently dropped by the next save. An item's
-  reserved `effects` is accepted only empty.
+  migrations from the file's version (`MIGRATIONS[n]` upgrades `n + 1` to `n + 2`; the
+  one so far, 1 to 2, adds scene `filters` and item `effects`, which a version 1 file
+  has none of, so it changes nothing and refuses a version 1 file that holds either),
+  and refuses unknown fields in the file's own objects, so a newer field is never
+  silently dropped by the next save. Scene filters and item effects are added after
+  every scene, item and source, so their references find what they name.
 - **A loaded collection passes every edit check.** Rather than trust the file, loading
   rebuilds the state by applying the edits that create it, one at a time, to an empty
   graph with the caller's kinds: the canvas size, folders and labels, scenes with their
@@ -436,8 +448,10 @@ video mix edits and their inverses, a mix blocking its scene's delete and the pl
 pointing it at the program,
 opacity and blend checks and inverses, the filter edits (`tests/filters.rs`: each
 check's field, exact inverses, duplicate and delete, references in filter settings as
-cycles, blockers and plans, the collection file, and the master's and outputs' audio
-chains with their checks), audio defaults by kind, a
+cycles, blockers and plans, the collection file, the master's and outputs' audio
+chains with their checks, and scene filters and item effects: their checks, a keyframe
+scene refused, exact inverses through `item.remove`, `scene.delete`, `item.move` and
+`item.set_source`, and their references as cycles, blockers and plans), audio defaults by kind, a
 duplicate's audio and a delete's restore, a bus deleted with its sends and undone
 exactly, bus references (#362: `a_bus_reference_must_name_a_bus`,
 `a_drawn_bus_is_deleted_only_with_its_references_cleared`, and in `persist/tests.rs`
@@ -452,7 +466,7 @@ rejected batches of `jstream_protocol::parity` (a dev-dependency with the `fixtu
 feature) must get exactly the fixture's answers, the same ones the mock is held to. And a
 property test: a seeded generator applies 6000 random
 batches of every edit, including moves, role changes, source switches, addressed
-placement edits, filter edits on sources, outputs and the master, the audio edits, the
+placement edits, filter edits on sources, outputs, the master, scenes and items, the audio edits, the
 transition edits, and folders, labels and metadata. After each successful one, the
 state must hold no cycle and its folders must form a tree, applying its
 inverse must restore the state exactly, and applying the inverse's inverse (redo) must
@@ -475,10 +489,15 @@ two video mixes that two outputs show, scene `b` made a group, a clone, a
 gain filters, one disabled, a gain filter each on the master and the recording output,
 and the fixture's buses, sends and source audio, less the virtual camera and the
 hotkeys the parity collection gained later) plus a source whose
-settings refer to a later one must produce exactly the checked-in
-`persist/fixtures/v1.json`, and that fixture must load back to the same state and
-`rev` ([R-API-003](../../docs/RULES.md#R-API-003): the fixture stays when the schema
-moves on, and a migration has to load it); the fixture with its `webcam` sources'
+settings refer to a later one must load exactly from the checked-in
+`persist/fixtures/v1.json`, through the migration to version 2
+([R-API-003](../../docs/RULES.md#R-API-003): the fixture stays when the schema moves
+on, and a migration has to load it); that collection with a disabled scene filter and
+an item effect, both referring to a source that sorts after them, must produce exactly
+`persist/fixtures/v2.json` and load back to the same state and `rev`; a version 1 file
+holding scene filters or item effects refused by its migration; scene filters and
+effects loading through `filter.add`'s checks (an audio chain, a missing reference, an
+audio kind refused); the v1 fixture with its `webcam` sources'
 settings taken out (as saved before the kind had a `device`) loading to the same state;
 the fixture with its `display` source's `show_cursor` taken out (as saved before 0.36)
 loading to the same state;
@@ -509,10 +528,10 @@ no error quotes a credential-like value placed where a number, key or tag belong
 
 Planned, and kept possible by the private fields of the model types:
 
-- **Effects and more chains:** `effects[]` on items (per placement), which a collection
-  reserves and must leave empty for now, with their edits; filter chains on buses,
-  scenes, the master and outputs
-  ([ADR-0026](../../docs/adr/0026-source-filter-chains.md)).
+- **More chains:** filter chains on buses, and video chains on the master and outputs
+  ([ADR-0026](../../docs/adr/0026-source-filter-chains.md),
+  [ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)); keyframe
+  overrides of item effects (ADR-0065).
 - **Kind versions.** The engine's kinds come from `jstream-sources`. The collection file
   records each source's kind version but refuses a mismatch: settings migrations per
   kind, and keeping the data of a source whose kind is missing, come later.

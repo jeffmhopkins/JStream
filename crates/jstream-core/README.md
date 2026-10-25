@@ -116,6 +116,10 @@ state machine. Contents:
     the scan describes the kind. So nothing hosts a CLAP filter, keeps its saved state,
     runs a supervisor or reports its events. Also not yet: the plugin's editor, and
     rescanning.
+- **Not yet: scene filters and item effects** (ADR-0065, ADR-0068). The graph holds
+  them, but nothing renders them, so the engine refuses a `filter.*` edit whose owner is
+  a scene or an item (`invalid_argument` on `edits.N.owner`). It validates the batch
+  first, so a batch the graph refuses gets the graph's answer.
 - **Live sources** (`live.rs`): a running `jstream-sources` source for every source
   in the collection, built when it is created, rebuilt when its settings change and
   dropped when it is deleted, on the engine's `jstream-sources` thread. The program

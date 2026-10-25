@@ -153,13 +153,13 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   - an `opacity` outside 0 to 1 and a blend mode other than `normal`, in `item.add`,
     `item.set_opacity` and `item.set_blend`;
   - the filter edits (`mock/filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
-    the `scene` and `item` owners (protocol 0.43), refused on `owner` first as the
-    graph refuses them, a missing owner or filter, an empty or duplicate filter ID, an audio chain on a
-    `scene` source, a full chain and an index out of range. The master stage and
+    a missing owner (a source, output, scene or item) or filter, an empty or duplicate
+    filter ID, an audio chain on a `scene` source, a full chain and an index out of range. The master stage and
     outputs ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)) take
     audio filters only, an output only if it carries audio, and their filters no scene
-    or source reference. `source.duplicate` copies the chains, and `source.delete`'s
-    and `output.delete`'s inverses re-add them; a reference in a filter's settings
+    or source reference; a scene and an item (ADR-0065) take video filters only, and
+    `scene.delete`'s and `item.remove`'s inverses re-add theirs. `source.duplicate`
+    copies the chains, and `source.delete`'s and `output.delete`'s inverses re-add them; a reference in a filter's settings
     blocks deleting its target, as a source's own does;
   - audio (`mock/audio.rs`, ADR-0028): each audio source's `SourceAudio` with its kind's
     defaults and the master send at 0 dB, copied by `source.duplicate` and dropped by

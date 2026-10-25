@@ -4,8 +4,10 @@
 //! kinds, so it doesn't check a filter's kind, or whether a builtin source has the chain
 //! (a `scene` source has no audio chain, and that it does check), and stores settings as
 //! given. The master stage and each output that carries audio have an audio chain only,
-//! whose filters can't hold a reference (ADR-0027); those it checks too. The scene and
-//! item owners it refuses on `owner`, as the graph does until it builds them.
+//! whose filters can't hold a reference (ADR-0027); those it checks too. A scene and an
+//! item have a video chain only (ADR-0065), whose references the mock's delete checks
+//! follow; it has no keyframe scenes, so it never refuses a variant owner, and it runs
+//! no cycle check.
 
 use super::{
     Collection, already_exists, check_id, check_index, invalid, not_found, unimplemented_by_mock,
@@ -16,18 +18,6 @@ use jstream_protocol::{
     MAX_CHAIN_FILTERS, OutputKind, ProtocolError, Reference, Settings, SourceKind,
 };
 
-/// Refuses the scene and item owners (protocol 0.43) as the graph does until it builds
-/// their chains: `invalid_argument` on `owner`, before any other check.
-fn check_owner_built(owner: &FilterOwner, at: usize) -> Result<(), ProtocolError> {
-    match owner {
-        FilterOwner::Scene { .. } => {
-            Err(invalid(at, "owner", "scene filters are not available yet"))
-        }
-        FilterOwner::Item { .. } => Err(invalid(at, "owner", "item effects are not available yet")),
-        _ => Ok(()),
-    }
-}
-
 impl Collection {
     /// Applies a `filter.*` edit and returns the edits that undo it.
     pub(super) fn apply_filter(
@@ -35,14 +25,6 @@ impl Collection {
         edit: Edit,
         at: usize,
     ) -> Result<Vec<Edit>, ProtocolError> {
-        if let Edit::FilterAdd { owner, .. }
-        | Edit::FilterRemove { owner, .. }
-        | Edit::FilterSetEnabled { owner, .. }
-        | Edit::FilterSetSettings { owner, .. }
-        | Edit::FilterReorder { owner, .. } = &edit
-        {
-            check_owner_built(owner, at)?;
-        }
         match edit {
             Edit::FilterAdd {
                 owner,
@@ -134,6 +116,17 @@ impl Collection {
                 Ok(self.output_filters.entry(output_id.clone()).or_default())
             }
             FilterOwner::Master => Ok(&mut self.master),
+            FilterOwner::Scene { scene_id } => self
+                .scenes
+                .iter_mut()
+                .find(|scene| scene.id == *scene_id)
+                .map(|scene| &mut scene.filters)
+                .ok_or_else(|| not_found(EntityKind::Scene, scene_id.as_str())),
+            FilterOwner::Item { item_id } => self
+                .items
+                .get_mut(item_id)
+                .map(|item| &mut item.effects)
+                .ok_or_else(|| not_found(EntityKind::Item, item_id.as_str())),
             _ => Err(unimplemented_by_mock("this filter owner")),
         }
     }
@@ -170,6 +163,12 @@ impl Collection {
                     "output `{output_id}` carries no audio, so it has no audio chain"
                 ))
             }
+            (FilterOwner::Scene { scene_id }, FilterChain::Audio) => missing(format!(
+                "scene `{scene_id}` has no audio chain: a scene's audio is its bus's"
+            )),
+            (FilterOwner::Item { item_id }, FilterChain::Audio) => missing(format!(
+                "item `{item_id}` has no audio chain: its effects are video only"
+            )),
             _ => Ok(()),
         }
     }
@@ -281,7 +280,10 @@ fn check_no_references(
     at: usize,
     field_prefix: &str,
 ) -> Result<(), ProtocolError> {
-    if owner.source_id().is_some() {
+    if matches!(
+        owner,
+        FilterOwner::Source { .. } | FilterOwner::Scene { .. } | FilterOwner::Item { .. }
+    ) {
         return Ok(());
     }
     match settings

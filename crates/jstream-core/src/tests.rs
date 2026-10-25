@@ -517,6 +517,94 @@ fn scanned_clap_plugins_are_audio_filter_kinds() {
     );
 }
 
+/// The graph holds scene filters and item effects (ADR-0065), but nothing renders them
+/// yet, so the engine refuses a filter edit on a scene or an item, on `owner`, once the
+/// graph's own checks pass; a batch the graph would refuse gets the graph's answer.
+#[test]
+fn scene_and_item_filter_owners_are_refused_until_rendered() {
+    use jstream_protocol::{FilterChain, FilterId, FilterOwner, ItemId, SceneId};
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let setup = vec![
+        Edit::SceneCreate {
+            scene_id: SceneId::new("s"),
+            name: "S".into(),
+            role: None,
+        },
+        Edit::SourceCreate {
+            source_id: SourceId::new("bg"),
+            name: "bg".into(),
+            kind: SourceKind::Builtin {
+                kind: "color".into(),
+            },
+            settings: Default::default(),
+            duplicated_from: None,
+        },
+        Edit::ItemAdd {
+            scene_id: SceneId::new("s"),
+            item_id: ItemId::new("i"),
+            source_id: SourceId::new("bg"),
+            transform: None,
+            geometry: None,
+            opacity: None,
+            blend: None,
+        },
+    ];
+    let rev = batch(
+        &control,
+        Batch {
+            edits: setup,
+            expected_rev: None,
+            idempotency_key: None,
+            ends_gesture: None,
+        },
+    )
+    .expect("set up");
+    let sharpen = |owner: FilterOwner| Edit::FilterAdd {
+        owner,
+        chain: FilterChain::Video,
+        filter_id: FilterId::new("f"),
+        kind: "sharpen".into(),
+        settings: Default::default(),
+        enabled: None,
+        index: None,
+    };
+    let owners = [
+        FilterOwner::Scene {
+            scene_id: SceneId::new("s"),
+        },
+        FilterOwner::Item {
+            item_id: ItemId::new("i"),
+        },
+    ];
+    for owner in owners {
+        let error = batch(&control, Batch::single(sharpen(owner.clone()))).expect_err("refused");
+        assert!(
+            matches!(
+                error.protocol(),
+                Some(ProtocolError::InvalidArgument { field, reason, .. })
+                    if field == "edits.0.owner" && reason.contains("not rendered yet")
+            ),
+            "{owner:?}: {error:?}"
+        );
+        assert_eq!(engine.rev(), rev, "nothing applied");
+    }
+    let ghost = FilterOwner::Scene {
+        scene_id: SceneId::new("ghost"),
+    };
+    let error = batch(&control, Batch::single(sharpen(ghost))).expect_err("not found");
+    assert!(
+        matches!(
+            error.protocol(),
+            Some(ProtocolError::NotFound {
+                entity: EntityKind::Scene,
+                ..
+            })
+        ),
+        "{error:?}"
+    );
+}
+
 /// The engine describes its built-in kinds, and validates and completes settings against
 /// them (ADR-0025).
 #[test]

@@ -309,7 +309,7 @@ impl Scene {
         SceneInfo {
             scene_id: self.id.clone(),
             name: self.name.clone(),
-            filters: Default::default(),
+            filters: self.filters.to_info(),
             role: self.role,
             transition_in: self.transition_in.clone(),
             transition_out: self.transition_out.clone(),
@@ -351,7 +351,7 @@ impl Item {
             geometry,
             crop: self.crop,
             visible: self.visible,
-            effects: Vec::new(),
+            effects: self.effects.video.iter().map(Filter::to_info).collect(),
             opacity: self.opacity,
             blend: self.blend,
             transition: self.transition,

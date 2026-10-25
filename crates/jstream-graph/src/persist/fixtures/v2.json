@@ -1,0 +1,505 @@
+{
+  "schema_version": 2,
+  "rev": 3,
+  "canvas": {
+    "width": 1280,
+    "height": 720
+  },
+  "scenes": [
+    {
+      "id": "b",
+      "name": "B",
+      "role": "group",
+      "items": [
+        {
+          "id": "i4",
+          "source_id": "cam",
+          "geometry": {
+            "center": {
+              "x": 640.0,
+              "y": 360.0
+            },
+            "size": {
+              "width": 320.0,
+              "height": 180.0
+            },
+            "fit_mode": "fill",
+            "rotation_deg": 0.0,
+            "tilt_deg": 0.0,
+            "turn_deg": 0.0,
+            "depth_px": 0.0,
+            "flip_h": true
+          },
+          "crop": {
+            "left": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0
+          },
+          "visible": true,
+          "opacity": 0.5,
+          "effects": [
+            {
+              "id": "edge",
+              "kind": "frame",
+              "kind_version": 1,
+              "settings": {
+                "tint": {
+                  "source_id": "z_base",
+                  "type": "source"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "a",
+      "name": "A",
+      "filters": {
+        "video": [
+          {
+            "id": "grade",
+            "kind": "frame",
+            "kind_version": 1,
+            "enabled": false,
+            "settings": {
+              "tint": {
+                "source_id": "z_base",
+                "type": "source"
+              }
+            }
+          }
+        ]
+      },
+      "items": [
+        {
+          "id": "i3",
+          "source_id": "cam",
+          "transform": {
+            "position": {
+              "x": 10.0,
+              "y": 20.0
+            },
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "rotation_deg": 0.0
+          },
+          "crop": {
+            "left": 1,
+            "top": 2,
+            "right": 3,
+            "bottom": 4
+          },
+          "visible": false,
+          "opacity": 0.25
+        },
+        {
+          "id": "i1",
+          "source_id": "cam_copy",
+          "transform": {
+            "position": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "rotation_deg": 0.0
+          },
+          "crop": {
+            "left": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0
+          },
+          "visible": true
+        },
+        {
+          "id": "i2",
+          "source_id": "b_src",
+          "transform": {
+            "position": {
+              "x": 0.0,
+              "y": 0.0
+            },
+            "scale": {
+              "x": 1.0,
+              "y": 1.0
+            },
+            "rotation_deg": 0.0
+          },
+          "crop": {
+            "left": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0
+          },
+          "visible": true
+        }
+      ]
+    }
+  ],
+  "sources": [
+    {
+      "id": "a_tint",
+      "name": "a_tint",
+      "kind": {
+        "type": "builtin",
+        "kind": "color"
+      },
+      "kind_version": 2,
+      "settings": {
+        "color": "#000000ff",
+        "follow": {
+          "source_id": "z_base",
+          "type": "source"
+        }
+      }
+    },
+    {
+      "id": "aux",
+      "name": "Aux",
+      "kind": {
+        "type": "builtin",
+        "kind": "webcam"
+      },
+      "kind_version": 1,
+      "settings": {
+        "device": ""
+      },
+      "duplicated_from": "gone",
+      "audio": {
+        "enabled": true,
+        "follow": "when_shown",
+        "gain_db": 0.0,
+        "muted": false
+      }
+    },
+    {
+      "id": "b_src",
+      "name": "Scene B",
+      "kind": {
+        "type": "scene",
+        "scene_id": "b"
+      },
+      "audio": {
+        "enabled": false,
+        "follow": "when_shown",
+        "gain_db": 0.0,
+        "muted": false
+      }
+    },
+    {
+      "id": "cam",
+      "name": "Camera",
+      "kind": {
+        "type": "builtin",
+        "kind": "webcam"
+      },
+      "kind_version": 1,
+      "settings": {
+        "device": ""
+      },
+      "audio": {
+        "enabled": true,
+        "follow": "when_shown",
+        "gain_db": 0.0,
+        "muted": false
+      }
+    },
+    {
+      "id": "cam_copy",
+      "name": "Camera copy",
+      "kind": {
+        "type": "builtin",
+        "kind": "webcam"
+      },
+      "kind_version": 1,
+      "settings": {
+        "device": ""
+      },
+      "duplicated_from": "cam",
+      "audio": {
+        "enabled": true,
+        "follow": "when_shown",
+        "gain_db": 0.0,
+        "muted": false
+      }
+    },
+    {
+      "id": "desk",
+      "name": "Desktop",
+      "kind": {
+        "type": "builtin",
+        "kind": "desktop_audio"
+      },
+      "kind_version": 1,
+      "filters": {
+        "audio": [
+          {
+            "id": "g1",
+            "kind": "gain",
+            "kind_version": 1,
+            "settings": {
+              "gain_db": -3.0
+            }
+          },
+          {
+            "id": "g2",
+            "kind": "gain",
+            "kind_version": 1,
+            "enabled": false,
+            "settings": {
+              "gain_db": 0.0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "mic",
+      "name": "Microphone",
+      "kind": {
+        "type": "builtin",
+        "kind": "mic"
+      },
+      "kind_version": 1,
+      "audio": {
+        "enabled": true,
+        "follow": "when_shown",
+        "gain_db": -2.0,
+        "muted": true
+      }
+    },
+    {
+      "id": "mic_copy",
+      "name": "Microphone copy",
+      "kind": {
+        "type": "builtin",
+        "kind": "mic"
+      },
+      "kind_version": 1,
+      "duplicated_from": "mic",
+      "audio": {
+        "enabled": true,
+        "follow": "when_shown",
+        "gain_db": -2.0,
+        "muted": true
+      }
+    },
+    {
+      "id": "screen",
+      "name": "Screen",
+      "kind": {
+        "type": "builtin",
+        "kind": "display"
+      },
+      "kind_version": 1,
+      "settings": {
+        "show_cursor": true,
+        "target": ""
+      }
+    },
+    {
+      "id": "z_base",
+      "name": "z_base",
+      "kind": {
+        "type": "builtin",
+        "kind": "color"
+      },
+      "kind_version": 2,
+      "settings": {
+        "color": "#000000ff",
+        "follow": null
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "id": "rec",
+      "kind": {
+        "type": "record",
+        "path": "/home/me/Videos/show.mp4",
+        "container": "mp4"
+      },
+      "encoder_profile": "hq",
+      "filters": {
+        "audio": [
+          {
+            "id": "o1",
+            "kind": "gain",
+            "kind_version": 1,
+            "settings": {
+              "gain_db": -6.0
+            }
+          }
+        ]
+      },
+      "video_mix": "prog"
+    },
+    {
+      "id": "tw",
+      "kind": {
+        "type": "rtmp",
+        "target": {
+          "type": "generic",
+          "url": "rtmp://live.twitch.tv/app"
+        }
+      }
+    },
+    {
+      "id": "yt",
+      "kind": {
+        "type": "rtmp",
+        "target": {
+          "type": "generic",
+          "url": "rtmps://a.rtmps.youtube.com:443/live2"
+        }
+      },
+      "encoder_profile": "low",
+      "video_mix": "side"
+    }
+  ],
+  "encoders": [
+    {
+      "id": "hq",
+      "name": "Recording",
+      "profile": {
+        "video": {
+          "codec": "h264",
+          "rate_control": {
+            "type": "vbr",
+            "kbps": 12000,
+            "max_kbps": 20000
+          },
+          "keyframe_interval_s": 4,
+          "hardware": "avoid"
+        },
+        "audio": {
+          "codec": "aac",
+          "kbps": 320
+        }
+      }
+    },
+    {
+      "id": "low",
+      "name": "Stream",
+      "profile": {
+        "video": {
+          "codec": "h264",
+          "rate_control": {
+            "type": "cbr",
+            "kbps": 3000
+          },
+          "keyframe_interval_s": 2,
+          "hardware": "prefer"
+        },
+        "audio": {
+          "codec": "aac",
+          "kbps": 128
+        }
+      }
+    }
+  ],
+  "video_mixes": [
+    {
+      "id": "prog",
+      "name": "Program 720p",
+      "mix": {
+        "input": {
+          "type": "program"
+        },
+        "resolution": {
+          "width": 1280,
+          "height": 720
+        },
+        "fps_divisor": 1
+      }
+    },
+    {
+      "id": "side",
+      "name": "Side",
+      "mix": {
+        "input": {
+          "type": "scene",
+          "scene_id": "b"
+        },
+        "resolution": {
+          "width": 640,
+          "height": 360
+        },
+        "fps_divisor": 2
+      }
+    }
+  ],
+  "buses": [
+    {
+      "id": "master",
+      "name": "Master",
+      "gain_db": -1.0,
+      "muted": false
+    },
+    {
+      "id": "vod",
+      "name": "VOD track",
+      "gain_db": -6.0,
+      "muted": true
+    }
+  ],
+  "sends": [
+    {
+      "source_id": "aux",
+      "bus_id": "master",
+      "gain_db": 0.0
+    },
+    {
+      "source_id": "cam",
+      "bus_id": "master",
+      "gain_db": 0.0
+    },
+    {
+      "source_id": "cam_copy",
+      "bus_id": "master",
+      "gain_db": 0.0
+    },
+    {
+      "source_id": "desk",
+      "bus_id": "master",
+      "gain_db": 0.0
+    },
+    {
+      "source_id": "mic",
+      "bus_id": "master",
+      "gain_db": -1.5
+    },
+    {
+      "source_id": "mic",
+      "bus_id": "vod",
+      "gain_db": -3.0
+    },
+    {
+      "source_id": "mic_copy",
+      "bus_id": "vod",
+      "gain_db": -3.0
+    }
+  ],
+  "master": {
+    "filters": {
+      "audio": [
+        {
+          "id": "m1",
+          "kind": "gain",
+          "kind_version": 1,
+          "settings": {
+            "gain_db": -1.0
+          }
+        }
+      ]
+    }
+  }
+}

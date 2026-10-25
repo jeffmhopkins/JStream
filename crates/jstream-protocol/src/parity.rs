@@ -1224,19 +1224,35 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                  their audio chains hold filters",
             ),
         ),
-        // A scene's filters and an item's effects (0.43, ADR-0065) are refused on
-        // `owner` until they are built, before the scene or item is looked up, and for
-        // every filter edit.
+        // A scene's filters and an item's effects (0.43, ADR-0065): a video chain only,
+        // on a scene or item that exists.
         (
             Batch::single(gain_on(
                 FilterOwner::Scene {
                     scene_id: SceneId::new("a"),
                 },
                 "s",
-                FilterChain::Video,
+                FilterChain::Audio,
                 0.0,
             )),
-            invalid("edits.0.owner", "scene filters are not available yet"),
+            invalid(
+                "edits.0.chain",
+                "scene `a` has no audio chain: a scene's audio is its bus's",
+            ),
+        ),
+        (
+            Batch::single(gain_on(
+                FilterOwner::Item {
+                    item_id: ItemId::new("i1"),
+                },
+                "e",
+                FilterChain::Audio,
+                0.0,
+            )),
+            invalid(
+                "edits.0.chain",
+                "item `i1` has no audio chain: its effects are video only",
+            ),
         ),
         (
             Batch::single(Edit::FilterRemove {
@@ -1245,7 +1261,22 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 },
                 filter_id: FilterId::new("e"),
             }),
-            invalid("edits.0.owner", "item effects are not available yet"),
+            ProtocolError::NotFound {
+                entity: EntityKind::Item,
+                id: "ghost".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::FilterRemove {
+                owner: FilterOwner::Scene {
+                    scene_id: SceneId::new("ghost"),
+                },
+                filter_id: FilterId::new("s"),
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Scene,
+                id: "ghost".into(),
+            },
         ),
         (
             Batch::single(gain_on(

@@ -41,6 +41,35 @@ use jstream_render::{Compositor, FilterClock, Image, RenderError, ResourceCache,
 use crate::filter_assets::{self, FilterAsset, FilterAssets};
 use crate::snapshot::GpuKey;
 
+/// Refuses every filter edit on a scene or an item (ADR-0065), as `invalid_argument` on
+/// its `owner`. The graph holds scene filters and item effects, but no render node runs
+/// them yet, so the engine takes none it would not draw.
+pub(crate) fn refuse_unrendered_owners(
+    edits: &[jstream_protocol::Edit],
+) -> Result<(), jstream_protocol::ProtocolError> {
+    use jstream_protocol::{Edit, FilterOwner};
+    for (at, edit) in edits.iter().enumerate() {
+        let (Edit::FilterAdd { owner, .. }
+        | Edit::FilterRemove { owner, .. }
+        | Edit::FilterSetEnabled { owner, .. }
+        | Edit::FilterSetSettings { owner, .. }
+        | Edit::FilterReorder { owner, .. }) = edit
+        else {
+            continue;
+        };
+        let what = match owner {
+            FilterOwner::Scene { .. } => "scene filters",
+            FilterOwner::Item { .. } => "item effects",
+            _ => continue,
+        };
+        return Err(jstream_protocol::ProtocolError::invalid_argument(
+            format!("edits.{at}.owner"),
+            format!("{what} are not rendered yet, so the engine doesn't take them"),
+        ));
+    }
+    Ok(())
+}
+
 /// One filter of a [`Chain`], as the collection holds it.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ChainFilter {
