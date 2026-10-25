@@ -199,7 +199,10 @@ state machine. Contents:
   `audio.reset_loudness` restarts its integrated loudness. Every bus a source's
   settings draw (#362) has a scope the mixer thread feeds from that mixer bus, and
   every source a scope source's `audio_source` draws (#459) one it feeds from that
-  source's mixer input.
+  source's mixer input. Every bus with a monitor (ADR-0028's D22, protocol 0.42) plays
+  on its output device: the program stage's audio sources thread opens the device and
+  the mixer thread feeds it each block the bus makes, before or after its filters as
+  its tap says (see *Bus monitors* in [Design](#design)).
 - **History** (`history.rs`): per-client undo and redo
   ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): each client's undo and redo
   stacks, built from the inverse batches `Graph::apply` returns, and the log of what
@@ -322,7 +325,10 @@ state machine. Contents:
   (`a_bus_a_source_draws_feeds_its_scope_while_an_output_runs`), and a source a
   `waveform` draws reaching its own scope after its fader while the program mix carries
   another source, then silence once it is muted
-  (`a_source_a_source_draws_feeds_its_scope_after_its_fader`)), the audio filter kinds
+  (`a_source_a_source_draws_feeds_its_scope_after_its_fader`), and a bus's monitor
+  playing that bus on its device while the master's hears nothing of it, unavailable on
+  a device that isn't there, and closed once taken away or when the output stops
+  (`a_bus_monitor_plays_its_bus_on_its_device_while_an_output_runs`)), the audio filter kinds
   and their kernels (`filters.rs`: defaults, range edges, and a chain updated in place
   or rebuilt on a real mixer, and new settings a full command queue refuses kept off
   the record and tried again), item opacity in linear light through a nested scene
@@ -1008,6 +1014,26 @@ collection lock; the thread takes only its own lock, the wanted set's and the dr
 ledger's. When the program stage stops it joins the thread and closes every input
 after the mixer thread has stopped.
 
+**Bus monitors.** The same thread plays each bus's monitor (ADR-0028's D22). Each
+routing sync hands it the monitors to play (`Wanted::set_monitors`): each bus with a
+monitor that the mixer holds, with its mixer bus, and none once the routing's mixer
+goes, since the next program's mixer has buses of its own. On each pass it closes the
+monitors no longer wanted or wanted differently (another device, tap or mixer bus),
+reopens one whose stream failed (`MonitorStats::failed`), and opens every one that
+isn't playing. Opening one starts the device's stream (`AudioIo::open_output`; an
+empty `device` is the default output) on a `jstream_audio::MonitorSocket`, which plays
+silence, builds the monitor for the format the stream reports
+(`MixerControl::add_monitor`), plugs its player into the socket, and sends its feed to
+the mixer thread as a `MonitorRoute` over a channel that holds one per bus. A monitor
+that can't play (a device that isn't there, a format the player refuses) is
+unavailable, as an input is: logged at `warn` once per reason, retried on every pass,
+and never a failure of `output.start`. Closing one sets the route's `closed` flag and
+stops its stream. After each block the mixer thread hands the routes whose flag is set
+to the collector, takes the new ones while it has room (it keeps room for two per
+bus, so taking one never allocates), and pushes `Mixer::monitor_block` of each route's
+mixer bus and tap into its feed, at the block's engine frame. When it stops it hands
+every route to the collector.
+
 A running source with audio of its own (a `browser` page's, from
 `LiveSources::audio`) is wanted too, as `Recorded::Own`: `sync` takes those beside the
 graph, and also runs whenever a build installs, so a page's audio is recorded once its
@@ -1273,6 +1299,9 @@ brings the mixer in line with the collection under the collection lock:
   it replaces, and its last one when it stops, to the collector, since it may hold a
   scope's last reference ([R-RT-003](../../docs/RULES.md#R-RT-003)). The program
   stage makes the list and hands it to the engine with the mixer's controls;
+- the monitors: every bus with a monitor, on the mixer bus the routing holds for it,
+  goes to the program stage's audio sources thread, which plays it (see *Bus
+  monitors*);
 - the source scopes (#459): every source a `waveform` or `spectrum` draws through its
   `audio_source` (`jstream_sources::drawn_source`) keeps a scope too
   (`AudioScopes::retain_sources`), listed in the same `ScopeTaps` after the buses. It
@@ -2070,7 +2099,8 @@ no audio source), meters each master block's true peak and loudness, and also pu
 each block into the engine's program audio scope for the `waveform` and `spectrum`
 sources, and each drawn bus's and source's block into its scope (lock-free rings: no
 lock, no allocation; the list of scopes comes through `arc-swap`, see *Audio routing*
-in Design). Once the stage is up, the engine routes the
+in Design), and each bus monitor's block into its feed (the routes come over a
+channel, see *Bus monitors* in Design). Once the stage is up, the engine routes the
 collection's buses, faders and sends into its mixer until it stops (see *Audio
 routing* in Design). Every running output shares that one program stage (capture,
 render, mixer, audio inputs); the first `output.start` builds it and the

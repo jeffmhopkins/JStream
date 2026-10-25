@@ -1699,6 +1699,15 @@ impl Engine {
         lock(&self.shared.state).audio.status(source_id)
     }
 
+    /// How the program stage fares with bus `bus_id`'s monitor, for tests.
+    #[cfg(test)]
+    pub(crate) fn monitor_status(
+        &self,
+        bus_id: &jstream_protocol::BusId,
+    ) -> Option<crate::audio_sources::AudioStatus> {
+        lock(&self.shared.state).audio.monitor_status(bus_id)
+    }
+
     /// The packets the mixer input of `source_id` has received, for tests.
     #[cfg(test)]
     pub(crate) fn audio_packets(&self, source_id: &SourceId) -> Option<u64> {

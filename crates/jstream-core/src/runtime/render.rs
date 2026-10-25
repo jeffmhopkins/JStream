@@ -26,7 +26,7 @@ use jstream_encode::{AudioInput, VideoInput};
 use jstream_platform::GpuFrame;
 use jstream_render::Reclaimed;
 
-use crate::audio::ScopeTap;
+use crate::audio::{MonitorRoute, ScopeTap};
 use crate::runtime::pipeline::VideoTap;
 use crate::runtime::vcam::VcamTap;
 use crate::snapshot::{LiveParams, Shot};
@@ -271,6 +271,9 @@ pub(crate) enum Garbage {
     /// A list of bus and source scopes the mixer thread replaced; it may hold the last
     /// reference to a scope no source draws any more.
     Scopes(Arc<Vec<ScopeTap>>),
+    /// A monitor's feed the mixer thread let go of, once its device closed: it holds
+    /// the monitor's ring and its closed flag.
+    Monitor(MonitorRoute),
 }
 
 /// The sending side of a program stage's collector thread (R-RT-003): the render
@@ -322,6 +325,7 @@ fn collect(rx: Receiver<Garbage>) {
             Garbage::Targets(targets) => drop(targets),
             Garbage::Vcam(tap) => drop(tap),
             Garbage::Scopes(taps) => drop(taps),
+            Garbage::Monitor(route) => drop(route),
         }
     }
 }

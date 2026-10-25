@@ -34,6 +34,7 @@ fn the_mixer_follows_edits_and_undo_and_meters_tick() {
         meters,
         scopes: engine.audio_scopes(),
         taps: Arc::new(ScopeTaps::default()),
+        wanted: Arc::default(),
     });
 
     // A nested scene is the only audio source the builtin kinds give for now; it has
@@ -145,6 +146,7 @@ fn when_shown_audio_follows_the_program() {
         meters,
         scopes: engine.audio_scopes(),
         taps: Arc::new(ScopeTaps::default()),
+        wanted: Arc::default(),
     });
     // `a` goes on program as the first scene; the clip is placed in it.
     batch(
@@ -255,6 +257,7 @@ fn a_drawn_bus_gets_a_scope_fed_from_its_mixer_bus() {
         meters,
         scopes: engine.audio_scopes(),
         taps: Arc::clone(&taps),
+        wanted: Arc::default(),
     });
     let scopes = engine.audio_scopes();
     let wave = |id: &str, audio: serde_json::Value| Edit::SourceCreate {
@@ -406,6 +409,7 @@ fn a_drawn_source_gets_a_scope_fed_from_its_mixer_input() {
         meters,
         scopes: engine.audio_scopes(),
         taps: Arc::clone(&taps),
+        wanted: Arc::default(),
     });
     let scopes = engine.audio_scopes();
     let wave = |id: &str, drawn: &str| Edit::SourceCreate {
@@ -628,6 +632,7 @@ fn the_master_chain_follows_edits_and_undo() {
         meters,
         scopes: engine.audio_scopes(),
         taps: Arc::new(ScopeTaps::default()),
+        wanted: Arc::default(),
     });
     let mut out = vec![0.0; 2 * block];
     let mut frame = 40_000i64;
@@ -681,6 +686,7 @@ fn an_output_tap_runs_the_output_chain() {
         meters,
         scopes: engine.audio_scopes(),
         taps: Arc::new(ScopeTaps::default()),
+        wanted: Arc::default(),
     });
     let rec = OutputId::new("rec");
     let rec_owner = || FilterOwner::Output {

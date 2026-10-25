@@ -71,7 +71,7 @@ use jstream_render::{
 };
 use jstream_sources::AudioScopes;
 
-use crate::audio::{MasterMetering, MixerHandles, ScopeTaps, TapFeed};
+use crate::audio::{MasterMetering, MixerHandles, MonitorRoute, ScopeTaps, TapFeed};
 use crate::audio_sources::{AudioInputs, Wanted};
 use crate::chain::Chains;
 use crate::drops::{
@@ -1451,6 +1451,9 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
     let captures = captures::spawn(backends, parts.clock.timebase())?;
     let format = engine_format()?;
     let mixer = Mixer::new(MixerConfig::default()).map_err(|err| format!("mixer: {err}"))?;
+    // The monitors the audio sources' thread opens hand their feeds to the mixer
+    // thread here, at most one per bus at a time.
+    let (monitor_routes, monitor_feeds) = mpsc::sync_channel(jstream_audio::MAX_BUSES);
     // On an early return this closes the inputs, each stream before its ring's last
     // handle, so no ring is freed on a real-time thread (docs/RULES.md#R-RT-003).
     let audio = AudioInputs::start(
@@ -1460,6 +1463,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         Arc::clone(&parts.clock),
         Arc::clone(&parts.audio_sources),
         engine.drop_ledger(),
+        monitor_routes,
     )?;
     let bus = mixer.bus();
     let period = frame_period(parts.clock.timebase())?;
@@ -1548,6 +1552,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             format,
             scopes: engine.audio_scopes(),
             taps: Arc::clone(&scope_taps),
+            monitors: monitor_feeds,
         };
         let mixing = Mixing { mixer, metering };
         move || mixer_thread(mixing, clock, &out, stop, fail, &collector)
@@ -1599,6 +1604,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
                 meters: master_meters,
                 scopes: engine.audio_scopes(),
                 taps: scope_taps,
+                wanted: Arc::clone(&parts.audio_sources),
             });
             *lock(&program.detach_audio) = Some(detach);
             Ok(Arc::new(program))
@@ -3023,6 +3029,8 @@ struct MixOut {
     scopes: Arc<AudioScopes>,
     /// The bus and source scopes, each fed its bus's or input's block.
     taps: Arc<ScopeTaps>,
+    /// The bus monitors' feeds, as the audio sources' thread opens them.
+    monitors: Receiver<MonitorRoute>,
 }
 
 /// The mixer thread's boundary: a panic is caught and reported as fatal. The encoders
@@ -3076,6 +3084,7 @@ fn mixer_loop(
         format,
         scopes,
         taps,
+        monitors: monitor_feeds,
     } = out;
     let format = *format;
     let scope = scopes.program();
@@ -3085,6 +3094,9 @@ fn mixer_loop(
     // What a silent drawn source's scope gets.
     let silence = vec![0.0f32; samples_len];
     let mut targets: Vec<AudioTap> = Vec::new();
+    // Room for every bus's monitor and as many being replaced, so taking one never
+    // allocates here.
+    let mut monitors: Vec<MonitorRoute> = Vec::with_capacity(2 * jstream_audio::MAX_BUSES);
     'mix: while !stop.load(Ordering::Relaxed) {
         match mixer.poll(clock.now(), &mut samples) {
             Ok(Some(block)) => {
@@ -3104,6 +3116,7 @@ fn mixer_loop(
                 if let Some(replaced) = replaced {
                     collector.free(Garbage::Scopes(replaced));
                 }
+                feed_monitors(&mixer, &block, &mut monitors, monitor_feeds, collector);
                 targets.extend(inputs.try_iter());
                 let mut rejected = None;
                 // The mix itself does not allocate. `AudioInput::push` takes an owned
@@ -3153,6 +3166,40 @@ fn mixer_loop(
         }
     }
     collector.free(Garbage::Scopes(scope_taps.into_held()));
+    for route in monitors {
+        collector.free(Garbage::Monitor(route));
+    }
+}
+
+/// Lets go of the monitors whose device closed (to the collector), takes the newly
+/// opened ones while there is room, and pushes each the block it hears. Never locks,
+/// waits or allocates: `monitors` has its room already.
+fn feed_monitors(
+    mixer: &Mixer,
+    block: &jstream_audio::Block,
+    monitors: &mut Vec<MonitorRoute>,
+    feeds: &Receiver<MonitorRoute>,
+    collector: &Collector,
+) {
+    let mut at = 0;
+    while at < monitors.len() {
+        if monitors[at].closed.load(Ordering::Acquire) {
+            collector.free(Garbage::Monitor(monitors.swap_remove(at)));
+        } else {
+            at += 1;
+        }
+    }
+    while monitors.len() < monitors.capacity() {
+        match feeds.try_recv() {
+            Ok(route) => monitors.push(route),
+            Err(_) => break,
+        }
+    }
+    for route in monitors.iter_mut() {
+        if let Some(heard) = mixer.monitor_block(route.bus, route.tap) {
+            route.feed.push(block.frame, heard);
+        }
+    }
 }
 
 /// An output thread's encoder subscriptions, shared with the stop so that, when it

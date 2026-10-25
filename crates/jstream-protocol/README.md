@@ -479,8 +479,8 @@ through its fader and mute: "before FX") or `post_filters` (after them, the defa
 connected is never checked by the edit: a monitor is collection state, valid on any
 machine, and one whose device is missing stays silent. A tap a newer server sent parses
 as `unknown`, which `bus.set_monitor` refuses with `invalid_argument` on
-`monitor.tap`. The engine stores and reports monitors but doesn't open their devices
-yet: playing them is the rest of ROADMAP item D9.
+`monitor.tap`. The engine plays a monitor while the program stage runs; one it can't
+open stays silent and is retried, never failing `output.start`.
 
 Buses never feed buses (ADR-0028), so a send always runs from a source to a bus, and
 an audio routing cycle can't be expressed. Filter chains (a source's from 0.22, the
