@@ -603,7 +603,8 @@ loads it with acquire ordering at the start of each tick. The blur pass's layers
 kept whenever a mix is drawn, so turning privacy on allocates nothing on a real-time
 thread. The flag fails closed: a tick under privacy that couldn't draw pushes black,
 never the last frame. The mixer thread reads the same flag with acquire ordering before
-each poll, and the mixer silences the inputs it mutes from the next block, through their
+each poll, and the mixer silences the inputs it mutes from the next block, before their
+filter chains (so no delay line holds what they captured meanwhile) and through their
 activity gain, so that takes a field store and allocates nothing either.
 
 <a id="protocol"></a>

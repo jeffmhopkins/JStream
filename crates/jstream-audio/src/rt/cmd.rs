@@ -177,6 +177,7 @@ impl ControlPlane {
     pub(crate) fn add(
         &self,
         format: AudioFormat,
+        privacy_muted: bool,
     ) -> Result<(InputProducer, u64, Arc<InputShared>, Arc<FrameRing>), AudioError> {
         if format.sample_format() != SampleFormat::F32Interleaved {
             return Err(AudioError::UnsupportedFormat);
@@ -195,6 +196,10 @@ impl ControlPlane {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let ring = Arc::new(FrameRing::new(self.ring_frames));
         let shared = Arc::new(InputShared::new());
+        // Before the command is sent, so the mixer installs the input already marked.
+        shared
+            .privacy_muted
+            .store(privacy_muted, std::sync::atomic::Ordering::Relaxed);
         let queued = Command::Add {
             id,
             ring: Arc::clone(&ring),

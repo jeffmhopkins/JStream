@@ -782,15 +782,15 @@ impl Open {
             .audio
             .input_format(&target)
             .map_err(|err| err.to_string())?;
+        // A microphone is marked before the mixer can install it: the privacy screen
+        // mutes it from its first block.
         let (producer, control) = self
             .mixer
-            .add_input(format)
+            .add_input_with(format, is_microphone(&target))
             .map_err(|err| format!("mixer input: {err}"))?;
         if matches!(key, Key::Source(_)) {
             control.set_muted(true);
         }
-        // A microphone, before its stream starts: the privacy screen mutes it.
-        control.set_privacy_muted(is_microphone(&target));
         let stream = match self.audio.open_input(&target, Box::new(producer)) {
             Ok(stream) if stream.format() == format => stream,
             Ok(stream) => {

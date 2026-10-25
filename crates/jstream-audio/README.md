@@ -74,12 +74,15 @@ stamped on the clock, and no device is the master.
 - `InputControl::set_privacy_muted` marks an input as one the privacy screen mutes
   ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)), and
   `Mixer::set_privacy` turns the screen on or off for the next block: the thread that
-  polls the mixer calls it before each poll. While it is on, a marked input's activity
-  gain is 0 in place of its own, so it ramps out over one block, feeds no bus and its
-  own block is silent, and its meter still reads. Its mute, sends and activity gain
-  are left as they are, so turning the screen off brings it back as it was. A new
-  input is unmarked, and one the mixer installs while the screen is on, marked before
-  that, starts silent.
+  polls the mixer calls it before each poll. While it is on, a marked input is
+  silenced where it leaves its ring, before its filter chain, and its activity gain is
+  0 in place of its own. So nothing it captures meanwhile enters a delay filter's line
+  or its compensation delay to be heard after the screen goes off; what the chain held
+  from before ramps out over one block. It feeds no bus, its own block is silent and
+  its meter reads silence. Its mute, sends and activity gain are left as they are, so
+  turning the screen off brings it back as it was. A new input is unmarked;
+  `MixerControl::add_input_with` marks one before the mixer can install it, so it
+  starts silent under the screen.
 - `InputControl::add_filter` / `insert_filter` and the same on `BusControl` add a
   filter (`FilterSpec`: gain, noise gate, compressor, limiter or delay, built at the
   engine rate) to the chain, and return a `FilterControl` whose `set(FilterParams)`
@@ -150,9 +153,10 @@ not start. No variant allocates.
 - the mixer's gains, ramps, meters, under- and overrun counters, and clocked polling;
 - each input's own block after its fader, mute and activity gain, unaffected by its
   send gains, and gone once the input is removed;
-- the privacy screen silencing only the inputs it mutes, ramping out and back over a
-  block, with their meters, sends and activity gains untouched, and an input added
-  while it is on starting silent;
+- the privacy screen silencing only the inputs it mutes, from the next block, metering
+  silence, with their sends, mute and activity gains untouched, an input added while it
+  is on starting silent, and nothing captured under it heard afterwards through a delay
+  filter or the compensation delay (`audio_from_under_the_privacy_screen_is_never_heard`);
 - the send matrix: post-fader sends into each bus, each bus's own fader, mute and
   meter, sends ramping in and out, a muted input feeding no bus, buses added from
   another thread and removed, a send to a removed bus not reaching the bus that reuses
@@ -212,9 +216,10 @@ Everything that runs on a real-time thread lives in `src/rt/`
 **audio thread** (the platform backend's, one per stream) calls
 `InputProducer::push_packet`. That call downmixes, tracks the device clock, resamples,
 and writes into the input's ring. The **mixer thread** calls `Mixer::poll`, which reads
-every ring for the block's window, applies faders, activity gains (0 for an input the
-privacy screen mutes while it is on, a plain field `Mixer::set_privacy` sets on that
-thread) and sends, sums each bus and meters.
+every ring for the block's window, applies faders, activity gains and sends, sums each
+bus and meters. An input the privacy screen mutes while it is on (a plain field
+`Mixer::set_privacy` sets on that thread) is zeroed after its ring read, before its
+chain, and takes an activity gain of 0.
 Neither allocates,
 locks, blocks or logs after setup ([R-RT-001](../../docs/RULES.md#R-RT-001)). They
 share only the rings and atomics: gains, sends, meters and counters

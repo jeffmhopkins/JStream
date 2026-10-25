@@ -744,10 +744,13 @@ It mutes the microphones: every input the program stage opens on an audio input 
 source, and a webcam's paired input) is marked, before its stream starts, as one the
 privacy screen mutes. Desktop and application audio, a page's and a media file's sound
 play on. The mixer thread loads the same flag with acquire ordering before each poll
-and hands it to the mixer, which gives a marked input an activity gain of 0 while it is
-on: it ramps out over the next block, feeds no bus, and its scope draws silence, while
-its meter still reads, as for a source's own mute. Its own mute, fader, sends and follow
-mode are untouched, so turning privacy off brings it back as it was. This default set
+and hands it to the mixer, which silences a marked input while it is on, from the next
+block: before the input's filter chain, so nothing said under the screen waits in a
+`delay` filter or the latency compensation to be heard once it is off, and through an
+activity gain of 0. It feeds no bus, its scope draws silence and its meter reads
+silence. Its own mute, fader, sends and follow mode are untouched, so turning privacy
+off brings it back as it was. Each microphone input is marked as it is added to the
+mixer (`MixerControl::add_input_with`), before the mixer can install it. This default set
 is the only one: choosing which sources it mutes comes with the look setting. What a
 microphone records is
 decided by the collection: a webcam's paired microphone opens only while its audio is

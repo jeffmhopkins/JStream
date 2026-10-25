@@ -83,7 +83,7 @@ pub(crate) struct InputShared {
     /// (ADR-0028's audio that follows the program).
     pub(crate) activity: AtomicF32,
     /// Whether the privacy screen mutes this input: while the mixer's privacy screen is
-    /// on, it applies an activity gain of 0 to it instead
+    /// on, it silences the input before its chain and applies an activity gain of 0
     /// (docs/adr/0027-program-master-and-output-chains.md).
     pub(crate) privacy_muted: AtomicBool,
     /// The input's row of the send matrix (post-fader).

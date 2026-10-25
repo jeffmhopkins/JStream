@@ -38,10 +38,13 @@
 //! stops (or whose bus is added) ramps from or to silence.
 //!
 //! **Privacy screen** (docs/adr/0027-program-master-and-output-chains.md): while it is
-//! on ([`Mixer::set_privacy`]), each input marked as one it mutes takes an activity gain
-//! of 0 in place of its own, so it ramps out over the next block, feeds no bus and its
-//! own block is silent, while its meter still reads. Turning it off ramps the input back
-//! to its own activity gain.
+//! on ([`Mixer::set_privacy`]), each input marked as one it mutes is silenced where it
+//! leaves its ring, before its filter chain: what it captures meanwhile never enters
+//! the chain's delay lines or compensation delay, so none of it is heard after the
+//! screen goes off. Its activity gain is 0 in place of its own, so what the chain still
+//! holds from before ramps out over the next block. It feeds no bus, its own block is
+//! silent and its meter reads silence. Turning the screen off ramps the input back to
+//! its own activity gain.
 //!
 //! **Meters** are post-fader (each input before its sends) and each bus's output:
 //! per channel, the peak held until the control plane takes it, and the latest block's
@@ -265,8 +268,10 @@ impl Mixer {
 
     /// Turns the privacy screen on or off for the next block
     /// (docs/adr/0027-program-master-and-output-chains.md): while it is on, every input
-    /// marked with [`InputControl::set_privacy_muted`] gets an activity gain of 0, which
-    /// the mixer ramps to over that block like any activity gain change. The thread that
+    /// marked with [`InputControl::set_privacy_muted`] is silenced before its filter
+    /// chain, so nothing it captures meanwhile is held there to be heard later, and gets
+    /// an activity gain of 0, which the mixer ramps to over that block like any
+    /// activity gain change. The thread that
     /// polls the mixer calls it before each poll, from a flag it reads lock-free, so the
     /// change needs no command and allocates nothing. Off when the mixer is made.
     pub fn set_privacy(&mut self, on: bool) {
@@ -490,6 +495,12 @@ impl Mixer {
                     .underrun_frames
                     .add((n - rep.valid.min(n)) as u64);
             }
+            // The privacy screen silences an input it mutes before its chain, so no
+            // delay line or compensation delay holds audio from under the screen.
+            let private = privacy_mutes(&slot.shared, privacy);
+            if private {
+                scratch.fill([0.0; 2]);
+            }
             let comp = input_latency - slot.chain.latency().min(input_latency);
             slot.chain.process(scratch, comp);
             let target = slot.shared.gain.effective();
@@ -497,9 +508,13 @@ impl Mixer {
             slot.gain_now = target;
             let (peak, rms) = levels(scratch);
             slot.shared.meter.publish(peak, rms);
-            // The activity gain scales every send, so it ramps with them. The privacy
-            // screen silences an input it mutes through it, so that ramps too.
-            let activity = activity_of(&slot.shared, privacy);
+            // The activity gain scales every send, so it ramps with them. Under the
+            // privacy screen it is 0, so what the chain held from before ramps out.
+            let activity = if private {
+                0.0
+            } else {
+                slot.shared.activity.load()
+            };
             // The input's own block: what the sends below receive, before their gains.
             slot.block.copy_from_slice(scratch);
             apply_gain(&mut slot.block, slot.activity_now, activity);
@@ -894,7 +909,22 @@ impl MixerControl {
         &self,
         format: jstream_media::AudioFormat,
     ) -> Result<(super::input::InputProducer, InputControl), AudioError> {
-        let (producer, id, shared, ring) = self.plane.add(format)?;
+        self.add_input_with(format, false)
+    }
+
+    /// Adds an input as [`Self::add_input`] does, marked as one the privacy screen mutes
+    /// when `privacy_muted` is true ([`InputControl::set_privacy_muted`]). The mark is set
+    /// before the mixer can install the input, so a microphone added while the screen is
+    /// on is never heard, not even for its first block.
+    ///
+    /// # Errors
+    /// The same as [`Mixer::add_input`].
+    pub fn add_input_with(
+        &self,
+        format: jstream_media::AudioFormat,
+        privacy_muted: bool,
+    ) -> Result<(super::input::InputProducer, InputControl), AudioError> {
+        let (producer, id, shared, ring) = self.plane.add(format, privacy_muted)?;
         Ok((
             producer,
             InputControl::new(InputId(id), shared, ring, Arc::clone(&self.plane)),
@@ -975,14 +1005,19 @@ fn apply_gain(frames: &mut [[f32; 2]], from: f32, to: f32) {
     }
 }
 
-/// The activity gain to apply to an input now: 0 while the privacy screen is on and
-/// mutes it, else the gain the control plane set.
-fn activity_of(shared: &InputShared, privacy: bool) -> f32 {
-    if privacy
+/// Whether the privacy screen silences this input now: it is on and the input is
+/// marked as one it mutes.
+fn privacy_mutes(shared: &InputShared, privacy: bool) -> bool {
+    privacy
         && shared
             .privacy_muted
             .load(std::sync::atomic::Ordering::Relaxed)
-    {
+}
+
+/// The activity gain to apply to an input now: 0 while the privacy screen is on and
+/// mutes it, else the gain the control plane set.
+fn activity_of(shared: &InputShared, privacy: bool) -> f32 {
+    if privacy_mutes(shared, privacy) {
         0.0
     } else {
         shared.activity.load()
@@ -1368,10 +1403,9 @@ mod tests {
         assert_eq!(ramp, [0.25, 0.5, 0.75, 1.0]);
     }
 
-    /// The privacy screen silences only the inputs it mutes, ramping them out over the
-    /// next block like an activity gain, and leaves their meter, sends and activity
-    /// gain as they were, so turning it off restores them (ADR-0027 §4). An input added
-    /// while it is on starts silent.
+    /// The privacy screen silences only the inputs it mutes, from the next block, and
+    /// leaves their sends, mute and activity gain as they were, so turning it off
+    /// restores them (ADR-0027 §4). An input added while it is on starts silent.
     #[test]
     fn the_privacy_screen_silences_the_inputs_it_mutes() {
         let mut m = Mixer::new(config(4)).unwrap();
@@ -1393,27 +1427,27 @@ mod tests {
         m.set_privacy(true);
         let _ = cmic.take_meter();
         m.mix(40_008, &mut out).unwrap();
-        let ramp: Vec<f32> = out.iter().step_by(2).copied().collect();
-        assert_eq!(ramp, [0.625, 0.5, 0.375, 0.25], "the mic ramps out");
+        assert_frames(
+            &out,
+            [0.25, 0.25],
+            "the mic is cut where it leaves its ring",
+        );
         m.mix(40_012, &mut out).unwrap();
         assert_frames(&out, [0.25, 0.25], "only the unmarked input is heard");
         assert_frames(m.bus_block(aux.id()).unwrap(), [0.0, 0.0], "every send");
         assert_frames(m.input_block(cmic.id()).unwrap(), [0.0, 0.0], "its block");
         let meter = cmic.take_meter();
-        assert!(
-            (meter.peak[0] - 1.0).abs() < 1e-6,
-            "still metered: {meter:?}"
-        );
+        assert_eq!(meter.peak[0], 0.0, "it meters silence: {meter:?}");
         assert_eq!(
             (cmic.activity_gain(), cmic.send(aux.id()), cmic.muted()),
             (0.5, Some(1.0), false),
             "its own settings are untouched"
         );
 
-        // An input added while the mixer runs and marked before its next block starts
-        // silent under the screen: the mixer installs it then, at an activity of 0.
-        let (mut late, clate) = m.control().add_input(stereo48()).unwrap();
-        clate.set_privacy_muted(true);
+        // An input added while the mixer runs, marked as it is added, starts silent
+        // under the screen.
+        let (mut late, clate) = m.control().add_input_with(stereo48(), true).unwrap();
+        assert!(clate.privacy_muted());
         feed(&mut late, 1.0, 1.0, 1.0);
         m.mix(40_016, &mut out).unwrap();
         assert_frames(&out, [0.25, 0.25], "a late marked input is silent");
@@ -1424,6 +1458,65 @@ mod tests {
         assert_frames(&out, [1.75, 1.75], "off restores both marked inputs");
         assert_frames(m.bus_block(aux.id()).unwrap(), [0.5, 0.5], "and the send");
         drop((mic, desk, late, cdesk));
+    }
+
+    /// Nothing a muted input captures under the privacy screen is held in its chain to
+    /// be heard once the screen goes off: not in a delay filter's line, nor in the
+    /// compensation delay another input's latency gives it (ADR-0027 §4).
+    #[test]
+    fn audio_from_under_the_privacy_screen_is_never_heard() {
+        use crate::FilterSpec;
+        use crate::filter::LimiterParams;
+        let mut m = Mixer::new(config(480)).unwrap();
+        let (mut mic, cmic) = m.add_input(stereo48()).unwrap();
+        let (mut other, cother) = m.add_input(stereo48()).unwrap();
+        cmic.set_privacy_muted(true);
+        // 20 ms of delay on the mic, and 10 ms of compensation for the other input's
+        // limiter: the mic's frame `t` is in the block mixed at `t + 1440`.
+        cmic.add_filter(FilterSpec::Delay {
+            max_ms: 100.0,
+            delay_ms: 20.0,
+        })
+        .unwrap();
+        cother
+            .add_filter(FilterSpec::Limiter {
+                lookahead_ms: 10.0,
+                params: LimiterParams::default(),
+            })
+            .unwrap();
+        // The mic is louder while the screen is on (frames 42_400 to 43_360).
+        let level = |n: u64| match n {
+            ..42_400 => 0.25,
+            42_400..43_360 => 1.0,
+            _ => 0.5,
+        };
+        feed_with(&mut mic, |n| [level(n), level(n)], 1.0);
+        feed(&mut other, 0.0, 0.0, 1.0);
+        let mut out = vec![0.0; 960];
+        let mut heard = Vec::new();
+        for frame in (40_000..46_000).step_by(480) {
+            m.set_privacy((42_400..43_360).contains(&frame));
+            m.mix(frame, &mut out).unwrap();
+            let pts = frame - 480; // the limiter's latency
+            heard.push((pts, out[0], out[958]));
+        }
+        for &(pts, first, last) in &heard {
+            // What the block carries is the mic's input from 960 frames (its delay)
+            // before its stamp.
+            let from = pts - 960;
+            if (42_400..43_360).contains(&(from as u64)) {
+                assert!(
+                    first == 0.0 && last == 0.0,
+                    "audio from under the screen heard at {pts}: {heard:?}"
+                );
+            }
+        }
+        let (_, first, last) = heard[heard.len() - 1];
+        assert!(
+            (first - 0.5).abs() < 1e-5 && (last - 0.5).abs() < 1e-5,
+            "the mic is heard again: {heard:?}"
+        );
+        drop((mic, other));
     }
 
     /// Removing a bus drops it from the mix; its slot can go to a new bus, which the
