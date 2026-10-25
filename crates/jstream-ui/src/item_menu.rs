@@ -2,9 +2,9 @@
 //! objects panel (spec-workspace.md 5.2.8 to 5.2.12): Properties, the Audio check,
 //! layer order, Center, Fit and Stretch to canvas, Reset rotation, Clear crop, the two
 //! duplicates and Remove from scene. Each choice sends one batch, so one undo step. In
-//! a keyframe scene only placement and visibility can change (ADR-0049), so what would
-//! change the parent's items (layer order, the duplicates, Remove, Add source) is
-//! disabled, and the placement choices write the keyframe's overrides.
+//! a keyframe scene only geometry, crop, visibility and opacity change (ADR-0049), so
+//! what would change the parent's items (layer order, the duplicates, Remove, Add
+//! source) is disabled, and the placement choices write the keyframe's overrides.
 //!
 //! Docs: docs/UI-FEATURES.md#menus
 

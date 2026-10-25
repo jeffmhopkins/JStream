@@ -104,15 +104,24 @@ fn typed_in_field(event: &leptos::ev::KeyboardEvent) -> bool {
     ) || element.is_content_editable()
 }
 
+/// Whether a dialog or a menu is open: it holds the keyboard, so no binding runs.
+fn overlay_open() -> bool {
+    leptos::prelude::document()
+        .query_selector("[aria-modal='true'], [role='menu']")
+        .ok()
+        .flatten()
+        .is_some()
+}
+
 /// Runs the collection's hotkeys while the page has the focus: a bound chord sends its
 /// action, as an `action` call, and the browser's own use of the key (F5 reloads) is
-/// prevented. Mounted once, in the shell.
+/// prevented. Nothing runs while a dialog or a menu is open. Mounted once, in the shell.
 #[component]
 pub fn Hotkeys() -> impl IntoView {
     let studio = expect_context::<Studio>();
     let session = expect_context::<SessionContext>();
     let keys = window_event_listener(leptos::ev::keydown, move |event| {
-        if event.default_prevented() || event.repeat() || typed_in_field(&event) {
+        if event.default_prevented() || event.repeat() || typed_in_field(&event) || overlay_open() {
             return;
         }
         let Some(chord) = of_event(&event) else {

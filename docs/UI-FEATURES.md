@@ -190,7 +190,7 @@ on the canvas and in Scene objects but for its last lines.
 | CM-05 | Empty panel menus | Scenes: New scene, New folder, Paste scene. Scene objects: Add source, Add scene as source, New group, Select all, Paste. | 🟡 | Both are built. New folder ([SC-06](#scenes)), New group ([OB-04](#objects)) and the two Pastes (decision register D43) show disabled. |
 | CM-06 | Reference ↔ clone | A placement of a shared source toggles between "Reference to original" and "Independent clone". | ⬜ | `item.set_source` and `source.duplicate` exist ([ADR-0023](adr/0023-placements-references-and-clones.md)). |
 | CM-07 | Transition in/out submenus | Default (preset), then each preset, then "Manage presets…". | 🔒 | T1 (#260). |
-| CM-08 | Keyframe and folder menus | Switch to it, Reset to parent, New keyframe, Delete keyframe; New folder, Rename, Delete folder / Ungroup. | 🟡 | The keyframe menu is built: Switch to it (`scene.switch`), Rename, the transition submenus (empty until T1), Reset to “<parent>” (a batch of `item.clear_override`s, disabled while it overrides nothing), New keyframe (of the parent) and Delete keyframe (`scene.delete`, at once: it holds no items, and undo brings it back). The folder menu waits on folders ([SC-06](#scenes)). |
+| CM-08 | Keyframe and folder menus | Switch to it, Reset to parent, New keyframe, Delete keyframe; New folder, Rename, Delete folder / Ungroup. | 🟡 | The keyframe menu is built: Switch to it (`scene.switch`), Rename, the transition submenus (empty until T1), Reset to “<parent>” (a batch of `item.clear_override`s, disabled while it overrides nothing), New keyframe (of the parent) and Delete keyframe (`scene.delete`, at once since it holds no items, and undo brings it back; when a scene source or a video mix shows it, the delete plan after a confirmation, as for a scene). The folder menu waits on folders ([SC-06](#scenes)). |
 
 <a id="dialogs"></a>
 ## Dialogs and windows
@@ -406,7 +406,7 @@ handlers; the real UI makes them work.
 | KB-04 | Edit keys | Ctrl+D duplicate as reference, Ctrl+Shift+D as clone, Del remove, F2 rename. | 🟡 | F2 renames and Del removes in the Scenes and Scene objects rows (Del deletes a scene there, through its plan). Ctrl+D and Ctrl+Shift+D wait. |
 | KB-05 | Copy and paste | Ctrl+C, Ctrl+V. | ⬜ | Decision register D43. |
 | KB-06 | Privacy key | Pause toggles privacy. | 🔒 | E2b (#317). |
-| KB-07 | Scene hotkeys | F1–F5 switch to the scene bound to them. | ✅ | Every binding in the collection (K1) runs its action while the page has the focus (`hotkeys.rs`), unless a field or a focused row took the key: F2 on a scene row still renames. The prototype's F1–F5 are bindings like any other, set from the Inspector ([IN-08](#inspector)). |
+| KB-07 | Scene hotkeys | F1–F5 switch to the scene bound to them. | ✅ | Every binding in the collection (K1) runs its action while the page has the focus and no dialog or menu is open (`hotkeys.rs`), unless a field or a focused row took the key: F2 on a scene row still renames, and Del on a keyframe's object row does nothing. The prototype's F1–F5 are bindings like any other, set from the Inspector ([IN-08](#inspector)). |
 
 <a id="beyond"></a>
 ## Beyond the prototype

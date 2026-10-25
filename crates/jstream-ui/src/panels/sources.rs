@@ -228,7 +228,7 @@ pub fn Sources() -> impl IntoView {
             }
         };
         // F2 renames the source, Del removes the item from the scene, as the menu's
-        // hints say.
+        // hints say. In a keyframe, Del does nothing, and runs no hotkey either.
         let on_key = {
             let item = item_id.clone();
             move |event: leptos::ev::KeyboardEvent| match event.key().as_str() {
@@ -236,11 +236,13 @@ pub fn Sources() -> impl IntoView {
                     event.prevent_default();
                     renaming.set(Some(item.clone()));
                 }
-                "Delete" if !in_keyframe() => {
+                "Delete" => {
                     event.prevent_default();
-                    send(Edit::ItemRemove {
-                        item_id: item.clone(),
-                    });
+                    if !in_keyframe() {
+                        send(Edit::ItemRemove {
+                            item_id: item.clone(),
+                        });
+                    }
                 }
                 _ => {}
             }

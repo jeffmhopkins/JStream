@@ -136,8 +136,8 @@ impl Collection {
             .and_then(|parent| self.scene(parent))
     }
 
-    /// Whether `scene_id` names a keyframe scene, where only placement and visibility
-    /// can change (ADR-0049).
+    /// Whether `scene_id` names a keyframe scene, where only its items' geometry, crop,
+    /// visibility and opacity can change (ADR-0049).
     pub fn is_keyframe(&self, scene_id: &SceneId) -> bool {
         self.scene(scene_id)
             .is_some_and(|scene| scene.variant_of.is_some())

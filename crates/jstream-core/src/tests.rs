@@ -1440,6 +1440,97 @@ fn organise_script() -> Vec<Call> {
     ]
 }
 
+/// The differential script's keyframe calls (ADR-0024 §2, ADR-0049), run last on scene
+/// `kp` and its keyframe `kk`: overrides written by placement edits and cleared, what a
+/// keyframe refuses, `live.set` on one, the refused parent delete, and a keyframe with a
+/// role deleted and undone. An `item.remove` that drops an override is left out: the
+/// mock leaves the batch result's `dropped_overrides` empty.
+fn keyframe_script() -> Vec<Call> {
+    use jstream_protocol::{Crop, OverrideField};
+    fn one(edit: Edit) -> Call {
+        Call::Batch(Batch::single(edit))
+    }
+    fn variant(id: &str, of: &str) -> Edit {
+        Edit::SceneCreateVariant {
+            scene_id: SceneId::new(id),
+            variant_of: SceneId::new(of),
+            name: id.to_uppercase(),
+        }
+    }
+    fn crop(scene: &str, left: u32) -> Edit {
+        Edit::ItemSetCrop {
+            item_id: ItemId::new("ikp"),
+            scene_id: Some(SceneId::new(scene)),
+            crop: Crop {
+                left,
+                ..Crop::default()
+            },
+        }
+    }
+    fn clear(field: OverrideField) -> Edit {
+        Edit::ItemClearOverride {
+            scene_id: SceneId::new("kk"),
+            item_id: ItemId::new("ikp"),
+            field,
+        }
+    }
+    let read = |query: Query| Call::Query { query };
+    let undo = || {
+        Call::History(jstream_protocol::HistoryCall::new(
+            jstream_protocol::HistoryOp::Undo,
+        ))
+    };
+    let delete = |scene: &str| {
+        one(Edit::SceneDelete {
+            scene_id: SceneId::new(scene),
+        })
+    };
+    vec![
+        Call::Batch(edits(vec![
+            create("kp"),
+            add("kp", "ikp", "cam"),
+            variant("kk", "kp"),
+        ])),
+        one(Edit::ItemSetVisible {
+            item_id: ItemId::new("ikp"),
+            scene_id: Some(SceneId::new("kk")),
+            visible: false,
+        }),
+        one(crop("kk", 8)),
+        read(Query::StateGet),
+        // Refused: a keyframe of a keyframe, an item added to one, a placement on an item
+        // its parent doesn't place, and the parent's delete while it has a keyframe.
+        one(variant("kx", "kk")),
+        one(add("kk", "ikx", "cam")),
+        one(Edit::ItemSetVisible {
+            item_id: ItemId::new("ghost"),
+            scene_id: Some(SceneId::new("kk")),
+            visible: false,
+        }),
+        delete("kp"),
+        // A live value on a keyframe waits on #702.
+        live("gk", vec![crop("kk", 4)]),
+        one(clear(OverrideField::Visible)),
+        read(Query::StateGet),
+        undo(),
+        Call::Batch(edits(vec![
+            clear(OverrideField::Visible),
+            clear(OverrideField::Crop),
+        ])),
+        undo(),
+        read(Query::StateGet),
+        // `scene.create_variant` takes no role, so undoing the delete sets it again.
+        one(Edit::SceneSetRole {
+            scene_id: SceneId::new("kk"),
+            role: SceneRole::Group,
+        }),
+        delete("kk"),
+        read(Query::StateGet),
+        undo(),
+        read(Query::StateGet),
+    ]
+}
+
 #[test]
 fn the_engine_answers_like_the_mock() {
     fn normalize(event: Event) -> Event {
@@ -1645,7 +1736,11 @@ fn the_engine_answers_like_the_mock() {
             },
         },
     ];
-    let script: Vec<Call> = script.into_iter().chain(organise_script()).collect();
+    let script: Vec<Call> = script
+        .into_iter()
+        .chain(organise_script())
+        .chain(keyframe_script())
+        .collect();
 
     let engine = parity_engine().with_output(OutputId::new("yt"));
     let real = connected(&engine);

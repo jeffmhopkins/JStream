@@ -195,15 +195,43 @@ pub fn Scenes() -> impl IntoView {
             studio.apply(&s, edits);
         }
     };
-    // A keyframe holds no items, so it goes at once; its parent is selected if it was.
-    let delete_keyframe = move |scene_id: SceneId, parent: SceneId| {
-        if studio
-            .selection
-            .with_untracked(|s| s.scene.as_ref() == Some(&scene_id))
-        {
-            studio.select_scene(parent);
-        }
-        send(Edit::SceneDelete { scene_id });
+    // A keyframe holds no items, so it goes at once unless something shows it, which
+    // the plan clears after a confirmation as a scene's delete does. Its parent is
+    // selected if it was.
+    let delete_keyframe = move |scene_id: SceneId, parent: SceneId, name: String| {
+        let Some(s) = session.get() else { return };
+        spawn_local(async move {
+            let target = DeleteTarget::Scene {
+                scene_id: scene_id.clone(),
+            };
+            // An engine without `delete.plan` (the mock) gets the bare delete.
+            let (rev, edits) = match plan_delete(&s, target).await {
+                Ok((rev, edits)) => (Some(rev), edits),
+                Err(_) => (
+                    None,
+                    vec![Edit::SceneDelete {
+                        scene_id: scene_id.clone(),
+                    }],
+                ),
+            };
+            if let (Some(rev), true) = (rev, edits.len() > 1) {
+                return pending.set(Some(Pending {
+                    question: format!("Delete keyframe “{name}”?"),
+                    detail: plan_summary(&edits),
+                    rev,
+                    edits,
+                }));
+            }
+            if studio
+                .selection
+                .with_untracked(|s| s.scene.as_ref() == Some(&scene_id))
+            {
+                studio.select_scene(parent);
+            }
+            if let Err(error) = apply(&s, edits, rev).await {
+                studio.report(&error);
+            }
+        });
     };
 
     let ask_delete = move |scene_id: SceneId, name: String| {
@@ -310,7 +338,9 @@ pub fn Scenes() -> impl IntoView {
                 "Delete" => {
                     event.prevent_default();
                     match &parent {
-                        Some((parent, _)) => delete_keyframe(id.clone(), parent.clone()),
+                        Some((parent, _)) => {
+                            delete_keyframe(id.clone(), parent.clone(), name.clone());
+                        }
                         None => ask_delete(id.clone(), name.clone()),
                     }
                 }
@@ -347,6 +377,7 @@ pub fn Scenes() -> impl IntoView {
                 if let Some((parent, parent_name)) = parent.clone() {
                     let (switch_id, reset_id, delete_id) = (id.clone(), id.clone(), id.clone());
                     let new_parent = parent.clone();
+                    let delete_name = name.clone();
                     let overrides = studio.collection.with_untracked(|c| {
                         c.as_ref()
                             .and_then(|c| c.scene(&id))
@@ -369,7 +400,11 @@ pub fn Scenes() -> impl IntoView {
                             Entry::item("New keyframe", move || new_keyframe(new_parent.clone())),
                             Entry::Sep,
                             Entry::item("Delete keyframe", move || {
-                                delete_keyframe(delete_id.clone(), parent.clone());
+                                delete_keyframe(
+                                    delete_id.clone(),
+                                    parent.clone(),
+                                    delete_name.clone(),
+                                );
                             })
                             .hint("Del"),
                         ],

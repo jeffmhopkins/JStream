@@ -58,8 +58,8 @@ Contents ([Design](#design) explains the choices):
   is set or cleared. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
   `plan_summary`, `reset_edits` (a keyframe's Reset) and `fresh_id`.
 - **Hotkeys** (`hotkeys.rs`): `Hotkeys`, which runs the collection's hotkey bindings
-  while the page has the focus, and the chord of a key press, its label and the edits
-  that bind a chord to a scene, tested natively.
+  while the page has the focus and no dialog or menu is open, and the chord of a key
+  press, its label and the edits that bind a chord to a scene, tested natively.
 - **Menus, dialogs and icons**: `menu.rs` (`ContextMenu`, the right-click menu, and
   `Menus`, the context that opens it with a list of `Entry`s), `item_menu.rs` (the
   selected items' entries, which the canvas and the sources list share, with the
@@ -188,7 +188,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   transitions and the scene Properties dialog). A keyframe row's menu switches to it,
   renames it, resets it to its parent (`item.clear_override` for each field it
   overrides), makes another keyframe of the parent (`scene.create_variant`) and deletes
-  it with a plain `scene.delete`, since it holds no items. A right-click on an item, on the canvas or its row, selects it
+  it: a plain `scene.delete`, since it holds no items, or the delete plan after a
+  confirmation when a scene source or a video mix shows it. A right-click on an item, on the canvas or its row, selects it
   unless it was selected and opens `item_menu.rs`'s menu for the selection: Properties
   (the Properties dialog), the Audio check (`source.set_audio`), layer order
   (`item.reorder`s that keep the selected items' order), Center, Fit and Stretch to

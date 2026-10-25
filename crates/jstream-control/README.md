@@ -200,7 +200,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   scenes can't be deleted (they are the refusal's `blockers`). Each has the graph's
   inverse, so undo restores the overrides; the batch result's `dropped_overrides` stays
   empty. `state.get` reports each keyframe scene's `variant_of` and `overrides`, and
-  `live.set` refuses a value addressed to one (#702), as the engine does;
+  `live.set` refuses a value addressed to one (#702) after its gesture limit, as the
+  engine does;
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing

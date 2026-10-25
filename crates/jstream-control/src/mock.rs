@@ -1147,16 +1147,6 @@ impl State {
         if let Some(at) = values.iter().position(|value| !is_live_adjustable(value)) {
             return Err(invalid(format!("values.{at}.type"), "not live-adjustable"));
         }
-        // Live values on a keyframe scene wait on #702, as in the engine.
-        if let Some(at) = values.iter().position(|value| {
-            live_scene(value).is_some_and(|scene_id| self.collection.is_variant(scene_id))
-        }) {
-            return Err(invalid(
-                format!("values.{at}.scene_id"),
-                "live values on a keyframe scene are not supported yet (#702); send the value \
-                 in a batch",
-            ));
-        }
         let key = (client_id.clone(), gesture_id);
         let open = self
             .gestures
@@ -1165,6 +1155,16 @@ impl State {
             .count();
         if !self.gestures.contains_key(&key) && open >= MAX_GESTURES_PER_CLIENT {
             return Err(invalid("gesture_id".into(), "16 gestures are open"));
+        }
+        // Live values on a keyframe scene wait on #702, after the gesture limit, as in the engine.
+        if let Some(at) = values.iter().position(|value| {
+            live_scene(value).is_some_and(|scene_id| self.collection.is_variant(scene_id))
+        }) {
+            return Err(invalid(
+                format!("values.{at}.scene_id"),
+                "live values on a keyframe scene are not supported yet (#702); send the value \
+                 in a batch",
+            ));
         }
         let running = self.running();
         let mut check = self.collection.clone();
@@ -1414,6 +1414,13 @@ impl Collection {
                         role: (!scene.role.is_scene()).then_some(scene.role),
                     },
                 }];
+                // `scene.create_variant` takes no role.
+                if scene.variant_of.is_some() && !scene.role.is_scene() {
+                    inverse.push(Edit::SceneSetRole {
+                        scene_id: scene.id.clone(),
+                        role: scene.role,
+                    });
+                }
                 // Re-created scenes are appended, so only a scene that wasn't last moves back.
                 if index != self.scenes.len() {
                     inverse.push(Edit::SceneReorder {
@@ -4066,10 +4073,50 @@ mod tests {
         assert!(undo(&*control).is_ok());
         assert_eq!(state(&*control), before);
 
+        // `live.set` refuses a keyframe target, after the gesture limit as the engine does.
+        let crop = |scene: &str| Edit::ItemSetCrop {
+            item_id: ItemId::new("i1"),
+            scene_id: Some(SceneId::new(scene)),
+            crop: Crop::default(),
+        };
+        let live = |gesture: &str, scene: &str| {
+            let gesture_id = jstream_protocol::GestureId::new(gesture);
+            action(
+                &*control,
+                Action::LiveSet {
+                    gesture_id,
+                    values: vec![crop(scene)],
+                },
+            )
+        };
+        let field = |result: Result<CallResult, ControlError>| match result {
+            Err(error) => match error.protocol() {
+                Some(ProtocolError::InvalidArgument { field, .. }) => field.clone(),
+                other => panic!("not invalid_argument: {other:?}"),
+            },
+            Ok(other) => panic!("applied: {other:?}"),
+        };
+        assert_eq!(field(live("g0", "k")), "values.0.scene_id");
+        for n in 0..16 {
+            assert!(live(&format!("g{n}"), "a").is_ok());
+        }
+        assert_eq!(field(live("g16", "k")), "gesture_id");
+
         // Deleting the keyframe scene, then undoing, restores it with its override.
         let delete = Edit::SceneDelete {
             scene_id: SceneId::new("k"),
         };
+        assert!(batch(&*control, Batch::single(delete.clone())).is_ok());
+        assert!(undo(&*control).is_ok());
+        assert_eq!(state(&*control), before);
+
+        // `scene.create_variant` takes no role, so the inverse sets it again.
+        let group = Edit::SceneSetRole {
+            scene_id: SceneId::new("k"),
+            role: SceneRole::Group,
+        };
+        assert!(batch(&*control, Batch::single(group)).is_ok());
+        let before = state(&*control);
         assert!(batch(&*control, Batch::single(delete)).is_ok());
         assert!(undo(&*control).is_ok());
         assert_eq!(state(&*control), before);
