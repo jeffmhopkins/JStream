@@ -1,12 +1,12 @@
-//! libva's H.264 encode structs and constants, hand-written (ADR-0060 §8).
+//! libva's H.264 and HEVC encode structs and constants, hand-written (ADR-0060 §8).
 //!
 //! Each struct mirrors its C declaration field for field, `#[repr(C)]`, with C bitfield
-//! unions as one `u32` that `h264` packs. They were checked against the
-//! headers of **libva 2.20.0** (VA-API 1.20.0, `va/va.h` and `va/va_enc_h264.h`) on
-//! x86_64 by compiling a C program that printed every `sizeof`, the offsets of the
-//! fields after each padding gap, the constants, and the value of each bitfield union
-//! with known fields set. The sizes and offsets are asserted at compile time below, and
-//! the bitfield values in `h264`'s tests. libva only appends to these
+//! unions as one `u32` (or `u16`) that `h264` and `hevc` pack. They were checked against
+//! the headers of **libva 2.20.0** (VA-API 1.20.0, `va/va.h`, `va/va_enc_h264.h` and
+//! `va/va_enc_hevc.h`) on x86_64 by compiling a C program that printed every `sizeof`,
+//! the offsets of the fields after each padding gap, the constants, and the value of
+//! each bitfield union with known fields set. The sizes and offsets are asserted at
+//! compile time below, and the bitfield values in `h264`'s and `hevc`'s tests. libva only appends to these
 //! structs (each ends in reserved padding), so a later libva reads them the same way.
 //!
 //! Bitfields are packed lowest bit first, as GCC and Clang lay them out on every Linux
@@ -45,10 +45,22 @@ pub(crate) const RC_CBR: u32 = 0x2;
 pub(crate) const RC_VBR: u32 = 0x4;
 /// `VA_ENC_PACKED_HEADER_SEQUENCE`.
 pub(crate) const PACKED_HEADER_SEQUENCE: u32 = 0x1;
+/// `VA_ENC_PACKED_HEADER_SLICE`.
+pub(crate) const PACKED_HEADER_SLICE: u32 = 0x4;
+/// `VA_FEATURE_REQUIRED`: a two-bit field of `VAConfigAttribValEncHEVCFeatures` whose
+/// tool the driver always codes.
+pub(crate) const FEATURE_REQUIRED: u32 = 2;
+/// `VA_PREDICTION_DIRECTION_BI_NOT_EMPTY`: the driver codes no P slices, so a P frame is
+/// coded as a B slice with the same reference in both lists.
+pub(crate) const PREDICTION_DIRECTION_BI_NOT_EMPTY: u32 = 0x4;
 /// `VA_PICTURE_H264_INVALID`.
 pub(crate) const PICTURE_H264_INVALID: u32 = 0x1;
 /// `VA_PICTURE_H264_SHORT_TERM_REFERENCE`.
 pub(crate) const PICTURE_H264_SHORT_TERM_REFERENCE: u32 = 0x8;
+/// `VA_PICTURE_HEVC_INVALID`.
+pub(crate) const PICTURE_HEVC_INVALID: u32 = 0x1;
+/// `VA_PICTURE_HEVC_RPS_ST_CURR_BEFORE`: a short-term reference before the picture.
+pub(crate) const PICTURE_HEVC_RPS_ST_CURR_BEFORE: u32 = 0x10;
 /// `VA_CODED_BUF_STATUS_SLICE_OVERFLOW_MASK`: the picture didn't fit the coded buffer.
 pub(crate) const CODED_BUF_STATUS_SLICE_OVERFLOW_MASK: u32 = 0x200;
 /// `VASurfaceRendering` (`VASurfaceStatus`): the surface is still being encoded.
@@ -87,6 +99,12 @@ pub(crate) mod attrib {
     pub(crate) const RATE_CONTROL: i32 = 5;
     /// `VAConfigAttribEncPackedHeaders`.
     pub(crate) const ENC_PACKED_HEADERS: i32 = 10;
+    /// `VAConfigAttribPredictionDirection`.
+    pub(crate) const PREDICTION_DIRECTION: i32 = 39;
+    /// `VAConfigAttribEncHEVCFeatures`: a `VAConfigAttribValEncHEVCFeatures`.
+    pub(crate) const ENC_HEVC_FEATURES: i32 = 50;
+    /// `VAConfigAttribEncHEVCBlockSizes`: a `VAConfigAttribValEncHEVCBlockSizes`.
+    pub(crate) const ENC_HEVC_BLOCK_SIZES: i32 = 51;
 }
 
 /// `VABufferType` values.
@@ -111,6 +129,8 @@ pub(crate) mod buffer {
 pub(crate) mod packed {
     /// `VAEncPackedHeaderSequence`.
     pub(crate) const SEQUENCE: u32 = 1;
+    /// `VAEncPackedHeaderSlice` (`VAEncPackedHeaderHEVC_Slice`).
+    pub(crate) const SLICE: u32 = 3;
 }
 
 /// `VAEncMiscParameterType` values.
@@ -252,6 +272,134 @@ pub(crate) struct SliceParamH264 {
     pub(crate) slice_alpha_c0_offset_div2: i8,
     pub(crate) slice_beta_offset_div2: i8,
     pub(crate) va_reserved: [u32; 4],
+}
+
+/// `VAPictureHEVC`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct PictureHevc {
+    pub(crate) picture_id: Id,
+    pub(crate) pic_order_cnt: i32,
+    pub(crate) flags: u32,
+    pub(crate) va_reserved: [u32; 4],
+}
+
+impl PictureHevc {
+    /// An unused entry: `VA_INVALID_SURFACE` with `VA_PICTURE_HEVC_INVALID`.
+    pub(crate) const INVALID: Self = Self {
+        picture_id: INVALID_ID,
+        pic_order_cnt: 0,
+        flags: PICTURE_HEVC_INVALID,
+        va_reserved: [0; 4],
+    };
+}
+
+/// `VAEncSequenceParameterBufferHEVC`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct SeqParamHevc {
+    pub(crate) general_profile_idc: u8,
+    pub(crate) general_level_idc: u8,
+    pub(crate) general_tier_flag: u8,
+    pub(crate) intra_period: u32,
+    pub(crate) intra_idr_period: u32,
+    pub(crate) ip_period: u32,
+    pub(crate) bits_per_second: u32,
+    pub(crate) pic_width_in_luma_samples: u16,
+    pub(crate) pic_height_in_luma_samples: u16,
+    /// The `seq_fields` bitfield union.
+    pub(crate) seq_fields: u32,
+    pub(crate) log2_min_luma_coding_block_size_minus3: u8,
+    pub(crate) log2_diff_max_min_luma_coding_block_size: u8,
+    pub(crate) log2_min_transform_block_size_minus2: u8,
+    pub(crate) log2_diff_max_min_transform_block_size: u8,
+    pub(crate) max_transform_hierarchy_depth_inter: u8,
+    pub(crate) max_transform_hierarchy_depth_intra: u8,
+    pub(crate) pcm_sample_bit_depth_luma_minus1: u32,
+    pub(crate) pcm_sample_bit_depth_chroma_minus1: u32,
+    pub(crate) log2_min_pcm_luma_coding_block_size_minus3: u32,
+    pub(crate) log2_max_pcm_luma_coding_block_size_minus3: u32,
+    pub(crate) vui_parameters_present_flag: u8,
+    /// The `vui_fields` bitfield union.
+    pub(crate) vui_fields: u32,
+    pub(crate) aspect_ratio_idc: u8,
+    pub(crate) sar_width: u32,
+    pub(crate) sar_height: u32,
+    pub(crate) vui_num_units_in_tick: u32,
+    pub(crate) vui_time_scale: u32,
+    pub(crate) min_spatial_segmentation_idc: u16,
+    pub(crate) max_bytes_per_pic_denom: u8,
+    pub(crate) max_bits_per_min_cu_denom: u8,
+    /// The `scc_fields` bitfield union.
+    pub(crate) scc_fields: u32,
+    pub(crate) va_reserved: [u32; 7],
+}
+
+/// `VAEncPictureParameterBufferHEVC`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct PicParamHevc {
+    pub(crate) decoded_curr_pic: PictureHevc,
+    pub(crate) reference_frames: [PictureHevc; 15],
+    pub(crate) coded_buf: Id,
+    pub(crate) collocated_ref_pic_index: u8,
+    pub(crate) last_picture: u8,
+    pub(crate) pic_init_qp: u8,
+    pub(crate) diff_cu_qp_delta_depth: u8,
+    pub(crate) pps_cb_qp_offset: i8,
+    pub(crate) pps_cr_qp_offset: i8,
+    pub(crate) num_tile_columns_minus1: u8,
+    pub(crate) num_tile_rows_minus1: u8,
+    pub(crate) column_width_minus1: [u8; 19],
+    pub(crate) row_height_minus1: [u8; 21],
+    pub(crate) log2_parallel_merge_level_minus2: u8,
+    pub(crate) ctu_max_bitsize_allowed: u8,
+    pub(crate) num_ref_idx_l0_default_active_minus1: u8,
+    pub(crate) num_ref_idx_l1_default_active_minus1: u8,
+    pub(crate) slice_pic_parameter_set_id: u8,
+    pub(crate) nal_unit_type: u8,
+    /// The `pic_fields` bitfield union.
+    pub(crate) pic_fields: u32,
+    pub(crate) hierarchical_level_plus1: u8,
+    pub(crate) va_byte_reserved: u8,
+    /// The `scc_fields` bitfield union (16 bits).
+    pub(crate) scc_fields: u16,
+    pub(crate) va_reserved: [u32; 15],
+}
+
+/// `VAEncSliceParameterBufferHEVC`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct SliceParamHevc {
+    pub(crate) slice_segment_address: u32,
+    pub(crate) num_ctu_in_slice: u32,
+    pub(crate) slice_type: u8,
+    pub(crate) slice_pic_parameter_set_id: u8,
+    pub(crate) num_ref_idx_l0_active_minus1: u8,
+    pub(crate) num_ref_idx_l1_active_minus1: u8,
+    pub(crate) ref_pic_list0: [PictureHevc; 15],
+    pub(crate) ref_pic_list1: [PictureHevc; 15],
+    pub(crate) luma_log2_weight_denom: u8,
+    pub(crate) delta_chroma_log2_weight_denom: i8,
+    pub(crate) delta_luma_weight_l0: [i8; 15],
+    pub(crate) luma_offset_l0: [i8; 15],
+    pub(crate) delta_chroma_weight_l0: [[i8; 2]; 15],
+    pub(crate) chroma_offset_l0: [[i8; 2]; 15],
+    pub(crate) delta_luma_weight_l1: [i8; 15],
+    pub(crate) luma_offset_l1: [i8; 15],
+    pub(crate) delta_chroma_weight_l1: [[i8; 2]; 15],
+    pub(crate) chroma_offset_l1: [[i8; 2]; 15],
+    pub(crate) max_num_merge_cand: u8,
+    pub(crate) slice_qp_delta: i8,
+    pub(crate) slice_cb_qp_offset: i8,
+    pub(crate) slice_cr_qp_offset: i8,
+    pub(crate) slice_beta_offset_div2: i8,
+    pub(crate) slice_tc_offset_div2: i8,
+    /// The `slice_fields` bitfield union.
+    pub(crate) slice_fields: u32,
+    pub(crate) pred_weight_table_bit_offset: u32,
+    pub(crate) pred_weight_table_bit_length: u32,
+    pub(crate) va_reserved: [u32; 6],
 }
 
 /// `VAEncMiscParameterRateControl`.
@@ -566,6 +714,52 @@ const _: () = {
     assert!(offset_of!(SliceParamH264, cabac_init_idc) == 3118);
     assert!(offset_of!(SliceParamH264, slice_beta_offset_div2) == 3122);
     assert!(offset_of!(SliceParamH264, va_reserved) == 3124);
+    assert!(size_of::<PictureHevc>() == 28);
+    assert!(offset_of!(PictureHevc, flags) == 8);
+    assert!(size_of::<SeqParamHevc>() == 116);
+    assert!(offset_of!(SeqParamHevc, intra_period) == 4);
+    assert!(offset_of!(SeqParamHevc, bits_per_second) == 16);
+    assert!(offset_of!(SeqParamHevc, pic_width_in_luma_samples) == 20);
+    assert!(offset_of!(SeqParamHevc, seq_fields) == 24);
+    assert!(offset_of!(SeqParamHevc, log2_min_luma_coding_block_size_minus3) == 28);
+    assert!(offset_of!(SeqParamHevc, max_transform_hierarchy_depth_intra) == 33);
+    assert!(offset_of!(SeqParamHevc, pcm_sample_bit_depth_luma_minus1) == 36);
+    assert!(offset_of!(SeqParamHevc, log2_max_pcm_luma_coding_block_size_minus3) == 48);
+    assert!(offset_of!(SeqParamHevc, vui_parameters_present_flag) == 52);
+    assert!(offset_of!(SeqParamHevc, vui_fields) == 56);
+    assert!(offset_of!(SeqParamHevc, aspect_ratio_idc) == 60);
+    assert!(offset_of!(SeqParamHevc, sar_width) == 64);
+    assert!(offset_of!(SeqParamHevc, vui_time_scale) == 76);
+    assert!(offset_of!(SeqParamHevc, min_spatial_segmentation_idc) == 80);
+    assert!(offset_of!(SeqParamHevc, max_bits_per_min_cu_denom) == 83);
+    assert!(offset_of!(SeqParamHevc, scc_fields) == 84);
+    assert!(offset_of!(SeqParamHevc, va_reserved) == 88);
+    assert!(size_of::<PicParamHevc>() == 576);
+    assert!(offset_of!(PicParamHevc, reference_frames) == 28);
+    assert!(offset_of!(PicParamHevc, coded_buf) == 448);
+    assert!(offset_of!(PicParamHevc, collocated_ref_pic_index) == 452);
+    assert!(offset_of!(PicParamHevc, column_width_minus1) == 460);
+    assert!(offset_of!(PicParamHevc, row_height_minus1) == 479);
+    assert!(offset_of!(PicParamHevc, log2_parallel_merge_level_minus2) == 500);
+    assert!(offset_of!(PicParamHevc, nal_unit_type) == 505);
+    assert!(offset_of!(PicParamHevc, pic_fields) == 508);
+    assert!(offset_of!(PicParamHevc, hierarchical_level_plus1) == 512);
+    assert!(offset_of!(PicParamHevc, scc_fields) == 514);
+    assert!(offset_of!(PicParamHevc, va_reserved) == 516);
+    assert!(size_of::<SliceParamHevc>() == 1076);
+    assert!(offset_of!(SliceParamHevc, slice_type) == 8);
+    assert!(offset_of!(SliceParamHevc, ref_pic_list0) == 12);
+    assert!(offset_of!(SliceParamHevc, ref_pic_list1) == 432);
+    assert!(offset_of!(SliceParamHevc, luma_log2_weight_denom) == 852);
+    assert!(offset_of!(SliceParamHevc, delta_luma_weight_l0) == 854);
+    assert!(offset_of!(SliceParamHevc, delta_chroma_weight_l0) == 884);
+    assert!(offset_of!(SliceParamHevc, delta_luma_weight_l1) == 944);
+    assert!(offset_of!(SliceParamHevc, chroma_offset_l1) == 1004);
+    assert!(offset_of!(SliceParamHevc, max_num_merge_cand) == 1034);
+    assert!(offset_of!(SliceParamHevc, slice_tc_offset_div2) == 1039);
+    assert!(offset_of!(SliceParamHevc, slice_fields) == 1040);
+    assert!(offset_of!(SliceParamHevc, pred_weight_table_bit_length) == 1048);
+    assert!(offset_of!(SliceParamHevc, va_reserved) == 1052);
     assert!(size_of::<RateControlParam>() == 60);
     assert!(offset_of!(RateControlParam, rc_flags) == 24);
     assert!(size_of::<FrameRateParam>() == 24);

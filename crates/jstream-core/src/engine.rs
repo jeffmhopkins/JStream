@@ -109,6 +109,36 @@ struct Shared {
     youtube: Mutex<Option<Arc<Youtube>>>,
     /// The preview thread, which draws and encodes every session's preview streams.
     previews: PreviewHub,
+    /// The WASM automation plugins installed this run (ADR-0069). On its own lock,
+    /// never taken with the collection lock held, nor while a plugin runs.
+    #[cfg(feature = "wasm-plugins")]
+    automation: crate::plugins::automation::Registry,
+}
+
+/// A handle to an [`Engine`] that doesn't keep it alive: what a plugin's thread holds,
+/// so an engine with plugins installed still ends when its last handle and session go.
+#[cfg(feature = "wasm-plugins")]
+#[derive(Clone)]
+pub(crate) struct WeakEngine {
+    shared: Weak<Shared>,
+    media: Option<Weak<MediaHost>>,
+    drops: Weak<Mutex<DropLedger>>,
+}
+
+#[cfg(feature = "wasm-plugins")]
+impl WeakEngine {
+    /// The engine, while any handle or session keeps it alive.
+    pub(crate) fn upgrade(&self) -> Option<Engine> {
+        let media = match &self.media {
+            Some(media) => Some(media.upgrade()?),
+            None => None,
+        };
+        Some(Engine {
+            shared: self.shared.upgrade()?,
+            media,
+            drops: self.drops.upgrade()?,
+        })
+    }
 }
 
 impl Default for Engine {
@@ -132,6 +162,8 @@ impl Default for Engine {
                 audio_scopes,
                 youtube: Mutex::new(None),
                 previews: PreviewHub::default(),
+                #[cfg(feature = "wasm-plugins")]
+                automation: crate::plugins::automation::Registry::default(),
             }),
             media: None,
             drops: Arc::new(Mutex::new(DropLedger::default())),
@@ -265,6 +297,28 @@ impl Engine {
     pub fn with_audit(self, sink: Arc<dyn AuditSink>) -> Self {
         self.shared.audit.set(sink);
         self
+    }
+
+    /// Saves the installed WASM plugins and their grants in `plugins.json` in the folder
+    /// `dir` from now on, after every install, grant, enable and disable, and loads the
+    /// ones saved there now: each that was enabled is loaded again, as `plugin.enable`
+    /// loads it (ADR-0076). The folder and file are created if missing. A file that can't
+    /// be read, or that a newer version wrote, is logged at `error` and left as it is, and
+    /// then no plugin is loaded or saved this run. Built without the `wasm-plugins`
+    /// feature, the engine runs no plugins and this does nothing.
+    ///
+    /// Call it once the engine is built, after [`with_backends`](Self::with_backends)
+    /// and the other `with_` methods: a plugin it loads holds a handle to the engine as
+    /// it is at this call, so one opened earlier would act on an engine without its
+    /// media host. A second call is logged and ignored.
+    pub fn open_plugin_dir(&self, dir: impl Into<PathBuf>) {
+        #[cfg(feature = "wasm-plugins")]
+        crate::plugins::automation::open_dir(self, dir.into());
+        #[cfg(not(feature = "wasm-plugins"))]
+        {
+            let _ = dir.into();
+            tracing::debug!("built without WASM plugins: no plugin folder to open");
+        }
     }
 
     /// Loads the collection from the file at `path` and saves it there after every
@@ -698,6 +752,30 @@ impl Engine {
         InProcessControl::new(self.clone())
     }
 
+    /// A handle to this engine that doesn't keep it alive.
+    #[cfg(feature = "wasm-plugins")]
+    pub(crate) fn downgrade(&self) -> WeakEngine {
+        WeakEngine {
+            shared: Arc::downgrade(&self.shared),
+            media: self.media.as_ref().map(Arc::downgrade),
+            drops: Arc::downgrade(&self.drops),
+        }
+    }
+
+    /// Sends `event` to every subscriber, outside any call.
+    #[cfg(feature = "wasm-plugins")]
+    pub(crate) fn emit(&self, event: &Event) {
+        let mut wake = Vec::new();
+        lock(&self.shared.state).subscribers.emit(event, &mut wake);
+        wake_all(wake);
+    }
+
+    /// The installed WASM automation plugins.
+    #[cfg(feature = "wasm-plugins")]
+    pub(crate) fn automation(&self) -> &crate::plugins::automation::Registry {
+        &self.shared.automation
+    }
+
     /// The current state revision.
     pub fn rev(&self) -> Rev {
         lock(&self.shared.state).graph.rev()
@@ -856,7 +934,9 @@ impl Engine {
             } => Some(output_id.clone()),
             _ => None,
         };
-        let result = if let Some(result) = self.youtube_call(&call) {
+        let result = if let Some(result) = self.plugin_call(&call) {
+            result
+        } else if let Some(result) = self.youtube_call(&call) {
             result
         } else if let Call::Action {
             action: action @ (Action::OutputSetKey { .. } | Action::OutputClearKey { .. }),
@@ -933,6 +1013,22 @@ impl Engine {
             sink.record(pending.finish(client_id, request_id, &result));
         }
         Executed::Ready(Box::new(result))
+    }
+
+    /// `plugin.install`, `plugin.grant` and `plugin.enable`, or `None` for any other call
+    /// or without the `wasm-plugins` feature. They run with no engine lock held: a plugin
+    /// loads, and may call back into the engine, while its install waits.
+    #[cfg(feature = "wasm-plugins")]
+    fn plugin_call(&self, call: &Call) -> Option<Result<CallResult, ProtocolError>> {
+        match call {
+            Call::Action { action } => crate::plugins::automation::action(self, action),
+            _ => None,
+        }
+    }
+
+    #[cfg(not(feature = "wasm-plugins"))]
+    fn plugin_call(&self, _: &Call) -> Option<Result<CallResult, ProtocolError>> {
+        None
     }
 
     /// The YouTube actions and queries, or `None` for any other call. They run with no
@@ -2711,12 +2807,18 @@ impl State {
             other @ (Action::PairingStart | Action::DeviceRevoke { .. }) => {
                 return Err(served_by_the_server(other.name()));
             }
-            // This engine hosts no plugins yet (WA1, ADR-0069).
-            other @ (Action::PluginInstall { .. }
-            | Action::PluginGrant { .. }
-            | Action::PluginEnable { .. }) => {
+            // Built without the `wasm-plugins` feature, the engine can't run a plugin, so
+            // none is ever installed. With it, `Engine::execute` answers these before
+            // taking the collection lock.
+            other @ Action::PluginInstall { .. } => {
                 return Err(ProtocolError::Unsupported {
                     call: other.name().into(),
+                });
+            }
+            Action::PluginGrant { plugin_id, .. } | Action::PluginEnable { plugin_id } => {
+                return Err(ProtocolError::NotFound {
+                    entity: EntityKind::Plugin,
+                    id: plugin_id.to_string(),
                 });
             }
             Action::PrivacySet { on } => {

@@ -24,7 +24,7 @@ pub use capability::{Capabilities, command_names};
 pub use error::Error;
 pub use events::{EventSender, MAX_QUEUED_EVENTS};
 pub use limits::Limits;
-pub use plugin::{EPOCH_TICK, Plugin, PluginConfig, PluginHost};
+pub use plugin::{EPOCH_TICK, Plugin, PluginConfig, PluginHost, Refusals};
 
 /// The control crate, re-exported so a host names `Control` and the protocol through one
 /// dependency.
