@@ -14488,7 +14488,7 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": true,
         "readOnlyHint": false
       },
-      "description": "Runs one `source` operation: set `op.type` to one of `source.create` (edit), `source.rename` (edit), `source.set_settings` (edit), `source.duplicate` (edit), `source.delete` (edit), `source.set_meta` (edit), `source.set_audio` (edit), `source.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `source` operation: set `op.type` to one of `source.create` (edit), `source.rename` (edit), `source.set_settings` (edit), `source.duplicate` (edit), `source.delete` (edit), `source.set_meta` (edit), `source.set_audio` (edit), `source.list` (query), `source.sizes` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "AudioFollow": {
@@ -14830,6 +14830,19 @@ source: crates/jstream-mcp/src/tests.rs
                 "properties": {
                   "type": {
                     "const": "source.list",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Every source's current size (ADR-0022 §4, 0.40): runtime state, so the result\ncarries no `rev`. A source drawn at a density reports its own size, the size its\nframes are placed at, not its pixels (ADR-0073). `source.size_changed` reports each\nchange after this.",
+                "properties": {
+                  "type": {
+                    "const": "source.sizes",
                     "type": "string"
                   }
                 },

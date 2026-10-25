@@ -24,7 +24,7 @@ use crate::{
 };
 use crate::{AudienceStatsInfo, QuotaInfo, StatsPolling};
 use crate::{AudioFollow, BusId, BusInfo, BusMeter, Loudness, SendInfo, SourceAudio, SourceMeter};
-use crate::{CaptureTargetInfo, CaptureTargetKind, PixelSize};
+use crate::{CaptureTargetInfo, CaptureTargetKind, PixelSize, SourceSize};
 use crate::{Chord, DeviceId, DeviceInfo, HotkeyBinding};
 use crate::{DroppedOverride, ItemOverride, OverrideField};
 use crate::{
@@ -1034,6 +1034,7 @@ pub(crate) fn queries() -> Vec<Query> {
         },
         Query::DeviceList,
         Query::YoutubeStats,
+        Query::SourceSizes,
     ]
 }
 
@@ -1549,6 +1550,21 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             rev: Rev(12),
             video_mixes: mix_infos(),
         },
+        QueryResult::SourceSizes {
+            sources: vec![
+                SourceSize {
+                    source_id: SourceId::new("cam"),
+                    size: Some(PixelSize {
+                        width: 1920,
+                        height: 1080,
+                    }),
+                },
+                SourceSize {
+                    source_id: SourceId::new("mic"),
+                    size: None,
+                },
+            ],
+        },
         QueryResult::CaptureTargets {
             targets: vec![
                 CaptureTargetInfo {
@@ -1816,6 +1832,17 @@ pub(crate) fn events() -> Vec<Event> {
     });
     events.push(Event::YoutubeStats {
         stats: audience_stats(),
+    });
+    events.push(Event::SourceSizeChanged {
+        source_id: SourceId::new("window"),
+        size: Some(PixelSize {
+            width: 1280,
+            height: 720,
+        }),
+    });
+    events.push(Event::SourceSizeChanged {
+        source_id: SourceId::new("window"),
+        size: None,
     });
     events.push(Event::YoutubeStats {
         stats: AudienceStatsInfo {
