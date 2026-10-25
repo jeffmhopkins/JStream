@@ -1,4 +1,4 @@
-//! The single-pass pack (roadmap V1): colour correction, the chroma, colour and luma keys, sharpen, rounded corners with a border, and scroll.
+//! The single-pass pack (roadmap V1): colour correction, the chroma, colour and luma keys, sharpen, rounded corners with a border, scroll, and vignette.
 //!
 //! Every kind here is one fullscreen draw of the input's size. The colour kinds
 //! (colour correction and the keys) work on straight sRGB-encoded colour, as OBS does,
@@ -16,6 +16,7 @@ mod keys;
 mod rounded_corners;
 mod scroll;
 mod sharpen;
+mod vignette;
 
 /// This group's kinds.
 pub(crate) fn descriptors() -> Vec<KindDescriptor> {
@@ -27,6 +28,7 @@ pub(crate) fn descriptors() -> Vec<KindDescriptor> {
         sharpen::descriptor(),
         rounded_corners::descriptor(),
         scroll::descriptor(),
+        vignette::descriptor(),
     ]
 }
 
@@ -47,6 +49,7 @@ pub(crate) fn build(kind_id: &str, settings: &Settings) -> Option<Box<dyn Pass>>
         sharpen::KIND => single(sharpen::SHADER, sharpen::uniforms),
         rounded_corners::KIND => single(rounded_corners::SHADER, rounded_corners::uniforms),
         scroll::KIND => Box::new(scroll::Scroll::new(settings)),
+        vignette::KIND => single(vignette::SHADER, vignette::uniforms),
         _ => return None,
     })
 }
