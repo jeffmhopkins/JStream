@@ -66,8 +66,10 @@ on **program**, drawn on the canvas in the middle.
    **Inspector** and **Transform** panels hold the exact numbers.
 4. Sound sources appear in the **Audio mixer**: check that their meters move, and mute or
    lower them there.
-5. To show a scene, hover its row in **Scenes** and press the button that puts it on
-   program. The red "program" badge marks the one that is live.
+5. To show a scene, click its row in **Scenes**: it goes on program, and the red
+   "program" badge marks the one that is live. With **Studio mode** on (in the header),
+   a click puts the scene on preview instead, and the button on its row, or
+   **Transition** in the Transitions panel, takes it live.
 
 Panels can be moved, hidden and brought back from the **View** menu; **Layout** saves
 and resets arrangements.
