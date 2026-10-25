@@ -4245,6 +4245,10 @@ fn a_bus_monitor_is_set_undone_and_restored_with_its_bus() {
         refused("a\tb", jstream_protocol::MonitorTap::PreFilters),
         "edits.0.monitor.device"
     );
+    assert_eq!(
+        refused(&"d".repeat(513), jstream_protocol::MonitorTap::PostFilters),
+        "edits.0.monitor.device"
+    );
 }
 
 #[test]

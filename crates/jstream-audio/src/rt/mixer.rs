@@ -960,8 +960,8 @@ impl MixerControl {
         &self,
         device: jstream_media::AudioFormat,
     ) -> Result<super::monitor::Monitor, AudioError> {
-        let (rate, block, ring) = self.plane.monitor_config();
-        super::monitor::monitor(device, rate, block, ring, self.plane.retirer())
+        let (rate, block) = self.plane.monitor_config();
+        super::monitor::monitor(device, rate, block, self.plane.retirer())
     }
 
     /// Adds an output tap on `bus` while the mixer is running: the bus after the master
