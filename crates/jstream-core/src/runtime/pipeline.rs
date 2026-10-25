@@ -543,6 +543,9 @@ pub(crate) struct Program {
     collector: Option<JoinHandle<()>>,
     mixer: Option<JoinHandle<()>>,
     forward: Option<JoinHandle<()>>,
+    /// Hands the captures' sizes to the engine. It ends once the render thread has let
+    /// go of its captures.
+    sizes: Option<JoinHandle<()>>,
     clock: Arc<dyn MediaClock>,
     codecs: Arc<dyn Codecs>,
     size: FrameSize,
@@ -729,6 +732,7 @@ impl Drop for Program {
         // These end once the render and mixer threads have dropped their senders.
         join("collector", self.collector.take());
         join("program watch", self.forward.take());
+        join("capture sizes", self.sizes.take());
         join("stats", self.ticker.take());
         // After the threads stop, so the latch sees their final counters.
         self.drop_guard.take();
@@ -1448,7 +1452,10 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
     let gpu_sources = context
         .as_deref()
         .map(|context| GpuSourcesGuard(GpuSources::new(engine.use_gpu(context))));
-    let captures = captures::spawn(backends, parts.clock.timebase())?;
+    // Ends once the captures' sender goes, so on an early return it ends by itself.
+    let (size_tx, size_rx) = mpsc::channel();
+    let sizes = spawn("jstream-capture-sizes", engine.capture_sizes_watch(size_rx))?;
+    let captures = captures::spawn(backends, parts.clock.timebase(), size_tx)?;
     let format = engine_format()?;
     let mixer = Mixer::new(MixerConfig::default()).map_err(|err| format!("mixer: {err}"))?;
     // On an early return this closes the inputs, each stream before its ring's last
@@ -1565,6 +1572,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         collector: Some(collector_thread),
         mixer: Some(mixer_thread),
         forward: Some(forward),
+        sizes: Some(sizes),
         clock: Arc::clone(&parts.clock),
         codecs: Arc::clone(&parts.codecs),
         size,

@@ -24,11 +24,13 @@ use crate::preview::{Opening, PreviewHub, PreviewSource, SessionPreviews};
 use crate::privacy::Privacy;
 use crate::runtime::{
     Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, MixKey, OpenPublish,
-    OutputEncode, OutputStats, Pending, PipelineEvent, Release, RenderHub, Running, VcamOut,
-    launch, launch_program, launch_vcam, parts_from,
+    OutputEncode, OutputStats, Pending, PipelineEvent, Release, RenderHub, Running, SizeChange,
+    VcamOut, launch, launch_program, launch_vcam, parts_from,
 };
 use crate::session::InProcessControl;
-use crate::snapshot::{self, Frame, Look, SnapshotReply, SnapshotWorker, SourceFrameError};
+use crate::snapshot::{
+    self, CaptureKey, Frame, Look, SnapshotReply, SnapshotWorker, SourceFrameError,
+};
 use crate::studio::{self, Studio};
 use crate::transition;
 use crate::youtube::{NO_YOUTUBE_CLIENT, Youtube, YoutubeSetup};
@@ -496,6 +498,31 @@ impl Engine {
     #[cfg(test)]
     pub(crate) fn audio_scope(&self) -> Arc<jstream_sources::AudioScope> {
         Arc::clone(self.shared.audio_scopes.program())
+    }
+
+    /// The body of the program stage's `jstream-capture-sizes` thread: records each
+    /// capture's size as the render thread reports it, and announces the sources whose
+    /// size it changes (ADR-0022 §4). When the render thread lets go of its captures,
+    /// every capture's size is forgotten. It holds the shared collection, not the
+    /// [`MediaHost`], like the ticker.
+    pub(crate) fn capture_sizes_watch(
+        &self,
+        changes: Receiver<SizeChange>,
+    ) -> impl FnOnce() + Send + 'static {
+        let shared = Arc::clone(&self.shared);
+        move || {
+            for change in changes {
+                shared.capture_sizes(|sizes| match change.size {
+                    Some(size) => {
+                        sizes.insert(change.key, size);
+                    }
+                    None => {
+                        sizes.remove(&change.key);
+                    }
+                });
+            }
+            shared.capture_sizes(BTreeMap::clear);
+        }
     }
 
     /// A thread that emits `stats.tick` about once a second until `stop` is set.
@@ -2280,6 +2307,9 @@ struct State {
     /// announced it (ADR-0022 §4): runtime state, not part of `rev`. A source with no
     /// size has no entry.
     sizes: BTreeMap<SourceId, FrameSize>,
+    /// The size of each capture the program stage runs, as its render thread reports
+    /// it: what a `display`, `window` or `webcam` source's size comes from.
+    capture_sizes: BTreeMap<CaptureKey, FrameSize>,
 }
 
 impl State {
@@ -2812,6 +2842,7 @@ impl State {
             frames,
             live,
             sizes,
+            capture_sizes,
             subscribers,
             ..
         } = self;
@@ -2836,7 +2867,9 @@ impl State {
             let source_id = source.id();
             let now = match frames.get(source_id) {
                 Some(frame) => frame.extent(),
-                None => live.size(source_id),
+                None => live
+                    .size(source_id)
+                    .or_else(|| capture_sizes.get(&live.capture_key(source_id)?).copied()),
             };
             if sizes.get(source_id) == now.as_ref() {
                 continue;
@@ -3069,6 +3102,18 @@ impl PreviewSource for Shared {
 }
 
 impl Shared {
+    /// Changes the captures' sizes and announces the sources whose size that changes,
+    /// waking the subscribers once the collection lock is released.
+    fn capture_sizes(&self, change: impl FnOnce(&mut BTreeMap<CaptureKey, FrameSize>)) {
+        let mut wake = Vec::new();
+        {
+            let mut state = lock(&self.state);
+            change(&mut state.capture_sizes);
+            state.sync_sizes(&mut wake);
+        }
+        wake_all(wake);
+    }
+
     /// Re-plans now and announces the sizes that changed, waking the subscribers once
     /// the collection lock is released.
     fn replan_and_sync(&self) {

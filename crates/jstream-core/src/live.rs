@@ -600,6 +600,17 @@ impl LiveSources {
         self.entries.get(source_id)?.running.as_ref()?.size
     }
 
+    /// The capture the program stage runs for `source_id`, if it is a capture source
+    /// that captures something, as [`look`](Self::look) names it.
+    pub(crate) fn capture_key(&self, source_id: &SourceId) -> Option<CaptureKey> {
+        let source = &self.entries.get(source_id)?.running.as_ref()?.source;
+        let spec = source.capture()?;
+        (*spec != CaptureSpec::Window(None)).then(|| {
+            CaptureKey::for_source(spec.clone(), source_id.clone())
+                .with_cursor(source.show_cursor())
+        })
+    }
+
     /// Starts a plan of the program mix: the [`look`](Self::look) calls until the next
     /// one are the sources it reaches.
     pub(crate) fn begin_plan(&mut self) {
@@ -618,19 +629,21 @@ impl LiveSources {
         now: MediaTime,
         versions: &mut u64,
     ) -> Option<Look> {
+        if self
+            .entries
+            .get(source_id)?
+            .running
+            .as_ref()?
+            .source
+            .capture()
+            .is_some()
+        {
+            // A window source with no window chosen shows nothing.
+            return self.capture_key(source_id).map(Look::Capture);
+        }
         let plan = self.plan;
         let entry = self.entries.get_mut(source_id)?;
         let running = entry.running.as_mut()?;
-        if let Some(spec) = running.source.capture() {
-            // A window source with no window chosen shows nothing.
-            let show_cursor = running.source.show_cursor();
-            return (*spec != CaptureSpec::Window(None)).then(|| {
-                Look::Capture(
-                    CaptureKey::for_source(spec.clone(), source_id.clone())
-                        .with_cursor(show_cursor),
-                )
-            });
-        }
         let at = since(now, running.start);
         if running.planned + 1 < plan {
             running.source.show(at);
