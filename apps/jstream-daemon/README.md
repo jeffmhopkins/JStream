@@ -417,8 +417,8 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   runs only in the sandboxed browser helper, which the backend starts with the first
   page ([ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md)): the helper
   (`jstream-browser-helper.exe`, CEF's bootstrap exe renamed, and
-  `jstream-browser-helper.dll`) and CEF's runtime files must be next to
-  `jstream-daemon.exe`; its cache is the data directory's `cef` folder (else the log
+  `jstream-browser-helper.dll`) and CEF's runtime files must be in the `browser` folder
+  beside `jstream-daemon.exe`, as the portable zip has them, or next to it; its cache is the data directory's `cef` folder (else the log
   directory's) and its log the log directory's `cef.log`. Nothing about the browser
   stops the daemon: a device that won't open leaves pages playing audio with their
   frames dropped, a daemon whose own path is unknown leaves browser sources empty, and

@@ -236,7 +236,8 @@ fn macos_backends() -> anyhow::Result<Backends> {
 ///
 /// CEF runs only in the sandboxed browser helper (ADR-0048), which starts when the first
 /// page opens: the helper (`jstream-browser-helper.exe` and its DLL) and CEF's runtime
-/// files go next to the daemon's exe, CEF's cache in the data directory's `cef` folder
+/// files go in the `browser` folder beside the daemon's exe (or next to it), CEF's cache
+/// in the data directory's `cef` folder
 /// and its log in the log directory's `cef.log`. Neither a
 /// missing data directory nor a device that won't open stops the daemon: without a
 /// device, pages still play their audio and only their frames are dropped, and when the

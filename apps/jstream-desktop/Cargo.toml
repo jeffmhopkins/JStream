@@ -1,6 +1,6 @@
 [package]
 name = "jstream-desktop"
-version = "0.0.0"
+version.workspace = true
 description = "The JStream desktop app: a Tauri window showing the web UI, with the engine in-process."
 edition.workspace = true
 license.workspace = true

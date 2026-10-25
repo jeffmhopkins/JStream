@@ -1,6 +1,6 @@
 [package]
 name = "jstream-daemon"
-version = "0.0.0"
+version.workspace = true
 description = "The headless JStream engine host: runs an engine and serves its WebSocket API on localhost."
 edition.workspace = true
 license.workspace = true
