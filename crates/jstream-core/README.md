@@ -981,8 +981,11 @@ source drawn at a density reports its extent, the size its frames are placed at
 source's (`display`, `window`, `webcam`) is the frame size of the capture the program
 stage runs for it (`capture_sizes`, by capture key, so the sources sharing a webcam share
 its size), which the render thread reports (*Captures* in [Runtime](#runtime)). It has
-none while no output runs or its capture hasn't delivered a frame, and loses it when it
-leaves program, which stops its capture, or the stage closes. A source that failed to
+none while no output runs or its capture hasn't delivered a frame, and loses it when no
+source on program shows its capture any more, which stops that capture, or the stage
+closes. A `display` or `window` source's capture is its own, so it runs only while that
+source is on program; a webcam's runs while any source showing that device is, so a
+webcam source off program can have the shared device's size. A source that failed to
 build has no size, nor does an audio-only one or a deleted one. A source of a video kind with nothing to show (an `image` or `media` source
 with no file, or a `media` file with no video stream) shows one transparent pixel, and so
 reports 1×1.
