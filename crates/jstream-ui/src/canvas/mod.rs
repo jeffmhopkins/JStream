@@ -369,8 +369,8 @@ pub fn Canvas() -> impl IntoView {
     };
     // The handle of the one selected item under `point`: in crop mode the resize
     // handles sit on its picture and crop, with Alt the box's do; the picture is given
-    // when the handle crops. In crop mode with no picture known, only the rotate knob
-    // is there.
+    // when the handle crops. With no picture known there is nothing to crop, so the
+    // box's handles resize as usual.
     let single_handle = move |current: &Layout,
                               id: &ItemId,
                               geometry: &ItemGeometry,
@@ -379,11 +379,12 @@ pub fn Canvas() -> impl IntoView {
                               alt: bool|
           -> Option<(Handle, Option<Picture>)> {
         let picture = picture_of(current, id, geometry);
-        if crop_mode.get_untracked() {
+        if crop_mode.get_untracked()
+            && let Some(picture) = picture
+        {
             if let Some(Handle::Rotate) = transform::handle_at(geometry, point, fit) {
                 return Some((Handle::Rotate, None));
             }
-            let picture = picture?;
             let handles = picture.geometry(geometry)?;
             return match transform::handle_at(&handles, point, fit)? {
                 Handle::Rotate => None,
@@ -391,10 +392,7 @@ pub fn Canvas() -> impl IntoView {
             };
         }
         match transform::handle_at(geometry, point, fit)? {
-            Handle::Resize { .. } if alt => {
-                let handle = transform::handle_at(geometry, point, fit)?;
-                Some((handle, Some(picture?)))
-            }
+            handle @ Handle::Resize { .. } if alt => Some((handle, picture)),
             handle => Some((handle, None)),
         }
     };

@@ -133,7 +133,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **Events and the shared state.** One task reads the session's event stream. It keeps
   the header's revision current and hands each event to `Studio`, which re-reads
   the state with `state.get` after a `state.changed` newer than its copy (or after
-  `events.dropped`), and follows `studio.changed` for the program scene. Reads coalesce:
+  `events.dropped`), and follows `studio.changed` for the program scene. It reads the
+  sources' sizes with `source.sizes` after its first read and after `events.dropped`,
+  and follows `source.size_changed` between them. Reads coalesce:
   while one `state.get` is in flight, any number of further changes cost one more read.
   Panels never edit the copy: they send edits and the copy follows from the
   `state.changed` that comes back, so every client's change shows the same way. When
@@ -551,7 +553,8 @@ browser, and `mod.rs` is the component.
   amber, and the uncropped extent is drawn as a dashed amber ghost, as it is whenever
   the selected item is cropped. While a crop drag goes on the readout says
   `crop l / r / t / b`; at rest it adds ` · cropped` for a cropped item, or, in crop
-  mode with no size known, ` · no source size yet`, and then there are no crop handles.
+  mode with no size known, ` · no source size yet`, and then there are no crop handles:
+  the box's handles resize as usual, with Alt too.
 - **Snapping.** A moved upright box's edges and centre snap, within 6 screen pixels,
   to the canvas's edges and centre lines and to the other boxes' edges and centres,
   using each box's axis-aligned bounds; the lines it lands on are drawn as guides. An

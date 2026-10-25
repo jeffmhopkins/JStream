@@ -73,6 +73,13 @@ test('the crop tool and C, V and Escape switch crop mode', async ({ page, daemon
   await expect(move).toHaveAttribute('aria-pressed', 'false');
   // With no size from the engine, there is nothing to crop by dragging yet.
   await expect(readout(page)).toHaveText('640 × 360 · no source size yet');
+  // So the box's handles resize as usual.
+  const startRev = await rev(page);
+  await dragAcross(page, 1280, 540, -40);
+  await expect.poll(() => rev(page)).toBe(startRev + 1);
+  await expect(readout(page)).toHaveText(/^(?!640 )\d+ × \d+\s+· no source size yet$/);
+  await page.keyboard.press('Control+z');
+  await expect(readout(page)).toHaveText('640 × 360 · no source size yet');
   await page.keyboard.press('v');
   await expect(crop).toHaveAttribute('aria-pressed', 'false');
   await expect(readout(page)).toHaveText('640 × 360');

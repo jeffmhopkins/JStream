@@ -113,7 +113,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   on the canvas tools over an item leaves the selection alone.
 - **Crop** (`crop.spec.js`): the Crop tool, C, V, Escape, the item menu's Crop and a
   switch of scene enter and leave crop mode, whose readout says there is no source size
-  while the engine reports none; with `sourceSizes` giving the Backdrop's source a size,
+  while the engine reports none, and then a handle drag resizes as usual; with `sourceSizes` giving the Backdrop's source a size,
   a crop-mode drag on the right handle crops that side as one edit, with the Inspector's
   Right field, the ` · cropped` readout and the crop ghost, which Ctrl+Z undoes; Alt on
   the left handle crops outside crop mode, and Clear crop gives the whole picture back;
