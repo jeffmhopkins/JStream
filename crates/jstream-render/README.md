@@ -584,6 +584,15 @@ premultiplied linear light on the way out.
   `f32` `frame.time` would drift). Sampling is bilinear by hand: a looping axis wraps
   across its seam; off, the area the picture leaves is transparent. A new speed jumps
   to where that speed puts the picture at the current time.
+- `vignette`: `strength` (0..1, default 0.5), `radius` (0..1, default 0.5), `softness`
+  (0..1, default 0.5) and `color` (with alpha, default opaque black). The distance from
+  the centre is measured in the frame's own UV, so the shape is an ellipse that follows
+  the frame's aspect: 0 at the centre, 1 at the corners. Inside `radius` the picture is
+  untouched. Over the next `softness` it fades towards `color`, to `strength` times the
+  colour's alpha (a smoothstep; 0 is a hard edge). Coverage is kept, so a transparent
+  pixel stays transparent. It frames whatever its chain runs on: the source's whole
+  frame here, and an item's cropped box or a scene's composite once those owners are
+  built (ADR-0065, #529).
 
 Aspect ratio (V1a): `aspect_ratio` gives the frame a target shape before it is placed.
 Settings: `ratio` (`16:9`, `9:16`, `4:3`, `1:1`, `21:9` or `custom`, with
@@ -764,7 +773,11 @@ tests check:
   doesn't survive a round trip through its `f32` texture coordinate;
 - that two crops of one source get a chain each;
 - that a cropped floor minified onto coarse levels shows nothing of a red border just
-  past its crop (red 160 with the chain built from the whole source).
+  past its crop (red 160 with the chain built from the whole source);
+- that a slightly tilted item of a 128² image placed as 64² and cropped in those pixels
+  samples its crop's texels: each half of the crop where it belongs and nothing past it
+  (`Region::in_texels` at its call site; fails with the crop read as texels, the extent
+  and texels swapped, or the UV remap divided by the extent).
 
 Accepted means drawable (protocol 0.34's `check_drawable`): over 3D geometries from a
 fixed seed, every input spread from 0.1 to f32's limit, each one `check_drawable` accepts

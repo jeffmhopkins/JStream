@@ -27,11 +27,13 @@ pub(crate) mod export;
 
 use std::future::Future;
 use std::pin::pin;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::task::{Context, Poll, Waker};
 
 use jstream_platform::media::FrameSize;
-use jstream_platform::{AdapterId, FrameSync, GpuContext, GpuFrame, GpuInterop, PlatformError};
+use jstream_platform::{
+    AdapterId, FrameSync, GpuContext, GpuFrame, GpuInterop, PlatformError, SubmitLock,
+};
 use wgpu::hal::api::Vulkan;
 
 use crate::spa::SpaVideoFormat;
@@ -71,6 +73,9 @@ pub(crate) struct Shared {
     pub(crate) export: Option<export::Export>,
     pub(crate) device: wgpu::Device,
     pub(crate) queue: wgpu::Queue,
+    /// The context's submit lock, set by [`LinuxGpu::open_device`] once the context
+    /// exists. Read it through [`Self::submit_lock`].
+    submit: OnceLock<SubmitLock>,
 }
 
 impl std::fmt::Debug for Shared {
@@ -95,6 +100,17 @@ impl Shared {
                 what,
                 state: "the context was not opened by the Linux GPU interop",
             })
+    }
+
+    /// The lock that orders submits on the context's queue
+    /// ([`GpuContext::submit_lock`]): taken around every submit this crate makes on
+    /// it, so none comes between render's staging of a frame and render's submit
+    /// (#667).
+    pub(crate) fn submit_lock(&self) -> &SubmitLock {
+        // `open_device`, the only constructor of the state, sets it before the
+        // context is handed out, so the fallback is never reached; it only keeps this
+        // method total.
+        self.submit.get_or_init(SubmitLock::new)
     }
 
     /// Whether this device imports DMA-BUFs in any format PipeWire may send.
@@ -217,14 +233,22 @@ impl GpuInterop for LinuxGpu {
             export,
             device: device.clone(),
             queue: queue.clone(),
+            submit: OnceLock::new(),
         });
-        Ok(GpuContext::new(
+        let context = GpuContext::new(
             adapter,
             device,
             queue,
             id,
-            Some(Box::new(shared)),
-        ))
+            Some(Box::new(Arc::clone(&shared))),
+        );
+        // The context makes its lock, so the platform's state takes a clone of it here,
+        // before anything can submit.
+        shared
+            .submit
+            .set(context.submit_lock().clone())
+            .expect("set once, on a state only this call holds");
+        Ok(context)
     }
 
     /// An NV12 image in the `LINEAR` DRM layout, exported as a DMA-BUF, which render
