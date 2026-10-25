@@ -63,10 +63,11 @@ Contents:
   past the end, a list over `MAX_LIST`, a string that isn't UTF-8 and trailing bytes,
   since each side treats the other's frames as untrusted.
 
-**One filter per block.** The mixer's side numbers blocks from 0 and fixes its
-latency from the host's ready latency when it is built, so a block serves exactly one
-filter, freshly initialised. A restarted host gets a re-initialised block and the
-filter is built again, since its plugin latency may differ.
+**One filter per block at a time.** The mixer's side numbers its blocks on from the
+input ring's head and fixes its latency from the host's ready latency when it is built.
+When the engine rebuilds a chain, a new filter can go on a block whose filter was
+removed, and the host carries on. A restarted host gets a new block and the filter is
+built again, since its plugin latency may differ.
 
 **Trust.** Each side treats what the other wrote as untrusted: a slot's frame count
 must match the reader's buffer exactly, a corrupt parameter ring is empty, the

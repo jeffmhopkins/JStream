@@ -486,8 +486,9 @@ model; a change that would contradict it edits it in the same PR.
 (`jstream-plugin-proto`), the mixer's side of it (`jstream-audio`) and the host
 process (`jstream-plugin-host`) are built, and so are starting hosts
 (`jstream-platform-windows`) and watching and restarting them on a control thread
-(`jstream-core`'s `HostSupervisor`); running a CLAP filter from the graph, which would
-start that supervisor, and the `stats.tick` count are not yet. Each CLAP filter
+(`jstream-core`'s `HostSupervisor`), and a source's audio chain runs CLAP filters, each
+with its own supervisor; CLAP filters on the master's and outputs' chains, and the
+`stats.tick` count, are not yet. Each CLAP filter
 instance runs in its own `jstream-plugin-host` process, on a real-time thread registered
 with MMCSS "Pro Audio" and woken by its own timer on the media clock, which both
 processes read from the same OS counter (not built yet: for now the host sleeps a
@@ -1134,6 +1135,10 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   version, migrated on load like the collection
   ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). Until kinds ship settings
   migrations, a source, filter or preset saved at another version is refused on load.
+  A filter whose kind the engine doesn't describe (a pack that isn't installed, or a
+  CLAP plugin before the scan that runs after the load) loads with its settings and
+  version verbatim and is saved back as it was; the engine bypasses it until its kind
+  appears.
   A placement's `opacity` and `blend` are written only when they differ from 1 and
   `normal`, a geometry's `flip_h` and `flip_v` only when true, a disabled filter's `enabled` only when false, and the reserved `effects[]`
   must be empty.

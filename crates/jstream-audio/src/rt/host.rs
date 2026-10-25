@@ -104,7 +104,9 @@ impl HostFilter {
         Ok(Self {
             block_samples: 2 * block_frames,
             depth: u64::from(config.depth),
-            next: 0,
+            // On from the last filter's blocks, if the block had one: the host's output
+            // ring holds its numbers, and only this process writes the input ring.
+            next: shared.input.head(),
             latency,
             dry,
             wet: vec![0.0; 2 * block_frames].into_boxed_slice(),
@@ -337,6 +339,35 @@ mod tests {
                 &b[..4]
             );
         }
+    }
+
+    /// A filter built on a block an earlier filter used (its chain was rebuilt) numbers
+    /// on from it, so the host keeps up without a restart and nothing is missed.
+    #[test]
+    fn a_new_filter_on_a_used_block_carries_on() {
+        let (shared, mem) = memory(2, Some(0));
+        let mut first = HostFilter::new(RATE, FRAMES, Arc::clone(&mem)).unwrap();
+        let mut host_next = 0;
+        for n in 0..6u64 {
+            host_step(&shared, &mut host_next, 0.5);
+            first.process(&mut block(n));
+        }
+        drop(first);
+        let mut second = HostFilter::new(RATE, FRAMES, mem).unwrap();
+        assert_eq!(second.next, 6);
+        for n in 6..12u64 {
+            let mut b = block(n);
+            host_step(&shared, &mut host_next, 0.5);
+            second.process(&mut b);
+            if n >= 7 {
+                assert!(
+                    b.iter().all(|&s| s == (n - 2 + 1) as f32 * 0.5),
+                    "block {n}: {:?}",
+                    &b[..4]
+                );
+            }
+        }
+        assert_eq!(shared.status.mixer_misses.load(Ordering::Relaxed), 0);
     }
 
     #[test]

@@ -962,7 +962,7 @@ milestone = "M3"
 title = "CLAP plugin host"
 status = "planned"
 prs = [272, 281, 407, 488, 573]
-note = "parts 1 to 3 merged (wave/m3 landed in #477): the shared-memory contract, the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; the host's Windows run passed in #342; CLAP filters in a source's audio chain, part 4 (#488), is in review into wave/m3-4, and the IPC hardening (#573, for #351) is stacked on it; then a live-audio Windows run (new issue once CLAP filters run)"
+note = "parts 1 to 3 merged (wave/m3 landed in #477): the shared-memory contract, the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; the host's Windows run passed in #342; CLAP filters in a source's audio chain, part 4 (#488), is in review into wave/m3-4, and the IPC hardening (#573, for #351) is in review stacked on it; then a live-audio Windows run (new issue once CLAP filters run)"
 needs = ["build", "hardware"]
 
 [[item]]
