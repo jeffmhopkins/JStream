@@ -7,7 +7,9 @@
 //! strings, as the API sends them.
 //!
 //! A stream's key (`cdn.ingestionInfo.streamName`) is parsed straight into a
-//! [`Secret`] and never prints (R-SEC-001, docs/RULES.md#R-SEC-001).
+//! [`Secret`] and never prints (R-SEC-001, docs/RULES.md#R-SEC-001). A client given a
+//! [`SecretHook`] also hands it every access token, refresh token and stream key it
+//! holds, as it gets them, so the app's crash reports can redact them (#353).
 
 use std::fmt;
 use std::sync::Arc;
@@ -20,6 +22,10 @@ use serde::{Deserialize, Deserializer, Serialize};
 use crate::error::remote_text;
 use crate::http::{Body, HttpRequest, HttpResponse, HttpTransport, Method, encode_pairs};
 use crate::{AccessToken, OAuthClient, Scope, YoutubeError};
+
+/// Called with each secret a [`LiveClient`] holds, as it gets it (an app registers them
+/// with its crash reports' redaction). It must not block or log the secret.
+pub type SecretHook = Arc<dyn Fn(&str) + Send + Sync>;
 
 /// The Live API's base URL.
 pub const API_BASE: &str = "https://www.googleapis.com/youtube/v3";
@@ -51,6 +57,7 @@ pub struct LiveClient {
     refresh_token: Secret,
     rotated: bool,
     access: Option<AccessToken>,
+    hook: Option<SecretHook>,
 }
 
 impl fmt::Debug for LiveClient {
@@ -75,6 +82,35 @@ impl LiveClient {
             refresh_token,
             rotated: false,
             access: None,
+            hook: None,
+        }
+    }
+
+    /// This client, handing `hook` its refresh token and access token now, and every
+    /// access token, rotated refresh token and stream key it gets from here on.
+    #[must_use]
+    pub fn with_secret_hook(mut self, hook: SecretHook) -> Self {
+        hook(self.refresh_token.expose());
+        if let Some(access) = &self.access {
+            hook(access.secret().expose());
+        }
+        self.hook = Some(hook);
+        self
+    }
+
+    /// Hands `secret` to the hook, if there is one.
+    fn saw(&self, secret: &Secret) {
+        if let Some(hook) = &self.hook {
+            hook(secret.expose());
+        }
+    }
+
+    /// Hands each stream key in `streams` to the hook.
+    fn saw_keys<'s>(&self, streams: impl IntoIterator<Item = &'s LiveStream>) {
+        for stream in streams {
+            if let Some(key) = &stream.cdn.ingestion_info.stream_name {
+                self.saw(key);
+            }
         }
     }
 
@@ -252,14 +288,16 @@ impl LiveClient {
             StreamFilter::Ids(ids) => query.push(("id", join_ids(ids)?)),
         }
         page.push_to(&mut query)?;
-        self.call(
+        let page: Page<LiveStream> = self.call(
             Method::Get,
             "liveStreams",
             &query,
             Body::Empty,
             "liveStreams.list",
             Scope::Readonly,
-        )
+        )?;
+        self.saw_keys(&page.items);
+        Ok(page)
     }
 
     /// One stream by ID, with its ingestion details and key.
@@ -284,14 +322,16 @@ impl LiveClient {
     pub fn insert_stream(&mut self, new: &NewStream) -> Result<LiveStream, YoutubeError> {
         let body = new.json_body()?;
         let query = [("part", STREAM_INSERT_PARTS.to_owned())];
-        self.call(
+        let stream: LiveStream = self.call(
             Method::Post,
             "liveStreams",
             &query,
             Body::Json(body),
             "liveStreams.insert",
             Scope::Manage,
-        )
+        )?;
+        self.saw_keys([&stream]);
+        Ok(stream)
     }
 
     /// The stream's status and health (`liveStreams.list` with `part=id,status`),
@@ -374,9 +414,11 @@ impl LiveClient {
     fn refresh(&mut self) -> Result<(), YoutubeError> {
         let refreshed = self.oauth.refresh(&*self.transport, &self.refresh_token)?;
         if let Some(rotated) = refreshed.rotated_refresh_token {
+            self.saw(&rotated);
             self.refresh_token = rotated;
             self.rotated = true;
         }
+        self.saw(refreshed.access.secret());
         self.access = Some(refreshed.access);
         Ok(())
     }

@@ -67,7 +67,8 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   the log directory ([Design](#design)).
 - **Tests** (`serve.rs`, `token.rs`, `args.rs` and `logs.rs` unit tests, the token
   registered for redaction, and the stream key registered through the live engine's
-  `Redacting` store; the real `connect_rtmp` failing against loopback servers without
+  `Redacting` store; `set_up` registering the stored YouTube token through the setup's
+  secret hook, in `youtube.rs`; the real `connect_rtmp` failing against loopback servers without
   naming the key, through `serve::live_redacting`, in `serve.rs`; the publish opener and
   the live engine on the platform fakes, in `live.rs`; `tests/daemon.rs`, the built binary driven by
   `jstream-control`'s WebSocket client, a raw HTTP MCP client and raw HTTP UI
@@ -513,10 +514,11 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   `Redacting`, which
   registers each secret as it is stored or loaded, and every YouTube refresh token,
   since `serve.rs` hands YouTube its Credential Manager token store behind
-  `Redacting` too. Secrets that pass through neither store are not registered
-  yet: a YouTube-bound output's stream key, which core reads with `Youtube::ingest`
-  and hands straight to its connect, and the OAuth access token (left open on #353);
-  only their length and BLAKE3 digest are kept, and the text is scanned for windows
+  `Redacting` too. The secrets that pass through neither store are registered by the
+  YouTube setup's secret hook (`Secrets::hook`, #353): every OAuth access token and
+  rotated refresh token the account's client gets, and every stream key YouTube sends
+  it, such as the one a `youtube` output's `Youtube::ingest` reads for its connect.
+  Only their length and BLAKE3 digest are kept, and the text is scanned for windows
   with that digest, so the hook holds no plaintext. It replaces the default hook,
   whose stderr line would quote the message unredacted; `main.rs`'s `crash_line` prints
   the hook's redacted line instead (the crate never prints). A panic in a tokio task writes

@@ -347,8 +347,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   slate) and which sources it mutes, by default every audio input-device source,
   independently of each source's own mute. While on, it covers every output and every
   preview stream of a post-master stage. Built so far: on and off, covering every
-  output's video with the default blur. The look setting, the slate and the muted
-  sources are not built yet.
+  output's video with the default blur and muting the default set, every audio input
+  device. The look setting, the slate and choosing the muted sources are not built
+  yet.
 - **Audio** ([ADR-0028](adr/0028-audio-model-v2.md)): sources feed buses through the send
   matrix; buses feed outputs and monitors, never other buses. Every audio source gets a
   send to the master bus ("Program output") at 0 dB. Per source: stream → audio filters →
@@ -420,7 +421,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   `VirtualCam`, which has no settings and ignores its profile. A stream
   key is never collection state: it lives in the OS credential store
   ([R-SEC-001](RULES.md#R-SEC-001)). Encoder profiles, ordered by ID, each a name and an
-  H.264 and AAC encoding (rate control, keyframe interval, hardware preference, audio bit
+  H.264, HEVC or AV1 and AAC encoding (rate control, keyframe interval, hardware preference, audio bit
   rate), checked against the ranges the protocol states. An output with no profile uses
   the engine's default; a profile an output uses can't be deleted. Video mixes
   (protocol 0.28), ordered by ID, each with a name besides the fields above: the
@@ -602,8 +603,18 @@ the next tick: the engine stores it with release ordering under its lock, and th
 loads it with acquire ordering at the start of each tick. The blur pass's layers are
 kept whenever a mix is drawn, so turning privacy on allocates nothing on a real-time
 thread. The flag fails closed: a tick under privacy that couldn't draw pushes black,
-never the last frame. The mixer thread will read it the same way once privacy mutes
-sources; not built yet.
+never the last frame. The mixer reads a count of the screen's changes instead (odd
+while it is on, stored after the flag), with acquire ordering at each poll, so a screen
+turned on and off again between two polls still reaches it. It silences the inputs it
+mutes from the next block, before their filter chains (so no delay line holds what
+they captured meanwhile) and through their activity gain, so that takes a field store
+and allocates nothing either. Those inputs' audio threads load the count with acquire
+ordering too, and zero each packet as it arrives, before the input's ring, while it is
+odd or the mixer has not yet acted on it. Turning it off follows the capture
+time: blocks mixed late by the mixer's latency that start before the clock's frame at
+the first poll after it went off, plus 40 ms for an input's timing error, stay covered,
+and the audio threads zero a packet that its stamp, the input's timing of it or its
+placement starts before that frame, an atomic the mixer stores.
 
 <a id="protocol"></a>
 ## Control protocol
@@ -864,7 +875,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 707 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 709 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking

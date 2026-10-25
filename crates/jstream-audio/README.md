@@ -30,9 +30,10 @@ compensates their latency. It also has
 [ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)'s audio half: a
 master chain on every bus that feeds an output, output taps with their own chains for
 outputs that encode their own audio, and each bus's output before the master chain for
-monitoring. Each input has an activity gain (audio that follows the program) before
-its sends. Sidechain keys in the mixer
-and the monitor devices themselves come later. The true-peak and loudness meters
+monitoring, and the privacy screen's mute. Each input has an activity gain (audio that
+follows the program) before its sends. A bus monitor (ADR-0028's D22) hears the bus before or after its filters and
+plays on an output device through a monitor player; `jstream-core` doesn't open one yet,
+since the protocol has no monitor. Sidechain keys in the mixer come later. The true-peak and loudness meters
 ([Meters](#meters)) exist as DSP but don't run in the mixer yet; `jstream-core`'s
 mixer thread runs them on the master block the mixer returns.
 
@@ -71,6 +72,34 @@ stamped on the clock, and no device is the master.
   after its fader, mute and meter: ADR-0028's activity gain, which `jstream-core` sets
   from what the Program mix shows. It ramps over one block with the sends, and a new
   input starts at 1.
+- `InputControl::set_privacy_muted` marks an input as one the privacy screen mutes
+  ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)), and
+  `Mixer::set_privacy` turns the screen on or off (the thread that polls a mixer made
+  with `Mixer::new` calls it before each poll), and turning it on covers the next
+  block mixed. While it
+  is on, a marked input's audio thread zeroes each packet as it arrives, before its
+  ring, and the mixer silences it where it leaves its ring, before its filter chain,
+  and gives it an activity gain of 0 in place of its own. So nothing it captures
+  meanwhile reaches its ring, a delay filter's line or its compensation delay to be
+  heard after the screen goes off; what the chain held from before ramps out over one
+  block. `Mixer::with_privacy_signal` makes a mixer that follows the engine's count of
+  the screen's changes (odd while it is on) at each poll, with no `set_privacy` call,
+  turning it on and off again when it changed twice between two polls. Its inputs'
+  audio threads read the count too, so they cover a packet from the moment the engine
+  changes it until the next poll has acted on the change. Turning it off follows
+  the capture time: until the next `poll` everything stays covered, and that poll sets
+  the end to the engine frame of its clock plus 40 ms (`PRIVACY_MARGIN_S`, twice the
+  20 ms timing error at which an input re-anchors). The blocks that start before it,
+  mixed late by the latency, stay covered, and the audio thread zeroes a packet that
+  its own stamp, the input's timing of it or its placement starts before it, so a
+  stamp the drift fit rejects is covered by its capture time. Only a packet that
+  arrives after that poll and that all three date at least 40 ms after the screen went
+  off is heard. It feeds no
+  bus, its own block is silent and its meter reads silence. Its mute, sends and
+  activity gain are left as they are, so turning the screen off brings it back as it
+  was. A new input is unmarked;
+  `MixerControl::add_input_with` marks one before the mixer can install it, so it
+  starts silent under the screen.
 - `InputControl::add_filter` / `insert_filter` and the same on `BusControl` add a
   filter (`FilterSpec`: gain, noise gate, compressor, limiter or delay, built at the
   engine rate) to the chain, and return a `FilterControl` whose `set(FilterParams)`
@@ -112,6 +141,25 @@ stamped on the clock, and no device is the master.
   contributes to the mix before each send's gain, which `jstream-core` draws for a
   `waveform` or `spectrum` source that names the source (ADR-0028 defines a sidechain
   key's signal at the same point).
+- `Mixer::monitor_block(bus, tap)` reads what a monitor on `bus` hears in the last block
+  mixed, at its `MonitorTap`: `PostFilters` is `bus_block`, and `PreFilters` is the bus's
+  sum before its filter chain, through the same fader and mute (so only the filters
+  differ). Neither has the master chain. `PreFilters` skips the bus chain's latency and
+  its compensation, so it is that much earlier than `PostFilters`.
+- `MixerControl::add_monitor(format)` builds a `Monitor` for an output device of
+  `format` (the device's rate, 12 to 288 kHz at a 48 kHz engine, and layout, interleaved
+  `f32`): its `feed` (`MonitorFeed::push(frame, block)`) takes each block the mixer
+  thread monitors, its `player` (`MonitorPlayer`) implements
+  `jstream_platform::AudioOutputHandler` and goes to `AudioIo::open_output` as the
+  stream's handler, and its `control` reads `MonitorStats` (blocks, renders, underrun
+  frames, re-anchors, failure). The player maps stereo onto the device: both channels
+  averaged into mono, the front pair of anything wider, the rest silent. See
+  [Real-time design](#realtime) for its clock. `AudioIo::open_output` reports the
+  device's format only on the stream it returns, so the stream opens on a
+  `MonitorSocket` from `monitor_socket()`, which plays silence until
+  `MonitorPlug::plug` hands it the player built for that format, then plays the player.
+  It takes the player with a lock-free `try_recv` per render, and passes on a stream
+  failure reported before then.
 - `InputControl` and `BusControl` set the fader (linear or dB, 0 to +24 dB) and mute,
   ramped over one block. They read meters (per channel, post-fader, so an input's is
   before its sends: the peak held until read, and the last block's RMS) and counters
@@ -126,7 +174,8 @@ stamped on the clock, and no device is the master.
   ([Filters](#filters)).
 
 **Errors** (`AudioError`): an invalid configuration (including a loudness meter's
-rate, or a filter's rate or settings), an unsupported input rate or sample layout, a
+rate, or a filter's rate or settings), an unsupported input or monitor device rate or
+sample layout, a
 wrong output length, more than 64 inputs, 16 buses, 16 output taps or 8 filters in a
 chain, an input, bus, output tap or filter already removed, a full command queue, or a collector thread that could
 not start. No variant allocates.
@@ -143,6 +192,19 @@ not start. No variant allocates.
 - the mixer's gains, ramps, meters, under- and overrun counters, and clocked polling;
 - each input's own block after its fader, mute and activity gain, unaffected by its
   send gains, and gone once the input is removed;
+- the privacy screen silencing only the inputs it mutes, from the next block, metering
+  silence, with their sends, mute and activity gains untouched, an input added while it
+  is on starting silent, and nothing captured under it heard afterwards through a delay
+  filter or the compensation delay (`audio_from_under_the_privacy_screen_is_never_heard`)
+  or in the blocks mixed just after it goes off (`the_privacy_screen_ends_at_the_capture_time`),
+  also from an input placed 10 ms late (`the_privacy_screen_covers_an_input_placed_late`)
+  and from stamps the drift fit rejects as outliers, placed 300 ms late
+  (`the_privacy_screen_covers_stamps_the_fit_rejects`); a mixer given the engine's
+  count of changes following it with no `set_privacy` call
+  (`the_mixer_follows_the_engine_signal`), and covering a screen turned on and off
+  again between two polls, whether the packet captured meanwhile arrives before the
+  next poll or after it, even placed 102 ms late
+  (`a_screen_on_and_off_between_two_polls_still_covers_it`);
 - the send matrix: post-fader sends into each bus, each bus's own fader, mute and
   meter, sends ramping in and out, a muted input feeding no bus, buses added from
   another thread and removed, a send to a removed bus not reaching the bus that reuses
@@ -158,6 +220,16 @@ not start. No variant allocates.
   input and bus lines up, and `pts` moves back by the total, then returns when they are
   removed), a delay filter's output stamped later by its delay, and the limits and
   rejected edits;
+- monitor taps: a bus before its filters and after them, both through its fader and
+  mute and before the master chain, silent when muted, and gone with the bus;
+- monitors (`monitor.rs`): a 48 kHz device playing the bus at its level with no
+  re-anchor or underrun once playing; 44.1 kHz mono, 96 kHz 5.1 and 16 kHz stereo
+  devices at the right level on each channel; a device clock ±1000 ppm off steered out
+  over two minutes with no re-anchor; a feed that stops played as silence and picked up
+  where the player stands; a stalled device moving forward onto the target; silence
+  before the first block; a stream failure reported; device rates and planar formats
+  refused; the ring freed on the collector from both ends; and a socket silent until
+  its player is plugged in, then playing it, with an earlier failure passed on;
 - the master chain and output taps: the master chain on the master bus and on a
   tapped bus but not before monitoring, a master filter's edit reaching every copy and
   a bus added later, an output tap's own chain and stamp, a tap reading silence once
@@ -182,8 +254,10 @@ be.
 
 `tests/no_alloc.rs` is R-RT-001's `callback_does_not_allocate`: the real-time calls
 under `assert_no_alloc`, through the same kinds of glitches and live input, bus, send,
-filter, master-chain, output-tap and CLAP-filter changes, reading each output tap's and
-each input's block after every block
+filter, master-chain, output-tap and CLAP-filter changes and the privacy screen,
+reading each output tap's and each input's block after every block, feeding two
+monitors (before and after the master's filters) and rendering their devices every
+tick through the sockets their players are plugged into
 ([Real-time design](#realtime)).
 `tests/cost.rs` is an ignored measurement of what a block costs
 ([Real-time design](#realtime)).
@@ -203,9 +277,13 @@ Everything that runs on a real-time thread lives in `src/rt/`
 ([ARCH › Threads, clock and sync](../../docs/ARCHITECTURE.md#threading)). Each input's
 **audio thread** (the platform backend's, one per stream) calls
 `InputProducer::push_packet`. That call downmixes, tracks the device clock, resamples,
-and writes into the input's ring. The **mixer thread** calls `Mixer::poll`, which reads
+and writes into the input's ring, zeroing a packet of an input the privacy screen
+covers (it reads the mixer's end of the screen and, from `Mixer::with_privacy_signal`,
+the engine's count of its changes and the last count the mixer acted on, all atomics). The **mixer thread** calls `Mixer::poll`, which reads
 every ring for the block's window, applies faders, activity gains and sends, sums each
-bus and meters.
+bus and meters. An input the privacy screen mutes while it is on (a plain field
+`Mixer::set_privacy` sets on that thread) is zeroed after its ring read, before its
+chain, and takes an activity gain of 0.
 Neither allocates,
 locks, blocks or logs after setup ([R-RT-001](../../docs/RULES.md#R-RT-001)). They
 share only the rings and atomics: gains, sends, meters and counters
@@ -223,6 +301,25 @@ frames that arrive behind the mixer's read position as late. `unsafe` is forbidd
 producer publishes the end of the write it is about to make before a release fence, and
 the reader re-reads it after an acquire fence. No workspace crate provides a ring
 indexed by time with these policies.
+
+**Monitors** (`monitor.rs`). The mixer thread writes each monitored block into a ring
+of the same kind, under its engine frames. The ring is sized for the monitor, not from
+the inputs' `ring_frames`: twice the sum of the target, a block and the 50 ms threshold,
+rounded up to a power of two, so a short mixer ring can't push a steady read past the
+ring's half-capacity guard. The output device's audio thread reads
+it through `MonitorPlayer::render`: in 64-frame stages, through a resampler from the
+engine rate to the device's, steered by the inputs' controller and smoothing so that it
+reads a fixed distance behind the newest frame written. That target is 1.5 blocks plus
+20 ms (2496 frames, 52 ms, at the default 1024-frame block): the distance swings by a block as the mixer writes
+them, and the rest covers a device period and the look-ahead. More than 50 ms above the
+target (the device stalled) moves the read position forward onto it, counted as a
+re-anchor. More than 50 ms below (the feed stalled or stopped) leaves the player
+reading on into silence, counted as underrun, with the controller held: moving back
+would replay what was already heard. Both ends hand the ring and counters to the
+collector when dropped. The device stream opens on a `MonitorSocket` before the player
+exists; the player, built on the control thread once the stream's format is known,
+reaches it through a one-slot `crossbeam` channel, which the socket polls with
+`try_recv` (no lock, no wait) until it arrives.
 
 **Downmix** (`downmix.rs`), before resampling, so 5.1 costs no more than stereo:
 
@@ -282,8 +379,10 @@ not rubato's output ratio.
 compensation delay, ramps its fader and meters it, copies it into the input's own
 block with its activity gain ramped (`input_block`; the block is allocated with the
 input on the control plane, travels in its add command and goes to the collector with
-it), then adds it into every bus it sends to, ramping each send's gain. For each bus it then runs the bus chain and compensation
-delay, ramps the bus fader, replaces any non-finite sample with 0 and meters the output.
+it), then adds it into every bus it sends to, ramping each send's gain. For each bus it
+then copies the sum into a third buffer (the `PreFilters` monitor block), runs the bus
+chain and compensation delay, ramps the bus fader on both, replaces any non-finite
+sample with 0 and meters the output.
 Each bus that feeds an output then runs its copy of the master chain on a second
 buffer, so the first keeps the pre-master output for monitoring (`bus_block`), and each
 output tap copies its bus's post-master block and runs its own chain. The master's
@@ -404,8 +503,10 @@ limiter and removed, filters on an input and the master edited every 0.5 s, and 
 limiter added to and removed from an input (so the compensation delays move), master
 filters edited every 0.5 s and one added to both fed buses and removed, an output tap
 on the aux bus with its own chain (edited every 0.5 s, outliving its bus) whose block is
-read after each mix, a tap on the master added and removed, and every input's own
-block read after each mix. The test
+read after each mix, a tap on the master added and removed, every input's own
+block read after each mix, and the privacy screen going on and off over the microphone
+(through the count of changes `Mixer::with_privacy_signal` reads, at each poll and in
+each of the microphone's packets). The test
 checks that each of those paths ran. Control-plane calls and dropping a producer (stream teardown) run
 outside the scope. Locks, blocking and logging are still left to review.
 
@@ -576,8 +677,6 @@ descriptors and the protocol. The kernels' cost in the mixer is measured in
   master bus and subscribed buses and sources) with their meter-stream fields and
   `audio.reset_loudness`, and monitor devices that play `bus_block`; and render-side
   resampling for output devices.
-- **The privacy screen's mute** from ADR-0027's audio half (the master chain and output
-  taps are driven by `jstream-core`).
 - **The engine side of CLAP filters**
   ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)): the mixer's side is
   here (`insert_host_filter`), and starting and watching the host process are built

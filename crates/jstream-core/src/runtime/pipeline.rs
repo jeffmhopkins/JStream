@@ -80,6 +80,7 @@ use crate::drops::{
 };
 use crate::engine::Engine;
 use crate::lock;
+use crate::privacy::Privacy;
 use crate::runtime::captures::{self, RenderCaptures};
 use crate::runtime::sink::{Destination, Sink, StreamInfo};
 use crate::runtime::vcam::{VcamOut, VcamSlot, VcamTap, camera_channels, run_camera};
@@ -1186,6 +1187,10 @@ pub(crate) struct Parts {
     /// Whether the privacy screen is on: the engine sets it, the render thread reads it
     /// every tick, with no lock (ADR-0027 §4).
     privacy: Arc<AtomicBool>,
+    /// How many times the privacy screen has changed, odd while it is on: the engine
+    /// increments it, the mixer reads it before every block and the microphones' audio
+    /// threads on every packet, with no lock.
+    privacy_changes: Arc<AtomicU64>,
 }
 
 pub(crate) fn parts_from(
@@ -1195,7 +1200,7 @@ pub(crate) fn parts_from(
     render: Arc<RenderHub>,
     audio_sources: Arc<Wanted>,
     canvas: (u32, u32),
-    privacy: Arc<AtomicBool>,
+    privacy: &Privacy,
 ) -> Parts {
     Parts {
         canvas,
@@ -1209,7 +1214,8 @@ pub(crate) fn parts_from(
         open_timeout,
         render,
         audio_sources,
-        privacy,
+        privacy: privacy.flag(),
+        privacy_changes: privacy.changes(),
     }
 }
 
@@ -1457,7 +1463,12 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
     let sizes = spawn("jstream-capture-sizes", engine.capture_sizes_watch(size_rx))?;
     let captures = captures::spawn(backends, parts.clock.timebase(), size_tx)?;
     let format = engine_format()?;
-    let mixer = Mixer::new(MixerConfig::default()).map_err(|err| format!("mixer: {err}"))?;
+    // The mixer and its inputs' audio threads follow the engine's count of privacy
+    // changes, so a microphone's packets are zeroed from the moment privacy goes on, and
+    // a change between two polls is not missed (ADR-0027 §4).
+    let mixer =
+        Mixer::with_privacy_signal(MixerConfig::default(), Arc::clone(&parts.privacy_changes))
+            .map_err(|err| format!("mixer: {err}"))?;
     // On an early return this closes the inputs, each stream before its ring's last
     // handle, so no ring is freed on a real-time thread (docs/RULES.md#R-RT-003).
     let audio = AudioInputs::start(
@@ -1904,12 +1915,13 @@ fn gpu_capture(capture: &dyn Capture, context: &GpuContext) -> Option<Arc<dyn Ca
     }
 }
 
-/// The codec `profile` encodes video in. HEVC and AV1 map here once the protocol's
-/// `VideoCodec` names them; the encoders (`MfCodecs`) and the FLV sink already take them,
-/// and [`check_video_encoder`] already names the ones a platform lacks.
+/// The codec `profile` encodes video in. A machine without that encoder fails at the
+/// open, and [`check_video_encoder`] names the ones a platform lacks.
 fn video_codec(profile: &EncoderProfile) -> Result<Codec, String> {
     match profile.video.codec {
         VideoCodec::H264 => Ok(Codec::H264),
+        VideoCodec::Hevc => Ok(Codec::Hevc),
+        VideoCodec::Av1 => Ok(Codec::Av1),
         _ => Err("the encoder profile's video codec is not one this engine knows".into()),
     }
 }
@@ -3121,8 +3133,9 @@ fn mixer_thread(
     }
 }
 
-/// What the mixer thread owns: the mixer, and the master's true-peak and loudness
-/// meters, which it runs on every block.
+/// What the mixer thread owns: the mixer, which follows the privacy screen itself
+/// (`Mixer::with_privacy_signal`), and the master's true-peak and loudness meters, which
+/// it runs on every block.
 struct Mixing {
     mixer: Mixer,
     metering: MasterMetering,
@@ -3679,10 +3692,20 @@ mod tests {
         assert!(video_config(size, &profile).is_err());
 
         let mut profile = EncoderProfile::DEFAULT;
-        assert_eq!(
-            video_config(size, &profile).expect("h264").codec,
-            Codec::H264
-        );
+        for (codec, want) in [
+            (VideoCodec::H264, Codec::H264),
+            (VideoCodec::Hevc, Codec::Hevc),
+            (VideoCodec::Av1, Codec::Av1),
+        ] {
+            profile.video.codec = codec;
+            assert_eq!(video_config(size, &profile).expect("known").codec, want);
+            assert_eq!(
+                stream_info(size, MediaTime::zero(Timebase::MICROS), &profile)
+                    .expect("known")
+                    .codec,
+                want
+            );
+        }
         profile.video.codec = VideoCodec::Unknown;
         assert!(video_config(size, &profile).is_err());
         assert!(stream_info(size, MediaTime::zero(Timebase::MICROS), &profile).is_err());

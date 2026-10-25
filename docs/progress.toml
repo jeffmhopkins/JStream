@@ -544,9 +544,9 @@ needs = ["build"]
 id = "D9"
 milestone = "M1b"
 title = "Audio monitoring: a bus's monitor device and tap point"
-status = "planned"
-prs = []
-note = "ADR-0028 gives a bus a monitor, a device and a tap point before or after its filters (decision register D22); nothing in the protocol yet, and the mixer's Hear: before or after FX row (MX-05) waits on it"
+status = "review"
+prs = [801]
+note = "ADR-0028 gives a bus a monitor, a device and a tap point before or after its filters (decision register D22). #801 is the mixer's monitor taps and player; the protocol's bus monitor, its edits and the engine wiring come next, and the mixer's Hear: before or after FX row (MX-05) waits on them"
 needs = ["build"]
 
 # M1c
@@ -815,8 +815,8 @@ id = "E2b"
 milestone = "M2"
 title = "Privacy screen and encoder sharing key"
 status = "planned"
-prs = [317]
-note = "on/off privacy covering every output, the encoder owner key and cost reporting (#317) landed with wave/m1-3 (#754); the look setting, the slate and muted sources to build"
+prs = [317, 804]
+note = "on/off privacy covering every output, the encoder owner key and cost reporting (#317) landed with wave/m1-3 (#754); muting the microphones, the default muted set (#804), in review; the look setting, the slate and choosing the muted sources to build"
 needs = ["build"]
 
 [[item]]
@@ -879,7 +879,7 @@ milestone = "M2"
 title = "Desktop UI as a 1:1 match of the UI prototype"
 status = "review"
 prs = [495, 496, 615, 637, 659, 664, 766, 770, 785, 788, 792, 809]
-note = "#748; docs/UI-FEATURES.md tracks it row by row. Theme and header (#495), docking (#496), the canvas (#615, #637), the Inspector (#659) and the Transform panel (#664) landed with wave/m1-3 (#754); menus, dialogs and live drag (#766, #747), the Scenes and Scene objects panels (#770), the Filters panel and its dialogs (#785, #788) and the mixer master card (#792) landed with wave/m1-4 (#810); vertical mixer strips (#809) are in review into wave/m1-5; the rest of the mixer and the keyboard batch are still to build. Rows that wait on the engine follow B12, C2b, V4, D9, E2b, K1, X1 and Y4, and on two gaps with no item yet: previews of any scene or source (decision register D36) and the audit log over the protocol (D38); the bundled IBM Plex fonts are a licensing call for the maintainer (WS-02)"
+note = "#748; docs/UI-FEATURES.md tracks it row by row. Theme and header (#495), docking (#496), the canvas (#615, #637), the Inspector (#659) and the Transform panel (#664) landed with wave/m1-3 (#754); menus, dialogs and live drag (#766, #747), the Scenes and Scene objects panels (#770), the Filters panel and its dialogs (#785, #788) and the mixer master card (#792) landed with wave/m1-4 (#810); vertical mixer strips (#809) are in review into wave/m1-5; the rest of the mixer and the keyboard batch are still to build. Rows that wait on the engine follow B12, V4, D9, E2b, K1, X1 and Y4, and on two gaps with no item yet: previews of any scene or source (decision register D36) and the audit log over the protocol (D38); the bundled IBM Plex fonts are a licensing call for the maintainer (WS-02)"
 needs = ["build", "maintainer"]
 
 [[item]]
@@ -895,10 +895,9 @@ needs = ["build", "wave"]
 id = "C2b"
 milestone = "M2"
 title = "Crisp text at any item scale"
-status = "planned"
-prs = []
-note = "#749: a scaled text item resamples its bitmap; sources don't see their item's scale, so it starts with an agent-tier ADR"
-needs = ["build"]
+status = "done"
+prs = [781]
+note = "#749: ADR-0073 (agent tier, accepted) draws a source at the density its most enlarged item needs, and the text kind draws at it; built in #781, landed with wave/m1-4 (#810)"
 
 # M3
 
@@ -1014,8 +1013,8 @@ id = "F6b"
 milestone = "M3"
 title = "Choose HEVC or AV1 from a client"
 status = "review"
-prs = [807]
-note = "F6 built the encoders, but an encoder profile accepts only h264 (EncoderProfile::problem refuses the rest), so no client can pick them yet. #807 names the encoder a machine lacks at output.start; hevc and av1 in the protocol's VideoCodec come in a protocol bump"
+prs = [807, 814]
+note = "F6 built the encoders; #807 names the encoder a machine lacks at output.start, and #814 (protocol 0.41) adds hevc and av1 to VideoCodec and lets an encoder profile take them"
 needs = ["build"]
 
 [[item]]
