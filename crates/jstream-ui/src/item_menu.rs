@@ -318,9 +318,10 @@ pub fn group_edits(
 pub enum Kept {
     /// Another item places the group too, and would lose its items.
     PlacedElsewhere,
-    /// The group's placement can't be carried onto its items as their own boxes: it is
-    /// cropped, faded, blended, filtered, mirrored or turned in 3D, or it stretches an
-    /// item that is turned or has no box.
+    /// The group's placement can't be carried onto its items as their own boxes: the
+    /// group item is cropped, faded, blended, filtered, mirrored or turned in 3D, the
+    /// group scene has filters of its own, or, moved, it would show an item it clips,
+    /// stretch one that is turned or fitted, or move one with no box.
     Look,
 }
 
@@ -395,10 +396,20 @@ impl Carry {
         if !c.is_neutral_3d() {
             return Err(Kept::Look);
         }
+        // The group draws its canvas as one picture, clipping what lies outside it, which
+        // the item would show once it is drawn in the parent.
+        if !within(c, self.canvas) {
+            return Err(Kept::Look);
+        }
         let (sx, sy) = self.scale;
+        let uniform = (sx - sy).abs() <= 1e-4 * sx.max(sy);
+        // A stretch of a fitted or filled item would change its content's shape.
+        if !uniform && c.fit_mode != FitMode::Stretch {
+            return Err(Kept::Look);
+        }
         let own = c.rotation_deg.get().rem_euclid(180.0);
         // A stretch keeps a box a box only when the box isn't turned against it.
-        let (bw, bh) = if (sx - sy).abs() <= 1e-4 * sx.max(sy) || own == 0.0 {
+        let (bw, bh) = if uniform || own == 0.0 {
             (sx, sy)
         } else if own == 90.0 {
             (sy, sx)
@@ -427,9 +438,24 @@ impl Carry {
     }
 }
 
+/// Whether the box `g`, flat, lies on the canvas `(width, height)`.
+fn within(g: ItemGeometry, canvas: (f32, f32)) -> bool {
+    let (half_w, half_h) = (g.size.width.get() * 0.5, g.size.height.get() * 0.5);
+    let (sin, cos) = g.rotation_deg.get().to_radians().sin_cos();
+    let (cx, cy) = (g.center.x.get(), g.center.y.get());
+    let slack = 0.5;
+    [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)]
+        .iter()
+        .all(|(u, v)| {
+            let (x, y) = (u * half_w, v * half_h);
+            let (px, py) = (cx + x * cos - y * sin, cy + x * sin + y * cos);
+            (-slack..=canvas.0 + slack).contains(&px) && (-slack..=canvas.1 + slack).contains(&py)
+        })
+}
+
 /// The batch that ungroups the nested scene `item_id` places: its items move into the
 /// item's scene where it was, in their order, each keeping where it draws (ADR-0024 §1),
-/// and the item goes. A group scene that nothing else places goes too, with its unplaced
+/// and hidden if the group was, and the item goes. A group scene that nothing else places goes too, with its unplaced
 /// `scene` sources. `None` when the item doesn't place a scene; [`Kept`] when another
 /// item places it too, or its placement can't be carried onto its items.
 pub fn ungroup_edits(collection: &Collection, item_id: &ItemId) -> Option<Result<Vec<Edit>, Kept>> {
@@ -454,6 +480,10 @@ pub fn ungroup_edits(collection: &Collection, item_id: &ItemId) -> Option<Result
         .any(|i| i.item_id != *item_id && sources.contains(&&i.source_id));
     if placed_elsewhere {
         return Some(Err(Kept::PlacedElsewhere));
+    }
+    // The group's own filters run on its composite; deleting the scene would drop them.
+    if !nested.filters.video.is_empty() {
+        return Some(Err(Kept::Look));
     }
     let carry = match Carry::of(item, collection.canvas) {
         Ok(carry) => carry,
@@ -483,6 +513,20 @@ pub fn ungroup_edits(collection: &Collection, item_id: &ItemId) -> Option<Result
         })
         .collect();
     edits.extend(boxes);
+    // A hidden group hides everything in it.
+    if !item.visible {
+        edits.extend(
+            nested
+                .items
+                .iter()
+                .filter(|child| child.visible)
+                .map(|child| Edit::ItemSetVisible {
+                    item_id: child.item_id.clone(),
+                    scene_id: Some(parent.scene_id.clone()),
+                    visible: false,
+                }),
+        );
+    }
     edits.push(Edit::ItemRemove {
         item_id: item_id.clone(),
     });
@@ -1360,6 +1404,102 @@ mod tests {
             g.fit_mode = FitMode::Stretch;
         }
         assert_eq!(at(wide), Err(Kept::Look));
+    }
+
+    /// N10 on #871: the Fit scale of a box of another shape, the axis swap for a
+    /// quarter-turned item under a stretch, and each refusal.
+    #[test]
+    fn ungrouping_scales_by_the_fitted_canvas_and_refuses_what_would_change() {
+        let ungroup = |group: ItemInfo, kids: Vec<ItemInfo>| {
+            let c = grouped(vec![group], kids);
+            ungroup_edits(&c, &ItemId::new("g1")).expect("a nested scene")
+        };
+        let child = || boxed("x", "logo", 1060.0, 540.0, 200.0, 100.0, 0.0);
+        // A wide Fit box shows the group's canvas at the smaller scale, centred.
+        let fit = ungroup(
+            boxed("g1", "grp_src", 960.0, 540.0, 1920.0, 540.0, 0.0),
+            vec![child()],
+        )
+        .expect("carried");
+        assert_eq!(boxes(&fit)[0].1, [1010.0, 540.0, 100.0, 50.0, 0.0]);
+        // A stretch swaps its axes on a quarter-turned stretched item.
+        let mut turned = boxed("x", "logo", 960.0, 540.0, 200.0, 100.0, 90.0);
+        let mut stretch = boxed("g1", "grp_src", 960.0, 540.0, 1920.0, 540.0, 0.0);
+        for g in [&mut turned.geometry, &mut stretch.geometry]
+            .into_iter()
+            .flatten()
+        {
+            g.fit_mode = FitMode::Stretch;
+        }
+        let swapped = ungroup(stretch.clone(), vec![turned]).expect("carried");
+        assert_eq!(boxes(&swapped)[0].1, [960.0, 540.0, 100.0, 100.0, 90.0]);
+        // B3: a stretch of a fitted item would change its content's shape.
+        assert_eq!(ungroup(stretch, vec![child()]), Err(Kept::Look));
+        // A moved group refuses for the group item's crop, blend, filters and mirror,
+        // and for an item turned in 3D or partly off the group's canvas (N9).
+        let half = || boxed("g1", "grp_src", 480.0, 270.0, 960.0, 540.0, 0.0);
+        let mut cropped = half();
+        cropped.crop.left = 10;
+        let mut blended = half();
+        blended.blend = jstream_control::protocol::BlendMode::Multiply;
+        let mut filtered = half();
+        filtered.effects.push(effect());
+        let mut mirrored = half();
+        if let Some(g) = &mut mirrored.geometry {
+            g.flip_h = true;
+        }
+        for group in [cropped, blended, filtered, mirrored] {
+            assert_eq!(ungroup(group, vec![child()]), Err(Kept::Look));
+        }
+        let mut tilted = child();
+        if let Some(g) = &mut tilted.geometry {
+            g.tilt_deg = Finite32::new(20.0).expect("finite");
+        }
+        assert_eq!(ungroup(half(), vec![tilted]), Err(Kept::Look));
+        let off = boxed("x", "logo", 1900.0, 540.0, 200.0, 100.0, 0.0);
+        assert_eq!(ungroup(half(), vec![off.clone()]), Err(Kept::Look));
+        // At its default placement nothing is clipped, so the same item moves out as is.
+        let plain = boxed("g1", "grp_src", 960.0, 540.0, 1920.0, 1080.0, 0.0);
+        assert!(ungroup(plain, vec![off]).is_ok());
+    }
+
+    /// B3 on #871: a hidden group hides its items, and its scene's filters keep it.
+    #[test]
+    fn ungrouping_keeps_a_hidden_group_hidden_and_a_filtered_one_whole() {
+        let mut hidden = placing("g1", "grp_src");
+        hidden.visible = false;
+        let mut off = placing("y", "copy");
+        off.visible = false;
+        let c = grouped(vec![hidden], vec![placing("x", "logo"), off]);
+        let edits = ungroup_edits(&c, &ItemId::new("g1"))
+            .expect("a nested scene")
+            .expect("hidden is fine");
+        let hides: Vec<&ItemId> = edits
+            .iter()
+            .filter_map(|e| match e {
+                Edit::ItemSetVisible {
+                    item_id,
+                    visible: false,
+                    ..
+                } => Some(item_id),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(hides, [&ItemId::new("x")]);
+        let mut c = grouped(vec![placing("g1", "grp_src")], vec![placing("x", "logo")]);
+        if let Some(group) = c.scenes.iter_mut().find(|s| s.scene_id.as_str() == "grp") {
+            group.filters.video.push(effect());
+        }
+        assert_eq!(ungroup_edits(&c, &ItemId::new("g1")), Some(Err(Kept::Look)));
+    }
+
+    fn effect() -> jstream_control::protocol::FilterInfo {
+        jstream_control::protocol::FilterInfo {
+            filter_id: "f1".into(),
+            kind: "blur".into(),
+            enabled: true,
+            settings: Settings::new(),
+        }
     }
 
     #[test]
