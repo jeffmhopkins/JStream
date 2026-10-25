@@ -464,6 +464,7 @@ mod tests {
             },
             state,
             key_set: true,
+            cleartext: false,
         }
     }
 

@@ -15,7 +15,7 @@ a single canvas.
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0073-sources-drawn-at-their-shown-size.md", "crates/jstream-platform/README.md#gpu-frames"]
 -->
 
 One scene, composited on the GPU with wgpu
@@ -46,7 +46,14 @@ and calls this crate.
     top-left at `position` in canvas pixels, and rotate clockwise about that corner.
 
   Both depend on the image's size, which is runtime state, so the compositor evaluates
-  the placement on every `render`.
+  the placement on every `render`. That size is the image's **extent**
+  (`Image::extent`): its pixel size, unless the caller set another with
+  `Image::set_extent` or `ResourceCache::set_extent`, for an image drawn with more
+  pixels than the size it stands for, such as a text source drawn sharp for an
+  enlarged item
+  ([ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)). Crops, a
+  legacy scale and a fit mode's aspect ratio all count in the extent, and the texture
+  is sampled across it.
 - `visible == false`, a crop that leaves no pixels, or a scale of zero draws nothing.
 - Opacity is a straight-alpha multiplier in `[0, 1]`, default 1: `jstream-core` passes
   an item's stored opacity, or during a transition its track's sampled one
@@ -104,8 +111,9 @@ and calls this crate.
   (`Compositor::context`), so a caller can tell a texture from that context from one
   it can't sample. A
   `GpuFrame` keeps its `FrameSync`; `render` calls `stage` once per distinct hold
-  before the submit that samples it, and ends that submit by moving each staged
-  texture to `PRESENT`, as `stage` requires. Staging stays the safe method on
+  before the submit that samples it, holding the context's `SubmitLock` from the stage
+  through that submit, and ends that submit by moving each staged texture to
+  `PRESENT`, as `stage` requires. Staging stays the safe method on
   `jstream-platform`. This crate never calls wgpu-hal.
 - An `Image` draws only in the `Compositor` that made it. It carries that
   compositor's identity, and `render` refuses an item whose image came from another
@@ -132,8 +140,8 @@ and calls this crate.
   `Nv12Planes::read` copies back as packed NV12 for the CPU fallback. The colour is
   `jstream-media`'s `ColorInfo`: BT.709 only, limited range (the default) or full.
   `Nv12Converter::submit` runs a pass into a platform `GpuFrame` in a submit of its
-  own, which is how `jstream-core`'s render thread feeds an encoder that takes GPU
-  frames.
+  own on a compositor's queue, which is how `jstream-core`'s render thread feeds an
+  encoder that takes GPU frames.
 - **A lost device** (a driver reset after a hang, Windows' TDR, a removed GPU; #349).
   Every compositor sets wgpu's device-lost callback and uncaptured-error handler on its
   device, its own or the context's (wgpu keeps one of each per device, and the program
@@ -172,9 +180,13 @@ depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.
 
 `render` does not wait on the control plane and does no file or network I/O
 ([R-RT-002](../../docs/RULES.md#R-RT-002)). This crate has no render thread: calling
-`render` is the caller's tick, on `jstream-core`'s render thread. Nothing here drops
-an image on its own: `ResourceCache` returns what it frees as `Reclaimed`, so that
-thread can hand it to a collector ([R-RT-003](../../docs/RULES.md#R-RT-003)). GPU
+`render` is the caller's tick, on `jstream-core`'s render thread. `ResourceCache`
+returns what it frees as `Reclaimed`, so that thread can hand it to a collector
+([R-RT-003](../../docs/RULES.md#R-RT-003)). The images this crate drops itself are a
+multi-pass filter's scratch layers that a call replaces at a new size or no longer asks
+for, and a video delay's held frames when its delay goes to 0, its input size changes or
+its memory cap shrinks (**Filters**), so only when a filter's size or settings change; the
+same goes for a filter draw's two small uniform buffers, which hold no texture. GPU
 calls may allocate inside the driver; this crate does not allocate per item on the
 steady path.
 
@@ -219,7 +231,10 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    its texture coordinates; `vs_region` maps the pass onto it), converting an import as
    the composite shader would. So no coarser level averages a texel past the crop into
    the item, and clamping to the chain's edge keeps the anisotropic footprint inside the
-   crop too (#641). The item's UVs and UV bounds are mapped into the chain's. An image
+   crop too (#641). The crop counts in the image's extent, so for an image drawn with
+   more pixels than its extent (ADR-0073) it is scaled to texels and widened outwards to
+   whole ones (`Region::in_texels`). The item's UVs and UV bounds are mapped into the
+   chain's. An image
    keeps a chain per crop it is drawn with, the four most recently used. Each further
    level is one pass that samples the level above at its own texel centres, so the
    linear filter averages 2×2 texels. Each `Image` counts its changes (its clones share
@@ -302,7 +317,9 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    records the pass into its own encoder, after the composite, and stages a shared
    target's `FrameSync` before that submit. `Nv12Converter::submit` does that for a
    platform `GpuFrame`: it stages the frame, records the pass, transitions the frame's
-   texture to `PRESENT` as the composite does with the frames it samples, and submits.
+   texture to `PRESENT` as the composite does with the frames it samples, and submits,
+   holding the compositor's `SubmitLock` from the stage through the submit as `render`
+   does.
 
 The composite and resolve passes are one command buffer and one `queue.submit`. `FrameSync::stage` runs
 before that submit, for every distinct hold the scene samples, and the command buffer
@@ -310,7 +327,10 @@ ends by transitioning each of those textures to `PRESENT` (on D3D12 the `COMMON`
 the platform's other APIs read a shared texture in), which `stage` requires of the
 submit. `render_into` does the same. Staging comes after every other step that can
 fail (targets, vertex buffer, readback buffer), so a refused canvas or readback stages
-nothing. The compositor lets go of the holds after the submit, so it keeps no platform
+nothing. From the first stage through the submit, the compositor holds the queue's
+`SubmitLock`. On a platform context that is the context's lock, which the platform's
+other submitters on that queue take too, so none of their submits takes the staged
+wait and signal. The lock is let go before the readback's wait. The compositor lets go of the holds after the submit, so it keeps no platform
 texture busy between frames. The output texture is the
 compositor's own, not a shared encode target, so nothing transitions it; an encode
 target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
@@ -332,6 +352,8 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | `Nv12Pass` bind group, source view, uniform and plane views | The pass; made again by `bind` when the source or target is replaced |
 | `Nv12Planes` textures | The planes value |
 | A video delay filter's held frames | Its `VideoFilter`: reused as the ring turns; dropped when the input size changes or the delay is set to 0 ([Filters](#filters)) |
+| A multi-pass filter's scratch layers | Its `VideoFilter`: reused by the next call at the same size; replaced for a new size, and dropped when a call asks for fewer ([Filters](#filters)) |
+| A filter draw's uniform buffers | Its `VideoFilter`: rewritten by the next call's same draw; made again for another compositor or parameter size, and dropped when a call draws fewer times. They hold no texture ([Filters](#filters)) |
 | `ResourceCache` entries | While a frame uses them; then retired until the GPU finishes the last frame that used them, and handed back as `Reclaimed` |
 
 **`ResourceCache`.** A frame runs `begin_frame`, `upload`, `import` or `layer` for each
@@ -345,6 +367,9 @@ returns the retired images whose last frame has finished. A steady frame allocat
 only that callback; a frame that fails before `end_frame` leaves its retirees to the
 next frame's fence, which covers it. `frame` names the frame being built, so work that
 several draws of one frame share (a source's video chain) can run once in it.
+`set_extent` places a key's image as if it were another size (ADR-0073); a reused entry
+keeps the extent it had, so a caller that sets one sets it on every frame, and a new
+texture starts at its own size.
 `retire_filter` hands the cache a `VideoFilter` no frame runs any more: it may hold
 textures of its own (a video delay's ring), so it waits for the same fence and comes
 back in `Reclaimed` (`Reclaimed::filters` counts them) to be dropped with the images.
@@ -394,7 +419,7 @@ mapped back, past the near plane, keeps the unpushed vertex. An item seen edge-o
 wholly behind the viewer draws nothing.
 
 **Legacy.** `place` asks [`legacy_quad`](../jstream-protocol/src/geometry.rs) for the
-quad. For a source of size `(sw, sh)` and crop `(left, top, right, bottom)` that
+quad. For a source of size `(sw, sh)`, the image's extent, and crop `(left, top, right, bottom)` that
 function:
 
 - takes `cw = sw - left - right`, `ch = sh - top - bottom`, and skips when either is
@@ -503,12 +528,22 @@ cached layer with `apply_filter_into`. `video_filter_descriptors()` is how its
   aren't a multiple of 16 (at least 16) are refused the same way.
 - A multi-pass filter draws into `Ctx::scratch` layers first. A draw either replaces
   its target or blends premultiplied src-over it.
-- Each draw creates its two small uniform buffers, two views and a bind group, and each
-  `apply_filter` its output layer (`apply_filter_into` reuses the caller's). A
-  multi-pass filter also creates its `Ctx::scratch` layers on every call: up to three,
-  each at most the filter's output size (about 16.6 MB at 1080p). Pooling the scratch
-  layers is still to do (V0); until then a multi-pass filter costs them per frame. The video delay's ring of held frames is
-  the one thing a filter keeps between frames.
+- Each `apply_filter` makes its output layer (`apply_filter_into` reuses the caller's).
+  A multi-pass filter's `Ctx::scratch` layers (up to three, each at most the filter's
+  output size, about 16.6 MB at 1080p) come from a pool its `VideoFilter` keeps (V0): a
+  call's `n`th scratch layer is the call before's `n`th when the size is the same, so a
+  filter at a steady size makes them once. A layer of another size replaces it, and one
+  a call doesn't ask for is dropped at its end. A pass never keeps a scratch layer, or
+  relies on its contents, past the call that takes it. A filter's draws keep their two
+  small uniform buffers in that pool too (#369): a call's `n`th draw reuses the call
+  before's `n`th, rewriting them with `queue.write_buffer` before the submit. They are
+  made again for another compositor or when the parameter block changes size. Each draw
+  still makes its bind group and two views: they hold the textures it reads, and a kept
+  one could outlive the cache entry that owns those textures and free them on the
+  drawing thread (R-RT-003). Besides its scratch layers and these buffers, a filter keeps
+  between frames only the video delay's ring of held frames (its own layers,
+  `Ctx::layer`, never scratch ones) and the reference image an asset or scene kind is
+  given (`VideoFilter::set_reference`, see Assets and references below).
 
 **External kinds** (effect packs, ADR-0035). `ExternalFilter` is the seam for a kind
 whose WGSL arrives at run time: a label (the kind ID), WGSL appended to the prelude
@@ -740,11 +775,13 @@ extreme of them renders on 8192×1, 1×8192 and 64×36 sources
 bound removed.
 
 **What is checked.** Background only; an opaque rect over a background (position and
-stacking); crop; integer scale; 90° rotation about the top-left; opacity over an
+stacking); crop; an image placed at an extent of half its pixels (its size and its crop
+count in the extent, ADR-0073); integer scale; 90° rotation about the top-left; opacity over an
 opaque background (the linear blend, then the sRGB encode); a fully cropped item and
 a hidden item draw nothing; readback size and row packing; a `FrameSync` hold is
 staged once per submit, and not staged when the item is hidden or when a readback
-too large for a buffer refuses the render. Nested scenes
+too large for a buffer refuses the render; on a platform context it is staged with the
+context's `SubmitLock` held, which is free again after the submit. Nested scenes
 (`render_image`), three pixel tests and an ownership check: an image placed in
 another scene lands where its scene put the item and is transparent elsewhere, and
 survives a later `render`; a half-opaque item stays exact in linear light; images
@@ -810,8 +847,9 @@ ranges, and for a compositor output with an item at 0.75 opacity. Black, white a
 50% grey land on their codes in both ranges with neutral chroma, transparent white
 encodes as black, and a single red column shows up in the two blocks whose `[1 2 1]`
 taps reach it, which centre-sited chroma would not do. Odd sizes, a size mismatch,
-BT.601 and a non-sRGB source are refused. `submit` stages its frame once and leaves
-the conversion in the planes, with a plane texture standing in for the platform's
+BT.601 and a non-sRGB source are refused. `submit` stages its frame once, with the
+compositor's `SubmitLock` held and free again after the submit, and leaves the
+conversion in the planes, with a plane texture standing in for the platform's
 target. The native path (plane views of an `NV12`
 texture, compared with the planes path) runs where the adapter has
 `TEXTURE_FORMAT_NV12`. It skips on lavapipe, which offers the feature but writes its

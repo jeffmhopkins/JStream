@@ -156,6 +156,44 @@ fn golden_wrapped_centred_outlined_text_on_a_background() {
     check_golden("styled", &frame);
 }
 
+/// The styled golden's text drawn at a density between whole numbers (ADR-0073), so its
+/// frame's corner falls between pixels.
+#[test]
+fn golden_styled_text_at_a_density() {
+    let patch = [
+        (
+            "text",
+            json!("Wrapped and centred text, with an outline.\nÅngström façade"),
+        ),
+        ("size", json!(24)),
+        ("color", json!("#ffcc00ff")),
+        ("align", json!("center")),
+        ("wrap_width", json!(200)),
+        ("outline_width", json!(3)),
+        ("outline_color", json!("#202040ff")),
+        ("background", json!("#3060a080")),
+        ("padding", json!(8)),
+    ];
+    let mut source = Registry::builtin()
+        .create("text", &settings(&patch), &Context::default())
+        .expect("a text source");
+    let (w, h) = size(&source.frame(ms(0)).expect("a frame"));
+    let density = 2f32.powf(0.75);
+    let extent = source
+        .set_density(density)
+        .expect("text draws at a density");
+    assert_eq!((extent.width(), extent.height()), (w, h));
+    let frame = (*source.frame(ms(0)).expect("a frame")).clone();
+    assert_eq!(
+        size(&frame),
+        (
+            (w as f32 * density).ceil() as u32,
+            (h as f32 * density).ceil() as u32
+        )
+    );
+    check_golden("styled-dense", &frame);
+}
+
 #[test]
 fn the_descriptor_marks_everything_but_the_font_live() {
     let registry = Registry::builtin();
@@ -381,4 +419,105 @@ fn text_too_large_for_the_limits_is_an_error() {
         draw_with(&[("text", json!("x"))], &tight),
         Err(SourceError::Setting { param, .. }) if param == "text"
     ));
+}
+
+/// Drawn at a density, the text keeps its layout and its own size, which the frame is
+/// placed at, and draws that many pixels each way (ADR-0073).
+#[test]
+fn a_density_draws_more_pixels_for_the_same_size() {
+    let patch = [
+        ("text", json!("Crisp\ntext")),
+        ("size", json!(40.0)),
+        ("outline_width", json!(2)),
+        ("padding", json!(3)),
+        ("background", json!("#10203040")),
+    ];
+    let mut source = Registry::builtin()
+        .create("text", &settings(&patch), &Context::default())
+        .expect("a text source");
+    let plain = (*source.frame(ms(0)).expect("a frame")).clone();
+    let (w, h) = size(&plain);
+    let extent = source.set_density(2.0).expect("text draws at a density");
+    assert_eq!((extent.width(), extent.height()), (w, h));
+    let dense = (*source.frame(ms(0)).expect("a frame")).clone();
+    assert_eq!(size(&dense), (w * 2, h * 2));
+    // The background fills both, and the glyphs cover about four times the pixels.
+    let opaque = |f: &VideoFrame| pixels(f).iter().filter(|p| p[3] > 200).count() as f64;
+    let ratio = opaque(&dense) / opaque(&plain);
+    assert!((3.6..4.4).contains(&ratio), "ink ratio {ratio}");
+    // An update keeps the density; a density out of range is clamped.
+    let mut longer = patch.to_vec();
+    longer[0] = ("text", json!("Crisp\ntext, longer"));
+    source.update(&settings(&longer)).expect("a live update");
+    let (lw, lh) = size(&source.frame(ms(0)).expect("a frame"));
+    assert!(
+        lw > w * 2 && lh == h * 2,
+        "updated to {lw}x{lh} from {w}x{h}"
+    );
+    let extent = source.set_density(100.0).expect("text draws at a density");
+    let clamped = source.frame(ms(0)).expect("a frame");
+    assert_eq!(
+        size(&clamped),
+        (
+            (extent.width() as f32 * jstream_sources::MAX_DENSITY).ceil() as u32,
+            (extent.height() as f32 * jstream_sources::MAX_DENSITY).ceil() as u32
+        )
+    );
+    // Back to 1: the frame is its own size again.
+    let extent = source.set_density(1.0).expect("text draws at a density");
+    assert_eq!(
+        size(&source.frame(ms(0)).expect("a frame")),
+        (extent.width(), extent.height())
+    );
+}
+
+/// A density whose frame is over the limits is halved until it fits.
+#[test]
+fn a_density_over_the_limits_is_lowered() {
+    let ctx = Context {
+        limits: Limits {
+            max_side: 300,
+            ..Limits::default()
+        },
+        ..Context::default()
+    };
+    let mut source = Registry::builtin()
+        .create("text", &settings(&[("text", json!("Hi"))]), &ctx)
+        .expect("a text source");
+    let (w, _) = size(&source.frame(ms(0)).expect("a frame"));
+    assert!(w * 2 <= 300 && w * 8 > 300, "the test text is {w} wide");
+    source.set_density(8.0).expect("text draws at a density");
+    let (dense, _) = size(&source.frame(ms(0)).expect("a frame"));
+    assert!(dense <= 300 && dense >= w * 2, "drew {dense} wide from {w}");
+}
+
+/// The extent a density returns is the frame's size at a density of 1, for every text,
+/// size, outline and density: an extent a pixel off made the engine rebuild a fitted
+/// text forever, between two densities (review B1 on #781).
+#[test]
+fn the_extent_is_the_size_at_a_density_of_1() {
+    let densities: Vec<f32> = (1..=12).map(|step| 2f32.powf(step as f32 / 4.0)).collect();
+    for text in ["1234567890", "Hi", "Crisp\ntext", "Ångström façade"] {
+        for px in [9.0, 12.0, 13.5, 17.0, 24.0, 31.0, 40.0] {
+            for outline in [0, 2] {
+                let patch = [
+                    ("text", json!(text)),
+                    ("size", json!(px)),
+                    ("outline_width", json!(outline)),
+                ];
+                let mut source = Registry::builtin()
+                    .create("text", &settings(&patch), &Context::default())
+                    .expect("a text source");
+                let plain = size(&source.frame(ms(0)).expect("a frame"));
+                for &density in &densities {
+                    let extent = source.set_density(density).expect("a density");
+                    assert_eq!(
+                        (extent.width(), extent.height()),
+                        plain,
+                        "{text:?} at {px} px, outline {outline}, density {density}"
+                    );
+                }
+            }
+        }
+    }
 }

@@ -5,7 +5,8 @@
 
 use jstream_protocol::{
     BusId, Chord, Edit, EncoderProfileId, EntityKind, FilterId, FilterOwner, FolderId, ItemId,
-    LabelId, OutputId, SceneId, SourceId, SourceKind, TransitionPresetId, VideoMixId,
+    LabelId, OutputId, OverrideField, SceneId, SourceId, SourceKind, TransitionPresetId,
+    VideoMixId,
 };
 use std::collections::BTreeSet;
 
@@ -123,6 +124,25 @@ impl Touched {
         match edit {
             Edit::SceneCreate { scene_id, .. } | Edit::SceneDelete { scene_id } => {
                 self.exists.insert(Object::Scene(scene_id.clone()));
+            }
+            Edit::SceneCreateVariant {
+                scene_id,
+                variant_of,
+                ..
+            } => {
+                self.exists.insert(Object::Scene(scene_id.clone()));
+                self.uses.insert(Object::Scene(variant_of.clone()));
+            }
+            // A keyframe scene's override is a property of the item, as the placement
+            // edits that write it touch it: an override and the item's own value conflict.
+            Edit::ItemClearOverride { item_id, field, .. } => {
+                let prop = match field {
+                    OverrideField::Geometry => Prop::Placement,
+                    OverrideField::Crop => Prop::Crop,
+                    OverrideField::Visible => Prop::Visible,
+                    OverrideField::Opacity => Prop::Opacity,
+                };
+                self.prop(Object::Item(item_id.clone()), prop);
             }
             Edit::SceneRename { scene_id, .. } => {
                 self.prop(Object::Scene(scene_id.clone()), Prop::Name);

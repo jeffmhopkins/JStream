@@ -52,7 +52,7 @@ pub use codec::{
 };
 pub use cursor::{CaptureCursor, CursorCapture, CursorImage, draw_cursor};
 pub use error::PlatformError;
-pub use gpu::{AdapterId, ContextKey, FrameSync, GpuContext, GpuFrame, GpuInterop};
+pub use gpu::{AdapterId, ContextKey, FrameSync, GpuContext, GpuFrame, GpuInterop, SubmitLock};
 pub use id::DeviceId;
 pub use keys::{OAuthTokenStore, Secret, StreamKeyStore};
 pub use media_file::{
