@@ -229,12 +229,54 @@ pub(crate) const MERGE_MARK: &str = " | merge: ";
 /// any earlier merge's addendum, then `merge`, what this merge changed in the input.
 pub(crate) fn merge_note(earlier: Option<&str>, merge: &str) -> String {
     let own = earlier
+        .map(|n| split_kept(n).0)
         .map(|n| n.split_once(MERGE_MARK).map_or(n, |(own, _)| own).trim())
         .filter(|n| !n.is_empty());
     match own {
         Some(own) => format!("{own}{MERGE_MARK}{merge}"),
         None => format!("merge: {merge}"),
     }
+}
+
+/// Where a note turns from this branch's text to the merged side's notes it keeps (#840):
+/// each merged-side note follows this mark word for word, as that side wrote it, so a
+/// verify after a merge never drops the records a wave or `main` wrote on the same input.
+pub(crate) const KEPT_MARK: &str = " | kept from the merged side: ";
+
+/// A note split into this branch's text and the merged side's notes it keeps: everything
+/// from the first [`KEPT_MARK`] on, or `""`.
+pub(crate) fn split_kept(note: &str) -> (&str, &str) {
+    note.find(KEPT_MARK)
+        .map_or((note, ""), |i| note.split_at(i))
+}
+
+/// The note a verify writes on an entry it rewrites after this branch's merge (#840):
+/// `head`, its new text, then the merged-side notes the entry's `earlier` note (this
+/// branch's own) kept, then `theirs`, the note the merged side wrote on the input since the
+/// branch left it. A note already in `head` or in what is kept isn't added again, and an
+/// earlier kept note that `theirs` holds in full gives way to it.
+pub(crate) fn keep_notes(head: &str, earlier: Option<&str>, theirs: Option<&str>) -> String {
+    let mut kept = earlier.map_or("", |n| split_kept(n).1).to_owned();
+    if kept
+        .strip_prefix(KEPT_MARK)
+        .is_some_and(|k| head.contains(k.trim()))
+    {
+        kept.clear();
+    }
+    if let Some(t) = theirs.map(str::trim).filter(|t| !t.is_empty())
+        && !head.contains(t)
+        && !kept.contains(t)
+    {
+        if kept
+            .strip_prefix(KEPT_MARK)
+            .is_some_and(|k| t.contains(k.trim()))
+        {
+            kept.clear();
+        }
+        kept.push_str(KEPT_MARK);
+        kept.push_str(t);
+    }
+    format!("{head}{kept}")
 }
 
 /// The stamp `docs verify --merge` writes after `docs merge-main`. `branch` is the entries

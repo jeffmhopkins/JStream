@@ -69,7 +69,8 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
   from. `docs verify --merge` then keeps those notes and adds what the merge changed
   ([Verification notes](#notes)), and refuses an input whose file the branch changed after
   the merge. It and `--renote` list the merged PRs behind the entries they rewrite and
-  name any the note leaves out.
+  name any the note leaves out. Every verify after the merge keeps the merged side's note
+  on each entry that side re-verified, word for word ([Verification notes](#notes)).
 - **Weekly sweep** ([Time-based review](#ttl)): the scheduled `sweep` workflow reports
   `cargo deny` findings, docs due for review, `cargo update --dry-run` and the override
   audit list in one issue. The parts that [Time-based review](#ttl) lists as not built
@@ -376,7 +377,8 @@ lists the branch's notes, after it has committed the merge.
 
 `docs verify <DOC#anchor> --by <who> --renote "<note>"` replaces the `by` and `note` of a
 section that is already fresh, as when a reviewer asks for a better note, without touching
-any hash. It rewrites only the entries this branch wrote: those that differ from the ledger
+any hash, and keeps the merged side's notes on those entries ([Verification
+notes](#notes)). It rewrites only the entries this branch wrote: those that differ from the ledger
 at the merge base of `HEAD` and `origin/main`, or of the wave named with
 `--from wave/<name>`. A PR stacked on another PR's branch names that branch instead,
 `--from <base branch>`, which must be an ancestor of `HEAD` (merge it first), so the base
@@ -487,6 +489,14 @@ holds**. The note says what was checked and why it still holds, e.g.:
   `docs verify --merge "<what the merge changed>"` keeps the earlier note on each entry
   this PR changes and adds the text. On an input whose hash equals the merged side's
   entry, it keeps that entry as it is, which `merge-main` has already given main's note.
+- **The merged side's notes are kept** (#840). After the branch's own merge, every verify
+  (`--note`, `--merge` or `--renote`) that rewrites an entry the merged side (main or the
+  wave) re-verified since the branch left it ends the new note with that side's note, word
+  for word, after ` | kept from the merged side: `. The notes the branch's earlier note
+  kept that way are carried too, and none is added twice, even if the new text already
+  holds it. Write only this PR's text; never copy the merged side's notes by hand. Before
+  the branch's first merge, a verify still replaces main's note on an input the PR
+  changes.
   `merge-main` prints the merged commits behind each
   stale input to write it from ([Hash-bound verification](#verification)), and under each
   stale section the PRs (`(#N)` in their subjects) those commits came from. A wave's
