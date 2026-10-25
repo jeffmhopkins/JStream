@@ -1,5 +1,5 @@
 //! The Scene objects panel (spec-panels.md 2): the selected scene's items, top of the
-//! stack first, under the "In “<scene>”, top to bottom" caption and the search box and
+//! stack first, under the `In “<scene>”, top to bottom` caption and the search box and
 //! favourites filter. Each row shows its source's type icon and name (in italics when
 //! the source is placed in other scenes too), a visibility eye and a favourite star.
 //! A click selects an item (Shift adds or takes it out), a double click opens its
