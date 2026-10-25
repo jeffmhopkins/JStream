@@ -34,6 +34,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use crossbeam_channel::{Receiver, Sender};
 use jstream_media::{AudioFormat, ChannelLayout, SampleFormat};
 use jstream_platform::{AudioOutputHandler, AudioRenderBuffer, PlatformError};
 
@@ -325,6 +326,73 @@ impl Drop for MonitorPlayer {
         }
         if let Some(shared) = self.shared.take() {
             self.retirer.monitor(shared);
+        }
+    }
+}
+
+/// An output handler to open a device stream with before its format is known: it plays
+/// silence until a [`MonitorPlayer`] built for the stream's format is plugged in through
+/// its [`MonitorPlug`] ([`monitor_socket`]). `AudioIo::open_output` reports the format
+/// only on the stream it returns, and a player has to be built for it, off the audio
+/// thread. The socket takes the player with one lock-free `try_recv` per render until it
+/// has it; a stream failure reported before then is passed on to it.
+#[derive(Debug)]
+pub struct MonitorSocket {
+    rx: Receiver<MonitorPlayer>,
+    player: Option<MonitorPlayer>,
+    failed: bool,
+}
+
+/// Plugs a player into its [`MonitorSocket`].
+#[derive(Debug)]
+pub struct MonitorPlug {
+    tx: Sender<MonitorPlayer>,
+}
+
+impl MonitorPlug {
+    /// Hands `player` to the socket's next render. Returns `false`, dropping `player`
+    /// on this thread, when the socket is gone (its stream was dropped).
+    pub fn plug(self, player: MonitorPlayer) -> bool {
+        self.tx.try_send(player).is_ok()
+    }
+}
+
+/// A [`MonitorSocket`] for `AudioIo::open_output` and the [`MonitorPlug`] that plugs the
+/// player in once the stream's format is known.
+pub fn monitor_socket() -> (MonitorSocket, MonitorPlug) {
+    let (tx, rx) = crossbeam_channel::bounded(1);
+    (
+        MonitorSocket {
+            rx,
+            player: None,
+            failed: false,
+        },
+        MonitorPlug { tx },
+    )
+}
+
+impl AudioOutputHandler for MonitorSocket {
+    fn render(&mut self, buffer: &mut AudioRenderBuffer<'_>) {
+        if self.player.is_none()
+            && let Ok(player) = self.rx.try_recv()
+        {
+            if self.failed
+                && let Some(shared) = &player.shared
+            {
+                shared.failed.store(true, Ordering::Relaxed);
+            }
+            self.player = Some(player);
+        }
+        match &mut self.player {
+            Some(player) => player.render(buffer),
+            None => buffer.samples.fill(0.0),
+        }
+    }
+
+    fn on_error(&mut self, error: &PlatformError) {
+        match &mut self.player {
+            Some(player) => player.on_error(error),
+            None => self.failed = true,
         }
     }
 }
@@ -644,6 +712,55 @@ mod tests {
                 Err(AudioError::UnsupportedFormat)
             ));
         }
+    }
+
+    /// A socket plays silence until its player is plugged in, then the player; a
+    /// failure before that reaches the player's stats; a plug whose socket is gone says
+    /// so.
+    #[test]
+    fn a_socket_plays_its_player_once_plugged() {
+        let m = mixer();
+        let format = device(ENGINE, ChannelLayout::Stereo);
+        let (mut socket, plug) = super::monitor_socket();
+        let mut buf = vec![1.0; 960];
+        let render = |socket: &mut super::MonitorSocket, buf: &mut Vec<f32>| {
+            socket.render(&mut AudioRenderBuffer {
+                samples: buf,
+                device_position: 0,
+                time: None,
+            });
+        };
+        render(&mut socket, &mut buf);
+        assert_level(&buf, 0.0, "unplugged");
+        socket.on_error(&jstream_platform::PlatformError::DeviceLost {
+            what: "speakers".into(),
+            reason: "unplugged".into(),
+        });
+        let mut monitor = m.control().add_monitor(format).unwrap();
+        assert!(!monitor.control.stats().failed);
+        let block = vec![[0.5f32, 0.5]; BLOCK].concat();
+        let mut frame = 0;
+        for _ in 0..10 {
+            monitor.feed.push(frame, &block);
+            frame += BLOCK as i64;
+        }
+        assert!(plug.plug(monitor.player));
+        let renders = monitor.control.stats().renders;
+        render(&mut socket, &mut buf);
+        assert_eq!(
+            monitor.control.stats().renders,
+            renders + 1,
+            "the player renders"
+        );
+        assert!(
+            monitor.control.stats().failed,
+            "the earlier failure is passed on"
+        );
+
+        let (socket, plug) = super::monitor_socket();
+        drop(socket);
+        let other = m.control().add_monitor(format).unwrap();
+        assert!(!plug.plug(other.player));
     }
 
     /// Both ends hand the ring to the collector: neither the mixer thread nor the audio

@@ -124,7 +124,12 @@ stamped on the clock, and no device is the master.
   stream's handler, and its `control` reads `MonitorStats` (blocks, renders, underrun
   frames, re-anchors, failure). The player maps stereo onto the device: both channels
   averaged into mono, the front pair of anything wider, the rest silent. See
-  [Real-time design](#realtime) for its clock.
+  [Real-time design](#realtime) for its clock. `AudioIo::open_output` reports the
+  device's format only on the stream it returns, so the stream opens on a
+  `MonitorSocket` from `monitor_socket()`, which plays silence until
+  `MonitorPlug::plug` hands it the player built for that format, then plays the player.
+  It takes the player with a lock-free `try_recv` per render, and passes on a stream
+  failure reported before then.
 - `InputControl` and `BusControl` set the fader (linear or dB, 0 to +24 dB) and mute,
   ramped over one block. They read meters (per channel, post-fader, so an input's is
   before its sends: the peak held until read, and the last block's RMS) and counters
@@ -178,7 +183,8 @@ not start. No variant allocates.
   over two minutes with no re-anchor; a feed that stops played as silence and picked up
   where the player stands; a stalled device moving forward onto the target; silence
   before the first block; a stream failure reported; device rates and planar formats
-  refused; and the ring freed on the collector from both ends;
+  refused; the ring freed on the collector from both ends; and a socket silent until
+  its player is plugged in, then playing it, with an earlier failure passed on;
 - the master chain and output taps: the master chain on the master bus and on a
   tapped bus but not before monitoring, a master filter's edit reaching every copy and
   a bus added later, an output tap's own chain and stamp, a tap reading silence once
@@ -205,7 +211,8 @@ be.
 under `assert_no_alloc`, through the same kinds of glitches and live input, bus, send,
 filter, master-chain, output-tap and CLAP-filter changes, reading each output tap's and
 each input's block after every block, feeding two monitors (before and after the
-master's filters) and rendering their devices every tick
+master's filters) and rendering their devices every tick through the sockets their
+players are plugged into
 ([Real-time design](#realtime)).
 `tests/cost.rs` is an ignored measurement of what a block costs
 ([Real-time design](#realtime)).
@@ -257,7 +264,10 @@ target (the device stalled) moves the read position forward onto it, counted as 
 re-anchor. More than 50 ms below (the feed stalled or stopped) leaves the player
 reading on into silence, counted as underrun, with the controller held: moving back
 would replay what was already heard. Both ends hand the ring and counters to the
-collector when dropped.
+collector when dropped. The device stream opens on a `MonitorSocket` before the player
+exists; the player, built on the control thread once the stream's format is known,
+reaches it through a one-slot `crossbeam` channel, which the socket polls with
+`try_recv` (no lock, no wait) until it arrives.
 
 **Downmix** (`downmix.rs`), before resampling, so 5.1 costs no more than stereo:
 

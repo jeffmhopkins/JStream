@@ -13,7 +13,8 @@
 //! compressor and the meters on each mixed block, as the mixer thread will run them
 //! (ADR-0028; sidechain keys and meters aren't in the mixer yet). Two bus monitors take
 //! each block, one before the master's filters and one after, and their devices' audio
-//! threads (`AudioOutputHandler::render`) play a tick's worth each tick.
+//! threads (`AudioOutputHandler::render`, on the socket each player is plugged into)
+//! play a tick's worth each tick.
 //! Control-plane work (adding and removing inputs, buses, output taps, sends and
 //! filters, filter edits, gain and mute changes) runs between ticks, outside the scope,
 //! as it does on the control thread.
@@ -39,7 +40,7 @@ use jstream_audio::filter::{AudioFilter, Compressor, CompressorParams, GateParam
 use jstream_audio::meter::{LoudnessMeter, TruePeakMeter};
 use jstream_audio::{
     BusId, FilterParams, FilterSpec, HostMemory, InputControl, InputProducer, Mixer, MixerConfig,
-    Monitor, MonitorTap, OutputTapId,
+    Monitor, MonitorControl, MonitorFeed, MonitorSocket, MonitorTap, OutputTapId, monitor_socket,
 };
 use jstream_media::{AudioFormat, ChannelLayout, MediaTime, SampleFormat, Timebase};
 use jstream_platform::{
@@ -310,9 +311,16 @@ struct Sim {
     input_blocks: u64,
     /// The mixer thread does not run until this tick (a stall).
     mixer_stalled_until: u64,
-    /// Bus monitors (ADR-0028, D22): each one's tap, and its device's buffer for one
-    /// tick, which its player fills every tick.
-    monitors: Vec<(Monitor, MonitorTap, Vec<f32>)>,
+    /// Bus monitors (ADR-0028, D22): each one's feed and counters, the socket its
+    /// device stream plays (its player plugged in), its tap, and its device's buffer
+    /// for one tick, which the socket fills every tick.
+    monitors: Vec<(
+        MonitorFeed,
+        MonitorControl,
+        MonitorSocket,
+        MonitorTap,
+        Vec<f32>,
+    )>,
 }
 
 impl Sim {
@@ -327,9 +335,9 @@ impl Sim {
         let now = clock(T0 + (tick + 1) as f64 * TICK_S);
         while let Some(mixed) = self.mixer.poll(now, &mut self.out).expect("right length") {
             self.chain.process(&mut self.out);
-            for (monitor, tap, _) in &mut self.monitors {
+            for (feed, _, _, tap, _) in &mut self.monitors {
                 if let Some(block) = self.mixer.monitor_block(BusId::MASTER, *tap) {
-                    monitor.feed.push(mixed.frame, block);
+                    feed.push(mixed.frame, block);
                 }
             }
             for &tap in &self.taps {
@@ -346,8 +354,8 @@ impl Sim {
             }
         }
         // Each monitor device's audio thread, once a tick.
-        for (monitor, _, buf) in &mut self.monitors {
-            monitor.player.render(&mut AudioRenderBuffer {
+        for (_, _, socket, _, buf) in &mut self.monitors {
+            socket.render(&mut AudioRenderBuffer {
                 samples: buf,
                 device_position: tick,
                 time: None,
@@ -422,9 +430,15 @@ mod rt {
             (48_000, ChannelLayout::Surround51, MonitorTap::PostFilters),
         ] {
             let format = fmt(rate, layout);
-            let monitor = sim.mixer.control().add_monitor(format).expect("supported");
+            let Monitor {
+                feed,
+                player,
+                control,
+            } = sim.mixer.control().add_monitor(format).expect("supported");
+            let (socket, plug) = monitor_socket();
+            assert!(plug.plug(player));
             let buf = vec![0.0; rate as usize / 100 * format.channels()];
-            sim.monitors.push((monitor, tap, buf));
+            sim.monitors.push((feed, control, socket, tap, buf));
         }
         let control = sim.mixer.control();
         let bus = sim.mixer.bus();
@@ -705,8 +719,8 @@ mod rt {
         assert!(sim.input_blocks > 4 * 1_300, "{}", sim.input_blocks);
         // 45 s of 1024-frame blocks at 48 kHz, minus the stall's.
         assert!(bus.blocks > 2_000, "{bus:?}");
-        for (monitor, _, _) in &sim.monitors {
-            let stats = monitor.control.stats();
+        for (_, control, _, _, _) in &sim.monitors {
+            let stats = control.stats();
             assert!(stats.blocks > 2_000 && stats.renders > 4_000, "{stats:?}");
         }
     }

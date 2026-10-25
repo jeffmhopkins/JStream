@@ -48,5 +48,8 @@ pub use rt::chain::{FilterParams, FilterSpec};
 pub use rt::host::HostMemory;
 pub use rt::input::InputProducer;
 pub use rt::mixer::{Block, Mixer, MixerConfig, MixerControl, MonitorTap};
-pub use rt::monitor::{Monitor, MonitorControl, MonitorFeed, MonitorPlayer, MonitorStats};
+pub use rt::monitor::{
+    Monitor, MonitorControl, MonitorFeed, MonitorPlayer, MonitorPlug, MonitorSocket, MonitorStats,
+    monitor_socket,
+};
 pub use rt::shared::MeterReading;
