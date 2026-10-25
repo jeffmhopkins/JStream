@@ -271,11 +271,20 @@ fn inline_stamp(doc: &parse::Doc, section: &parse::Section) -> Option<usize> {
 /// ledger (ADR-0053). It also drops ledger stamps of sections that no longer need one.
 /// After this branch's merge, each rewritten entry keeps the merged side's notes
 /// ([`Upstream`]).
+#[cfg(test)]
 fn verify(root: &Path, target: &str, by: &str, note: &str) -> Result<()> {
-    let note = check_stamp(by, note)?;
+    verify_text(root, target, by, &Text::One(note.to_owned()))
+}
+
+/// `verify` (above) with the note given as a [`Text`]: one for every rewritten entry, or one per
+/// input (#855).
+fn verify_text(root: &Path, target: &str, by: &str, text: &Text) -> Result<()> {
+    text.check(by)?;
+    merge::refuse_merge_in_progress(root)?;
     let upstream = Upstream::load(root, merge::last_merge(root)?.as_ref())?;
     stamp_section(root, target, &|_, key, old, inputs| {
-        let stamp = ledger::restamp(old, inputs, by, note);
+        let mut stamp = ledger::restamp(old, inputs, by, text.placeholder());
+        text.fill(key, inputs, &mut stamp)?;
         Ok(match &upstream {
             // Only this branch's own earlier note carries kept notes forward.
             Some(up) => up.keep(key, old, stamp, &|input| {
@@ -286,6 +295,122 @@ fn verify(root: &Path, target: &str, by: &str, note: &str) -> Result<()> {
             None => stamp,
         })
     })
+}
+
+/// The text a verify writes on the entries it rewrites (#855, docs/DOCS.md#notes): one text
+/// for every entry, or, with `--per-input`, one per input, read from a TOML table that maps
+/// each input's key (`body`, `file:<path>`, `dep:<reference>`) to its text, with `"*"` for
+/// any input the table doesn't name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Text {
+    One(String),
+    PerInput(BTreeMap<String, String>),
+}
+
+/// What the ledger functions write for a per-input text, before [`Text::fill`] replaces it
+/// on each entry. No real note holds it: `--per-input` texts may not.
+const PER_INPUT: &str = "\u{1f}per-input\u{1f}";
+
+impl Text {
+    /// A `--per-input` table: string values only, each key `"*"` or an input's key.
+    fn per_input(table: &str) -> Result<Self> {
+        let value: toml::Table = table
+            .parse()
+            .context("--per-input text must be a TOML table of `\"<input>\" = \"<text>\"`")?;
+        let mut texts = BTreeMap::new();
+        for (input, text) in value {
+            let Some(text) = text.as_str() else {
+                bail!("--per-input: the text for `{input}` must be a string");
+            };
+            if text.contains(PER_INPUT) {
+                bail!("--per-input: the text for `{input}` holds a reserved character");
+            }
+            texts.insert(input, text.trim().to_owned());
+        }
+        if texts.is_empty() {
+            bail!("--per-input: the table names no input");
+        }
+        Ok(Self::PerInput(texts))
+    }
+
+    /// Checks every text as [`check_stamp`] checks a note.
+    fn check(&self, by: &str) -> Result<()> {
+        match self {
+            Self::One(t) => check_stamp(by, t).map(drop),
+            Self::PerInput(texts) => texts.iter().try_for_each(|(input, t)| {
+                check_stamp(by, t)
+                    .map(drop)
+                    .with_context(|| format!("--per-input: the text for `{input}`"))
+            }),
+        }
+    }
+
+    /// The text the ledger functions write: the one text, or [`PER_INPUT`].
+    fn placeholder(&self) -> &str {
+        match self {
+            Self::One(t) => t.trim(),
+            Self::PerInput(_) => PER_INPUT,
+        }
+    }
+
+    /// The text for `input`, if there is one.
+    fn get(&self, input: &str) -> Option<&str> {
+        match self {
+            Self::One(t) => Some(t.trim()),
+            Self::PerInput(texts) => texts
+                .get(input)
+                .or_else(|| texts.get("*"))
+                .map(String::as_str),
+        }
+    }
+
+    /// Replaces [`PER_INPUT`] on each entry of `key`'s `stamp` with that input's text.
+    /// Fails when a key of the table names none of `inputs`, or when a rewritten entry's
+    /// input has no text and the table has no `"*"`.
+    fn fill(
+        &self,
+        key: &str,
+        inputs: &BTreeMap<String, String>,
+        stamp: &mut ledger::Stamp,
+    ) -> Result<()> {
+        let Self::PerInput(texts) = self else {
+            return Ok(());
+        };
+        let unknown: Vec<&str> = texts
+            .keys()
+            .filter(|k| *k != "*" && !inputs.contains_key(*k))
+            .map(String::as_str)
+            .collect();
+        if !unknown.is_empty() {
+            bail!(
+                "--per-input names inputs {key} doesn't have: {} (its inputs: {})",
+                unknown.join(", "),
+                inputs
+                    .keys()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
+        let mut missing = Vec::new();
+        for (input, e) in stamp.iter_mut() {
+            let Some(note) = e.note.as_mut().filter(|n| n.contains(PER_INPUT)) else {
+                continue;
+            };
+            match self.get(input) {
+                Some(t) => *note = note.replace(PER_INPUT, t),
+                None => missing.push(input.as_str()),
+            }
+        }
+        if !missing.is_empty() {
+            bail!(
+                "--per-input has no text for {key}'s {}, which this verify rewrites; add them \
+                 or a `\"*\"` text",
+                missing.join(", ")
+            );
+        }
+        Ok(())
+    }
 }
 
 /// The ledgers a verify after this branch's last merge reads to keep the merged side's
@@ -361,19 +486,37 @@ impl Upstream {
 /// section's inputs (docs/DOCS.md#notes). It refuses when the file of a rewritten input changed after
 /// the merge: the branch's earlier note doesn't cover that edit, so it needs `--note`.
 /// Returns the merged PRs it reported on the rewritten entries' files.
+#[cfg(test)]
 fn verify_merge(root: &Path, target: &str, by: &str, text: &str) -> Result<Vec<u32>> {
-    let text = check_stamp(by, text)?;
+    verify_merge_text(root, target, by, &Text::One(text.to_owned()), None)
+}
+
+/// `verify_merge` (above) with the text given as a [`Text`] (#855). With `from`, it first checks
+/// that the merge it carries notes across brought in `origin/<from>` (or a commit on it).
+fn verify_merge_text(
+    root: &Path,
+    target: &str,
+    by: &str,
+    text: &Text,
+    from: Option<&str>,
+) -> Result<Vec<u32>> {
+    text.check(by)?;
+    merge::refuse_merge_in_progress(root)?;
     let point = merge::last_merge(root)?.context(
         "no merge on this branch to carry notes across (run `cargo xtask docs merge-main` \
          first, or verify with --note)",
     )?;
+    if let Some(from) = from {
+        merge::check_merged_from(root, &point, from)?;
+    }
     let branch = merge::branch_entries(root, &point)?;
     let up = Upstream::load(root, Some(&point))?.context("invariant: a merge point")?;
     let reported = std::cell::RefCell::new(Vec::new());
     stamp_section(root, target, &|doc, key, old, inputs| {
         let theirs = up.merged.sections.get(key);
         let own = branch.get(key);
-        let stamp = ledger::restamp_merge(old, inputs, own, theirs, by, text);
+        let mut stamp = ledger::restamp_merge(old, inputs, own, theirs, by, text.placeholder());
+        text.fill(key, inputs, &mut stamp)?;
         // This branch's note before the merge carries the merged-side notes it kept (#840).
         let stamp = up.keep(key, old, stamp, &|input| {
             own.and_then(|o| o.get(input)).and_then(|e| e.note.clone())
@@ -390,7 +533,7 @@ fn verify_merge(root: &Path, target: &str, by: &str, text: &str) -> Result<Vec<u
             .iter()
             .map(|(k, p)| ((*k).clone(), p.clone()))
             .collect();
-        *reported.borrow_mut() = report_merged_prs(root, &point, key, &keyed, text)?;
+        *reported.borrow_mut() = report_text(root, &point, key, &keyed, text)?;
         let mut paths: Vec<String> = rewritten.iter().map(|(_, p)| p.clone()).collect();
         paths.sort();
         paths.dedup();
@@ -420,6 +563,7 @@ fn verify_merge(root: &Path, target: &str, by: &str, text: &str) -> Result<Vec<u
 /// the PR branch it is stacked on (#715).
 /// A stale section is refused: re-read it and verify with `--note` or `--merge`. Returns the
 /// PRs this branch's last merge brought in on those entries' files, which it reports.
+#[cfg(test)]
 fn verify_renote(
     root: &Path,
     target: &str,
@@ -427,7 +571,19 @@ fn verify_renote(
     note: &str,
     branch: &str,
 ) -> Result<Vec<u32>> {
-    let note = check_stamp(by, note)?;
+    verify_renote_text(root, target, by, &Text::One(note.to_owned()), branch)
+}
+
+/// `verify_renote` (above) with the note given as a [`Text`] (#855).
+fn verify_renote_text(
+    root: &Path,
+    target: &str,
+    by: &str,
+    text: &Text,
+    branch: &str,
+) -> Result<Vec<u32>> {
+    text.check(by)?;
+    merge::refuse_merge_in_progress(root)?;
     let bases = merge::base_ledgers(root, branch)?;
     let point = merge::last_merge(root)?;
     let upstream = Upstream::load(root, point.as_ref())?;
@@ -449,11 +605,12 @@ fn verify_renote(
                 .filter(|(k, e)| !stamps.iter().any(|b| b.get(*k) == Some(*e)))
                 .map(|(k, _)| (k.clone(), merge::input_path(doc, k)))
                 .collect();
-            *reported.borrow_mut() = report_merged_prs(root, p, key, &own, note)?;
+            *reported.borrow_mut() = report_text(root, p, key, &own, text)?;
         }
-        let stamp = ledger::renote(old, &stamps, by, note).with_context(|| {
+        let mut stamp = ledger::renote(old, &stamps, by, text.placeholder()).with_context(|| {
             format!("this branch wrote no entry on {key} since it left origin/{branch}; nothing to renote")
         })?;
+        text.fill(key, inputs, &mut stamp)?;
         // Every entry renote rewrites is this branch's own, so its earlier note carries the
         // merged-side notes it kept; after a merge, the merged side's note is kept too (#840).
         let earlier = |input: &str| old.get(input).and_then(|e| e.note.clone());
@@ -481,6 +638,36 @@ fn keep_earlier(
         }
     }
     stamp
+}
+
+/// [`report_merged_prs`] for a [`Text`]: one report over every rewritten entry for one text,
+/// or one per entry for a per-input text, each against that entry's own file and text, so
+/// each entry's note credits the PRs behind its own input (#855). Returns every PR reported.
+fn report_text(
+    root: &Path,
+    point: &merge::MergePoint,
+    key: &str,
+    inputs: &[(String, String)],
+    text: &Text,
+) -> Result<Vec<u32>> {
+    if let Text::One(note) = text {
+        return report_merged_prs(root, point, key, inputs, note.trim());
+    }
+    let mut all = Vec::new();
+    for entry in inputs {
+        let note = text.get(&entry.0).unwrap_or_default();
+        let label = format!("{key} [{}]", entry.0);
+        all.extend(report_merged_prs(
+            root,
+            point,
+            &label,
+            std::slice::from_ref(entry),
+            note,
+        )?);
+    }
+    all.sort_unstable();
+    all.dedup();
+    Ok(all)
 }
 
 /// Prints the PRs `point`'s merge brought in on `inputs`, the entries a verify of `key`
@@ -766,33 +953,55 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
             let mut merge = None;
             let mut renote = None;
             let mut from = None;
+            let mut per_input = false;
             let mut it = args[1..].iter();
+            // `--<mode>-file <path>` reads the mode's text from a file (#855).
+            let read = |path: Option<&String>| -> Result<Option<String>> {
+                path.map(|p| {
+                    std::fs::read_to_string(p).with_context(|| format!("reading the text in `{p}`"))
+                })
+                .transpose()
+            };
             while let Some(a) = it.next() {
                 match a.as_str() {
                     "--by" => by = it.next(),
-                    "--note" => note = it.next(),
-                    "--merge" => merge = it.next(),
-                    "--renote" => renote = it.next(),
+                    "--note" => note = it.next().cloned(),
+                    "--merge" => merge = it.next().cloned(),
+                    "--renote" => renote = it.next().cloned(),
+                    "--note-file" => note = read(it.next())?,
+                    "--merge-file" => merge = read(it.next())?,
+                    "--renote-file" => renote = read(it.next())?,
                     "--from" => from = it.next(),
+                    "--per-input" => per_input = true,
                     t if target.is_none() => target = Some(t),
                     other => bail!("unexpected argument `{other}`"),
                 }
             }
+            let text = |t: String| -> Result<Text> {
+                if per_input {
+                    Text::per_input(&t)
+                } else {
+                    Ok(Text::One(t))
+                }
+            };
+            let from = from.map(String::as_str);
             match (target, by, note, merge, renote, from) {
                 (Some(target), Some(by), Some(note), None, None, None) => {
-                    verify(root, target, by, note)?;
+                    verify_text(root, target, by, &text(note)?)?;
                 }
-                (Some(target), Some(by), None, Some(merge), None, None) => {
-                    verify_merge(root, target, by, merge)?;
+                (Some(target), Some(by), None, Some(merge), None, from) => {
+                    verify_merge_text(root, target, by, &text(merge)?, from)?;
                 }
                 (Some(target), Some(by), None, None, Some(renote), from) => {
-                    let branch = from.map_or(merge::BRANCH, String::as_str);
-                    verify_renote(root, target, by, renote, branch)?;
+                    let branch = from.unwrap_or(merge::BRANCH);
+                    verify_renote_text(root, target, by, &text(renote)?, branch)?;
                 }
                 _ => bail!(
                     "usage: cargo xtask docs verify <DOC#anchor> --by <human:..|agent:..> \
                      (--note \"<what you checked>\" | --merge \"<what the merge changed>\" \
-                     | --renote \"<the better note>\" [--from <base branch>])"
+                     [--from <branch>] | --renote \"<the better note>\" [--from <base branch>]); \
+                     --note-file, --merge-file and --renote-file <path> read the text from a \
+                     file, and --per-input reads it as a TOML table of one text per input"
                 ),
             }
             Ok(true)
@@ -1883,6 +2092,136 @@ mod tests {
             format!("{again}{}{second}{k}{main}{k}{main2}", ledger::MERGE_MARK)
         );
         assert!(work.diags("is stale").is_empty());
+    }
+
+    /// #855: after a merge, `--per-input` gives each rewritten entry its own text, and each
+    /// entry still keeps its own merged-side notes; `--merge --from` checks the merged branch;
+    /// and a verify refuses while a merge is in progress.
+    #[test]
+    fn verify_per_input_writes_each_entry_its_own_text() {
+        let mut files = REGISTRIES.to_vec();
+        let s = "<!-- @doc\nid = \"S\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"src/**\"]\n-->\nText.\n";
+        files.extend([
+            ("S.md", s),
+            ("src/a.rs", "a1\n\n\n\n\na5\n"),
+            ("src/b.rs", "b\n"),
+        ]);
+        let (origin, work) = origin_and_clone("verify-per-input", &files);
+        verify(&origin.0, "S#a", "agent:test", NOTE).expect("S verifies");
+        commit_all(&origin, "stamps");
+        work.git(&["pull", "-q", "--no-rebase", "origin", "main"]);
+        let note = |input: &str| {
+            ledger::Ledger::read(&work.0)
+                .expect("invariant: parses")
+                .sections["S#a"][input]
+                .note
+                .clone()
+                .unwrap_or_default()
+        };
+        work.write("src/a.rs", "a1 work\n\n\n\n\na5\n");
+        work.write("src/b.rs", "b work\n");
+        let pr = "the branch's a1 and b edits, which the text still describes";
+        verify(&work.0, "S#a", "agent:work", pr).expect("S verifies on work");
+        commit_all(&work, "work: a1 and b");
+        origin.write("src/a.rs", "a1\n\n\n\n\na5 main\n");
+        let main = "[#1] main's a5 edit, which the text still describes";
+        verify(&origin.0, "S#a", "agent:main", main).expect("S verifies on main");
+        commit_all(&origin, "main: a5 (#1)");
+        merge::merge_main(&work.0, "main").expect("merges");
+
+        let table = |t: &str| Text::per_input(t).expect("parses");
+        let by = "agent:work";
+        // A key that names no input, and a rewritten input with no text, are refused.
+        let err = verify_merge_text(
+            &work.0,
+            "S#a",
+            by,
+            &table("\"file:src/z.rs\" = \"a text that names a file the section lacks\""),
+            None,
+        )
+        .expect_err("unknown input");
+        assert!(format!("{err:#}").contains("file:src/z.rs"), "{err:#}");
+        let err = verify_merge_text(
+            &work.0,
+            "S#a",
+            by,
+            &table("body = \"the section text, which the merge left as it was\""),
+            None,
+        )
+        .expect_err("a.rs has no text");
+        assert!(format!("{err:#}").contains("file:src/a.rs"), "{err:#}");
+        assert_eq!(work.diags("is stale").len(), 1, "nothing was written");
+        // `--from` names the branch the merge brought in.
+        let a_text = "main's a5 edit (#1) is outside what the text says about a.rs";
+        let good = table(&format!("\"file:src/a.rs\" = \"{a_text}\""));
+        let err = verify_merge_text(&work.0, "S#a", by, &good, Some("wave/none"))
+            .expect_err("not the merged branch");
+        assert!(format!("{err:#}").contains("origin/wave/none"), "{err:#}");
+        verify_merge_text(&work.0, "S#a", by, &good, Some("main")).expect("verifies");
+        let k = ledger::KEPT_MARK;
+        assert_eq!(
+            note("file:src/a.rs"),
+            format!("{pr}{}{a_text}{k}{main}", ledger::MERGE_MARK)
+        );
+        assert_eq!(note("file:src/b.rs"), pr, "the merge left b.rs alone");
+        assert!(work.diags("is stale").is_empty());
+        commit_all(&work, "work: re-verify S after the merge");
+
+        // `--renote --per-input` rewrites each of the branch's entries with its own text; a.rs
+        // keeps main's note, b.rs, which main never re-verified, has none.
+        let a = "a1, with main's a5 (#1) outside what the text says about a.rs";
+        let b = "b's edit, which the section text still describes";
+        let both = table(&format!(
+            "\"file:src/a.rs\" = \"{a}\"\n\"file:src/b.rs\" = \"{b}\""
+        ));
+        verify_renote_text(&work.0, "S#a", "agent:review", &both, "main").expect("renotes");
+        assert_eq!(note("file:src/a.rs"), format!("{a}{k}{main}"));
+        assert_eq!(note("file:src/b.rs"), b);
+        // `"*"` covers the inputs the table doesn't name.
+        let star = table(&format!(
+            "\"*\" = \"{b}\"\n\"file:src/a.rs\" = \"{a}, again\""
+        ));
+        verify_renote_text(&work.0, "S#a", "agent:review", &star, "main").expect("renotes");
+        assert_eq!(note("file:src/a.rs"), format!("{a}, again{k}{main}"));
+        assert_eq!(note("file:src/b.rs"), b);
+        commit_all(&work, "work: renoted");
+
+        // While a merge is in progress, every verify refuses rather than read the last one.
+        origin.write("other.txt", "o\n");
+        commit_all(&origin, "main: other");
+        work.git(&["fetch", "-q", "origin"]);
+        work.git(&["merge", "-q", "--no-commit", "--no-ff", "origin/main"]);
+        let one = Text::One(pr.to_owned());
+        for err in [
+            verify_text(&work.0, "S#a", by, &one).expect_err("--note"),
+            verify_merge_text(&work.0, "S#a", by, &one, None)
+                .map(drop)
+                .expect_err("--merge"),
+            verify_renote_text(&work.0, "S#a", by, &one, "main")
+                .map(drop)
+                .expect_err("--renote"),
+        ] {
+            assert!(
+                format!("{err:#}").contains("merge is in progress"),
+                "{err:#}"
+            );
+        }
+        work.git(&["merge", "--abort"]);
+    }
+
+    /// `--per-input` takes a TOML table of string texts, each checked as a note (#855).
+    #[test]
+    fn per_input_text_parses_and_checks() {
+        let t = Text::per_input("body = \"  the text, which still holds  \"\n\"*\" = \"x\"")
+            .expect("parses");
+        assert_eq!(t.get("body"), Some("the text, which still holds"));
+        assert_eq!(t.get("file:a"), Some("x"));
+        assert!(t.check("agent:x").is_err(), "the `*` text is too short");
+        assert!(Text::per_input("body = 1").is_err());
+        assert!(Text::per_input("").is_err());
+        assert!(Text::per_input("body = [").is_err());
+        assert!(Text::per_input(&format!("body = \"a{PER_INPUT}\"")).is_err());
+        assert_eq!(Text::One("one".to_owned()).get("any"), Some("one"));
     }
 
     /// `docs::ledger::keep_notes`: the new text, then the kept notes, each once (#840).
