@@ -1562,7 +1562,18 @@ H.264 keyframe; until the muxer has a decoder configuration, such a keyframe get
 stand-in parameter sets in front (`with_parameter_sets`). A later one goes out as it
 is, since a stand-in SPS would replace the encoder's own, which shares its id. The protocol's `VideoCodec` names
 only H.264 so far, so a profile can't select HEVC or AV1 yet. MP4 recording takes H.264
-only: another codec fails the start with `recording … is not supported yet`.
+only: another codec fails the start with `recording … is not supported yet`. The open
+decides whether a video encoder is there. When it fails (`video_open_failure`), a
+missing component keeps the platform's own error and its remedy: a VA-API driver
+package, or the OpenH264 download ([ADR-0060](../../docs/adr/0060-linux-platform-support.md)
+§6). Otherwise `check_video_encoder` reads the platform's `codecs.list()`, and if no
+encoder there fits the profile, the start fails naming what the machine lacks:
+`this machine has no AV1 encoder`, or no hardware one for `hardware: require`, or no
+software one for `avoid`, and the open's own error goes to the log at `warn`, so a list
+that disagrees with the open still shows the real cause. When the list explains
+nothing, or can't be read, the open's own error stands. A profile's codec is collection
+state, valid on any machine, so this is only consulted at a failed start, never at the
+edit, and an encoder the list leaves out still opens.
 
 **Virtual camera.** `with_backends` takes the backends' `VcamSink` out and keeps it for
 the engine's life. When the collection's output is `VirtualCam`, the start takes that
