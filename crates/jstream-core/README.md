@@ -1027,9 +1027,15 @@ builds the source (its frame at time zero, which a plan shows first anyway), the
 new frame's that a plan takes, so a source no plan reaches keeps its first size. A
 source drawn at a density reports its extent, the size its frames are placed at
 ([ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)). A capture
-(`display`, `window`, `webcam`) has no size yet: its frames reach only the render
-thread (*Not yet*, #805). Nor does a source that failed to build, an audio-only one, or a
-deleted one. A source of a video kind with nothing to show (an `image` or `media` source
+source's (`display`, `window`, `webcam`) is the frame size of the capture the program
+stage runs for it (`capture_sizes`, by capture key, so the sources sharing a webcam share
+its size), which the render thread reports (*Captures* in [Runtime](#runtime)). It has
+none while no output runs or its capture hasn't delivered a frame, and loses it when no
+source on program shows its capture any more, which stops that capture, or the stage
+closes. A `display` or `window` source's capture is its own, so it runs only while that
+source is on program; a webcam's runs while any source showing that device is, so a
+webcam source off program can have the shared device's size. A source that failed to
+build has no size, nor does an audio-only one or a deleted one. A source of a video kind with nothing to show (an `image` or `media` source
 with no file, or a `media` file with no video stream) shows one transparent pixel, and so
 reports 1×1.
 
@@ -2025,9 +2031,6 @@ history, idempotency keys and the program and preview scenes are not saved (see 
   `set_source_frame`.
 - Keeping a window source on its window across restarts (its target ID names a window
   handle, which a new session of the app doesn't keep).
-- The size of a capture source (`display`, `window`, `webcam`) in `source.sizes`: its
-  frames arrive on the render thread, which would hand their sizes back to the engine
-  through a lock-free queue (R-RT-003, #805). Until then it reports none.
 
 <a id="runtime"></a>
 ## Runtime
@@ -2160,7 +2163,11 @@ hands that thread the stream of each one no longer shown, which it drops, so sta
 stopping a capture (OS calls that can block) never run on the render thread. Both go
 through channels it never waits on, and it takes the started streams with `try_recv`
 ([R-RT-002](../../docs/RULES.md#R-RT-002),
-[R-RT-003](../../docs/RULES.md#R-RT-003)). The primary display is looked up when its
+[R-RT-003](../../docs/RULES.md#R-RT-003)). After reading the mailboxes it sends each
+capture's frame size, only when it changes (the first frame, a resize, and none once the
+capture is no longer wanted), on another such channel (`SizeChange`), so a steady size
+sends and allocates nothing. A capture restarting after a failure or a move off the GPU
+path keeps the size it had until a frame says otherwise. The primary display is looked up when its
 capture starts. A webcam or capture card is opened on the backends' `VideoDevices`, on
 the CPU path, in the format `device_format` picks from those it lists: frames that arrive
 uncompressed as RGBA, BGRA or NV12 (YUY2 is delivered as NV12), the largest of at most
@@ -2212,7 +2219,12 @@ writes it to the file, syncing each fragment (writes may block on the disk; the
 encoder queues absorb that and drop when full). The `output.start` that opens the
 program stage also starts `jstream-stats`, which is not a real-time thread: it emits
 `stats.tick` about once a second from the stage counters, and once more when the last
-output stops, and `meters.tick` about ten times a second. The render loop publishes capture mailbox skips and the frames an encode ring drops
+output stops, and `meters.tick` about ten times a second. The stage also starts
+`jstream-capture-sizes`, not a real-time thread either: it records each capture size the
+render thread sends under the collection lock and announces the sources it changes
+(`source.size_changed`, *Source sizes* in [Design](#design)), and when the render thread
+lets go of its captures it forgets them all and ends. `Program`'s drop joins it after
+the render thread. The render loop publishes capture mailbox skips and the frames an encode ring drops
 (`encode_frames`), and a tick that falls a
 whole period behind the clock skips to the current tick and counts the skipped ones in
 `render_ticks`. None of those threads lock the collection: the render thread reads the
