@@ -65,7 +65,7 @@ pub fn Scenes() -> impl IntoView {
     let shown_rows = move || {
         all_rows()
             .into_iter()
-            .filter(|row| filter.shows(&row.name, row.favourite))
+            .filter(|row| filter.shows(&row.name, row.favourite, &[]))
             .collect::<Vec<_>>()
     };
     // Adds a scene named "Scene N", selects it and returns its ID.

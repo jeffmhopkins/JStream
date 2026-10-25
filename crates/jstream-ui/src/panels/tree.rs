@@ -1,21 +1,26 @@
 //! What the Scenes and Scene objects panels share (spec-panels.md 1 and 2): the search
-//! box and the favourites filter over their rows, the rows' favourite star, and
+//! box and the favourites and labels filter over their rows, the rows' favourite star, and
 //! reordering rows by dragging them. The filters' matching and a drop's new position are
 //! plain functions, tested natively.
 //!
 //! Docs: docs/UI-FEATURES.md#scenes, docs/UI-FEATURES.md#objects
 
 use crate::icons::Icon;
+use crate::panels::labels::{LabelIcon, LabelManager};
+use crate::store::Studio;
+use jstream_control::protocol::LabelId;
 use leptos::prelude::*;
 use leptos::wasm_bindgen::JsCast;
 
-/// The search text and the favourites-only switch over one panel's rows.
+/// The search text, the favourites-only switch and the labels over one panel's rows.
 #[derive(Clone, Copy)]
 pub struct Filter {
     /// The search box's text.
     pub search: RwSignal<String>,
     /// Whether only favourites show.
     pub favourites: RwSignal<bool>,
+    /// The labels checked: a row shows if it carries any of them (S4).
+    pub labels: RwSignal<Vec<LabelId>>,
 }
 
 impl Filter {
@@ -24,23 +29,42 @@ impl Filter {
         Filter {
             search: RwSignal::new(String::new()),
             favourites: RwSignal::new(false),
+            labels: RwSignal::new(Vec::new()),
         }
     }
 
-    /// Whether a row of this name, a favourite or not, shows.
-    pub fn shows(&self, name: &str, favourite: bool) -> bool {
-        (favourite || !self.favourites.get()) && self.search.with(|search| matches(search, name))
+    /// Whether a row of this name, a favourite or not, carrying these labels, shows.
+    pub fn shows(&self, name: &str, favourite: bool, carried: &[LabelId]) -> bool {
+        (favourite || !self.favourites.get())
+            && self.labels.with(|labels| any_of(labels, carried))
+            && self.search.with(|search| matches(search, name))
     }
 
     /// Whether any filter is on, so rows may be hidden and dragging is off (S5).
     pub fn active(&self) -> bool {
-        self.favourites.get() || self.search.with(|s| !s.trim().is_empty())
+        self.count() > 0
     }
 
-    /// The count on the filter button: one for favourites only and one for a search.
+    /// The count on the filter button (S3): one for favourites only, one per label and
+    /// one for a search.
     fn count(&self) -> usize {
-        usize::from(self.favourites.get()) + usize::from(self.search.with(|s| !s.trim().is_empty()))
+        usize::from(self.favourites.get())
+            + self.labels.with(Vec::len)
+            + usize::from(self.search.with(|s| !s.trim().is_empty()))
     }
+
+    /// Clears the search, favourites only and the labels.
+    fn clear(&self) {
+        self.search.set(String::new());
+        self.favourites.set(false);
+        self.labels.set(Vec::new());
+    }
+}
+
+/// Whether a row carrying `carried` passes a labels filter of `checked`: any of them,
+/// and every row when none is checked.
+pub fn any_of(checked: &[LabelId], carried: &[LabelId]) -> bool {
+    checked.is_empty() || checked.iter().any(|l| carried.contains(l))
 }
 
 impl Default for Filter {
@@ -56,21 +80,67 @@ pub fn matches(search: &str, name: &str) -> bool {
     search.is_empty() || name.to_lowercase().contains(&search.to_lowercase())
 }
 
-/// The search box and the filter button over a panel's rows (S2 to S4). The filter's
-/// labels wait on the label manager, so it offers Favorites only and Clear.
+/// The search box and the filter button over a panel's rows (S2 to S4). With
+/// `labels`, the filter lists the collection's labels and offers "Edit labels…"; the
+/// Scenes panel has none, since scenes carry no labels (ADR-0024 §4).
 #[component]
 pub fn SearchBar(
     /// What the rows are, for the placeholder: "scenes" or "objects".
     what: &'static str,
     /// The filter it edits.
     filter: Filter,
+    /// Whether the rows carry labels.
+    #[prop(optional)]
+    labels: bool,
 ) -> impl IntoView {
+    let studio = use_context::<Studio>();
+    let manager = use_context::<LabelManager>().filter(|_| labels);
     let open = RwSignal::new(false);
     let placeholder = format!("Search {what}");
     let clear = move |_| {
-        filter.search.set(String::new());
-        filter.favourites.set(false);
+        filter.clear();
         open.set(false);
+    };
+    let label_rows = move || {
+        let all = studio
+            .filter(|_| labels)
+            .and_then(|s| s.collection.with(|c| c.as_ref().map(|c| c.labels.clone())))
+            .unwrap_or_default();
+        (!all.is_empty()).then(|| {
+            let rows = all
+                .into_iter()
+                .map(|label| {
+                    let id = StoredValue::new(label.label_id.clone());
+                    let on = move || filter.labels.with(|l| l.contains(&id.get_value()));
+                    let name = label.name.clone();
+                    view! {
+                        <button
+                            type="button"
+                            class="tree-check"
+                            aria-pressed=move || on().to_string()
+                            on:click=move |_| {
+                                let mine = id.get_value();
+                                filter.labels.update(|l| {
+                                    if let Some(at) = l.iter().position(|x| *x == mine) {
+                                        l.remove(at);
+                                    } else {
+                                        l.push(mine);
+                                    }
+                                });
+                            }
+                        >
+                            <span class="tree-box label-box" class:on=on>{move || on().then_some("✓")}</span>
+                            <LabelIcon label=label />
+                            {name}
+                        </button>
+                    }
+                })
+                .collect_view();
+            view! {
+                <div class="tree-pop-head">"Labels · any of"</div>
+                {rows}
+            }
+        })
     };
     view! {
         <div class="tree-bar">
@@ -114,8 +184,21 @@ pub fn SearchBar(
                             <span class="tree-star on"><Icon name="star" size=14 /></span>
                             "Favorites only"
                         </button>
+                        {label_rows}
                         <div class="tree-pop-foot">
                             <button type="button" class="link muted" on:click=clear>"Clear"</button>
+                            {manager.map(|m| view! {
+                                <button
+                                    type="button"
+                                    class="link"
+                                    on:click=move |_| {
+                                        open.set(false);
+                                        m.open();
+                                    }
+                                >
+                                    "Edit labels…"
+                                </button>
+                            })}
                         </div>
                     </div>
                 </Show>
@@ -305,7 +388,18 @@ fn row_under(event: &leptos::ev::PointerEvent) -> Option<(String, Side)> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Side, dropped_at, matches, side};
+    use super::{Side, any_of, dropped_at, matches, side};
+    use jstream_control::protocol::LabelId;
+
+    #[test]
+    fn a_labels_filter_keeps_rows_with_any_checked_label() {
+        let (a, b, c) = (LabelId::new("a"), LabelId::new("b"), LabelId::new("c"));
+        assert!(any_of(&[], &[]));
+        assert!(any_of(&[], std::slice::from_ref(&a)));
+        assert!(any_of(&[a.clone(), b.clone()], &[b.clone(), c.clone()]));
+        assert!(!any_of(std::slice::from_ref(&a), &[b, c]));
+        assert!(!any_of(&[a], &[]));
+    }
 
     #[test]
     fn search_matches_a_substring_of_the_name_in_any_case() {

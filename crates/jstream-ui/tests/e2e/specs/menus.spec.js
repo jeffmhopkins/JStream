@@ -152,6 +152,7 @@ test('an item row has the item menu, which restacks and arranges', async ({ page
   expect(await labels(page)).toEqual([
     'Properties…',
     'Edit filters…',
+    'Labels',
     'Pop out',
     'Bring to front',
     'Bring forward',

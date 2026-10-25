@@ -297,6 +297,10 @@ pub fn native_geometry(native: (f32, f32), canvas: Canvas) -> Option<ItemGeometr
     ItemGeometry::try_new(Vec2::new(cw * 0.5, ch * 0.5)?, size).ok()
 }
 
+/// The toast once another placement of a source is added (spec-workspace.md 6.7.2).
+pub const REFERENCE_ADDED: &str =
+    "Added a reference. Only its position, size, rotation and crop are its own.";
+
 /// A reference's placement: its source's first placement anywhere, moved 40 px right
 /// and down, or the native box when the source isn't placed.
 fn reference_geometry(
@@ -618,6 +622,13 @@ fn AddSourceBody(
                             Err(error) => studio.report(&error),
                         }
                     });
+                }
+                // Another placement of a visual source is a reference (6.5.6).
+                (Choice::Existing(_), _) if t.kind.is_some() => {
+                    studio.apply_noting(&s, edits, REFERENCE_ADDED.into());
+                    if let Some(dock) = dock {
+                        dock.0.update(|d| d.show(PanelId::Inspector));
+                    }
                 }
                 _ => {
                     studio.apply(&s, edits);

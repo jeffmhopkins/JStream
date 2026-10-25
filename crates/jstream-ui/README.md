@@ -52,20 +52,24 @@ Contents ([Design](#design) explains the choices):
 - **Store** (`store.rs`): `Studio`, the state the scene, sources and properties panels
   share: the collection as `state.get` last reported it (`Collection`, with its buses
   for the bus picker), the program
-  scene, the `Selection`, the source kinds and the kind descriptors read so far, and the
-  last failed call, and `keys_changed`, which the outputs panel bumps when a stream key
+  scene, the `Selection`, the source kinds and the kind descriptors read so far, the
+  last failed call, the toast's confirmation (`notify`, `apply_noting`), and `keys_changed`, which the outputs panel bumps when a stream key
   is set or cleared. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
   `plan_summary` and `fresh_id`.
 - **Menus, dialogs and icons**: `menu.rs` (`ContextMenu`, the right-click menu, and
-  `Menus`, the context that opens it with a list of `Entry`s), `item_menu.rs` (the
+  `Menus`, the context that opens it with a list of `Entry`s, each with an optional
+  check, colour swatch, hint or submenu), `item_menu.rs` (the
   selected items' entries, which the canvas and the sources list share, with the
   layer moves and canvas arrangements they send, tested natively), `dialog.rs` (`Modal`,
   the modal dialog frame) and `icons.rs` (`Icon`, the prototype's stroke icons).
 - **Panels** (`panels/`): the scene list (`scenes.rs`), the sources list
-  (`sources.rs`), what those two share (`tree.rs`: the search box, the favourites
-  filter, the star and drag reordering, with the matching and the drop's index tested
-  natively), the Inspector (`inspector.rs`: the selected item's box, crop,
-  blending and settings, or the selected scene's objects, uses and transitions), the
+  (`sources.rs`), what those two share (`tree.rs`: the search box, the favourites and
+  labels filter, the star and drag reordering, with the matching and the drop's index
+  tested natively), labels (`labels.rs`: the chips, the tag popover, the label manager
+  and the `LabelManager` context that opens it, with the edits they send tested
+  natively), the Inspector (`inspector.rs`: the selected item's box, 3D, crop,
+  blending and settings, or the selected scene's objects, uses and transitions, in
+  sections whose folds `Folds` remembers by title), the
   properties form inside it (`properties.rs`), the Add source dialog (`add_source.rs`:
   `AddSource` and the `AddSourceDialog` context that opens it, with its type list and
   the edits it sends, tested natively), the Properties dialog (`source_properties.rs`:
@@ -154,8 +158,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   "program", and puts a scene on program with `scene.switch` from a hover button. The
   sources list shows the selected scene's items with the top of the stack first, each
   with its source's type icon, in italics when the source is placed in another scene
-  too, and an eye that shows or hides it. Each panel has a search box and a filter for
-  favourites (the star, `scene.set_meta` or `source.set_meta`), applied in the page;
+  too, the chips of its source's labels, an eye that shows or hides it, and a tag
+  button whose popover puts labels on the source or takes them off
+  (`source.set_meta`). Each panel has a search box and a filter for favourites (the
+  star, `scene.set_meta` or `source.set_meta`), applied in the page; the sources list's
+  filter also keeps the rows carrying any checked label, and its "Edit labels…" opens
+  the label manager over the rows, which renames, recolours, gives icons to, adds
+  (`label.create`) and deletes labels; a delete takes the label off every source that
+  carries it in the same batch. Scenes carry no labels (ADR-0024 §4), so the scene list
+  has no labels filter;
   rows drag before or after each other (`scene.reorder`, `item.reorder`, counted in the
   whole list so a hidden row doesn't shift the index) with pointer events, but not
   while a filter is on. F2 renames a row in place and Del deletes a scene (through its
@@ -168,7 +179,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   user saw. Removing an item from its scene is a plain `item.remove`.
 - **Right-click menus and dialogs.** `menu.rs` draws the one right-click menu, which
   the shell provides as `Menus` context: a component opens a list of entries (items
-  with a check, a shortcut hint or a submenu, heads and separators) at the pointer, and
+  with a check, a colour swatch, a shortcut hint or a submenu, heads and separators)
+  at the pointer, and
   the menu keeps itself on screen, opens submenus on hover or the right arrow, moves
   the focus with the arrows, Home and End, and closes on a choice, a press outside,
   Escape or Tab. The canvas opens the empty canvas or margin menu, the scene and
@@ -176,11 +188,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Rename, New scene and Delete scene work; the rest waits on folders, keyframes,
   transitions and the scene Properties dialog). A right-click on an item, on the canvas or its row, selects it
   unless it was selected and opens `item_menu.rs`'s menu for the selection: Properties
-  (the Properties dialog), the Audio check (`source.set_audio`), layer order
+  (the Properties dialog), for one item a Labels submenu (each label checked while the
+  source carries it, with its colour as the swatch, then Edit labels…), the Audio check
+  (`source.set_audio`), layer order
   (`item.reorder`s that keep the selected items' order), Center, Fit and Stretch to
   canvas and Reset rotation (`item.set_geometry`), Clear crop, Duplicate as reference
   (`item.add` of the same source, 40 pixels down and right, just above the original)
-  or as clone (`source.duplicate` first), and Remove from scene, each one batch; in
+  or as clone (`source.duplicate` first), each confirmed by a toast, and Remove from
+  scene, each one batch; in
   the sources list, one item's menu ends with deleting its source everywhere. A
   nested scene and an audio-only source get the prototype's shorter menus; the first
   can be opened. The scene and object lists fill their dock group, so the space under
@@ -201,11 +216,17 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   call's does.
 - **The Inspector** ([UI features › inspector](../../docs/UI-FEATURES.md#inspector))
   shows the primary selected item, or with none the selected scene, under a header with
-  its name, kind, "+N" for the other selected items and a favourite star
+  its type icon (the scene's icon for a scene), name, kind, "+N" for the other selected
+  items, the item's source's label chips and tag button, and a favourite star
   (`source.set_meta` or `scene.set_meta`). An item's name is in italics when its source
-  is placed in another scene too. Its sections fold: Parameters (X and Y of the
+  is placed in another scene too. Its sections fold, and each stays as it was last left,
+  by title, across items and reloads (`Folds`, kept in the browser's storage as
+  `jstream.folds`): Parameters (X and Y of the
   unrotated box's top-left corner, W, H and Rotation, sent as `item.set_geometry`; the
-  W/H link, on by default, keeps the aspect ratio when either side changes), Crop
+  W/H link, on by default, keeps the aspect ratio when either side changes), 3D (folded
+  at first: Tilt, Turn, Depth and Perspective, also `item.set_geometry`; Perspective
+  shows the prototype's 1200 px while the item has none, and the first change that puts
+  the item in 3D sets it, since without one the engine draws 3D flat), Crop
   (`item.set_crop`, in source pixels), Blending (the nine modes, of which the engine
   draws only Normal so the others are disabled, and Opacity, `item.set_opacity`) and
   Properties, the source's settings form. A scene shows its object count, the scenes
@@ -279,7 +300,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   than three settings or isn't described yet. Edit filters… in the item menus selects the item and shows the
   panel. Names come from the prototype's catalogue, then `kind.list`, then the kind's ID.
 - **The shell** is the header bar over the workspace. A failed call shows in a
-  dismissable bar. The look follows the UI prototype ([UI features](../../docs/UI-FEATURES.md)): dark only, with the
+  dismissable bar. A confirmation, such as "Added a reference…" after a placement of
+  an existing source or a duplicate, shows in the toast (`Studio::notify`, or
+  `apply_noting` once a batch is applied): one at a time, bottom centre, gone after
+  4.5 s, a new one replacing it. The look follows the UI prototype ([UI features](../../docs/UI-FEATURES.md)): dark only, with the
   prototype's palette as CSS variables in `style.css`. The font stack names IBM Plex
   first and falls back to the system's, since the page's policy loads fonts only from
   its own origin and Plex isn't bundled.
@@ -287,10 +311,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   ([UI features › docking](../../docs/UI-FEATURES.md#docking)): eight zones nest around
   the canvas, outer columns, full-width top and bottom, sidebars, and above and below
   the canvas. A zone stacks groups (columns top to bottom, rows side by side); a group
-  shows one panel with its title, or tabs. Panels are the eight the UI has: Scenes,
+  shows one panel with its title, or tabs. Panels are the prototype's eleven: Scenes,
   Scene objects (`Sources`), the Inspector (`Inspector`, with `Pairing` under it), the
-  Transform, Filters, Audio mixer, Outputs and Transitions (`StudioMode`); `panel_view` maps
-  each to its component, and a new panel adds a `PanelId` and a line there. The
+  Transform, Filters, Live chat, Stream stats, Audio mixer, Outputs, Agent activity and
+  Transitions (`StudioMode`); `panel_view` maps each to its component, and a new panel
+  adds a `PanelId` and a line there. Live chat, Stream stats and Agent activity wait on
+  the engine (YouTube sign-in, an agent audit log), so they say what they wait on and
+  none is in a built-in layout. The
   panels' own `h2` headings are hidden, since the tab is the title. Narrow windows
   stack the zones, without splitters.
   - Each group keeps every tab's panel mounted and hides the inactive ones, so a tab

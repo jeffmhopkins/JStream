@@ -54,15 +54,15 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 
 | Area | Rows | ✅ | 🟡 | ⬜ | 🔒 | ⏸ |
 |---|---|---|---|---|---|---|
-| [Theme and shared controls](#theme) | 8 | 3 | 3 | 1 | 0 | 1 |
-| [Header bar](#header) | 9 | 4 | 2 | 1 | 2 | 0 |
+| [Theme and shared controls](#theme) | 8 | 7 | 0 | 0 | 0 | 1 |
+| [Header bar](#header) | 9 | 5 | 1 | 1 | 2 | 0 |
 | [Docking and layouts](#docking) | 10 | 8 | 2 | 0 | 0 | 0 |
 | [Canvas](#canvas) | 18 | 11 | 3 | 2 | 2 | 0 |
-| [Context menus](#menus) | 8 | 0 | 5 | 2 | 1 | 0 |
+| [Context menus](#menus) | 8 | 1 | 4 | 2 | 1 | 0 |
 | [Dialogs and windows](#dialogs) | 8 | 4 | 1 | 0 | 3 | 0 |
-| [Scenes panel](#scenes) | 10 | 4 | 3 | 2 | 1 | 0 |
+| [Scenes panel](#scenes) | 10 | 6 | 1 | 2 | 1 | 0 |
 | [Scene objects panel](#objects) | 9 | 6 | 1 | 1 | 1 | 0 |
-| [Inspector](#inspector) | 10 | 5 | 2 | 2 | 1 | 0 |
+| [Inspector](#inspector) | 10 | 7 | 1 | 1 | 1 | 0 |
 | [Transform panel](#transform) | 4 | 4 | 0 | 0 | 0 | 0 |
 | [Filters](#filters) | 8 | 5 | 0 | 0 | 3 | 0 |
 | [Mixer](#mixer) | 7 | 4 | 0 | 2 | 1 | 0 |
@@ -70,7 +70,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Transitions](#transitions) | 6 | 3 | 2 | 0 | 1 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
 | [Keyboard](#keyboard) | 7 | 1 | 3 | 1 | 2 | 0 |
-| **Total** | **130** | **62** | **28** | **14** | **25** | **1** |
+| **Total** | **130** | **72** | **20** | **12** | **25** | **1** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -89,11 +89,11 @@ Spec: [workspace › theme](../design/ui-prototype/spec-workspace.md#theme-fonts
 | WS-01 | Dark palette | Dark only: app `#0F1115`, panels `#16191E`, dock zones `#121418`, canvas area `#0A0B0E`, menus `#1F232A`, borders `#262A31`/`#2E333B`, text `#E6E8EB`/`#9AA1AC`/`#7D8590`, accent `#4C8DFF`, selected `#22324A`, danger `#C62F36`. | ✅ | The palette's CSS variables in `style.css`; panels restyle further in their own rows. |
 | WS-02 | Fonts | IBM Plex Sans 13px for the UI, IBM Plex Mono for numbers and readouts. | ⏸ | The UI's CSP allows fonts from `'self'` only, so the prototype's Google Fonts link can't load. Bundling the OFL-licensed Plex files is a licensing question for the maintainer ([R-GOV-005](RULES.md#R-GOV-005)). Until then, the font stack names Plex first and falls back to system fonts. |
 | WS-03 | Scrollbars, focus and selection | Thin 10px scrollbars (`#3A3F48` thumb), 2px accent focus ring, `#2B4A7A` text selection. | ✅ | |
-| WS-04 | Icons | 24×24 stroke icons (1.8 stroke, round caps) for source types, scene kinds, labels and tools, in place of text glyphs. | 🟡 | The prototype's icons are in `icons.rs`; the Add source, Properties and filter dialogs, the canvas tools, the Scenes and Scene objects rows and the Filters panel use them. Other panels' rows still use text glyphs (● ○ ↺). |
+| WS-04 | Icons | 24×24 stroke icons (1.8 stroke, round caps) for source types, scene kinds, labels and tools, in place of text glyphs. | ✅ | The prototype's icons are in `icons.rs`, with a close and a reset icon added; the Add source, Properties and filter dialogs, the canvas tools, the Scenes and Scene objects rows, the Filters panel, the labels (chips, tag buttons, the manager's icon picker), the Inspector's header, the output cards and the settings' reset use them. The dialogs' close buttons keep the prototype's ×. |
 | WS-05 | Number field | Stepper with − and +, typed entry (Enter commits, Escape cancels, `−` and `,` accepted), arrow keys (Shift fine, Ctrl coarse), and pointer scrubbing (3px per step, Shift ×0.1, Ctrl ×4). | ✅ | `NumberField` (`panels/number.rs`), used by the Inspector and the mixer's channel rows (named by the row, with no label above); the filters and dialogs take it as they are rebuilt. A drag shows its value as it goes and is sent once on release, so it is one undo step, where the prototype writes every step. |
-| WS-06 | Foldable section headers | Caret plus uppercase title; folded sections show a hint ("cropped", "in use"); fold state remembered per title. | 🟡 | `Fold` in `inspector.rs`: caret, uppercase title and folded hint ("cropped", the transitions hint); fold state isn't remembered per title yet. The mixer's Buses section uses it too; the other panels take it as they are built |
-| WS-07 | Hover-revealed row buttons | Row tools fade in on hover or focus, and stay shown while their state is on. | 🟡 | Built for the Scenes and Scene objects rows (`tree.rs`): the buttons fade in over 120 ms on hover or focus, and a hidden item's eye and a favourite's star stay shown; and for the filter rows' × (`filters.rs`). The other panels' rows take it as they are rebuilt. |
-| WS-08 | Toasts | One toast at a time, bottom centre, hides after 4.5 s. | ⬜ | Today: a fixed bottom-right error box with Dismiss, in the prototype's toast colours. Errors may stay sticky; toasts are for confirmations ("Added a reference…"). |
+| WS-06 | Foldable section headers | Caret plus uppercase title; folded sections show a hint ("cropped", "in use"); fold state remembered per title. | ✅ | `Fold` in `inspector.rs`: caret, uppercase title and folded hint ("cropped", "in use", the transitions hint). `Folds` remembers each title's state across items and reloads, in the browser's storage (`jstream.folds`); 3D starts folded, as Scene switches will (IN-10). The mixer's Buses section uses it too. |
+| WS-07 | Hover-revealed row buttons | Row tools fade in on hover or focus, and stay shown while their state is on. | ✅ | The Scenes and Scene objects rows (`tree.rs`): the buttons fade in over 120 ms on hover or focus, and a hidden item's eye, a favourite's star and an open tag button stay shown; the filter rows' × (`filters.rs`); and the Transitions panel's preset rows, whose Edit, Make default and Delete fade in the same way. An output card's Start, Stop, Edit and Delete are its main controls, not row tools, so they always show. |
+| WS-08 | Toasts | One toast at a time, bottom centre, hides after 4.5 s. | ✅ | `Toast` in `app.rs` (`Studio::notify`, `apply_noting`): "Added a reference…" after placing an existing source again or Duplicate as reference, "Added a clone…" after Duplicate as clone. Failed calls stay in the sticky problem bar. |
 
 <a id="header"></a>
 ## Header bar
@@ -106,7 +106,7 @@ Spec: [workspace › header bar](../design/ui-prototype/spec-workspace.md#header
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
 | HD-01 | Brand and menu row | Accent square and "JStream", then File, Edit, View and Layout menus; one top menu open at a time, closed by any outside press. | ✅ | The prototype leaves File and Edit empty; the real ones hold the connection details and Disconnect, and Undo and Redo. |
-| HD-02 | View menu | Lists all 11 panels with "shown" or "add"; clicking hides a shown panel or adds a hidden one to its home zone. | 🟡 | Built for the eight panels the UI has; the rest join as they are built. |
+| HD-02 | View menu | Lists all 11 panels with "shown" or "add"; clicking hides a shown panel or adds a hidden one to its home zone. | ✅ | All eleven, in the prototype's order. Live chat, Stream stats and Agent activity wait on the engine ([live panels](#live-panels)), so for now they say what they wait on. |
 | HD-03 | Layout menu | "Layout: <name>", saved layouts with "current", "Save current layout as new", "Reset to default". | ✅ | |
 | HD-04 | Stats readout | Mono "60 fps · 0 dropped · CPU 3%". | 🟡 | "N dropped" built from `stats.tick` (frames dropped since the page connected). fps and CPU need engine stats (decision register D39). |
 | HD-05 | Privacy button | "Privacy" / "Privacy on" (red); blurs every output and mutes the mic; Pause toggles it. | 🔒 | Privacy screen is E2b (#317). |
@@ -122,10 +122,11 @@ covers = ["crates/jstream-ui/src/app.rs", "crates/jstream-ui/src/dock.rs", "crat
 -->
 
 Spec: [workspace › dock zones and docking](../design/ui-prototype/spec-workspace.md#dock-zones-and-docking).
-The dock is built (`dock.rs`, `workspace.rs`) with the eight panels the UI has: Scenes,
+The dock is built (`dock.rs`, `workspace.rs`) with the prototype's eleven panels: Scenes,
 Scene objects, Inspector (with the pairing panel under the properties), Transform,
-Filters, Audio mixer, Outputs and Transitions (studio mode and the presets). The other prototype panels join
-the dock, its View menu and its layouts as their rows are built.
+Filters, Live chat, Stream stats, Audio mixer, Outputs, Agent activity and Transitions
+(studio mode and the presets). Live chat, Stream stats and Agent activity say what they
+wait on until their rows are built ([live panels](#live-panels)).
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
@@ -136,7 +137,7 @@ the dock, its View menu and its layouts as their rows are built.
 | DK-05 | Close twice | × arms red on the first click, closes on the second; disarms after 3 s or when the pointer leaves. | ✅ | |
 | DK-06 | Drag to dock | Drag a tab onto a tab strip (group), a panel's half (split before or after), or a zone (append); empty zones show "Drop here" placeholders while dragging. | ✅ | Pointer drag rather than HTML drag and drop, which desktop webviews can intercept. |
 | DK-07 | Home zones | A panel added from the View menu goes to its home zone (Scenes and Scene objects left; Inspector, Transform, Filters, chat, stats and agent right; Mixer, Outputs and Transitions bottom). | ✅ | |
-| DK-08 | Editing and Live layouts | Editing is the default: left Scenes, Scene objects; right Inspector (weight 2), Filters+Transform; bottom Mixer, Outputs+Transitions. Live: Scenes; Mixer and Transitions under the canvas; chat, then stats+Outputs+Agent on the right. | 🟡 | Both built with the panels the UI has: Editing puts Filters and Transform in one group under the Inspector, Filters shown; chat, stats and agent join them as they are built. |
+| DK-08 | Editing and Live layouts | Editing is the default: left Scenes, Scene objects; right Inspector (weight 2), Filters+Transform; bottom Mixer, Outputs+Transitions. Live: Scenes; Mixer and Transitions under the canvas; chat, then stats+Outputs+Agent on the right. | 🟡 | Both built with the panels the UI has: Editing puts Filters and Transform in one group under the Inspector, Filters shown. Live chat, Stream stats and Agent activity only say what they wait on, so Live leaves them out until the engine supports them. |
 | DK-09 | "(modified)" and saving | Any move, close, resize or View toggle marks the layout "(modified)"; layouts can be saved as "My layout N" and reset. | ✅ | |
 | DK-10 | Layouts persist | Layouts survive a reload, the same on the desktop app and in a browser. | 🟡 | Kept in the browser's storage, so per browser rather than the same everywhere. Decision register D35 recommends an engine-side UI settings store, which the protocol doesn't have. |
 
@@ -183,8 +184,8 @@ on the canvas and in Scene objects but for its last lines.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| CM-01 | Menu mechanics | One menu at the pointer, kept on screen; check column, colour swatch, label, shortcut hint, submenu arrow; Windows-style submenus that open on hover; full keyboard navigation; any outside press closes. | 🟡 | Built but for the colour swatch column, which comes with the label menus that use it. Items the UI or the engine can't do yet show disabled, as the prototype's "(dis)" items do. |
-| CM-02 | Canvas menus | Item: Properties, Edit filters, Pop out, reference/clone, layer order, Center/Fit/Stretch, Reset rotation, Clear crop, Crop, Duplicate as reference/clone, Remove, Select all. Empty canvas and margin: Select all, snapping, Add source, scene transitions and Properties. | 🟡 | Built, with an Audio check for a source with sound and the prototype's shorter menus for a nested scene and an audio-only source. Properties opens the Properties dialog ([DL-02](#dialogs)), and Edit filters selects the item and shows the Filters panel ([FL-01](#filters)). Reference and clone wait on [CM-06](#menus), Crop on [CV-08](#canvas), Group selection on [OB-04](#objects), and Pop out, the transitions and the scene's Properties on [DL-07](#dialogs), [CM-07](#menus) and [DL-03](#dialogs), so they show disabled. Remove from scene works, though the prototype shows it disabled. |
+| CM-01 | Menu mechanics | One menu at the pointer, kept on screen; check column, colour swatch, label, shortcut hint, submenu arrow; Windows-style submenus that open on hover; full keyboard navigation; any outside press closes. | ✅ | Built, with the colour swatch column (an 8 px dot, transparent unless set), which the item menu's Labels submenu uses for each label's colour. Items the UI or the engine can't do yet show disabled, as the prototype's "(dis)" items do. |
+| CM-02 | Canvas menus | Item: Properties, Edit filters, Pop out, reference/clone, layer order, Center/Fit/Stretch, Reset rotation, Clear crop, Crop, Duplicate as reference/clone, Remove, Select all. Empty canvas and margin: Select all, snapping, Add source, scene transitions and Properties. | 🟡 | Built, with an Audio check for a source with sound, a Labels submenu for one item (beyond the prototype, since its labels are set from rows only), and the prototype's shorter menus for a nested scene and an audio-only source. Properties opens the Properties dialog ([DL-02](#dialogs)), and Edit filters selects the item and shows the Filters panel ([FL-01](#filters)). Reference and clone wait on [CM-06](#menus), Crop on [CV-08](#canvas), Group selection on [OB-04](#objects), and Pop out, the transitions and the scene's Properties on [DL-07](#dialogs), [CM-07](#menus) and [DL-03](#dialogs), so they show disabled. Remove from scene works, though the prototype shows it disabled. |
 | CM-03 | Scene row menu | Rename, Transition in ▸, Transition out ▸, Properties, Edit filters, Pop out ▸, New scene, New keyframe, New folder, Duplicate scene, Delete scene. | 🟡 | Built. Show in preview (`studio.set_preview`), Rename, New scene and Delete scene work, though the prototype shows all but New scene disabled. Transitions wait on T1, New keyframe (`scene.create_variant`, K1) on the keyframe rows ([SC-07](#scenes)), folders on [SC-06](#scenes), Properties on [DL-03](#dialogs), Edit filters on [FL-06](#filters), and Duplicate scene on an engine edit that copies a scene, so they show disabled. |
 | CM-04 | Scene object row menu | Audio on/off, Properties, Edit filters, Pop out, reference/clone, layer order, Add source, New group, Remove from scene. | 🟡 | The selected items' menu of [CM-02](#menus), ending with Add source and New group instead of Select all; New group waits on [OB-04](#objects). |
 | CM-05 | Empty panel menus | Scenes: New scene, New folder, Paste scene. Scene objects: Add source, Add scene as source, New group, Select all, Paste. | 🟡 | Both are built. New folder ([SC-06](#scenes)), New group ([OB-04](#objects)) and the two Pastes (decision register D43) show disabled. |
@@ -228,14 +229,14 @@ Spec: [panels › scenes](../design/ui-prototype/spec-panels.md#scenes-panel).
 | SC-05 | Rename, delete, new | Rename (F2 or menu), delete with the plan's summary, New scene. | ✅ | F2 or the menu's Rename renames in place, Del or Delete scene asks with the plan's summary, and the menus' New scene adds one with its name open. A double click renames too, until scenes have their Properties dialog (DL-03). |
 | SC-06 | Folders | Folders organise scenes; collapsible. | ⬜ | `folder.*` and `scene.set_folder`; folders nest ([ADR-0024](adr/0024-scene-structure.md) §3, [ADR-0064](adr/0064-nested-scene-folders.md), #323). |
 | SC-07 | Keyframe rows | Keyframes nest under their scene with a purple diamond icon. | ⬜ | `SceneInfo.variant_of` names the parent (K1). |
-| SC-08 | Labels and favourites | Label chips and a favourite star per row; label manager (name, colour, icon). | 🟡 | The favourite star is built (`scene.set_meta`). Labels wait on the label manager. |
-| SC-09 | Filter by favourites and labels | Funnel button with a count badge; "Favorites only", labels (any of), Clear, Edit labels. | 🟡 | The funnel with its count, Favorites only and Clear are built, client-side; the labels part waits on SC-08's labels. |
+| SC-08 | Labels and favourites | Label chips and a favourite star per row; label manager (name, colour, icon). | ✅ | The favourite star (`scene.set_meta`, `source.set_meta`), label chips and a hover tag button whose popover puts labels on or takes them off (`source.set_meta`), and the label manager (`labels.rs`: name, colour, icon picker, + New label, delete), inline in Scene objects. Scenes carry no labels ([ADR-0024](adr/0024-scene-structure.md) §4), so scene rows have the star only; labels are on Scene objects rows and the Inspector, and an item menu's Labels submenu sets them too. |
+| SC-09 | Filter by favourites and labels | Funnel button with a count badge; "Favorites only", labels (any of), Clear, Edit labels. | ✅ | The funnel with its count, Favorites only, Labels · any of, Clear and Edit labels…, client-side. Since scenes carry no labels (ADR-0024 §4), the Scenes panel's filter has Favorites only; the labels and Edit labels… are in the Scene objects panel's filter, over its sources. |
 | SC-10 | Put on program | Clicking a scene switches to it (or, in studio mode, puts it on preview). | 🔒 | Clicking a scene selects it, as in the prototype. Until T1's studio mode, a hover button (broadcast icon) puts the scene on program, and the row menu's Show in preview sends `studio.set_preview`. |
 
 <a id="objects"></a>
 ## Scene objects panel
 <!-- @section
-covers = ["crates/jstream-ui/src/panels/sources.rs", "crates/jstream-ui/src/store.rs", "crates/jstream-ui/src/panels/tree.rs"]
+covers = ["crates/jstream-ui/src/panels/sources.rs", "crates/jstream-ui/src/store.rs", "crates/jstream-ui/src/panels/tree.rs", "crates/jstream-ui/src/panels/labels.rs"]
 -->
 
 Spec: [panels › scene objects](../design/ui-prototype/spec-panels.md#scene-objects-panel).
@@ -265,11 +266,11 @@ in the Inspector until the Inspector's own rows say otherwise.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| IN-01 | Header | Type icon, name (italic for a reference), kind, "+N" for more selected, labels and favourite. | 🟡 | Name (italic when the source is placed in another scene too), kind, "+N" and the favourite star (`source.set_meta`, `scene.set_meta`) are built. Type icons and labels wait on SC-08's icons and label manager. |
+| IN-01 | Header | Type icon, name (italic for a reference), kind, "+N" for more selected, labels and favourite. | ✅ | Type icon (the scene's icon for a scene), name (italic when the source is placed in another scene too), kind, "+N", the source's label chips and its always-shown tag button, and the favourite star (`source.set_meta`, `scene.set_meta`). |
 | IN-02 | Parameters | X, Y, W, H in px, and Rotation, as number fields bound to the canvas. | ✅ | Each change is one `item.set_geometry`. X and Y are the unrotated box's top-left corner. The fields show committed values, so a canvas drag shows in them once dropped. |
 | IN-03 | Size in % | W % and H % of the source's own size. | ⬜ | Source sizes as runtime state are in the protocol since 0.40 (`source.sizes`, [ADR-0022](adr/0022-item-transform-and-canvas.md), B12); a capture source has one while an output runs and its capture has a frame. |
 | IN-04 | W/H link | Link toggle keeps the aspect ratio while editing W or H. | ✅ | On by default, kept while the panel is shown. |
-| IN-05 | 3D | Tilt, Turn, Depth, Perspective, folded by default. | ⬜ | `item.set_geometry` takes any 3D it can draw from protocol 0.34 ([ADR-0050](adr/0050-3d-transforms-rendering.md)). |
+| IN-05 | 3D | Tilt, Turn, Depth, Perspective, folded by default. | ✅ | Folded by default, with the "in use" hint; each field is one `item.set_geometry` ([ADR-0050](adr/0050-3d-transforms-rendering.md)). Perspective shows the prototype's 1200 px while the item has none, and the first change that puts the item in 3D sets it, since without one the engine draws 3D flat. |
 | IN-06 | Crop | Left, Right, Top, Bottom in px. | ✅ | `item.set_crop`, in source pixels. The canvas doesn't draw crop yet (CV-08). |
 | IN-07 | Blending | Mode (9 modes) and Opacity %. | ✅ | Opacity is `item.set_opacity`. The select lists all nine modes; the engine accepts only `normal`, so the others are disabled until it draws them. |
 | IN-08 | Scene section | Objects count, "Used as a source in", hotkey. | 🟡 | Objects and "Used as a source in" are built. The hotkey row waits on K1. |

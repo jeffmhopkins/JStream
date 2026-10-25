@@ -7,6 +7,7 @@
 //! Docs: crates/jstream-ui/README.md#design, docs/adr/0025-typed-settings-kind-descriptors.md
 
 use crate::app::SessionContext;
+use crate::icons::Icon;
 use crate::store::{Collection, Studio, apply};
 use jstream_control::protocol::{
     AssetRoot, Edit, KindDescriptor, Media, ParamDescriptor, ParamType, Reference, Settings,
@@ -411,7 +412,10 @@ fn Field(
                     {unit.map(|u| view! { <span class="unit">{u}</span> })}
                 </span>
             </label>
-            <button class="reset" title="Reset to the default" disabled=is_default on:click=reset>"↺"</button>
+            <button class="reset" title="Reset to the default" aria-label="Reset to the default"
+                disabled=is_default on:click=reset>
+                <Icon name="reset" size=13 />
+            </button>
             {move || error().map(|e| view! { <p class="problem">{e}</p> })}
         </div>
     }

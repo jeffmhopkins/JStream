@@ -10,7 +10,8 @@ use crate::canvas::snap::Bounds;
 use crate::canvas::transform::{nudge, with_box};
 use crate::dock::PanelId;
 use crate::menu::Entry;
-use crate::panels::add_source::{AddSourceDialog, has_picture};
+use crate::panels::add_source::{AddSourceDialog, REFERENCE_ADDED, has_picture};
+use crate::panels::labels::{self, LabelManager};
 use crate::panels::source_properties::{self, PropertiesDialog};
 use crate::store::{Collection, Studio};
 use crate::workspace::DockState;
@@ -213,6 +214,7 @@ pub struct Context {
     adder: Option<AddSourceDialog>,
     props: Option<PropertiesDialog>,
     dock: Option<DockState>,
+    labels: Option<LabelManager>,
 }
 
 impl Context {
@@ -224,6 +226,7 @@ impl Context {
             adder: use_context(),
             props: use_context(),
             dock: use_context(),
+            labels: use_context(),
         })
     }
 
@@ -330,9 +333,51 @@ impl Context {
                 index: u32::try_from(above).unwrap_or(u32::MAX),
             });
         }
-        self.studio.apply(&s, edits);
+        let note = if clone {
+            "Added a clone. Changes to it don't affect the original."
+        } else {
+            REFERENCE_ADDED
+        };
+        self.studio.apply_noting(&s, edits, note.into());
         self.studio.select_item(Some(new_item));
     }
+}
+
+/// The Labels submenu of one source: a line per label, checked while the source carries
+/// it and with the label's colour in the swatch column, then "Edit labels…".
+fn labels_entry(cx: Context, source_id: &SourceId) -> Entry {
+    let lines = cx.studio.collection.with_untracked(|c| {
+        let c = c.as_ref()?;
+        let carried = c
+            .source(source_id)
+            .map(|s| s.meta.labels.clone())
+            .unwrap_or_default();
+        Some(
+            c.labels
+                .iter()
+                .map(|label| {
+                    let (source, id) = (source_id.clone(), label.label_id.clone());
+                    Entry::item(label.name.clone(), move || {
+                        let edit = cx.studio.collection.with_untracked(|c| {
+                            c.as_ref()
+                                .and_then(|c| labels::toggle_edit(c, &source, &id))
+                        });
+                        cx.send(edit.into_iter().collect());
+                    })
+                    .checked(carried.contains(&label.label_id))
+                    .swatch(label.color.clone())
+                })
+                .collect::<Vec<_>>(),
+        )
+    });
+    let mut lines = lines.unwrap_or_default();
+    if let Some(manager) = cx.labels {
+        if !lines.is_empty() {
+            lines.push(Entry::Sep);
+        }
+        lines.push(Entry::item("Edit labels…", move || manager.open()));
+    }
+    Entry::submenu("Labels", lines)
 }
 
 /// The menu for the selected `items` of `scene_id`, the primary one first; empty when
@@ -358,6 +403,7 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
         Entry::item("Edit filters…", move || cx.filters(id.clone()))
     };
     let pop_out = Entry::submenu("Pop out", Vec::new());
+    let labels = labels_entry(cx, &facts.source_id);
     let audio = facts.audio.map(|on| {
         let source_id = facts.source_id.clone();
         Entry::item("Audio", move || {
@@ -390,7 +436,7 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
         let into = nested.clone();
         let open = nested.clone();
         let studio = cx.studio;
-        let mut list = vec![properties, filters, pop_out, Entry::Sep];
+        let mut list = vec![properties, filters, labels, pop_out, Entry::Sep];
         list.extend(audio);
         list.extend([
             Entry::item("Add source…", move || cx.add_source(into.clone()))
@@ -405,7 +451,7 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
     }
     // A source with no picture (5.2.9).
     if !many && !facts.picture {
-        let mut list = vec![properties, filters, Entry::Sep];
+        let mut list = vec![properties, filters, labels, Entry::Sep];
         if let Some(audio) = audio {
             list.extend([audio, Entry::Sep]);
         }
@@ -425,7 +471,7 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
         if let Some(audio) = audio {
             list.extend([audio, Entry::Sep]);
         }
-        list.extend([properties, filters, pop_out, Entry::Sep]);
+        list.extend([properties, filters, labels, pop_out, Entry::Sep]);
     }
     let layer = |label: &str, layer: Layer| {
         let facts = Rc::clone(&facts);

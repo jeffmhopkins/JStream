@@ -9,6 +9,8 @@ use crate::menu::{ContextMenu, Menus};
 use crate::panels::AddSource;
 use crate::panels::add_source::AddSourceDialog;
 use crate::panels::filters::{AddFilter, FilterDialogs, FilterSettings};
+use crate::panels::inspector::Folds;
+use crate::panels::labels::LabelManager;
 use crate::panels::source_properties::{PropertiesDialog, SourceProperties};
 use crate::session::{Session, engine_url_for_page};
 use crate::store::Studio;
@@ -204,6 +206,40 @@ fn ConnectForm(
     }
 }
 
+/// How long a toast shows, in milliseconds (spec-workspace.md 6.7.1).
+const TOAST_MS: u64 = 4_500;
+
+/// The toast: one confirmation at a time, bottom centre, gone after [`TOAST_MS`]. A new
+/// one replaces it and restarts the time. Failures stay in the problem bar instead,
+/// until dismissed.
+#[component]
+fn Toast() -> impl IntoView {
+    let studio = expect_context::<Studio>();
+    Effect::new(move |_| {
+        let Some((shown, _)) = studio.toast.get() else {
+            return;
+        };
+        set_timeout(
+            move || {
+                if studio
+                    .toast
+                    .try_with_untracked(|t| t.as_ref().map(|(n, _)| *n))
+                    .flatten()
+                    == Some(shown)
+                {
+                    studio.toast.set(None);
+                }
+            },
+            std::time::Duration::from_millis(TOAST_MS),
+        );
+    });
+    move || {
+        studio.toast.get().map(|(_, text)| {
+            view! { <div class="toast" role="status">{text}</div> }
+        })
+    }
+}
+
 /// The workspace: the header bar over the dock zones and the preview canvas
 /// (`workspace.rs`). The dock is the browser's kept one, or the Editing layout.
 #[component]
@@ -214,6 +250,8 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
     provide_context(AddSourceDialog::new());
     provide_context(PropertiesDialog::new());
     provide_context(FilterDialogs::new());
+    provide_context(Folds::restore());
+    provide_context(LabelManager::new());
     view! {
         <div class="shell">
             <Header info=info disconnect=disconnect />
@@ -224,6 +262,7 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
                 </div>
             })}
             <Workspace />
+            <Toast />
             <AddSource />
             <SourceProperties />
             <AddFilter />

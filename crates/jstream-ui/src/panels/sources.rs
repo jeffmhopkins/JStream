@@ -1,7 +1,9 @@
 //! The Scene objects panel (spec-panels.md 2): the selected scene's items, top of the
 //! stack first, under the `In “<scene>”, top to bottom` caption and the search box and
-//! favourites filter. Each row shows its source's type icon and name (in italics when
-//! the source is placed in other scenes too), a visibility eye and a favourite star.
+//! favourites and labels filter. Each row shows its source's type icon and name (in
+//! italics when the source is placed in other scenes too), the chips of its labels, a
+//! visibility eye, the labels popover and a favourite star. The label manager opens over
+//! the rows (`labels.rs`).
 //! A click selects an item (Shift adds or takes it out), a double click opens its
 //! Properties dialog, F2 renames its source in place and Del removes it from the scene;
 //! rows are reordered by dragging them (`item.reorder`). A right-click on a row opens the
@@ -18,10 +20,13 @@ use crate::menu::{Entry, Menus};
 use crate::panels::add_source::{AddSourceDialog, type_label};
 use crate::panels::confirm::{Confirm, Pending};
 use crate::panels::inspector::is_shared;
+use crate::panels::labels::{LabelChips, LabelEditor, LabelManager, LabelPicker, carried};
 use crate::panels::scenes::RenameField;
 use crate::panels::tree::{Filter, Reorder, SearchBar, Side, Star, dropped_at};
 use crate::store::{Collection, Studio, apply, plan_delete, plan_summary};
-use jstream_control::protocol::{DeleteTarget, Edit, ItemId, SceneId, SourceId, SourceKind};
+use jstream_control::protocol::{
+    DeleteTarget, Edit, ItemId, LabelId, SceneId, SourceId, SourceKind,
+};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 
@@ -37,10 +42,28 @@ struct Row {
     /// Whether the source is placed in other scenes too.
     shared: bool,
     favourite: bool,
+    /// The labels the source carries, for the filter. The row's chips follow the
+    /// collection themselves, so a label put on doesn't rebuild the row and close its
+    /// popover.
+    label_ids: Vec<LabelId>,
+}
+
+impl Row {
+    /// What rebuilds the row when it changes: everything but its labels.
+    fn key(&self) -> (ItemId, String, &'static str, bool, bool, bool) {
+        (
+            self.item_id.clone(),
+            self.name.clone(),
+            self.icon,
+            self.visible,
+            self.shared,
+            self.favourite,
+        )
+    }
 }
 
 /// The icon of a source of this kind: its type's, the scene icon for a nested scene.
-fn icon_of(kind: Option<&SourceKind>) -> &'static str {
+pub(crate) fn icon_of(kind: Option<&SourceKind>) -> &'static str {
     match kind {
         Some(SourceKind::Builtin { kind }) => type_label(kind).map_or("image", |(_, icon)| icon),
         Some(SourceKind::Scene { .. }) => "layers",
@@ -67,6 +90,7 @@ fn rows(collection: &Collection, scene_id: &SceneId) -> Vec<Row> {
                 visible: item.visible,
                 shared: is_shared(collection, item),
                 favourite: source.is_some_and(|s| s.meta.favourite),
+                label_ids: source.map(|s| s.meta.labels.clone()).unwrap_or_default(),
             }
         })
         .collect()
@@ -85,6 +109,7 @@ pub fn Sources() -> impl IntoView {
     let item_cx = item_menu::Context::from_page();
     let filter = Filter::new();
     let reorder = Reorder::new();
+    let manager = use_context::<LabelManager>();
 
     let scene = move || studio.selection.with(|s| s.scene.clone());
     let scene_name = move || {
@@ -104,7 +129,7 @@ pub fn Sources() -> impl IntoView {
     let shown_rows = move || {
         all_rows()
             .into_iter()
-            .filter(|row| filter.shows(&row.name, row.favourite))
+            .filter(|row| filter.shows(&row.name, row.favourite, &row.label_ids))
             .collect::<Vec<_>>()
     };
 
@@ -170,7 +195,18 @@ pub fn Sources() -> impl IntoView {
             visible,
             shared,
             favourite,
+            ..
         } = row;
+        let labels = {
+            let id = source_id.clone();
+            Signal::derive(move || {
+                studio.collection.with(|c| {
+                    c.as_ref()
+                        .and_then(|c| Some(carried(c, &c.source(&id)?.meta.labels)))
+                        .unwrap_or_default()
+                })
+            })
+        };
         let key = item_id.to_string();
         let selected = {
             let id = item_id.clone();
@@ -319,6 +355,8 @@ pub fn Sources() -> impl IntoView {
         let shown = name.clone();
         let eye_label = format!("Show or hide {name}");
         let star_name = name.clone();
+        let picker_name = name.clone();
+        let picker_source = source_id.clone();
         view! {
             <li
                 class="row tree-row"
@@ -347,6 +385,7 @@ pub fn Sources() -> impl IntoView {
                 >
                     <RenameField value=name.clone() done=rename.clone() />
                 </Show>
+                <LabelChips labels=labels />
                 <button
                     type="button"
                     class="hov tree-tool eye"
@@ -358,6 +397,7 @@ pub fn Sources() -> impl IntoView {
                 >
                     <Icon name=if visible { "eye" } else { "eye-off" } size=14 />
                 </button>
+                <LabelPicker source_id=picker_source name=picker_name />
                 <Star name=star_name on=Signal::stored(favourite) toggle=toggle_favourite />
             </li>
         }
@@ -396,7 +436,8 @@ pub fn Sources() -> impl IntoView {
     view! {
         <section class="panel sources-panel tree-panel" on:contextmenu=on_context>
             <h2>"Sources"</h2>
-            <SearchBar what="objects" filter=filter />
+            <SearchBar what="objects" filter=filter labels=true />
+            {move || manager.is_some_and(|m| m.shown.get()).then(|| view! { <LabelEditor /> })}
             <Confirm pending=pending confirm=confirm_delete />
             <Show
                 when=move || scene().is_some()
@@ -412,7 +453,7 @@ pub fn Sources() -> impl IntoView {
                     on:pointerup=move |_| reorder.up(drop)
                     on:pointercancel=move |_| reorder.cancel()
                 >
-                    <For each=shown_rows key=|row| row.clone() children=row />
+                    <For each=shown_rows key=Row::key children=row />
                 </ul>
                 {move || {
                     let none = all_rows().is_empty();
