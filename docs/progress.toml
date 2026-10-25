@@ -536,8 +536,8 @@ id = "V4"
 milestone = "M1b"
 title = "Scene filter chains and item effects"
 status = "review"
-prs = [802, 813]
-note = "ADR-0065 designs a video chain owned by a scene or by one placement, and ADR-0068 puts item effects in v1 (#529). In review into wave/m1-5: a vignette kind (#802) and the protocol part, the scene and item owners at 0.43 (#813), which the engine refuses until built; then the graph, core and render, and the UI's scene filters (FL-06) and effects"
+prs = [802, 813, 815]
+note = "ADR-0065 designs a video chain owned by a scene or by one placement, and ADR-0068 puts item effects in v1 (#529). In review into wave/m1-5: a vignette kind (#802), the protocol part, the scene and item owners at 0.43 (#813), and the graph and mock holding them at collection schema 2 (#815), which the engine refuses until rendered; then core and render, and the UI's scene filters (FL-06) and effects"
 needs = ["build"]
 
 [[item]]
