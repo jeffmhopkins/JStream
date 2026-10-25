@@ -167,9 +167,14 @@ impl ControlPlane {
         }
     }
 
-    /// The engine rate and block size a monitor is built for.
-    pub(crate) fn monitor_config(&self) -> (u32, usize) {
-        (self.sample_rate, self.block_frames)
+    /// The mixer's sample rate.
+    pub(crate) fn sample_rate(&self) -> u32 {
+        self.sample_rate
+    }
+
+    /// Frames per mixer block.
+    pub(crate) fn block_frames(&self) -> usize {
+        self.block_frames
     }
 
     /// This mixer's tag.
