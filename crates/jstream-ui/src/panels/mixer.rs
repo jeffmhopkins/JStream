@@ -1,6 +1,7 @@
-//! The audio mixer (ADR-0028): a strip per audio source with its meter, fader, mute and
-//! routing, and a strip per bus with its meter, fader and mute; the master's strip adds
-//! its loudness and true peak. Levels come from `meters.tick`.
+//! The audio mixer (ADR-0028), after the prototype's (spec-panels.md 8): the master card
+//! with its loudness and true peak, the channels folded under it, a row per audio source
+//! with its meter, fader, dB field, mute and routing, and, folded under Buses, a strip
+//! per bus with its meter, fader and mute. Levels come from `meters.tick`.
 //!
 //! A fader shows the value under the pointer while it is dragged and sends one edit when
 //! it is let go (or on each key press), so a drag is one undo step. Hearing the fader
@@ -13,6 +14,8 @@
 
 use crate::app::SessionContext;
 use crate::panels::confirm::{Confirm, Pending};
+use crate::panels::inspector::Fold;
+use crate::panels::number::NumberField;
 use crate::store::plan_summary;
 use futures_util::StreamExt;
 use jstream_control::protocol::{
@@ -419,14 +422,56 @@ impl MeterBank {
 
 /// A loudness reading in LUFS for the master strip, or a dash before there is one.
 pub fn format_lufs(value: Option<Finite32>) -> String {
-    value.map_or_else(|| "–".into(), |v| format!("{:.1}", v.get()))
+    value.map_or_else(|| "–".into(), |v| minus(format!("{:.1}", v.get())))
+}
+
+/// A number with a true minus sign, as the prototype writes them.
+fn minus(text: String) -> String {
+    text.replace('-', "\u{2212}")
 }
 
 /// The master's true peak in dBTP: the louder channel.
 pub fn format_true_peak(true_peak: Option<[f32; 2]>) -> String {
-    match true_peak.and_then(|tp| level_to_dbfs(tp[0].max(tp[1]))) {
-        Some(dbtp) => format!("{dbtp:.1} dBTP"),
+    match true_peak_dbtp(true_peak) {
+        Some(dbtp) => minus(format!("{dbtp:.1} dBTP")),
         None => "– dBTP".into(),
+    }
+}
+
+/// The loudness the master card's marker shows, in LUFS: the usual target for streams.
+pub const LOUDNESS_TARGET_LUFS: f32 = -14.0;
+
+/// The quietest and loudest the master card's loudness bar shows, in LUFS. The target
+/// sits at 70% of it, where the prototype draws its marker.
+const LOUDNESS_RANGE: (f32, f32) = (-60.0, 6.0);
+
+/// How much of the master card's loudness bar a reading fills, from 0 to 1.
+pub fn loudness_fraction(lufs: f32) -> f32 {
+    let (floor, top) = LOUDNESS_RANGE;
+    ((lufs - floor) / (top - floor)).clamp(0.0, 1.0)
+}
+
+/// The master's true peak in dBTP, the louder channel, if it isn't silent.
+pub fn true_peak_dbtp(true_peak: Option<[f32; 2]>) -> Option<f32> {
+    true_peak.and_then(|tp| level_to_dbfs(tp[0].max(tp[1])))
+}
+
+/// The note beside the master's true peak, and whether it warns: over 0 dBTP clips on
+/// the way out.
+pub fn true_peak_note(dbtp: Option<f32>) -> (&'static str, bool) {
+    match dbtp {
+        Some(dbtp) if dbtp > 0.0 => ("over 0 dBTP: add a true-peak limiter", true),
+        Some(_) => ("safe", false),
+        None => ("", false),
+    }
+}
+
+/// "1 channel", "3 channels".
+pub fn channel_count(n: usize) -> String {
+    if n == 1 {
+        "1 channel".into()
+    } else {
+        format!("{n} channels")
     }
 }
 
@@ -597,10 +642,21 @@ pub fn Mixer() -> impl IntoView {
             .snapshot
             .with(|s| s.as_ref().is_some_and(|s| s.channels.is_empty()))
     };
+    // The channels fold under the master, folded at first (spec-panels.md M1).
+    let open = RwSignal::new(false);
+    let bus_count = Signal::derive(move || {
+        let n = panel
+            .snapshot
+            .with(|s| s.as_ref().map_or(0, |s| s.buses.len()));
+        if n == 1 {
+            "1 bus".to_owned()
+        } else {
+            format!("{n} buses")
+        }
+    });
 
     view! {
         <section class="mixer-panel">
-            <h2>"Mixer"</h2>
             {move || {
                 panel
                     .problem
@@ -617,29 +673,114 @@ pub fn Mixer() -> impl IntoView {
                         }
                     })
             }}
-            <div class="mixer-columns">
-                <div class="mixer-channels">
-                    <h3>"Sources"</h3>
-                    <Show when=no_channels>
-                        <p class="placeholder">"No audio sources. Add an audio input, desktop audio or application audio source."</p>
-                    </Show>
-                    <ul class="strips">
-                        <For each=channel_ids key=|id| id.clone() let:source_id>
-                            <ChannelStrip panel=panel source_id=source_id />
-                        </For>
-                    </ul>
-                </div>
-                <div class="mixer-buses">
-                    <h3>"Buses"</h3>
-                    <ul class="strips">
-                        <For each=bus_ids key=|id| id.clone() let:bus_id>
-                            <BusStrip panel=panel bus_id=bus_id />
-                        </For>
-                    </ul>
-                    <NewBusForm panel=panel />
-                </div>
+            <MasterCard panel=panel open=open />
+            <div class="mix-channels" id="mix-channels" hidden=move || !open.get()>
+                <Show when=no_channels>
+                    <p class="placeholder">"No audio sources. Add an audio input, desktop audio or application audio source."</p>
+                </Show>
+                <ul class="mix-rows" aria-label="Channels">
+                    <For each=channel_ids key=|id| id.clone() let:source_id>
+                        <ChannelStrip panel=panel source_id=source_id />
+                    </For>
+                </ul>
             </div>
+            <Fold title="Buses" open=false hint=bus_count>
+                <ul class="strips">
+                    <For each=bus_ids key=|id| id.clone() let:bus_id>
+                        <BusStrip panel=panel bus_id=bus_id />
+                    </For>
+                </ul>
+                <NewBusForm panel=panel />
+            </Fold>
         </section>
+    }
+    .into_any()
+}
+
+/// The master card (spec-panels.md M3): the fold button over the channels with their
+/// count, the monitor and program FX buttons the engine can't serve yet, the short-term
+/// loudness against the target, and the true peak.
+#[component]
+fn MasterCard(panel: Panel, open: RwSignal<bool>) -> AnyView {
+    let count = move || {
+        channel_count(
+            panel
+                .snapshot
+                .with(|s| s.as_ref().map_or(0, |s| s.channels.len())),
+        )
+    };
+    let master = move || panel.meters.with(|m| m.master);
+    let short = move || {
+        master()
+            .loudness
+            .and_then(|l| l.short_term)
+            .map(Finite32::get)
+    };
+    let fill = move || format!("{:.1}%", short().map_or(0.0, loudness_fraction) * 100.0);
+    let target = format!("{:.1}%", loudness_fraction(LOUDNESS_TARGET_LUFS) * 100.0);
+    let loudness_title = move || {
+        let l = master().loudness.unwrap_or_default();
+        format!(
+            "Momentary {} · short-term {} · integrated {} LUFS",
+            format_lufs(l.momentary),
+            format_lufs(l.short_term),
+            format_lufs(l.integrated),
+        )
+    };
+    let dbtp = move || true_peak_dbtp(master().true_peak);
+    let over = move || true_peak_note(dbtp()).1;
+    view! {
+        <div class="master-card" role="group" aria-label="Master">
+            <div class="master-head">
+                <button
+                    class="master-fold"
+                    aria-expanded=move || open.get().to_string()
+                    aria-controls="mix-channels"
+                    title="Show or hide the channels feeding the master"
+                    on:click=move |_| open.update(|o| *o = !*o)
+                >
+                    <span class="caret" aria-hidden="true">{move || if open.get() { "▾" } else { "▸" }}</span>
+                    <span class="master-name">"Master · program output"</span>
+                    <span class="master-count">{count}</span>
+                </button>
+                <button
+                    class="ghost-button"
+                    title="Starts the integrated loudness over"
+                    on:click=move |_| panel.act(Action::AudioResetLoudness {})
+                >
+                    "Reset"
+                </button>
+                <button
+                    class="ghost-button"
+                    disabled
+                    title="What your headphones hear: the engine has no monitor output yet (decision D22)"
+                >
+                    "Hear: after FX"
+                </button>
+                <button
+                    class="fx-button"
+                    disabled
+                    title="Filters on the program output: the master chain isn't built yet (FL-07)"
+                >
+                    "FX 0"
+                </button>
+            </div>
+            <div class="master-row">
+                <span class="master-label">"Loudness"</span>
+                <div class="level-bar" title=loudness_title aria-hidden="true">
+                    <div class="level-fill" style:width=fill></div>
+                    <div class="level-target" title="Target" style:left=target></div>
+                </div>
+                <span class="master-value mono" role="status" title=loudness_title>
+                    {move || format!("{} LUFS", format_lufs(master().loudness.and_then(|l| l.short_term)))}
+                </span>
+            </div>
+            <div class="master-row" class:over=over>
+                <span class="master-label">"True peak"</span>
+                <span class="master-note">{move || true_peak_note(dbtp()).0}</span>
+                <span class="master-value mono">{move || format_true_peak(master().true_peak)}</span>
+            </div>
+        </div>
     }
     .into_any()
 }
@@ -729,6 +870,66 @@ where
         >
             {move || format_gain(shown())}
         </button>
+    }
+    .into_any()
+}
+
+/// A channel's gain: the console-taper fader and the prototype's dB field (M4), the
+/// field showing the fader's value while it is dragged. Either sends one edit through
+/// `commit`.
+fn channel_gain<Fut>(
+    label: impl Fn() -> String + Copy + Send + Sync + 'static,
+    gain: impl Fn() -> f32 + Copy + Send + Sync + 'static,
+    problem: RwSignal<Option<String>>,
+    commit: impl Fn(f32) -> Fut + Copy + Send + Sync + 'static,
+) -> AnyView
+where
+    Fut: Future<Output = Result<(), String>> + 'static,
+{
+    let dragging = RwSignal::new(None::<f32>);
+    let shown = move || dragging.get().unwrap_or_else(gain);
+    let send = move |db: f32| {
+        dragging.set(Some(db));
+        let done = commit(db);
+        spawn_local(async move {
+            let outcome = done.await;
+            dragging.try_set(None);
+            problem.try_set(outcome.err());
+        });
+    };
+    let position = |event: &leptos::ev::Event| {
+        position_to_db(event_target_value(event).parse::<u16>().unwrap_or(0))
+    };
+    let value = Signal::derive(move || Some(f64::from(shown())));
+    let named = Signal::derive(move || format!("{} gain", label()));
+    view! {
+        <input
+            type="range"
+            class="fader"
+            min="0"
+            max=FADER_STEPS.to_string()
+            step="1"
+            aria-label=move || format!("{} fader", label())
+            aria-valuetext=move || format_gain(shown())
+            prop:value=move || db_to_position(shown()).to_string()
+            on:input=move |event| dragging.set(Some(position(&event)))
+            on:change=move |event| send(position(&event))
+        />
+        <NumberField
+            named=named
+            unit="dB"
+            value=value
+            step=0.5
+            decimals=1
+            fixed=true
+            min=f64::from(MIN_GAIN_DB)
+            max=f64::from(MAX_GAIN_DB)
+            send=move |db: f64| {
+                // The field keeps to the gain range at one decimal place.
+                send(db as f32);
+                true
+            }
+        />
     }
     .into_any()
 }
@@ -828,14 +1029,14 @@ fn ChannelStrip(panel: Panel, source_id: SourceId) -> AnyView {
     };
 
     view! {
-        <li class="strip" class:off=move || !enabled()>
+        <li class="mix-row" class:off=move || !enabled()>
             <span class="strip-name" title=move || id.with_value(ToString::to_string)>{name}</span>
             <Show
                 when=move || !is_scene()
                 fallback=|| view! { <span class="hint">"Nested scene: follows its own sources"</span> }
             >
                 {meter(reading)}
-                {fader(
+                {channel_gain(
                     name,
                     move || audio().map_or(0.0, |a| a.gain_db.get()),
                     panel.problem,
@@ -957,8 +1158,8 @@ fn SendRow(panel: Panel, source_id: SourceId, bus_id: BusId) -> AnyView {
     .into_any()
 }
 
-/// One bus's strip: its meter, fader and mute, renaming and deleting; the master's adds
-/// its loudness.
+/// One bus's strip: its meter, fader and mute, renaming and deleting. The master's
+/// loudness is on the master card.
 #[component]
 fn BusStrip(panel: Panel, bus_id: BusId) -> AnyView {
     let bus = {
@@ -1064,8 +1265,6 @@ fn BusStrip(panel: Panel, bus_id: BusId) -> AnyView {
             panel.problem.try_set(outcome.err());
         });
     };
-    let master = move || panel.meters.with(|m| m.master);
-
     view! {
         <li class="strip" class:master=is_master>
             <Show
@@ -1094,29 +1293,6 @@ fn BusStrip(panel: Panel, bus_id: BusId) -> AnyView {
                 {(!is_master).then(|| view! { <button on:click=ask_delete>"Delete"</button> })}
             </details>
             <Confirm pending=pending confirm=confirm_delete />
-            {is_master.then(|| view! {
-                <p class="loudness" role="status">
-                    {move || {
-                        let loudness = master().loudness.unwrap_or_default();
-                        format!(
-                            "M {}  S {}  I {} LUFS",
-                            format_lufs(loudness.momentary),
-                            format_lufs(loudness.short_term),
-                            format_lufs(loudness.integrated),
-                        )
-                    }}
-                    "  ·  "
-                    {move || format_true_peak(master().true_peak)}
-                    " "
-                    <button
-                        class="link"
-                        title="Starts the integrated loudness over"
-                        on:click=move |_| panel.act(Action::AudioResetLoudness {})
-                    >
-                        "Reset"
-                    </button>
-                </p>
-            })}
         </li>
     }
     .into_any()
@@ -1178,9 +1354,10 @@ fn NewBusForm(panel: Panel) -> AnyView {
 #[cfg(test)]
 mod tests {
     use super::{
-        FADER_STEPS, HOLD_TICKS, Hold, MeterBank, apply_plan, checked_gain, db_to_position, edit,
-        format_gain, format_lufs, format_true_peak, load, meter_fraction, next_bus_id,
-        plan_bus_delete, position_to_db,
+        FADER_STEPS, HOLD_TICKS, Hold, LOUDNESS_TARGET_LUFS, MeterBank, apply_plan, channel_count,
+        checked_gain, db_to_position, edit, format_gain, format_lufs, format_true_peak, load,
+        loudness_fraction, meter_fraction, next_bus_id, plan_bus_delete, position_to_db,
+        true_peak_dbtp, true_peak_note,
     };
     use jstream_control::protocol::{
         AudioFollow, Batch, BusId, BusMeter, Call, CallResult, DeleteTarget, Edit, Finite32, Hello,
@@ -1545,6 +1722,28 @@ mod tests {
     }
 
     #[test]
+    fn the_master_card_reads_loudness_and_true_peak() {
+        // The target sits where the prototype draws its marker.
+        let target = loudness_fraction(LOUDNESS_TARGET_LUFS);
+        assert!((target - 0.7).abs() < 0.01, "{target}");
+        assert_eq!(loudness_fraction(-80.0), 0.0);
+        assert_eq!(loudness_fraction(10.0), 1.0);
+        assert_eq!(true_peak_dbtp(None), None);
+        assert_eq!(true_peak_dbtp(Some([0.0, 0.0])), None);
+        let half = true_peak_dbtp(Some([0.1, 0.5])).expect("louder channel");
+        assert!((half + 6.02).abs() < 0.01, "{half}");
+        assert_eq!(true_peak_note(Some(-1.0)), ("safe", false));
+        assert_eq!(
+            true_peak_note(Some(0.4)),
+            ("over 0 dBTP: add a true-peak limiter", true)
+        );
+        assert_eq!(true_peak_note(None), ("", false));
+        assert_eq!(channel_count(1), "1 channel");
+        assert_eq!(channel_count(0), "0 channels");
+        assert_eq!(channel_count(3), "3 channels");
+    }
+
+    #[test]
     fn meters_fill_from_the_floor_to_full_scale() {
         assert_eq!(meter_fraction(0.0), 0.0);
         assert_eq!(meter_fraction(-0.5), 0.0);
@@ -1610,9 +1809,9 @@ mod tests {
         assert_eq!(reading.rms, [0.25, 0.125]);
         assert!(reading.clipped());
         assert_eq!(bank.buses.len(), 2);
-        assert_eq!(format_true_peak(bank.master.true_peak), "-6.0 dBTP");
+        assert_eq!(format_true_peak(bank.master.true_peak), "\u{2212}6.0 dBTP");
         let loudness = bank.master.loudness.expect("loudness");
-        assert_eq!(format_lufs(loudness.momentary), "-23.0");
+        assert_eq!(format_lufs(loudness.momentary), "\u{2212}23.0");
         assert_eq!(format_lufs(loudness.integrated), "–");
 
         // A quieter tick keeps a source's hold.

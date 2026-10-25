@@ -935,10 +935,9 @@ note = "#364 landed with wave/m1-2 (#545); its Windows run passed (#366); choosi
 id = "X1"
 milestone = "M3"
 title = "Full 3D transforms and WGSL effect packs"
-status = "review"
+status = "done"
 prs = [359, 368, 611, 622, 624, 643, 687, 629]
-note = "effect packs #368 landed with wave/m1-2 (#545); 3D transforms part 1, the drawn polygon and unplace (#611), part 2, the compositor draw (#622), part 2b, mips and anisotropic sampling (#624), part 2c, mips rebuilt once per source and frame (#643), and the mip chains built from the crop and rebuilt once per change (#687), landed in wave/m3-3; part 3, accepting 3D at protocol 0.34 (#629), also in wave/m3-3"
-needs = ["wave"]
+note = "effect packs #368 landed with wave/m1-2 (#545); 3D transforms part 1, the drawn polygon and unplace (#611), part 2, the compositor draw (#622), part 2b, mips and anisotropic sampling (#624), part 2c, mips rebuilt once per source and frame (#643), the mip chains built from the crop and rebuilt once per change (#687), and part 3, accepting 3D at protocol 0.34 (#629), landed with wave/m3-3 (#786)"
 
 [[item]]
 id = "3D1"
@@ -969,27 +968,27 @@ needs = ["build", "hardware"]
 id = "WA1"
 milestone = "M3"
 title = "WASM automation plugins"
-status = "review"
+status = "planned"
 prs = [486, 623, 642, 722, 725]
-note = "WASM host #486 landed with wave/m3-2 (#663); its wall-time deadlines #623, the cap of 50 commands a second #722 and the 1,000-event queue #725 are in wave/m3-3; the wire half #642 (protocol 0.35) is in wave/m3-3 too; the engine side to build"
-needs = ["build", "wave"]
+note = "WASM host #486 landed with wave/m3-2 (#663); its wall-time deadlines #623, the cap of 50 commands a second #722, the 1,000-event queue #725 and the wire half #642 (protocol 0.35) landed with wave/m3-3 (#786); the engine side to build"
+needs = ["build"]
 
 [[item]]
 id = "MAC1"
 milestone = "M3"
 title = "macOS platform crate"
-status = "review"
+status = "planned"
 prs = [511, 513, 533, 543, 554, 566, 570, 583, 586, 589, 599, 608, 618, 625, 639]
-note = "ADR-0063 accepted (#511); crate part 1 (#513); VideoToolbox H.264/HEVC encoder, part 2 (#533); AudioToolbox AAC-LC encoder, part 3 (#543); ScreenCaptureKit display and window capture with the Screen Recording permission check, part 4 (#554); Keychain store for stream keys and OAuth tokens, part 5 (#566); Core Audio devices and input recording, part 6 (#570); Microphone permission check and the daemon's embedded Info.plist, part 7 (#583); Core Audio output playback, part 8 (#586); all landed with wave/m3-2 (#663); in wave/m3-3: the list of processes Core Audio knows, part 9 (#589); desktop and application audio through Core Audio process taps, part 10 (#599); AVFoundation webcams behind the Camera permission, part 11 (#608); VideoToolbox H.264/HEVC decoder on CPU frames (#618); media files through AVFoundation's asset reader (#625); the daemon live on macOS (#639)"
-needs = ["wave", "build"]
+note = "ADR-0063 accepted (#511); crate part 1 (#513); VideoToolbox H.264/HEVC encoder, part 2 (#533); AudioToolbox AAC-LC encoder, part 3 (#543); ScreenCaptureKit display and window capture with the Screen Recording permission check, part 4 (#554); Keychain store for stream keys and OAuth tokens, part 5 (#566); Core Audio devices and input recording, part 6 (#570); Microphone permission check and the daemon's embedded Info.plist, part 7 (#583); Core Audio output playback, part 8 (#586); all landed with wave/m3-2 (#663); with wave/m3-3 (#786): the list of processes Core Audio knows, part 9 (#589); desktop and application audio through Core Audio process taps, part 10 (#599); AVFoundation webcams behind the Camera permission, part 11 (#608); VideoToolbox H.264/HEVC decoder on CPU frames (#618); media files through AVFoundation's asset reader (#625); the daemon live on macOS (#639); the rest of the crate to build"
+needs = ["build"]
 
 [[item]]
 id = "LNX1"
 milestone = "M3"
 title = "Linux codec path and platform crate"
 status = "review"
-prs = [481, 490, 509, 510, 572, 598, 606, 652, 593]
-note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); these landed with wave/m3-2 (#663); in wave/m3-3: ALSA audio input and output (#572); portal restore tokens per source (#598); DMA-BUF capture frames imported into Vulkan (#606); VA-API H.264 encode from the Vulkan device's NV12 encode targets (#652); PipeWire audio input, output and loopback (#593); further parts are in review into wave/m3-4; the rest of the codec path to build"
+prs = [481, 490, 509, 510, 572, 598, 606, 652, 593, 612]
+note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); these landed with wave/m3-2 (#663); with wave/m3-3 (#786): ALSA audio input and output (#572); portal restore tokens per source (#598); DMA-BUF capture frames imported into Vulkan (#606); VA-API H.264 encode from the Vulkan device's NV12 encode targets (#652); PipeWire audio input, output and loopback (#593); in wave/m3-4: PipeWire processing on the real-time data loop (#612); further parts are in review into wave/m3-4; the rest of the codec path to build"
 needs = ["wave", "build"]
 
 [[item]]
@@ -1005,10 +1004,10 @@ needs = ["build"]
 id = "LNX3"
 milestone = "M3"
 title = "AAC-LC encoder in Rust, patent check first (ADR-0061)"
-status = "review"
+status = "planned"
 prs = [508, 518, 723, 727]
-note = "patent check ADR-0062 accepted (#508); encoder and Linux wiring (#518), landed with wave/m3-2 (#663); TNS (#723, more tests #727) in wave/m3-3; intensity stereo later; before the Linux app ships the encoder its licence information must say JStream holds no AAC patent licence and name Via LA (ADR-0062)"
-needs = ["wave", "build"]
+note = "patent check ADR-0062 accepted (#508); encoder and Linux wiring (#518), landed with wave/m3-2 (#663); TNS (#723, more tests #727) landed with wave/m3-3 (#786); intensity stereo later; before the Linux app ships the encoder its licence information must say JStream holds no AAC patent licence and name Via LA (ADR-0062)"
+needs = ["build"]
 
 [[item]]
 id = "F6b"
