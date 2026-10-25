@@ -8,9 +8,9 @@
 use crate::session::Session;
 use jstream_control::ControlError;
 use jstream_control::protocol::{
-    Batch, BusInfo, Call, CallResult, Canvas, DeleteTarget, Edit, Event, ItemId, ItemInfo,
-    KindDescriptor, KindSummary, OutputInfo, Query, QueryResult, Rev, SceneId, SceneInfo,
-    SceneRole, SourceId, SourceInfo, SourceKind,
+    Batch, BusInfo, Call, CallResult, Canvas, DeleteTarget, Edit, Event, FilterChains, FilterOwner,
+    ItemId, ItemInfo, KindDescriptor, KindSummary, OutputId, OutputInfo, Query, QueryResult, Rev,
+    SceneId, SceneInfo, SceneRole, SourceId, SourceInfo, SourceKind,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -32,6 +32,8 @@ pub struct Collection {
     /// Every audio bus, ordered by ID, the master among them: what a `bus` parameter
     /// picks from.
     pub buses: Vec<BusInfo>,
+    /// The master stage's chains, which apply to everything leaving JStream (ADR-0027).
+    pub master: FilterChains,
 }
 
 impl Collection {
@@ -45,6 +47,7 @@ impl Collection {
                 scenes,
                 outputs,
                 buses,
+                master,
                 ..
             } => Some(Collection {
                 rev,
@@ -53,6 +56,7 @@ impl Collection {
                 scenes,
                 outputs,
                 buses,
+                master: master.filters,
             }),
             _ => None,
         }
@@ -66,6 +70,22 @@ impl Collection {
     /// The source with this ID.
     pub fn source(&self, source_id: &SourceId) -> Option<&SourceInfo> {
         self.sources.iter().find(|s| &s.source_id == source_id)
+    }
+
+    /// The output with this ID.
+    pub fn output(&self, output_id: &OutputId) -> Option<&OutputInfo> {
+        self.outputs.iter().find(|o| &o.output_id == output_id)
+    }
+
+    /// The chains `owner` has, or `None` if it doesn't exist or reports none (an item).
+    pub fn chains(&self, owner: &FilterOwner) -> Option<&FilterChains> {
+        match owner {
+            FilterOwner::Source { source_id } => self.source(source_id).map(|s| &s.filters),
+            FilterOwner::Master => Some(&self.master),
+            FilterOwner::Output { output_id } => self.output(output_id).map(|o| &o.filters),
+            FilterOwner::Scene { scene_id } => self.scene(scene_id).map(|s| &s.filters),
+            _ => None,
+        }
     }
 
     /// The item with this ID, with the scene it is in.

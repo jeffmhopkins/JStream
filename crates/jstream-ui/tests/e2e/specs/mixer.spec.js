@@ -19,7 +19,9 @@ test('the master card folds its channels, whose dB fields set the gain', async (
   const card = mixer(page).getByRole('group', { name: 'Master' });
   await expect(card.locator('.master-count')).toHaveText('2 channels');
   await expect(card.getByRole('button', { name: 'Hear: after FX' })).toBeDisabled();
-  await expect(card.getByRole('button', { name: 'FX 0' })).toBeDisabled();
+  // FX shows the program output's chain, the master chain, in the Filters panel.
+  await card.getByRole('button', { name: 'FX 0' }).click();
+  await expect(page.locator('.filters-panel .filters-title')).toHaveText('Program output');
 
   // Folded at first.
   const channels = mixer(page).getByRole('list', { name: 'Channels' });

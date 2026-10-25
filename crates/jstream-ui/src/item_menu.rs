@@ -11,6 +11,7 @@ use crate::canvas::transform::{nudge, with_box};
 use crate::dock::PanelId;
 use crate::menu::Entry;
 use crate::panels::add_source::{AddSourceDialog, has_picture};
+use crate::panels::filters::FilterDialogs;
 use crate::panels::source_properties::{self, PropertiesDialog};
 use crate::store::{Collection, Studio};
 use crate::workspace::DockState;
@@ -213,6 +214,7 @@ pub struct Context {
     adder: Option<AddSourceDialog>,
     props: Option<PropertiesDialog>,
     dock: Option<DockState>,
+    filters: Option<FilterDialogs>,
 }
 
 impl Context {
@@ -224,6 +226,7 @@ impl Context {
             adder: use_context(),
             props: use_context(),
             dock: use_context(),
+            filters: use_context(),
         })
     }
 
@@ -262,6 +265,9 @@ impl Context {
     /// chains.
     pub fn filters(self, item_id: ItemId) {
         self.studio.select_item(Some(item_id));
+        if let Some(filters) = self.filters {
+            filters.unpick();
+        }
         if let Some(dock) = self.dock {
             dock.0.update(|d| d.show(PanelId::Filters));
         }

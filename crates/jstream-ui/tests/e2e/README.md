@@ -153,8 +153,20 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   edit and updates the summary. With one setting refused late: a refusal that arrives
   after its row was closed, and one after the Filter settings dialog was cancelled,
   each in the problem bar.
+- **Program and output chains** (`output-chains.spec.js`): the Outputs panel's Program
+  output row ("master", "FX 0"), a recording's row under it with its state and FX
+  button, and the footnote; the program's FX showing the master chain in the Filters
+  panel from behind the Transform tab, with its note, its one audio chain and the note
+  on video, the output's FX its own chain, and selecting an item going back to its
+  source's. With Gain and Sharpen described: Add filter on the master offering only
+  Gain, with its foot, as one edit that the program's FX and the Mixer's count; the new
+  filter opening in place, a setting there as one more edit; the output's chain adding
+  its own Gain, counted on its FX button alone, whose eye and × edit the output's chain,
+  not the master's; and the master's filter in the Filter settings dialog, whose Remove
+  deletes it.
 - **Mixer** (`mixer.spec.js`, on the Audio mixer tab): the master card counting the
-  seed's two channels, its Hear and FX buttons disabled, and its button unfolding the
+  seed's two channels, its Hear button disabled, its "FX 0" showing the program
+  output's chain in the Filters panel, and its button unfolding the
   channel rows by name and folding them again; a typed gain in the Mic's dB field and
   its + stepper each as one edit, with the fader following; with `meterTicks`, the
   short-term loudness and its tooltip, the bar's fill against the target, and the true

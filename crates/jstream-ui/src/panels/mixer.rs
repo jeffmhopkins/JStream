@@ -698,10 +698,30 @@ pub fn Mixer() -> impl IntoView {
 }
 
 /// The master card (spec-panels.md M3): the fold button over the channels with their
-/// count, the monitor and program FX buttons that aren't built yet, the short-term
-/// loudness against the target, and the true peak.
+/// count, the monitor button that isn't built yet, the program output's FX button, which
+/// shows the master chain in the Filters panel (FL-07), the short-term loudness against
+/// the target, and the true peak.
 #[component]
 fn MasterCard(panel: Panel, open: RwSignal<bool>) -> AnyView {
+    let fx = use_context::<crate::panels::filters::FilterDialogs>();
+    let dock = use_context::<crate::workspace::DockState>();
+    let fx_count = {
+        let studio = use_context::<crate::store::Studio>();
+        move || {
+            let chains = studio
+                .and_then(|s| s.collection.with(|c| c.as_ref().map(|c| c.master.clone())))
+                .unwrap_or_default();
+            crate::panels::outputs::fx_label(&chains)
+        }
+    };
+    let show_fx = move |_| {
+        if let Some(fx) = fx {
+            fx.pick(jstream_control::protocol::FilterOwner::Master);
+            if let Some(dock) = dock {
+                dock.0.update(|d| d.show(crate::dock::PanelId::Filters));
+            }
+        }
+    };
     let count = move || {
         channel_count(
             panel
@@ -759,10 +779,11 @@ fn MasterCard(panel: Panel, open: RwSignal<bool>) -> AnyView {
                 </button>
                 <button
                     class="fx-button"
-                    disabled
-                    title="Filters on the program output: the master chain isn't built yet (FL-07)"
+                    disabled=fx.is_none()
+                    title="Filters on the program output"
+                    on:click=show_fx
                 >
-                    "FX 0"
+                    {fx_count}
                 </button>
             </div>
             <div class="master-row">
