@@ -54,13 +54,13 @@ in, and **What's left** lists each unfinished item with the steps it still needs
 | [M1b: Scenes and mixing](ROADMAP.md#m1) | `█████████░` 92% | 36 | 0 | 3 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `█████████░` 91% | 10 | 1 | 0 |
-| [M2: UI](ROADMAP.md#m2) | `████████░░` 82% | 23 | 2 | 3 |
+| [M2: UI](ROADMAP.md#m2) | `█████████░` 86% | 24 | 2 | 2 |
 | [M3: Depth and reach](ROADMAP.md#m3) | `████░░░░░░` 38% | 6 | 3 | 7 |
 
-111 of 130 items are merged; 11 of those still wait on a run on Windows hardware.
+112 of 130 items are merged; 11 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 30 items, by next step: 🔨 build 18, 🌊 its wave lands 2, 🧪 Windows run 8, 👤 maintainer 2</summary>
+<summary><b>What's left</b>: 29 items, by next step: 🔨 build 17, 🌊 its wave lands 2, 🧪 Windows run 8, 👤 maintainer 2</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
@@ -83,9 +83,8 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | E2b | Privacy screen and encoder sharing key | M2 | 🔨 build | on/off privacy covering every output, the encoder owner key and cost reporting (#317) landed with wave/m1-3 (#754); the look setting, the slate and muted sources to build | #317 |
 | C9 | Media file source | M2 | 🔨 build, then 🧪 Windows run | the media file run passed on main (#382) except an MP3's loop seam, a 56 ms gap at each wrap (#445): a fix to build, then a rerun | #245, #322 |
 | K1 | Keyframe scenes, folders, organisation metadata and hotkeys | M2 | 🔨 build | hotkeys #319 landed with wave/m1-2 (#545); organisation metadata #323 landed with wave/m1-3 (#754); keyframe scenes part 1, in the protocol, graph and engine (#720, protocol 0.39), landed with wave/m1-4 (#810); a group's children and the UI follow (#702) | #319, #720 |
-| U6 | Desktop UI as a 1:1 match of the UI prototype | M2 | 🔨 build, then 👤 maintainer | #748; docs/UI-FEATURES.md tracks it row by row. Theme and header (#495), docking (#496), the canvas (#615, #637), the Inspector (#659) and the Transform panel (#664) landed with wave/m1-3 (#754); menus, dialogs and live drag (#766, #747), the Scenes and Scene objects panels (#770), the Filters panel and its dialogs (#785, #788) and the mixer master card (#792) landed with wave/m1-4 (#810); vertical mixer strips (#809) are in review into wave/m1-5; the rest of the mixer and the keyboard batch are still to build. Rows that wait on the engine follow B12, C2b, V4, D9, E2b, K1, X1 and Y4, and on two gaps with no item yet: previews of any scene or source (decision register D36) and the audit log over the protocol (D38); the bundled IBM Plex fonts are a licensing call for the maintainer (WS-02) | #495, #496, #615, #637, #659, #664, #766, #770, #785, #788, #792, #809 |
+| U6 | Desktop UI as a 1:1 match of the UI prototype | M2 | 🔨 build, then 👤 maintainer | #748; docs/UI-FEATURES.md tracks it row by row. Theme and header (#495), docking (#496), the canvas (#615, #637), the Inspector (#659) and the Transform panel (#664) landed with wave/m1-3 (#754); menus, dialogs and live drag (#766, #747), the Scenes and Scene objects panels (#770), the Filters panel and its dialogs (#785, #788) and the mixer master card (#792) landed with wave/m1-4 (#810); vertical mixer strips (#809) are in review into wave/m1-5; the rest of the mixer and the keyboard batch are still to build. Rows that wait on the engine follow B12, V4, D9, E2b, K1, X1 and Y4, and on two gaps with no item yet: previews of any scene or source (decision register D36) and the audit log over the protocol (D38); the bundled IBM Plex fonts are a licensing call for the maintainer (WS-02) | #495, #496, #615, #637, #659, #664, #766, #770, #785, #788, #792, #809 |
 | B12 | Source sizes as runtime state (source.sizes) | M2 | 🔨 build, then 🌊 its wave lands | ADR-0022 decision 4: part 1, the source.sizes query and source.size_changed event with the engine's sizes of stored frames and live sources (#806, protocol 0.40), is in review into wave/m1-5; capture sources' sizes follow (#805); it unblocks crop by dragging (CV-08), size in % (IN-03) and native-size placement | #806 |
-| C2b | Crisp text at any item scale | M2 | 🔨 build | #749: a scaled text item resamples its bitmap; sources don't see their item's scale, so it starts with an agent-tier ADR |  |
 | Y4 | YouTube chat, metadata, health and audience stats | M3 | 🔨 build, then 👤 maintainer | chat reading and the featured message (#363, landed with wave/m1-2, #545); chat preset of the browser source (#375, landed with wave/m1); audience stats in jstream-youtube (#594, landed with wave/m3-2, #663); the engine's stats polling, the youtube.stats event and query, and the quota estimate (#696, protocol 0.38, landed with wave/m1-4, #810); the chat rate waits on the engine polling chat; signed-in features need the OAuth client (ADR-0058) | #363, #375, #594, #696 |
 | CL1 | CLAP plugin host | M3 | 🔨 build, then 🧪 Windows run | parts 1 to 3 merged (wave/m3 landed in #477): the shared-memory contract, the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; the host's Windows run passed in #342; CLAP filters in a source's audio chain, part 4 (#488), is merged into wave/m3-4, and the IPC hardening (#573, for #351) is in review into wave/m3-4; then a live-audio Windows run (new issue once CLAP filters run) | #272, #281, #407, #488, #573 |
 | WA1 | WASM automation plugins | M3 | 🔨 build | WASM host #486 landed with wave/m3-2 (#663); its wall-time deadlines #623, the cap of 50 commands a second #722, the 1,000-event queue #725 and the wire half #642 (protocol 0.35) landed with wave/m3-3 (#786); the engine side to build | #486, #623, #642, #722, #725 |
@@ -226,7 +225,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 </details>
 
 <details>
-<summary><b>M2</b> UI: 23 of 28 merged</summary>
+<summary><b>M2</b> UI: 24 of 28 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -255,9 +254,9 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | B11 | Folders and labels | ✅ merged: #323 landed with wave/m1-3 (#754) | #323 |
 | K1 | Keyframe scenes, folders, organisation metadata and hotkeys | ⏳ planned: hotkeys #319 landed with wave/m1-2 (#545); organisation metadata #323 landed with wave/m1-3 (#754); keyframe scenes part 1, in the protocol, graph and engine (#720, protocol 0.39), landed with wave/m1-4 (#810); a group's children and the UI follow (#702) | #319, #720 |
 | K2 | Keyframe scenes: model and evaluator | ✅ merged | #350 |
-| U6 | Desktop UI as a 1:1 match of the UI prototype | 🔍 in review: #748; docs/UI-FEATURES.md tracks it row by row. Theme and header (#495), docking (#496), the canvas (#615, #637), the Inspector (#659) and the Transform panel (#664) landed with wave/m1-3 (#754); menus, dialogs and live drag (#766, #747), the Scenes and Scene objects panels (#770), the Filters panel and its dialogs (#785, #788) and the mixer master card (#792) landed with wave/m1-4 (#810); vertical mixer strips (#809) are in review into wave/m1-5; the rest of the mixer and the keyboard batch are still to build. Rows that wait on the engine follow B12, C2b, V4, D9, E2b, K1, X1 and Y4, and on two gaps with no item yet: previews of any scene or source (decision register D36) and the audit log over the protocol (D38); the bundled IBM Plex fonts are a licensing call for the maintainer (WS-02) | #495, #496, #615, #637, #659, #664, #766, #770, #785, #788, #792, #809 |
+| U6 | Desktop UI as a 1:1 match of the UI prototype | 🔍 in review: #748; docs/UI-FEATURES.md tracks it row by row. Theme and header (#495), docking (#496), the canvas (#615, #637), the Inspector (#659) and the Transform panel (#664) landed with wave/m1-3 (#754); menus, dialogs and live drag (#766, #747), the Scenes and Scene objects panels (#770), the Filters panel and its dialogs (#785, #788) and the mixer master card (#792) landed with wave/m1-4 (#810); vertical mixer strips (#809) are in review into wave/m1-5; the rest of the mixer and the keyboard batch are still to build. Rows that wait on the engine follow B12, V4, D9, E2b, K1, X1 and Y4, and on two gaps with no item yet: previews of any scene or source (decision register D36) and the audit log over the protocol (D38); the bundled IBM Plex fonts are a licensing call for the maintainer (WS-02) | #495, #496, #615, #637, #659, #664, #766, #770, #785, #788, #792, #809 |
 | B12 | Source sizes as runtime state (source.sizes) | 🔍 in review: ADR-0022 decision 4: part 1, the source.sizes query and source.size_changed event with the engine's sizes of stored frames and live sources (#806, protocol 0.40), is in review into wave/m1-5; capture sources' sizes follow (#805); it unblocks crop by dragging (CV-08), size in % (IN-03) and native-size placement | #806 |
-| C2b | Crisp text at any item scale | ⏳ planned: #749: a scaled text item resamples its bitmap; sources don't see their item's scale, so it starts with an agent-tier ADR |  |
+| C2b | Crisp text at any item scale | ✅ merged: #749: ADR-0073 (agent tier, accepted) draws a source at the density its most enlarged item needs, and the text kind draws at it; built in #781, landed with wave/m1-4 (#810) | #781 |
 
 </details>
 
