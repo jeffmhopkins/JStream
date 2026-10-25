@@ -81,6 +81,12 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   name, not the scene) and Del removing one; selecting an item opens its properties. The mock engine lists no kinds and makes
   no delete plans, so new-kind sources, the properties form's fields and deletes are
   tested natively.
+- **Scene folders** (`folders.spec.js`): New folder from the panel's and a folder's menu,
+  named in place; drags into a folder's middle, out beside a top-level row and before a
+  folder, which a second client follows; folding by the caret at two depths; a search
+  keeping the open, unfoldable folders of a match; a folder refusing to go inside its
+  own child; F2 renaming a folder, and Del deleting an empty one without asking. Deleting
+  a folder that holds anything needs `delete.plan`, so it is tested natively.
 - **Outputs** (`outputs.spec.js`, on the Outputs panel and the header): adding a stream and a recording; a stream can't start
   or go live until its key is set; the key field empties on save and the key never
   appears in the page; go live and end stream; the header's Record starts and stops a

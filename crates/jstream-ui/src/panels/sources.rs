@@ -150,6 +150,7 @@ pub fn Sources() -> impl IntoView {
             let side = match side {
                 Side::Before => Side::After,
                 Side::After => Side::Before,
+                Side::Into => Side::Into,
             };
             dropped_at(&order, &moved.as_str(), &target.as_str(), side)
         });

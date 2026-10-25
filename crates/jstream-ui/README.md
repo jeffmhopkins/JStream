@@ -52,7 +52,7 @@ Contents ([Design](#design) explains the choices):
   and `engine_url_for_page`, the engine URL the connect form offers.
 - **Store** (`store.rs`): `Studio`, the state the scene, sources and properties panels
   share: the collection as `state.get` last reported it (`Collection`, with its buses
-  for the bus picker), the program
+  for the bus picker and its scene folders), the program
   scene, the `Selection`, the source kinds and the kind descriptors read so far, and the
   last failed call, and `keys_changed`, which the outputs panel bumps when a stream key
   is set or cleared. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
@@ -62,7 +62,8 @@ Contents ([Design](#design) explains the choices):
   selected items' entries, which the canvas and the sources list share, with the
   layer moves and canvas arrangements they send, tested natively), `dialog.rs` (`Modal`,
   the modal dialog frame) and `icons.rs` (`Icon`, the prototype's stroke icons).
-- **Panels** (`panels/`): the scene list (`scenes.rs`), the sources list
+- **Panels** (`panels/`): the scene list (`scenes.rs`, with its folders: the rows each
+  level shows and the edits a drop sends are tested natively), the sources list
   (`sources.rs`), what those two share (`tree.rs`: the search box, the favourites
   filter, the star and drag reordering, with the matching and the drop's index tested
   natively), the Inspector (`inspector.rs`: the selected item's box, crop,
@@ -151,17 +152,20 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   canvas edits the same scene and selects the same items, so a click on a box selects
   its row and opens its properties, and every selected item's row is highlighted.
 - **Scenes and sources.** The Scenes and Scene objects panels are the prototype's
-  trees (spec-panels.md 1 and 2), without folders and groups yet. The scene list shows
-  scenes in display order and leaves out groups (ADR-0024), marks the program scene
+  trees (spec-panels.md 1 and 2), without groups yet. The scene list shows each
+  folder level's folders in folder order, then its scenes in display order (ADR-0064),
+  indented by depth, with a caret that folds a folder, and leaves out groups (ADR-0024). It marks the program scene
   "program", and puts a scene on program with `scene.switch` from a hover button. The
   sources list shows the selected scene's items with the top of the stack first, each
   with its source's type icon, in italics when the source is placed in another scene
   too, and an eye that shows or hides it. Each panel has a search box and a filter for
   favourites (the star, `scene.set_meta` or `source.set_meta`), applied in the page;
-  rows drag before or after each other (`scene.reorder`, `item.reorder`, counted in the
-  whole list so a hidden row doesn't shift the index) with pointer events, but not
-  while a filter is on. F2 renames a row in place and Del deletes a scene (through its
-  plan) or removes an item; a double click on an item opens its Properties dialog. New scenes, sources and items get IDs from `fresh_id`, which includes
+  rows drag before or after each other (`scene.reorder`, `folder.reorder`,
+  `item.reorder`, counted in the whole list so a hidden row doesn't shift the index) with
+  pointer events, but not while a filter is on, and a drop on a folder row's middle half
+  moves the row into it (`scene.set_folder`, `folder.set_parent`). A search keeps the
+  folders that hold a match. F2 renames a row in place and Del deletes a scene or a folder (through its
+  plan, or at once for an empty folder) or removes an item; a double click on an item opens its Properties dialog. New scenes, sources and items get IDs from `fresh_id`, which includes
   the session's client ID so two UIs on one engine don't pick the same one. Sources
   are added through the Add source dialog (below). Deleting a scene, or a source
   everywhere, reads `delete.plan` first,
@@ -175,7 +179,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the focus with the arrows, Home and End, and closes on a choice, a press outside,
   Escape or Tab. The canvas opens the empty canvas or margin menu, the scene and
   sources lists their panels' menus, and a scene row its scene's (Show in preview,
-  Rename, New scene and Delete scene work; the rest waits on folders, keyframes,
+  Rename, New scene, New folder and Delete scene work, as do a folder's own menu's; the
+  rest waits on keyframes,
   transitions and the scene Properties dialog). A right-click on an item, on the canvas or its row, selects it
   unless it was selected and opens `item_menu.rs`'s menu for the selection: Properties
   (the Properties dialog), the Audio check (`source.set_audio`), layer order
