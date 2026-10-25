@@ -978,7 +978,7 @@ new frame's that a plan takes, so a source no plan reaches keeps its first size.
 source drawn at a density reports its extent, the size its frames are placed at
 ([ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)). A capture
 (`display`, `window`, `webcam`) has no size yet: its frames reach only the render
-thread (*Not yet*). Nor does a source that failed to build, an audio-only one, or a
+thread (*Not yet*, #805). Nor does a source that failed to build, an audio-only one, or a
 deleted one.
 
 **Audio sources.** `audio_sources::AudioSources` holds, under the collection lock, the
@@ -1937,7 +1937,7 @@ history, idempotency keys and the program and preview scenes are not saved (see 
   handle, which a new session of the app doesn't keep).
 - The size of a capture source (`display`, `window`, `webcam`) in `source.sizes`: its
   frames arrive on the render thread, which would hand their sizes back to the engine
-  through a lock-free queue (R-RT-003). Until then it reports none.
+  through a lock-free queue (R-RT-003, #805). Until then it reports none.
 
 <a id="runtime"></a>
 ## Runtime
