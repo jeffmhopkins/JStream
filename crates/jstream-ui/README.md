@@ -410,9 +410,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   has the master's short-term loudness on a bar from −60 to +6 LUFS with a marker at
   the −14 LUFS target (70% along, where the prototype draws it), the three loudness
   readings in its tooltip, its true peak with "safe" or a warning over 0 dBTP, and a
-  button that resets the integrated loudness (`audio.reset_loudness`). Its monitor
-  and FX buttons show disabled: the monitor control isn't built yet (MX-05), and the
-  engine has no master chain yet. Each source gets a row, ordered by name: its meter, fader, a dB field
+  button that resets the integrated loudness (`audio.reset_loudness`). Its Hear
+  button is the master's monitor (`bus.set_monitor`, D22): it reads "Hear: off" while
+  the master has none, a click turns one on at the default output after FX, and later
+  clicks switch it between after and before FX on the same device. Its FX button shows
+  disabled: the engine has no master chain yet. Each source gets a row, ordered by name: its meter, fader, a dB field
   (the shared `NumberField`), mute and, folded under "Routing", whether its audio is
   on, when it is heard (`always` or `when_shown`) and its send into each bus (on or
   off, and its gain). A nested scene's row has only the routing toggles, since it has
@@ -423,8 +425,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   loudness filling up to the target line, the loudness and true peak (its warning
   heard by a screen reader only, for want of room), then, folded
   beside it, a strip per source with its short name, a meter filling upwards, the dB
-  field stacked + over − and scrubbed up and down, and mute. Each bus gets a strip, the master first, with renaming
-  and (except the master) deleting. A delete reads `delete.plan`
+  field stacked + over − and scrubbed up and down, and mute. Each bus gets a strip, the master first, with, under More, its
+  monitor (off, after FX or before FX, and the output device it plays on, empty for the
+  default output, trimmed and checked as the engine checks it), renaming and (except
+  the master) deleting. A delete reads `delete.plan`
   first, as a scene's or source's does: the strip asks, saying how many `waveform` or
   `spectrum` settings drawing the bus the plan clears, and sends the plan's edits
   expecting the plan's revision. New buses take the first
