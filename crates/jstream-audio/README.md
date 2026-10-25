@@ -32,8 +32,8 @@ master chain on every bus that feeds an output, output taps with their own chain
 outputs that encode their own audio, and each bus's output before the master chain for
 monitoring, and the privacy screen's mute. Each input has an activity gain (audio that
 follows the program) before its sends. A bus monitor (ADR-0028's D22) hears the bus before or after its filters and
-plays on an output device through a monitor player; `jstream-core` doesn't open one yet,
-since the protocol has no monitor. Sidechain keys in the mixer come later. The true-peak and loudness meters
+plays on an output device through a monitor player; `jstream-core` opens one for each
+bus monitor in the collection (protocol 0.42) while the program stage runs. Sidechain keys in the mixer come later. The true-peak and loudness meters
 ([Meters](#meters)) exist as DSP but don't run in the mixer yet; `jstream-core`'s
 mixer thread runs them on the master block the mixer returns.
 

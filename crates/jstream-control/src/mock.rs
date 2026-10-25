@@ -3444,6 +3444,7 @@ mod tests {
                     name: "Master".into(),
                     gain_db: Finite32::ZERO,
                     muted: false,
+                    monitor: None,
                 }],
                 sends: vec![],
                 master: Default::default(),

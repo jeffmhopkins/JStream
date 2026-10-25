@@ -23,6 +23,13 @@
 //! is off, or that has no mixer input now (its stream isn't open) is fed silence, so
 //! it draws what the audience hears from it.
 //!
+//! Each bus with a monitor (ADR-0028's D22) is played on its output device while the
+//! mixer runs. Each sync hands the program stage's audio thread the monitors to play,
+//! each with the mixer bus that feeds it (`crate::audio_sources::Wanted::set_monitors`);
+//! that thread opens the device off the collection lock and hands the monitor's feed to
+//! the mixer thread as a [`MonitorRoute`], which pushes each block the monitor hears
+//! into it, before or after the bus's filters.
+//!
 //! The audio sources' inputs are opened and closed by the program stage
 //! (`crate::audio_sources`, which opens none for a source whose audio is off, and runs
 //! each source's filter chain); this module only sets them up.
@@ -35,11 +42,13 @@
 //! with the collection, so their filters change live.
 
 use crate::activity::activity_gains;
+use crate::audio_sources::{Wanted, WantedMonitor};
 use crate::filters::{Chain, chain_of};
 use arc_swap::ArcSwap;
 use jstream_audio::meter::{LoudnessMeter, TruePeakMeter};
 use jstream_audio::{
-    BusControl, InputControl, MeterReading, MixerControl, OutputTapControl, OutputTapId,
+    BusControl, InputControl, MeterReading, MixerControl, MonitorFeed, OutputTapControl,
+    OutputTapId,
 };
 use jstream_graph::State;
 use jstream_protocol::{
@@ -82,6 +91,8 @@ struct Attached {
     output_taps: BTreeMap<OutputId, Tap>,
     /// Output taps whose removal the mixer refused: each sync tries again.
     removing_taps: Vec<OutputTapControl>,
+    /// Where the program stage's audio thread learns which monitors to play.
+    wanted: Arc<Wanted>,
 }
 
 /// One output's tap and the chain it runs.
@@ -99,6 +110,20 @@ pub(crate) struct MixerHandles {
     pub(crate) scopes: Arc<AudioScopes>,
     /// Where the mixer thread reads which mixer bus feeds which scope.
     pub(crate) taps: Arc<ScopeTaps>,
+    /// The program stage's audio thread's wanted set, which opens the monitors.
+    pub(crate) wanted: Arc<Wanted>,
+}
+
+/// One monitor's feed on the mixer thread: after each block, what `bus` sounds like at
+/// `tap` goes into `feed`. The program stage's audio thread opens the device and sends
+/// the route over; it sets `closed` when it closes the monitor, and the mixer thread
+/// then hands the route to the collector.
+#[derive(Debug)]
+pub(crate) struct MonitorRoute {
+    pub(crate) bus: jstream_audio::BusId,
+    pub(crate) tap: jstream_audio::MonitorTap,
+    pub(crate) feed: MonitorFeed,
+    pub(crate) closed: Arc<std::sync::atomic::AtomicBool>,
 }
 
 /// One bus or source scope the mixer thread feeds: after each block, the block `feed`
@@ -244,6 +269,7 @@ impl AudioRouting {
             removing_taps: Vec::new(),
             scopes: mixer.scopes,
             taps: mixer.taps,
+            wanted: mixer.wanted,
         });
         self.sync(state, program, inputs);
         self.attaches
@@ -255,8 +281,10 @@ impl AudioRouting {
             .attached
             .as_ref()
             .is_some_and(|a| a.generation == generation)
+            && let Some(attached) = self.attached.take()
         {
-            self.attached = None;
+            // Its mixer buses go with it: the next program's names its own.
+            attached.wanted.set_monitors(BTreeMap::new());
         }
     }
 
@@ -389,6 +417,26 @@ impl AudioRouting {
             control.set_gain_db(bus.gain_db().get());
             control.set_muted(bus.muted());
         }
+        // The monitors, each on the mixer bus its bus has now.
+        let monitors = state
+            .buses()
+            .filter_map(|bus| {
+                let monitor = bus.monitor()?;
+                let mixer_bus = if bus.id().is_master() {
+                    attached.master.id()
+                } else {
+                    attached.buses.get(bus.id())?.id()
+                };
+                Some((
+                    bus.id().clone(),
+                    WantedMonitor {
+                        bus: mixer_bus,
+                        monitor: monitor.clone(),
+                    },
+                ))
+            })
+            .collect();
+        attached.wanted.set_monitors(monitors);
         // The scopes of the buses sources draw, each fed from its mixer bus once the
         // mixer holds it, and of the sources they draw, each fed from its input.
         retain_scopes(&attached.scopes, state);
@@ -680,6 +728,7 @@ mod tests {
                 meters,
                 scopes: Arc::default(),
                 taps: Arc::new(ScopeTaps::default()),
+                wanted: Arc::default(),
             },
             graph.state(),
             None,

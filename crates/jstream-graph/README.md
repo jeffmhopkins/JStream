@@ -78,7 +78,8 @@ protocol's types (`Overrides`).
 - `Preset`: a transition preset ([ADR-0029](../../docs/adr/0029-transitions.md),
   [ADR-0037](../../docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md)): an
   ID, a name, a transition kind, `duration_ms`, `easing` and its complete settings.
-- `Bus`: an ID, a name and a fader (`gain_db`, `muted`). The master bus (`master`,
+- `Bus`: an ID, a name, a fader (`gain_db`, `muted`) and an optional monitor
+  (`monitor()`, the protocol's `BusMonitor`: an output device and a tap point, 0.42). The master bus (`master`,
   `MASTER_NAME`) is in every state; at most `MAX_BUSES` (16, the protocol's
   `MAX_BUSES`) buses in all. A send is a
   gain in dB from a source into a bus.
@@ -121,7 +122,7 @@ the batch **touched**.
   item's placement, crop, visibility, opacity, blend, index and source, each settings
   parameter, a filter's switch, settings parameters and index, an output's target,
   encoder and mix choices, a profile's encoding, a mix's spec, each audio field a
-  `source.set_audio` or `bus.set_fader` sets, a send's gain, a preset's fields, a
+  `source.set_audio` or `bus.set_fader` sets, a bus's monitor, a send's gain, a preset's fields, a
   scene's transition overrides, an item's transition settings), and whether the
   scenes' order, the canvas size or the default preset was set. A send is an object of its own, so two sources'
   sends into one bus don't conflict, and deleting a bus conflicts with every change to
@@ -254,7 +255,11 @@ the batch **touched**.
   `source.set_audio` needs an audio source and at least one field, and refuses a
   `scene` source's `gain_db` or `muted`. `bus.create` checks the ID, the name and the
   bus limit; `bus.delete` refuses the master and a bus a setting refers to (above),
-  and removes the bus's sends, and its inverse is `bus.create`, `bus.set_fader` if the fader differed, and the sends.
+  and removes the bus's sends, and its inverse is `bus.create`, `bus.set_fader` if the fader differed,
+  `bus.set_monitor` if it had a monitor, and the sends. `bus.set_monitor` needs the bus
+  (`not_found`), then checks the monitor with the protocol's `BusMonitor::problem`
+  (`invalid_argument` on `monitor.<field>`); a device is never looked up, and its
+  inverse is the previous monitor, or none.
   `send.set` and `send.remove` check the source, then the bus (`not_found`), then that
   the source has a channel (a `scene` source sends nothing of its own). Every gain is
   checked with the protocol's `gain_db_problem` (−100 to +24 dB). A send always runs
@@ -374,7 +379,8 @@ filter with its `kind_version` and settings, and `enabled` only when false), out
 `encoder_profile`, omitted for the default, its `filters` as a source's, and its
 `video_mix`, omitted for the program), encoder profiles (`encoders`) ordered by ID,
 omitted when there are none, video mixes (`video_mixes`) ordered by ID, omitted when
-there are none, `buses` (omitted while the master is the only one and at its defaults)
+there are none, `buses` (omitted while the master is the only one and at its defaults;
+each bus's `monitor` omitted for none)
 and `sends`, written whenever there is a send or a source with a channel of its own (so
 an empty list means every master send was removed) and omitted otherwise, the `master`
 with its `filters`, omitted while it has none, the `hotkeys` ordered by chord, omitted
@@ -408,7 +414,7 @@ the engine's; this crate does no I/O.
   graph with the caller's kinds: the canvas size, folders and labels, scenes with their
   roles, folders and metadata (keyframe scenes after every other, then `scene.reorder`s
   to the file's order if that moved one, so a variant may come before its parent), then
-  the buses (the master renamed or faded as saved),
+  the buses (the master renamed or faded as saved) and their monitors,
   which a source's settings may refer to, then sources (each after the sources its
   settings refer to, then its labels and favourite), then every source's filters, then
   items in their placement form with their crop and visibility, opacity, blend and
@@ -517,7 +523,9 @@ the fixture with its `display` source's `show_cursor` taken out (as saved before
 loading to the same state;
 a file without `encoders` or any
 `encoder_profile` (as saved before profiles existed) loading with none, and one without
-`video_mixes` or any `video_mix` likewise; a file without `sends`, `buses` or source
+`video_mixes` or any `video_mix` likewise, and one without bus `monitor`s (as saved
+before 0.42) with none, while a monitor whose tap this version doesn't know is refused;
+a file without `sends`, `buses` or source
 `audio` (as saved before audio existed) keeping its audio sources' master sends at
 0 dB, its webcams' with their audio off; a webcam with no audio settings (as saved
 before webcams had audio, #716; a webcam's are written since, even at their defaults)

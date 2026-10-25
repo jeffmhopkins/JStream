@@ -1010,6 +1010,17 @@ source: crates/jstream-protocol/src/fixtures.rs
           "$ref": "#/$defs/Finite32",
           "description": "The bus fader, in dB, applied after the sum: from −100 to +24."
         },
+        "monitor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BusMonitor"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The bus's monitor, if it has one (since 0.42; omitted when it has none)."
+        },
         "muted": {
           "description": "Whether the bus is muted.",
           "type": "boolean"
@@ -1081,6 +1092,22 @@ source: crates/jstream-protocol/src/fixtures.rs
         "peak",
         "rms"
       ],
+      "type": "object"
+    },
+    "BusMonitor": {
+      "description": "A bus's monitor (ADR-0028, D22): an output device the engine plays the bus on while\nthe program mixer runs, for the operator to hear. Collection state, set by\n`bus.set_monitor`. A monitor hears the bus through its fader and mute and never\nthrough the master's filters, so it is not what an output carries.",
+      "properties": {
+        "device": {
+          "default": "",
+          "description": "The output device, as the platform names it; empty (the default) for the\nsystem's default output, which the monitor follows when it changes. A device\nthat isn't connected leaves the monitor silent; the edit is not refused. At most\n512 bytes.",
+          "type": "string"
+        },
+        "tap": {
+          "$ref": "#/$defs/MonitorTap",
+          "default": "post_filters",
+          "description": "Where on the bus the monitor listens. Omitted means `post_filters`."
+        }
+      },
       "type": "object"
     },
     "Call": {
@@ -3548,7 +3575,36 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Deletes a bus and every send into it. The master bus can't be deleted\n(`invalid_argument`), nor (since 0.24) a bus a source's settings refer to: that\n`invalid_argument` lists the `blockers`, and `delete.plan` clears them. Inverse: `bus.create` with its name, `bus.set_fader` if\nits fader or mute were not the defaults, then `send.set` for each send it had.",
+          "description": "Gives a bus a monitor, the master's included, or (with `monitor` omitted or null)\ntakes its monitor away (since 0.42). A monitor `BusMonitor::problem` refuses is\n`invalid_argument` on `monitor.<field>`; a device that isn't connected is not\nrefused. Inverse: `bus.set_monitor` with the previous monitor, or none.",
+          "properties": {
+            "bus_id": {
+              "$ref": "#/$defs/BusId",
+              "description": "The bus to change."
+            },
+            "monitor": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/BusMonitor"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The monitor, or none."
+            },
+            "type": {
+              "const": "bus.set_monitor",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "bus_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Deletes a bus and every send into it. The master bus can't be deleted\n(`invalid_argument`), nor (since 0.24) a bus a source's settings refer to: that\n`invalid_argument` lists the `blockers`, and `delete.plan` clears them. Inverse: `bus.create` with its name, `bus.set_fader` if\nits fader or mute were not the defaults, `bus.set_monitor` if it had a monitor\n(since 0.42), then `send.set` for each send it had.",
           "properties": {
             "bus_id": {
               "$ref": "#/$defs/BusId",
@@ -5364,6 +5420,21 @@ source: crates/jstream-protocol/src/fixtures.rs
         "height"
       ],
       "type": "object"
+    },
+    "MonitorTap": {
+      "description": "Where a bus's monitor listens (ADR-0028, D22). Serialized as a snake_case string.",
+      "oneOf": [
+        {
+          "const": "pre_filters",
+          "description": "The bus's sum before its filters, through its fader and mute: \"before FX\".",
+          "type": "string"
+        },
+        {
+          "const": "post_filters",
+          "description": "The bus after its filters, fader and mute: \"after FX\", what the bus feeds.",
+          "type": "string"
+        }
+      ]
     },
     "OutputId": {
       "description": "An output (RTMP(S), recording, virtual camera).",

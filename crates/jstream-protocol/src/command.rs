@@ -9,7 +9,7 @@
 //!
 //! The split is enforced by the types: a [`Batch`] can only hold edits.
 
-use crate::audio::AudioFollow;
+use crate::audio::{AudioFollow, BusMonitor};
 use crate::encoder::EncoderProfile;
 use crate::error::EntityKind;
 use crate::filter::{FilterChain, FilterOwner};
@@ -917,10 +917,23 @@ pub enum Edit {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         muted: Option<bool>,
     },
+    /// Gives a bus a monitor, the master's included, or (with `monitor` omitted or null)
+    /// takes its monitor away (since 0.42). A monitor `BusMonitor::problem` refuses is
+    /// `invalid_argument` on `monitor.<field>`; a device that isn't connected is not
+    /// refused. Inverse: `bus.set_monitor` with the previous monitor, or none.
+    #[serde(rename = "bus.set_monitor")]
+    BusSetMonitor {
+        /// The bus to change.
+        bus_id: BusId,
+        /// The monitor, or none.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        monitor: Option<BusMonitor>,
+    },
     /// Deletes a bus and every send into it. The master bus can't be deleted
     /// (`invalid_argument`), nor (since 0.24) a bus a source's settings refer to: that
     /// `invalid_argument` lists the `blockers`, and `delete.plan` clears them. Inverse: `bus.create` with its name, `bus.set_fader` if
-    /// its fader or mute were not the defaults, then `send.set` for each send it had.
+    /// its fader or mute were not the defaults, `bus.set_monitor` if it had a monitor
+    /// (since 0.42), then `send.set` for each send it had.
     #[serde(rename = "bus.delete")]
     BusDelete {
         /// The bus to delete.
@@ -995,6 +1008,7 @@ impl Edit {
             Edit::BusCreate { .. } => "bus.create",
             Edit::BusRename { .. } => "bus.rename",
             Edit::BusSetFader { .. } => "bus.set_fader",
+            Edit::BusSetMonitor { .. } => "bus.set_monitor",
             Edit::BusDelete { .. } => "bus.delete",
             Edit::SendSet { .. } => "send.set",
             Edit::SendRemove { .. } => "send.remove",

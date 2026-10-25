@@ -233,7 +233,8 @@ fn a_webcam_saved_without_settings_loads_with_its_default() {
             }
         }
     });
-    assert!(!older.contains("\"device\""));
+    // The webcam's `device` setting is gone; the bus monitor's `device` is not a setting.
+    assert!(!older.contains("\"device\":\"\""));
     let loaded = load(&older);
     assert_eq!(
         loaded.as_ref().map(Graph::state),
@@ -830,6 +831,29 @@ fn scene_filters_and_item_effects_are_checked() {
             load(&file)
         );
     }
+}
+
+/// A file saved before bus monitors (protocol 0.42) loads with none, and a monitor whose
+/// tap this version doesn't know is refused as its edit would be.
+#[test]
+fn a_file_without_monitors_loads_and_an_unknown_tap_is_refused() {
+    let older = edit_file(|v| {
+        for bus in v["buses"].as_array_mut().into_iter().flatten() {
+            bus.as_object_mut().map(|b| b.remove("monitor"));
+        }
+    });
+    assert!(!older.contains("\"monitor\""));
+    let loaded = load(&older);
+    assert!(loaded.is_ok(), "{loaded:?}");
+    if let Ok(graph) = loaded {
+        assert!(graph.state().buses().all(|bus| bus.monitor().is_none()));
+    }
+    let later = edit_file(|v| v["buses"][1]["monitor"]["tap"] = json!("pre_master"));
+    assert!(
+        matches!(load(&later), Err(LoadError::Invalid { ref object, .. }) if object == "bus `vod`"),
+        "{:?}",
+        load(&later)
+    );
 }
 
 #[test]

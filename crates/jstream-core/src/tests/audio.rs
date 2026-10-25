@@ -708,6 +708,104 @@ fn a_bus_a_source_draws_feeds_its_scope_while_an_output_runs() {
     block_on(control.call(output_call("yt", false))).expect("output.stop");
 }
 
+/// A bus's monitor (D9) plays the bus on its device while an output runs: `vod`'s on
+/// the default output hears the desktop, which sends only to `vod`, and the master's on
+/// the fake speakers hears nothing from it. A device that isn't there leaves the
+/// monitor unavailable, taking it away closes its stream, and stopping closes the rest.
+#[test]
+fn a_bus_monitor_plays_its_bus_on_its_device_while_an_output_runs() {
+    use jstream_protocol::{BusId, BusMonitor, Finite32, MonitorTap};
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let engine = engine(&audio, &clock);
+    let control = connected(&engine);
+    let vod = BusId::new("vod");
+    let monitor = |bus_id: &BusId, device: &str, tap| Edit::BusSetMonitor {
+        bus_id: bus_id.clone(),
+        monitor: Some(BusMonitor {
+            device: device.into(),
+            tap,
+        }),
+    };
+    batch(
+        &control,
+        edits(vec![
+            audio_source("desk", "desktop_audio", None),
+            Edit::BusCreate {
+                bus_id: vod.clone(),
+                name: "VOD".into(),
+            },
+            Edit::SendSet {
+                source_id: SourceId::new("desk"),
+                bus_id: vod.clone(),
+                gain_db: Finite32::ZERO,
+            },
+            Edit::SendRemove {
+                source_id: SourceId::new("desk"),
+                bus_id: BusId::master(),
+            },
+            monitor(
+                &BusId::master(),
+                jstream_platform::fake::FAKE_SPEAKERS,
+                MonitorTap::PreFilters,
+            ),
+            monitor(&vod, "", MonitorTap::PostFilters),
+        ]),
+    )
+    .expect("created");
+    // Nothing plays while no output runs.
+    assert_eq!(engine.monitor_status(&vod), None);
+    assert_eq!(audio.open_streams(), 0);
+
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+    assert!(eventually(|| {
+        engine.monitor_status(&vod) == Some(AudioStatus::Recording)
+            && engine.monitor_status(&BusId::master()) == Some(AudioStatus::Recording)
+    }));
+    // The desktop input and the two monitors: master's opened first, in bus order.
+    assert_eq!(audio.open_streams(), 3);
+    let mut heard = Vec::new();
+    assert!(
+        eventually(|| {
+            audio.deliver(480, 0.25);
+            clock.advance(10_000);
+            heard = audio.render(480);
+            heard.len() == 2 && heard[1].iter().any(|&s| s > 0.2)
+        }),
+        "vod's monitor played no audio"
+    );
+    assert!(
+        heard[0].iter().all(|&s| s.abs() < 1e-3),
+        "the master's monitor hears no desktop"
+    );
+
+    // A device that isn't there: the monitor is unavailable, and its stream closes.
+    batch(
+        &control,
+        Batch::single(monitor(&vod, "nope", MonitorTap::PreFilters)),
+    )
+    .expect("another device");
+    assert!(eventually(|| matches!(
+        engine.monitor_status(&vod),
+        Some(AudioStatus::Unavailable(_))
+    )));
+    assert_eq!(audio.open_streams(), 2);
+
+    // Taken away, it has no status; stopping closes the master's too.
+    batch(
+        &control,
+        Batch::single(Edit::BusSetMonitor {
+            bus_id: vod.clone(),
+            monitor: None,
+        }),
+    )
+    .expect("no monitor");
+    assert!(eventually(|| engine.monitor_status(&vod).is_none()));
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
+    assert!(eventually(|| audio.open_streams() == 0));
+    assert_eq!(engine.monitor_status(&BusId::master()), None);
+}
+
 /// Sources that open through the browser backend, `browser` and its `youtube_chat`
 /// preset, are built again when the host gives the engine its backend after they
 /// exist (review B1 on #375).
