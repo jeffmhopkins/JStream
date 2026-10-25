@@ -5,7 +5,7 @@
 //! the crate's own minimal D-Bus client), the GPU interop on Vulkan that imports the
 //! stream's DMA-BUF frames into the engine's device (`LinuxGpu`), run-time loading of
 //! libpipewire (`PipeWire`) with audio input, output and loopback through it
-//! (`PipeWireAudio`), and libva, VA-API H.264 encoding from CPU frames behind
+//! (`PipeWireAudio`), and libva, VA-API H.264 and HEVC encoding behind
 //! `VaapiCodecs`, Cisco's OpenH264 binary as the software H.264 encoder, downloaded only
 //! on the user's request and checked against its pin (`OpenH264Store`, `OpenH264Encoder`,
 //! ADR-0061), and AAC encoding on JStream's own AAC-LC encoder (`RustAacEncoder`,
@@ -69,4 +69,4 @@ pub use portal::{CursorModes, PersistMode, PortalPick, SourceTypes, handle_token
 pub use session::{Session, SessionKind, SupportTier};
 #[cfg(target_os = "linux")]
 pub use vaapi::probe_encoders;
-pub use vaapi::{H264Profile, VaEncoder, VaEntrypoint};
+pub use vaapi::{H264Profile, VaEncoder, VaEntrypoint, VaProfile};
