@@ -99,18 +99,19 @@ pub fn engine(
 /// `jstream-plugin-host.exe`; the daemon serves meanwhile.
 #[cfg(windows)]
 fn scan_clap_plugins(engine: &Arc<Engine>) {
-    let hosts = match jstream_platform_windows::WindowsPluginHosts::new() {
-        Ok(hosts) => hosts,
-        Err(e) => {
-            tracing::warn!(error = %e, "CLAP plugins are unavailable");
-            return;
-        }
-    };
+    let hosts: Arc<dyn jstream_platform::PluginHosts> =
+        match jstream_platform_windows::WindowsPluginHosts::new() {
+            Ok(hosts) => Arc::new(hosts),
+            Err(e) => {
+                tracing::warn!(error = %e, "CLAP plugins are unavailable");
+                return;
+            }
+        };
     let engine = Arc::clone(engine);
     let spawned = std::thread::Builder::new()
         .name("jstream-clap-scan".into())
         .spawn(move || {
-            let scan = engine.scan_clap_plugins(&hosts);
+            let scan = engine.scan_clap_plugins(hosts);
             for (file, error) in &scan.failed {
                 tracing::warn!(file = %file.display(), %error, "a CLAP plugin file could not be scanned");
             }
@@ -142,19 +143,20 @@ fn with_youtube(engine: Engine, client: Option<youtube::Client>, secrets: &Secre
             }
         };
         // Behind `Redacting`, like the stream keys, so a refresh token is registered with
-        // the crash redaction as it is stored or loaded (#353).
+        // the crash redaction as it is stored or loaded; the setup's secret hook registers
+        // the access tokens and the stream keys YouTube hands the client (#353).
         let tokens = Arc::new(Redacting::new(
             secrets.clone(),
             Arc::new(jstream_platform_windows::WindowsCredentials),
         ));
         if let Some(client) = client {
             tracing::info!("YouTube sign-in is available, with the developer's OAuth client");
-            return youtube::set_up(engine, client, transport, tokens);
+            return youtube::set_up(engine, client, transport, tokens, secrets);
         }
         match jstream_core::YoutubeSetup::built_in(transport, tokens) {
             Some(setup) => {
                 tracing::info!("YouTube sign-in is available");
-                engine.with_youtube(setup)
+                engine.with_youtube(setup.with_secret_hook(secrets.hook()))
             }
             None => engine,
         }

@@ -21,8 +21,11 @@ pub(crate) const ESC_HCB: u8 = 11;
 pub(crate) const MAX_QUANT: i32 = 8191;
 /// A cost for a codebook that can't code a band.
 pub(crate) const NEVER: u32 = u32::MAX / 64;
-/// The number of codebooks a section may name, `ZERO_HCB` through `ESC_HCB`.
-pub(crate) const BOOKS: usize = 12;
+/// The number of codebooks a section may name, `ZERO_HCB` through `INTENSITY_HCB` (15).
+/// The reserved book 12 and `NOISE_HCB` (13, PNS, never emitted) always cost [`NEVER`];
+/// the intensity books cost nothing on the bands they're chosen for and [`NEVER`]
+/// elsewhere, so sectioning never merges an intensity band with any other.
+pub(crate) const BOOKS: usize = 16;
 
 /// One spectrum codebook (ISO/IEC 13818-7 Table 9.2 lists their parameters).
 struct Book {

@@ -3888,6 +3888,35 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "A source's size changed (ADR-0022 §4, 0.40), including when it became known (its\nfirst frame) or unknown (it stopped, failed, or was deleted). Runtime state, so it\ncarries no `rev`. The size is the one `source.sizes` reports.",
+          "properties": {
+            "size": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PixelSize"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Its new size. Omitted when it has no video frame now."
+            },
+            "source_id": {
+              "$ref": "#/$defs/SourceId",
+              "description": "The source."
+            },
+            "type": {
+              "const": "source.size_changed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "source_id"
+          ],
+          "type": "object"
+        },
+        {
           "description": "The scene on program or on preview changed: after a `scene.switch` or a\n`studio.set_preview`, or after a batch, undo or redo deleted the scene (it gives\nway to the first remaining scene) or created the collection's first scene (it goes\non program and on preview). Studio state is runtime state (ADR-0030), so the event\ncarries no `rev`; a `state.changed` for the same edits comes first.",
           "properties": {
             "client_id": {
@@ -5964,6 +5993,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Every source's current size (ADR-0022 §4, 0.40): runtime state, so the result\ncarries no `rev`. A source drawn at a density reports its own size, the size its\nframes are placed at, not its pixels (ADR-0073). `source.size_changed` reports each\nchange after this.",
+          "properties": {
+            "type": {
+              "const": "source.sizes",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Lists one scene's items, in stacking order (the first is at the bottom). Fails with\n`not_found` if the scene doesn't exist.",
           "properties": {
             "scene_id": {
@@ -6919,6 +6961,27 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "The result of `source.sizes`. Runtime state, so it carries no `rev`.",
+          "properties": {
+            "sources": {
+              "description": "Every source in the collection, ordered by ID.",
+              "items": {
+                "$ref": "#/$defs/SourceSize"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "source.sizes",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "sources"
+          ],
+          "type": "object"
+        },
+        {
           "description": "The result of `capture.targets`.",
           "properties": {
             "targets": {
@@ -7607,6 +7670,30 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "SourceSize": {
+      "description": "One source's current size, in a `source.sizes` result.",
+      "properties": {
+        "size": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PixelSize"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Its current frame's size. Omitted while the source has no video frame: it hasn't\nstarted, it has no video (an audio-only kind), or it failed."
+        },
+        "source_id": {
+          "$ref": "#/$defs/SourceId",
+          "description": "The source."
+        }
+      },
+      "required": [
+        "source_id"
+      ],
+      "type": "object"
+    },
     "StatsPolling": {
       "description": "How the engine polls audience stats, by how much of the day's estimated YouTube\nquota is left (ADR-0041 §5). Serialized as a snake_case string.",
       "oneOf": [
@@ -7858,11 +7945,21 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "VideoCodec": {
-      "description": "A video codec. Serialized as a snake_case string.",
+      "description": "A video codec. Serialized as a snake_case string. Streams carry HEVC and AV1 in\nenhanced RTMP; a recording takes H.264 only so far, and its start fails with another.\nA machine with no encoder for the codec, or none that fits the profile's\n`hardware`, fails `output.start`.",
       "oneOf": [
         {
           "const": "h264",
           "description": "H.264 (AVC).",
+          "type": "string"
+        },
+        {
+          "const": "hevc",
+          "description": "HEVC (H.265). Since 0.41.",
+          "type": "string"
+        },
+        {
+          "const": "av1",
+          "description": "AV1. Since 0.41.",
           "type": "string"
         }
       ]
@@ -8334,5 +8431,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.39"
+  "title": "JStream protocol 0.41"
 }
