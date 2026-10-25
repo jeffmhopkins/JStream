@@ -12,15 +12,16 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-platform-linux/src/**", "crates/jstream-platform-linux/Cargo.toml"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-linux", "docs/ARCHITECTURE.md#threading", "docs/adr/0060-linux-platform-support.md", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0062-aac-lc-encoder-patent-check.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "crates/jstream-platform/README.md#purpose", "crates/jstream-aac/README.md#purpose"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-linux", "docs/ARCHITECTURE.md#threading", "docs/adr/0060-linux-platform-support.md", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0062-aac-lc-encoder-patent-check.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "crates/jstream-platform/README.md#purpose", "crates/jstream-aac/README.md#purpose", "docs/adr/0071-linux-secret-store.md"]
 -->
 
 The Linux implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
 traits, as [ADR-0060](../../docs/adr/0060-linux-platform-support.md) lays them out. That
 ADR is **accepted**; this crate has its first three parts (the platform basics, screen
 capture, then VA-API H.264 encoding), the software H.264 and AAC encoders, PipeWire and
-ALSA audio input and output, V4L2 webcams and capture cards, and the capture's DMA-BUF import into Vulkan, and the rest
-follows in later PRs. Layer 2, and one
+ALSA audio input and output, V4L2 webcams and capture cards, the capture's DMA-BUF import into Vulkan, and the secret
+store of [ADR-0071](../../docs/adr/0071-linux-secret-store.md), and the rest follows in later
+PRs. Layer 2, and one
 of the crates allowed `unsafe` ([R-UNSAFE-001](../../docs/RULES.md#R-UNSAFE-001)): every
 system call is wrapped here behind safe APIs, with RAII types for what the system hands
 back ([R-UNSAFE-003](../../docs/RULES.md#R-UNSAFE-003)).
@@ -102,7 +103,35 @@ It has:
   with timeouts over the session bus socket. Received messages are untrusted: lengths
   are checked, nesting is bounded, and malformed input is an error. The portal needs a
   few calls and two signals, which didn't justify a D-Bus crate and its async runtime,
-  and libdbus would be one more C library to load.
+  and libdbus would be one more C library to load. As a best effort, it zeroes the
+  buffers of the messages it encodes and decodes, spare capacity included, before
+  freeing them, since the secret store's carry secrets; copies left when its receive
+  buffer grows are not reached.
+- **`LinuxSecrets`** (`StreamKeyStore`, `OAuthTokenStore`;
+  [ADR-0071](../../docs/adr/0071-linux-secret-store.md),
+  [R-SEC-001](../../docs/RULES.md#R-SEC-001)) keeps stream keys and OAuth refresh tokens
+  in the desktop's keyring through the Secret Service, on the crate's D-Bus client. Each
+  call opens the session bus and a `plain` session (the bus may start the service).
+  Items go in the default collection, created when the keyring has none, with the
+  attributes `application = "jstream"`, `kind` and `id`, labelled with the Windows
+  credential name (`JStream/stream-key/<output id>`). A locked collection or item is
+  unlocked, which may show the desktop's prompt for up to five minutes; a dismissed
+  prompt fails the call. **Only when no Secret Service is reachable** (no session bus,
+  or the bus has no `org.freedesktop.secrets` and can't start one) do secrets go to the
+  fallback file, `secrets` in `$XDG_CONFIG_HOME/jstream` (`LinuxSecrets::config_dir`).
+  The file is plaintext, one secret per line, written to a fresh `0600` file (named for
+  the process and the write) and renamed into place, in a folder created `0700` (an
+  existing folder is left as it is). The file is read only when it is a regular file the
+  user owns that nobody else can read or write, and refused, never repaired, otherwise.
+  Calls on one store and its clones take turns, so a host clones one store for both
+  traits; separate stores on one file don't, and the last update wins. A keyring that refuses, is locked or fails is
+  an error, never a reason to use the file. A secret cleared while no keyring is
+  reachable is recorded as cleared, so the keyring's copy is deleted later rather than
+  coming back. Once the Secret Service is reachable, each call first moves the file's
+  entries into the keyring and deletes the file when it is empty.
+  `LinuxSecrets::fallback_warning` does the same and returns the warning a host shows
+  and logs at startup while the file holds a secret. It names the file and never a
+  secret.
 - **The PipeWire video stream** (`pipewire/stream.rs`) connects to the granted node on
   the portal's remote, on a `pw_thread_loop`. It offers BGRx, BGRA, RGBx and RGBA at
   any size and rate (`spa.rs` builds and parses the SPA pods by hand, since libspa's
@@ -326,7 +355,9 @@ It calls `forget_source` when the source is deleted.
 Not here yet, in roughly the order they follow:
 - DMA-BUF export from V4L2;
 - media-file decoders, which `LinuxBackends` leaves to the host;
-- the stream-key store.
+- an app keeping its stream keys and OAuth tokens in `LinuxSecrets`, the protocol field
+  that tells the UI the secret store's fallback is active, and the `jstream.toml`
+  setting that turns the fallback off (ADR-0071 §4, §5).
 
 The virtual camera is out of scope (`Backends::vcam` is `None` on Linux).
 
@@ -346,7 +377,10 @@ stopping on drop, a capture stream running again after an overrun, loopback refu
 unknown PCM and the listing; V4L2's refusal of IDs that aren't video nodes and of a
 node that isn't V4L2, and its handling of filled buffers) pass with or without those libraries installed and need no
 GPU, session or daemon; a missing PipeWire daemon is tried on a socket name nothing
-listens on. The registry reading and stream planning (`pipewire/graph.rs`), the audio
+listens on. The secret store's names, file format and Secret Service messages are
+platform-independent; its file handling, refusals, moves into the keyring and concurrent
+writes (clones taking turns, separate stores never colliding) are tested on Linux
+against a keyring in memory. The registry reading and stream planning (`pipewire/graph.rs`), the audio
 format pods, the `process` gate's hand-off between threads (`pipewire/audio.rs`),
 ALSA's sample conversion, channel layouts, listed names and frame times, the audio
 backend choice, and pairing (finding a node's sound cards in a sysfs tree laid out in a
@@ -363,6 +397,7 @@ from CPU frames and from the context's encode targets (which needs the Vulkan an
 VA-API drivers on one render node), `PipeWireAudio` recording (on the data loop),
 playing and looping back on a PipeWire daemon (`pipewire/audio_tests.rs`; null nodes
 are enough, no sound card, and one says it is on ALSA card 7 for the pairing test),
-`LinuxBackends` picking PipeWire with a daemon and ALSA without, and a second of ALSA's default input on a sound card (`null`
+`LinuxBackends` picking PipeWire with a daemon and ALSA without, the secret store against a real Secret Service (gnome-keyring under
+`dbus-run-session` is enough), and a second of ALSA's default input on a sound card (`null`
 isn't paced, so only a real device shows real-time recording), and V4L2 capture from a webcam or capture card (the `vivid` test
 driver will do).

@@ -26,7 +26,7 @@ depends_on = ["docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-004"]
 
 | Asset | Why it matters | Where it lives |
 |---|---|---|
-| Stream keys | Anyone holding one can broadcast as the user's channel | OS credential store only ([R-SEC-001](../RULES.md#R-SEC-001)); Windows Credential Manager, and the macOS Keychain ([ADR-0063](../adr/0063-macos-platform-support.md)), which the daemon uses where it is live on macOS (#639); Linux has none yet. **Accepted** for Linux, not built ([ADR-0071](../adr/0071-linux-secret-store.md)): the Secret Service, else a `0600` plaintext file (see [Secrets](#secrets)) |
+| Stream keys | Anyone holding one can broadcast as the user's channel | OS credential store only ([R-SEC-001](../RULES.md#R-SEC-001)); Windows Credential Manager, and the macOS Keychain ([ADR-0063](../adr/0063-macos-platform-support.md)), which the daemon uses where it is live on macOS (#639); and Linux's ([ADR-0071](../adr/0071-linux-secret-store.md): the Secret Service, else a `0600` plaintext file, see [Secrets](#secrets)) is built in `jstream-platform-linux` but no app uses it yet |
 | YouTube OAuth refresh token | Manages the user's channel (the `youtube` scope) | OS credential store; access tokens stay in memory |
 | Control token | Full control of the engine, by design ([ADR-0006](../adr/0006-mcp-full-access.md)), including every stream key's use | The daemon's token file (user-chosen path); the desktop app's is in memory and new on every start |
 | Paired device tokens | Same power as the control token ([ADR-0044](../adr/0044-pairing-remote-browsers.md)) | A digest in the devices file beside the token file; the device's own copy; a browser's in a cookie, once there is a TLS listener |
@@ -333,7 +333,8 @@ intercepted connection.
 **Controls on main:**
 - Keys and refresh tokens live in Windows Credential Manager, and stream keys in the
   macOS Keychain where the daemon is live on macOS (#639). Where an app has no store
-  (the desktop app on macOS; Linux has none) `set_key` fails rather than fall back to a
+  (the desktop app on macOS; on Linux, where the Secret Service store is built but not
+  wired into an app yet) `set_key` fails rather than fall back to a
   file. Secret types print `***` and
   are zeroed on drop. The collection never holds a key, and target URLs that could carry
   one (user info, query, fragment) are refused.
@@ -360,19 +361,24 @@ shows one (`RtmpUrl::sends_key_in_cleartext`; `localhost` and loopback are exemp
 `output.status` carries no flag for it yet, so other clients must apply the rule
 themselves.
 
-**Accepted** ([ADR-0071](../adr/0071-linux-secret-store.md), nothing built): on Linux,
-keys and refresh tokens go to the Secret Service, and only where none is reachable to
-`secrets` in `~/.config/jstream`. That file is **plaintext at rest**: anyone with read
+**Accepted** ([ADR-0071](../adr/0071-linux-secret-store.md)), built as `LinuxSecrets` in
+`jstream-platform-linux` and not yet used by an app: on Linux, keys and refresh tokens
+go to the Secret Service, and only where none is reachable to `secrets` in
+`~/.config/jstream`. That file is **plaintext at rest**: anyone with read
 access to the user's account or its files, or to a backup or sync of that folder, can
 read the keys in it, and use them to broadcast as the user's channel. The mitigations:
-- the file is `0600` in a `0700` folder, and refused if group or others can read it;
+- the file is written `0600` (through a fresh file and a rename) in a folder created
+  `0700`, and refused, never repaired, if it is a symlink, another user owns it, or
+  group or others can read or write it;
 - the UI shows a lasting warning while the fallback holds any secret, and the daemon
-  logs one at startup;
+  logs one at startup (the store gives the warning's text; the protocol field and the
+  daemon's log line come with the wiring);
 - secrets move into the keyring, and the file is deleted, once a keyring is reachable;
 - a later setting turns the fallback off, so a machine can be keyring-only.
 
 A keyring that is locked, or whose unlock prompt is dismissed, fails the call and
-never sends the secret to the file.
+never sends the secret to the file. A secret cleared while no keyring is reachable is
+recorded as cleared, so the keyring's older copy is deleted rather than coming back.
 
 **Gaps:** the daemon's and the desktop app's crash reports redact the control token and the keys and refresh
 tokens that pass through their credential stores, but not a YouTube-bound output's key
