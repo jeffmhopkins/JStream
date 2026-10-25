@@ -323,9 +323,11 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
 }
 
 /* A confirmation (spec-workspace.md 6.7): bottom centre, over the panels, until it hides. */
-/* The toast's live region stays in the page, out of the flow. */
+/* The toast's live region stays in the page, out of the flow, over the panels' popovers
+   and menus but under modal dialogs. */
 .toast-region {
   position: fixed;
+  z-index: 150;
   width: 0;
   height: 0;
 }
