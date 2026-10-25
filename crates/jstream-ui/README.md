@@ -400,7 +400,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   in Live) reads the scenes (groups left out) and presets with
   `state.get` and the studio state with `studio.get` into a copy of its own,
   re-reads them on `state.changed` and
-  `events.dropped`, and takes `studio.changed` in place. The studio bar (preview,
+  `events.dropped`, and takes `studio.changed` in place (a re-read that a
+  `studio.changed` overtook keeps the event's program and preview). The studio bar (preview,
   program, Transition and Cut) shows only in studio mode; with it off a line says that
   a click on a scene puts it on program. Picking a scene sends
   `studio.set_preview`. "Transition" sends `scene.switch` for the preview scene, naming

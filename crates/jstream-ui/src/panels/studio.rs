@@ -782,6 +782,9 @@ struct Panel {
     problem: RwSignal<Option<String>>,
     /// Bumped by each reload, so an older reload that finishes late is dropped.
     loads: StoredValue<u64>,
+    /// Bumped by each `studio.changed`, so a reload's older program and preview don't
+    /// overwrite an event's newer ones.
+    changes: StoredValue<u64>,
     /// Bumped by each transition the panel shows, so a replaced one's timer can't
     /// clear its successor.
     transitions: StoredValue<u64>,
@@ -815,13 +818,25 @@ impl Panel {
         }) else {
             return;
         };
+        let asked = self.changes.try_get_value();
         spawn_local(async move {
             let loaded = load(&*session.control).await;
             if self.loads.try_get_value() != Some(mine) {
                 return;
             }
             match loaded {
-                Ok(snapshot) => {
+                Ok(mut snapshot) => {
+                    // A `studio.changed` came in while this read was in flight: its
+                    // program and preview are newer than the answer's.
+                    if self.changes.try_get_value() != asked
+                        && let Some(Some((program, preview))) =
+                            self.snapshot.try_with_untracked(|s| {
+                                s.as_ref().map(|s| (s.program.clone(), s.preview.clone()))
+                            })
+                    {
+                        snapshot.program = program;
+                        snapshot.preview = preview;
+                    }
                     // A chosen preset that was deleted goes back to the engine's choice.
                     self.chosen.try_update(|chosen| {
                         if chosen
@@ -859,6 +874,7 @@ impl Panel {
         preview: Option<SceneId>,
         duration_ms: Option<u32>,
     ) {
+        self.changes.try_update_value(|n| *n += 1);
         let moved = self
             .snapshot
             .try_update(|snapshot| match snapshot {
@@ -941,6 +957,7 @@ pub fn StudioMode() -> impl IntoView {
         running: RwSignal::new(None),
         problem: RwSignal::new(None),
         loads: StoredValue::new(0),
+        changes: StoredValue::new(0),
         transitions: StoredValue::new(0),
     };
 
