@@ -40,11 +40,14 @@
 //! **Privacy screen** (docs/adr/0027-program-master-and-output-chains.md): while it is
 //! on ([`Mixer::set_privacy`]), each input marked as one it mutes is silenced where it
 //! leaves its ring, before its filter chain: what it captures meanwhile never enters
-//! the chain's delay lines or compensation delay, so none of it is heard after the
-//! screen goes off. Its activity gain is 0 in place of its own, so what the chain still
-//! holds from before ramps out over the next block. It feeds no bus, its own block is
-//! silent and its meter reads silence. Turning the screen off ramps the input back to
-//! its own activity gain.
+//! the chain's delay lines or compensation delay. The screen ends at the capture time,
+//! not the mix time: a block that starts before the engine frame of the clock at the
+//! first poll after it goes off still carries audio captured under it, and stays
+//! covered. So none of what the input captured under the screen is heard after it
+//! goes off. Its activity gain is 0 in place of its own, so what the chain still holds
+//! from before ramps out over the next block. It feeds no bus, its own block is silent
+//! and its meter reads silence. Once the screen is off, the input ramps back to its own
+//! activity gain.
 //!
 //! **Meters** are post-fader (each input before its sends) and each bus's output:
 //! per channel, the peak held until the control plane takes it, and the latest block's
@@ -210,8 +213,14 @@ pub struct Mixer {
     bus_latency: usize,
     /// The master chain's latency, frames: the same on every bus.
     master_latency: usize,
-    /// Whether the privacy screen is on: the inputs it mutes get an activity gain of 0.
+    /// Whether the privacy screen is on: the inputs it mutes are silenced.
     privacy: bool,
+    /// The screen went off and the next [`Self::poll`] has not yet read the clock: the
+    /// inputs it mutes stay silenced until it does.
+    privacy_ending: bool,
+    /// The engine frame the screen went off at: a block that starts before it holds
+    /// audio captured while it was on, so the inputs it mutes stay silenced in it.
+    private_until: Option<i64>,
 }
 
 impl Mixer {
@@ -263,6 +272,8 @@ impl Mixer {
             bus_latency: 0,
             master_latency: 0,
             privacy: false,
+            privacy_ending: false,
+            private_until: None,
         })
     }
 
@@ -274,8 +285,27 @@ impl Mixer {
     /// activity gain change. The thread that
     /// polls the mixer calls it before each poll, from a flag it reads lock-free, so the
     /// change needs no command and allocates nothing. Off when the mixer is made.
+    ///
+    /// Turning it on takes effect for the next block mixed. Turning it off follows the
+    /// capture time, not the mix time: the mixer mixes a block only once the clock has
+    /// passed its end by the latency, so the next blocks still carry audio captured
+    /// under the screen. The next [`Self::poll`] records the engine frame of the clock it
+    /// is given, and every block that starts before that frame keeps the marked inputs
+    /// silenced. ([`Self::mix`], which has no clock, ends it at the block it mixes.)
     pub fn set_privacy(&mut self, on: bool) {
-        self.privacy = on;
+        if on {
+            self.privacy = true;
+            self.privacy_ending = false;
+            self.private_until = None;
+        } else if self.privacy {
+            self.privacy = false;
+            self.privacy_ending = true;
+        }
+    }
+
+    /// Whether the privacy screen covers the block starting at engine frame `frame`.
+    fn private_for(&self, frame: i64) -> bool {
+        self.privacy || self.privacy_ending || self.private_until.is_some_and(|u| frame < u)
     }
 
     /// Adds an input of `format` (the device's own rate and layout, interleaved `f32`, as
@@ -436,6 +466,11 @@ impl Mixer {
         let Some(now) = self.engine_frame(now) else {
             return Ok(None);
         };
+        // The privacy screen went off: what was captured before now was captured under it.
+        if self.privacy_ending {
+            self.privacy_ending = false;
+            self.private_until = Some(now);
+        }
         let block = self.config.block_frames as i64;
         let latency = self.config.latency_frames as i64;
         let start = now.saturating_sub(latency);
@@ -467,6 +502,11 @@ impl Mixer {
         self.check_out(out)?;
         let n = self.config.block_frames;
         let end = frame.saturating_add(n as i64);
+        if self.privacy_ending {
+            self.privacy_ending = false;
+            self.private_until = Some(frame);
+        }
+        let privacy = self.private_for(frame);
         let Self {
             inputs,
             buses,
@@ -477,10 +517,8 @@ impl Mixer {
             input_latency,
             bus_latency,
             master_latency,
-            privacy,
             ..
         } = self;
-        let privacy = *privacy;
         let (input_latency, bus_latency) = (*input_latency, *bus_latency);
         for (bus, sum) in buses.iter().zip(acc.chunks_exact_mut(n)) {
             if bus.is_some() {
@@ -629,7 +667,8 @@ impl Mixer {
                     let send_bus: [u64; MAX_BUSES] = std::array::from_fn(|k| {
                         self.buses[k].as_ref().map_or(NO_BUS, |bus| bus.id)
                     });
-                    let activity = activity_of(&shared, self.privacy);
+                    let private = self.private_for(self.position.unwrap_or(i64::MIN));
+                    let activity = activity_of(&shared, private);
                     let send_now =
                         std::array::from_fn(|k| shared.sends.target(k, send_bus[k]) * activity);
                     self.inputs.push(Slot {
@@ -1517,6 +1556,62 @@ mod tests {
             "the mic is heard again: {heard:?}"
         );
         drop((mic, other));
+    }
+
+    /// The privacy screen ends at the capture time, not the mix time: the blocks mixed
+    /// just after it goes off still carry audio captured under it, since a block is
+    /// mixed only once the clock has passed its end by the latency, and the inputs it
+    /// mutes stay silent in them (ADR-0027 §4).
+    #[test]
+    fn the_privacy_screen_ends_at_the_capture_time() {
+        let tb = Timebase::per_second(RATE).unwrap();
+        let mut m = Mixer::new(config(480)).unwrap();
+        let (mut mic, _cmic) = m.control().add_input_with(stereo48(), true).unwrap();
+        let samples: Vec<f32> = vec![1.0; 2 * 480];
+        let mut pushed = 0u64;
+        let mut out = vec![0.0; 960];
+        let off = 30_000;
+        let mut blocks = Vec::new();
+        let mut late = 0;
+        m.set_privacy(true);
+        for now in (20_000..=40_000).step_by(200) {
+            // The device delivers what it captured up to now, in 10 ms packets.
+            while (pushed + 1) * 480 <= now as u64 {
+                mic.push_packet(&AudioPacket {
+                    samples: &samples,
+                    device_position: pushed * 480,
+                    time: Some(MediaTime::new((pushed * 480) as i64, tb)),
+                    flags: AudioPacketFlags::default(),
+                });
+                pushed += 1;
+            }
+            if now == off {
+                m.set_privacy(false);
+            }
+            while let Some(b) = m.poll(MediaTime::new(now, tb), &mut out).unwrap() {
+                if now >= off && b.frame < off {
+                    late += 1;
+                }
+                blocks.push((b.frame, out[0], out[958]));
+            }
+        }
+        assert!(
+            late > 0,
+            "a block captured under the screen is mixed after it: {blocks:?}"
+        );
+        for &(frame, first, last) in &blocks {
+            if frame < off {
+                assert!(
+                    first == 0.0 && last == 0.0,
+                    "audio captured under the screen heard in the block at {frame}: {blocks:?}"
+                );
+            }
+        }
+        let &(_, first, last) = blocks.last().unwrap();
+        assert!(
+            (first - 1.0).abs() < 1e-4 && (last - 1.0).abs() < 1e-4,
+            "the mic is heard again: {blocks:?}"
+        );
     }
 
     /// Removing a bus drops it from the mix; its slot can go to a new bus, which the

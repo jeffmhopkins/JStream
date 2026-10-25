@@ -747,7 +747,8 @@ play on. The mixer thread loads the same flag with acquire ordering before each 
 and hands it to the mixer, which silences a marked input while it is on, from the next
 block: before the input's filter chain, so nothing said under the screen waits in a
 `delay` filter or the latency compensation to be heard once it is off, and through an
-activity gain of 0. It feeds no bus, its scope draws silence and its meter reads
+activity gain of 0. Turning it off follows the capture time: the blocks the mixer
+mixes late by its latency that hold audio from under the screen stay silent. It feeds no bus, its scope draws silence and its meter reads
 silence. Its own mute, fader, sends and follow mode are untouched, so turning privacy
 off brings it back as it was. Each microphone input is marked as it is added to the
 mixer (`MixerControl::add_input_with`), before the mixer can install it. This default set

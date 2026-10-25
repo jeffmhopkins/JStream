@@ -267,7 +267,9 @@ impl InputControl {
     /// screen is on ([`Mixer::set_privacy`](crate::Mixer::set_privacy)), it is silenced
     /// before its filter chain and its activity gain is 0, so it feeds no bus, its own
     /// block is silent, its meter reads silence, and nothing it captured meanwhile is
-    /// heard once the screen goes off. It is independent of [`Self::set_muted`] and of
+    /// heard once the screen goes off: neither through its chain nor in the blocks mixed
+    /// after, which the mixer keeps covered up to the capture time the screen went off
+    /// at. It is independent of [`Self::set_muted`] and of
     /// the activity gain, which it leaves as they are. A new input is not muted by it;
     /// [`MixerControl::add_input_with`](crate::MixerControl::add_input_with) marks one
     /// before the mixer installs it.
