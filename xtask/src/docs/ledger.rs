@@ -229,12 +229,74 @@ pub(crate) const MERGE_MARK: &str = " | merge: ";
 /// any earlier merge's addendum, then `merge`, what this merge changed in the input.
 pub(crate) fn merge_note(earlier: Option<&str>, merge: &str) -> String {
     let own = earlier
+        .map(|n| split_kept(n).0)
         .map(|n| n.split_once(MERGE_MARK).map_or(n, |(own, _)| own).trim())
         .filter(|n| !n.is_empty());
     match own {
         Some(own) => format!("{own}{MERGE_MARK}{merge}"),
         None => format!("merge: {merge}"),
     }
+}
+
+/// Where a note turns from this branch's text to the merged side's notes it keeps (#840):
+/// each merged-side note follows this mark word for word, as that side wrote it, so a
+/// verify after a merge never drops the records a wave or `main` wrote on the same input.
+pub(crate) const KEPT_MARK: &str = " | kept from the merged side: ";
+
+/// A note split into this branch's text and the merged side's notes it keeps: everything
+/// from the first [`KEPT_MARK`] on, or `""`.
+pub(crate) fn split_kept(note: &str) -> (&str, &str) {
+    note.find(KEPT_MARK)
+        .map_or((note, ""), |i| note.split_at(i))
+}
+
+/// The note a verify writes on an entry it rewrites after this branch's merge (#840):
+/// `head`, its new text, then each kept segment once (#842). The segments are those the
+/// entry's `earlier` note (this branch's own) kept, then `theirs`, the note the merged side
+/// wrote on the input since the branch left it, split at [`KEPT_MARK`] into its own text
+/// and the segments it kept in turn. Each segment is kept word for word, in the order it is
+/// first met. One that `head` or another segment already holds in full is left out, so a
+/// record two sides both kept appears once and a newer segment that holds an older one in
+/// full takes its place.
+pub(crate) fn keep_notes(head: &str, earlier: Option<&str>, theirs: Option<&str>) -> String {
+    let earlier = earlier.map_or("", |n| split_kept(n).1);
+    let theirs = theirs.map_or("", str::trim);
+    let segments = earlier
+        .split(KEPT_MARK)
+        .chain(
+            std::iter::once(theirs)
+                .filter(|t| !t.is_empty())
+                .flat_map(|t| t.split(KEPT_MARK)),
+        )
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && !head.contains(s));
+    let mut kept: Vec<&str> = Vec::new();
+    for s in segments {
+        if kept.iter().any(|k| k.contains(s)) {
+            continue;
+        }
+        // A newer segment that holds earlier ones in full takes the first one's place.
+        match kept.iter().position(|k| s.contains(k)) {
+            Some(i) => {
+                kept[i] = s;
+                let mut j = i + 1;
+                while j < kept.len() {
+                    if s.contains(kept[j]) {
+                        kept.remove(j);
+                    } else {
+                        j += 1;
+                    }
+                }
+            }
+            None => kept.push(s),
+        }
+    }
+    let mut note = head.to_owned();
+    for k in kept {
+        note.push_str(KEPT_MARK);
+        note.push_str(k);
+    }
+    note
 }
 
 /// The stamp `docs verify --merge` writes after `docs merge-main`. `branch` is the entries
@@ -533,32 +595,65 @@ mod tests {
                 who,
             ))
         };
-        let dir = std::env::temp_dir().join(format!("xtask-ledger-git-{}", std::process::id()));
-        let git = |args: &[&str]| {
+        let root = std::env::temp_dir().join(format!("xtask-ledger-git-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        // Runs git in `dir` and returns its output. Auto-maintenance is off: from git 2.47
+        // a commit or merge starts it detached, so it could still be running in a
+        // repository when the next step reuses that path (#779).
+        let git = |dir: &std::path::Path, args: &[&str]| {
             std::process::Command::new("git")
                 .args(["-c", "user.name=t", "-c", "user.email=t@t"])
+                .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
                 .args(args)
-                .current_dir(&dir)
+                .current_dir(dir)
                 .output()
                 .expect("invariant: git runs")
         };
+        // Like `git`, but a failure panics with git's own message.
+        let ok = |dir: &std::path::Path, args: &[&str]| {
+            let out = git(dir, args);
+            assert!(
+                out.status.success(),
+                "git {args:?} failed: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+        };
+        let runs = std::cell::Cell::new(0);
         // Merges main into the branch and returns whether it was clean, and the ledger
-        // after taking main's side of any conflict.
+        // after taking main's side of any conflict. Each merge gets a repository of its
+        // own, so nothing a previous one left behind can reach it.
         let merge = |branch: &str, main: &str| -> (bool, Ledger) {
-            let _ = std::fs::remove_dir_all(&dir);
+            runs.set(runs.get() + 1);
+            let dir = root.join(runs.get().to_string());
             std::fs::create_dir_all(&dir).expect("invariant: temp dir is writable");
+            let dir = dir.as_path();
             let commit = |text: &str, name: &str| {
                 std::fs::write(dir.join("v.toml"), text).expect("invariant: writable");
-                git(&["checkout", "-q", "-B", name]);
-                git(&["add", "v.toml"]);
-                git(&["commit", "-q", "-m", name]);
+                ok(dir, &["checkout", "-q", "-B", name]);
+                ok(dir, &["add", "v.toml"]);
+                ok(dir, &["commit", "-q", "-m", name]);
             };
-            git(&["init", "-q"]);
+            ok(dir, &["init", "-q"]);
             commit(&render(base_stamp.clone()), "base");
             commit(main, "main");
-            git(&["checkout", "-q", "base"]);
+            ok(dir, &["checkout", "-q", "base"]);
             commit(branch, "branch");
-            let clean = git(&["merge", "-q", "main"]).status.success();
+            let out = git(dir, &["merge", "-q", "main"]);
+            let clean = out.status.success();
+            // A failed merge must be a conflict in the ledger, not some other refusal.
+            let listed = git(dir, &["ls-files", "-u"]);
+            assert!(
+                listed.status.success(),
+                "git ls-files -u failed: {}",
+                String::from_utf8_lossy(&listed.stderr)
+            );
+            let unmerged = listed.stdout;
+            assert!(
+                clean || !unmerged.is_empty(),
+                "git merge failed without a conflict: {}{}",
+                String::from_utf8_lossy(&out.stdout),
+                String::from_utf8_lossy(&out.stderr)
+            );
             let text = std::fs::read_to_string(dir.join("v.toml")).expect("invariant: written");
             let text = if clean {
                 text
@@ -632,7 +727,7 @@ mod tests {
                 Remove(k) => format!("remove {k}"),
             }
         }
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

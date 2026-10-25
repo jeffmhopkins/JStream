@@ -69,7 +69,11 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
   from. `docs verify --merge` then keeps those notes and adds what the merge changed
   ([Verification notes](#notes)), and refuses an input whose file the branch changed after
   the merge. It and `--renote` list the merged PRs behind the entries they rewrite and
-  name any the note leaves out.
+  name any the note leaves out. Every verify after the merge keeps the merged side's note
+  on each entry that side re-verified, each kept segment once and word for word
+  ([Verification notes](#notes)). `--per-input` gives each entry its own text from a
+  TOML table, the `--<mode>-file` options read the text from a file, `--merge --from`
+  checks the merged branch, and every verify refuses while a merge is in progress.
 - **Weekly sweep** ([Time-based review](#ttl)): the scheduled `sweep` workflow reports
   `cargo deny` findings, docs due for review, `cargo update --dry-run` and the override
   audit list in one issue. The parts that [Time-based review](#ttl) lists as not built
@@ -314,6 +318,9 @@ cargo xtask docs verify ARCH#gpu-pipeline \
     --by agent:claude --merge "…"               # the same after merge-main: keeps the branch's notes
 cargo xtask docs verify ARCH#gpu-pipeline \
     --by agent:claude --renote "…"              # fresh section, better note: hashes unchanged
+cargo xtask docs verify ARCH#gpu-pipeline \
+    --by agent:claude --per-input \
+    --merge-file notes.toml --from wave/m1      # one text per input, read from a file
 cargo xtask docs review ARCH \
     --by human:jeffmhopkins --note "…"          # doc-level TTL review: write `reviewed`
 cargo xtask docs log ARCH#gpu-pipeline         # history, derived from git
@@ -376,7 +383,8 @@ lists the branch's notes, after it has committed the merge.
 
 `docs verify <DOC#anchor> --by <who> --renote "<note>"` replaces the `by` and `note` of a
 section that is already fresh, as when a reviewer asks for a better note, without touching
-any hash. It rewrites only the entries this branch wrote: those that differ from the ledger
+any hash, and keeps the merged side's notes on those entries ([Verification
+notes](#notes)). It rewrites only the entries this branch wrote: those that differ from the ledger
 at the merge base of `HEAD` and `origin/main`, or of the wave named with
 `--from wave/<name>`. A PR stacked on another PR's branch names that branch instead,
 `--from <base branch>`, which must be an ancestor of `HEAD` (merge it first), so the base
@@ -387,6 +395,18 @@ has merged them ahead of its base. A bare `--renote` on a stacked PR compares ag
 stale section, which needs a re-read and `--note` or `--merge`, and a section this branch
 never stamped. It fails when the ledger at that merge base doesn't parse, rather than
 taking every entry for this branch's own.
+
+Each mode can read its text from a file instead of an argument, with `--note-file`,
+`--merge-file` or `--renote-file <path>`, so a long text needn't fit on a command line.
+With `--per-input`, the text is a TOML table with one text per input, keyed as the ledger
+keys them (`body`, `"file:<path>"`, `"dep:<reference>"`), and `"*"` for any input it
+doesn't name. Each entry the verify rewrites gets its own input's text, checked like any
+note, so each input's note says what was checked about that input. A key that names none of
+the section's inputs, or a rewritten entry with no text and no `"*"`, is refused and nothing
+is written. `--merge` also takes `--from <branch>` (`main` or `wave/<name>`): it then
+refuses unless the merge it carries notes across brought in `origin/<branch>` or a commit on
+it. Every verify refuses while a merge is in progress (`MERGE_HEAD` set), since it would
+read the branch's previous merge instead: commit the merge first.
 
 `docs migrate` moves inline `verified` stamps, from before the ledger, into it. A stamp
 whose hash is still what the inline rule (one hash over all the inputs above) computes
@@ -502,8 +522,24 @@ holds**. The note says what was checked and why it still holds, e.g.:
   side wrote it is left out) and name any the text leaves out: credit each PR whose change
   the note covers, by number. The text is
   still per section: one stock text across every stale section, such as "rechecked after merging
-  main", fails review. A section this PR also changed after the merge takes `--note`, and
+  main", fails review. With `--per-input` ([Hash-bound verification](#verification)), each
+  entry gets its own text, and the PRs are reported per entry against that entry's own
+  file and text (#855), so each input's note can credit the PRs behind that input alone. A section this PR also changed after the merge takes `--note`, and
   `--merge` refuses it.
+- **The merged side's notes are kept** (#840). After the branch's own merge, every verify
+  (`--note`, `--merge` or `--renote`) that rewrites an entry the merged side (main or the
+  wave) re-verified since the branch left it ends the new note with that side's note, word
+  for word, after ` | kept from the merged side: `. The notes the branch's earlier note
+  kept that way are carried too. Each kept segment (the text after each mark, up to the
+  next one) appears once (#842): a segment the new text or another segment already holds
+  in full is left out, and a newer one that holds older ones in full takes the first one's
+  place. Kept notes are per entry: each entry keeps the notes of its own input, also with
+  `--per-input`. So a
+  record both sides kept isn't copied again, and a merged note that repeats records
+  the branch kept may appear split into its segments rather than as one block. Write
+  only this PR's text; never copy the merged side's notes by hand. Before
+  the branch's first merge, a verify still replaces main's note on an input the PR
+  changes.
 - A verify that only drops removed inputs, or finds no input changed, records no `by` or
   `note`: it rewrites no entry, so the ledger diff shows only the dropped entries. To
   improve the note on a fresh section, use `docs verify --renote`, never a hand edit. Say in

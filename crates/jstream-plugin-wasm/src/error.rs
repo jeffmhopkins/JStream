@@ -40,6 +40,10 @@ pub enum Error {
     /// (ADR-0069's `cpu_limit`).
     #[error("the plugin ran past its time limit")]
     Deadline,
+    /// The plugin asked to grow its memory or table past its cap, or its module starts
+    /// above it, and was stopped (ADR-0069's `memory_limit`).
+    #[error("the plugin reached its memory or table cap")]
+    MemoryLimit(#[source] Source),
     /// The plugin trapped: a WASM trap, a host function it misused (a pointer outside its
     /// memory), or a stack overflow. Its state may be inconsistent.
     #[error("the plugin trapped")]
@@ -48,9 +52,12 @@ pub enum Error {
 
 impl Error {
     /// Classifies a wasmtime error from running plugin code: fuel exhaustion is
-    /// [`Error::OutOfFuel`], an epoch interrupt [`Error::Deadline`], anything else is
-    /// `other`.
+    /// [`Error::OutOfFuel`], an epoch interrupt [`Error::Deadline`], a growth past a cap
+    /// [`Error::MemoryLimit`], anything else is `other`.
     pub(crate) fn from_run(error: wasmtime::Error, other: fn(Source) -> Error) -> Error {
+        if error.downcast_ref::<crate::limits::CapReached>().is_some() {
+            return Error::MemoryLimit(error.into());
+        }
         match error.downcast_ref::<wasmtime::Trap>() {
             Some(wasmtime::Trap::OutOfFuel) => Error::OutOfFuel,
             Some(wasmtime::Trap::Interrupt) => Error::Deadline,

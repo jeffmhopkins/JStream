@@ -911,11 +911,16 @@ mod tests {
             mixer.mix(0, &mut out).expect("mix");
             notes
         };
+        // The host loads until released, so a fast host thread can't be ready within
+        // the first pass.
+        fake.start_loading(true);
         assert!(pass(&mut chain, &mut mixer, &wanted).is_empty());
         assert!(
             chain.filters[1].control.is_none(),
             "bypassed while starting"
         );
+        fake.start_loading(false);
+        fake.hosts()[0].finish_loading();
         let deadline = Instant::now() + Duration::from_secs(5);
         while chain.filters[1].control.is_none() {
             assert!(Instant::now() < deadline, "the host never got ready");
