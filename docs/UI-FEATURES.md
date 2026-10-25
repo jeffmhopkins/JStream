@@ -65,12 +65,12 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Inspector](#inspector) | 10 | 5 | 2 | 2 | 1 | 0 |
 | [Transform panel](#transform) | 4 | 4 | 0 | 0 | 0 | 0 |
 | [Filters](#filters) | 8 | 5 | 0 | 0 | 3 | 0 |
-| [Mixer](#mixer) | 7 | 4 | 0 | 1 | 2 | 0 |
+| [Mixer](#mixer) | 7 | 4 | 0 | 2 | 1 | 0 |
 | [Outputs](#outputs) | 4 | 0 | 1 | 0 | 3 | 0 |
 | [Transitions](#transitions) | 6 | 3 | 2 | 0 | 1 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
 | [Keyboard](#keyboard) | 7 | 1 | 3 | 1 | 2 | 0 |
-| **Total** | **130** | **62** | **28** | **13** | **26** | **1** |
+| **Total** | **130** | **62** | **28** | **14** | **25** | **1** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -332,7 +332,7 @@ does more than the prototype (buses, sends, routing); that stays ([Beyond](#beyo
 | MX-02 | Channels fold under the master | Channels hidden under the master card by default. | ✅ | The master card's button folds them (not remembered across reloads). The buses, which the prototype doesn't have, fold under their own Buses header below. |
 | MX-03 | Channel strips | Name, level bar, dB number field. | ✅ | Each row: name, the stereo meter as the level bar, the console-taper fader ([Beyond](#beyond)), the dB field (`NumberField`, −100 to +24, step 0.5), mute and Routing. |
 | MX-04 | Vertical meters | Vertical strips in side columns; a title-bar toggle flips orientation. | ⬜ | The dock's title bar is built; the toggle comes with the mixer's restyle. |
-| MX-05 | Monitoring | "Hear: after FX" / "before FX". | 🔒 | Decision register D22; the protocol has a bus's monitor since 0.42 (`bus.set_monitor`), and the engine doesn't play it yet. |
+| MX-05 | Monitoring | "Hear: after FX" / "before FX". | ⬜ | Decision register D22: a bus's monitor (`bus.set_monitor`, protocol 0.42), which the engine plays on its device while an output runs. |
 | MX-06 | Privacy mute | The mic reads "muted (privacy)" while privacy is on. | 🔒 | E2b (#317). |
 | MX-07 | Real levels | Meters show the engine's levels. | ✅ | `meters.tick`, with RMS, peak and peak hold; the prototype's numbers are simulated. |
 
@@ -460,8 +460,8 @@ starts when the one before it has passed review.
    DL-06, OB-03, OB-04, KB-04, KB-05).
 6. **Filters:** panel, rows, add and settings dialogs (FL-01 to FL-05, DL-04, DL-05).
 7. **Trees and mixer:** search, drag to reorder, folders, labels and favourites, mixer
-   master card and vertical meters (SC-03 to SC-06, SC-08, SC-09, OB-01, OB-02, OB-06 to
-   OB-09, MX-01 to MX-04).
+   master card, vertical meters and monitoring (SC-03 to SC-06, SC-08, SC-09, OB-01,
+   OB-02, OB-06 to OB-09, MX-01 to MX-05).
 8. **Keyframes:** keyframe rows, their menu and the keyframe banner (SC-07, CM-08,
    CV-16), on K1's keyframe scenes.
 

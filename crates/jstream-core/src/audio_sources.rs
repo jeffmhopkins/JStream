@@ -64,12 +64,15 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use jstream_audio::{InputControl, MixerControl};
+use jstream_audio::{InputControl, MixerControl, Monitor, MonitorControl, monitor_socket};
 use jstream_platform::{
-    AudioInputTarget, AudioIo, AudioProcess, AudioStream, DeviceId, MediaClock, PlatformError,
-    PluginHosts, VideoDeviceInfo, VideoDevices,
+    AudioInputTarget, AudioIo, AudioOutputTarget, AudioProcess, AudioStream, DeviceId, MediaClock,
+    PlatformError, PluginHosts, VideoDeviceInfo, VideoDevices,
 };
-use jstream_protocol::{SourceId, SourceKind};
+use jstream_protocol::{BusId, BusMonitor, MonitorTap, SourceId, SourceKind};
+use std::sync::mpsc::SyncSender;
+
+use crate::audio::MonitorRoute;
 use jstream_sources::{AudioTarget, SourceAudio, webcam_device};
 
 use crate::drops::{AudioInputDrops, DropLedger, DropSourceId, lock_ledger};
@@ -98,6 +101,32 @@ pub(crate) struct Wanted {
     changed: Condvar,
     /// The audio sources' open inputs, for the routing.
     routed: Routed,
+}
+
+/// A bus monitor the program stage plays: the collection's monitor, and the mixer bus
+/// that feeds it, which the engine's audio routing (`crate::audio`) names.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct WantedMonitor {
+    pub(crate) bus: jstream_audio::BusId,
+    pub(crate) monitor: BusMonitor,
+}
+
+impl Wanted {
+    /// Brings the monitors to play in line with `monitors`, and wakes the program
+    /// stage's thread when they changed. The routing calls it under the collection lock
+    /// on every sync, and with none when its mixer goes.
+    pub(crate) fn set_monitors(&self, monitors: BTreeMap<BusId, WantedMonitor>) {
+        let mut guard = lock(&self.state);
+        let wanted = &mut *guard;
+        if wanted.monitors != monitors {
+            wanted.monitors = monitors;
+            let monitors = &wanted.monitors;
+            wanted
+                .monitor_status
+                .retain(|id, _| monitors.contains_key(id));
+            self.changed.notify_all();
+        }
+    }
 }
 
 /// The mixer input of each audio source that records, kept by the program stage's
@@ -152,6 +181,11 @@ struct WantedState {
     clap: Option<Arc<ClapCatalog>>,
     /// How each source fares while the program stage runs.
     status: BTreeMap<SourceId, AudioStatus>,
+    /// The bus monitors to play, keyed by bus.
+    monitors: BTreeMap<BusId, WantedMonitor>,
+    /// How each monitor fares while the program stage runs: `Recording` while its
+    /// device plays.
+    monitor_status: BTreeMap<BusId, AudioStatus>,
 }
 
 /// Whether the program stage records an audio source or mixes a source's sound.
@@ -323,6 +357,12 @@ impl AudioSources {
     pub(crate) fn status(&self, source_id: &SourceId) -> Option<AudioStatus> {
         lock(&self.wanted.state).status.get(source_id).cloned()
     }
+
+    /// How the program stage fares with `bus_id`'s monitor, while it runs.
+    #[cfg(test)]
+    pub(crate) fn monitor_status(&self, bus_id: &BusId) -> Option<AudioStatus> {
+        lock(&self.wanted.state).monitor_status.get(bus_id).cloned()
+    }
 }
 
 /// After a change to the wanted set: a deleted source, or one whose audio is off, has no
@@ -384,11 +424,14 @@ struct Wants {
     /// Each source's audio filter chain.
     chains: BTreeMap<SourceId, Vec<Chained>>,
     clap: Option<Arc<ClapCatalog>>,
+    /// The bus monitors to play.
+    monitors: BTreeMap<BusId, WantedMonitor>,
 }
 
 impl Wants {
     fn of(state: &WantedState) -> Self {
         Self {
+            monitors: state.monitors.clone(),
             targets: state.targets.clone(),
             live: state
                 .live
@@ -477,6 +520,28 @@ struct Open {
     inputs: BTreeMap<Key, Input>,
     /// Inputs whose removal the mixer's command queue could not take yet.
     removing: Vec<InputControl>,
+    /// Where each opened monitor's feed goes: the mixer thread.
+    monitor_routes: SyncSender<MonitorRoute>,
+    /// Each wanted bus monitor, and its device stream while it plays.
+    monitors: BTreeMap<BusId, MonitorSlot>,
+}
+
+/// One wanted bus monitor, and its stream while it plays.
+struct MonitorSlot {
+    want: WantedMonitor,
+    live: Option<LiveMonitor>,
+    /// Why it isn't playing, once that has been reported.
+    unavailable: Option<String>,
+}
+
+/// A playing monitor.
+struct LiveMonitor {
+    /// Declared first, so the stream (and the player it calls) stops before the rest
+    /// goes.
+    stream: Box<dyn AudioStream>,
+    control: MonitorControl,
+    /// Set when the monitor closes: the mixer thread then lets go of its feed.
+    closed: Arc<AtomicBool>,
 }
 
 /// One wanted input, and its stream while it records.
@@ -514,6 +579,7 @@ impl AudioInputs {
         clock: Arc<dyn MediaClock>,
         wanted: Arc<Wanted>,
         ledger: Arc<Mutex<DropLedger>>,
+        monitor_routes: SyncSender<MonitorRoute>,
     ) -> Result<Self, String> {
         let open = Arc::new(Mutex::new(Open {
             mixer,
@@ -524,6 +590,8 @@ impl AudioInputs {
             ledger,
             inputs: BTreeMap::new(),
             removing: Vec::new(),
+            monitor_routes,
+            monitors: BTreeMap::new(),
         }));
         let stop = Arc::new(AtomicBool::new(false));
         let mut inputs = Self {
@@ -563,7 +631,11 @@ impl AudioInputs {
             tracing::error!(panic = ?err, "the jstream-audio-sources thread panicked");
         }
         // Cleared first, so no status says recording once a stream has stopped.
-        lock(&self.wanted.state).status.clear();
+        {
+            let mut state = lock(&self.wanted.state);
+            state.status.clear();
+            state.monitor_status.clear();
+        }
         let mut open = lock(&self.open);
         for (key, input) in std::mem::take(&mut open.inputs) {
             if let Some(live) = input.live {
@@ -571,6 +643,11 @@ impl AudioInputs {
             }
         }
         open.removing.clear();
+        for slot in std::mem::take(&mut open.monitors).into_values() {
+            if let Some(live) = slot.live {
+                close_monitor(live);
+            }
+        }
     }
 }
 
@@ -603,10 +680,11 @@ fn run(open: &Mutex<Open>, wanted: &Wanted, stop: &AtomicBool) {
     }
 }
 
-/// What one reconcile pass did: each source's status, and what to log once the inputs'
-/// lock is released (nothing is logged under a lock).
+/// What one reconcile pass did: each source's and monitor's status, and what to log
+/// once the inputs' lock is released (nothing is logged under a lock).
 struct Pass {
     status: BTreeMap<SourceId, AudioStatus>,
+    monitor_status: BTreeMap<BusId, AudioStatus>,
     notes: Vec<Note>,
     /// Each source's mixer input's packets so far, for tests.
     #[cfg(test)]
@@ -620,6 +698,9 @@ enum Note {
     Unavailable(Key, String),
     /// A filter, or a filter's new settings, the mixer refused.
     Refused(Key, String),
+    MonitorReopening(BusId),
+    MonitorAvailable(BusId),
+    MonitorUnavailable(BusId, String),
 }
 
 impl Pass {
@@ -639,6 +720,15 @@ impl Pass {
                 Note::Refused(key, reason) => {
                     tracing::warn!(input = ?key, reason, "audio filter not applied");
                 }
+                Note::MonitorReopening(bus_id) => {
+                    tracing::info!(bus_id = %bus_id, "monitor stream failed; reopening it");
+                }
+                Note::MonitorAvailable(bus_id) => {
+                    tracing::info!(bus_id = %bus_id, "monitor is playing again");
+                }
+                Note::MonitorUnavailable(bus_id, reason) => {
+                    tracing::warn!(bus_id = %bus_id, reason, "monitor is unavailable");
+                }
             }
         }
         let mut state = lock(&wanted.state);
@@ -651,6 +741,11 @@ impl Pass {
             .status
             .into_iter()
             .filter(|(id, _)| wants.names(id) && now.names(id))
+            .collect();
+        state.monitor_status = self
+            .monitor_status
+            .into_iter()
+            .filter(|(id, _)| wants.monitors.contains_key(id) && now.monitors.contains_key(id))
             .collect();
     }
 }
@@ -752,6 +847,7 @@ impl Open {
                 Some((id.clone(), status))
             })
             .collect();
+        let monitor_status = self.reconcile_monitors(wants, &mut notes);
         #[cfg(test)]
         let packets = self
             .inputs
@@ -765,10 +861,122 @@ impl Open {
             .collect();
         Pass {
             status,
+            monitor_status,
             notes,
             #[cfg(test)]
             packets,
         }
+    }
+
+    /// Brings the monitors in line with `wants`: closes those no longer wanted or
+    /// wanted differently, reopens failed ones, and opens every one that isn't
+    /// playing. Returns each monitor's status.
+    fn reconcile_monitors(
+        &mut self,
+        wants: &Wants,
+        notes: &mut Vec<Note>,
+    ) -> BTreeMap<BusId, AudioStatus> {
+        let stale: Vec<BusId> = self
+            .monitors
+            .iter()
+            .filter(|(id, slot)| wants.monitors.get(*id) != Some(&slot.want))
+            .map(|(id, _)| id.clone())
+            .collect();
+        for id in stale {
+            if let Some(MonitorSlot {
+                live: Some(live), ..
+            }) = self.monitors.remove(&id)
+            {
+                close_monitor(live);
+            }
+        }
+        let mut status = BTreeMap::new();
+        for (id, want) in &wants.monitors {
+            let mut slot = self.monitors.remove(id).unwrap_or(MonitorSlot {
+                want: want.clone(),
+                live: None,
+                unavailable: None,
+            });
+            if let Some(live) = slot.live.take() {
+                if live.control.stats().failed {
+                    notes.push(Note::MonitorReopening(id.clone()));
+                    close_monitor(live);
+                } else {
+                    slot.live = Some(live);
+                }
+            }
+            if slot.live.is_none() {
+                match self.open_monitor(&slot.want) {
+                    Ok(live) => {
+                        if slot.unavailable.take().is_some() {
+                            notes.push(Note::MonitorAvailable(id.clone()));
+                        }
+                        slot.live = Some(live);
+                    }
+                    Err(reason) => {
+                        if slot.unavailable.as_ref() != Some(&reason) {
+                            notes.push(Note::MonitorUnavailable(id.clone(), reason.clone()));
+                        }
+                        slot.unavailable = Some(reason);
+                    }
+                }
+            }
+            status.insert(
+                id.clone(),
+                match (&slot.live, &slot.unavailable) {
+                    (Some(_), _) => AudioStatus::Recording,
+                    (None, reason) => AudioStatus::Unavailable(reason.clone().unwrap_or_default()),
+                },
+            );
+            self.monitors.insert(id.clone(), slot);
+        }
+        status
+    }
+
+    /// Opens one monitor: starts its device's stream on a socket, builds the monitor
+    /// for the format the stream reports and plugs its player in, then hands its feed
+    /// to the mixer thread.
+    fn open_monitor(&mut self, want: &WantedMonitor) -> Result<LiveMonitor, String> {
+        let tap = match want.monitor.tap {
+            MonitorTap::PreFilters => jstream_audio::MonitorTap::PreFilters,
+            MonitorTap::PostFilters => jstream_audio::MonitorTap::PostFilters,
+            _ => return Err("the monitor's tap point is not one this engine knows".into()),
+        };
+        let target = if want.monitor.device.is_empty() {
+            AudioOutputTarget::DefaultOutput
+        } else {
+            AudioOutputTarget::Output(DeviceId::new(want.monitor.device.clone()))
+        };
+        let (socket, plug) = monitor_socket();
+        let stream = self
+            .audio
+            .open_output(&target, Box::new(socket))
+            .map_err(|err| err.to_string())?;
+        let Monitor {
+            feed,
+            player,
+            control,
+        } = self
+            .mixer
+            .add_monitor(stream.format())
+            .map_err(|err| err.to_string())?;
+        if !plug.plug(player) {
+            return Err("the device's stream stopped while it opened".into());
+        }
+        let closed = Arc::new(AtomicBool::new(false));
+        self.monitor_routes
+            .try_send(MonitorRoute {
+                bus: want.bus,
+                tap,
+                feed,
+                closed: Arc::clone(&closed),
+            })
+            .map_err(|_| "the mixer thread is not taking monitors".to_owned())?;
+        Ok(LiveMonitor {
+            stream,
+            control,
+            closed,
+        })
     }
 
     /// Opens one input: resolves its target, adds a mixer input in the format the
@@ -927,6 +1135,13 @@ impl Open {
             self.removing.push(control);
         }
     }
+}
+
+/// Stops a monitor's stream, and tells the mixer thread to let go of its feed.
+fn close_monitor(live: LiveMonitor) {
+    let LiveMonitor { stream, closed, .. } = live;
+    closed.store(true, Ordering::Release);
+    drop(stream);
 }
 
 /// Why a recording input has to be reopened, if it does: its stream failed, or the

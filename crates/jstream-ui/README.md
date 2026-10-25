@@ -409,8 +409,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the −14 LUFS target (70% along, where the prototype draws it), the three loudness
   readings in its tooltip, its true peak with "safe" or a warning over 0 dBTP, and a
   button that resets the integrated loudness (`audio.reset_loudness`). Its monitor
-  and FX buttons show disabled, since the engine has no monitor output and no master
-  chain yet. Each source gets a row, ordered by name: its meter, fader, a dB field
+  and FX buttons show disabled: the monitor control isn't built yet (MX-05), and the
+  engine has no master chain yet. Each source gets a row, ordered by name: its meter, fader, a dB field
   (the shared `NumberField`), mute and, folded under "Routing", whether its audio is
   on, when it is heard (`always` or `when_shown`) and its send into each bus (on or
   off, and its gain). A nested scene's row has only the routing toggles, since it has
