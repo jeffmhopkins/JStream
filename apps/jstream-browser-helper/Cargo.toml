@@ -1,6 +1,6 @@
 [package]
 name = "jstream-browser-helper"
-version = "0.0.0"
+version.workspace = true
 description = "The browser helper: the DLL CEF's bootstrap exe loads, running CEF's browser process for browser sources with the sandbox on."
 edition.workspace = true
 license.workspace = true

@@ -85,14 +85,16 @@ Closing the window stops the engine.
 | `--no-vcam` | Run without the virtual camera: a `virtual_cam` output can't start. |
 
 **Browser sources** need the `cef` feature (`cargo run -p jstream-desktop --features
-cef`) and the sandboxed browser helper beside `jstream.exe`: CEF's bootstrap exe renamed
-`jstream-browser-helper.exe`, `jstream-browser-helper.dll` and CEF's runtime files
+cef`) and the sandboxed browser helper in the `browser` folder beside `jstream.exe` (or
+next to it, in a build folder): CEF's bootstrap exe renamed `jstream-browser-helper.exe`,
+`jstream-browser-helper.dll` and CEF's runtime files
 ([ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md),
 [the helper's README](../jstream-browser-helper/README.md#purpose)). The app itself
 doesn't build or link CEF, so it starts without them; a `browser` source fails to open
-until they are there. It is off by default until the CEF runtime and the helper are
-packaged ([the browser crate's open items](../../crates/jstream-browser/README.md#open-items)).
-Without it, a `browser` source draws nothing. CEF's cache is the data folder's `cef`
+until they are there. The feature is off by default, because only Windows has the
+backend; the portable zip turns it on and ships the helper
+([ARCH › Packaging](../../docs/ARCHITECTURE.md#packaging)). Without it, a `browser`
+source draws nothing. CEF's cache is the data folder's `cef`
 folder, and its log `logs\cef.log`.
 
 - **Data folder.** `%APPDATA%\JStream`, the daemon's too. When a file named `portable`
