@@ -21,7 +21,7 @@ use jstream_graph::Graph;
 use jstream_media::MediaTime;
 use jstream_protocol::{
     Easing, EntityKind, FADE, Glide, ItemId, ItemTransition, MOVE, ProtocolError, SceneId,
-    SourceId, TransitionEffect, TransitionPresetId, TransitionStarted,
+    Settings, SourceId, TransitionEffect, TransitionPresetId, TransitionStarted,
 };
 use jstream_render::transition::{Effect, Endpoint, Timing, Track};
 
@@ -105,6 +105,9 @@ pub(crate) struct Visual {
     /// The size of the image in pixels, which bounds its crop, when known.
     pub(crate) size: Option<[u32; 2]>,
     pub(crate) settings: ItemTransition,
+    /// Its effects' kinds and settings in order (ADR-0065), empty without: two items
+    /// pair only when theirs are the same (§6).
+    pub(crate) effects: Vec<(String, Settings)>,
 }
 
 /// What a transition starts from: a scene, planned from the collection as it is now, or
@@ -201,7 +204,7 @@ pub(crate) fn plan(from: &[Visual], to: &[Visual], run: &Run, by_item: bool) -> 
                     } else {
                         f.source_id == item.source_id
                     };
-                    !used[j] && same && f.settings.glide == Glide::Auto
+                    !used[j] && same && f.settings.glide == Glide::Auto && f.effects == item.effects
                 })
             })
             .flatten();
@@ -285,6 +288,7 @@ mod tests {
             },
             size: None,
             settings: ItemTransition::default(),
+            effects: Vec::new(),
         }
     }
 
@@ -312,6 +316,39 @@ mod tests {
                 (visual.source_id.to_string(), kind)
             })
             .collect()
+    }
+
+    /// Two placements of a source pair only when their effects are the same filters in
+    /// order with the same settings (ADR-0065 §6); otherwise each takes its unmatched
+    /// effect.
+    #[test]
+    fn items_pair_only_when_their_effects_match() {
+        let framed = |x: f32, strength: f64| Visual {
+            effects: vec![(
+                "vignette".into(),
+                [("strength", serde_json::json!(strength))]
+                    .into_iter()
+                    .collect(),
+            )],
+            ..visual("cam", x)
+        };
+        let same = plan(&[framed(0.0, 0.5)], &[framed(10.0, 0.5)], &run(true), false);
+        assert_eq!(kinds(&same), [("cam".into(), "pair")]);
+        let other = plan(&[framed(0.0, 0.5)], &[framed(10.0, 0.8)], &run(true), false);
+        assert_eq!(
+            kinds(&other),
+            [("cam".into(), "disappear"), ("cam".into(), "appear")]
+        );
+        let bare = plan(
+            &[visual("cam", 0.0)],
+            &[framed(10.0, 0.5)],
+            &run(true),
+            false,
+        );
+        assert_eq!(
+            kinds(&bare),
+            [("cam".into(), "disappear"), ("cam".into(), "appear")]
+        );
     }
 
     #[test]

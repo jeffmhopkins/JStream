@@ -28,7 +28,7 @@ pub use chat::ChatPoller;
 pub use error::{MAX_REMOTE_TEXT, YoutubeError};
 pub use http::HttpTransport;
 pub use https::{DEFAULT_TIMEOUT, HttpsTransport, MAX_BODY_BYTES};
-pub use live::LiveClient;
+pub use live::{LiveClient, SecretHook, SecretKind};
 pub use loopback::LoopbackRedirect;
 pub use oauth::{
     AccessToken, BUILT_IN_CLIENT_ID, BUILT_IN_CLIENT_SECRET, Grant, OAuthClient,

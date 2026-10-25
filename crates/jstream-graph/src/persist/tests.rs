@@ -3,9 +3,10 @@
 use super::{LoadError, Migration, SCHEMA_VERSION, migrate_with};
 use crate::Graph;
 use jstream_protocol::{
-    Action, BusId, Chord, Edit, EncoderProfile, EncoderProfileId, FolderId, KindCategory,
-    KindDescriptor, LabelId, OutputId, OutputKind, ParamDescriptor, ParamType, ProtocolError, Rev,
-    SceneId, SceneMeta, SceneRole, SourceId, SourceKind, SourceMeta, parity,
+    Action, BusId, Chord, Edit, EncoderProfile, EncoderProfileId, FilterChain, FilterId,
+    FilterOwner, FolderId, ItemId, KindCategory, KindDescriptor, LabelId, OutputId, OutputKind,
+    ParamDescriptor, ParamType, ProtocolError, Rev, SceneId, SceneMeta, SceneRole, SourceId,
+    SourceKind, SourceMeta, parity,
 };
 use serde_json::{Value, json};
 
@@ -13,6 +14,10 @@ use serde_json::{Value, json};
 /// is supported (R-API-003): when the schema changes, this file stays as it is, a
 /// migration upgrades it, and a fixture of the new version is added beside it.
 const V1: &str = include_str!("fixtures/v1.json");
+
+/// A collection file at schema version 2, the current one: version 1 with scene
+/// filters and item effects (ADR-0065). The same rule applies once version 3 exists.
+const V2: &str = include_str!("fixtures/v2.json");
 
 /// The parity fixture's `webcam`, and `color`, whose `follow` parameter refers to
 /// another source.
@@ -25,6 +30,7 @@ fn kinds() -> Vec<KindDescriptor> {
         version: 2,
         video: true,
         audio: false,
+        max_outset_px: None,
         params: vec![
             ParamDescriptor {
                 id: "color".into(),
@@ -57,6 +63,7 @@ fn kinds() -> Vec<KindDescriptor> {
         version: 1,
         video: true,
         audio: false,
+        max_outset_px: None,
         params: vec![ParamDescriptor {
             id: "audio".into(),
             ty: ParamType::Bus,
@@ -69,7 +76,70 @@ fn kinds() -> Vec<KindDescriptor> {
             live: false,
         }],
     });
+    kinds.push(KindDescriptor {
+        kind_id: "frame".into(),
+        category: KindCategory::VideoFilter,
+        name: "Frame".into(),
+        version: 1,
+        video: true,
+        audio: false,
+        max_outset_px: Some(4),
+        params: vec![ParamDescriptor {
+            id: "tint".into(),
+            ty: ParamType::Source { media: None },
+            default: Value::Null,
+            label: "Tint".into(),
+            description: None,
+            group: None,
+            advanced: false,
+            visible_if: None,
+            live: false,
+        }],
+    });
     kinds
+}
+
+/// A `frame` filter tinted by source `z_base`, which sorts after every scene and item
+/// that holds one, so a load must add filters after every source.
+fn frame(owner: FilterOwner, id: &str, enabled: Option<bool>) -> Edit {
+    Edit::FilterAdd {
+        owner,
+        chain: FilterChain::Video,
+        filter_id: FilterId::new(id),
+        kind: "frame".into(),
+        settings: [("tint", json!({"type": "source", "source_id": "z_base"}))]
+            .into_iter()
+            .collect(),
+        enabled,
+        index: None,
+    }
+}
+
+/// The v1 fixture's collection, plus a disabled scene filter on scene `a` and an effect
+/// on item `i4` (ADR-0065), in one more batch: rev 3.
+fn v2_graph() -> Graph {
+    let mut graph = fixture_graph();
+    let applied = graph.apply(
+        &[
+            frame(
+                FilterOwner::Scene {
+                    scene_id: SceneId::new("a"),
+                },
+                "grade",
+                Some(false),
+            ),
+            frame(
+                FilterOwner::Item {
+                    item_id: ItemId::new("i4"),
+                },
+                "edge",
+                None,
+            ),
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    graph
 }
 
 fn color(id: &str, follow: Option<&str>) -> Edit {
@@ -130,9 +200,19 @@ fn edit_file(edit: impl FnOnce(&mut Value)) -> String {
 
 #[test]
 fn the_fixture_is_what_the_collection_saves() {
-    assert_eq!(fixture_graph().to_collection_json(), V1);
+    assert_eq!(v2_graph().to_collection_json(), V2);
 }
 
+#[test]
+fn the_v2_fixture_loads_exactly() {
+    let expected = v2_graph();
+    let loaded = load(V2);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(3)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+/// Version 1 upgrades unchanged: it has no scene filters, and its items' `effects`
+/// could only be empty.
 #[test]
 fn the_v1_fixture_loads_exactly() {
     let expected = fixture_graph();
@@ -153,7 +233,8 @@ fn a_webcam_saved_without_settings_loads_with_its_default() {
             }
         }
     });
-    assert!(!older.contains("\"device\""));
+    // The webcam's `device` setting is gone; the bus monitor's `device` is not a setting.
+    assert!(!older.contains("\"device\":\"\""));
     let loaded = load(&older);
     assert_eq!(
         loaded.as_ref().map(Graph::state),
@@ -189,7 +270,7 @@ fn an_empty_collection_round_trips() {
     assert_eq!(
         serde_json::from_str::<Value>(&json).ok(),
         Some(json!({
-            "schema_version": 1,
+            "schema_version": SCHEMA_VERSION,
             "rev": 0,
             "canvas": {"width": 1920, "height": 1080},
             "scenes": [],
@@ -716,6 +797,65 @@ fn a_collection_an_edit_would_refuse_is_refused() {
     );
 }
 
+/// Scene filters and item effects load through `filter.add`'s checks: a video chain of
+/// `video_filter` kinds whose references exist.
+#[test]
+fn scene_filters_and_item_effects_are_checked() {
+    let edit_v2 = |edit: &dyn Fn(&mut Value)| {
+        let mut value: Value = serde_json::from_str(V2).unwrap_or_default();
+        edit(&mut value);
+        value.to_string()
+    };
+    assert_eq!(load(&edit_v2(&|_| {})).map(|g| g.rev()), Ok(Rev(3)));
+    // Scene `a` is second in the file and holds `grade`; item `i4` in scene `b` holds
+    // `edge`.
+    let audio = edit_v2(&|v| {
+        let filters = v["scenes"][1]["filters"]
+            .as_object_mut()
+            .and_then(|f| f.remove("video"));
+        v["scenes"][1]["filters"]["audio"] = filters.unwrap_or_default();
+    });
+    let missing = edit_v2(&|v| {
+        v["scenes"][0]["items"][0]["effects"][0]["settings"]["tint"]["source_id"] = json!("gone");
+    });
+    let not_a_filter =
+        edit_v2(&|v| v["scenes"][0]["items"][0]["effects"][0]["kind"] = json!("gain"));
+    for (file, of) in [
+        (audio, "filter `grade` of scene `a`"),
+        (missing, "filter `edge` of item `i4`"),
+        (not_a_filter, "filter `edge` of item `i4`"),
+    ] {
+        assert!(
+            matches!(load(&file), Err(LoadError::Invalid { ref object, .. }) if object == of),
+            "{of}: {:?}",
+            load(&file)
+        );
+    }
+}
+
+/// A file saved before bus monitors (protocol 0.42) loads with none, and a monitor whose
+/// tap this version doesn't know is refused as its edit would be.
+#[test]
+fn a_file_without_monitors_loads_and_an_unknown_tap_is_refused() {
+    let older = edit_file(|v| {
+        for bus in v["buses"].as_array_mut().into_iter().flatten() {
+            bus.as_object_mut().map(|b| b.remove("monitor"));
+        }
+    });
+    assert!(!older.contains("\"monitor\""));
+    let loaded = load(&older);
+    assert!(loaded.is_ok(), "{loaded:?}");
+    if let Ok(graph) = loaded {
+        assert!(graph.state().buses().all(|bus| bus.monitor().is_none()));
+    }
+    let later = edit_file(|v| v["buses"][1]["monitor"]["tap"] = json!("pre_master"));
+    assert!(
+        matches!(load(&later), Err(LoadError::Invalid { ref object, .. }) if object == "bus `vod`"),
+        "{:?}",
+        load(&later)
+    );
+}
+
 #[test]
 fn a_source_saved_by_another_kind_version_is_refused() {
     let file = edit_file(|v| v["sources"][0]["kind_version"] = json!(1));
@@ -849,8 +989,8 @@ fn a_geometry_flip_round_trips_and_defaults_to_false() {
     assert!(!graph.to_collection_json().contains("flip_"));
 }
 
-/// An item's opacity and blend load through `item.add`'s checks, and its reserved
-/// `effects` loads only empty (ADR-0023 §1).
+/// An item's opacity and blend load through `item.add`'s checks. A version 1 file's
+/// `effects` loads only empty, and holds no scene `filters`: its migration refuses both.
 #[test]
 fn opacity_blend_and_reserved_effects_are_checked() {
     let empty = edit_file(|v| v["scenes"][0]["items"][0]["effects"] = json!([]));
@@ -858,9 +998,18 @@ fn opacity_blend_and_reserved_effects_are_checked() {
     let effect = edit_file(|v| v["scenes"][0]["items"][0]["effects"] = json!([{"kind": "blur"}]));
     assert_eq!(
         load(&effect),
-        Err(LoadError::Parse(
-            "item `i4`: `effects` is reserved and must be empty".into()
-        ))
+        Err(LoadError::Migration {
+            from: 1,
+            reason: "a version 1 item's `effects` must be empty".into()
+        })
+    );
+    let filters = edit_file(|v| v["scenes"][0]["filters"] = json!({}));
+    assert_eq!(
+        load(&filters),
+        Err(LoadError::Migration {
+            from: 1,
+            reason: "a version 1 scene has no `filters`".into()
+        })
     );
     for (field, value) in [("opacity", json!(1.5)), ("blend", json!("multiply"))] {
         let file = edit_file(|v| v["scenes"][0]["items"][0][field] = value.clone());
