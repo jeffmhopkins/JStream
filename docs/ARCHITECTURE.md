@@ -1012,8 +1012,9 @@ reports the loss as an error rather than panicking. The third loss within
 60 s fails the output instead. Each loss is logged and counted in the output's stats
 ([jstream-core › Design](../crates/jstream-core/README.md#design)). Not built yet: the
 engine event for a loss (a protocol change), attributing a loss to the effect pack that
-was drawing, and quarantining that pack, all of which wait for packs to be drawn in the
-engine (X1).
+was drawing, quarantining that pack, and the GPU-time guard (timestamp queries that
+quarantine an effect whose pass runs over half the frame budget for 30 frames running,
+before Windows' TDR fires), all of which wait for packs to be drawn in the engine (X1).
 
 **Transitions** ([ADR-0029](adr/0029-transitions.md), with
 [ADR-0052](adr/0052-transition-mechanics-and-studio-preview.md)'s mechanics). A Move is not a texture blend:
