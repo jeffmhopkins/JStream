@@ -915,16 +915,18 @@ impl State {
                 self.keys.remove(&output_id);
                 return Ok(CallResult::action());
             }
-            // As the engine: the server in front answers the pairing calls (ADR-0044),
-            // and the mock hosts no plugins (ADR-0069).
+            // As the engine: the server in front answers the pairing calls (ADR-0044).
+            // The mock runs no plugins (ADR-0069), so it installs none: it can't load a
+            // module, and none is ever installed to grant or enable.
             other @ (Action::PairingStart
             | Action::DeviceRevoke { .. }
-            | Action::PluginInstall { .. }
-            | Action::PluginGrant { .. }
-            | Action::PluginEnable { .. }) => {
+            | Action::PluginInstall { .. }) => {
                 return Err(ProtocolError::Unsupported {
                     call: other.name().into(),
                 });
+            }
+            Action::PluginGrant { plugin_id, .. } | Action::PluginEnable { plugin_id } => {
+                return Err(not_found(EntityKind::Plugin, plugin_id.as_str()));
             }
             // The mock runs no mixer, so there is no loudness to reset.
             Action::AudioResetLoudness {} => return Ok(CallResult::action()),

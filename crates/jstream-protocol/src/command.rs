@@ -1269,8 +1269,9 @@ pub enum Action {
     /// ADR-0069). It starts enabled, and `plugin.state_changed` reports it. For a person
     /// only: no MCP tool carries it, and no plugin is ever granted it. Fails with
     /// `already_exists` for a plugin ID in use, `invalid_argument` for a grant whose
-    /// `problem` names a field (`grant.hosts.0`) or a package that isn't a plugin, and
-    /// `unsupported` from an engine that hosts no plugins.
+    /// `problem` names a field (`grant.hosts.0`) or a package that isn't a plugin,
+    /// `action_failed` for a module whose `start` function traps or runs past its limits,
+    /// and `unsupported` from an engine that hosts no plugins.
     #[serde(rename = "plugin.install")]
     PluginInstall {
         /// The ID to install it under.

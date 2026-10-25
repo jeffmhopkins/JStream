@@ -968,9 +968,9 @@ needs = ["build", "hardware"]
 id = "WA1"
 milestone = "M3"
 title = "WASM automation plugins"
-status = "planned"
-prs = [486, 623, 642, 722, 725]
-note = "WASM host #486 landed with wave/m3-2 (#663); its wall-time deadlines #623, the cap of 50 commands a second #722, the 1,000-event queue #725 and the wire half #642 (protocol 0.35) landed with wave/m3-3 (#786); the engine side to build"
+status = "review"
+prs = [486, 623, 642, 722, 725, 839]
+note = "WASM host #486 landed with wave/m3-2 (#663); its wall-time deadlines #623, the cap of 50 commands a second #722, the 1,000-event queue #725 and the wire half #642 (protocol 0.35) landed with wave/m3-3 (#786); the engine side part 1, installing, granting, events, forbidden and disabling (#839, ADR-0075), is in review into wave/m3-5; saving installed plugins, the manifest's classes with needs_grant, a private data folder and the UI's grant flow follow"
 needs = ["build"]
 
 [[item]]
