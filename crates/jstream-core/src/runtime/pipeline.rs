@@ -658,6 +658,8 @@ impl Program {
             let mut claim = self.context.as_ref().and_then(|_| self.gpu_gate.claim());
             let context = claim.as_ref().and(self.context.as_deref());
             let (profile, limited) = while_hardware_held(&key.2, hardware_held);
+            // A settings error is no refusal: only the encoder's open is classified below.
+            video_config(&feed, &profile)?;
             let video =
                 open_video(self.codecs.as_ref(), context, &feed, &profile).map_err(|reason| {
                     if limited {

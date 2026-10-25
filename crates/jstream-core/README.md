@@ -1401,7 +1401,10 @@ software), so a refusal can't fall back to software. That refusal fails the star
 `hardware_session_limit`, naming the outputs that hold hardware sessions and keeping the
 encoder's message (0.44, `StartError`; ADR-0027 §3, #443). An output that joins an
 open session opens nothing, so it is never refused. With no hardware session open,
-`prefer` still falls back to software when hardware refuses (ADR-0031).
+`prefer` still falls back to software when hardware refuses (ADR-0031). A hardware
+encoder that takes the session and then refuses its first frame no longer falls back
+either (its fallback is `prefer`'s only), but that comes after `output.start` has
+answered: the output settles `failed` with the encoder's reason, not this code.
 
 **Video mixes.** The render thread keeps one frame per video mix the running sessions
 are fed from, each at its session's size, and counts base ticks (1/30 s). On a tick it
