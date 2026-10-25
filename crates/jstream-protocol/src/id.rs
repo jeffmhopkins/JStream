@@ -77,9 +77,30 @@ opaque_id!(
     EncoderProfileId
 );
 opaque_id!(
+    /// A video mix in the collection: what an output's video shows.
+    VideoMixId
+);
+opaque_id!(
+    /// An installed WASM automation plugin (ADR-0069), chosen by the person who installs
+    /// it.
+    PluginId
+);
+opaque_id!(
+    /// A folder of the scene list (ADR-0024 §3). Folders organise only.
+    FolderId
+);
+opaque_id!(
+    /// A label that sources carry (ADR-0024 §4).
+    LabelId
+);
+opaque_id!(
     /// A paired device: one browser or other client admitted with its own device token
     /// (ADR-0044). Assigned by the server when the device pairs.
     DeviceId
+);
+opaque_id!(
+    /// A transition preset in the collection (ADR-0029).
+    TransitionPresetId
 );
 opaque_id!(
     /// An audio bus in the collection (ADR-0028). [`BusId::master`] names the master
@@ -94,6 +115,11 @@ opaque_id!(
 opaque_id!(
     /// Chosen by the client for each request and echoed in its response or error.
     RequestId
+);
+opaque_id!(
+    /// A live-value gesture (ADR-0032): a drag, a fader move or a live dialog. Chosen by
+    /// the client that opens it, and unique among that client's open gestures.
+    GestureId
 );
 opaque_id!(
     /// Makes a retried batch safe: the engine applies a batch with a given key at most

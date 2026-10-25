@@ -101,11 +101,13 @@ feature) over a block on the heap, with the control channel over in-process pipe
   stop word, and `scan` listing only the hostable effects.
 
 **Not yet:**
-- CLAP filters in the graph, so nothing starts this process for a filter yet. The
-  launcher that creates the block and starts it in a kill-on-close job object with a
-  scrubbed environment is `jstream-platform-windows`'s `WindowsPluginHosts`, and the
-  supervisor that watches the heartbeat and restarts it with backoff is `jstream-core`'s
-  `HostSupervisor`.
+- CLAP filters on the master's and outputs' audio chains: the engine starts this
+  process only for each CLAP filter in a source's audio chain, through
+  `jstream-platform-windows`'s `WindowsPluginHosts` (the block, a kill-on-close job
+  object and a scrubbed environment) and `jstream-core`'s `HostSupervisor` (the
+  heartbeat, and restarts with backoff).
+- Writing the plugin's own parameter changes and saved state back to the filter's
+  settings.
 - The plugin's editor window.
 - Waking on a high-resolution timer on the media clock instead of sleeping.
 - Running a real plugin file, which needs a Windows hardware check.

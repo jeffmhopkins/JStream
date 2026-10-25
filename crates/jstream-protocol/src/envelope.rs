@@ -11,7 +11,9 @@ use crate::command::{Action, Batch};
 use crate::error::{ProtocolError, WireError};
 use crate::event::Event;
 use crate::history::HistoryCall;
+use crate::hotkey::HotkeyBinding;
 use crate::id::{ClientId, RequestId, Rev};
+use crate::keyframe::DroppedOverride;
 use crate::output::SecretString;
 use crate::query::{Query, QueryResult};
 use crate::version::ProtocolVersion;
@@ -132,6 +134,18 @@ pub enum CallResult {
     Batch {
         /// The revision the batch produced.
         rev: Rev,
+        /// The hotkey bindings the batch removed because their action named an object it
+        /// deleted (ADR-0040 §3), in the order it removed them. Undoing the batch restores
+        /// them. Omitted when there are none, and missing (from a server older than 0.25)
+        /// parses as empty.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        removed_hotkeys: Vec<HotkeyBinding>,
+        /// The keyframe-scene overrides the batch dropped because their item left the
+        /// variant's parent (ADR-0040 §1), in the order it dropped them. Undoing the
+        /// batch restores them. Omitted when there are none, and missing (from a server
+        /// older than 0.39) parses as empty.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        dropped_overrides: Vec<DroppedOverride>,
     },
     /// The action was accepted. Its progress is reported by events. An action whose
     /// answer carries data (`pairing.start`, `youtube.sign_in` and the YouTube broadcast
@@ -167,6 +181,15 @@ impl CallResult {
     /// `youtube.sign_in` and the YouTube broadcast actions.
     pub fn action() -> Self {
         CallResult::Action { result: None }
+    }
+
+    /// A batch result at `rev` that removed no hotkey bindings.
+    pub fn batch(rev: Rev) -> Self {
+        CallResult::Batch {
+            rev,
+            removed_hotkeys: Vec::new(),
+            dropped_overrides: Vec::new(),
+        }
     }
 }
 
@@ -242,7 +265,7 @@ impl ErrorResponse {
 }
 
 /// An event, as pushed to clients.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct EventMessage {
     /// The event.
     pub event: Event,

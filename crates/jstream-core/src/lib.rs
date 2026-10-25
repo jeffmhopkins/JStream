@@ -24,23 +24,30 @@ mod activity;
 mod audio;
 mod audio_sources;
 mod audit;
+mod chain;
 mod collection;
 mod drops;
 mod engine;
 mod events;
+mod filter_assets;
 mod filters;
+mod forget;
+mod gesture;
 mod history;
 mod kinds;
 mod live;
 mod outputs;
 mod plugins;
 mod preview;
+mod privacy;
+mod private_file;
 mod runtime;
 mod session;
 mod snapshot;
 mod studio;
 #[cfg(test)]
 mod tests;
+mod transition;
 mod youtube;
 
 pub use audit::{
@@ -64,7 +71,10 @@ pub use runtime::{
 };
 pub use session::InProcessControl;
 pub use snapshot::SourceFrameError;
-pub use youtube::{HEALTH_INTERVAL, SIGN_IN_TIMEOUT, TOKEN_ACCOUNT, YoutubeSetup};
+pub use youtube::{
+    DAILY_QUOTA, HEALTH_INTERVAL, SIGN_IN_TIMEOUT, STATS_INTERVAL, STATS_SLOWDOWN, TOKEN_ACCOUNT,
+    YoutubeSetup,
+};
 
 use std::sync::{Mutex, MutexGuard, PoisonError};
 

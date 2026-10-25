@@ -7,19 +7,27 @@ use jstream_platform::FrameSync;
 
 use crate::color::{self, premultiplied_linear};
 use crate::error::RenderError;
+use crate::filter::{self, FilterClock, VideoFilter};
 use crate::gpu::{Gpu, OpenOptions};
 use crate::image::{self, Alpha, Image, Maker, Owner};
-use crate::place::{self, Quad};
+use crate::mips::{MipPipelines, Mips, Region};
+use crate::place::{self, MAX_VERTICES, Shape};
 use crate::scene::{Output, Scene, Snapshot};
 
-/// Bytes from one vertex to the next: six `f32`s (position, UV, opacity, alpha mode),
-/// tightly packed. wgpu only needs the stride and attribute offsets to be multiples of 4.
-const VERTEX_STRIDE: u64 = 24;
-const VERTICES_PER_ITEM: u32 = 6;
+/// Bytes from one vertex to the next: 26 `f32`s (position, UV, opacity, alpha mode, `w`,
+/// the item's five edge lines of three each, and its UV bounds), tightly packed. wgpu
+/// only needs the stride and attribute offsets to be multiples of 4.
+const VERTEX_STRIDE: u64 = 104;
+/// The most vertices one item draws: a five-vertex polygon as a fan of three triangles.
+const MAX_VERTICES_PER_ITEM: u32 = 3 * (MAX_VERTICES as u32 - 2);
 
 struct Draw {
     index: usize,
     first_vertex: u32,
+    vertex_count: u32,
+    /// A 3D item's mip chain, of its crop of its image (ADR-0050 decision 5), which it
+    /// samples instead of the image.
+    mips: Option<Arc<Mips>>,
 }
 
 struct Targets {
@@ -53,6 +61,8 @@ pub struct Compositor {
     /// The holds staged for the submit being built, and their textures, which the
     /// submit hands back to the platform (`PRESENT`) after its last use.
     staged: Vec<(Arc<dyn FrameSync>, wgpu::Texture)>,
+    filters: filter::Runtime,
+    mip_pipelines: MipPipelines,
 }
 
 impl Compositor {
@@ -101,7 +111,52 @@ impl Compositor {
         texture: wgpu::Texture,
         sync: Option<Arc<dyn FrameSync>>,
     ) -> Result<Image, RenderError> {
-        image::import(&self.maker(), texture, sync)
+        self.import_as(texture, sync, Alpha::Straight)
+    }
+
+    /// Samples `texture`, as [`Self::import`] does, but holding sRGB code values already
+    /// multiplied by alpha, as a browser page paints (CEF's layout). It must be
+    /// `Rgba8Unorm` or `Bgra8Unorm`, so sampling does not decode it.
+    ///
+    /// The texels are filtered premultiplied, so transparent edges keep no fringe, then
+    /// divided by alpha, decoded from sRGB and multiplied by alpha again in linear light.
+    /// Filtering the code values rather than linear light differs from an upload only
+    /// where the filter mixes texels of different colour.
+    ///
+    /// # Errors
+    /// As for [`Self::import`].
+    pub fn import_premultiplied(
+        &self,
+        texture: wgpu::Texture,
+        sync: Option<Arc<dyn FrameSync>>,
+    ) -> Result<Image, RenderError> {
+        self.import_as(texture, sync, Alpha::PremultipliedSrgb)
+    }
+
+    /// Samples `texture`, as [`Self::import`] does, reading every texel's alpha as 1:
+    /// for a captured frame, whose alpha means nothing (a display or window capture can
+    /// deliver alpha below 1 under some drivers or HDR modes), so it draws as the CPU
+    /// capture path does, which ignores alpha (#451).
+    ///
+    /// # Errors
+    /// As for [`Self::import`].
+    pub fn import_opaque(
+        &self,
+        texture: wgpu::Texture,
+        sync: Option<Arc<dyn FrameSync>>,
+    ) -> Result<Image, RenderError> {
+        self.import_as(texture, sync, Alpha::Opaque)
+    }
+
+    /// [`Self::import`], [`Self::import_premultiplied`] or [`Self::import_opaque`], by
+    /// `alpha`.
+    pub(crate) fn import_as(
+        &self,
+        texture: wgpu::Texture,
+        sync: Option<Arc<dyn FrameSync>>,
+        alpha: Alpha,
+    ) -> Result<Image, RenderError> {
+        image::import(&self.maker(), texture, sync, alpha)
     }
 
     /// [`Self::import`] of a [`jstream_platform::GpuFrame`], keeping its [`FrameSync`] hold.
@@ -137,6 +192,12 @@ impl Compositor {
         } else {
             None
         };
+        // Last, so no error between the staging and the submit it arms (#391), and with
+        // the queue's submit lock held until that submit, so no other thread's submit
+        // takes what was staged.
+        let lock = self.gpu.submit.clone();
+        let submitting = lock.lock();
+        self.stage_sources(scene)?;
         let mut encoder = self
             .gpu
             .device
@@ -147,6 +208,7 @@ impl Compositor {
             .targets
             .as_ref()
             .expect("invariant: ensure_targets just set them");
+        self.record_mips(&mut encoder, scene);
         self.record_composite(&mut encoder, &targets.working_view, scene);
         self.record_resolve(&mut encoder, targets);
         if let Some(buffer) = &readback_buffer {
@@ -174,8 +236,14 @@ impl Compositor {
         }
         self.record_release(&mut encoder);
         self.gpu.queue.submit([encoder.finish()]);
+        drop(submitting);
         // The platform reuses a frame's texture once nothing holds it.
         self.staged.clear();
+        // wgpu validates the commands as they are recorded and submitted, so an error in
+        // this frame has been raised by now; one from an earlier call fails this frame.
+        if let Some(detail) = self.take_error() {
+            return Err(RenderError::Uncaptured { detail });
+        }
 
         let output = targets.output.clone();
         let pixels = match readback_buffer {
@@ -258,15 +326,22 @@ impl Compositor {
             });
         }
         self.load(scene)?;
+        // The submit lock is held from staging through the submit, as in `render`.
+        let lock = self.gpu.submit.clone();
+        let submitting = lock.lock();
+        self.stage_sources(scene)?;
         let mut encoder = self
             .gpu
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("jstream-render-layer"),
             });
+        self.record_mips(&mut encoder, scene);
         self.record_composite(&mut encoder, view, scene);
         self.record_release(&mut encoder);
         self.gpu.queue.submit([encoder.finish()]);
+        target.mark_changed();
+        drop(submitting);
         // The platform reuses a frame's texture once nothing holds it.
         self.staged.clear();
         Ok(())
@@ -283,6 +358,127 @@ impl Compositor {
         image::rewrite(&self.maker(), image, rgba)
     }
 
+    /// Draws `filter` over `input` into a new layer of the filter's
+    /// [`VideoFilter::output_size`], at the media-clock time `clock`. The filter keeps
+    /// its state, so a stateful kind (a video delay) must see every frame in order.
+    ///
+    /// # Errors
+    /// [`RenderError::Invalid`] when `input` came from another compositor,
+    /// [`RenderError::TooLarge`] for an output past the adapter limit, and
+    /// [`RenderError::Sync`] when staging an imported input or reference image fails.
+    pub fn apply_filter(
+        &mut self,
+        filter: &mut VideoFilter,
+        input: &Image,
+        clock: FilterClock,
+    ) -> Result<Image, RenderError> {
+        self.check_filter_input(input)?;
+        let (width, height) = filter.output_size(input.width(), input.height());
+        let output = self.layer(width, height)?;
+        self.apply_filter_into(filter, input, &output, clock)?;
+        Ok(output)
+    }
+
+    /// [`Self::apply_filter`] into `output`, a [`Self::layer`] of the filter's
+    /// [`VideoFilter::output_size`] for `input`, replacing what it held. The layer is
+    /// reused, so a chain that runs every frame allocates no output texture, and a
+    /// multi-pass kind keeps its scratch layers between calls at a steady size. Earlier
+    /// submits that read
+    /// `output` are ordered before this one, so they keep its old contents.
+    ///
+    /// # Errors
+    /// As for [`Self::apply_filter`]; also [`RenderError::Invalid`] when `output` is not
+    /// a layer this compositor made, is not the filter's output size, or is `input`.
+    pub fn apply_filter_into(
+        &mut self,
+        filter: &mut VideoFilter,
+        input: &Image,
+        output: &Image,
+        clock: FilterClock,
+    ) -> Result<(), RenderError> {
+        self.check_filter_input(input)?;
+        let invalid = |detail: String| RenderError::Invalid {
+            what: "filter output",
+            detail,
+        };
+        if !output.owner().is(&self.owner) || output.target().is_none() {
+            return Err(invalid(
+                "the output is not a layer this compositor made".into(),
+            ));
+        }
+        if output.texture() == input.texture() {
+            return Err(invalid("a filter cannot draw into its own input".into()));
+        }
+        let size = filter.output_size(input.width(), input.height());
+        if (output.width(), output.height()) != size {
+            return Err(invalid(format!(
+                "the output is {}x{}, but the filter draws {}x{}",
+                output.width(),
+                output.height(),
+                size.0,
+                size.1
+            )));
+        }
+        let mut encoder = self
+            .gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("jstream-render-filter"),
+            });
+        let (pass, scratch) = filter.parts();
+        scratch.begin();
+        let mut ctx = filter::Ctx {
+            gpu: &self.gpu,
+            maker: Maker {
+                gpu: &self.gpu,
+                layout: &self.image_layout,
+                sampler: &self.sampler,
+                owner: &self.owner,
+            },
+            runtime: &mut self.filters,
+            encoder: &mut encoder,
+            clock,
+            holds: &mut self.staged,
+            scratch,
+        };
+        ctx.holds.clear();
+        let encoded = pass.encode(&mut ctx, input, output);
+        ctx.hold(input);
+        ctx.scratch.end();
+        if let Err(err) = encoded {
+            self.staged.clear();
+            return Err(err);
+        }
+        // Staged only once recording succeeded, right before the submit it arms, and
+        // handed back to the platform at the end of that submit, as `render` does: the
+        // input's hold and those of the images the filter reads besides it, each once.
+        // The submit lock is held from staging through the submit, as in `render`.
+        let submitting = self.gpu.submit.lock();
+        for (sync, _) in &self.staged {
+            if let Err(err) = sync.stage(&self.gpu.queue) {
+                self.staged.clear();
+                return Err(RenderError::Sync(err));
+            }
+        }
+        self.record_release(&mut encoder);
+        self.gpu.queue.submit([encoder.finish()]);
+        drop(submitting);
+        // The platform reuses a frame's texture once nothing holds it.
+        self.staged.clear();
+        Ok(())
+    }
+
+    fn check_filter_input(&self, input: &Image) -> Result<(), RenderError> {
+        if input.owner().is(&self.owner) {
+            Ok(())
+        } else {
+            Err(RenderError::Invalid {
+                what: "image",
+                detail: "the filter input was made by another compositor".into(),
+            })
+        }
+    }
+
     /// The device images and targets are created on.
     pub fn device(&self) -> &wgpu::Device {
         &self.gpu.device
@@ -293,9 +489,51 @@ impl Compositor {
         &self.gpu.queue
     }
 
+    /// The lock held from staging a platform frame through the submit it arms on
+    /// [`Self::queue`]: the context's on a platform context, else the compositor's own.
+    pub(crate) fn submit_lock(&self) -> &jstream_platform::SubmitLock {
+        &self.gpu.submit
+    }
+
     /// The adapter the device was opened on.
     pub fn adapter(&self) -> &wgpu::Adapter {
         &self.gpu.adapter
+    }
+
+    /// The platform context this compositor was opened on ([`Self::on_context`]), or
+    /// `None` when it opened a device of its own. A texture made on that context can be
+    /// imported here; one from another context or device can't.
+    pub fn context(&self) -> Option<&jstream_platform::ContextKey> {
+        self.gpu.context.as_ref()
+    }
+
+    /// Why the device was lost, from wgpu's device-lost callback: `destroyed`, or `lost by
+    /// the driver` (a reset after a hang, Windows' TDR, a removed GPU) with the driver's
+    /// message. `None` while the device is usable. wgpu reports a loss when the device
+    /// is polled, so this polls it once, without waiting.
+    ///
+    /// Once it is lost, calls on this compositor fail or draw nothing. Nothing comes
+    /// back: open a new compositor ([`Self::open`]) and upload the images again.
+    pub fn lost(&self) -> Option<String> {
+        if self.gpu.faults.lost.get().is_none() {
+            let _ = self.gpu.device.poll(wgpu::PollType::Poll);
+        }
+        self.gpu.faults.lost.get().cloned()
+    }
+
+    /// The first uncaptured wgpu error on this compositor's device since the last call:
+    /// one no call returned, such as a validation error in a submitted command. wgpu's
+    /// default would panic on it. The compositor installs its own handler instead, so a
+    /// lost device's invalid resources fail the frame rather than the thread; an error
+    /// before a loss is also logged, as `uncaptured wgpu error`, once until it is taken:
+    /// `render` takes it each frame, so one that recurs is logged once per frame.
+    pub fn take_error(&self) -> Option<String> {
+        self.gpu
+            .faults
+            .error
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take()
     }
 
     /// A one-line description of the adapter, for logs and test output.
@@ -313,10 +551,13 @@ impl Compositor {
             adapter: self.gpu.adapter.clone(),
             max_texture_dimension_2d: self.gpu.max_texture_dimension_2d,
             max_buffer_size: self.gpu.max_buffer_size,
+            context: self.gpu.context.clone(),
+            faults: Arc::clone(&self.gpu.faults),
+            submit: self.gpu.submit.clone(),
         })
     }
 
-    fn maker(&self) -> Maker<'_> {
+    pub(crate) fn maker(&self) -> Maker<'_> {
         Maker {
             gpu: &self.gpu,
             layout: &self.image_layout,
@@ -350,9 +591,11 @@ impl Compositor {
             include_str!("resolve.wgsl"),
         );
         let resolve = resolve_pipeline(&gpu.device, &resolve_layout, &resolve_shader);
+        let filters = filter::Runtime::new(&gpu.device);
+        let mip_pipelines = MipPipelines::new(&gpu.device, &image_layout);
         let vertex_buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("jstream-render-vertices"),
-            size: VERTEX_STRIDE * u64::from(VERTICES_PER_ITEM),
+            size: VERTEX_STRIDE * u64::from(MAX_VERTICES_PER_ITEM),
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -369,6 +612,8 @@ impl Compositor {
             vertex_buffer,
             draws: Vec::new(),
             staged: Vec::new(),
+            filters,
+            mip_pipelines,
         }
     }
 
@@ -392,33 +637,60 @@ impl Compositor {
                     detail: format!("{} is not a finite value in 0..=1", item.opacity),
                 });
             }
-            let quad = place::quad(
-                item.image.width(),
-                item.image.height(),
-                item.placement,
-                item.crop,
-            )?;
+            let (width, height) = item.image.extent();
+            let mut shape = place::shape(width, height, item.placement, item.crop)?;
             if !item.visible || item.opacity == 0.0 {
                 continue;
             }
-            let Some(quad) = quad else { continue };
-            let first_vertex = u32::try_from(self.draws.len())
+            let Some(shape) = shape.as_mut() else {
+                continue;
+            };
+            let too_many = || RenderError::TooManyItems {
+                count: scene.items.len(),
+            };
+            let first_vertex = u32::try_from(self.vertices.len() as u64 / VERTEX_STRIDE)
                 .ok()
-                .and_then(|n| n.checked_mul(VERTICES_PER_ITEM))
-                .ok_or(RenderError::TooManyItems {
-                    count: scene.items.len(),
-                })?;
-            push_quad(
+                .filter(|first| first.checked_add(MAX_VERTICES_PER_ITEM).is_some())
+                .ok_or_else(too_many)?;
+            // A 3D item samples a chain of its crop, so its texture coordinates are
+            // mapped from the source's into the chain's.
+            let mips = shape.is_3d().then(|| {
+                let image = item.image;
+                let texels = (image.width(), image.height());
+                // The crop counts in the extent; the chain is built from texels.
+                let region = shape.crop.map_or_else(
+                    || Region::whole(texels.0, texels.1),
+                    |crop| crop.in_texels(image.extent(), texels),
+                );
+                let chain = self.chain_of(image, region);
+                let (w, h) = (image.width() as f32, image.height() as f32);
+                shape.remap_uv([
+                    region.x as f32 / w,
+                    region.y as f32 / h,
+                    region.width as f32 / w,
+                    region.height as f32 / h,
+                ]);
+                chain
+            });
+            // A chain holds premultiplied linear whatever the source held.
+            let alpha = if mips.is_some() {
+                Alpha::Premultiplied
+            } else {
+                item.image.alpha()
+            };
+            let vertex_count = push_shape(
                 &mut self.vertices,
-                &quad,
+                shape,
                 canvas_w,
                 canvas_h,
                 item.opacity,
-                item.image.alpha(),
+                alpha,
             );
             self.draws.push(Draw {
                 index,
                 first_vertex,
+                vertex_count,
+                mips,
             });
         }
         let limit = self.gpu.max_texture_dimension_2d;
@@ -478,7 +750,7 @@ impl Compositor {
         }
         let size = needed
             .next_power_of_two()
-            .max(VERTEX_STRIDE * u64::from(VERTICES_PER_ITEM));
+            .max(VERTEX_STRIDE * u64::from(MAX_VERTICES_PER_ITEM));
         if size > self.gpu.max_buffer_size {
             return Err(RenderError::TooManyItems {
                 count: self.draws.len(),
@@ -543,12 +815,12 @@ impl Compositor {
         Ok(())
     }
 
-    /// Validates `scene`, builds its vertices, stages its frame holds and writes the
-    /// vertex buffer: everything before the passes are recorded.
+    /// Validates `scene`, builds its vertices and writes the vertex buffer. The caller
+    /// stages the frame holds after this and every other step that can fail, so an
+    /// error never leaves a hold staged without the submit it arms.
     fn load(&mut self, scene: &Scene<'_>) -> Result<(), RenderError> {
         color::validate(scene.background)?;
         self.prepare(scene)?;
-        self.stage_sources(scene)?;
         self.ensure_vertex_buffer()?;
         if !self.vertices.is_empty() {
             self.gpu
@@ -556,6 +828,33 @@ impl Compositor {
                 .write_buffer(&self.vertex_buffer, 0, &self.vertices);
         }
         Ok(())
+    }
+
+    /// `image`'s mip chain of `region`, made the first time it is placed in 3D with it.
+    fn chain_of(&self, image: &Image, region: Region) -> Arc<Mips> {
+        image.chain(region, || {
+            Mips::new(
+                &self.gpu.device,
+                &self.gpu.queue,
+                &self.image_layout,
+                &self.mip_pipelines,
+                image,
+                region,
+            )
+        })
+    }
+
+    /// Rebuilds each mip chain a 3D item draws whose image changed since its last
+    /// build (an upload rewritten, a layer drawn into, an import handed a new frame),
+    /// once however many items and calls draw it (ADR-0050 decision 5).
+    fn record_mips(&self, encoder: &mut wgpu::CommandEncoder, scene: &Scene<'_>) {
+        for draw in &self.draws {
+            let Some(mips) = &draw.mips else { continue };
+            let image = scene.items[draw.index].image;
+            if mips.claim(image) {
+                mips.record(encoder, &self.mip_pipelines, image);
+            }
+        }
     }
 
     /// The composite pass: clear `target` (`Rgba16Float`) to the background and draw
@@ -587,9 +886,14 @@ impl Compositor {
             pass.set_pipeline(&self.composite);
             pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             for draw in &self.draws {
-                pass.set_bind_group(0, scene.items[draw.index].image.bind_group(), &[]);
+                let image = scene.items[draw.index].image;
+                let bind_group = match &draw.mips {
+                    Some(mips) => &mips.bind_group,
+                    None => image.bind_group(),
+                };
+                pass.set_bind_group(0, bind_group, &[]);
                 pass.draw(
-                    draw.first_vertex..draw.first_vertex + VERTICES_PER_ITEM,
+                    draw.first_vertex..draw.first_vertex + draw.vertex_count,
                     0..1,
                 );
             }
@@ -631,6 +935,14 @@ impl Compositor {
     }
 }
 
+#[cfg(test)]
+impl Compositor {
+    /// Lowers the buffer limit, as a smaller adapter's would be.
+    pub(crate) fn cap_buffer_size(&mut self, bytes: u64) {
+        self.gpu.max_buffer_size = bytes;
+    }
+}
+
 impl std::fmt::Debug for Compositor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Compositor")
@@ -639,33 +951,40 @@ impl std::fmt::Debug for Compositor {
     }
 }
 
-fn push_quad(
+/// Appends one item's triangles, a fan from its first vertex, and returns how many
+/// vertices that is.
+fn push_shape(
     buf: &mut Vec<u8>,
-    quad: &Quad,
+    shape: &Shape,
     canvas_w: f32,
     canvas_h: f32,
     opacity: f32,
     alpha: Alpha,
-) {
-    let straight = match alpha {
-        Alpha::Premultiplied => 0.0,
-        Alpha::Straight => 1.0,
-    };
-    let corner = |i: usize| {
-        let [x, y] = quad.corners[i];
-        let [u, v] = quad.uvs[i];
-        (x / canvas_w * 2.0 - 1.0, 1.0 - y / canvas_h * 2.0, u, v)
-    };
-    // Two triangles: 0-1-2 and 0-2-3.
-    for index in [0, 1, 2, 0, 2, 3] {
-        let (x, y, u, v) = corner(index);
-        push_f32(buf, x);
-        push_f32(buf, y);
-        push_f32(buf, u);
-        push_f32(buf, v);
-        push_f32(buf, opacity);
-        push_f32(buf, straight);
+) -> u32 {
+    // The shader's `mode`: how it turns a filtered sample into premultiplied linear.
+    let mode = alpha.shader_mode();
+    let vertices = shape.vertices();
+    let mut count = 0;
+    for second in 1..vertices.len().saturating_sub(1) {
+        for vertex in [vertices[0], vertices[second], vertices[second + 1]] {
+            let [x, y] = vertex.canvas;
+            push_f32(buf, x / canvas_w * 2.0 - 1.0);
+            push_f32(buf, 1.0 - y / canvas_h * 2.0);
+            push_f32(buf, vertex.uv[0]);
+            push_f32(buf, vertex.uv[1]);
+            push_f32(buf, opacity);
+            push_f32(buf, mode);
+            push_f32(buf, vertex.w);
+            for value in shape.edges.as_flattened() {
+                push_f32(buf, *value);
+            }
+            for value in shape.uv_bounds {
+                push_f32(buf, value);
+            }
+            count += 1;
+        }
     }
+    count
 }
 
 fn push_f32(buf: &mut Vec<u8>, value: f32) {
@@ -773,6 +1092,13 @@ fn composite_pipeline(
         1 => Float32x2,
         2 => Float32,
         3 => Float32,
+        4 => Float32,
+        5 => Float32x3,
+        6 => Float32x3,
+        7 => Float32x3,
+        8 => Float32x3,
+        9 => Float32x3,
+        10 => Float32x4,
     ];
     let buffers = [Some(wgpu::VertexBufferLayout {
         array_stride: VERTEX_STRIDE,

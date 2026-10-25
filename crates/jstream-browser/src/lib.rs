@@ -14,7 +14,7 @@
 //! Windows with the `helper` feature only, which `jstream-browser-helper` turns on, so no
 //! other build downloads or compiles CEF.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-browser/README.md#purpose, docs/adr/0021-browser-source.md, docs/adr/0046-browser-crate-and-helper.md, docs/adr/0048-sandboxed-browser-helper.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-browser/README.md#purpose, docs/adr/0021-browser-source.md, docs/adr/0046-browser-crate-and-helper.md, docs/adr/0048-sandboxed-browser-helper.md, docs/security/threat-model.md#browser
 
 mod audio;
 #[cfg(all(windows, feature = "cef"))]
@@ -26,6 +26,8 @@ mod helper;
 #[cfg(any(test, all(windows, feature = "cef")))]
 mod link;
 mod page;
+#[cfg(any(test, all(windows, feature = "helper")))]
+mod permission;
 mod request;
 #[cfg(any(test, all(windows, any(feature = "cef", feature = "helper"))))]
 mod wire;
@@ -59,8 +61,9 @@ pub trait BrowserBackend: Send + Sync {
     fn open(&self, spec: &PageSpec) -> Result<Box<dyn BrowserPage>, BrowserError>;
 
     /// The GPU device pages deliver their frames on: one on the media adapter, so the
-    /// compositor can sample them where they are (ADR-0004). The host opens it for now,
-    /// until the engine hands out its own. With `None`
+    /// compositor can sample them where they are (ADR-0004). The host gives one it opens,
+    /// for paints before a program stage; while a stage runs the engine replaces it with
+    /// the stage's own context, and passes `None` when the stage stops. With `None`
     /// (the default) pages keep painting but their frames are dropped. Pages open before
     /// the call follow it from their next paint.
     fn use_device(&self, gpu: Option<&GpuContext>);

@@ -7,7 +7,8 @@
 //! an action (`output.set_key`) and never appears in the collection, in any result,
 //! event or error, or in a `Debug` print. A read reports only whether a key is set.
 
-use crate::id::{EncoderProfileId, OutputId};
+use crate::filter::FilterChains;
+use crate::id::{EncoderProfileId, OutputId, VideoMixId};
 use schemars::JsonSchema;
 use serde::de::{self, Unexpected, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -33,10 +34,14 @@ pub enum OutputKind {
         /// `<path>.part` and renamed to `path` when the output stops. A recording never
         /// overwrites: `output.start` fails with `action_failed` when `path` or its
         /// `.part` name exists. The engine rejects, with `invalid_argument`, an empty or
-        /// relative path (absolute is `/…`, `\…`, `C:\…` or `C:/…`), one with control
-        /// characters or a `..` segment, and one that ends in a separator or names no
-        /// file. `output.start` also fails when the path is not absolute on the
-        /// engine's own machine.
+        /// relative path (absolute is `/…`, `\…`, `C:\…` or `C:/…`), one that starts
+        /// with two separators (a Windows UNC or device path, `\\host\share\…`,
+        /// `\\.\…` or `\\?\…`), one with `:` other than a drive letter's, `?`, `*`,
+        /// control characters or a `..` segment, one that ends in a separator or names
+        /// no file, and one whose file name is a DOS device name, in any case and with
+        /// or without an extension (`NUL`, `nul.mp4`, `CON`, `PRN`, `AUX`, `COM1`,
+        /// `LPT1`, …), which Windows opens in place of a file. `output.start` also fails
+        /// when the path is not absolute on the engine's own machine.
         path: String,
         /// The file format.
         container: RecordContainer,
@@ -55,6 +60,102 @@ pub enum OutputKind {
     #[serde(other)]
     #[schemars(skip)]
     Unknown,
+}
+
+impl OutputKind {
+    /// The server a stream key set for this output would be sent to, or `None` for a
+    /// kind that sends none (a recording, the virtual camera).
+    ///
+    /// For a generic RTMP(S) target this is `scheme://host:port`, with the scheme and
+    /// host lowercased and the scheme's default port (1935 for `rtmp`, 443 for `rtmps`)
+    /// filled in, so only a change of server changes it: the application path after the
+    /// host doesn't count. A YouTube target is `youtube`. The engine removes an output's
+    /// stream key when an applied batch, undo or redo changes this value or deletes the
+    /// output, so a key never goes to a server it wasn't set for.
+    #[must_use]
+    pub fn key_server(&self) -> Option<String> {
+        match self {
+            Self::Rtmp {
+                target: RtmpTarget::Generic { url },
+            } => Some(rtmp_server(url)),
+            Self::Rtmp {
+                target: RtmpTarget::YouTube { .. },
+            } => Some("youtube".to_owned()),
+            _ => None,
+        }
+    }
+
+    /// Whether publishing to this output sends its stream key across the network
+    /// unencrypted: a generic RTMP target whose server URL is plain `rtmp://` to a host
+    /// other than the engine's machine. `localhost` and loopback addresses
+    /// (`127.0.0.0/8`, `::1`, and IPv4 loopback mapped into IPv6) don't count, so a local
+    /// relay raises no warning. A YouTube target publishes over `rtmps://`, and a
+    /// recording or the virtual camera sends no key (#353). `output.status` reports it as
+    /// `cleartext`.
+    #[must_use]
+    pub fn sends_key_in_cleartext(&self) -> bool {
+        match self {
+            Self::Rtmp {
+                target: RtmpTarget::Generic { url },
+            } => rtmp_url_sends_key_in_cleartext(url),
+            _ => false,
+        }
+    }
+}
+
+/// [`OutputKind::sends_key_in_cleartext`] for a generic RTMP(S) server URL. The engine's
+/// publish path logs its warning by this rule, so the log and `output.status` agree.
+#[must_use]
+pub fn rtmp_url_sends_key_in_cleartext(url: &str) -> bool {
+    let server = rtmp_server(url);
+    let Some(authority) = server.strip_prefix("rtmp://") else {
+        return false;
+    };
+    // `rtmp_server` always appends `:port` to a URL it could split.
+    let host = authority
+        .rsplit_once(':')
+        .map_or(authority, |(host, _)| host);
+    let host = host
+        .strip_prefix('[')
+        .and_then(|host| host.strip_suffix(']'))
+        .unwrap_or(host);
+    let loopback = host == "localhost"
+        || host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| ip.to_canonical().is_loopback());
+    !loopback
+}
+
+/// `scheme://host:port` of an RTMP(S) URL, lowercased with the default port filled in.
+/// A URL that doesn't split that way (the engine never stores one) is returned whole,
+/// so it only ever equals itself.
+fn rtmp_server(url: &str) -> String {
+    let Some((scheme, rest)) = url.split_once("://") else {
+        return url.to_owned();
+    };
+    let scheme = scheme.to_ascii_lowercase();
+    let default_port = match scheme.as_str() {
+        "rtmp" => 1935,
+        "rtmps" => 443,
+        _ => return url.to_owned(),
+    };
+    let authority = rest
+        .split_once('/')
+        .map_or(rest, |(authority, _)| authority)
+        .to_ascii_lowercase();
+    let (host, port) = match authority.rfind(':') {
+        // A colon inside `[v6]` is not a port separator.
+        Some(at) if !authority[at..].contains(']') => {
+            (&authority[..at], Some(&authority[at + 1..]))
+        }
+        _ => (authority.as_str(), None),
+    };
+    let port = match port.map(str::parse::<u16>) {
+        None => default_port,
+        Some(Ok(port)) => port,
+        Some(Err(_)) => return url.to_owned(),
+    };
+    format!("{scheme}://{host}:{port}")
 }
 
 /// The file format a recording is written in. Serialized as a snake_case string.
@@ -120,6 +221,16 @@ pub struct OutputInfo {
     /// default, as from a server older than 0.13.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub encoder_profile: Option<EncoderProfileId>,
+    /// Its own chains, which `filter.*` edits with the owner
+    /// `{"type":"output","output_id":…}` and which run after the master stage
+    /// (ADR-0027 §2). Only the audio chain holds filters so far, and a virtual camera,
+    /// which has no audio, has none. Omitted while both are empty.
+    #[serde(default, skip_serializing_if = "FilterChains::is_empty")]
+    pub filters: FilterChains,
+    /// The video mix it shows (`output.set_video_mix`). Absent means none: the program
+    /// at the engine's canvas size and base rate, as from a server older than 0.28.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub video_mix: Option<VideoMixId>,
 }
 
 /// A secret string, such as a stream key sent by a client to the engine, or the
@@ -242,9 +353,78 @@ impl<'de> Visitor<'de> for SecretVisitor {
 
 #[cfg(test)]
 mod tests {
-    use super::{OutputKind, RecordContainer, RtmpTarget, SecretString};
+    use super::{
+        OutputKind, RecordContainer, RtmpTarget, SecretString, rtmp_url_sends_key_in_cleartext,
+    };
     use crate::{ClientMessage, ProtocolError};
     use serde_json::json;
+
+    fn server(url: &str) -> Option<String> {
+        OutputKind::Rtmp {
+            target: RtmpTarget::Generic { url: url.into() },
+        }
+        .key_server()
+    }
+
+    /// A stream key is bound to scheme, host and port (#343): the path doesn't count,
+    /// case and an explicit default port don't either.
+    #[test]
+    fn key_server_is_scheme_host_and_port() {
+        let youtube = server("rtmp://a.rtmp.youtube.com/live2");
+        assert_eq!(youtube.as_deref(), Some("rtmp://a.rtmp.youtube.com:1935"));
+        assert_eq!(server("RTMP://A.rtmp.YouTube.com:1935/other/app"), youtube);
+        assert_ne!(server("rtmp://attacker.example/live2"), youtube);
+        assert_ne!(server("rtmps://a.rtmp.youtube.com/live2"), youtube);
+        assert_ne!(server("rtmp://a.rtmp.youtube.com:1936/live2"), youtube);
+        assert_eq!(
+            server("rtmps://[::1]/live").as_deref(),
+            Some("rtmps://[::1]:443")
+        );
+        assert_eq!(
+            server("rtmp://[::1]:1936/live").as_deref(),
+            Some("rtmp://[::1]:1936")
+        );
+        let yt = OutputKind::Rtmp {
+            target: RtmpTarget::YouTube {
+                broadcast_id: "a".into(),
+            },
+        };
+        assert_eq!(yt.key_server().as_deref(), Some("youtube"));
+        assert_eq!(OutputKind::VirtualCam.key_server(), None);
+    }
+
+    /// Plain `rtmp://` to a remote host sends the key in the clear; `rtmps://`, loopback,
+    /// YouTube and the other kinds don't (#353).
+    #[test]
+    fn only_plain_rtmp_to_a_remote_host_sends_the_key_in_cleartext() {
+        let clear = rtmp_url_sends_key_in_cleartext;
+        assert!(clear("rtmp://a.rtmp.youtube.com/live2"));
+        assert!(clear("RTMP://192.168.1.20:1935/live"));
+        assert!(clear("rtmp://[2001:db8::1]/live"));
+        assert!(clear("rtmp://[2001:db8::1]:1936/live"));
+        assert!(clear("rtmp://localhost.example.com/live"));
+        assert!(!clear("rtmps://a.rtmps.youtube.com/live2"));
+        assert!(!clear("RTMPS://a.rtmps.youtube.com/live2"));
+        assert!(!clear("rtmp://localhost/live"));
+        assert!(!clear("rtmp://LOCALHOST:1936/live"));
+        assert!(!clear("rtmp://127.0.0.1/live"));
+        assert!(!clear("rtmp://127.8.9.10/live"));
+        assert!(!clear("rtmp://[::1]/live"));
+        assert!(!clear("rtmp://[::1]:1936/live"));
+        assert!(!clear("rtmp://[::ffff:127.0.0.1]/live"));
+        let generic = |url: &str| OutputKind::Rtmp {
+            target: RtmpTarget::Generic { url: url.into() },
+        };
+        assert!(generic("rtmp://a.rtmp.youtube.com/live2").sends_key_in_cleartext());
+        assert!(!generic("rtmps://a.rtmps.youtube.com/live2").sends_key_in_cleartext());
+        let youtube = OutputKind::Rtmp {
+            target: RtmpTarget::YouTube {
+                broadcast_id: "a".into(),
+            },
+        };
+        assert!(!youtube.sends_key_in_cleartext());
+        assert!(!OutputKind::VirtualCam.sends_key_in_cleartext());
+    }
 
     #[test]
     fn kind_wire_form_is_tagged_twice() {

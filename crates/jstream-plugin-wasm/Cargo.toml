@@ -1,0 +1,27 @@
+[package]
+name = "jstream-plugin-wasm"
+version = "0.0.0"
+description = "The wasmtime host for JStream's sandboxed WASM automation plugins, which call the API through Control."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 3
+summary = "wasmtime host for automation plugins (calls the API through `Control`): fuel, wall-time and memory limits, no WASI, and a per-plugin capability list of the calls a plugin may make, empty by default"
+unsafe_allowed = false
+
+[lints]
+workspace = true
+
+[dependencies]
+jstream-control.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+wasmtime.workspace = true
+
+[dev-dependencies]
+futures-core.workspace = true
+jstream-control = { workspace = true, features = ["mock"] }
+wat.workspace = true

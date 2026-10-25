@@ -229,6 +229,14 @@ status = "unverified"
 checked_note = "Not fetched from the PR's environment (proxy refused the host); the commands were run against cargo-fuzz 0.13.2"
 
 [[external]]
+id = "w3c-uievents-code"
+url = "https://www.w3.org/TR/uievents-code/"
+relied_on = "KeyboardEvent.code values name physical keys independently of layout: KeyA–KeyZ, Digit0–Digit9, the punctuation keys (Minus, Equal, BracketLeft, BracketRight, Backslash, Semicolon, Quote, Backquote, Comma, Period, Slash), Space, Enter, Tab, Backspace, Escape, F1–F24, Insert, Delete, Home, End, PageUp, PageDown, the Arrow keys, PrintScreen, ScrollLock, Pause, Numpad0–Numpad9 and NumpadAdd/Subtract/Multiply/Divide/Decimal/Enter, and MediaPlayPause, MediaStop, MediaTrackNext, MediaTrackPrevious, AudioVolumeMute, AudioVolumeDown, AudioVolumeUp (Chord::KEYS, ADR-0024 §5)"
+review_every = "365d"
+status = "unverified"
+checked_note = "Not fetched: the build container's proxy refused the host; the names follow the spec as widely implemented by browsers"
+
+[[external]]
 id = "playwright"
 url = "https://playwright.dev/"
 relied_on = "@playwright/test drives Chromium headless from a test runner with fixtures, HTTP Basic credentials per browser context (httpCredentials), a launch executablePath and expected failures (test.fail); the web UI's end-to-end tests (crates/jstream-ui/tests/e2e/README.md)"
@@ -269,9 +277,353 @@ status = "ok"
 checked_note = "Re-read the default allocation and the audit requirement for more quota"
 
 [[external]]
+id = "yt-videos-list"
+url = "https://developers.google.com/youtube/v3/docs/videos/list"
+relied_on = "videos.list costs 1 unit and takes a comma-separated id list; with part=liveStreamingDetails,statistics a video carries liveStreamingDetails.concurrentViewers (present only while the broadcast has current viewers and dropped once it ends), actualStartTime, actualEndTime, and statistics.likeCount and viewCount, unsigned longs sent as strings (jstream-youtube stats)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read the method's quota cost and parameters, and the videos resource's liveStreamingDetails and statistics properties"
+
+[[external]]
 id = "yt-quota-costs"
 url = "https://developers.google.com/youtube/v3/determine_quota_cost"
 relied_on = "Quota costs: liveBroadcasts.insert 1, liveBroadcasts.transition 1, liveStreams.list 1, liveChatMessages.list 5, liveChatMessages.streamList 5; daily quotas reset at midnight Pacific time (ADR-0058)"
 review_every = "180d"
 status = "ok"
 checked_note = "Re-read the Live Streaming rows of the cost table and the reset time"
+
+[[external]]
+id = "xdp-screencast"
+url = "https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.ScreenCast.html"
+relied_on = "ScreenCast portal: SelectSources options restore_token and persist_mode (0 none, 1 while running, 2 until revoked) since interface version 4; restore tokens are single-use and Start returns a replacement; cursor_mode 4 sends the cursor as PipeWire stream metadata; OpenPipeWireRemote returns an fd for pw_context_connect_fd that exposes only the cast nodes (ADR-0060)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read restore_token, persist_mode values, cursor_mode metadata and OpenPipeWireRemote"
+
+[[external]]
+id = "pipewire-docs"
+url = "https://docs.pipewire.org/"
+relied_on = "PipeWire is a low-level multimedia framework for low-latency audio and video streams, the API screen-cast nodes and audio devices are read through (ADR-0060)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read the self-description on the front page"
+
+[[external]]
+id = "libva"
+url = "https://github.com/intel/libva"
+relied_on = "libva is the implementation of VA-API, the hardware video acceleration API the Linux encoder loads at run time (ADR-0060)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read the README's description of libva as the VA-API implementation"
+
+[[external]]
+id = "openh264-binary-license"
+url = "https://www.openh264.org/BINARY_LICENSE.txt"
+relied_on = "Cisco's MPEG LA patent license covers only the Cisco-provided OpenH264 binary, when it is separately downloaded to the end user's device and not integrated with third-party software before that download (ADR-0060 question 1, answered by ADR-0061)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read the conditions for the Cisco-provided binary"
+
+[[external]]
+id = "ubuntu-release-cycle"
+url = "https://ubuntu.com/about/release-cycle"
+relied_on = "Ubuntu LTS releases in standard security maintenance: 22.04 (until May 2027), 24.04 (until May 2029), 26.04 (until May 2031) (ADR-0060 fact ubuntu-lts-supported)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read the standard-maintenance rows for 22.04, 24.04 and 26.04"
+
+[[external]]
+id = "fedora-eol"
+url = "https://endoflife.date/fedora"
+relied_on = "Fedora releases still supported: 43 (until Dec 2026) and 44 (until Jun 2027) (ADR-0060 fact fedora-maintained)"
+review_every = "90d"
+status = "ok"
+checked_note = "Re-read the supported rows; Fedora 42 is end of life"
+
+[[external]]
+id = "apple-screencapturekit"
+url = "https://developer.apple.com/documentation/screencapturekit"
+relied_on = "ScreenCaptureKit is available from macOS 12.3; it lists displays, applications and windows (SCShareableContent) and delivers frames as CMSampleBuffers; capture needs the Screen Recording permission and an NSScreenCaptureUsageDescription (ADR-0063 §3)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read the framework page: availability macOS 12.3, SCShareableContent, CMSampleBuffer output, NSScreenCaptureUsageDescription"
+
+[[external]]
+id = "apple-sck-sharing-picker"
+url = "https://developer.apple.com/documentation/screencapturekit/sccontentsharingpicker"
+relied_on = "SCContentSharingPicker, the system content-sharing picker, is available from macOS 14.0 (ADR-0063 question 2)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read: availability macOS 14.0"
+
+[[external]]
+id = "apple-cg-request-screen-capture"
+url = "https://developer.apple.com/documentation/coregraphics/cgrequestscreencaptureaccess()"
+relied_on = "CGRequestScreenCaptureAccess (and CGPreflightScreenCaptureAccess) are available from macOS 10.15 (ADR-0063 §3)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read: both available from macOS 10.15"
+
+[[external]]
+id = "tidbits-sequoia-capture-prompts"
+url = "https://tidbits.com/2024/08/19/apple-reduces-excessive-sequoia-permission-requests-shifts-to-monthly"
+relied_on = "From macOS 15, apps that capture the screen are re-prompted for the permission periodically, now monthly; the system picker may avoid it (ADR-0063 §3)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read: monthly re-prompt; developers report ScreenCaptureKit apps get it too; picker may avoid it"
+
+[[external]]
+id = "apple-coreaudio-process-tap"
+url = "https://developer.apple.com/documentation/coreaudio/audiohardwarecreateprocesstap(_:_:)"
+relied_on = "AudioHardwareCreateProcessTap, Core Audio process taps, is available from macOS 14.2 (ADR-0063 §2, §4)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read: availability macOS 14.2"
+
+[[external]]
+id = "apple-coreaudio-taps-sample"
+url = "https://developer.apple.com/documentation/coreaudio/capturing-system-audio-with-core-audio-taps"
+relied_on = "A tap records one process or a group, can exclude processes, is used as an aggregate device's input, and needs NSAudioCaptureUsageDescription; the first recording prompts for system audio recording permission (ADR-0063 §4)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read: tap on processes, aggregate device, NSAudioCaptureUsageDescription, system audio recording prompt"
+
+[[external]]
+id = "apple-sck-captures-audio"
+url = "https://developer.apple.com/documentation/screencapturekit/scstreamconfiguration/capturesaudio"
+relied_on = "SCStreamConfiguration.capturesAudio is available from macOS 13.0 (ADR-0063 §4, the rejected alternative)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read: availability macOS 13.0"
+
+[[external]]
+id = "apple-vt-constant-bitrate"
+url = "https://developer.apple.com/documentation/videotoolbox/kvtcompressionpropertykey_constantbitrate"
+relied_on = "kVTCompressionPropertyKey_ConstantBitRate requires a constant-bit-rate algorithm; available from macOS 13.0 (ADR-0063 §6)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read: availability macOS 13.0"
+
+[[external]]
+id = "apple-metal-iosurface-texture"
+url = "https://developer.apple.com/documentation/metal/mtldevice/maketexture(descriptor:iosurface:plane:)"
+relied_on = "MTLDevice newTextureWithDescriptor:iosurface:plane: creates a texture whose storage is an IOSurface plane; available from macOS 10.11 (ADR-0063 §8)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read: availability macOS 10.11; texture uses the IOSurface as its storage"
+
+[[external]]
+id = "apple-secitemadd"
+url = "https://developer.apple.com/documentation/security/secitemadd(_:_:)"
+relied_on = "SecItemAdd adds keychain items (generic passwords among them), available from macOS 10.6; it blocks, so it is called off the UI and real-time threads (ADR-0063 §9)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read: availability macOS 10.6; blocks the calling thread"
+
+[[external]]
+id = "apple-avcapture-external"
+url = "https://developer.apple.com/documentation/avfoundation/avcapturedevice/devicetype-swift.struct/external"
+relied_on = "AVCaptureDevice.DeviceType.external (external, such as USB, cameras) is available from macOS 14.0 (ADR-0063 §2, §10)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read: availability macOS 14.0"
+
+[[external]]
+id = "apple-cmio-camera-extension"
+url = "https://developer.apple.com/documentation/coremediaio/creating-a-camera-extension-with-core-media-i-o"
+relied_on = "Camera extensions are system extensions from macOS 12.3, packaged in the app, needing the System Extension and App Groups capabilities, activated only from an app in /Applications with an administrator's approval (ADR-0063 question 5)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read: macOS 12.3, entitlements, /Applications, admin approval"
+
+[[external]]
+id = "apple-developer-program"
+url = "https://developer.apple.com/programs/"
+relied_on = "Apple Developer Program membership costs $99 a year (ADR-0063 question 1)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read: '$99 annual membership'"
+
+[[external]]
+id = "apple-sequoia-gatekeeper"
+url = "https://developer.apple.com/news/?id=saqachfa"
+relied_on = "From macOS 15, users can no longer Control-click to open software that isn't signed correctly or notarised; they allow it in System Settings > Privacy & Security (ADR-0063 question 1)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read the Control-click passage"
+
+[[external]]
+id = "apple-security-releases"
+url = "https://support.apple.com/kb/HT1222"
+relied_on = "Which macOS releases currently receive security updates (fact macos-security-updated; ADR-0063 §2)"
+review_every = "90d"
+status = "ok"
+checked_note = "Re-read: 27.0.1, 26.7.1 and 15.8.1 in September 2026; Sonoma's latest 14.8.9 in August 2026"
+
+[[external]]
+id = "petapixel-tahoe-last-intel"
+url = "https://petapixel.com/2025/06/10/macos-26-tahoe-is-the-end-of-the-road-for-intel-macs/"
+relied_on = "Apple said at WWDC 2025 that macOS 26 is the last release that supports Intel Macs (ADR-0063 §2, question 3)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read: macOS 26 'will be the last release that supports Intel-based Macs'"
+
+[[external]]
+id = "gh-actions-billing"
+url = "https://docs.github.com/en/billing/concepts/product-billing/github-actions"
+relied_on = "Standard GitHub-hosted runners are free in public repositories; otherwise Linux 2-core is $0.006 and macOS $0.062 a minute (ADR-0063 question 4)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read: free for public repositories on standard runners; $0.006 Linux, $0.062 macOS"
+
+[[external]]
+id = "objc2"
+url = "https://github.com/madsmtm/objc2"
+relied_on = "objc2 and its framework crates, generated from Apple's SDK headers, licensed Zlib OR Apache-2.0 OR MIT (ADR-0063 §12)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read: licence badge Zlib OR Apache-2.0 OR MIT; generated code in a submodule; active"
+
+[[external]]
+id = "via-la-aac"
+url = "https://www.via-la.com/licensing-programs/aac/"
+relied_on = "Via LA administers one AAC pool licence covering AAC-LC, HE-AAC, HE-AAC v2, xHE-AAC, MPEG-D DRC, AAC Scalable, AAC-LD and AAC-ELD; developers of end-user encoders and decoders need it; per-unit fees ($0.98 for the first 500,000 a year) plus a $15,000 initial fee ($1,000 for small entities), no cap listed; no fees for distributing AAC bit streams; its licensors (ADR-0062)"
+review_every = "90d"
+status = "ok"
+checked_note = "Re-read the covered technologies, who needs a licence, the fee table, initial fee and licensor list"
+
+[[external]]
+id = "via-la-aac-patent-list"
+url = "https://www.via-la.com/wp-content/uploads/2026/09/26Q3-AAC-Patent-List-website.pdf"
+relied_on = "The AAC pool's patent list gives licensor, country and patent number only: no expiry or priority dates and no mapping to profiles or tools (ADR-0062). Replaced by the next quarter's list when published"
+review_every = "90d"
+status = "ok"
+checked_note = "Re-read the columns; no expiry, priority or profile columns"
+
+[[external]]
+id = "sec-aac-patent-license-agreement"
+url = "https://www.sec.gov/Archives/edgar/data/1649009/000121390020023370/ea125930ex10-9_siyatamobile.htm"
+relied_on = "Via Licensing's AAC Patent License Agreement form (June 2018): fees on each licensed product Sold or Otherwise Supplied, Otherwise Supply includes transfers without compensation, each computer with the software counts separately, fees only where a licensed patent remains unexpired; profiles listed include MPEG-4 AAC Profile including MPEG-2 AAC LC (ADR-0062)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read sections 1.1, 1.17, 4.3 and 4.6.3"
+
+[[external]]
+id = "fraunhofer-aac-lc"
+url = "https://www.iis.fraunhofer.de/en/ff/amm/broadcast-streaming/aaclc.html"
+relied_on = "Fraunhofer says a patent licensing programme covering all versions of AAC is administered by Via LA; no statement that AAC-LC patents have expired (ADR-0062)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read the licensing paragraph; no expiry statement"
+
+[[external]]
+id = "fraunhofer-patent-licensing"
+url = "https://www.iis.fraunhofer.de/en/ff/amm/lizenz/patent.html"
+relied_on = "Fraunhofer licenses its AAC patents (AAC-LC included) through the Via LA pool or directly; no statement about expired AAC patents or open-source encoders (ADR-0062)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read the AAC paragraphs; no expiry or open-source statement"
+
+[[external]]
+id = "doom9-aac-patent-list-analysis"
+url = "https://forum.doom9.org/showthread.php?p=2027355"
+relied_on = "Community analysis of Via LA's AAC patent list: US patents with priority on or before 2003-12-31 still in force, the last expiring 2028-12-09 (US 8311809); 1,120 entries without dates on Google Patents; not legal advice (ADR-0062)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read posts 4 and 6 of the thread"
+
+[[external]]
+id = "redhat-fdk-aac-free-review"
+url = "https://bugzilla.redhat.com/show_bug.cgi?id=1501522"
+relied_on = "Fedora's fdk-aac-free package review: Red Hat Legal cleared the package's licence as free; the stripped library still decodes all AAC files, some with reduced functionality (ADR-0062)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read comments 2, 34, 39 and 75"
+
+[[external]]
+id = "debian-fdk-aac-free-new"
+url = "https://ftp-master.debian.org/new/fdk-aac-free_2.0.2-3.html"
+relied_on = "Debian's fdk-aac-free upload describes Fedora's fork as stripping newer high efficiency profiles with patent concerns, on the premise that patents no longer apply to this code (ADR-0062). The page disappears when the upload leaves the NEW queue"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read the copyright and changelog text"
+
+[[external]]
+id = "patent-us9462404"
+url = "https://patents.google.com/patent/US9462404"
+relied_on = "US9462404: Fraunhofer, compatible multi-channel coding (downmix side information), not an AAC-LC tool; expires 2026-05-19 (Google Patents' adjusted expiry, ADR-0062)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read title, assignee, priority date, expiry and the description or claims"
+
+[[external]]
+id = "patent-us8014534"
+url = "https://patents.google.com/patent/US8014534"
+relied_on = "US8014534: Dolby International, parametric stereo width, not an AAC-LC tool; expires 2026-06-29 (Google Patents' adjusted expiry, ADR-0062)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read title, assignee, priority date, expiry and the description or claims"
+
+[[external]]
+id = "patent-us7577570"
+url = "https://patents.google.com/patent/US7577570"
+relied_on = "US7577570: Dolby International, aliasing reduction in SBR filterbanks, not an AAC-LC tool; expires 2026-08-10 (Google Patents' adjusted expiry, ADR-0062)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read title, assignee, priority date, expiry and the description or claims"
+
+[[external]]
+id = "patent-us7756711"
+url = "https://patents.google.com/patent/US7756711"
+relied_on = "US7756711: Panasonic, frequency-domain band extension, not an AAC-LC tool; expires 2026-12-27 (Google Patents' adjusted expiry, ADR-0062)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read title, assignee, priority date, expiry and the description or claims"
+
+[[external]]
+id = "patent-us8340302"
+url = "https://patents.google.com/patent/US8340302"
+relied_on = "US8340302: Philips, parametric representation of spatial audio (parametric stereo), not an AAC-LC tool; expires 2027-08-01 (Google Patents' adjusted expiry, ADR-0062)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read title, assignee, priority date, expiry and the description or claims"
+
+[[external]]
+id = "patent-us8116460"
+url = "https://patents.google.com/patent/US8116460"
+relied_on = "US8116460: Dolby International, high-frequency reconstruction (SBR), not an AAC-LC tool; expires 2027-10-24 (Google Patents' adjusted expiry, ADR-0062)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read title, assignee, priority date, expiry and the description or claims"
+
+[[external]]
+id = "patent-us7933415"
+url = "https://patents.google.com/patent/US7933415"
+relied_on = "US7933415: Philips, parametric stereo decorrelator, not an AAC-LC tool; expires 2027-12-27 (Google Patents' adjusted expiry, ADR-0062)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read title, assignee, priority date, expiry and the description or claims"
+
+[[external]]
+id = "patent-us7949057"
+url = "https://patents.google.com/patent/US7949057"
+relied_on = "US7949057: Panasonic, band extension, not an AAC-LC tool; expires 2028-07-18 (Google Patents' adjusted expiry, ADR-0062)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read title, assignee, priority date, expiry and the description or claims"
+
+[[external]]
+id = "patent-us8311809"
+url = "https://patents.google.com/patent/US8311809"
+relied_on = "US8311809: Philips, converting a decoded sub-band signal into stereo (parametric stereo), not an AAC-LC tool; expires 2028-12-09 (Google Patents' adjusted expiry, ADR-0062)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read title, assignee, priority date, expiry and the description or claims"
+
+[[external]]
+id = "secret-service-spec"
+url = "https://specifications.freedesktop.org/secret-service/latest/"
+relied_on = "Secret Service API: the service object is /org/freedesktop/secrets and the default collection is also reached at /org/freedesktop/secrets/aliases/default; secrets cross the bus with a negotiated algorithm, plain (no encryption) or dh-ietf1024-sha256-aes128-cbc-pkcs7; Unlock takes item or collection paths and may return a prompt that must be acted on to finish (ADR-0071)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read the object paths, the plain algorithm and the unlocking chapter"

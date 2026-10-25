@@ -1,12 +1,12 @@
 //! The `text` source: a string drawn with a TrueType or OpenType font.
 
-mod raster;
+pub(crate) mod raster;
 
 use crate::color::{parse_color, rgba_frame};
 use crate::describe::{asset, kind, param};
 use crate::source::{self, changed_non_live, setting};
 use crate::{Context, Limits, Source, SourceError, SourceKind};
-use jstream_media::{MediaTime, Timebase, VideoFrame};
+use jstream_media::{FrameSize, MediaTime, Timebase, VideoFrame};
 use jstream_protocol::{EnumOption, KindDescriptor, ParamDescriptor, ParamType, Settings};
 use serde_json::{Value, json};
 use skrifa::FontRef;
@@ -15,7 +15,8 @@ use std::sync::Arc;
 
 /// The font used when the `font` setting is `null`: a Latin subset of Roboto Regular
 /// (Apache-2.0; the crate README's "Bundled font" says how it was made).
-static DEFAULT_FONT: &[u8] = include_bytes!("../../assets/fonts/Roboto-Regular-subset.ttf");
+pub(crate) static DEFAULT_FONT: &[u8] =
+    include_bytes!("../../assets/fonts/Roboto-Regular-subset.ttf");
 
 /// The longest `text`, in characters.
 const MAX_TEXT_LEN: u32 = 4096;
@@ -143,23 +144,26 @@ impl SourceKind for TextKind {
             format: "a TrueType or OpenType font",
             reason,
         })?;
-        let frame = draw(&font, settings, &ctx.limits)?;
+        let (frame, extent) = draw(&font, settings, 1.0, &ctx.limits)?;
         Ok(Box::new(TextSource {
             descriptor: self.0.clone(),
             settings: settings.clone(),
             limits: ctx.limits,
             font,
             frame,
+            density: 1.0,
+            extent,
         }))
     }
 }
 
 /// The first font in `bytes`, a font file or a collection.
-fn parse(bytes: &[u8]) -> Result<FontRef<'_>, String> {
+pub(crate) fn parse(bytes: &[u8]) -> Result<FontRef<'_>, String> {
     FontRef::from_index(bytes, 0).map_err(|e| e.to_string())
 }
 
-/// A running `text` source. Its one frame is drawn on create and on each update.
+/// A running `text` source. Its one frame is drawn on create, on each update and at
+/// each new density.
 struct TextSource {
     descriptor: KindDescriptor,
     settings: Settings,
@@ -167,7 +171,15 @@ struct TextSource {
     /// The font file, already checked by [`parse`].
     font: Cow<'static, [u8]>,
     frame: Arc<VideoFrame>,
+    /// How many pixels each way the frame draws per pixel of its extent (ADR-0073).
+    density: f32,
+    /// The frame's size at a density of 1, which it is placed at.
+    extent: FrameSize,
 }
+
+/// The highest density a source draws at ([`Source::set_density`]): 8 times as many
+/// pixels each way. The `text` kind is the one that draws at a density.
+pub const MAX_DENSITY: f32 = 8.0;
 
 impl Source for TextSource {
     fn frame(&mut self, _: MediaTime) -> Result<Arc<VideoFrame>, SourceError> {
@@ -184,14 +196,41 @@ impl Source for TextSource {
                 param: param.to_owned(),
             });
         }
-        self.frame = draw(&self.font, settings, &self.limits)?;
+        (self.frame, self.extent) = draw(&self.font, settings, self.density, &self.limits)?;
         self.settings = settings.clone();
         Ok(())
     }
+
+    /// Draws the text again at `density`, from 1 to [`MAX_DENSITY`]. A density whose
+    /// frame would be over the limits is halved until it fits, down to 1, which the text
+    /// already fit at when it was created or last updated.
+    fn set_density(&mut self, density: f32) -> Option<FrameSize> {
+        let mut density = if density.is_finite() {
+            density.clamp(1.0, MAX_DENSITY)
+        } else {
+            1.0
+        };
+        while density != self.density {
+            match draw(&self.font, &self.settings, density, &self.limits) {
+                Ok((frame, extent)) => {
+                    (self.frame, self.extent, self.density) = (frame, extent, density);
+                    break;
+                }
+                Err(_) => density = (density / 2.0).max(1.0),
+            }
+        }
+        Some(self.extent)
+    }
 }
 
-/// Draws the text `settings` describe with `font` into a new frame.
-fn draw(font: &[u8], settings: &Settings, limits: &Limits) -> Result<Arc<VideoFrame>, SourceError> {
+/// Draws the text `settings` describe with `font` into a new frame, at `density`, and
+/// returns it with its extent ([`raster::Drawn::extent`]).
+fn draw(
+    font: &[u8],
+    settings: &Settings,
+    density: f32,
+    limits: &Limits,
+) -> Result<(Arc<VideoFrame>, FrameSize), SourceError> {
     let text = string(settings, "text")?;
     if text.chars().count() > MAX_TEXT_LEN as usize {
         return Err(bad(
@@ -205,12 +244,9 @@ fn draw(font: &[u8], settings: &Settings, limits: &Limits) -> Result<Arc<VideoFr
         format: "a TrueType or OpenType font",
         reason,
     })?;
-    let (size, rgba) = raster::render(&font, text, &style, limits)?;
-    Ok(Arc::new(rgba_frame(
-        size,
-        rgba,
-        MediaTime::zero(Timebase::MILLIS),
-    )?))
+    let drawn = raster::render(&font, text, &style, density, limits)?;
+    let frame = rgba_frame(drawn.size, drawn.rgba, MediaTime::zero(Timebase::MILLIS))?;
+    Ok((Arc::new(frame), drawn.extent))
 }
 
 /// How the text is laid out and coloured: every setting but `text` and `font`.
@@ -262,7 +298,7 @@ fn style(settings: &Settings) -> Result<Style, SourceError> {
     })
 }
 
-fn bad(param: &str, reason: &str) -> SourceError {
+pub(crate) fn bad(param: &str, reason: &str) -> SourceError {
     SourceError::Setting {
         param: param.to_owned(),
         reason: reason.to_owned(),
@@ -276,7 +312,7 @@ fn string<'s>(settings: &'s Settings, id: &str) -> Result<&'s str, SourceError> 
 }
 
 /// A whole number of pixels from 0 to `max`.
-fn pixels(settings: &Settings, id: &str, max: u32) -> Result<u32, SourceError> {
+pub(crate) fn pixels(settings: &Settings, id: &str, max: u32) -> Result<u32, SourceError> {
     setting(settings, id)?
         .as_u64()
         .and_then(|v| u32::try_from(v).ok())
@@ -285,7 +321,7 @@ fn pixels(settings: &Settings, id: &str, max: u32) -> Result<u32, SourceError> {
 }
 
 /// A colour setting as straight sRGB RGBA bytes.
-fn color(settings: &Settings, id: &str) -> Result<[u8; 4], SourceError> {
+pub(crate) fn color(settings: &Settings, id: &str) -> Result<[u8; 4], SourceError> {
     setting(settings, id)?
         .as_str()
         .and_then(parse_color)

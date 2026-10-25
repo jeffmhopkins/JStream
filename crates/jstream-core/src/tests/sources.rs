@@ -1,13 +1,16 @@
-//! Live sources (C1b): the engine builds a `jstream-sources` source for each source in
-//! the collection, rebuilds it when its settings change, drops it when the source is
-//! deleted, and the program mix shows its frames, advancing animations on the clock.
+//! Live sources (C1b, C3): the engine builds a `jstream-sources` source for each source
+//! in the collection, rebuilds it when its settings change, drops it when the source is
+//! deleted, and the program mix shows its frames, advancing animations on the clock, or
+//! what the pipeline captures for it.
 
 use super::{add, batch, connected, create, edits};
 use crate::Engine;
 use jstream_media::{FrameSize, Timebase};
 use jstream_platform::fake::{FakeClip, FakeClock, FakeMediaDecoders};
 use jstream_protocol::{AssetRoot, Batch, Edit, ItemId, Reference, Settings, SourceId, SourceKind};
+use jstream_sources::CaptureSpec;
 use serde_json::{Value, json};
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -160,21 +163,156 @@ fn a_text_source_is_built_and_rebuilt() {
     assert_eq!(shown(&engine, "caption"), Some([0, 0, 0xff, 0xff]));
 }
 
+/// A text item shown enlarged has its source drawn again with more pixels for the same
+/// size, so it stays sharp, and drawn at its own size again when it is not enlarged
+/// (ADR-0073). The density goes up in quarter steps of a doubling.
 #[test]
-fn a_kind_that_is_not_built_still_shows_the_capture() {
+fn an_enlarged_text_item_draws_its_source_at_a_density() {
+    use jstream_protocol::{Finite32, ItemGeometry, ItemTransform, Size, Vec2};
     let engine = Engine::new();
     let control = connected(&engine);
     batch(
         &control,
         edits(vec![
             create("a"),
-            source("screen", "display", Settings::new()),
-            add("a", "i1", "screen"),
+            source("caption", "text", settings(&[("text", json!("Hi"))])),
+            add("a", "i1", "caption"),
         ]),
     )
     .expect("created");
-    assert_eq!(shown(&engine, "screen"), None);
-    assert!(engine.render_hub().load().shot().uses_capture());
+    let sizes = || {
+        assert!(engine.settle_sources(), "the sources were built in time");
+        engine
+            .render_hub()
+            .load()
+            .shot()
+            .frame(&SourceId::new("caption"))
+            .map(|frame| frame.sizes())
+            .expect("the caption is shown")
+    };
+    let (pixels, extent) = sizes();
+    assert_eq!(pixels, extent, "at its own size");
+    let scaled = |scale: f32| Edit::ItemSetTransform {
+        item_id: ItemId::new("i1"),
+        scene_id: None,
+        transform: ItemTransform {
+            position: Vec2::new(0.0, 0.0).expect("finite"),
+            scale: Vec2::new(scale, scale).expect("finite"),
+            rotation_deg: Finite32::new(0.0).expect("finite"),
+        },
+    };
+
+    batch(&control, Batch::single(scaled(2.0))).expect("scaled");
+    assert_eq!(
+        sizes(),
+        ([extent[0] * 2, extent[1] * 2], extent),
+        "twice as many pixels each way, placed at the same size"
+    );
+
+    // A box three times its size: the next quarter step up is 2^(7/4).
+    let [w, h] = extent.map(|side| side as f32 * 3.0);
+    batch(
+        &control,
+        Batch::single(Edit::ItemSetGeometry {
+            item_id: ItemId::new("i1"),
+            scene_id: None,
+            geometry: ItemGeometry {
+                size: Size::try_new(w, h).expect("positive"),
+                ..ItemGeometry::covering_canvas(1920, 1080).expect("positive")
+            },
+        }),
+    )
+    .expect("boxed");
+    let step = 2f32.powf(7.0 / 4.0);
+    assert_eq!(
+        sizes(),
+        (
+            extent.map(|side| (side as f32 * step).ceil() as u32),
+            extent
+        )
+    );
+
+    batch(&control, Batch::single(scaled(1.0))).expect("back to its size");
+    assert_eq!(sizes(), (extent, extent), "at its own size again");
+}
+
+/// A `display` or `window` source shows what the pipeline captures for its target:
+/// the primary display by default, the one its `target` names otherwise. Sources that
+/// capture the same thing share one capture, and a window source with no window chosen
+/// captures nothing.
+#[test]
+fn capture_sources_capture_their_targets() {
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let target = |id: &str| settings(&[("target", json!(id))]);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source("screen", "display", Settings::new()),
+            source("again", "display", Settings::new()),
+            source("second", "display", target("monitor:2")),
+            source("editor", "window", target("hwnd:0x2a")),
+            source("unset", "window", Settings::new()),
+            source("cam", "webcam", Settings::new()),
+            source(
+                "card",
+                "webcam",
+                settings(&[("device", json!("fake-capture-card-0"))]),
+            ),
+            add("a", "i6", "cam"),
+            add("a", "i7", "card"),
+            add("a", "i1", "screen"),
+            add("a", "i2", "again"),
+            add("a", "i3", "second"),
+            add("a", "i4", "editor"),
+            add("a", "i5", "unset"),
+        ]),
+    )
+    .expect("created");
+    assert!(engine.settle_sources(), "the sources were built in time");
+    let keys = |engine: &Engine| engine.render_hub().load().shot().captures().clone();
+    let captures = |engine: &Engine| {
+        keys(engine)
+            .into_iter()
+            .map(|key| key.spec)
+            .collect::<BTreeSet<_>>()
+    };
+    assert_eq!(
+        captures(&engine),
+        BTreeSet::from([
+            CaptureSpec::Display(None),
+            CaptureSpec::Display(Some("monitor:2".into())),
+            CaptureSpec::Window(Some("hwnd:0x2a".into())),
+            CaptureSpec::Device(None),
+            CaptureSpec::Device(Some("fake-capture-card-0".into())),
+        ])
+    );
+    // Each source has a capture of its own, so a backend that keeps a grant per source
+    // keeps them apart: `screen` and `again` show the same display through two.
+    let sources: BTreeSet<_> = keys(&engine)
+        .into_iter()
+        .filter_map(|key| key.source.map(|id| id.as_str().to_owned()))
+        .collect();
+    assert_eq!(
+        sources,
+        BTreeSet::from(["again", "editor", "screen", "second"].map(String::from))
+    );
+    assert_eq!(shown(&engine, "screen"), None, "no frame of its own");
+
+    batch(
+        &control,
+        edits(vec![Edit::SourceSetSettings {
+            source_id: SourceId::new("editor"),
+            patch: target("hwnd:0x2b"),
+        }]),
+    )
+    .expect("retargeted");
+    assert!(engine.settle_sources(), "the sources were built in time");
+    assert!(
+        captures(&engine).contains(&CaptureSpec::Window(Some("hwnd:0x2b".into()))),
+        "a new target is a new capture"
+    );
 }
 
 /// A new, empty directory for one test.
@@ -595,4 +733,206 @@ fn a_media_file_loaded_before_the_media_backend_plays_once_it_is_injected() {
     clock.advance(150);
     assert!(plays(&engine, 1), "and advances on the clock");
     let _ = fs::remove_dir_all(dir);
+}
+
+/// A 2-point `.cube` table that inverts every colour.
+const INVERT: &str = "LUT_3D_SIZE 2\n1 1 1\n0 1 1\n1 0 1\n0 0 1\n1 1 0\n0 1 0\n1 0 0\n0 0 0\n";
+
+/// The version of the asset the first filter of `id`'s video chain reads in the
+/// published program mix, once every build and load is done.
+fn chain_asset(engine: &Engine, id: &str) -> Option<u64> {
+    assert!(engine.settle_sources(), "the assets were loaded in time");
+    let snapshot = engine.render_hub().load();
+    let chain = snapshot.shot().chain(&SourceId::new(id))?;
+    chain.filters[0]
+        .reference
+        .as_ref()
+        .map(|asset| asset.version)
+}
+
+/// V0: the sources thread loads the file a video filter reads and the plan hands it to
+/// the source's chain; a file that can't be read leaves the filter without one (it
+/// passes its input through), and pointing it at another file loads that.
+#[test]
+fn a_video_filters_asset_is_loaded_for_its_chain() {
+    let dir = temp_dir("filter-asset");
+    fs::write(dir.join("invert.cube"), INVERT).expect("the table");
+    fs::write(dir.join("again.cube"), INVERT).expect("the table");
+    let engine = Engine::new()
+        .with_collection_file(dir.join("scenes.json"))
+        .expect("collection file");
+    let control = connected(&engine);
+    let lut = |path: &str| {
+        Reference::Asset {
+            root: AssetRoot::Collection,
+            path: path.into(),
+        }
+        .to_value()
+    };
+    let owner = jstream_protocol::FilterOwner::Source {
+        source_id: SourceId::new("pic"),
+    };
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source("pic", "color", color("#ffffff")),
+            add("a", "i1", "pic"),
+            Edit::FilterAdd {
+                owner: owner.clone(),
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new("grade"),
+                kind: "apply_lut".into(),
+                settings: settings(&[("lut", lut("invert.cube"))]),
+                enabled: None,
+                index: None,
+            },
+        ]),
+    )
+    .expect("created");
+    let first = chain_asset(&engine, "pic").expect("the table is loaded");
+
+    let point = |path: &str| {
+        batch(
+            &control,
+            edits(vec![Edit::FilterSetSettings {
+                owner: owner.clone(),
+                filter_id: jstream_protocol::FilterId::new("grade"),
+                patch: settings(&[("lut", lut(path))]),
+            }]),
+        )
+        .expect("set");
+    };
+    point("nowhere.cube");
+    assert_eq!(
+        chain_asset(&engine, "pic"),
+        None,
+        "a missing file loads nothing"
+    );
+    point("again.cube");
+    let again = chain_asset(&engine, "pic").expect("the other table is loaded");
+    assert_ne!(again, first, "another file is another load");
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// A capture backend that records what it was asked, around the fake capture.
+struct Recording {
+    inner: jstream_platform::fake::FakeCapture,
+    started: std::sync::Mutex<Vec<(Option<String>, jstream_platform::CursorCapture)>>,
+    forgot: std::sync::Mutex<Vec<String>>,
+}
+
+impl jstream_platform::Capture for Recording {
+    fn targets(
+        &self,
+    ) -> Result<Vec<jstream_platform::CaptureTargetInfo>, jstream_platform::PlatformError> {
+        self.inner.targets()
+    }
+
+    fn start(
+        &self,
+        target: &jstream_platform::CaptureTarget,
+    ) -> Result<Box<dyn jstream_platform::CaptureStream>, jstream_platform::PlatformError> {
+        self.start_with(target, &jstream_platform::CaptureOptions::default())
+    }
+
+    fn start_with(
+        &self,
+        target: &jstream_platform::CaptureTarget,
+        options: &jstream_platform::CaptureOptions,
+    ) -> Result<Box<dyn jstream_platform::CaptureStream>, jstream_platform::PlatformError> {
+        crate::lock(&self.started).push((options.source.clone(), options.cursor));
+        self.inner.start(target)
+    }
+
+    fn forget_source(&self, source: &str) {
+        crate::lock(&self.forgot).push(source.to_owned());
+    }
+}
+
+fn recording() -> Arc<Recording> {
+    Arc::new(Recording {
+        inner: jstream_platform::fake::FakeCapture::new(
+            FakeClock::new(Timebase::MICROS),
+            FrameSize::new(64, 36).expect("size"),
+        ),
+        started: std::sync::Mutex::new(Vec::new()),
+        forgot: std::sync::Mutex::new(Vec::new()),
+    })
+}
+
+#[test]
+fn a_sources_capture_is_started_for_that_source() {
+    let capture = recording();
+    let clock = FakeClock::new(Timebase::MICROS);
+    let backends = crate::runtime::CaptureBackends {
+        cpu: Arc::clone(&capture) as Arc<dyn jstream_platform::Capture>,
+        gpu: None,
+        devices: Arc::new(jstream_platform::fake::FakeVideoDevices::new(clock)),
+        codecs: Arc::new(jstream_platform::fake::FakeCodecs),
+    };
+    let key = crate::snapshot::CaptureKey::for_source(
+        CaptureSpec::Display(None),
+        SourceId::new("screen"),
+    );
+    crate::runtime::start_capture(&backends, &key).expect("the capture starts");
+    crate::runtime::start_capture(&backends, &crate::snapshot::CaptureKey::primary())
+        .expect("the primary display starts");
+    crate::runtime::start_capture(&backends, &key.clone().with_cursor(false))
+        .expect("the capture without the pointer starts");
+    use jstream_platform::CursorCapture::{Drawn, Hidden};
+    assert_eq!(
+        *crate::lock(&capture.started),
+        vec![
+            (Some("screen".to_owned()), Drawn),
+            (None, Drawn),
+            (Some("screen".to_owned()), Hidden)
+        ],
+        "a source's capture names it, the primary display without a scene names none, \
+         and a capture without the pointer asks for it to be left out"
+    );
+}
+
+#[test]
+fn deleting_a_source_forgets_its_capture_grant() {
+    use jstream_media::ChannelLayout;
+    use jstream_platform::Backends;
+    use jstream_platform::fake::{
+        FakeAudioIo, FakeCodecs, FakeGpuInterop, FakeMediaDecoders, FakeVideoDevices,
+    };
+
+    let capture = recording();
+    let clock = FakeClock::new(Timebase::MICROS);
+    let backends = Backends {
+        clock: Arc::new(clock.clone()),
+        video_devices: Arc::new(FakeVideoDevices::new(clock.clone())),
+        capture: Arc::clone(&capture) as Arc<dyn jstream_platform::Capture>,
+        audio: Arc::new(FakeAudioIo::new(clock, 48_000, ChannelLayout::Stereo).expect("audio")),
+        codecs: Arc::new(FakeCodecs),
+        gpu: Arc::new(FakeGpuInterop),
+        media: Arc::new(FakeMediaDecoders::new()),
+        vcam: None,
+    };
+    let engine = Engine::new().with_backends(backends);
+    let control = connected(&engine);
+    batch(
+        &control,
+        edits(vec![
+            source("screen", "display", Settings::new()),
+            source("other", "display", Settings::new()),
+        ]),
+    )
+    .expect("created");
+    batch(
+        &control,
+        edits(vec![Edit::SourceDelete {
+            source_id: SourceId::new("screen"),
+        }]),
+    )
+    .expect("deleted");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while crate::lock(&capture.forgot).is_empty() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(*crate::lock(&capture.forgot), vec!["screen".to_owned()]);
 }

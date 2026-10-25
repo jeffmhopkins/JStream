@@ -9,9 +9,16 @@
 //!   like the control token. The server keeps only its BLAKE3 digest, with the device's
 //!   ID, its name, when it paired and when its token was last presented. A token unused
 //!   for [`LAPSE`] lapses and its device is dropped.
+//! - **The browser cookie** (ADR-0047). A device token held as the
+//!   `__Host-jstream_device` cookie is admitted through [`Devices::admit_cookie`], which
+//!   also says when to re-set the cookie with a fresh `Max-Age`: on a use that renews
+//!   the lapse, at most once every [`COOKIE_RENEW_EVERY`]. When it was last set is kept
+//!   in memory only; a device read from the file is taken to have had it set at its last
+//!   use.
 //! - **The device file.** With `ServerConfig::device_file` the devices are kept in that
-//!   file, user-only on Unix (mode 0600; on Windows it gets its directory's ACL, like the
-//!   token file), rewritten whole through a temporary file on every change. It holds
+//!   file, user-only like the token file (mode 0600 on Unix; on Windows a protected DACL
+//!   for SYSTEM and the user, #344), rewritten whole through a temporary file on every
+//!   change. It holds
 //!   digests, never tokens. Without it they live in memory and are gone when the server
 //!   stops.
 //! - **Revocation.** Each open connection a device token admitted watches its device;
@@ -24,7 +31,9 @@ use crate::error::ServerError;
 use jstream_protocol::{DeviceId, DeviceInfo};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, HashMap};
-use std::fs::{self, OpenOptions};
+use std::fs;
+#[cfg(not(windows))]
+use std::fs::OpenOptions;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, PoisonError};
@@ -43,6 +52,10 @@ pub(crate) const LAPSE: u64 = 30 * 24 * 3600;
 /// How stale a device's stored `last_used_at` may get before a use rewrites the file, in
 /// seconds. Recording every use would rewrite it on every request.
 const TOUCH_EVERY: u64 = 3600;
+
+/// How long after the cookie was last set a use that renews the lapse re-sets it, in
+/// seconds: once a day.
+pub(crate) const COOKIE_RENEW_EVERY: u64 = 24 * 3600;
 
 /// The longest device name accepted, in characters.
 pub(crate) const MAX_NAME_CHARS: usize = 64;
@@ -88,6 +101,9 @@ struct Device {
     digest: blake3::Hash,
     paired_at: u64,
     last_used_at: u64,
+    /// When its cookie was last set or re-set, as far as this run of the server knows.
+    /// Not stored in the file.
+    cookie_set_at: u64,
 }
 
 impl Device {
@@ -237,6 +253,7 @@ impl Devices {
                 digest: blake3::hash(token.as_bytes()),
                 paired_at: now.unix,
                 last_used_at: now.unix,
+                cookie_set_at: now.unix,
             },
         );
         if let Err(error) = self.save(&state) {
@@ -251,17 +268,44 @@ impl Devices {
     /// presented value is hashed and compared digest to digest with every device's, so
     /// the compare reveals nothing about any token.
     pub(crate) fn admit(&self, presented: &[u8], now: u64) -> Option<(DeviceId, String)> {
+        self.admit_as(presented, now, false)
+            .map(|(id, name, _)| (id, name))
+    }
+
+    /// [`admit`](Devices::admit) for a token presented as the browser cookie, and
+    /// whether to re-set the cookie: this use renewed the lapse, and the cookie was last
+    /// set at least [`COOKIE_RENEW_EVERY`] ago.
+    pub(crate) fn admit_cookie(
+        &self,
+        presented: &[u8],
+        now: u64,
+    ) -> Option<(DeviceId, String, bool)> {
+        self.admit_as(presented, now, true)
+    }
+
+    fn admit_as(
+        &self,
+        presented: &[u8],
+        now: u64,
+        cookie: bool,
+    ) -> Option<(DeviceId, String, bool)> {
         let digest = blake3::hash(presented);
         let mut state = lock(&self.state);
         let mut changed = state.drop_lapsed(now);
         let mut found = None;
         for (id, device) in &mut state.devices {
             if device.digest == digest {
+                let mut renew = false;
                 if now.saturating_sub(device.last_used_at) >= TOUCH_EVERY {
                     device.last_used_at = now;
                     changed = true;
+                    renew =
+                        cookie && now.saturating_sub(device.cookie_set_at) >= COOKIE_RENEW_EVERY;
+                    if renew {
+                        device.cookie_set_at = now;
+                    }
                 }
-                found = Some((id.clone(), device.name.clone()));
+                found = Some((id.clone(), device.name.clone(), renew));
             }
         }
         if changed && let Err(error) = self.save(&state) {
@@ -379,8 +423,9 @@ pub(crate) fn check_name(name: &str) -> Result<&str, &'static str> {
     Ok(name)
 }
 
-/// Reads the device file: a missing one holds no devices. On Unix a file group or others
-/// can access is refused, as the token file is.
+/// Reads the device file: a missing one holds no devices. A file other users may access
+/// is refused, as the token file is: on Unix one group or others have any permission on,
+/// on Windows one `jstream_platform_windows::check_private_file` refuses.
 fn read_file(path: &Path) -> Result<BTreeMap<DeviceId, Device>, String> {
     let metadata = match fs::metadata(path) {
         Ok(metadata) => metadata,
@@ -401,7 +446,12 @@ fn read_file(path: &Path) -> Result<BTreeMap<DeviceId, Device>, String> {
             ));
         }
     }
-    let text = fs::read_to_string(path).map_err(|error| error.to_string())?;
+    let mut file = fs::File::open(path).map_err(|error| error.to_string())?;
+    #[cfg(windows)]
+    jstream_platform_windows::check_private_file(&file)
+        .map_err(|why| format!("it may be accessible to other users: {why}; make it user-only"))?;
+    let mut text = String::new();
+    io::Read::read_to_string(&mut file, &mut text).map_err(|error| error.to_string())?;
     parse_file(&text)
 }
 
@@ -423,11 +473,13 @@ fn parse_file(text: &str) -> Result<BTreeMap<DeviceId, Device>, String> {
         let digest = text("digest")
             .and_then(|hex| blake3::Hash::from_hex(hex).ok())
             .ok_or_else(broken)?;
+        let last_used_at = number("last_used_at").ok_or_else(broken)?;
         let device = Device {
             name: text("name").ok_or_else(broken)?.to_owned(),
             digest,
             paired_at: number("paired_at").ok_or_else(broken)?,
-            last_used_at: number("last_used_at").ok_or_else(broken)?,
+            last_used_at,
+            cookie_set_at: last_used_at,
         };
         devices.insert(DeviceId::new(id), device);
     }
@@ -452,7 +504,7 @@ fn render_file(devices: &BTreeMap<DeviceId, Device>) -> String {
     text
 }
 
-/// Writes the device file whole: to `<path>.tmp`, created user-only on Unix, synced, then
+/// Writes the device file whole: to `<path>.tmp`, created user-only, synced, then
 /// renamed over `path`, so a crash leaves the old file or the new one.
 fn write_file(path: &Path, devices: &BTreeMap<DeviceId, Device>) -> io::Result<()> {
     let mut tmp = path.as_os_str().to_owned();
@@ -463,11 +515,7 @@ fn write_file(path: &Path, devices: &BTreeMap<DeviceId, Device>) -> io::Result<(
         Err(error) if error.kind() != io::ErrorKind::NotFound => return Err(error),
         _ => {}
     }
-    let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
-    let written = options.open(&tmp).and_then(|mut file| {
+    let written = create_private(&tmp).and_then(|mut file| {
         file.write_all(render_file(devices).as_bytes())?;
         file.sync_all()
     });
@@ -478,10 +526,26 @@ fn write_file(path: &Path, devices: &BTreeMap<DeviceId, Device>) -> io::Result<(
     renamed
 }
 
+/// Opens a new user-only file at `path`, failing if anything is there: mode 0600 on
+/// Unix, a protected DACL for SYSTEM and the user on Windows.
+fn create_private(path: &Path) -> io::Result<fs::File> {
+    #[cfg(windows)]
+    return jstream_platform_windows::create_private_file(path);
+    #[cfg(not(windows))]
+    {
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+        options.open(path)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        CODE_LIFETIME, Devices, LAPSE, MAX_WRONG_ATTEMPTS, Now, PairError, check_name, normalize,
+        CODE_LIFETIME, COOKIE_RENEW_EVERY, Devices, LAPSE, MAX_WRONG_ATTEMPTS, Now, PairError,
+        TOUCH_EVERY, check_name, normalize,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -643,6 +707,37 @@ mod tests {
         assert_eq!(devices.list(t.unix + LAPSE + 10)[0].last_used_at, used);
     }
 
+    /// ADR-0047: a cookie use re-sets the cookie only when it renews the lapse and the
+    /// cookie is a day old, so at most once a day; a header use never does.
+    #[test]
+    fn the_cookie_is_renewed_at_most_once_a_day() {
+        let devices = memory();
+        let t = now();
+        let code = devices.start_pairing(t).expect("random");
+        let (_, token) = devices.pair(&code, "Browser", t).expect("paired");
+        let renews = |at: u64| {
+            devices
+                .admit_cookie(token.as_bytes(), at)
+                .map(|(_, _, renew)| renew)
+        };
+        assert_eq!(renews(t.unix), Some(false), "just set");
+        assert_eq!(
+            renews(t.unix + TOUCH_EVERY),
+            Some(false),
+            "renewed lapse, same day"
+        );
+        let day = t.unix + COOKIE_RENEW_EVERY;
+        assert_eq!(renews(day), Some(true));
+        assert_eq!(renews(day + 1), Some(false), "lapse not renewed");
+        assert_eq!(renews(day + TOUCH_EVERY), Some(false), "once a day");
+        // A header use renews the lapse but never re-sets a cookie.
+        let next = day + COOKIE_RENEW_EVERY;
+        assert!(devices.admit(token.as_bytes(), next).is_some());
+        assert_eq!(renews(next + 1), Some(false), "lapse already renewed");
+        assert_eq!(renews(next + TOUCH_EVERY), Some(true));
+        assert_eq!(devices.admit_cookie(b"not-the-token", next), None);
+    }
+
     #[test]
     fn the_file_keeps_digests_only_and_survives_a_restart() {
         let dir = scratch("file");
@@ -675,6 +770,39 @@ mod tests {
 
         fs::write(&path, "not json").expect("written");
         assert!(Devices::load(Some(path.clone())).is_err());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// #344: a device file whose DACL lets everyone read it is refused.
+    #[cfg(windows)]
+    #[test]
+    fn a_device_file_other_users_can_read_is_refused_on_windows() {
+        let dir = scratch("dacl");
+        let path = dir.join("token.devices");
+        let devices = Devices::load(Some(path.clone())).expect("no file yet");
+        let code = devices.start_pairing(now()).expect("OS randomness");
+        devices.pair(&code, "Tablet", now()).expect("paired");
+        assert!(
+            Devices::load(Some(path.clone())).is_ok(),
+            "its own DACL passes"
+        );
+
+        // Everyone (S-1-1-0) may read it now.
+        let granted = std::process::Command::new("icacls")
+            .arg(&path)
+            .args(["/grant", "*S-1-1-0:R"])
+            .output()
+            .expect("icacls runs");
+        assert!(granted.status.success(), "{granted:?}");
+        let error = Devices::load(Some(path.clone()))
+            .err()
+            .map(|e| e.to_string());
+        assert!(
+            error
+                .as_deref()
+                .is_some_and(|e| e.contains("accessible to other users")),
+            "{error:?}"
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 

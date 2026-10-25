@@ -1,15 +1,17 @@
-//! `delete.plan`: the batch that deletes a scene, source or bus together with everything
-//! that refers to it ([ADR-0025](../../../docs/adr/0025-typed-settings-kind-descriptors.md)).
+//! `delete.plan`: the batch that deletes a scene, source, bus, folder or label together
+//! with everything that refers to it ([ADR-0025](../../../docs/adr/0025-typed-settings-kind-descriptors.md)).
 //!
 //! Rejection stays the only delete: `scene.delete`, `source.delete` and `bus.delete`
 //! refuse while anything refers to their target. The plan spells out the removal as ordinary edits,
 //! so the client can show it, and its undo is the batch's normal inverse.
+//! Hotkey bindings are not blockers: the deletes remove those that name their targets
+//! (ADR-0040 §3), and the plan lists them.
 
 use crate::deps::{self, Node};
 use crate::model::Graph;
 use jstream_protocol::{
-    DeleteTarget, Edit, EntityKind, FilterId, FilterOwner, ItemId, ProtocolError, QueryResult,
-    Settings, SourceId, SourceKind,
+    DeleteTarget, Edit, EntityKind, FilterId, FilterOwner, HotkeyBinding, ItemId, MixInput,
+    ProtocolError, QueryResult, SceneId, Settings, SourceId, SourceKind, VideoMix, VideoMixId,
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -19,7 +21,8 @@ impl Graph {
     /// at the current revision. Applied as one batch with that `expected_rev`, they
     /// succeed. Fails with `not_found` if the target doesn't exist.
     ///
-    /// Deleting a scene also deletes the `scene` sources that show it. Deleting a source
+    /// Deleting a scene also deletes its keyframe scenes and the `scene` sources that show
+    /// it or them. Deleting a source
     /// never deletes a scene, so the cascade stops there. A bus is held only by settings
     /// values, which the plan clears; `bus.delete` takes its sends itself. The edits are, in order:
     /// - `item.remove` for each item that places a deleted source;
@@ -27,7 +30,17 @@ impl Graph {
     ///   object, setting each such parameter to `null`;
     /// - one `filter.set_settings` per remaining filter whose settings do, likewise;
     /// - `source.delete` for each `scene` source that shows a deleted scene;
+    /// - `video_mix.update` for each video mix that shows a deleted scene, keeping its
+    ///   name, resolution and rate and showing the program instead;
+    /// - `scene.delete` for each keyframe scene of a deleted scene;
     /// - the delete of the target.
+    ///
+    /// It also lists, ordered by chord, the hotkey bindings those deletes remove.
+    ///
+    /// A folder's plan moves the scenes and folders in it up to its parent
+    /// (`scene.set_folder`, then `folder.set_parent`), then deletes it. A label's plan
+    /// takes it off each source carrying it (`source.set_meta`), then deletes it. No
+    /// action names a folder or label, so neither removes a hotkey binding.
     pub fn delete_plan(&self, target: &DeleteTarget) -> Result<QueryResult, ProtocolError> {
         let state = &self.state;
         let (target, last) = match target {
@@ -52,6 +65,20 @@ impl Graph {
                         source_id: source_id.clone(),
                     },
                 )
+            }
+            DeleteTarget::Folder { folder_id } => {
+                return Ok(QueryResult::DeletePlan {
+                    rev: self.rev,
+                    edits: crate::organise::folder_plan(state, folder_id)?,
+                    hotkeys: Vec::new(),
+                });
+            }
+            DeleteTarget::Label { label_id } => {
+                return Ok(QueryResult::DeletePlan {
+                    rev: self.rev,
+                    edits: crate::organise::label_plan(state, label_id)?,
+                    hotkeys: Vec::new(),
+                });
             }
             DeleteTarget::Bus { bus_id } => {
                 if state.bus(bus_id).is_none() {
@@ -81,9 +108,17 @@ impl Graph {
         // show it. Those are leaves: deleting a source deletes nothing further.
         let mut deleted = vec![target.clone()];
         let mut shown_by = Vec::new();
+        let mut variants = Vec::new();
         if let Node::Scene(scene_id) = &target {
+            // A keyframe scene goes with its parent (ADR-0024 §2): it has no items of its
+            // own, so it is a leaf like a `scene` source.
+            variants.extend(state.variants_of(scene_id).map(|v| v.id.clone()));
+            let scenes: Vec<SceneId> = std::iter::once(scene_id.clone())
+                .chain(variants.iter().cloned())
+                .collect();
+            deleted.extend(variants.iter().cloned().map(Node::Scene));
             for source in state.sources() {
-                if matches!(&source.kind, SourceKind::Scene { scene_id: s } if s == scene_id) {
+                if matches!(&source.kind, SourceKind::Scene { scene_id: s } if scenes.contains(s)) {
                     shown_by.push(source.id.clone());
                     deleted.push(Node::Source(source.id.clone()));
                 }
@@ -91,12 +126,21 @@ impl Graph {
         }
 
         let mut removes: Vec<ItemId> = Vec::new();
+        let mut repoints: Vec<VideoMixId> = Vec::new();
         let mut clears: BTreeMap<SourceId, Settings> = BTreeMap::new();
         let mut filter_clears: BTreeMap<(SourceId, FilterId), Settings> = BTreeMap::new();
         for node in &deleted {
             for blocker in deps::blockers(state, node) {
                 if blocker.entity == EntityKind::Item {
                     removes.push(ItemId::new(blocker.id));
+                    continue;
+                }
+                if blocker.entity == EntityKind::VideoMix {
+                    repoints.push(VideoMixId::new(blocker.id));
+                    continue;
+                }
+                // A keyframe scene, already in `variants`.
+                if blocker.entity == EntityKind::Scene {
                     continue;
                 }
                 let source_id = SourceId::new(blocker.id);
@@ -146,10 +190,41 @@ impl Graph {
                 .into_iter()
                 .map(|source_id| Edit::SourceDelete { source_id }),
         );
+        edits.extend(repoints.into_iter().filter_map(|mix_id| {
+            let current = state.video_mix(&mix_id)?;
+            Some(Edit::VideoMixUpdate {
+                name: current.name.clone(),
+                mix: VideoMix {
+                    input: MixInput::Program,
+                    ..current.mix.clone()
+                },
+                mix_id,
+            })
+        }));
+        edits.extend(
+            variants
+                .into_iter()
+                .map(|scene_id| Edit::SceneDelete { scene_id }),
+        );
         edits.push(last);
+        let hotkeys = state
+            .hotkeys()
+            .filter(|(_, action)| {
+                action.named_objects().iter().any(|&(entity, id)| {
+                    deleted.iter().any(|node| match node {
+                        Node::Scene(s) => entity == EntityKind::Scene && s.as_str() == id,
+                        Node::Source(s) => entity == EntityKind::Source && s.as_str() == id,
+                        // No action names a bus, so no binding can.
+                        Node::Bus(_) => false,
+                    })
+                })
+            })
+            .map(|(chord, action)| HotkeyBinding::new(chord.clone(), action))
+            .collect();
         Ok(QueryResult::DeletePlan {
             rev: self.rev,
             edits,
+            hotkeys,
         })
     }
 }
@@ -164,7 +239,7 @@ fn not_found(entity: EntityKind, id: &str) -> ProtocolError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use jstream_protocol::{Rev, SceneId};
+    use jstream_protocol::Rev;
 
     #[test]
     fn a_missing_target_is_not_found() {
@@ -205,6 +280,7 @@ mod tests {
                 edits: vec![Edit::SceneDelete {
                     scene_id: SceneId::new("a"),
                 }],
+                hotkeys: vec![],
             })
         );
     }

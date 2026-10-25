@@ -1,18 +1,20 @@
 //! The source and filter kinds the engine describes (`kind.list`, `kind.describe`) and validates
 //! settings against (ADR-0025, docs/adr/0025-typed-settings-kind-descriptors.md): the
-//! descriptors of `jstream-sources`' built-in registry and the audio filter kinds of
-//! [`crate::filters`].
+//! descriptors of `jstream-sources`' built-in registry, the audio filter kinds of
+//! [`crate::filters`], and `jstream-render`'s built-in video filter kinds, which
+//! [`crate::chain`] runs.
 //!
 //! Frames still come from `Engine::set_source_frame`; rendering sources from the
 //! registry is the next step.
 
 use jstream_protocol::KindDescriptor;
 
-/// Every built-in kind, ordered by ID: the source kinds, then the audio filter kinds
-/// (ADR-0026), merged.
+/// Every built-in kind, ordered by ID: the source kinds, the audio filter kinds and the
+/// video filter kinds (ADR-0026), merged.
 pub(crate) fn builtin() -> Vec<KindDescriptor> {
     let mut kinds = jstream_sources::Registry::builtin().descriptors();
     kinds.extend(crate::filters::descriptors());
+    kinds.extend(jstream_render::video_filter_descriptors());
     kinds.sort_by(|a, b| a.kind_id.cmp(&b.kind_id));
     kinds
 }
@@ -49,5 +51,22 @@ mod tests {
         for kind in parity::kinds().into_iter().filter(|k| !k.audio) {
             assert!(kinds.contains(&kind), "{}", kind.kind_id);
         }
+    }
+
+    /// Every built-in kind's descriptor, as `kind.list` serves it, snapshot-tested
+    /// (ADR-0025, "Kinds get their own snapshot"; #635): adding or changing a kind changes
+    /// no protocol schema, so this diff is where the audio filter kinds' settings, which
+    /// no other crate snapshots, are reviewed like an API. Regenerate it with
+    /// `INSTA_UPDATE=always cargo test -p jstream-core --lib kinds`.
+    #[test]
+    fn builtin_kinds_snapshot() {
+        let kinds = serde_json::to_string_pretty(&builtin()).expect("descriptors serialize");
+        insta::with_settings!({
+            snapshot_path => "../schema",
+            prepend_module_to_snapshot => false,
+            omit_expression => true,
+        }, {
+            insta::assert_snapshot!("kinds", kinds);
+        });
     }
 }

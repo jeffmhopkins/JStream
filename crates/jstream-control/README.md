@@ -29,7 +29,8 @@ Contents (a first cut; [Design](#design) explains the choices):
   types that keep it dyn-compatible.
 - **Errors** (`error.rs`): `ControlError`, a `thiserror` enum: the engine's `WireError`,
   or a lost connection.
-- **Mock** (`mock.rs`, feature `mock`, with its filter edits in `mock/filter.rs`):
+- **Mock** (`mock.rs`, feature `mock`, with its filter edits in `mock/filter.rs`,
+  its audio in `mock/audio.rs` and its folders and labels in `mock/organise.rs`):
   `MockEngine` and `MockControl`, an in-memory implementation for developing and
   testing clients without the engine, which they never depend on. `jstream-core`'s `InProcessControl` is the real in-process
   implementation; its tests hold it to the mock's answers.
@@ -105,15 +106,19 @@ its own, and is used with default features off.
 ### Mock
 
 `MockEngine` (feature `mock`, off by default; clients enable it in
-`dev-dependencies`) keeps scenes, items, sources, outputs, encoder profiles, buses and
-sends in memory, with an
+`dev-dependencies`) keeps scenes, items, sources, outputs, encoder profiles, video
+mixes, buses, sends, hotkey bindings, folders and labels in memory, with an
 in-memory stand-in for the stream-key store, and follows the protocol's rules for them:
 - the version check in `hello`;
 - atomic batches that bump `rev` by exactly one, and per-client idempotency keys,
   shared with history calls. A retry with a known key gets its first result; then, in `Graph::apply`'s order, a stale
   `expected_rev` fails with `rev_conflict` before an empty batch fails with
   `empty_batch`;
-- every protocol edit, with the checks `jstream-graph` makes, in the same order per
+- every protocol edit but the transition ones (below) and the keyframe-scene ones
+  (`scene.create_variant` and `item.clear_override` answer `internal`, as an edit the
+  mock doesn't implement; with no keyframe scenes its `state.get` reports none and its
+  batch results drop no overrides), with the
+  checks `jstream-graph` makes, in the same order per
   edit, and the same error codes and `edits.<n>.<field>` paths:
   - `not_found` and `already_exists`;
   - empty IDs in creating edits (`scene.create`'s `scene_id`, `item.add`'s `item_id`,
@@ -122,10 +127,12 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   - reorder and `item.move` indices out of range (`item.move` into another scene may
     name one past its top);
   - a placement edit's `scene_id` naming a scene other than the item's own;
-  - both `transform` and `geometry` on `item.add`, a geometry that is not positive,
-    not finite or not neutral in 3D, and a canvas side of 0 or over 8192;
-  - deleting a source that an item places, or a scene that a scene source shows, or
-    either while a source's settings refer to it;
+  - both `transform` and `geometry` on `item.add`, a geometry that is not positive or
+    not finite or that the compositor can't draw (`ItemGeometry::check_drawable`; any
+    other 3D is accepted, as the engine does from protocol 0.34), and a
+    canvas side of 0 or over 8192;
+  - deleting a source that an item places, or a scene that a scene source or a video
+    mix shows, or either while a source's settings refer to it;
   - nesting cycles from `item.add`, `item.set_source` and `item.move`;
   - a `source.create` whose `duplicated_from` names the source itself. Like the graph,
     the mock stores `duplicated_from` as a plain link (`source.duplicate` sets it) and
@@ -140,20 +147,31 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   - encoder profiles: `EncoderProfile::problem`'s ranges in `encoder.create` and
     `encoder.update`, deleting a profile an output uses, and `output.set_encoder`
     naming a missing output, then a missing profile;
+  - video mixes: `VideoMix::problem`'s checks and a missing scene in
+    `video_mix.create` and `video_mix.update`, deleting a mix an output shows, and
+    `output.set_video_mix` naming a missing output, then a missing mix;
   - an `opacity` outside 0 to 1 and a blend mode other than `normal`, in `item.add`,
     `item.set_opacity` and `item.set_blend`;
   - the filter edits (`mock/filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
     a missing owner or filter, an empty or duplicate filter ID, an audio chain on a
-    `scene` source, a full chain and an index out of range. `source.duplicate` copies
-    the chains and `source.delete`'s inverse re-adds them; a reference in a filter's
-    settings blocks deleting its target, as a source's own does;
+    `scene` source, a full chain and an index out of range. The master stage and
+    outputs ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)) take
+    audio filters only, an output only if it carries audio, and their filters no scene
+    or source reference. `source.duplicate` copies the chains, and `source.delete`'s
+    and `output.delete`'s inverses re-add them; a reference in a filter's settings
+    blocks deleting its target, as a source's own does;
   - audio (`mock/audio.rs`, ADR-0028): each audio source's `SourceAudio` with its kind's
     defaults and the master send at 0 dB, copied by `source.duplicate` and dropped by
     `source.delete`; `source.set_audio` on a source with no audio, with nothing to set,
     or setting a `scene` source's fader or mute; the bus ID, name and 16-bus limit,
     deleting the master or a bus a source's settings refer to (a `bus` reference, as
     a `waveform` drawing it holds, #362), an empty `bus.set_fader`, sends from a `scene` source or a
-    source with no audio, removing a missing send, and gains outside −100 to +24 dB.
+    source with no audio, removing a missing send, and gains outside −100 to +24 dB;
+  - hotkeys: `hotkey.set`'s chord spelling, an already-bound chord, an action
+    `Action::bind_problem` refuses and a missing named scene, output or preset (only `cut`
+    exists), in that order, and
+    `hotkey.clear` of an unbound chord. Deleting a scene, source, output or encoder
+    profile removes the bindings naming it and lists them in the batch result's `removed_hotkeys`.
 
   Error messages may differ; clients match on codes and fields. The mock describes no
   kinds, so it accepts any non-empty builtin kind and any filter kind;
@@ -163,17 +181,27 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   and a filter's) as sent without checking them or filling in defaults (a `null` in a
   patch removes the entry), and doesn't follow settings references when it looks for
   cycles. `kind.list` answers with no kinds, `kind.describe` and `delete.plan` answer
-  `internal`, and its refused deletes carry no `blockers`;
+  `internal`, and its refused deletes carry no `blockers`, except a folder's and a
+  label's. The folder, label and metadata edits
+  ([ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4: `folder.*`, `label.*`,
+  `scene.set_folder`, `scene.set_meta` and `source.set_meta`, in `mock/organise.rs`)
+  make the graph's checks with the protocol's own `check_color`, `check_icon` and
+  `SceneMeta::problem`: a missing parent, folder or label, a folder inside itself, a
+  label listed twice, and no deleting a folder that holds a scene or folder or a label a
+  source carries (with the graph's `blockers`). Reads report the folders, labels and
+  each scene's and source's metadata, `source.duplicate` copies a source's, and undoing
+  a scene's or source's delete restores its folder and metadata;
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing
-  scene), `output.list`, `encoder.list` and `bus.list` (ordered by ID), each at the
-  current `rev`.
+  scene), `output.list`, `encoder.list`, `video_mix.list` and `bus.list` (ordered by
+  ID), each at the current `rev`.
   So it keeps everything an edit sets: the canvas, source names, kinds, settings and
   filter chains, each item's placement (its transform, or its geometry and the
   transform view of it), crop, visibility, opacity and blend, each scene's role and
-  each item's scene after an `item.move`, each output's kind, target and encoder
-  profile, each profile, each source's audio, and the buses and sends.
+  each item's scene after an `item.move`, each output's kind, target, encoder profile
+  and video mix, each profile, each mix, each source's audio, the buses and sends, and
+  the hotkey bindings (in `state.get`, ordered by chord).
   `video.snapshot` is not one of those reads: the mock has no compositor and answers
   it with `internal`, as it does for any protocol variant it does not implement;
 - outputs as the engine (`jstream-core`) keeps them: a configured output starts
@@ -181,18 +209,25 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   the way `Engine::with_output` does: it can be started, stopped and read with
   `output.status`, but it is not in the collection, so `output.list` and `state.get`
   don't report it and `output.set_key` answers `not_found` for it. It runs no
-  encoders, so `output.status` reports no encoder session and zero sessions;
+  encoders, so `output.status` reports no encoder session and zero sessions; its
+  `cleartext` follows the output's kind by the engine's rule;
 - the pairing calls (`pairing.start`, `device.list`, `device.revoke`) answered with
   `unsupported`, as the in-process engine answers them: only a server in front of a
   session serves them
   ([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md));
+- the plugin actions (`plugin.install`, `plugin.grant`, `plugin.enable`) answered with
+  `unsupported`, as the engine answers them: neither hosts plugins yet;
 - the stream-key actions with the engine's checks and errors. `output.set_key` answers
   `not_found` for an output not in the collection, then `invalid_argument` (field
   `key`) for an empty or over-long key, or one with whitespace, control or non-ASCII
-  characters; `output.clear_key` always succeeds.
-  The keys live in memory, outside the collection: no `rev`, no event, kept when their
-  output is deleted. `output.status` reports `key_set` from them, and
-  `MockEngine::stream_key` lets a client test check what was stored. Unlike an
+  characters; `output.clear_key` always succeeds. The engine's `action_failed` for a
+  key set while that output's start is still opening (#343) has no counterpart: a mock
+  `output.start` settles within the call, so no start is ever opening.
+  The keys live in memory, outside the collection: no `rev`, no event. As in the
+  engine, an applied batch, undo or redo that deletes an output or changes its
+  `OutputKind::key_server` (another scheme, host or port) removes its key (#343).
+  `output.status` reports `key_set` from them, and `MockEngine::stream_key` lets a
+  client test check what was stored. Unlike an
   `Engine` built without `with_key_store`, which answers `action_failed`, the mock
   always has a store, so clients can test the whole flow;
 - `audio.reset_loudness`, which succeeds and does nothing: the mock has no mixer, so it
@@ -209,7 +244,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   and sends, a deleted source's audio and sends, and each audio edit back to the values
   it replaced; a placement, crop or
   visibility edit undoes with the `scene_id` it was sent with, a deleted output comes
-  back with its encoder profile, encoder profile edits undo to the profile as it was,
+  back with its encoder profile, video mix and filters and the hotkeys its delete
+  removed, hotkey edits undo to the binding as it was, encoder profile and video mix
+  edits undo to the profile or mix as it was,
   and `canvas.set_size` undoes to the previous size. The checks run in the engine's order (the key, then `expected_rev`, then
   `history_empty`). The result carries `step_rev` and both depths, a new batch clears
   the client's redo stack, undoing the `output.create` of a running output fails with
@@ -221,14 +258,35 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   the step is dropped, where the engine refuses only a change that touches what the
   step touches. So an undo that succeeds against the mock succeeds against the engine
   too, but not the other way round;
+- live values ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): `live.set` with
+  the engine's checks in its order (1 to 256 values, each `item.set_transform`,
+  `item.set_geometry` or `item.set_crop`, at most 16 open gestures per client, then each
+  value as a batch edit named `values.<n>`), takeover of a parameter another gesture
+  holds, `live.cancel` (a no-op for a gesture that isn't open), `live.list`, a batch's
+  `ends_gesture` (`invalid_argument` unless the client has it open, checked after the
+  idempotency key and before `expected_rev`, as the engine does), live values
+  dropped with their item, and a session's gestures expiring when its `MockControl` is
+  dropped. It emits `live.changed` with each `live.set`'s values and `live.ended` after
+  the commit's `state.changed`. With no render thread and no clock, it doesn't coalesce
+  `live.changed` (the engine sends at most as many) and lets go of a committed
+  gesture's values at once;
 - `state.changed` events carrying the request ID (and `cause` for an undo or redo), and `output.start`/`output.stop`
   reported as `output.state_changed` events (`starting` → `active`, `stopping` →
   `stopped`). `MockEngine::emit` injects any other event;
-- the program scene with the engine's rules
+- the program and preview scenes with the engine's rules
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)): `scene.switch`
-  (`not_found` for a missing scene, no `rev`), `studio.get`, and `studio.changed` for a
-  switch and after a batch, undo or redo that creates the first scene or deletes the
-  program scene;
+  and `studio.set_preview` (`not_found` for a missing scene, no `rev`), `studio.get`,
+  and `studio.changed` for each and after a batch, undo or redo that creates the first
+  scene or deletes the program or preview scene. The mock knows only the initial `cut`
+  preset ([ADR-0029](../../docs/adr/0029-transitions.md)): `state.get` reports it, every
+  switch cuts and reports it, a switch naming another preset is `not_found`, and the
+  `transition.*`, `scene.set_transitions` and `item.set_transition` edits answer
+  `internal`;
+- `capture.targets`, answered with one made-up 1920×1080 primary display whose ID is
+  `MOCK_DISPLAY`;
+- the privacy screen ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)):
+  `privacy.set` (no `rev`), `privacy.get`, and `privacy.changed` for a change, which a
+  stream opened while it is on gets first;
 - event streams that end, after what they have buffered, when their `MockControl` or
   the engine is dropped, the way a socket's streams end when it closes. An ended stream
   stays ended: later events, including those other sessions cause, never reach it.
@@ -242,9 +300,9 @@ The mock re-implements these checks and reads rather than calling
 for dev-dependencies, so the dependency would need a layering change. The duplication
 is small, and both crates' tests run the shared fixture `jstream_protocol::parity` (a
 dev-dependency with the `fixtures` feature): one batch that builds a collection with
-its outputs and a filter chain, the exact answer to every read of it, and the exact
-error for batches rejected against it, RTMP URL, recording path, filter and audio
-rejections included. The mock's
+its outputs and filter chains on a source, the master and an output, the exact answer to
+every read of it, and the exact error for batches rejected against it, RTMP URL,
+recording path, filter and audio rejections included. The mock's
 undo test tears that collection down in one batch and checks that undo gives back
 exactly the fixture's state, which `jstream-graph`'s inverse property test guarantees
 for the graph.
