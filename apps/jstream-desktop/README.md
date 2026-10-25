@@ -48,7 +48,7 @@ Contents (a first cut; Windows first, because the window needs WebView2):
 - **Tests** (unit tests in each module, run on every platform: the server behind the
   token and the webview's origin, the bundle's paths, types and CSP, the bootstrap
   script's escaping, the command line, the virtual camera's status values, the
-  capped, user-only log file, and the control token registered for redaction; the crash hook's own
+  capped log file (user-only, checked on Unix), and the control token registered for redaction; the crash hook's own
   tests are `jstream-crash`'s), and one integration test, `tests/delay_load.rs` (Windows MSVC
   only), which reads the built `jstream.exe`'s PE headers to check that each Media
   Foundation DLL `build.rs` delay-loads is delay-loaded and none is a load-time import.
@@ -104,7 +104,7 @@ folder, and its log `logs\cef.log`.
   time and saved on every change, so the next start opens where the last one stopped.
 - **Logs.** `logs\jstream-desktop.log` in the data folder, replaced at each start by a
   new, user-only file (a protected DACL for SYSTEM and the user on Windows, mode `0600`
-  in a `0700` folder on Unix, #780) and capped at 10 MiB, filtered by `RUST_LOG` (default `info`). A debug build also logs to
+  on Unix, in a folder created `0700`, #780) and capped at 10 MiB, filtered by `RUST_LOG` (default `info`). A debug build also logs to
   its console; a release build has no console window. The audit log goes in the same
   folder, as the daemon's does. The token is never logged.
 - **Crash reports.** A panic writes `logs\crash-<UTC time>-<pid>-<n>.txt` in the data

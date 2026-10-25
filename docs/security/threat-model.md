@@ -450,7 +450,7 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 
 | Issue | Area | Gap | Severity |
 |---|---|---|---|
-| #344 | Server, pairing | Windows devices file and crash reports not yet checked user-only on hardware; token and daemon logs reported user-only (#546) | Low |
+| #344 | Server, pairing | Windows devices file, crash reports and the desktop app's log file (#780) not yet checked user-only on hardware; token and daemon logs reported user-only (#546) | Low |
 | #547 | Files | Windows audit log's user-only DACL not yet checked across a rotation on hardware (#574 landed in the wave) | Low |
 | #345 | Files | `absolute` asset paths accept UNC and device paths | Medium |
 | #347 | Browser | Permissions Chromium grants without a prompt; public names resolving locally (`*.nip.io`, DNS rebinding) and requests the handler doesn't see | Medium |
