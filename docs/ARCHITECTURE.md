@@ -440,7 +440,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   post-fader sends, a new channel source sending to the master at 0 dB. A send always
   runs from a source to a bus, and filters have no sidechain keys yet, so no edit can
   close an audio cycle. The engine routes these into the program stage's mixer while it
-  runs, apart from the monitors, which it doesn't play yet (#822).
+  runs, and plays each bus's monitor on its device (one it can't open stays silent and
+  is retried).
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
   and hotkey bindings (protocol 0.25), as the organisation bullet above describes.
   Not yet: settings migrations between kind versions (a source saved at another
