@@ -167,8 +167,8 @@ Contents:
   process), and `start`s a host for a `HostRequest` (file, plugin id, the block's
   `Config` and a saved state): it creates the block initialised with that
   configuration, starts the process on it and sends `Start`. A `PluginHost` (`Send`)
-  gives the block as a `HostBlock` (an `Arc` of anything that is `AsRef<Shared>`) for
-  the mixer's CLAP filter, says whether the process has `exited`, receives control
+  gives the block as a `HostBlock` (an `Arc<EngineBlock>`: the mapping, and the miss
+  counts the engine keeps beside it) for the mixer's CLAP filter and the supervisor, says whether the process has `exited`, receives control
   messages without waiting (`try_recv`), `send`s them (false once the host is gone),
   and is ended by `kill` or by dropping it. Deciding when to restart or give up is the
   engine's job, not this trait's. The engine holds it apart from `Backends`.
@@ -232,7 +232,8 @@ Contents:
   only then beats the heartbeat, copies each input block to the output under the same
   number, answers `SaveState` and ends on `Stop` or the `stop` word. A test makes it
   `crash` (it exits) or `hang` (the heartbeat stops but it hasn't exited) through its
-  `FakeHostControl`, which also records what the host received. The crate's tests drive every trait through trait objects only,
+  `FakeHostControl`, which also records what the host received and makes it `send` any
+  message, as a broken or hostile host would. The crate's tests drive every trait through trait objects only,
   keeping the concrete fakes for test-side controls and probes, and check the
   `Send`/`Sync` bounds above.
 

@@ -111,7 +111,15 @@ state machine. Contents:
     supervisor asks for the plugin's state whenever the plugin marks it changed, keeps
     the latest (`saved_state`, `StateSaved`) and restarts with it. A run of
     `degraded_after` consecutive late blocks in the mixer is `Degraded`, and its end
-    `Recovered`. `stop` asks the host to stop and kills it after `STOP_GRACE`.
+    `Recovered`; the mixer counts them in the engine's memory (`EngineBlock`), where
+    the host can't reset them. What the host sends back is checked first (#351):
+    parameter descriptions with a non-finite or inverted range, a default outside it,
+    or a repeated id are dropped from `Params`; a parameter change, from a control
+    message or the block's `params_out` ring (read only once the run's first `Params`
+    has arrived), must name a parameter of the last `Params` and be finite and within its range to become `ParamChanged`; and a saved
+    state over `MAX_STATE` (2 MiB) is ignored. Each dropped reply counts in `rejected`,
+    and the first of each host run is an `Error`. `stop` asks the host to stop and
+    kills it after `STOP_GRACE`.
   - A CLAP filter in a source's audio chain runs as `plugins::filter::ClapFilter`,
     one per filter, owned by the input's `filters::Chain` (see *Audio sources*). A
     collection holding one loads before the scan describes its kind (the graph keeps

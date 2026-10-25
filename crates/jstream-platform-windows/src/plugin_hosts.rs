@@ -1,18 +1,20 @@
 //! `WindowsPluginHosts`: starts `jstream-plugin-host.exe` processes (ADR-0035). Each run
-//! gets a new `PluginBlock`, which the host opens by name, and its stdin and stdout as
-//! the control channel. Every host is put in one job object that kills its processes
+//! gets a new, unnamed `PluginBlock`, whose handle is duplicated into the host and sent
+//! as its first control message (`ToHost::Block`), and its stdin and stdout as the
+//! control channel. Every host is put in one job object that kills its processes
 //! when the engine's handle to it closes, so hosts never outlive the engine. A host
 //! starts with a scrubbed environment and inherits only its standard handles.
 
 use std::io::Write;
+use std::os::windows::io::AsRawHandle;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, channel};
 use std::time::{Duration, Instant};
 
 use jstream_platform::{HostBlock, HostRequest, PlatformError, PluginHost, PluginHosts};
+use jstream_plugin_proto::EngineBlock;
 use jstream_plugin_proto::control::{FromHost, PluginDesc, ToHost, read_frame};
 use windows::Win32::Foundation::HANDLE;
 use windows::Win32::System::JobObjects::{
@@ -58,8 +60,6 @@ pub struct WindowsPluginHosts {
     exe: PathBuf,
     /// Every host's job: kill-on-close, so they end with the engine.
     job: Arc<Handle>,
-    /// Numbers the blocks this engine creates.
-    next_block: AtomicU64,
 }
 
 impl std::fmt::Debug for WindowsPluginHosts {
@@ -93,7 +93,6 @@ impl WindowsPluginHosts {
         Ok(Self {
             exe,
             job: Arc::new(kill_on_close_job()?),
-            next_block: AtomicU64::new(0),
         })
     }
 
@@ -158,12 +157,7 @@ impl PluginHosts for WindowsPluginHosts {
     }
 
     fn start(&self, request: &HostRequest) -> Result<Box<dyn PluginHost>, PlatformError> {
-        let name = format!(
-            "Local\\JStreamPlugin-{}-{}",
-            std::process::id(),
-            self.next_block.fetch_add(1, Ordering::Relaxed)
-        );
-        let block = PluginBlock::create(&name)?;
+        let block = PluginBlock::create()?;
         block
             .as_ref()
             .init(request.config)
@@ -173,26 +167,35 @@ impl PluginHosts for WindowsPluginHosts {
         let mut child = self.spawn(
             &[
                 "run".as_ref(),
-                name.as_ref(),
                 request.file.as_os_str(),
                 request.plugin_id.as_ref(),
             ],
             Stdio::piped(),
         )?;
+        let handle = match block.share_with(HANDLE(child.as_raw_handle())) {
+            Ok(handle) => handle,
+            Err(e) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(e);
+            }
+        };
         let (Some(stdin), Some(stdout)) = (child.stdin.take(), child.stdout.take()) else {
             let _ = child.kill();
             let _ = child.wait();
             return Err(host_failed("a host without its control channel"));
         };
         let mut host = WindowsPluginHost {
-            block: Arc::new(block),
+            block: Arc::new(EngineBlock::new(block)),
             child,
             stdin: Some(stdin),
             messages: spawn_reader(stdout),
         };
-        if !host.send(&ToHost::Start {
-            state: request.state.clone(),
-        }) {
+        if !(host.send(&ToHost::Block { handle })
+            && host.send(&ToHost::Start {
+                state: request.state.clone(),
+            }))
+        {
             host.kill();
             return Err(host_failed("the host exited before it started"));
         }
@@ -202,7 +205,7 @@ impl PluginHosts for WindowsPluginHosts {
 
 /// One running `jstream-plugin-host.exe`.
 struct WindowsPluginHost {
-    block: Arc<PluginBlock>,
+    block: HostBlock,
     child: Child,
     stdin: Option<ChildStdin>,
     messages: Receiver<FromHost>,
@@ -210,7 +213,7 @@ struct WindowsPluginHost {
 
 impl PluginHost for WindowsPluginHost {
     fn block(&self) -> HostBlock {
-        Arc::clone(&self.block) as HostBlock
+        Arc::clone(&self.block)
     }
 
     fn exited(&mut self) -> bool {
@@ -296,7 +299,6 @@ fn kill_on_close_job() -> Result<Handle, PlatformError> {
 
 /// Puts `child` in `job`.
 fn assign(job: &Handle, child: &Child) -> Result<(), PlatformError> {
-    use std::os::windows::io::AsRawHandle;
     let process = HANDLE(child.as_raw_handle());
     // SAFETY: both handles are live: the job is owned by the caller, and the process
     // handle by `child`, which outlives the call.

@@ -79,7 +79,8 @@ stamped on the clock, and no device is the master.
   on `InputControl`, `BusControl` and `OutputTapControl` adds a CLAP filter instead:
   the mixer's side of an out-of-process plugin host, through its shared block
   (`HostMemory`, a [`jstream-plugin-proto`](../jstream-plugin-proto/README.md)
-  `Shared` however it is mapped). The block must be initialised for the mixer's rate
+  `EngineBlock`: the `Shared` block however it is mapped, and the miss counts beside
+  it). The block must be initialised for the mixer's rate
   and block size (`InputControl::mixer_rate`, `mixer_block_frames`) and its host
   ready, with one filter on it at a time; the master chain refuses one, since each bus's
   copy would need its own host. `Mixer::latency_frames` is the
@@ -147,7 +148,8 @@ not start. No variant allocates.
   another thread and removed, a send to a removed bus not reaching the bus that reuses
   its buffer, the 16-bus limit, and a removed bus's state freed once its handle is gone;
 - CLAP filters (`host.rs`): the host's output heard `depth` blocks late, a missing
-  host bypassed with the same latency and each miss counted, the crossfades both ways,
+  host bypassed with the same latency and each miss counted, a host rewriting the
+  status block leaving the miss counts alone, the crossfades both ways,
   non-finite host samples as silence, a reset passed on to the host, a new filter on a
   block an earlier one used carrying on its numbers with no miss, and blocks that
   aren't ready or don't match refused;
@@ -337,9 +339,10 @@ it writes its dry input into the input ring as block `n` and reads the host's bl
 or wait. Its latency, fixed when it is built, is `depth` blocks plus the plugin's own
 reported latency, so the chain compensates it like any filter's. When the host's block
 isn't there (late, hung or dead), the filter passes its own dry signal delayed by that
-same latency, so timing doesn't jump, and counts the miss in the block's status
-(`mixer_misses`, and `mixer_miss_run` for misses in a row) for the control thread to
-report. Switching between the two is a crossfade over 2 ms (at most one block): dry to
+same latency, so timing doesn't jump, and counts the miss for the control thread to
+report: `MixerMisses`' `total`, and `run` for misses in a row. They are in the
+engine's memory beside the mapping (`EngineBlock`), not in the shared block, so a host
+can't reset them to hide a degraded filter (#351). Switching between the two is a crossfade over 2 ms (at most one block): dry to
 the plugin's output when it comes back, and from the plugin's last frame to dry when it
 goes missing, since the missing block can't be faded. The host's samples are another
 process's data, so non-finite ones become 0. A chain reset clears the dry delay and
@@ -580,9 +583,9 @@ descriptors and the protocol. The kernels' cost in the mixer is measured in
   here (`insert_host_filter`), and starting and watching the host process are built
   (`jstream-platform`'s `PluginHosts`, `jstream-core`'s `HostSupervisor`), and
   `jstream-core` runs a CLAP filter from a source's chain and sends its settings as
-  parameter changes, but reporting `mixer_misses` in `stats.tick` and the degraded
-  event in the protocol, and keeping those counts on the engine's side of the block
-  (#351), are not.
+  parameter changes, and the miss counts are kept on the engine's side of the block
+  (#351), but reporting them in `stats.tick` and the degraded event in the protocol
+  are not.
 - **A CPU measurement** of the mixer on Windows hardware, and of resampling
   ([Real-time design](#realtime) has a cloud machine's numbers for the mix).
 - **Feeding the fitted drift forward** into the controller, which would shorten the

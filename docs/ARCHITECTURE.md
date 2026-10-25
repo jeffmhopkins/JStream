@@ -501,8 +501,8 @@ quarter block between passes). Audio crosses through shared-memory rings, and
 the mixer never waits on the host: it writes block *n* and reads the processed block
 *n − d* (by default *d* is two engine blocks), with no syscall or lock for the plugin
 ([R-RT-001](RULES.md#R-RT-001)). A late block is bypassed with a short crossfade, by
-the dry signal delayed the same amount, and counted in the shared block for
-`stats.tick`. The filter's latency is *d* plus the plugin's own, and latency
+the dry signal delayed the same amount, and counted for `stats.tick` in the engine's
+own memory beside the block (`EngineBlock`), where the host can't reset it. The filter's latency is *d* plus the plugin's own, and latency
 compensation keeps audio and video in sync. A host that dies is restarted by the control
 thread with backoff while the mixer bypasses it.
 
