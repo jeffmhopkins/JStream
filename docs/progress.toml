@@ -681,9 +681,9 @@ needs = ["hardware"]
 id = "Q6"
 milestone = "M1d"
 title = "Threat-model follow-ups"
-status = "review"
+status = "planned"
 prs = [535, 540, 548, 549, 552, 555, 662, 714, 729, 573, 574, 653]
-note = "from the Q5 threat model: user-only token, devices and log files (#548) and crash reports (#662) on Windows, browser pages refused every permission and local-network requests decided by policy (#535, #549, #714, #729), the vcam's owner checks (#540), local redacted desktop crash reports (#552) and a warning on cleartext rtmp:// (#555) landed with wave/m1-3 (#754); the audit log and collection file user-only (#574, for #547) and the rtmp:// flag in output.status (#653, for #562) landed with wave/m1-4 (#810); in review: the CLAP IPC hardening (#573, for #351); open: #344, #347, #349 (with X1) and #353; Windows runs #546 and #557"
+note = "from the Q5 threat model: user-only token, devices and log files (#548) and crash reports (#662) on Windows, browser pages refused every permission and local-network requests decided by policy (#535, #549, #714, #729), the vcam's owner checks (#540), local redacted desktop crash reports (#552) and a warning on cleartext rtmp:// (#555) landed with wave/m1-3 (#754); the audit log and collection file user-only (#574, for #547) and the rtmp:// flag in output.status (#653, for #562) landed with wave/m1-4 (#810); the CLAP IPC hardening (#573, for #351) landed with wave/m3-4 (#827); open: #344, #347, #349 (with X1) and #353; Windows runs #546 and #557"
 needs = ["build", "hardware"]
 
 # M2
@@ -961,7 +961,7 @@ milestone = "M3"
 title = "CLAP plugin host"
 status = "planned"
 prs = [272, 281, 407, 488, 573]
-note = "parts 1 to 3 merged (wave/m3 landed in #477): the shared-memory contract, the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; the host's Windows run passed in #342; CLAP filters in a source's audio chain, part 4 (#488), is merged into wave/m3-4, and the IPC hardening (#573, for #351) is in review into wave/m3-4; then a live-audio Windows run (new issue once CLAP filters run)"
+note = "parts 1 to 3 merged (wave/m3 landed in #477): the shared-memory contract, the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; the host's Windows run passed in #342; CLAP filters in a source's audio chain, part 4 (#488), and the IPC hardening (#573, for #351) landed with wave/m3-4 (#827); CLAP filters on the master's and outputs' chains are not built yet; then a live-audio Windows run (new issue once CLAP filters run)"
 needs = ["build", "hardware"]
 
 [[item]]
@@ -987,8 +987,8 @@ id = "LNX1"
 milestone = "M3"
 title = "Linux codec path and platform crate"
 status = "review"
-prs = [481, 490, 509, 510, 572, 598, 606, 652, 593, 612, 603, 617, 610, 685, 689, 634]
-note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); these landed with wave/m3-2 (#663); with wave/m3-3 (#786): ALSA audio input and output (#572); portal restore tokens per source (#598); DMA-BUF capture frames imported into Vulkan (#606); VA-API H.264 encode from the Vulkan device's NV12 encode targets (#652); PipeWire audio input, output and loopback (#593); in wave/m3-4: PipeWire processing on the real-time data loop (#612); V4L2 webcams and capture cards (#603); multi-planar V4L2 capture (#617); the pointer as PipeWire cursor metadata or left out, platform only (#610), on the CPU and DMA-BUF paths; the source's show_cursor setting (protocol 0.36, #682) has the OS draw the pointer when it's on and leave it out when it's off (WGC leaves it out too, with #682, and ScreenCaptureKit with #685), and the engine doesn't draw the pointer; webcams paired with their microphones and the Linux backend set choosing PipeWire or ALSA (#689); stream keys and OAuth tokens in the Secret Service, else a 0600 file, ADR-0071, not yet used by an app (#634); further parts are in review into wave/m3-4; the rest of the codec path to build"
+prs = [481, 490, 509, 510, 572, 598, 606, 652, 593, 612, 603, 617, 610, 685, 689, 634, 694, 830]
+note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); these landed with wave/m3-2 (#663); with wave/m3-3 (#786): ALSA audio input and output (#572); portal restore tokens per source (#598); DMA-BUF capture frames imported into Vulkan (#606); VA-API H.264 encode from the Vulkan device's NV12 encode targets (#652); PipeWire audio input, output and loopback (#593); with wave/m3-4 (#827): PipeWire processing on the real-time data loop (#612); V4L2 webcams and capture cards (#603); multi-planar V4L2 capture (#617); the pointer as PipeWire cursor metadata or left out, platform only (#610), on the CPU and DMA-BUF paths; the source's show_cursor setting (protocol 0.36, #682) has the OS draw the pointer when it's on and leave it out when it's off (WGC leaves it out too, with #682, and ScreenCaptureKit with #685), and the engine doesn't draw the pointer; webcams paired with their microphones and the Linux backend set choosing PipeWire or ALSA (#689); stream keys and OAuth tokens in the Secret Service, else a 0600 file, ADR-0071, not yet used by an app (#634); capture copies and NV12 submits ordered on the context's queue (#694); in wave/m3-5: VA-API HEVC encode (#830), still to run on Intel or AMD hardware, and its hardening (#835) in review; the rest of the codec path to build"
 needs = ["wave", "build"]
 
 [[item]]
@@ -1004,10 +1004,10 @@ needs = ["build"]
 id = "LNX3"
 milestone = "M3"
 title = "AAC-LC encoder in Rust, patent check first (ADR-0061)"
-status = "review"
+status = "planned"
 prs = [508, 518, 723, 727, 799]
-note = "patent check ADR-0062 accepted (#508); encoder and Linux wiring (#518), landed with wave/m3-2 (#663); TNS (#723, more tests #727) landed with wave/m3-3 (#786); intensity stereo (#799) in wave/m3-4; before the Linux app ships the encoder its licence information must say JStream holds no AAC patent licence and name Via LA (ADR-0062)"
-needs = ["wave", "build"]
+note = "patent check ADR-0062 accepted (#508); encoder and Linux wiring (#518), landed with wave/m3-2 (#663); TNS (#723, more tests #727) landed with wave/m3-3 (#786); intensity stereo (#799) landed with wave/m3-4 (#827); before the Linux app ships the encoder its licence information must say JStream holds no AAC patent licence and name Via LA (ADR-0062)"
+needs = ["build"]
 
 [[item]]
 id = "F6b"
@@ -1015,7 +1015,7 @@ milestone = "M3"
 title = "Choose HEVC or AV1 from a client"
 status = "review"
 prs = [807]
-note = "F6 built the encoders, but an encoder profile accepts only h264 (EncoderProfile::problem refuses the rest), so no client can pick them yet. #807 names the encoder a machine lacks at output.start; hevc and av1 in the protocol's VideoCodec come in a protocol bump"
+note = "F6 built the encoders, but an encoder profile accepts only h264 (EncoderProfile::problem refuses the rest), so no client can pick them yet. #807 names the encoder a machine lacks at output.start, landed with wave/m3-4 (#827); hevc and av1 in the protocol's VideoCodec come in a protocol bump"
 needs = ["build"]
 
 [[item]]
