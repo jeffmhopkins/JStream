@@ -95,6 +95,64 @@ fn secrets_are_shared_by_their_clones() {
     assert_eq!(format!("{secrets:?}"), "Secrets { count: 1 }");
 }
 
+/// A client's kinds of secret, as `jstream_youtube::SecretKind` hands them to the hook.
+#[derive(Clone, Copy)]
+enum Kind {
+    Refresh,
+    Access,
+}
+
+fn slot(kind: Kind) -> Option<&'static str> {
+    match kind {
+        Kind::Access => Some("access-token"),
+        Kind::Refresh => None,
+    }
+}
+
+/// An access token refreshed every hour for weeks keeps the list bounded: its slot holds
+/// the newest token and the one it superseded, both redacted, and drops the older ones,
+/// while kept secrets stay (#844).
+#[test]
+fn a_refreshed_secret_replaces_the_one_before_it() {
+    let secrets = Secrets::new();
+    let hook = secrets.hook(slot);
+    hook(Kind::Refresh, "1//refresh-token-kept-0000");
+    secrets.register("control-token-kept-0000");
+    let token = |n: u32| format!("ya29.access-token-{n:06}");
+    for n in 0..1000 {
+        hook(Kind::Access, &token(n));
+        hook(Kind::Access, &token(n)); // the same token again changes nothing
+        assert_eq!(format!("{secrets:?}"), {
+            let count = 2 + (n.min(1) + 1);
+            format!("Secrets {{ count: {count} }}")
+        });
+    }
+    assert!(secrets.is_registered("1//refresh-token-kept-0000"));
+    assert!(secrets.is_registered("control-token-kept-0000"));
+    assert!(secrets.is_registered(&token(999)), "the current token");
+    assert!(secrets.is_registered(&token(998)), "the one it superseded");
+    assert!(
+        !secrets.is_registered(&token(997)),
+        "older ones are dropped"
+    );
+
+    let registry = secrets.0.lock().expect("lock").all();
+    assert_eq!(
+        redact(&format!("a {} and a {}", token(999), token(998)), &registry),
+        "a *** and a ***"
+    );
+    assert_eq!(
+        redact(&format!("gone: {}", token(997)), &registry),
+        format!("gone: {}", token(997))
+    );
+
+    // A slot of another name is separate.
+    secrets.register_in("other", &token(0));
+    secrets.register_in("other", "");
+    assert!(secrets.is_registered(&token(0)));
+    assert_eq!(format!("{secrets:?}"), "Secrets { count: 5 }");
+}
+
 /// A stream key or refresh token is registered when a [`Redacting`] store stores it or
 /// hands it out, and not when the store fails or holds nothing (#353).
 #[test]

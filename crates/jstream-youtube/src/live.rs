@@ -23,9 +23,34 @@ use crate::error::remote_text;
 use crate::http::{Body, HttpRequest, HttpResponse, HttpTransport, Method, encode_pairs};
 use crate::{AccessToken, OAuthClient, Scope, YoutubeError};
 
-/// Called with each secret a [`LiveClient`] holds, as it gets it (an app registers them
-/// with its crash reports' redaction). It must not block or log the secret.
-pub type SecretHook = Arc<dyn Fn(&str) + Send + Sync>;
+/// Called with each secret a [`LiveClient`] holds, as it gets it, and what kind it is (an
+/// app registers them with its crash reports' redaction). It must not block or log the
+/// secret.
+pub type SecretHook = Arc<dyn Fn(SecretKind, &str) + Send + Sync>;
+
+/// What a secret handed to a [`SecretHook`] is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SecretKind {
+    /// The account's refresh token, or the one Google rotated it to. The host stores it.
+    RefreshToken,
+    /// An access token. It lasts about an hour, and each one supersedes the one before.
+    AccessToken,
+    /// A stream's key.
+    StreamKey,
+}
+
+impl SecretKind {
+    /// The slot a redaction list keeps this kind in, superseding its earlier values, or
+    /// `None` for a kind kept for the life of the process. JStream signs in to one
+    /// account at a time, so access tokens share one slot (#844).
+    #[must_use]
+    pub fn slot(self) -> Option<&'static str> {
+        match self {
+            SecretKind::AccessToken => Some("youtube-access-token"),
+            SecretKind::RefreshToken | SecretKind::StreamKey => None,
+        }
+    }
+}
 
 /// The Live API's base URL.
 pub const API_BASE: &str = "https://www.googleapis.com/youtube/v3";
@@ -90,18 +115,18 @@ impl LiveClient {
     /// access token, rotated refresh token and stream key it gets from here on.
     #[must_use]
     pub fn with_secret_hook(mut self, hook: SecretHook) -> Self {
-        hook(self.refresh_token.expose());
+        hook(SecretKind::RefreshToken, self.refresh_token.expose());
         if let Some(access) = &self.access {
-            hook(access.secret().expose());
+            hook(SecretKind::AccessToken, access.secret().expose());
         }
         self.hook = Some(hook);
         self
     }
 
-    /// Hands `secret` to the hook, if there is one.
-    fn saw(&self, secret: &Secret) {
+    /// Hands `secret`, of `kind`, to the hook, if there is one.
+    fn saw(&self, kind: SecretKind, secret: &Secret) {
         if let Some(hook) = &self.hook {
-            hook(secret.expose());
+            hook(kind, secret.expose());
         }
     }
 
@@ -109,7 +134,7 @@ impl LiveClient {
     fn saw_keys<'s>(&self, streams: impl IntoIterator<Item = &'s LiveStream>) {
         for stream in streams {
             if let Some(key) = &stream.cdn.ingestion_info.stream_name {
-                self.saw(key);
+                self.saw(SecretKind::StreamKey, key);
             }
         }
     }
@@ -414,11 +439,11 @@ impl LiveClient {
     fn refresh(&mut self) -> Result<(), YoutubeError> {
         let refreshed = self.oauth.refresh(&*self.transport, &self.refresh_token)?;
         if let Some(rotated) = refreshed.rotated_refresh_token {
-            self.saw(&rotated);
+            self.saw(SecretKind::RefreshToken, &rotated);
             self.refresh_token = rotated;
             self.rotated = true;
         }
-        self.saw(refreshed.access.secret());
+        self.saw(SecretKind::AccessToken, refreshed.access.secret());
         self.access = Some(refreshed.access);
         Ok(())
     }

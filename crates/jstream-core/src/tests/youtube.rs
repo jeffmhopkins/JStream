@@ -21,7 +21,7 @@ use jstream_protocol::{
 };
 use jstream_youtube::fake::FakeTransport;
 use jstream_youtube::http::{HttpRequest, HttpResponse};
-use jstream_youtube::{HttpTransport, YoutubeError};
+use jstream_youtube::{HttpTransport, SecretKind, YoutubeError};
 use std::collections::BTreeSet;
 use std::io::{Read, Write};
 use std::net::TcpStream;
@@ -1247,7 +1247,9 @@ fn the_secret_hook_sees_the_tokens_and_a_youtube_outputs_key() {
     let seen: Arc<Mutex<Vec<String>>> = Arc::default();
     let hook = {
         let seen = Arc::clone(&seen);
-        Arc::new(move |secret: &str| seen.lock().expect("lock").push(secret.to_owned()))
+        Arc::new(move |_: SecretKind, secret: &str| {
+            seen.lock().expect("lock").push(secret.to_owned());
+        })
     };
     let engine = Engine::new()
         .with_backends(backends())
@@ -1293,9 +1295,16 @@ fn the_secret_hook_sees_a_sign_ins_tokens_and_its_clients_stream_key() {
         .respond(200, STREAMS)
         .respond(200, HEALTH);
     let seen: Arc<Mutex<Vec<String>>> = Arc::default();
+    let access: Arc<Mutex<Vec<String>>> = Arc::default();
     let hook = {
         let seen = Arc::clone(&seen);
-        Arc::new(move |secret: &str| seen.lock().expect("lock").push(secret.to_owned()))
+        let access = Arc::clone(&access);
+        Arc::new(move |kind: SecretKind, secret: &str| {
+            seen.lock().expect("lock").push(secret.to_owned());
+            if kind == SecretKind::AccessToken {
+                access.lock().expect("lock").push(secret.to_owned());
+            }
+        })
     };
     let tokens = MemoryTokenStore::new();
     let engine = Engine::new()
@@ -1333,6 +1342,12 @@ fn the_secret_hook_sees_a_sign_ins_tokens_and_its_clients_stream_key() {
         assert!(seen.iter().any(|s| s == "ya29.a0AfH6SMfixture-access-1"));
         assert!(!seen.iter().any(|s| s == STREAM_KEY), "no key yet");
     }
+    // Twice: once as the grant arrives, once as the new client takes it.
+    assert_eq!(
+        *access.lock().expect("lock"),
+        ["ya29.a0AfH6SMfixture-access-1"; 2],
+        "the grant's access token is handed over as one, so a refresh can supersede it (#844)"
+    );
 
     batch(&control, edits(vec![youtube_output("dQw4w9WgXcQ")])).expect("creates");
     block_on(control.call(output_call("live", true))).expect("output.start");
@@ -1352,7 +1367,9 @@ fn the_secret_hook_sees_a_refused_sign_ins_tokens() {
     let seen: Arc<Mutex<Vec<String>>> = Arc::default();
     let hook = {
         let seen = Arc::clone(&seen);
-        Arc::new(move |secret: &str| seen.lock().expect("lock").push(secret.to_owned()))
+        Arc::new(move |_: SecretKind, secret: &str| {
+            seen.lock().expect("lock").push(secret.to_owned());
+        })
     };
     let tokens = MemoryTokenStore::new();
     let engine = Engine::new().with_youtube(setup(&transport, &tokens).with_secret_hook(hook));

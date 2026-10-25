@@ -48,7 +48,7 @@ use jstream_youtube::live::{
 };
 use jstream_youtube::{
     BUILT_IN_CLIENT_ID, BUILT_IN_CLIENT_SECRET, HttpTransport, LiveClient, LoopbackRedirect,
-    MAX_REMOTE_TEXT, OAuthClient, Scope, SecretHook, YoutubeError,
+    MAX_REMOTE_TEXT, OAuthClient, Scope, SecretHook, SecretKind, YoutubeError,
 };
 use std::collections::BTreeMap;
 use std::fmt;
@@ -201,8 +201,8 @@ impl YoutubeSetup {
     /// anything decides whether the grant is kept, revoked or dropped.
     fn saw_grant(&self, grant: &jstream_youtube::Grant) {
         if let Some(hook) = &self.secret_hook {
-            hook(grant.refresh.expose());
-            hook(grant.access.secret().expose());
+            hook(SecretKind::RefreshToken, grant.refresh.expose());
+            hook(SecretKind::AccessToken, grant.access.secret().expose());
         }
     }
 
