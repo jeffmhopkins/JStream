@@ -229,12 +229,74 @@ pub(crate) const MERGE_MARK: &str = " | merge: ";
 /// any earlier merge's addendum, then `merge`, what this merge changed in the input.
 pub(crate) fn merge_note(earlier: Option<&str>, merge: &str) -> String {
     let own = earlier
+        .map(|n| split_kept(n).0)
         .map(|n| n.split_once(MERGE_MARK).map_or(n, |(own, _)| own).trim())
         .filter(|n| !n.is_empty());
     match own {
         Some(own) => format!("{own}{MERGE_MARK}{merge}"),
         None => format!("merge: {merge}"),
     }
+}
+
+/// Where a note turns from this branch's text to the merged side's notes it keeps (#840):
+/// each merged-side note follows this mark word for word, as that side wrote it, so a
+/// verify after a merge never drops the records a wave or `main` wrote on the same input.
+pub(crate) const KEPT_MARK: &str = " | kept from the merged side: ";
+
+/// A note split into this branch's text and the merged side's notes it keeps: everything
+/// from the first [`KEPT_MARK`] on, or `""`.
+pub(crate) fn split_kept(note: &str) -> (&str, &str) {
+    note.find(KEPT_MARK)
+        .map_or((note, ""), |i| note.split_at(i))
+}
+
+/// The note a verify writes on an entry it rewrites after this branch's merge (#840):
+/// `head`, its new text, then each kept segment once (#842). The segments are those the
+/// entry's `earlier` note (this branch's own) kept, then `theirs`, the note the merged side
+/// wrote on the input since the branch left it, split at [`KEPT_MARK`] into its own text
+/// and the segments it kept in turn. Each segment is kept word for word, in the order it is
+/// first met. One that `head` or another segment already holds in full is left out, so a
+/// record two sides both kept appears once and a newer segment that holds an older one in
+/// full takes its place.
+pub(crate) fn keep_notes(head: &str, earlier: Option<&str>, theirs: Option<&str>) -> String {
+    let earlier = earlier.map_or("", |n| split_kept(n).1);
+    let theirs = theirs.map_or("", str::trim);
+    let segments = earlier
+        .split(KEPT_MARK)
+        .chain(
+            std::iter::once(theirs)
+                .filter(|t| !t.is_empty())
+                .flat_map(|t| t.split(KEPT_MARK)),
+        )
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && !head.contains(s));
+    let mut kept: Vec<&str> = Vec::new();
+    for s in segments {
+        if kept.iter().any(|k| k.contains(s)) {
+            continue;
+        }
+        // A newer segment that holds earlier ones in full takes the first one's place.
+        match kept.iter().position(|k| s.contains(k)) {
+            Some(i) => {
+                kept[i] = s;
+                let mut j = i + 1;
+                while j < kept.len() {
+                    if s.contains(kept[j]) {
+                        kept.remove(j);
+                    } else {
+                        j += 1;
+                    }
+                }
+            }
+            None => kept.push(s),
+        }
+    }
+    let mut note = head.to_owned();
+    for k in kept {
+        note.push_str(KEPT_MARK);
+        note.push_str(k);
+    }
+    note
 }
 
 /// The stamp `docs verify --merge` writes after `docs merge-main`. `branch` is the entries

@@ -269,11 +269,89 @@ fn inline_stamp(doc: &parse::Doc, section: &parse::Section) -> Option<usize> {
 /// `docs verify <DOC-ID#anchor | path#anchor> --by <who> --note <text>`: records that a
 /// section was re-read and still holds, by writing its inputs' current hashes into the
 /// ledger (ADR-0053). It also drops ledger stamps of sections that no longer need one.
+/// After this branch's merge, each rewritten entry keeps the merged side's notes
+/// ([`Upstream`]).
 fn verify(root: &Path, target: &str, by: &str, note: &str) -> Result<()> {
     let note = check_stamp(by, note)?;
-    stamp_section(root, target, &|_, _, old, inputs| {
-        Ok(ledger::restamp(old, inputs, by, note))
+    let upstream = Upstream::load(root, merge::last_merge(root)?.as_ref())?;
+    stamp_section(root, target, &|_, key, old, inputs| {
+        let stamp = ledger::restamp(old, inputs, by, note);
+        Ok(match &upstream {
+            // Only this branch's own earlier note carries kept notes forward.
+            Some(up) => up.keep(key, old, stamp, &|input| {
+                old.and_then(|o| o.get(input))
+                    .filter(|e| up.own(key, input, e))
+                    .and_then(|e| e.note.clone())
+            }),
+            None => stamp,
+        })
     })
+}
+
+/// The ledgers a verify after this branch's last merge reads to keep the merged side's
+/// notes (#840, docs/DOCS.md#notes): when a verify rewrites an entry whose input the merged
+/// side also re-verified since the branch left it, the new note ends with that side's note,
+/// word for word, after [`ledger::KEPT_MARK`].
+struct Upstream {
+    merged: ledger::Ledger,
+    base: ledger::Ledger,
+}
+
+impl Upstream {
+    fn load(root: &Path, point: Option<&merge::MergePoint>) -> Result<Option<Self>> {
+        point
+            .map(|p| {
+                Ok(Self {
+                    merged: merge::merged_ledger(root, p)?,
+                    base: merge::base_ledger(root, p)?,
+                })
+            })
+            .transpose()
+    }
+
+    /// The merged side's entry on `key`'s `input`, when that side wrote it since the branch
+    /// left it.
+    fn theirs(&self, key: &str, input: &str) -> Option<&ledger::Entry> {
+        let t = self.merged.sections.get(key)?.get(input)?;
+        let before = self.base.sections.get(key).and_then(|b| b.get(input));
+        (before != Some(t)).then_some(t)
+    }
+
+    /// Whether `e` on `key`'s `input` is this branch's own: neither the merged side's entry
+    /// nor the base's.
+    fn own(&self, key: &str, input: &str, e: &ledger::Entry) -> bool {
+        [&self.merged, &self.base]
+            .iter()
+            .all(|l| l.sections.get(key).and_then(|s| s.get(input)) != Some(e))
+    }
+
+    /// `stamp` with each entry rewritten from `old` (and not taken as the merged side's
+    /// entry) keeping the merged-side notes ([`ledger::keep_notes`]): those this branch's
+    /// `earlier` note on the input kept, and the merged side's note on it.
+    fn keep(
+        &self,
+        key: &str,
+        old: Option<&ledger::Stamp>,
+        mut stamp: ledger::Stamp,
+        earlier: &dyn Fn(&str) -> Option<String>,
+    ) -> ledger::Stamp {
+        for (input, e) in &mut stamp {
+            let theirs = self.theirs(key, input);
+            if old.and_then(|o| o.get(input)) == Some(&*e) || theirs == Some(&*e) {
+                continue;
+            }
+            let Some(head) = e.note.as_deref() else {
+                continue;
+            };
+            let note = ledger::keep_notes(
+                head,
+                earlier(input).as_deref(),
+                theirs.and_then(|t| t.note.as_deref()),
+            );
+            e.note = Some(note);
+        }
+        stamp
+    }
 }
 
 /// `docs verify <DOC#anchor> --by <who> --merge <text>`: the same after `docs merge-main`,
@@ -290,11 +368,16 @@ fn verify_merge(root: &Path, target: &str, by: &str, text: &str) -> Result<Vec<u
          first, or verify with --note)",
     )?;
     let branch = merge::branch_entries(root, &point)?;
-    let merged = merge::merged_ledger(root, &point)?;
+    let up = Upstream::load(root, Some(&point))?.context("invariant: a merge point")?;
     let reported = std::cell::RefCell::new(Vec::new());
     stamp_section(root, target, &|doc, key, old, inputs| {
-        let theirs = merged.sections.get(key);
-        let stamp = ledger::restamp_merge(old, inputs, branch.get(key), theirs, by, text);
+        let theirs = up.merged.sections.get(key);
+        let own = branch.get(key);
+        let stamp = ledger::restamp_merge(old, inputs, own, theirs, by, text);
+        // This branch's note before the merge carries the merged-side notes it kept (#840).
+        let stamp = up.keep(key, old, stamp, &|input| {
+            own.and_then(|o| o.get(input)).and_then(|e| e.note.clone())
+        });
         // An entry taken as it is from the merged side carries no note of this branch's, so
         // a later edit to its file doesn't refuse it.
         let rewritten: Vec<(&String, String)> = stamp
@@ -347,6 +430,7 @@ fn verify_renote(
     let note = check_stamp(by, note)?;
     let bases = merge::base_ledgers(root, branch)?;
     let point = merge::last_merge(root)?;
+    let upstream = Upstream::load(root, point.as_ref())?;
     let reported = std::cell::RefCell::new(Vec::new());
     stamp_section(root, target, &|doc, key, old, inputs| {
         if !ledger::diff(old, inputs).is_empty() {
@@ -367,11 +451,36 @@ fn verify_renote(
                 .collect();
             *reported.borrow_mut() = report_merged_prs(root, p, key, &own, note)?;
         }
-        ledger::renote(old, &stamps, by, note).with_context(|| {
+        let stamp = ledger::renote(old, &stamps, by, note).with_context(|| {
             format!("this branch wrote no entry on {key} since it left origin/{branch}; nothing to renote")
+        })?;
+        // Every entry renote rewrites is this branch's own, so its earlier note carries the
+        // merged-side notes it kept; after a merge, the merged side's note is kept too (#840).
+        let earlier = |input: &str| old.get(input).and_then(|e| e.note.clone());
+        Ok(match &upstream {
+            Some(up) => up.keep(key, Some(old), stamp, &earlier),
+            None => keep_earlier(old, stamp, &earlier),
         })
     })?;
     Ok(reported.into_inner())
+}
+
+/// `stamp` with each entry rewritten from `old` keeping the merged-side notes its
+/// `earlier` note kept (#840), for a verify on a branch with no merge of its own.
+fn keep_earlier(
+    old: &ledger::Stamp,
+    mut stamp: ledger::Stamp,
+    earlier: &dyn Fn(&str) -> Option<String>,
+) -> ledger::Stamp {
+    for (input, e) in &mut stamp {
+        if old.get(input) == Some(&*e) {
+            continue;
+        }
+        if let Some(head) = e.note.as_deref() {
+            e.note = Some(ledger::keep_notes(head, earlier(input).as_deref(), None));
+        }
+    }
+    stamp
 }
 
 /// Prints the PRs `point`'s merge brought in on `inputs`, the entries a verify of `key`
@@ -1340,9 +1449,12 @@ mod tests {
         // that changed it; b.rs, which the merge left alone, isn't.
         let i = &m.inputs["S#a"];
         assert_eq!(i.len(), 1, "{i:?}");
+        // The branch had merged main, which re-verified a.rs, before re-verifying it, so
+        // its note keeps main's (#840).
+        let kept = format!("{work_note}{}{NOTE}", ledger::KEPT_MARK);
         assert_eq!(
             (i[0].input.as_str(), i[0].note.as_deref()),
-            ("file:src/a.rs", Some(work_note))
+            ("file:src/a.rs", Some(kept.as_str()))
         );
         assert_eq!(subjects(&i[0].commits), vec!["main: a again"]);
         let ledger =
@@ -1636,12 +1748,24 @@ mod tests {
                 .clone()
         };
         let note = |input: &str| entries()[input].note.clone().unwrap_or_default();
-        let joined = |merge: &str| format!("{pr}{}{merge}", ledger::MERGE_MARK);
+        // Main's note on a.rs, which main re-verified since the branch left it, is kept
+        // after each note (#840).
+        let joined = |merge: &str| {
+            format!(
+                "{pr}{}{merge}{}{NOTE}",
+                ledger::MERGE_MARK,
+                ledger::KEPT_MARK
+            )
+        };
 
-        // A plain re-verify replaces the branch's note on a.rs with a merge-only one.
+        // A plain re-verify replaces the branch's note on a.rs with a merge-only one, but
+        // keeps main's.
         let stock = "merged main: a5 edit, the section text still holds";
         verify(&work.0, "S#a", "agent:work", stock).expect("S verifies");
-        assert_eq!(note("file:src/a.rs"), stock);
+        assert_eq!(
+            note("file:src/a.rs"),
+            format!("{stock}{}{NOTE}", ledger::KEPT_MARK)
+        );
         let b = entries()["file:src/b.rs"].clone();
 
         // `--merge` puts the branch's note back on a.rs, with what the merge changed, and
@@ -1666,6 +1790,157 @@ mod tests {
         verify_merge(&work.0, "S#a", "agent:work", second).expect("S verifies");
         assert_eq!(note("file:src/a.rs"), joined(second));
         assert!(work.diags("is stale").is_empty());
+    }
+
+    /// #840: after the branch merges main, a `--note` or `--renote` that rewrites an entry
+    /// main also re-verified since the branch left it keeps main's note word for word after
+    /// the new text, instead of dropping main's records (#835 r2 B1). An entry main left
+    /// alone, and a branch with no merge of its own, get the new note alone.
+    #[test]
+    fn verify_after_a_merge_keeps_the_merged_sides_notes() {
+        let mut files = REGISTRIES.to_vec();
+        let s = "<!-- @doc\nid = \"S\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"src/**\"]\n-->\nText.\n";
+        files.extend([
+            ("S.md", s),
+            ("src/a.rs", "a1\n\n\n\n\na5\n"),
+            ("src/b.rs", "b\n"),
+        ]);
+        let (origin, work) = origin_and_clone("verify-keeps-merged", &files);
+        verify(&origin.0, "S#a", "agent:test", NOTE).expect("S verifies");
+        commit_all(&origin, "stamps");
+        work.git(&["pull", "-q", "--no-rebase", "origin", "main"]);
+        let note = |input: &str| {
+            ledger::Ledger::read(&work.0)
+                .expect("invariant: parses")
+                .sections["S#a"][input]
+                .note
+                .clone()
+                .unwrap_or_default()
+        };
+
+        // Before any merge of its own, the branch's note replaces main's.
+        work.write("src/a.rs", "a1 work\n\n\n\n\na5\n");
+        work.write("src/b.rs", "b work\n");
+        let pr = "the branch's a1 and b edits, which the text still describes";
+        verify(&work.0, "S#a", "agent:work", pr).expect("S verifies on work");
+        assert_eq!(note("file:src/a.rs"), pr);
+        commit_all(&work, "work: a1 and b");
+
+        // Main changes a.rs and re-verifies it with a long record of its own.
+        origin.write("src/a.rs", "a1\n\n\n\n\na5 main\n");
+        let main = "[#1] main's a5 edit, which the text still describes; [#0] an older record";
+        verify(&origin.0, "S#a", "agent:main", main).expect("S verifies on main");
+        commit_all(&origin, "main: a5 (#1)");
+        let m = merge::merge_main(&work.0, "main").expect("merges");
+        assert_eq!(m.stale, vec!["S#a".to_owned()], "{m:?}");
+        assert_eq!(
+            note("file:src/a.rs"),
+            main,
+            "the conflict takes main's entry"
+        );
+
+        // A plain --note after the merge keeps main's note on a.rs, and writes none on
+        // b.rs, which main left alone.
+        let after = "a1 and b, with main's a5 (#1) outside what the text says";
+        verify(&work.0, "S#a", "agent:work", after).expect("S verifies after the merge");
+        let kept = |head: &str| format!("{head}{}{main}", ledger::KEPT_MARK);
+        assert_eq!(note("file:src/a.rs"), kept(after));
+        assert!(work.diags("is stale").is_empty());
+        commit_all(&work, "work: re-verify S after the merge");
+
+        // --renote keeps it too, once, and leaves b.rs's entry the branch's alone.
+        let better = "a1 and b; main's a5 (#1) is outside what the text says about a.rs";
+        verify_renote(&work.0, "S#a", "agent:review", better, "main").expect("renotes");
+        assert_eq!(note("file:src/a.rs"), kept(better));
+        // A note that already carries main's note word for word gets no second copy.
+        let by_hand = kept("a1 and b, carried by hand");
+        verify_renote(&work.0, "S#a", "agent:review", &by_hand, "main").expect("renotes");
+        assert_eq!(note("file:src/a.rs"), by_hand);
+        assert_eq!(note("file:src/b.rs"), by_hand);
+        assert!(work.diags("is stale").is_empty());
+        commit_all(&work, "work: renoted");
+
+        // A second merge (#841 r1 N5): main changes a.rs again, and the branch's a1 edit
+        // conflicts with it once more. `--merge` keeps the branch's text with this merge's
+        // addendum, the note the branch kept from the first merge, and main's new note.
+        work.write("src/a.rs", "a1 work again\n\n\n\n\na5 main\n");
+        let again = "the branch's second a1 edit, which the text still describes";
+        verify(&work.0, "S#a", "agent:work", again).expect("S verifies on work");
+        commit_all(&work, "work: a1 again");
+        let own = note("file:src/a.rs");
+        assert_eq!(own, kept(again));
+        origin.write("src/a.rs", "a1\n\n\n\n\na5 main 2\n");
+        let main2 = "[#2] main's second a5 edit";
+        verify(&origin.0, "S#a", "agent:main", main2).expect("S verifies on main");
+        commit_all(&origin, "main: a5 again (#2)");
+        let m = merge::merge_main(&work.0, "main").expect("merges again");
+        assert_eq!(m.stale, vec!["S#a".to_owned()], "{m:?}");
+        let second = "main's second a5 edit (#2) is outside it too";
+        verify_merge(&work.0, "S#a", "agent:work", second).expect("S verifies");
+        let k = ledger::KEPT_MARK;
+        assert_eq!(
+            note("file:src/a.rs"),
+            format!("{again}{}{second}{k}{main}{k}{main2}", ledger::MERGE_MARK)
+        );
+        assert!(work.diags("is stale").is_empty());
+    }
+
+    /// `docs::ledger::keep_notes`: the new text, then the kept notes, each once (#840).
+    #[test]
+    fn keep_notes_appends_each_merged_note_once() {
+        let k = ledger::KEPT_MARK;
+        assert_eq!(ledger::keep_notes("new", None, None), "new");
+        assert_eq!(
+            ledger::keep_notes("new", Some("old"), Some("W")),
+            format!("new{k}W")
+        );
+        // What the earlier note kept is carried; a newer merged note that holds it replaces it.
+        let earlier = format!("old{k}W1");
+        assert_eq!(
+            ledger::keep_notes("new", Some(&earlier), None),
+            format!("new{k}W1")
+        );
+        assert_eq!(
+            ledger::keep_notes("new", Some(&earlier), Some("W1 and W2")),
+            format!("new{k}W1 and W2")
+        );
+        assert_eq!(
+            ledger::keep_notes("new", Some(&earlier), Some("W2")),
+            format!("new{k}W1{k}W2")
+        );
+        // #842: dedupe is per segment. A record that the branch kept and that the merged
+        // side's note kept in turn appears once, and the merged side's own text follows.
+        let both = format!("o{k}W1{k}W2");
+        assert_eq!(
+            ledger::keep_notes("new", Some(&both), Some(&format!("W3{k}W2"))),
+            format!("new{k}W1{k}W2{k}W3")
+        );
+        // A segment that holds several kept ones in full replaces them, in the first's place.
+        assert_eq!(
+            ledger::keep_notes("new", Some(&both), Some("W1, W2 and W3")),
+            format!("new{k}W1, W2 and W3")
+        );
+        // A shorter segment met after a kept one that holds it is left out (#849 r1 N1).
+        assert_eq!(
+            ledger::keep_notes("new", Some(&format!("o{k}W1 and W2")), Some("W2")),
+            format!("new{k}W1 and W2")
+        );
+        // A kept segment the new text already holds is left out, the rest stay.
+        assert_eq!(
+            ledger::keep_notes("new, W2", Some(&both), None),
+            format!("new, W2{k}W1")
+        );
+        // Text the new note already holds isn't added again.
+        assert_eq!(
+            ledger::keep_notes("new, W1", Some(&earlier), Some("W1")),
+            "new, W1"
+        );
+        // `--merge` keeps the kept notes out of the part it replaces.
+        let merged = format!("own{}m1{k}W1", ledger::MERGE_MARK);
+        assert_eq!(
+            ledger::merge_note(Some(&merged), "m2"),
+            format!("own{}m2", ledger::MERGE_MARK)
+        );
     }
 
     /// #596: on an input whose hash after the merge equals the merged side's entry,
@@ -1721,7 +1996,14 @@ mod tests {
         let a = &entries["file:src/a.rs"];
         assert_eq!(
             a.note.as_deref(),
-            Some(format!("{pr}{}{first}", ledger::MERGE_MARK).as_str())
+            Some(
+                format!(
+                    "{pr}{}{first}{}{wave}",
+                    ledger::MERGE_MARK,
+                    ledger::KEPT_MARK
+                )
+                .as_str()
+            )
         );
         assert_eq!(a.by.as_deref(), Some("agent:work"));
         assert!(work.diags("is stale").is_empty());
@@ -1828,8 +2110,9 @@ mod tests {
             entries["file:src/a.rs"].note.as_deref(),
             Some(
                 format!(
-                    "the branch's a1 edit{}main's a5 and D edits",
-                    ledger::MERGE_MARK
+                    "the branch's a1 edit{}main's a5 and D edits{}{NOTE}",
+                    ledger::MERGE_MARK,
+                    ledger::KEPT_MARK
                 )
                 .as_str()
             )
