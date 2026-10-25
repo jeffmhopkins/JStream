@@ -5,7 +5,7 @@
 
 use super::{block_on, connected, create, edits};
 use crate::Engine;
-use crate::plugins::automation::{EVENT_ENTRY, MANIFEST_FILE, MODULE_FILE, RUNNING_DELAY_MS};
+use crate::plugins::automation::{EVENT_ENTRY, MANIFEST_FILE, MODULE_FILE};
 use jstream_control::{Control, ControlError, EventStream};
 use jstream_protocol::{
     Action, Call, CallResult, EntityKind, Event, PluginClass, PluginDisabledReason, PluginGrant,
@@ -13,7 +13,8 @@ use jstream_protocol::{
 };
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::{Context, Poll, Waker};
 use std::time::{Duration, Instant};
 
@@ -309,14 +310,21 @@ fn a_plugin_that_traps_on_an_event_during_its_install_is_disabled() {
     let dir = package("traps_early", TRAPS, None);
     // Another session edits throughout the install, so events are queued for the plugin
     // from the moment its subscription opens.
-    let busy = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let busy = Arc::new(AtomicBool::new(true));
+    // Stops the editor however the test ends, so a timed-out wait doesn't leave it running.
+    struct Stop(Arc<AtomicBool>);
+    impl Drop for Stop {
+        fn drop(&mut self) {
+            self.0.store(false, Ordering::Relaxed);
+        }
+    }
+    let stop = Stop(busy.clone());
     let editor = {
         let engine = engine.clone();
-        let busy = busy.clone();
         std::thread::spawn(move || {
             let other = connected(&engine);
             let mut n = 0u32;
-            while busy.load(std::sync::atomic::Ordering::Relaxed) {
+            while busy.load(Ordering::Relaxed) {
                 let _ = call(&other, create_scene(&format!("s{n}")));
                 n += 1;
             }
@@ -324,15 +332,20 @@ fn a_plugin_that_traps_on_an_event_during_its_install_is_disabled() {
     };
     std::thread::sleep(Duration::from_millis(20));
     // Events reach the plugin's queue while `start` waits, so it faults on one at once
-    // if it is handed one before its entry is `Running`. Other tests' installs only get
-    // slower meanwhile.
-    RUNNING_DELAY_MS.store(200, Ordering::Relaxed);
+    // if it is handed one before its entry is `Running`.
+    engine
+        .automation()
+        .running_delay_ms
+        .store(200, Ordering::Relaxed);
     let installed = call(&person, install("plg_early", &dir, PluginGrant::default()));
-    RUNNING_DELAY_MS.store(0, Ordering::Relaxed);
+    engine
+        .automation()
+        .running_delay_ms
+        .store(0, Ordering::Relaxed);
     assert_eq!(installed, Ok(CallResult::action()));
     let enabled = next_state(&mut events);
     let disabled = next_state(&mut events);
-    busy.store(false, std::sync::atomic::Ordering::Relaxed);
+    drop(stop);
     editor.join().expect("the editor ends");
     assert_eq!(enabled.1, PluginState::Enabled, "enabled first");
     assert_eq!(

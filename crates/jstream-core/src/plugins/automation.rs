@@ -47,11 +47,6 @@ pub(crate) const MODULE_FILE: &str = "plugin.wasm";
 /// The manifest in a plugin's package, which may be left out.
 pub(crate) const MANIFEST_FILE: &str = "manifest.json";
 
-/// For tests: how long [`start`] waits between a plugin's load and marking its entry
-/// `Running`, to widen the window in which events queue for it (#839 review B1).
-#[cfg(test)]
-pub(crate) static RUNNING_DELAY_MS: AtomicU64 = AtomicU64::new(0);
-
 /// The installed plugins, by ID.
 #[derive(Default)]
 pub(crate) struct Registry {
@@ -60,6 +55,11 @@ pub(crate) struct Registry {
     plugins: Mutex<BTreeMap<PluginId, Entry>>,
     /// Numbers each run of a plugin, so a run that ends late can't touch a newer one.
     runs: AtomicU64,
+    /// For tests: how long [`start`] waits between a plugin's load and marking its entry
+    /// `Running`, to widen the window in which events queue for it (#839 review B1). Per
+    /// engine, so other tests' installs don't wait too.
+    #[cfg(test)]
+    pub(crate) running_delay_ms: AtomicU64,
 }
 
 struct Entry {
@@ -312,7 +312,7 @@ fn start(engine: &Engine, plugin_id: &PluginId, wasm: Vec<u8>) -> Result<(), Pro
     })?;
     #[cfg(test)]
     thread::sleep(std::time::Duration::from_millis(
-        RUNNING_DELAY_MS.load(Ordering::Relaxed),
+        registry.running_delay_ms.load(Ordering::Relaxed),
     ));
     if let Some(entry) = lock(&registry.plugins).get_mut(plugin_id) {
         entry.state = Run::Running(Running {
