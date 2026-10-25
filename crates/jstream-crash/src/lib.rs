@@ -7,8 +7,8 @@
 //! architecture, the time, the process ID, the panicking thread's name, the panic's
 //! location and message, and a backtrace. It holds nothing else: no environment, no
 //! command line, no settings. Secrets registered with the [`Secrets`] the hook was given
-//! (the control token, and every stream key and OAuth refresh token that passes through
-//! a [`Redacting`] store) are replaced by `***` wherever they appear (R-SEC-001), and
+//! (the control token, every stream key and OAuth refresh token that passes through a
+//! [`Redacting`] store, and what a client hands [`Secrets::hook`]) are replaced by `***` wherever they appear (R-SEC-001), and
 //! only their BLAKE3 digests are kept for that, never their text. The newest
 //! [`MAX_REPORTS`] reports are kept.
 //!
@@ -84,6 +84,14 @@ impl Secrets {
         if !secrets.contains(&secret) {
             secrets.push(secret);
         }
+    }
+
+    /// A closure that registers what it is given, for a client that hands its secrets
+    /// on as it gets them (`jstream_youtube::SecretHook`, #353).
+    #[must_use]
+    pub fn hook(&self) -> Arc<dyn Fn(&str) + Send + Sync> {
+        let secrets = self.clone();
+        Arc::new(move |value: &str| secrets.register(value))
     }
 
     /// Whether `value` is registered.

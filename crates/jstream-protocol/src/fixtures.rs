@@ -23,7 +23,10 @@ use crate::{
     YoutubeAuth,
 };
 use crate::{AudienceStatsInfo, QuotaInfo, StatsPolling};
-use crate::{AudioFollow, BusId, BusInfo, BusMeter, Loudness, SendInfo, SourceAudio, SourceMeter};
+use crate::{
+    AudioFollow, BusId, BusInfo, BusMeter, BusMonitor, Loudness, MonitorTap, SendInfo, SourceAudio,
+    SourceMeter,
+};
 use crate::{CaptureTargetInfo, CaptureTargetKind, PixelSize, SourceSize};
 use crate::{Chord, DeviceId, DeviceInfo, HotkeyBinding};
 use crate::{DroppedOverride, ItemOverride, OverrideField};
@@ -460,6 +463,17 @@ pub(crate) fn edits() -> Vec<Edit> {
             gain_db: Some(db(-3.0)),
             muted: Some(false),
         },
+        Edit::BusSetMonitor {
+            bus_id: BusId::new("bus_vod"),
+            monitor: Some(BusMonitor {
+                device: String::new(),
+                tap: MonitorTap::PreFilters,
+            }),
+        },
+        Edit::BusSetMonitor {
+            bus_id: BusId::master(),
+            monitor: None,
+        },
         Edit::SendSet {
             source_id: SourceId::new("src_mic"),
             bus_id: BusId::new("bus_vod"),
@@ -609,6 +623,28 @@ fn filter_edits() -> Vec<Edit> {
             enabled: None,
             index: None,
         },
+        Edit::FilterAdd {
+            owner: FilterOwner::Scene {
+                scene_id: SceneId::new("scn_1"),
+            },
+            chain: FilterChain::Video,
+            filter_id: FilterId::new("flt_grade"),
+            kind: "vignette".into(),
+            settings: Settings::new(),
+            enabled: Some(false),
+            index: None,
+        },
+        Edit::FilterAdd {
+            owner: FilterOwner::Item {
+                item_id: ItemId::new("itm_1"),
+            },
+            chain: FilterChain::Video,
+            filter_id: FilterId::new("flt_frame"),
+            kind: "vignette".into(),
+            settings: Settings::new(),
+            enabled: None,
+            index: None,
+        },
     ]
 }
 
@@ -684,12 +720,17 @@ fn bus_infos() -> Vec<BusInfo> {
             name: "VOD track".into(),
             gain_db: db(0.0),
             muted: false,
+            monitor: Some(BusMonitor {
+                device: "{0.0.0.00000000}.{headphones}".into(),
+                tap: MonitorTap::PostFilters,
+            }),
         },
         BusInfo {
             bus_id: BusId::master(),
             name: "Master".into(),
             gain_db: db(-3.0),
             muted: false,
+            monitor: None,
         },
     ]
 }
@@ -771,6 +812,30 @@ fn encoder_infos() -> Vec<EncoderProfileInfo> {
             profile: EncoderProfile {
                 video: VideoEncoding {
                     hardware: HardwarePreference::Avoid,
+                    ..EncoderProfile::DEFAULT.video
+                },
+                ..EncoderProfile::DEFAULT
+            },
+        },
+        // HEVC and AV1 (0.41), for enhanced RTMP.
+        EncoderProfileInfo {
+            profile_id: EncoderProfileId::new("enc_hevc"),
+            name: "HEVC stream".into(),
+            profile: EncoderProfile {
+                video: VideoEncoding {
+                    codec: VideoCodec::Hevc,
+                    hardware: HardwarePreference::Require,
+                    ..EncoderProfile::DEFAULT.video
+                },
+                ..EncoderProfile::DEFAULT
+            },
+        },
+        EncoderProfileInfo {
+            profile_id: EncoderProfileId::new("enc_av1"),
+            name: "AV1 stream".into(),
+            profile: EncoderProfile {
+                video: VideoEncoding {
+                    codec: VideoCodec::Av1,
                     ..EncoderProfile::DEFAULT.video
                 },
                 ..EncoderProfile::DEFAULT
@@ -1089,6 +1154,7 @@ fn color_kind() -> KindDescriptor {
         version: 1,
         video: true,
         audio: false,
+        max_outset_px: None,
         params: vec![
             ParamDescriptor {
                 description: Some("Fill colour.".into()),
@@ -1293,6 +1359,12 @@ fn item_infos() -> Vec<ItemInfo> {
             opacity: Finite32::new(0.5).expect("finite"),
             blend: BlendMode::Normal,
             transition: ItemTransition::default(),
+            effects: vec![FilterInfo {
+                filter_id: FilterId::new("flt_frame"),
+                kind: "vignette".into(),
+                enabled: true,
+                settings: vignette(),
+            }],
         },
         ItemInfo {
             item_id: ItemId::new("itm_2"),
@@ -1318,8 +1390,19 @@ fn item_infos() -> Vec<ItemInfo> {
                 glide: Glide::Never,
                 ..ItemTransition::default()
             },
+            effects: Vec::new(),
         },
     ]
+}
+
+/// A vignette's settings, complete as the engine reports them.
+fn vignette() -> Settings {
+    let mut settings = Settings::new();
+    settings.insert("strength", json!(0.5));
+    settings.insert("radius", json!(0.5));
+    settings.insert("softness", json!(0.5));
+    settings.insert("color", json!("#000000ff"));
+    settings
 }
 
 fn transitions_info() -> TransitionsInfo {
@@ -1398,6 +1481,15 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             scenes: vec![
                 SceneInfo {
                     overrides: Vec::new(),
+                    filters: FilterChains {
+                        video: vec![FilterInfo {
+                            filter_id: FilterId::new("flt_grade"),
+                            kind: "vignette".into(),
+                            enabled: false,
+                            settings: vignette(),
+                        }],
+                        audio: Vec::new(),
+                    },
                     variant_of: None,
                     scene_id: SceneId::new("scn_1"),
                     name: "Main".into(),
@@ -1410,6 +1502,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 },
                 SceneInfo {
                     overrides: item_overrides(),
+                    filters: Default::default(),
                     variant_of: Some(SceneId::new("scn_1")),
                     scene_id: SceneId::new("scn_1_wide"),
                     name: "Main, wide".into(),
@@ -1422,6 +1515,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 },
                 SceneInfo {
                     overrides: Vec::new(),
+                    filters: Default::default(),
                     variant_of: None,
                     scene_id: SceneId::new("scn_intro"),
                     name: "Intro".into(),

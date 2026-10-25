@@ -105,6 +105,23 @@ fn spawn_reader(mut input: impl Read + Send + 'static) -> Receiver<ToHost> {
     rx
 }
 
+/// The shared block's handle, from the engine's first control message
+/// ([`ToHost::Block`]), read before the session's own reader starts. Windows hands the
+/// block over this way, so it needs no name.
+///
+/// # Errors
+/// The stream ends, or its first message is malformed or isn't `Block`.
+pub(crate) fn block_handle(input: &mut impl Read) -> Result<u64, String> {
+    let payload = read_frame(input)
+        .map_err(|e| format!("reading the engine's first message: {e}"))?
+        .ok_or("the engine sent nothing")?;
+    match ToHost::decode(&payload) {
+        Ok(ToHost::Block { handle }) => Ok(handle),
+        Ok(_) => Err("the engine's first message wasn't the block".into()),
+        Err(e) => Err(format!("the engine's first message: {e}")),
+    }
+}
+
 /// How a stretch of real-time running ended.
 enum Outcome {
     Stop,
@@ -270,8 +287,8 @@ fn main_loop<W: Write>(
                 };
                 out.send(&FromHost::State(state));
             }
-            // A second Start changes nothing.
-            Ok(ToHost::Start { .. }) | Err(RecvTimeoutError::Timeout) => {}
+            // A second Start, or a Block once the block is mapped, changes nothing.
+            Ok(ToHost::Start { .. } | ToHost::Block { .. }) | Err(RecvTimeoutError::Timeout) => {}
             Ok(ToHost::Stop) | Err(RecvTimeoutError::Disconnected) => return Outcome::Stop,
         }
         if shared.status.stop.load(Ordering::Acquire) != 0 {
@@ -572,5 +589,37 @@ mod tests {
         });
         assert_eq!(got, 7);
         assert!(beats() >= 3, "{} beats while it reactivated", beats());
+    }
+
+    #[test]
+    fn the_block_handle_must_be_the_first_message() {
+        let block = ToHost::Block { handle: 0x2a4 }.encode();
+        let mut stream = &block[..];
+        assert_eq!(block_handle(&mut stream), Ok(0x2a4));
+        // The rest of the stream is left for the session.
+        let mut both = ToHost::Block { handle: 8 }.encode();
+        both.extend(ToHost::Stop.encode());
+        let mut stream = &both[..];
+        assert_eq!(block_handle(&mut stream), Ok(8));
+        assert_eq!(stream, &ToHost::Stop.encode()[..]);
+
+        let start = ToHost::Start { state: None }.encode();
+        let mut bad_tag = ToHost::Stop.encode();
+        bad_tag[4] = 200;
+        let mut short = ToHost::Block { handle: 8 }.encode();
+        short.truncate(6);
+        let mut too_big = ((MAX_FRAME + 1) as u32).to_le_bytes().to_vec();
+        too_big.push(0);
+        for (stream, why) in [
+            (&[][..], "nothing"),
+            (&start[..], "wasn't the block"),
+            (&bad_tag[..], "unknown message tag"),
+            (&short[..], "reading"),
+            (&too_big[..], "reading"),
+        ] {
+            let mut stream = stream;
+            let err = block_handle(&mut stream).unwrap_err();
+            assert!(err.contains(why), "{err}");
+        }
     }
 }

@@ -23,12 +23,15 @@ use std::task::{Context, Poll, Waker};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use jstream_graph::{Graph, Item as GraphItem, Placement as GraphPlacement, Source, State};
+use jstream_graph::{
+    Filter, Graph, Item as GraphItem, Placement as GraphPlacement, Scene as GraphScene, Source,
+    State,
+};
 use jstream_media::{FrameSize, MediaTime, PixelFormat, Rounding, VideoFrame};
 use jstream_platform::{ContextKey, GpuFrame};
 use jstream_protocol::{
-    Canvas, Crop as ProtocolCrop, Edit, ItemGeometry, ItemId, ProtocolError, QueryResult, Rev,
-    SceneId, SourceId, SourceKind, VideoMixId,
+    Canvas, Crop as ProtocolCrop, Edit, FilterChain, Glide, ItemGeometry, ItemId, ItemTransition,
+    ProtocolError, QueryResult, Rev, SceneId, SourceId, SourceKind, VideoMixId,
 };
 use jstream_render::transition::{Endpoint, Track};
 use jstream_render::{
@@ -37,7 +40,7 @@ use jstream_render::{
 };
 use jstream_sources::CaptureSpec;
 
-use crate::chain::{Chain, Chains};
+use crate::chain::{Chain, ChainOwner, Chains};
 use crate::filter_assets::FilterAssets;
 use crate::lock;
 use crate::runtime::RenderSnapshot;
@@ -266,6 +269,9 @@ pub(crate) enum SourceRef {
     Capture(CaptureKey),
     /// A source's frame or capture after its video chain, kept in [`Shot::chains`].
     Filtered(SourceId),
+    /// An item's box after its effects (ADR-0065), as that scene draws the item: what a
+    /// transition's track shows for an item with effects.
+    Boxed(SceneId, ItemId),
 }
 
 #[derive(Debug, PartialEq)]
@@ -277,6 +283,133 @@ struct Placed {
     crop: Crop,
     /// The item's straight alpha multiplier (ADR-0023), in [0, 1].
     opacity: f32,
+    /// Its effects' box, when an effect of it runs: the layer then shows the effects'
+    /// output in place of `source`.
+    effects: Option<Boxed>,
+}
+
+/// The longest side of an item's effects layer, in pixels: a larger box plus outset is
+/// drawn into it scaled down uniformly (ADR-0065 §5).
+const MAX_LAYER_SIDE: u32 = 8192;
+
+/// The layer an item with effects is drawn into (ADR-0065 §5): its box as planned plus
+/// the effects' outset on every side, in canvas pixels, scaled down to fit
+/// [`MAX_LAYER_SIDE`] when larger. A live resize draws into the same layer, scaled, until
+/// the plan is made again.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Boxed {
+    /// The box as planned, in canvas pixels.
+    size: [f32; 2],
+    /// The room the effects need beyond each edge, in canvas pixels.
+    outset: f32,
+    /// The layer's size in pixels.
+    layer: [u32; 2],
+    /// Layer pixels per canvas pixel: 1, or less for a layer scaled down to fit.
+    scale: f32,
+    /// The size of the image the item shows, when known: what turns a legacy transform
+    /// into its box.
+    input: Option<[u32; 2]>,
+}
+
+impl Boxed {
+    /// The layer for a box placed at `geometry` with effects that need `outset` pixels,
+    /// over an image of `input`. `None` for a box that isn't finite.
+    fn new(geometry: &ItemGeometry, outset: u32, input: Option<[u32; 2]>) -> Option<Self> {
+        let size = [geometry.size.width.get(), geometry.size.height.get()];
+        let outset = outset as f32;
+        let padded = [size[0] + 2.0 * outset, size[1] + 2.0 * outset];
+        if !padded.iter().all(|side| side.is_finite() && *side > 0.0) {
+            return None;
+        }
+        let scale = (MAX_LAYER_SIDE as f32 / padded[0].max(padded[1])).min(1.0);
+        let side = |px: f32| ((px * scale).ceil() as u32).clamp(1, MAX_LAYER_SIDE);
+        Some(Self {
+            size,
+            outset,
+            layer: [side(padded[0]), side(padded[1])],
+            scale,
+            input,
+        })
+    }
+
+    /// The box `placement` puts an item cropped by `crop` in: its geometry, or a legacy
+    /// transform's equivalent over the image's size. `None` when that isn't known or the
+    /// placement draws nothing.
+    fn geometry_of(&self, placement: Placement, crop: Crop) -> Option<ItemGeometry> {
+        match placement {
+            Placement::Geometry(geometry) => Some(geometry),
+            Placement::Legacy(transform) => {
+                let [width, height] = self.input?;
+                let transform = jstream_protocol::ItemTransform {
+                    position: jstream_protocol::Vec2::new(
+                        transform.position[0],
+                        transform.position[1],
+                    )?,
+                    scale: jstream_protocol::Vec2::new(transform.scale[0], transform.scale[1])?,
+                    rotation_deg: jstream_protocol::Finite32::new(transform.rotation_deg)?,
+                };
+                let cut = ProtocolCrop {
+                    left: crop.left,
+                    top: crop.top,
+                    right: crop.right,
+                    bottom: crop.bottom,
+                };
+                ItemGeometry::from_legacy(transform, cut, width, height)
+                    .ok()
+                    .flatten()
+                    .map(|boxed| boxed.geometry)
+            }
+        }
+    }
+
+    /// Where the item is drawn inside its layer: centred at the box's planned size,
+    /// flat and unrotated, with `geometry`'s fit and flips, so the effects see the
+    /// cropped, fitted box in its own frame (ADR-0050 §7).
+    fn inside(&self, geometry: &ItemGeometry) -> Option<ItemGeometry> {
+        let centre =
+            jstream_protocol::Vec2::new(self.layer[0] as f32 * 0.5, self.layer[1] as f32 * 0.5)?;
+        Some(ItemGeometry {
+            center: centre,
+            size: jstream_protocol::Size::try_new(
+                self.size[0] * self.scale,
+                self.size[1] * self.scale,
+            )
+            .ok()?,
+            fit_mode: geometry.fit_mode,
+            flip_h: geometry.flip_h,
+            flip_v: geometry.flip_v,
+            ..ItemGeometry::covering_canvas(1, 1).ok()?
+        })
+    }
+
+    /// Where the layer is placed for an item at `geometry`: its box grown by the outset
+    /// on every side, in proportion to the box the layer was planned for, the whole
+    /// layer stretched over it, turned and projected as the box is.
+    fn around(&self, geometry: &ItemGeometry) -> Option<ItemGeometry> {
+        let grow = |live: f32, planned: f32| live * (planned + 2.0 * self.outset) / planned;
+        Some(ItemGeometry {
+            size: jstream_protocol::Size::try_new(
+                grow(geometry.size.width.get(), self.size[0]),
+                grow(geometry.size.height.get(), self.size[1]),
+            )
+            .ok()?,
+            fit_mode: jstream_protocol::FitMode::Stretch,
+            flip_h: false,
+            flip_v: false,
+            ..*geometry
+        })
+    }
+}
+
+/// An item with effects as a shot draws it (ADR-0065 §5): what the item shows, where
+/// it is placed as planned, and its layer.
+#[derive(Clone, Debug, PartialEq)]
+struct ItemBox {
+    item: ItemId,
+    source: SourceRef,
+    placement: Placement,
+    crop: Crop,
+    boxed: Boxed,
 }
 
 /// The program mix and every video mix, copied out of the collection so they can be
@@ -293,8 +426,9 @@ pub(crate) struct Shot {
     scenes: BTreeMap<SceneId, Vec<Placed>>,
     /// The frames the copied scenes place, by source.
     frames: BTreeMap<SourceId, Frame>,
-    /// The video chains of the sources they place that have one (ADR-0026).
-    chains: BTreeMap<SourceId, Chain>,
+    /// The video chains of the sources they place that have one (ADR-0026), and of the
+    /// scenes they draw that have one (ADR-0065).
+    chains: BTreeMap<ChainOwner, Chain>,
     /// [`schedule`] of the program scene, made once here so drawing a frame schedules
     /// nothing. Empty without a program scene.
     passes: Vec<Pass>,
@@ -316,6 +450,8 @@ pub(crate) struct Shot {
     /// [`schedule_chains`]: the order the video chains run in once per frame, with the
     /// passes of the scenes they read, made once here like `passes`.
     chain_steps: Vec<ChainStep>,
+    /// The items with effects, by their chain's owner (ADR-0065).
+    boxes: BTreeMap<ChainOwner, ItemBox>,
 }
 
 /// A transition as a shot draws it (ADR-0029): each item's track in drawing order and
@@ -342,6 +478,7 @@ impl Default for Shot {
             captures: captures(&[]),
             transition: None,
             chain_steps: Vec::new(),
+            boxes: BTreeMap::new(),
         }
     }
 }
@@ -407,7 +544,32 @@ impl Shot {
     /// The video chain of `source_id` in this shot, for tests.
     #[cfg(test)]
     pub(crate) fn chain(&self, source_id: &SourceId) -> Option<&Chain> {
-        self.chains.get(source_id)
+        self.chains.get(&ChainOwner::Source(source_id.clone()))
+    }
+
+    /// The effects chain of item `item_id` as scene `scene_id` draws it, for tests.
+    #[cfg(test)]
+    pub(crate) fn item_chain(&self, scene_id: &SceneId, item_id: &ItemId) -> Option<&Chain> {
+        self.chains
+            .get(&ChainOwner::Item(scene_id.clone(), item_id.clone()))
+    }
+
+    /// The video chain of the scene `scene_id` in this shot, for tests.
+    #[cfg(test)]
+    pub(crate) fn scene_chain(&self, scene_id: &SceneId) -> Option<&Chain> {
+        self.chains.get(&ChainOwner::Scene(scene_id.clone()))
+    }
+
+    /// The scenes the chain phase composites, with their depths, in order, for tests.
+    #[cfg(test)]
+    pub(crate) fn chain_passes(&self) -> Vec<(String, usize)> {
+        self.chain_steps
+            .iter()
+            .filter_map(|step| match step {
+                ChainStep::Pass(pass) => Some((pass.scene.to_string(), pass.depth)),
+                _ => None,
+            })
+            .collect()
     }
 
     /// How many tracks the running transition draws, or `None` without one, for tests.
@@ -450,6 +612,7 @@ impl PartialEq for Shot {
             && self.chains == other.chains
             && self.captures == other.captures
             && self.transition == other.transition
+            && self.boxes == other.boxes
     }
 }
 
@@ -526,13 +689,14 @@ pub(crate) fn plan_with(
             finished = false;
             end_ms = Some(planned.end_ms);
             planner.wake = earliest(planner.wake, end);
+            let tracks = planned
+                .tracks
+                .into_iter()
+                .map(|(visual, track)| (key(&visual.image, &shot), track))
+                .collect();
             shot.transition = Some(Transitioning {
                 start: running.start,
-                tracks: planned
-                    .tracks
-                    .into_iter()
-                    .map(|(visual, track)| (key(&visual.image), track))
-                    .collect(),
+                tracks,
             });
             shot.passes = schedule_tracks(&shot);
         } else {
@@ -585,6 +749,12 @@ pub(crate) fn plan_with(
     };
     shot.captures
         .extend(placed_captures(shot.mix_passes.values().flatten()));
+    // An item's effects read what the item shows, though the layers show their output.
+    shot.captures
+        .extend(shot.boxes.values().filter_map(|boxed| match &boxed.source {
+            SourceRef::Capture(spec) => Some(spec.clone()),
+            _ => None,
+        }));
     // A chain over a capture reads it, though the layers show the chain's output.
     shot.captures
         .extend(shot.chains.values().filter_map(|chain| match &chain.input {
@@ -594,7 +764,7 @@ pub(crate) fn plan_with(
     shot.chain_steps = schedule_chains(&shot);
     let read = placed_captures(shot.chain_steps.iter().filter_map(|step| match step {
         ChainStep::Pass(pass) => Some(pass),
-        ChainStep::Run(_) => None,
+        ChainStep::Run(_) | ChainStep::Box(_) => None,
     }))
     .collect::<Vec<_>>();
     shot.captures.extend(read);
@@ -652,19 +822,30 @@ fn earliest(wake: Option<MediaTime>, at: Option<MediaTime>) -> Option<MediaTime>
     }
 }
 
-/// The cached image a visual shows: a frame's upload, the capture's, or a nested
-/// scene's layer one level below the program.
-fn key(image: &SourceRef) -> GpuKey {
+/// The cached image a visual shows: a frame's upload, the capture's, a nested scene's
+/// layer one level below the program, or its chain's output when `shot` runs one.
+fn key(image: &SourceRef, shot: &Shot) -> GpuKey {
     match image {
         SourceRef::Frame(id) => GpuKey::Frame(id.clone()),
         SourceRef::Capture(spec) => GpuKey::Capture(spec.clone()),
-        SourceRef::Scene(id) => GpuKey::Layer(id.clone(), 1),
-        SourceRef::Filtered(id) => GpuKey::Filtered(id.clone()),
+        SourceRef::Scene(id) => {
+            let owner = ChainOwner::Scene(id.clone());
+            if shot.chains.contains_key(&owner) {
+                GpuKey::Filtered(owner)
+            } else {
+                GpuKey::Layer(id.clone(), 1)
+            }
+        }
+        SourceRef::Filtered(id) => GpuKey::Filtered(ChainOwner::Source(id.clone())),
+        SourceRef::Boxed(scene, item) => {
+            GpuKey::Filtered(ChainOwner::Item(scene.clone(), item.clone()))
+        }
     }
 }
 
 /// The passes a transition shot draws before its tracks: every nested scene a track
-/// shows, at depth 1, and the scenes they nest.
+/// shows, at depth 1, and the scenes they nest. A scene with a chain is drawn before
+/// any mix, with the chains ([`schedule_chains`]).
 fn schedule_tracks(shot: &Shot) -> Vec<Pass> {
     let mut passes = Vec::new();
     let mut done = BTreeSet::new();
@@ -724,15 +905,80 @@ impl Planner<'_, '_> {
     fn transition(&mut self, running: &Running, out: &mut Shot) -> Planned {
         let flatten = running.run.pairs;
         let from = match &running.from {
-            From::Scene(scene) => self.visuals(scene, flatten, out),
+            From::Scene(scene) => self.endpoint(scene, flatten, out),
             From::OnScreen(items) => items
                 .iter()
                 .filter(|visual| self.shows(&visual.image, out))
                 .cloned()
                 .collect(),
         };
-        let to = self.visuals(&running.to, flatten, out);
+        let to = self.endpoint(&running.to, flatten, out);
         transition::plan(&from, &to, &running.run, running.by_item)
+    }
+
+    /// What a transition shows of scene `id` at one end: its items as
+    /// [`Self::visuals`] gives them or, for a scene with a chain, its filtered picture
+    /// as one visual over the canvas, which pairs with nothing (ADR-0065 §6): Fade
+    /// crossfades it and Move falls back to that.
+    fn endpoint(&mut self, id: &SceneId, flatten: bool, out: &mut Shot) -> Vec<Visual> {
+        if self.scene_chain(id).is_none() {
+            return self.visuals(id, flatten, out);
+        }
+        self.collect(id, out, &mut BTreeSet::new());
+        let canvas = self.state.canvas();
+        let Ok(geometry) = ItemGeometry::covering_canvas(canvas.width, canvas.height) else {
+            return Vec::new();
+        };
+        vec![Visual {
+            image: SourceRef::Scene(id.clone()),
+            item_id: ItemId::new(""),
+            source_id: SourceId::new(""),
+            at: Endpoint {
+                geometry,
+                crop: Crop::NONE,
+                opacity: OPAQUE,
+            },
+            size: Some([canvas.width, canvas.height]),
+            // One picture that pairs with nothing crossfades (ADR-0065 §6), whatever
+            // the preset's `unmatched` effect.
+            settings: ItemTransition {
+                glide: Glide::Never,
+                appear: jstream_protocol::TransitionEffect::Fade,
+                disappear: jstream_protocol::TransitionEffect::Fade,
+                ..ItemTransition::default()
+            },
+            effects: Vec::new(),
+        }]
+    }
+
+    /// The video chain of scene `id` as the collection holds it, over its composite: a
+    /// keyframe scene's is its parent's (ADR-0024). `None` when no filter of it runs.
+    fn scene_chain(&self, id: &SceneId) -> Option<Chain> {
+        let scene = self.state.scene(id)?;
+        Chain::of_filters(
+            &ChainOwner::Scene(id.clone()),
+            scene_filters(self.state, scene),
+            GpuKey::Composite(id.clone()),
+            self.assets,
+        )
+    }
+
+    /// Puts `chain`, `owner`'s, in `out`, with the scenes its filters read planned like
+    /// nested scenes, and each filter that reads a scene with a chain of its own pointed
+    /// at that chain's output.
+    fn add_chain(&mut self, owner: ChainOwner, chain: Chain, out: &mut Shot) {
+        let scenes: Vec<SceneId> = chain.scenes().cloned().collect();
+        out.chains.insert(owner.clone(), chain);
+        for scene in &scenes {
+            self.collect(scene, out, &mut BTreeSet::new());
+        }
+        let filtered: BTreeSet<SceneId> = scenes
+            .into_iter()
+            .filter(|scene| out.chains.contains_key(&ChainOwner::Scene(scene.clone())))
+            .collect();
+        if let Some(chain) = out.chains.get_mut(&owner) {
+            chain.read_filtered(|scene| filtered.contains(scene));
+        }
     }
 
     /// Whether `image` can be drawn now, putting its frame or scene in `out`.
@@ -752,7 +998,111 @@ impl Planner<'_, '_> {
                 self.collect(id, out, &mut BTreeSet::new());
                 true
             }
+            // The item's effects as the collection holds them now.
+            SourceRef::Boxed(scene, item) => self.reboxed(scene, item, out),
         }
+    }
+
+    /// Plans the effects of item `item_id` as scene `scene_id` draws it, for a
+    /// transition that retargets one with it on screen: whether they still run.
+    fn reboxed(&mut self, scene_id: &SceneId, item_id: &ItemId, out: &mut Shot) -> bool {
+        let state = self.state;
+        let Some(scene) = state.scene(scene_id) else {
+            return false;
+        };
+        let Some(item) = state
+            .shown_items(scene)
+            .into_iter()
+            .find(|item| item.as_ref().id() == item_id)
+        else {
+            return false;
+        };
+        let item = item.as_ref();
+        let Some(source) = state.source(item.source_id()) else {
+            return false;
+        };
+        let image = match source.kind() {
+            SourceKind::Scene { scene_id } => {
+                self.collect(scene_id, out, &mut BTreeSet::new());
+                SourceRef::Scene(scene_id.clone())
+            }
+            _ => match self.shown(source, out) {
+                Some(image) => image,
+                None => return false,
+            },
+        };
+        self.boxed(scene_id, item, &image, out).is_some()
+    }
+
+    /// Plans the effects of `item`, as scene `scene` draws it over `source`, into `out`:
+    /// their chain over the item's box, and the box (ADR-0065 §5). `None` when no effect
+    /// of it runs, or when its box isn't known (a legacy transform over a capture,
+    /// whose size isn't known when planning), which draws it as if it had none.
+    fn boxed(
+        &mut self,
+        scene: &SceneId,
+        item: &GraphItem,
+        source: &SourceRef,
+        out: &mut Shot,
+    ) -> Option<Boxed> {
+        let owner = ChainOwner::Item(scene.clone(), item.id().clone());
+        if let Some(planned) = out.boxes.get(&owner) {
+            return Some(planned.boxed);
+        }
+        let chain = Chain::of_filters(
+            &owner,
+            item.effects(),
+            GpuKey::ItemBox(scene.clone(), item.id().clone()),
+            self.assets,
+        )?;
+        let canvas = self.state.canvas();
+        let output = |chain: Option<&Chain>, [width, height]: [u32; 2]| {
+            let (w, h) = chain.map_or((width, height), |chain| chain.output_size(width, height));
+            [w, h]
+        };
+        let input = match source {
+            SourceRef::Frame(id) => out.frames.get(id).map(|frame| frame.extent),
+            SourceRef::Filtered(id) => out.frames.get(id).map(|frame| {
+                output(
+                    out.chains.get(&ChainOwner::Source(id.clone())),
+                    frame.extent,
+                )
+            }),
+            SourceRef::Scene(id) => Some(output(
+                out.chains.get(&ChainOwner::Scene(id.clone())),
+                [canvas.width, canvas.height],
+            )),
+            SourceRef::Capture(_) | SourceRef::Boxed(..) => None,
+        };
+        let geometry = match item.placement() {
+            GraphPlacement::Geometry(geometry) => *geometry,
+            GraphPlacement::Legacy(transform) => {
+                let Some([width, height]) = input else {
+                    tracing::debug!(
+                        item = %item.id(),
+                        "a legacy transform over a capture has no known box; its effects are bypassed"
+                    );
+                    return None;
+                };
+                ItemGeometry::from_legacy(*transform, *item.crop(), width, height)
+                    .ok()??
+                    .geometry
+            }
+            _ => return None,
+        };
+        let boxed = Boxed::new(&geometry, chain.outset(), input)?;
+        out.boxes.insert(
+            owner.clone(),
+            ItemBox {
+                item: item.id().clone(),
+                source: source.clone(),
+                placement: Placement::Geometry(geometry),
+                crop: crop(item.crop()),
+                boxed,
+            },
+        );
+        self.add_chain(owner, chain, out);
+        Some(boxed)
     }
 
     /// The visible items of scene `id`, bottom first, as transition endpoints, each at
@@ -792,46 +1142,66 @@ impl Planner<'_, '_> {
             let Some(source) = state.source(item.source_id()) else {
                 continue;
             };
-            let (image, size) =
-                match source.kind() {
-                    SourceKind::Scene { scene_id } => {
-                        if flatten
-                            && depth + 1 < MAX_NESTING
-                            && covers(item, canvas)
-                            && item.opacity().get() >= OPAQUE
-                        {
-                            self.visuals_into(scene_id, flatten, depth + 1, path, out, visuals);
-                            continue;
-                        }
-                        self.collect(scene_id, out, &mut BTreeSet::new());
-                        (
-                            SourceRef::Scene(scene_id.clone()),
-                            Some([canvas.width, canvas.height]),
-                        )
+            let (image, size) = match source.kind() {
+                SourceKind::Scene { scene_id } => {
+                    // A scene with a chain is one picture (ADR-0065 §6).
+                    if flatten
+                        && depth + 1 < MAX_NESTING
+                        && covers(item, canvas)
+                        && item.opacity().get() >= OPAQUE
+                        && self.scene_chain(scene_id).is_none()
+                        && !item.effects().iter().any(|effect| effect.enabled())
+                    {
+                        self.visuals_into(scene_id, flatten, depth + 1, path, out, visuals);
+                        continue;
                     }
-                    _ => match self.shown(source, out) {
-                        Some(SourceRef::Frame(id)) => {
-                            let size = out.frames.get(&id).map(|frame| frame.extent);
-                            (SourceRef::Frame(id), size)
-                        }
-                        // A filtered frame is the size the chain draws for it.
-                        Some(SourceRef::Filtered(id)) => {
-                            let size = out.frames.get(&id).zip(out.chains.get(&id)).map(
-                                |(frame, chain)| {
-                                    let [width, height] = frame.extent;
-                                    let (w, h) = chain.output_size(width, height);
-                                    [w, h]
-                                },
-                            );
-                            (SourceRef::Filtered(id), size)
-                        }
-                        // A capture's size isn't known when planning: the canvas stands in.
-                        Some(capture @ SourceRef::Capture(_)) => (capture, None),
-                        Some(SourceRef::Scene(_)) | None => continue,
-                    },
-                };
+                    self.collect(scene_id, out, &mut BTreeSet::new());
+                    (
+                        SourceRef::Scene(scene_id.clone()),
+                        Some([canvas.width, canvas.height]),
+                    )
+                }
+                _ => match self.shown(source, out) {
+                    Some(SourceRef::Frame(id)) => {
+                        let size = out.frames.get(&id).map(|frame| frame.extent);
+                        (SourceRef::Frame(id), size)
+                    }
+                    // A filtered frame is the size the chain draws for it.
+                    Some(SourceRef::Filtered(id)) => {
+                        let chain = out.chains.get(&ChainOwner::Source(id.clone()));
+                        let size = out.frames.get(&id).zip(chain).map(|(frame, chain)| {
+                            let [width, height] = frame.extent;
+                            let (w, h) = chain.output_size(width, height);
+                            [w, h]
+                        });
+                        (SourceRef::Filtered(id), size)
+                    }
+                    // A capture's size isn't known when planning: the canvas stands in.
+                    Some(capture @ SourceRef::Capture(_)) => (capture, None),
+                    Some(SourceRef::Scene(_) | SourceRef::Boxed(..)) | None => continue,
+                },
+            };
             let Some(geometry) = endpoint_geometry(item, size, canvas) else {
                 continue;
+            };
+            // An item with effects is its effects' layer over its grown box, uncropped.
+            let boxed = self.boxed(id, item, &image, out);
+            let (image, geometry, cut, size, effects) = match boxed {
+                Some(boxed) => {
+                    let owner = ChainOwner::Item(id.clone(), item.id().clone());
+                    let look = out.chains.get(&owner).map(Chain::look).unwrap_or_default();
+                    let Some(around) = boxed.around(&geometry) else {
+                        continue;
+                    };
+                    (
+                        SourceRef::Boxed(id.clone(), item.id().clone()),
+                        around,
+                        Crop::NONE,
+                        Some(boxed.layer),
+                        look,
+                    )
+                }
+                None => (image, geometry, crop(item.crop()), size, Vec::new()),
             };
             visuals.push(Visual {
                 image,
@@ -839,11 +1209,12 @@ impl Planner<'_, '_> {
                 source_id: item.source_id().clone(),
                 at: Endpoint {
                     geometry,
-                    crop: crop(item.crop()),
+                    crop: cut,
                     opacity: item.opacity().get(),
                 },
                 size,
                 settings: *item.transition(),
+                effects,
             });
         }
         path.remove(id);
@@ -875,16 +1246,21 @@ impl Planner<'_, '_> {
                         None => continue,
                     },
                 };
+                let effects = self.boxed(id, item, &source, out);
                 placed.push(Placed {
                     item: item.id().clone(),
                     source,
                     placement: placement(item.placement()),
                     crop: crop(item.crop()),
                     opacity: item.opacity().get(),
+                    effects,
                 });
             }
         }
         out.scenes.insert(id.clone(), placed);
+        if let Some(chain) = self.scene_chain(id) {
+            self.add_chain(ChainOwner::Scene(id.clone()), chain, out);
+        }
         path.remove(id);
     }
 
@@ -911,17 +1287,14 @@ impl Planner<'_, '_> {
     fn shown(&mut self, source: &Source, out: &mut Shot) -> Option<SourceRef> {
         let id = source.id();
         let image = self.look(id, out)?;
-        if out.chains.contains_key(id) {
+        let owner = ChainOwner::Source(id.clone());
+        if out.chains.contains_key(&owner) {
             return Some(SourceRef::Filtered(id.clone()));
         }
-        match Chain::of(source, key(&image), self.assets) {
+        match Chain::of(source, key(&image, out), self.assets) {
             Some(chain) => {
-                let scenes: Vec<SceneId> = chain.scenes().cloned().collect();
-                out.chains.insert(id.clone(), chain);
                 // What a `scene_mask` reads is planned like a nested scene.
-                for scene in &scenes {
-                    self.collect(scene, out, &mut BTreeSet::new());
-                }
+                self.add_chain(owner, chain, out);
                 Some(SourceRef::Filtered(id.clone()))
             }
             None => Some(image),
@@ -940,11 +1313,17 @@ pub(crate) enum GpuKey {
     Layer(SceneId, usize),
     /// The program scene at the canvas size, when the output is another size.
     Program,
-    /// The output of a source's video chain: what its items show.
-    Filtered(SourceId),
-    /// The output of the filter at that index of a source's video chain, which the next
-    /// one reads. The last filter draws into [`GpuKey::Filtered`] instead.
-    Chain(SourceId, usize),
+    /// The output of a source's or a scene's video chain: what its items show.
+    Filtered(ChainOwner),
+    /// The output of the filter at that index of a video chain, which the next one
+    /// reads. The last filter draws into [`GpuKey::Filtered`] instead.
+    Chain(ChainOwner, usize),
+    /// The composite of a scene with a video chain, which the chain runs over
+    /// (ADR-0065): drawn once per frame, before any mix.
+    Composite(SceneId),
+    /// The layer an item with effects is drawn into before they run (ADR-0065 §5), as
+    /// that scene draws it.
+    ItemBox(SceneId, ItemId),
     /// One step of the privacy blur at that width and height: the output itself, then
     /// halved until it is at most [`PRIVACY_SIDE`] on its longest side (ADR-0027 §4).
     Privacy(u32, u32),
@@ -953,6 +1332,12 @@ pub(crate) enum GpuKey {
 /// The depth a scene that a video filter reads (`scene_mask`) is drawn at: as a scene
 /// nested one level down, so what it nests counts toward [`MAX_NESTING`] the same way.
 const REFERENCE_DEPTH: usize = 1;
+
+/// The depth a scene with a video chain (ADR-0065) is composited at for its chain: the
+/// program scene's. Its composite is drawn once per frame, however deep it is placed,
+/// so its own nested scenes count toward [`MAX_NESTING`] from it, as a program scene's
+/// do, and a filtered program scene draws as deep as an unfiltered one.
+const COMPOSITE_DEPTH: usize = 0;
 
 impl GpuKey {
     /// The layer `scene` is drawn into for the video filters that read it.
@@ -968,8 +1353,10 @@ impl GpuKey {
 enum ChainStep {
     /// A scene a `scene_mask` reads, or a scene that one nests.
     Pass(Pass),
-    /// The video chain of a source.
-    Run(SourceId),
+    /// An item with effects, drawn into its [`GpuKey::ItemBox`] before they run.
+    Box(ChainOwner),
+    /// The video chain of a source or a scene.
+    Run(ChainOwner),
 }
 
 /// What [`compose`] draws: which mix, and whether the privacy stage applies.
@@ -1009,6 +1396,9 @@ struct Layer {
     placement: Placement,
     crop: Crop,
     opacity: f32,
+    /// The box of an item whose effects run: `image` is their output, placed over the
+    /// box grown by their outset, uncropped.
+    boxed: Option<Boxed>,
 }
 
 impl Shot {
@@ -1037,8 +1427,22 @@ impl Shot {
             let most = scales.entry(id.clone()).or_insert(0.0);
             *most = most.max(scale);
         }
-        for (id, chain) in &self.chains {
-            if chain.input == GpuKey::Frame(id.clone()) {
+        // An item's effects draw its frame into their layer, as the item would.
+        for boxed in self.boxes.values() {
+            let SourceRef::Frame(id) = &boxed.source else {
+                continue;
+            };
+            let Some(frame) = self.frames.get(id) else {
+                continue;
+            };
+            let scale = magnification(boxed.placement, boxed.crop, frame.extent);
+            let most = scales.entry(id.clone()).or_insert(0.0);
+            *most = most.max(scale);
+        }
+        for (owner, chain) in &self.chains {
+            if let ChainOwner::Source(id) = owner
+                && chain.input == GpuKey::Frame(id.clone())
+            {
                 scales.insert(id.clone(), 1.0);
             }
         }
@@ -1078,8 +1482,32 @@ fn magnification(placement: Placement, crop: Crop, extent: [u32; 2]) -> f32 {
 /// A scene is rendered once per depth it is reached at, however often it is placed
 /// there. A scene source more than [`MAX_NESTING`] levels below the program scene, or
 /// one that shows a scene already being drawn further up (a cycle, which the graph
-/// rejects), draws nothing.
+/// rejects), draws nothing. A scene with a video chain (ADR-0065) isn't composited
+/// here: the chain phase draws it once per frame ([`schedule_chains`]), and the passes
+/// here place its chain's output, the program scene's over the whole canvas.
 fn schedule(shot: &Shot, program: &SceneId) -> Vec<Pass> {
+    let owner = ChainOwner::Scene(program.clone());
+    if shot.chains.contains_key(&owner) {
+        let canvas = shot.canvas;
+        let layers = ItemGeometry::covering_canvas(canvas.width, canvas.height)
+            .map(|geometry| Layer {
+                // No item: a live value never moves the whole picture.
+                item: ItemId::new(""),
+                image: GpuKey::Filtered(owner),
+                placement: Placement::Geometry(geometry),
+                crop: Crop::NONE,
+                opacity: OPAQUE,
+                boxed: None,
+            })
+            .into_iter()
+            .collect();
+        return vec![Pass {
+            scene: program.clone(),
+            depth: 0,
+            key: GpuKey::Layer(program.clone(), 0),
+            layers,
+        }];
+    }
     let mut passes = Vec::new();
     let mut done = BTreeSet::new();
     let mut path = BTreeSet::new();
@@ -1092,15 +1520,9 @@ trait Passes {
     /// Takes `pass`, after every pass it reads.
     fn pass(&mut self, pass: Pass);
 
-    /// Called when a pass places `source`'s video chain output, before the pass is
-    /// taken. A mix's passes ignore it: every chain runs before any mix draws.
-    fn filtered(
-        &mut self,
-        _shot: &Shot,
-        _source: &SourceId,
-        _done: &mut BTreeSet<(SceneId, usize)>,
-    ) {
-    }
+    /// Called when a pass places the output of `owner`'s video chain, before the pass
+    /// is taken. A mix's passes ignore it: every chain runs before any mix draws.
+    fn filtered(&mut self, _shot: &Shot, _owner: &ChainOwner, _done: &mut BTreeSet<GpuKey>) {}
 }
 
 impl Passes for Vec<Pass> {
@@ -1110,16 +1532,18 @@ impl Passes for Vec<Pass> {
 }
 
 /// The work a frame does once, before any mix draws, in order: each video chain after
-/// the passes of the scenes it reads (`scene_mask`), and each such pass after the
-/// chains of the sources it places and the scenes it nests. A scene a chain reads is
-/// drawn at [`REFERENCE_DEPTH`] into [`GpuKey::reference`]. The graph refuses a cycle
-/// through a filter's scene reference (ADR-0026); were one there, the chain that
-/// closes it would read its source's output from the frame before.
+/// what it reads, and each pass after the chains of what it places and the scenes it
+/// nests. A source's chain reads its frame, and a scene's its composite, drawn at
+/// [`COMPOSITE_DEPTH`] into [`GpuKey::Composite`]. A scene a chain's filter reads
+/// (`scene_mask`) is drawn at [`REFERENCE_DEPTH`] into [`GpuKey::reference`], or read
+/// from its own chain's output when it has one. The graph refuses a cycle through a
+/// filter's scene reference (ADR-0026); were one there, the chain that closes it would
+/// read its owner's output from the frame before.
 fn schedule_chains(shot: &Shot) -> Vec<ChainStep> {
     let mut order = ChainOrder::default();
     let mut done = BTreeSet::new();
-    for source in shot.chains.keys() {
-        order.chain(shot, source, &mut done);
+    for owner in shot.chains.keys() {
+        order.chain(shot, owner, &mut done);
     }
     order.steps
 }
@@ -1128,31 +1552,72 @@ fn schedule_chains(shot: &Shot) -> Vec<ChainStep> {
 struct ChainOrder {
     steps: Vec<ChainStep>,
     /// The chains already in `steps`.
-    ran: BTreeSet<SourceId>,
+    ran: BTreeSet<ChainOwner>,
     /// The chains being ordered, whose scenes are being scheduled.
-    open: BTreeSet<SourceId>,
+    open: BTreeSet<ChainOwner>,
 }
 
 impl ChainOrder {
-    fn chain(&mut self, shot: &Shot, source: &SourceId, done: &mut BTreeSet<(SceneId, usize)>) {
-        if self.ran.contains(source) || !self.open.insert(source.clone()) {
+    fn chain(&mut self, shot: &Shot, owner: &ChainOwner, done: &mut BTreeSet<GpuKey>) {
+        if self.ran.contains(owner) || !self.open.insert(owner.clone()) {
             return;
         }
-        if let Some(chain) = shot.chains.get(source) {
+        if let Some(chain) = shot.chains.get(owner) {
+            // An item's effects read what the item shows.
+            if let Some(boxed) = shot.boxes.get(owner) {
+                match &boxed.source {
+                    SourceRef::Filtered(source) => {
+                        self.chain(shot, &ChainOwner::Source(source.clone()), done);
+                    }
+                    SourceRef::Scene(inner) => {
+                        let read = ChainOwner::Scene(inner.clone());
+                        if shot.chains.contains_key(&read) {
+                            self.chain(shot, &read, done);
+                        } else {
+                            visit(
+                                shot,
+                                inner,
+                                REFERENCE_DEPTH,
+                                &mut BTreeSet::new(),
+                                done,
+                                self,
+                            );
+                        }
+                    }
+                    SourceRef::Frame(_) | SourceRef::Capture(_) | SourceRef::Boxed(..) => {}
+                }
+            }
             for scene in chain.scenes() {
-                visit(
+                let read = ChainOwner::Scene(scene.clone());
+                if shot.chains.contains_key(&read) {
+                    self.chain(shot, &read, done);
+                } else {
+                    visit(
+                        shot,
+                        scene,
+                        REFERENCE_DEPTH,
+                        &mut BTreeSet::new(),
+                        done,
+                        self,
+                    );
+                }
+            }
+            if let ChainOwner::Scene(scene) = owner {
+                visit_into(
                     shot,
-                    scene,
-                    REFERENCE_DEPTH,
+                    (scene, COMPOSITE_DEPTH, GpuKey::Composite(scene.clone())),
                     &mut BTreeSet::new(),
                     done,
                     self,
                 );
             }
+            if shot.boxes.contains_key(owner) {
+                self.steps.push(ChainStep::Box(owner.clone()));
+            }
         }
-        self.open.remove(source);
-        self.ran.insert(source.clone());
-        self.steps.push(ChainStep::Run(source.clone()));
+        self.open.remove(owner);
+        self.ran.insert(owner.clone());
+        self.steps.push(ChainStep::Run(owner.clone()));
     }
 }
 
@@ -1161,32 +1626,54 @@ impl Passes for ChainOrder {
         self.steps.push(ChainStep::Pass(pass));
     }
 
-    fn filtered(&mut self, shot: &Shot, source: &SourceId, done: &mut BTreeSet<(SceneId, usize)>) {
-        self.chain(shot, source, done);
+    fn filtered(&mut self, shot: &Shot, owner: &ChainOwner, done: &mut BTreeSet<GpuKey>) {
+        self.chain(shot, owner, done);
     }
 }
 
+/// Schedules scene `id` at `depth` into its [`GpuKey::Layer`], after what it reads.
 fn visit(
     shot: &Shot,
     id: &SceneId,
     depth: usize,
     path: &mut BTreeSet<SceneId>,
-    done: &mut BTreeSet<(SceneId, usize)>,
+    done: &mut BTreeSet<GpuKey>,
     passes: &mut impl Passes,
 ) -> GpuKey {
     let key = GpuKey::Layer(id.clone(), depth);
-    if !done.insert((id.clone(), depth)) {
-        return key;
+    visit_into(shot, (id, depth, key.clone()), path, done, passes);
+    key
+}
+
+/// Schedules scene `id` at `depth` into `key`, once, after the passes and chains of
+/// what it places. A nested scene with a chain is placed as its chain's output.
+fn visit_into(
+    shot: &Shot,
+    (id, depth, key): (&SceneId, usize, GpuKey),
+    path: &mut BTreeSet<SceneId>,
+    done: &mut BTreeSet<GpuKey>,
+    passes: &mut impl Passes,
+) {
+    if !done.insert(key.clone()) {
+        return;
     }
     path.insert(id.clone());
     let mut layers = Vec::new();
     for placed in shot.scenes.get(id).map(Vec::as_slice).unwrap_or(&[]) {
         let image = match &placed.source {
+            // The item's effects' output, after what it shows (ADR-0065 §5).
+            _ if placed.effects.is_some() => {
+                let owner = ChainOwner::Item(id.clone(), placed.item.clone());
+                passes.filtered(shot, &owner, done);
+                GpuKey::Filtered(owner)
+            }
+            SourceRef::Boxed(..) => continue,
             SourceRef::Frame(source) => GpuKey::Frame(source.clone()),
             SourceRef::Capture(spec) => GpuKey::Capture(spec.clone()),
             SourceRef::Filtered(source) => {
-                passes.filtered(shot, source, done);
-                GpuKey::Filtered(source.clone())
+                let owner = ChainOwner::Source(source.clone());
+                passes.filtered(shot, &owner, done);
+                GpuKey::Filtered(owner)
             }
             SourceRef::Scene(inner) => {
                 if depth >= MAX_NESTING {
@@ -1200,7 +1687,13 @@ fn visit(
                 if path.contains(inner) {
                     continue;
                 }
-                visit(shot, inner, depth + 1, path, done, passes)
+                let owner = ChainOwner::Scene(inner.clone());
+                if shot.chains.contains_key(&owner) {
+                    passes.filtered(shot, &owner, done);
+                    GpuKey::Filtered(owner)
+                } else {
+                    visit(shot, inner, depth + 1, path, done, passes)
+                }
             }
         };
         layers.push(Layer {
@@ -1209,16 +1702,27 @@ fn visit(
             placement: placed.placement,
             crop: placed.crop,
             opacity: placed.opacity,
+            boxed: placed.effects,
         });
     }
     path.remove(id);
     passes.pass(Pass {
         scene: id.clone(),
         depth,
-        key: key.clone(),
+        key,
         layers,
     });
-    key
+}
+
+/// The video filters `scene` shows: its own, or its parent's for a keyframe scene,
+/// which has none of its own (ADR-0024 §2).
+fn scene_filters<'s>(state: &'s State, scene: &'s GraphScene) -> &'s [Filter] {
+    scene
+        .variant_of()
+        .and_then(|parent| state.scene(parent))
+        .unwrap_or(scene)
+        .filters()
+        .chain(FilterChain::Video)
 }
 
 /// Whether `item`, which places a scene, shows it exactly as the scene draws on the
@@ -1336,6 +1840,17 @@ impl LiveParams {
         self.items
             .get(item_id)
             .map(|live| (live.placement, live.crop))
+    }
+
+    /// `placement` and `crop`, item `item`'s in the shot, with its live values applied.
+    fn apply_to(&self, item: &ItemId, placement: Placement, crop: Crop) -> (Placement, Crop) {
+        match self.items.get(item) {
+            Some(live) => (
+                live.placement.unwrap_or(placement),
+                live.crop.unwrap_or(crop),
+            ),
+            None => (placement, crop),
+        }
     }
 
     /// `layer`'s placement and crop, with this item's live values applied.
@@ -1987,6 +2502,22 @@ fn run_chains(
                     chains.run_one(compositor, cache, (source, chain), at);
                 }
             }
+            ChainStep::Box(owner) => {
+                if let Some(boxed) = shot.boxes.get(owner) {
+                    // A layer too large for the adapter blanks its item, not the frame.
+                    match draw_box(
+                        compositor,
+                        (&mut *cache, &mut *chains),
+                        shot,
+                        owner,
+                        boxed,
+                        live,
+                    ) {
+                        Ok(()) => chains.drew_box(owner),
+                        Err(error) => chains.fail_box(owner, &error),
+                    }
+                }
+            }
             ChainStep::Pass(pass) => {
                 cache.layer(compositor, &pass.key, canvas.width(), canvas.height())?;
                 let mut items = Vec::new();
@@ -1999,6 +2530,67 @@ fn run_chains(
         }
     }
     Ok(())
+}
+
+/// The image an item's effects read: what the item shows, as the chain phase draws it.
+/// A nested scene is drawn there at [`REFERENCE_DEPTH`], or read from its own chain.
+fn box_input(shot: &Shot, source: &SourceRef) -> Option<GpuKey> {
+    Some(match source {
+        SourceRef::Scene(inner) if !shot.chains.contains_key(&ChainOwner::Scene(inner.clone())) => {
+            GpuKey::reference(inner)
+        }
+        SourceRef::Boxed(..) => return None,
+        other => key(other, shot),
+    })
+}
+
+/// Draws the item of `boxed`, the effects of `owner`, into its [`GpuKey::ItemBox`]
+/// layer before they run: cropped and fitted into its box, centred, flat and
+/// unrotated, with its live values applied (ADR-0065 §5). An item whose image isn't
+/// there this frame (a failed upload or chain) fails its chain, so it draws nothing.
+///
+/// # Errors
+/// What the compositor reports for the layer or its pass.
+fn draw_box(
+    compositor: &mut Compositor,
+    (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+    shot: &Shot,
+    owner: &ChainOwner,
+    boxed: &ItemBox,
+    live: &LiveParams,
+) -> Result<(), RenderError> {
+    let ChainOwner::Item(scene_id, item_id) = owner else {
+        return Ok(());
+    };
+    let key = GpuKey::ItemBox(scene_id.clone(), item_id.clone());
+    let [width, height] = boxed.boxed.layer;
+    cache.layer(compositor, &key, width, height)?;
+    let input = box_input(shot, &boxed.source).filter(|input| !chains.failed(input));
+    let (placement, crop) = live.apply_to(&boxed.item, boxed.placement, boxed.crop);
+    let inside = boxed
+        .boxed
+        .geometry_of(placement, crop)
+        .and_then(|geometry| boxed.boxed.inside(&geometry));
+    let (Some(image), Some(inside), Some(layer)) = (
+        input.as_ref().and_then(|input| cache.get(input)),
+        inside,
+        cache.get(&key),
+    ) else {
+        chains.fail(owner);
+        return Ok(());
+    };
+    let items = [Item {
+        image,
+        placement: Placement::Geometry(inside),
+        crop,
+        opacity: OPAQUE,
+        visible: true,
+    }];
+    let size = FrameSize::new(width, height).map_err(|_| RenderError::Invalid {
+        what: "item box",
+        detail: format!("an effects layer of {width}x{height}"),
+    })?;
+    compositor.render_into(&scene(size, Color::TRANSPARENT, &items), layer)
 }
 
 /// Keeps the privacy blur's layers for an output of `output`'s size in the cache, so
@@ -2038,8 +2630,24 @@ pub(crate) fn claim_layers(
     chains.claim(compositor, cache);
     let canvas = shot.canvas()?;
     for step in &shot.chain_steps {
-        if let ChainStep::Pass(pass) = step {
-            cache.layer(compositor, &pass.key, canvas.width(), canvas.height())?;
+        match step {
+            ChainStep::Pass(pass) => {
+                cache.layer(compositor, &pass.key, canvas.width(), canvas.height())?;
+            }
+            ChainStep::Box(owner) => {
+                if let (ChainOwner::Item(scene, item), Some(boxed)) = (owner, shot.boxes.get(owner))
+                {
+                    let [width, height] = boxed.boxed.layer;
+                    // One that can't be made fails its item when the chains next draw.
+                    let _ = cache.layer(
+                        compositor,
+                        &GpuKey::ItemBox(scene.clone(), item.clone()),
+                        width,
+                        height,
+                    );
+                }
+            }
+            ChainStep::Run(_) => {}
         }
     }
     let passes = shot.passes_of(mix);
@@ -2113,6 +2721,13 @@ fn fill_items<'a>(
             return None;
         }
         let (placement, crop) = live.apply(layer);
+        let (placement, crop) = match &layer.boxed {
+            Some(boxed) => {
+                let geometry = boxed.geometry_of(placement, crop)?;
+                (Placement::Geometry(boxed.around(&geometry)?), Crop::NONE)
+            }
+            None => (placement, crop),
+        };
         Some(Item {
             image: cache.get(&layer.image)?,
             placement,
@@ -2342,10 +2957,10 @@ pub(crate) fn is_no_adapter(error: &ProtocolError) -> bool {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::{
-        CaptureFrame, CaptureImage, Captures, Chain, Chains, FIRST_RETRY, Frame, GpuKey,
-        LiveParams, MAX_NESTING, MAX_RETRY, OpenBackoff, Placed, Shot, SourceFrameError, SourceRef,
-        View, base64, captures, claim_layers, compose, decode_base64, decode_png, draw, encode_png,
-        fit, is_no_adapter, schedule,
+        CaptureFrame, CaptureImage, Captures, Chain, ChainOwner, Chains, FIRST_RETRY, Frame,
+        GpuKey, LiveParams, MAX_NESTING, MAX_RETRY, OpenBackoff, Placed, Shot, SourceFrameError,
+        SourceRef, View, base64, captures, claim_layers, compose, decode_base64, decode_png, draw,
+        encode_png, fit, is_no_adapter, schedule,
     };
     use jstream_media::{FrameSize, MediaTime, Timebase};
     use jstream_protocol::{
@@ -2377,6 +2992,70 @@ pub(crate) mod tests {
         Frame::new(16, 9, &bytes, u64::from(rgba[1])).expect("invariant: 16x9 RGBA8")
     }
 
+    /// An item's effects layer is its box plus the outset on every side (ADR-0065 §5):
+    /// the box is drawn centred in it, flat, and the layer is placed over the box grown
+    /// in proportion, turned as the box is. A box too large for one texture is scaled
+    /// down uniformly, and a legacy transform has the box its quad covers.
+    #[test]
+    fn an_effects_layer_is_the_box_plus_its_outset() {
+        use jstream_protocol::{Finite32, FitMode, ItemGeometry, Size, Vec2};
+        let mut placed = ItemGeometry::try_new(
+            Vec2::new(500.0, 300.0).expect("finite"),
+            Size::try_new(100.0, 50.0).expect("positive"),
+        )
+        .expect("valid");
+        placed.rotation_deg = Finite32::new(30.0).expect("finite");
+        placed.flip_h = true;
+        placed.fit_mode = FitMode::Fill;
+        let boxed = super::Boxed::new(&placed, 4, None).expect("finite");
+        assert_eq!(boxed.layer, [108, 58]);
+
+        let inside = boxed.inside(&placed).expect("inside");
+        assert_eq!((inside.center.x.get(), inside.center.y.get()), (54.0, 29.0));
+        assert_eq!(
+            (inside.size.width.get(), inside.size.height.get()),
+            (100.0, 50.0)
+        );
+        assert_eq!(inside.rotation_deg.get(), 0.0);
+        assert!(
+            inside.flip_h && inside.fit_mode == FitMode::Fill,
+            "the item's own"
+        );
+
+        // A live box twice as wide grows its outset with it.
+        let mut wide = placed;
+        wide.size = Size::try_new(200.0, 50.0).expect("positive");
+        let around = boxed.around(&wide).expect("around");
+        assert_eq!(
+            (around.size.width.get(), around.size.height.get()),
+            (216.0, 58.0)
+        );
+        assert_eq!(around.center, placed.center);
+        assert_eq!(around.rotation_deg.get(), 30.0, "it turns with the item");
+        assert!(!around.flip_h && around.fit_mode == FitMode::Stretch);
+
+        let mut huge = placed;
+        huge.size = Size::try_new(16_384.0, 100.0).expect("positive");
+        let scaled = super::Boxed::new(&huge, 0, None).expect("finite");
+        assert_eq!(scaled.layer, [8192, 50]);
+        assert_eq!(scaled.scale, 0.5);
+
+        let legacy = Placement::Legacy(LegacyTransform {
+            position: [10.0, 20.0],
+            scale: [2.0, 2.0],
+            rotation_deg: 0.0,
+        });
+        let unknown = super::Boxed::new(&placed, 0, None).expect("finite");
+        assert!(
+            unknown.geometry_of(legacy, Crop::NONE).is_none(),
+            "no size known"
+        );
+        let known = super::Boxed::new(&placed, 0, Some([16, 9])).expect("finite");
+        let of = known.geometry_of(legacy, Crop::NONE).expect("its box");
+        assert_eq!((of.size.width.get(), of.size.height.get()), (32.0, 18.0));
+        assert_eq!((of.center.x.get(), of.center.y.get()), (26.0, 29.0));
+    }
+
     fn placed(source: SourceRef, placement: Placement) -> Placed {
         Placed {
             item: ItemId::new("itm"),
@@ -2384,6 +3063,7 @@ pub(crate) mod tests {
             placement,
             crop: Crop::NONE,
             opacity: super::OPAQUE,
+            effects: None,
         }
     }
 
@@ -3065,7 +3745,7 @@ pub(crate) mod tests {
         planned.frames.insert(SourceId::new("red"), dense_red());
         assert_eq!(scales(&planned)[1], (SourceId::new("red"), 120.0));
         planned.chains.insert(
-            SourceId::new("red"),
+            ChainOwner::Source(SourceId::new("red")),
             Chain {
                 input: GpuKey::Frame(SourceId::new("red")),
                 filters: Vec::new(),

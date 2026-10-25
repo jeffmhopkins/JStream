@@ -17,6 +17,12 @@
 //! its last frame and is started again after [`RETRY_MS`]. When the render thread leaves
 //! the GPU path mid-run ([`RenderCaptures::leave_gpu`]), every display and window
 //! capture restarts on the CPU path. A webcam or capture card, already there, runs on.
+//!
+//! Each capture's frame size, which `source.sizes` reports for its sources (ADR-0022
+//! §4), goes back to the engine as a [`SizeChange`] on a channel the render thread never
+//! waits on, only when it changes: its first frame, a resize, and `None` once it is no
+//! longer captured. Nothing is sent, and nothing allocated, while the size holds. A
+//! capture restarting on the CPU path keeps the size it had until a frame says otherwise.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -71,8 +77,21 @@ struct Started {
     epoch: u32,
 }
 
-/// Starts the `jstream-capture` thread, and returns the render thread's side of it.
-pub(crate) fn spawn(backends: Backends, clock: Timebase) -> Result<RenderCaptures, String> {
+/// A capture's frame size changed: `Some` for its first frame and for each frame of a new
+/// size, `None` once it is no longer captured.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SizeChange {
+    pub(crate) key: CaptureKey,
+    pub(crate) size: Option<FrameSize>,
+}
+
+/// Starts the `jstream-capture` thread, and returns the render thread's side of it,
+/// which sends each capture's size changes on `sizes`.
+pub(crate) fn spawn(
+    backends: Backends,
+    clock: Timebase,
+    sizes: Sender<SizeChange>,
+) -> Result<RenderCaptures, String> {
     let (requests, rx) = mpsc::channel();
     let (tx, started) = mpsc::channel();
     let thread = std::thread::Builder::new()
@@ -87,6 +106,7 @@ pub(crate) fn spawn(backends: Backends, clock: Timebase) -> Result<RenderCapture
         requests: Some(requests),
         started,
         thread: Some(thread),
+        sizes: Some(sizes),
         on_gpu: false,
         retry,
         ended: CaptureStats::default(),
@@ -322,6 +342,9 @@ pub(crate) struct RenderCaptures {
     requests: Option<Sender<Request>>,
     started: Receiver<Started>,
     thread: Option<JoinHandle<()>>,
+    /// Where each capture's size changes go; `None` once [`stop`](Self::stop) has run,
+    /// so the engine's side ends.
+    sizes: Option<Sender<SizeChange>>,
     /// Whether the compositor is on the platform's GPU context, so GPU frames can be
     /// sampled. Off, a GPU frame is unusable.
     on_gpu: bool,
@@ -362,6 +385,9 @@ struct Slot {
     /// again. A video device keeps its epoch when the render thread leaves the GPU path,
     /// since it isn't restarted.
     epoch: u32,
+    /// The size last sent for it, [`SizeChange`]. Kept when the render thread leaves the
+    /// GPU path, so a capture restarting there sends nothing until its size changes.
+    reported: Option<FrameSize>,
 }
 
 enum State {
@@ -435,14 +461,19 @@ impl RenderCaptures {
             return;
         };
         let ended = &mut self.ended;
+        let sizes = &self.sizes;
         self.slots.retain(|spec, slot| {
             let keep = wanted.contains(spec);
-            if !keep
-                && let State::Running { stream, .. } =
+            if !keep {
+                if let State::Running { stream, .. } =
                     std::mem::replace(&mut slot.state, State::Starting)
-            {
-                add(ended, stream.stats());
-                let _ = requests.send(Request::Stop(stream));
+                {
+                    add(ended, stream.stats());
+                    let _ = requests.send(Request::Stop(stream));
+                }
+                if slot.reported.is_some() {
+                    send_size(sizes, spec, None);
+                }
             }
             keep
         });
@@ -542,6 +573,23 @@ impl RenderCaptures {
                 }
             }
         }
+        self.report_sizes();
+    }
+
+    /// Sends the size of each capture whose frame changed size since the last one sent.
+    fn report_sizes(&mut self) {
+        for (spec, slot) in &mut self.slots {
+            let size = match &slot.frame {
+                Some(Latest::Cpu(size)) => *size,
+                Some(Latest::Gpu(frame)) => frame.info().size,
+                // A capture restarting keeps the size it had until a frame says otherwise.
+                None => continue,
+            };
+            if slot.reported != Some(size) {
+                slot.reported = Some(size);
+                send_size(&self.sizes, spec, Some(size));
+            }
+        }
     }
 
     /// The counters of every capture this pipeline ran, added up.
@@ -582,6 +630,8 @@ impl RenderCaptures {
             }
         }
         drop(requests);
+        // The engine's side forgets every capture's size when this closes.
+        self.sizes.take();
         if let Some(thread) = self.thread.take()
             && thread.join().is_err()
         {
@@ -626,7 +676,19 @@ impl Slot {
             rgba: Vec::new(),
             warned_format: false,
             epoch: 0,
+            reported: None,
         }
+    }
+}
+
+/// Sends one capture's size change. The engine's side is gone only while the stage is
+/// torn down, when there is no one to tell.
+fn send_size(sizes: &Option<Sender<SizeChange>>, key: &CaptureKey, size: Option<FrameSize>) {
+    if let Some(sizes) = sizes {
+        let _ = sizes.send(SizeChange {
+            key: key.clone(),
+            size,
+        });
     }
 }
 
@@ -911,14 +973,16 @@ mod tests {
     /// Leaving the GPU path restarts a display capture on the CPU path, but not a
     /// webcam, which is on it already: a running one keeps its stream and its frame, and
     /// one still starting takes its first answer rather than opening the device a second
-    /// time (#734).
+    /// time (#734). Each capture's size is sent once: a restart keeps it (B12).
     #[test]
     fn leaving_the_gpu_path_leaves_a_webcam_running() {
         let clock = FakeClock::new(Timebase::MICROS);
         let devices = FakeVideoDevices::new(clock.clone());
+        let (size_tx, size_rx) = std::sync::mpsc::channel();
         let mut captures = spawn(
             backends(&clock, &devices, Arc::new(FakeCodecs)),
             Timebase::MICROS,
+            size_tx,
         )
         .expect("the capture thread starts");
         let webcam = CaptureKey::for_source(
@@ -971,7 +1035,16 @@ mod tests {
             "the webcam's stream delivers on"
         );
         assert_eq!(devices.open_streams(), 1, "the same stream");
+        let mut sent: Vec<CaptureKey> = size_rx.try_iter().map(|change| change.key).collect();
+        sent.sort();
+        let mut each = vec![webcam.clone(), display.clone()];
+        each.sort();
+        assert_eq!(sent, each, "one size each, kept through the restarts");
         captures.stop();
         assert_eq!(devices.open_streams(), 0);
+        assert!(
+            size_rx.recv().is_err(),
+            "stopping closes the channel, sending nothing more"
+        );
     }
 }

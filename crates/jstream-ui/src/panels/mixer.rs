@@ -698,7 +698,7 @@ pub fn Mixer() -> impl IntoView {
 }
 
 /// The master card (spec-panels.md M3): the fold button over the channels with their
-/// count, the monitor and program FX buttons the engine can't serve yet, the short-term
+/// count, the monitor and program FX buttons that aren't built yet, the short-term
 /// loudness against the target, and the true peak.
 #[component]
 fn MasterCard(panel: Panel, open: RwSignal<bool>) -> AnyView {
@@ -753,7 +753,7 @@ fn MasterCard(panel: Panel, open: RwSignal<bool>) -> AnyView {
                 <button
                     class="ghost-button"
                     disabled
-                    title="What your headphones hear: the engine has no monitor output yet (decision D22)"
+                    title="What your headphones hear: not built yet (MX-05)"
                 >
                     "Hear: after FX"
                 </button>
@@ -1389,6 +1389,7 @@ mod tests {
             version: 1,
             video: false,
             audio: true,
+            max_outset_px: None,
             params: Vec::new(),
         }
     }

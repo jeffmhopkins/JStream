@@ -16,6 +16,7 @@ mod vcam;
 
 #[cfg(test)]
 pub(crate) use captures::Backends as CaptureBackends;
+pub(crate) use captures::SizeChange;
 #[cfg(test)]
 pub(crate) use captures::{RETRY_MS, start as start_capture};
 pub use pipeline::OutputStats;

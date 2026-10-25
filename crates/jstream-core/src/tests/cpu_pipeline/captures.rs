@@ -2,7 +2,7 @@
 //! display, window or webcam its program mix shows, started when a source comes on
 //! program, stopped when it goes, and started again after a failure.
 
-use super::super::{add, batch, connected, create, edits, output_call, output_state, query};
+use super::super::{add, batch, connected, create, drain, edits, output_call, output_state, query};
 use super::{Fakes, engine, fakes, pump_until, share, start};
 use crate::runtime::{RETRY_MS, cpu_draw};
 use crate::{Engine, RecordingPublish};
@@ -14,7 +14,7 @@ use jstream_platform::{
     CursorCapture, DeviceId, MediaClock, PlatformError, VideoSurface,
 };
 use jstream_protocol::{
-    CaptureTargetKind, Edit, ItemId, PixelSize, ProtocolError, Query, QueryResult, Settings,
+    CaptureTargetKind, Edit, Event, ItemId, PixelSize, ProtocolError, Query, QueryResult, Settings,
     SourceId, SourceKind,
 };
 use serde_json::json;
@@ -298,6 +298,99 @@ fn an_output_captures_what_its_program_shows() {
 
     block_on_stop(&control);
     assert_eq!(setup.live(), 0, "stopping the output stops every capture");
+}
+
+/// What `source.sizes` reports for each source, by ID.
+fn sizes(control: &dyn Control) -> Vec<(String, Option<PixelSize>)> {
+    match query(control, Query::SourceSizes).expect("source.sizes") {
+        QueryResult::SourceSizes { sources } => sources
+            .into_iter()
+            .map(|entry| (entry.source_id.as_str().to_owned(), entry.size))
+            .collect(),
+        other => panic!("not source.sizes: {other:?}"),
+    }
+}
+
+/// B12 part 2 (#805): a display or window source's size is its capture's frame size,
+/// once the render thread has its first frame. It is announced once, and lost again
+/// when the source leaves program, which stops its capture, or the output stops.
+#[test]
+fn capture_sources_report_their_captures_sizes() {
+    let setup = Setup::new();
+    let engine = engine(
+        share(&setup.fakes.backends),
+        cpu_draw(),
+        Box::new(RecordingPublish::new()),
+    );
+    let control = connected(&engine);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            capture_source("second", "display", "d2"),
+            capture_source("editor", "window", "w1"),
+            add("a", "i1", "second"),
+            add("a", "i2", "editor"),
+        ]),
+    )
+    .expect("created");
+    assert!(engine.settle_sources(), "the sources were built in time");
+    let sized = Some(PixelSize {
+        width: 64,
+        height: 36,
+    });
+    assert_eq!(
+        sizes(&control),
+        vec![("editor".into(), None), ("second".into(), None)],
+        "no capture runs before an output starts"
+    );
+    let mut announced = control.events();
+    let mut events = control.events();
+    start(&control, &mut events);
+    assert!(
+        setup.until(|| sizes(&control) == vec![("editor".into(), sized), ("second".into(), sized)]),
+        "both captures have a frame: {:?}",
+        sizes(&control)
+    );
+    let changed = |id: &str, size| Event::SourceSizeChanged {
+        source_id: SourceId::new(id),
+        size,
+    };
+    let size_events = |events: &mut jstream_control::EventStream| {
+        let mut out: Vec<Event> = drain(events)
+            .into_iter()
+            .filter(|event| matches!(event, Event::SourceSizeChanged { .. }))
+            .collect();
+        out.sort_by_key(|event| format!("{event:?}"));
+        out
+    };
+    assert_eq!(
+        size_events(&mut announced),
+        vec![changed("editor", sized), changed("second", sized)],
+        "each size is announced once, though every frame repeats it"
+    );
+
+    batch(
+        &control,
+        edits(vec![Edit::ItemRemove {
+            item_id: ItemId::new("i2"),
+        }]),
+    )
+    .expect("removed");
+    assert!(
+        setup.until(|| sizes(&control) == vec![("editor".into(), None), ("second".into(), sized)]),
+        "the window's capture stopped: {:?}",
+        sizes(&control)
+    );
+    assert_eq!(size_events(&mut announced), vec![changed("editor", None)]);
+
+    block_on_stop(&control);
+    assert!(
+        setup.until(|| sizes(&control) == vec![("editor".into(), None), ("second".into(), None)]),
+        "the stopped stage forgot its captures: {:?}",
+        sizes(&control)
+    );
+    assert_eq!(size_events(&mut announced), vec![changed("second", None)]);
 }
 
 /// A source whose `show_cursor` is off asks for the pointer to be left out; turning it on

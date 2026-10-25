@@ -162,6 +162,15 @@ mod backend {
             })
     }
 
+    impl crate::PairedAudio for PipeWireAudio {
+        /// Each input node's ALSA card, from its info (`api.alsa.pcm.card`).
+        fn card_inputs(&self) -> Result<crate::CardInputs, PlatformError> {
+            Ok(crate::CardInputs::by_index(
+                self.connect()?.graph().card_inputs(),
+            ))
+        }
+    }
+
     impl AudioIo for PipeWireAudio {
         fn devices(&self) -> Result<Vec<AudioDeviceInfo>, PlatformError> {
             Ok(self.connect()?.graph().devices())

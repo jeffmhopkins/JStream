@@ -9,12 +9,13 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use jstream_plugin_proto::control::{FromHost, PluginDesc, ToHost};
-use jstream_plugin_proto::{Config, Shared};
+use jstream_plugin_proto::{Config, EngineBlock};
 
 use crate::PlatformError;
 
-/// A host's shared block, as the mixer's CLAP filter holds it.
-pub type HostBlock = Arc<dyn AsRef<Shared> + Send + Sync>;
+/// A host's shared block, as the mixer's CLAP filter and the supervisor hold it: the
+/// mapping, and the miss counts the engine keeps beside it in its own memory.
+pub type HostBlock = Arc<EngineBlock>;
 
 /// What to run in a new host.
 #[derive(Clone, Debug, PartialEq)]
@@ -85,7 +86,7 @@ pub mod fake {
     use std::time::Duration;
 
     use jstream_plugin_proto::control::{FromHost, ParamDesc, PluginDesc, ToHost};
-    use jstream_plugin_proto::{CHANNELS, STATE_STOPPED, Shared, first_useful};
+    use jstream_plugin_proto::{CHANNELS, EngineBlock, STATE_STOPPED, Shared, first_useful};
 
     use super::{HostBlock, HostRequest, PluginHost, PluginHosts};
     use crate::PlatformError;
@@ -124,6 +125,8 @@ pub mod fake {
         state: Mutex<Vec<u8>>,
         /// Messages the host received, in order.
         received: Mutex<Vec<ToHost>>,
+        /// Messages the test makes the host send, as a broken or hostile host would.
+        to_send: Mutex<Vec<FromHost>>,
     }
 
     impl FakeHostControl {
@@ -155,6 +158,11 @@ pub mod fake {
         /// The control messages the host received.
         pub fn received(&self) -> Vec<ToHost> {
             lock(&self.received).clone()
+        }
+
+        /// Makes the host send `message` on its next pass, whatever it is.
+        pub fn send(&self, message: FromHost) {
+            lock(&self.to_send).push(message);
         }
     }
 
@@ -241,6 +249,7 @@ pub mod fake {
                 exited: AtomicBool::new(false),
                 state: Mutex::new(request.state.clone().unwrap_or_default()),
                 received: Mutex::new(Vec::new()),
+                to_send: Mutex::new(Vec::new()),
             });
             lock(&self.hosts).push(Arc::clone(&control));
             let inbox = Arc::new(Mutex::new(VecDeque::new()));
@@ -253,7 +262,7 @@ pub mod fake {
                 std::thread::spawn(move || run(&shared, &control, &inbox, &outbox))
             };
             let mut host = FakeHost {
-                shared,
+                block: Arc::new(EngineBlock::new(shared)),
                 control,
                 inbox,
                 outbox,
@@ -267,7 +276,7 @@ pub mod fake {
     }
 
     struct FakeHost {
-        shared: Arc<Shared>,
+        block: HostBlock,
         control: Arc<FakeHostControl>,
         /// Engine → host.
         inbox: Arc<Mutex<VecDeque<ToHost>>>,
@@ -278,7 +287,7 @@ pub mod fake {
 
     impl PluginHost for FakeHost {
         fn block(&self) -> HostBlock {
-            Arc::clone(&self.shared) as HostBlock
+            Arc::clone(&self.block)
         }
 
         fn exited(&mut self) -> bool {
@@ -340,6 +349,7 @@ pub mod fake {
                 lock(&control.received).push(message.clone());
                 match message {
                     ToHost::Start { .. } => asked = true,
+                    ToHost::Block { .. } => {}
                     ToHost::SaveState => {
                         let state = lock(&control.state).clone();
                         lock(outbox).push_back(FromHost::State(state));
@@ -351,6 +361,7 @@ pub mod fake {
                     }
                 }
             }
+            lock(outbox).extend(lock(&control.to_send).drain(..));
             if s.stop.load(Ordering::Acquire) != 0 {
                 s.host_state.store(STATE_STOPPED, Ordering::Release);
                 break;

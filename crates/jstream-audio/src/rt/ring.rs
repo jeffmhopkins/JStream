@@ -171,6 +171,12 @@ impl FrameRing {
         }
     }
 
+    /// The end of the last completed write, or `None` before the first.
+    pub(crate) fn written(&self) -> Option<i64> {
+        let written = self.written.load(Ordering::Acquire);
+        (written != UNSET).then_some(written)
+    }
+
     /// Records the consumer's next read position.
     pub(crate) fn set_read_pos(&self, pos: i64) {
         self.read_pos.store(pos, Ordering::Relaxed);

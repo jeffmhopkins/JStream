@@ -299,6 +299,7 @@ impl Bus {
             name: self.name.clone(),
             gain_db: self.gain_db,
             muted: self.muted,
+            monitor: self.monitor.clone(),
         }
     }
 }
@@ -309,6 +310,7 @@ impl Scene {
         SceneInfo {
             scene_id: self.id.clone(),
             name: self.name.clone(),
+            filters: self.filters.to_info(),
             role: self.role,
             transition_in: self.transition_in.clone(),
             transition_out: self.transition_out.clone(),
@@ -350,6 +352,7 @@ impl Item {
             geometry,
             crop: self.crop,
             visible: self.visible,
+            effects: self.effects.video.iter().map(Filter::to_info).collect(),
             opacity: self.opacity,
             blend: self.blend,
             transition: self.transition,
@@ -436,6 +439,7 @@ mod tests {
                     name: "Master".into(),
                     gain_db: jstream_protocol::Finite32::ZERO,
                     muted: false,
+                    monitor: None,
                 }],
                 sends: vec![],
                 master: Default::default(),
