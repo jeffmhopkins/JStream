@@ -73,16 +73,22 @@ stamped on the clock, and no device is the master.
   input starts at 1.
 - `InputControl::set_privacy_muted` marks an input as one the privacy screen mutes
   ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)), and
-  `Mixer::set_privacy` turns the screen on or off for the next block: the thread that
-  polls the mixer calls it before each poll. While it is on, a marked input is
+  `Mixer::set_privacy` turns the screen on or off: the thread that polls the mixer
+  calls it before each poll, and turning it on covers the next block mixed. While it
+  is on, a marked input is
   silenced where it leaves its ring, before its filter chain, and its activity gain is
   0 in place of its own. So nothing it captures meanwhile enters a delay filter's line
   or its compensation delay to be heard after the screen goes off; what the chain held
   from before ramps out over one block. Turning it off follows the capture time: the
-  next `poll` records the engine frame of its clock, and the blocks that start before
-  it, mixed late by the latency but captured under the screen, stay covered. It feeds
-  no bus, its own block is silent and its meter reads silence. Its mute, sends and activity gain are left as they are, so
-  turning the screen off brings it back as it was. A new input is unmarked;
+  next `poll` records the engine frame of its clock plus 40 ms (`PRIVACY_MARGIN_S`,
+  twice the 20 ms timing error at which an input re-anchors), and the blocks that start
+  before it, mixed late by the latency but captured under the screen, stay covered.
+  What an input placed more than 40 ms late on the engine time line is not: only a
+  packet whose stamp alone moves its error that far, which the drift fit takes only
+  among a segment's first 100 stamps, and which re-anchors the input. It feeds no
+  bus, its own block is silent and its meter reads silence. Its mute, sends and
+  activity gain are left as they are, so turning the screen off brings it back as it
+  was. A new input is unmarked;
   `MixerControl::add_input_with` marks one before the mixer can install it, so it
   starts silent under the screen.
 - `InputControl::add_filter` / `insert_filter` and the same on `BusControl` add a
@@ -159,7 +165,8 @@ not start. No variant allocates.
   silence, with their sends, mute and activity gains untouched, an input added while it
   is on starting silent, and nothing captured under it heard afterwards through a delay
   filter or the compensation delay (`audio_from_under_the_privacy_screen_is_never_heard`)
-  or in the blocks mixed just after it goes off (`the_privacy_screen_ends_at_the_capture_time`);
+  or in the blocks mixed just after it goes off (`the_privacy_screen_ends_at_the_capture_time`),
+  also from an input placed 10 ms late (`the_privacy_screen_covers_an_input_placed_late`);
 - the send matrix: post-fader sends into each bus, each bus's own fader, mute and
   meter, sends ramping in and out, a muted input feeding no bus, buses added from
   another thread and removed, a send to a removed bus not reaching the bus that reuses

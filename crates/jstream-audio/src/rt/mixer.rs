@@ -42,10 +42,14 @@
 //! leaves its ring, before its filter chain: what it captures meanwhile never enters
 //! the chain's delay lines or compensation delay. The screen ends at the capture time,
 //! not the mix time: a block that starts before the engine frame of the clock at the
-//! first poll after it goes off still carries audio captured under it, and stays
-//! covered. So none of what the input captured under the screen is heard after it
-//! goes off. Its activity gain is 0 in place of its own, so what the chain still holds
-//! from before ramps out over the next block. It feeds no bus, its own block is silent
+//! first poll after it goes off, plus [`PRIVACY_MARGIN_S`] (40 ms) for the input's
+//! timing error, may still carry audio captured under it, and stays covered. So,
+//! through [`Mixer::poll`], what the input captured under the screen is not heard after
+//! it goes off unless the input placed it more than 40 ms late on the engine time line:
+//! only the one packet whose stamp jumps that far at once, early in a drift-fit
+//! segment, which then re-anchors the input ([`PRIVACY_MARGIN_S`] says when). Its
+//! activity gain is 0 in place of its own, so what the chain still holds from before
+//! ramps out over the next block. It feeds no bus, its own block is silent
 //! and its meter reads silence. Once the screen is off, the input ramps back to its own
 //! activity gain.
 //!
@@ -65,7 +69,7 @@ use jstream_media::{MediaTime, Rounding, Timebase};
 use super::bus::{BusShared, MASTER_ID, MAX_BUSES, NO_BUS};
 use super::chain::Chain;
 use super::cmd::{self, ChainTarget, Command, ControlPlane, MasterKernels};
-use super::input::InputShared;
+use super::input::{InputShared, REANCHOR_ERROR_S};
 use super::retire::Retirer;
 use super::ring::FrameRing;
 use super::shared::levels;
@@ -218,8 +222,9 @@ pub struct Mixer {
     /// The screen went off and the next [`Self::poll`] has not yet read the clock: the
     /// inputs it mutes stay silenced until it does.
     privacy_ending: bool,
-    /// The engine frame the screen went off at: a block that starts before it holds
-    /// audio captured while it was on, so the inputs it mutes stay silenced in it.
+    /// The engine frame of the clock at the first poll after the screen went off, plus
+    /// [`PRIVACY_MARGIN_S`]: a block that starts before it may hold audio captured while
+    /// it was on, so the inputs it mutes stay silenced in it.
     private_until: Option<i64>,
 }
 
@@ -290,8 +295,11 @@ impl Mixer {
     /// capture time, not the mix time: the mixer mixes a block only once the clock has
     /// passed its end by the latency, so the next blocks still carry audio captured
     /// under the screen. The next [`Self::poll`] records the engine frame of the clock it
-    /// is given, and every block that starts before that frame keeps the marked inputs
-    /// silenced. ([`Self::mix`], which has no clock, ends it at the block it mixes.)
+    /// is given plus [`PRIVACY_MARGIN_S`] (40 ms, for the input's timing error: the
+    /// constant says what it covers), and every block that starts before that frame
+    /// keeps the marked inputs silenced.
+    /// ([`Self::mix`], which has no clock, ends it at the block it mixes: a caller that
+    /// drives it by hand chooses the blocks.)
     pub fn set_privacy(&mut self, on: bool) {
         if on {
             self.privacy = true;
@@ -466,10 +474,12 @@ impl Mixer {
         let Some(now) = self.engine_frame(now) else {
             return Ok(None);
         };
-        // The privacy screen went off: what was captured before now was captured under it.
+        // The privacy screen went off: what was captured before now was captured under
+        // it, and an input may place that up to its timing error later on the line.
         if self.privacy_ending {
             self.privacy_ending = false;
-            self.private_until = Some(now);
+            let margin = (PRIVACY_MARGIN_S * f64::from(self.config.sample_rate)).ceil() as i64;
+            self.private_until = Some(now.saturating_add(margin));
         }
         let block = self.config.block_frames as i64;
         let latency = self.config.latency_frames as i64;
@@ -1044,6 +1054,17 @@ fn apply_gain(frames: &mut [[f32; 2]], from: f32, to: f32) {
     }
 }
 
+/// How long past the capture time the privacy screen went off at it keeps covering the
+/// inputs it mutes, in seconds. An input places each frame on the engine time line
+/// within its timing error of the frame's capture time. The input's loop holds that
+/// error near 0 (spike S3: within 0.06 ms on real devices) and re-anchors once a packet
+/// leaves it past 20 ms; twice that also covers how far the error moves within one
+/// packet. Only a packet whose own stamp moves the error past
+/// the margin at once can be placed later than it, and the drift fit accepts such a
+/// stamp only while its segment has fewer than 100 stamps (a stream's start, or after
+/// a run of outliers restarts it); the input re-anchors after that packet.
+pub const PRIVACY_MARGIN_S: f64 = 2.0 * REANCHOR_ERROR_S;
+
 /// Whether the privacy screen silences this input now: it is on and the input is
 /// marked as one it mutes.
 fn privacy_mutes(shared: &InputShared, privacy: bool) -> bool {
@@ -1571,6 +1592,7 @@ mod tests {
         let mut pushed = 0u64;
         let mut out = vec![0.0; 960];
         let off = 30_000;
+        let margin = (PRIVACY_MARGIN_S * f64::from(RATE)).ceil() as i64;
         let mut blocks = Vec::new();
         let mut late = 0;
         m.set_privacy(true);
@@ -1600,7 +1622,7 @@ mod tests {
             "a block captured under the screen is mixed after it: {blocks:?}"
         );
         for &(frame, first, last) in &blocks {
-            if frame < off {
+            if frame < off + margin {
                 assert!(
                     first == 0.0 && last == 0.0,
                     "audio captured under the screen heard in the block at {frame}: {blocks:?}"
@@ -1610,6 +1632,73 @@ mod tests {
         let &(_, first, last) = blocks.last().unwrap();
         assert!(
             (first - 1.0).abs() < 1e-4 && (last - 1.0).abs() < 1e-4,
+            "the mic is heard again: {blocks:?}"
+        );
+    }
+
+    /// An input that places its audio later on the engine time line than it was captured
+    /// (a positive timing error: here its stamps step 10 ms earlier, within the fit's
+    /// outlier bound, so the loop has to steer it out) still has nothing it captured
+    /// under the privacy screen heard after it goes off: the screen covers it for
+    /// [`PRIVACY_MARGIN_S`] past the capture time it went off at.
+    #[test]
+    fn the_privacy_screen_covers_an_input_placed_late() {
+        // The docs (rustdoc, both READMEs, ARCH › Threads) give it as 40 ms.
+        assert!(
+            (PRIVACY_MARGIN_S - 0.040).abs() < 1e-12,
+            "update the docs that cite it"
+        );
+        let tb = Timebase::per_second(RATE).unwrap();
+        let mut m = Mixer::new(config(480)).unwrap();
+        let (mut mic, cmic) = m.control().add_input_with(stereo48(), true).unwrap();
+        let off = 30_000u64;
+        let shift = 480; // 10 ms
+        // Packet `i` holds device frames `i * 480..`, captured at its stamp: on time
+        // up to frame 24_960, 10 ms earlier from then on. What was captured under the
+        // screen (stamped before `off`) is at 1.0, what came after at 0.5.
+        let stamp = |i: u64| {
+            if i * 480 < 24_960 {
+                i * 480
+            } else {
+                i * 480 - shift
+            }
+        };
+        let mut pushed = 0u64;
+        let mut out = vec![0.0; 960];
+        let mut blocks = Vec::new();
+        m.set_privacy(true);
+        for now in (20_000..=40_000).step_by(200) {
+            while (pushed + 1) * 480 <= now as u64 {
+                let level = if stamp(pushed) < off { 1.0 } else { 0.5 };
+                let samples = vec![level; 2 * 480];
+                mic.push_packet(&AudioPacket {
+                    samples: &samples,
+                    device_position: pushed * 480,
+                    time: Some(MediaTime::new(stamp(pushed) as i64, tb)),
+                    flags: AudioPacketFlags::default(),
+                });
+                pushed += 1;
+            }
+            if now == off as i64 {
+                m.set_privacy(false);
+            }
+            while let Some(b) = m.poll(MediaTime::new(now, tb), &mut out).unwrap() {
+                let loudest = out.iter().fold(0.0f32, |a, &s| a.max(s.abs()));
+                blocks.push((b.frame, loudest));
+            }
+        }
+        let error = cmic.stats().timing_error_s.unwrap_or(0.0);
+        assert!(error > 0.0, "the input is placed late: {error}");
+        assert_eq!(cmic.stats().reanchors, 0, "it is steered, not re-anchored");
+        for &(frame, loudest) in &blocks {
+            assert!(
+                loudest <= 0.5 + 1e-3,
+                "audio captured under the screen heard in the block at {frame}: {blocks:?}"
+            );
+        }
+        let &(_, loudest) = blocks.last().unwrap();
+        assert!(
+            (loudest - 0.5).abs() < 1e-3,
             "the mic is heard again: {blocks:?}"
         );
     }

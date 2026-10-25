@@ -607,7 +607,8 @@ each poll, and the mixer silences the inputs it mutes from the next block, befor
 filter chains (so no delay line holds what they captured meanwhile) and through their
 activity gain, so that takes a field store and allocates nothing either. Turning it off
 follows the capture time: blocks mixed late by the mixer's latency that start before the
-clock's frame at the first poll after it went off stay covered.
+clock's frame at the first poll after it went off, plus 40 ms for an input's timing
+error, stay covered.
 
 <a id="protocol"></a>
 ## Control protocol

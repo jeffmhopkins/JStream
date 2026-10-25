@@ -748,10 +748,13 @@ and hands it to the mixer, which silences a marked input while it is on, from th
 block: before the input's filter chain, so nothing said under the screen waits in a
 `delay` filter or the latency compensation to be heard once it is off, and through an
 activity gain of 0. Turning it off follows the capture time: the blocks the mixer
-mixes late by its latency that hold audio from under the screen stay silent. It feeds no bus, its scope draws silence and its meter reads
-silence. Its own mute, fader, sends and follow mode are untouched, so turning privacy
-off brings it back as it was. Each microphone input is marked as it is added to the
-mixer (`MixerControl::add_input_with`), before the mixer can install it. This default set
+mixes late by its latency that hold audio from under the screen stay silent, and so
+does a further 40 ms for an input's timing error (`InputControl::set_privacy_muted`
+in [jstream-audio › Purpose](../jstream-audio/README.md#purpose) says what that covers).
+It feeds no bus, its scope draws silence and its meter reads silence. Its own mute,
+fader, sends and follow mode are untouched, so turning privacy off brings it back as it
+was. Each microphone input is marked as it is added to the mixer
+(`MixerControl::add_input_with`), before the mixer can install it. This default set
 is the only one: choosing which sources it mutes comes with the look setting. What a
 microphone records is
 decided by the collection: a webcam's paired microphone opens only while its audio is
