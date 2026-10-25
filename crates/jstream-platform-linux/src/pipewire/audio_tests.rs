@@ -10,6 +10,9 @@
 //! pw-cli create-node adapter '{ factory.name=support.null-audio-sink
 //!     node.name=jstream-test-sink-51 media.class=Audio/Sink object.linger=1
 //!     audio.position=[FL FR FC LFE RL RR] }'
+//! pw-cli create-node adapter '{ factory.name=support.null-audio-sink
+//!     node.name=jstream-test-card-source media.class=Audio/Source/Virtual
+//!     object.linger=1 api.alsa.pcm.card=7 }'
 //! cargo test -p jstream-platform-linux --features hw-tests -- --ignored audio_tests
 //! ```
 
@@ -62,6 +65,8 @@ struct Seen {
     peak: f32,
     times: Vec<MediaTime>,
     errors: Vec<String>,
+    /// The name of the thread the first packet came on.
+    thread: Option<String>,
 }
 
 struct Recorder {
@@ -72,6 +77,10 @@ struct Recorder {
 impl AudioInputHandler for Recorder {
     fn on_packet(&mut self, packet: &AudioPacket<'_>) {
         let mut s = self.seen.lock().expect("the seen lock");
+        if s.thread.is_none() {
+            let comm = std::fs::read_to_string("/proc/thread-self/comm");
+            s.thread = Some(comm.expect("the thread's name").trim().to_owned());
+        }
         if !packet.samples.len().is_multiple_of(self.channels) {
             s.ragged += 1;
         }
@@ -215,6 +224,10 @@ fn recording_the_default_input_delivers_continuous_timed_packets() {
     let s = seen.lock().unwrap();
     assert_eq!((s.gaps, s.ragged), (0, 0), "{s:?}");
     assert!(s.errors.is_empty(), "{s:?}");
+    // On PipeWire's data loop (`RT_PROCESS`: `pw-data-loop`, `data-loop.0` in newer
+    // releases), not the connection's thread loop (`jstream-audio`).
+    let thread = s.thread.as_deref().unwrap();
+    assert!(thread.contains("data-loop"), "{thread}");
     let end = clock.now();
     // Times are on the media clock, in order, and about now (within a second of the
     // recording, allowing for the device's delay).
@@ -324,6 +337,27 @@ fn a_surround_sink_is_planned_in_its_own_layout() {
         .input_format(&AudioInputTarget::OutputLoopback(sink))
         .expect("the 5.1 test sink (see the module doc)");
     assert_eq!(format.channels(), 6);
+}
+
+/// An input's ALSA card comes from its node's info, for pairing webcams: the test
+/// source that says it is on card 7 is listed there, and no input is on card 99.
+#[test]
+#[ignore = "needs a PipeWire daemon (see the module doc)"]
+fn inputs_are_listed_by_their_sound_card() {
+    use crate::{PairedAudio, SoundCard};
+
+    let (_one, audio) = audio();
+    let inputs = audio.card_inputs().expect("card inputs");
+    let card = |index| SoundCard {
+        index,
+        id: "unused".into(),
+    };
+    assert_eq!(
+        inputs.input_for(&[card(7)]),
+        Some(DeviceId::new("jstream-test-card-source")),
+        "the card-7 test source (see the module doc)"
+    );
+    assert_eq!(inputs.input_for(&[card(99)]), None);
 }
 
 /// Panics on its first packet.

@@ -540,6 +540,9 @@ pub struct Filter {
     pub(crate) kind: String,
     pub(crate) enabled: bool,
     pub(crate) settings: Settings,
+    /// For a filter loaded while its kind was missing, the kind version the file
+    /// recorded, which a save keeps while the kind is still missing.
+    pub(crate) unknown_kind_version: Option<u32>,
 }
 
 impl Filter {

@@ -99,18 +99,19 @@ pub fn engine(
 /// `jstream-plugin-host.exe`; the daemon serves meanwhile.
 #[cfg(windows)]
 fn scan_clap_plugins(engine: &Arc<Engine>) {
-    let hosts = match jstream_platform_windows::WindowsPluginHosts::new() {
-        Ok(hosts) => hosts,
-        Err(e) => {
-            tracing::warn!(error = %e, "CLAP plugins are unavailable");
-            return;
-        }
-    };
+    let hosts: Arc<dyn jstream_platform::PluginHosts> =
+        match jstream_platform_windows::WindowsPluginHosts::new() {
+            Ok(hosts) => Arc::new(hosts),
+            Err(e) => {
+                tracing::warn!(error = %e, "CLAP plugins are unavailable");
+                return;
+            }
+        };
     let engine = Arc::clone(engine);
     let spawned = std::thread::Builder::new()
         .name("jstream-clap-scan".into())
         .spawn(move || {
-            let scan = engine.scan_clap_plugins(&hosts);
+            let scan = engine.scan_clap_plugins(hosts);
             for (file, error) in &scan.failed {
                 tracing::warn!(file = %file.display(), %error, "a CLAP plugin file could not be scanned");
             }
