@@ -955,7 +955,7 @@ fn MasterCard(panel: Panel, open: RwSignal<bool>) -> AnyView {
 
 /// The master strip of the vertical mixer (spec-panels.md M5): the fold button with the
 /// channel count, the short-term loudness filling up to the target line, the loudness
-/// and true peak, and the FX and monitor buttons the engine can't serve yet.
+/// and true peak, and the FX and monitor buttons that aren't built yet.
 #[component]
 fn MasterStrip(panel: Panel, open: RwSignal<bool>) -> AnyView {
     let count = move || {
