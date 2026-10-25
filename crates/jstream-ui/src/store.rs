@@ -1,6 +1,6 @@
 //! The UI's copy of the engine's state, shared by every panel: the collection as
-//! `state.get` last reported it, the program scene, what is selected, and the kind
-//! descriptors read so far. The app keeps it current from the session's events; panels
+//! `state.get` last reported it, the program scene, whether the privacy screen is on,
+//! what is selected, and the kind descriptors read so far. The app keeps it current from the session's events; panels
 //! read it reactively and change the engine only through calls, never by editing it.
 //!
 //! Docs: crates/jstream-ui/README.md#design
@@ -8,7 +8,7 @@
 use crate::session::Session;
 use jstream_control::ControlError;
 use jstream_control::protocol::{
-    Batch, BusInfo, Call, CallResult, Canvas, DeleteTarget, Edit, Event, ItemId, ItemInfo,
+    Action, Batch, BusInfo, Call, CallResult, Canvas, DeleteTarget, Edit, Event, ItemId, ItemInfo,
     KindDescriptor, KindSummary, OutputInfo, Query, QueryResult, Rev, SceneId, SceneInfo,
     SceneRole, SourceId, SourceInfo, SourceKind,
 };
@@ -257,6 +257,9 @@ pub struct Studio {
     pub collection: RwSignal<Option<Collection>>,
     /// The scene on program.
     pub program: RwSignal<Option<SceneId>>,
+    /// Whether the privacy screen is on (ADR-0027 §4), as `privacy.get` and then each
+    /// `privacy.changed` reported it.
+    pub privacy: RwSignal<bool>,
     /// What is selected.
     pub selection: RwSignal<Selection>,
     /// The source kinds `kind.list` reported, once it answered.
@@ -280,6 +283,7 @@ impl Studio {
         Studio {
             collection: RwSignal::new(None),
             program: RwSignal::new(None),
+            privacy: RwSignal::new(false),
             selection: RwSignal::new(Selection::default()),
             kinds: RwSignal::new(None),
             descriptors: RwSignal::new(HashMap::new()),
@@ -294,6 +298,7 @@ impl Studio {
     pub fn reset(&self) {
         self.collection.set(None);
         self.program.set(None);
+        self.privacy.set(false);
         self.selection.set(Selection::default());
         self.kinds.set(None);
         self.descriptors.set(HashMap::new());
@@ -301,9 +306,11 @@ impl Studio {
         self.refresh.set_value((false, false));
     }
 
-    /// Reads everything a new session needs: the state, the program scene and the kinds.
+    /// Reads everything a new session needs: the state, the program scene, the privacy
+    /// screen and the kinds.
     pub fn load(&self, session: &Session) {
         let studio = *self;
+        studio.read_privacy(session);
         let first = session.clone();
         spawn_local(async move {
             if let Ok(QueryResult::StudioGet { program_scene, .. }) =
@@ -343,13 +350,37 @@ impl Studio {
                     self.refresh(session);
                 }
             }
-            Event::EventsDropped { .. } => self.refresh(session),
+            Event::EventsDropped { .. } => {
+                // A dropped `privacy.changed` would leave the indicator wrong.
+                self.refresh(session);
+                self.read_privacy(session);
+            }
+            Event::PrivacyChanged { on, .. } => self.privacy.set(*on),
             Event::StudioChanged { program_scene, .. } => {
                 self.program.set(program_scene.clone());
                 self.reconcile();
             }
             _ => {}
         }
+    }
+
+    /// Reads whether the privacy screen is on with `privacy.get`.
+    fn read_privacy(&self, session: &Session) {
+        let studio = *self;
+        let session = session.clone();
+        spawn_local(async move {
+            match query(&session, Query::PrivacyGet).await {
+                Ok(QueryResult::PrivacyGet { on }) => studio.privacy.set(on),
+                Ok(other) => studio.report(&unexpected(other.name())),
+                Err(error) => studio.report(&error),
+            }
+        });
+    }
+
+    /// Turns the privacy screen on or off, reporting a failure in the problem bar. The
+    /// indicator follows the `privacy.changed` the engine sends, not the request.
+    pub fn set_privacy(&self, session: &Session, on: bool) {
+        self.act(session, Action::PrivacySet { on });
     }
 
     /// Re-reads the state with `state.get`. While one read is in flight, further
@@ -458,7 +489,7 @@ impl Studio {
     }
 
     /// Runs an action, reporting a failure in the problem bar.
-    pub fn act(&self, session: &Session, action: jstream_control::protocol::Action) {
+    pub fn act(&self, session: &Session, action: Action) {
         let studio = *self;
         let session = session.clone();
         spawn_local(async move {

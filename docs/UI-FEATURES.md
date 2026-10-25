@@ -55,9 +55,9 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | Area | Rows | ✅ | 🟡 | ⬜ | 🔒 | ⏸ |
 |---|---|---|---|---|---|---|
 | [Theme and shared controls](#theme) | 8 | 3 | 3 | 1 | 0 | 1 |
-| [Header bar](#header) | 9 | 4 | 2 | 1 | 2 | 0 |
+| [Header bar](#header) | 9 | 5 | 2 | 1 | 1 | 0 |
 | [Docking and layouts](#docking) | 10 | 8 | 2 | 0 | 0 | 0 |
-| [Canvas](#canvas) | 18 | 11 | 3 | 2 | 2 | 0 |
+| [Canvas](#canvas) | 18 | 12 | 3 | 2 | 1 | 0 |
 | [Context menus](#menus) | 8 | 0 | 5 | 2 | 1 | 0 |
 | [Dialogs and windows](#dialogs) | 8 | 4 | 1 | 0 | 3 | 0 |
 | [Scenes panel](#scenes) | 10 | 4 | 3 | 2 | 1 | 0 |
@@ -65,12 +65,12 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Inspector](#inspector) | 10 | 5 | 2 | 2 | 1 | 0 |
 | [Transform panel](#transform) | 4 | 4 | 0 | 0 | 0 | 0 |
 | [Filters](#filters) | 8 | 5 | 0 | 0 | 3 | 0 |
-| [Mixer](#mixer) | 7 | 4 | 0 | 2 | 1 | 0 |
+| [Mixer](#mixer) | 7 | 5 | 0 | 2 | 0 | 0 |
 | [Outputs](#outputs) | 4 | 0 | 1 | 0 | 3 | 0 |
 | [Transitions](#transitions) | 6 | 3 | 2 | 0 | 1 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
-| [Keyboard](#keyboard) | 7 | 1 | 3 | 1 | 2 | 0 |
-| **Total** | **130** | **62** | **28** | **14** | **25** | **1** |
+| [Keyboard](#keyboard) | 7 | 2 | 3 | 1 | 1 | 0 |
+| **Total** | **130** | **66** | **28** | **14** | **21** | **1** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -109,7 +109,7 @@ Spec: [workspace › header bar](../design/ui-prototype/spec-workspace.md#header
 | HD-02 | View menu | Lists all 11 panels with "shown" or "add"; clicking hides a shown panel or adds a hidden one to its home zone. | 🟡 | Built for the eight panels the UI has; the rest join as they are built. |
 | HD-03 | Layout menu | "Layout: <name>", saved layouts with "current", "Save current layout as new", "Reset to default". | ✅ | |
 | HD-04 | Stats readout | Mono "60 fps · 0 dropped · CPU 3%". | 🟡 | "N dropped" built from `stats.tick` (frames dropped since the page connected). fps and CPU need engine stats (decision register D39). |
-| HD-05 | Privacy button | "Privacy" / "Privacy on" (red); blurs every output and mutes the mic; Pause toggles it. | 🔒 | Privacy screen is E2b (#317). |
+| HD-05 | Privacy button | "Privacy" / "Privacy on" (red); blurs every output and mutes the mic; Pause toggles it. | ✅ | Sends `privacy.set`; the button follows `privacy.get` and `privacy.changed`, so it shows another client's change too. The engine does the blurring and muting (E2b, ADR-0027 §4). |
 | HD-06 | Studio mode button | Turns studio mode (preview and program) on and off. | ⬜ | UI only: the engine has no studio-mode switch, so the Transitions panel (#304) always shows preview and program; the button would hide them. |
 | HD-07 | Record button | Starts and stops recording. | ✅ | Starts every stopped or failed recording output; "Stop recording" while any runs; disabled with none. |
 | HD-08 | Broadcast picker | Shows the YouTube broadcast Go Live uses; menu lists broadcasts and "+ Create new stream…". | 🔒 | YouTube sign-in needs the OAuth client (A6b, Y4, [ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)). |
@@ -167,7 +167,7 @@ Spec: [workspace › canvas structure](../design/ui-prototype/spec-workspace.md#
 | CV-14 | Right-click | Opens the canvas context menu ([menus](#menus)). | ✅ | On an item, the selected items' menu, after selecting the item alone unless it was selected; on the frame and the margin, theirs ([CM-02](#menus)). |
 | CV-15 | Opacity, blend and 3D drawn | Items draw with their opacity, blend mode and 3D tilt. | 🔒 | The picture comes from the engine; it accepts only the `normal` blend, and 3D it can draw from protocol 0.34 (X1). |
 | CV-16 | Keyframe banner | "◆ Keyframe of “<parent>”: only placement and visibility can change" while editing a keyframe. | ⬜ | Keyframe scenes are in the protocol since 0.39 (K1): `variant_of`, `overrides` and placement edits addressed to the keyframe. |
-| CV-17 | Privacy overlay | Blurred frame with "Privacy screen on · output blurred · mic muted". | 🔒 | E2b (#317). |
+| CV-17 | Privacy overlay | Blurred frame with "Privacy screen on · output blurred · mic muted". | ✅ | The canvas frame takes the prototype's `blur(14px) brightness(0.6)` under the notice while the engine reports privacy on. |
 | CV-18 | Half speed | Shift halves pointer speed for any drag but the marquee. | ✅ | The slow pointer follows the real one's movement, so pressing Shift mid-drag doesn't jump. |
 
 <a id="menus"></a>
@@ -333,7 +333,7 @@ does more than the prototype (buses, sends, routing); that stays ([Beyond](#beyo
 | MX-03 | Channel strips | Name, level bar, dB number field. | ✅ | Each row: name, the stereo meter as the level bar, the console-taper fader ([Beyond](#beyond)), the dB field (`NumberField`, −100 to +24, step 0.5), mute and Routing. |
 | MX-04 | Vertical meters | Vertical strips in side columns; a title-bar toggle flips orientation. | ⬜ | The dock's title bar is built; the toggle comes with the mixer's restyle. |
 | MX-05 | Monitoring | "Hear: after FX" / "before FX". | ⬜ | Decision register D22: a bus's monitor (`bus.set_monitor`, protocol 0.42), which the engine plays on its device while an output runs. |
-| MX-06 | Privacy mute | The mic reads "muted (privacy)" while privacy is on. | 🔒 | E2b (#317). |
+| MX-06 | Privacy mute | The mic reads "muted (privacy)" while privacy is on. | ✅ | Every channel the engine's privacy screen mutes: the `audio_input` and `webcam` sources (the input devices, ADR-0027 §4's default set), not desktop or application audio. Its own mute is unchanged. |
 | MX-07 | Real levels | Meters show the engine's levels. | ✅ | `meters.tick`, with RMS, peak and peak hold; the prototype's numbers are simulated. |
 
 <a id="outputs"></a>
@@ -405,7 +405,7 @@ handlers; the real UI makes them work.
 | KB-03 | Undo and redo | Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y. | ✅ | The prototype has none; kept. |
 | KB-04 | Edit keys | Ctrl+D duplicate as reference, Ctrl+Shift+D as clone, Del remove, F2 rename. | 🟡 | F2 renames and Del removes in the Scenes and Scene objects rows (Del deletes a scene there, through its plan). Ctrl+D and Ctrl+Shift+D wait. |
 | KB-05 | Copy and paste | Ctrl+C, Ctrl+V. | ⬜ | Decision register D43. |
-| KB-06 | Privacy key | Pause toggles privacy. | 🔒 | E2b (#317). |
+| KB-06 | Privacy key | Pause toggles privacy. | ✅ | Anywhere in the window, as the button does. |
 | KB-07 | Scene hotkeys | F1–F5 switch to the scene bound to them. | 🔒 | K1 (#319). |
 
 <a id="beyond"></a>

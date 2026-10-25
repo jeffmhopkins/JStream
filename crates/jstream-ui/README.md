@@ -31,7 +31,8 @@ Contents ([Design](#design) explains the choices):
 - **Header** (`header.rs`): `Header`, the bar along the top: the brand, the File menu
   (the connection's details and Disconnect), the Edit menu (Undo, Redo), the View menu
   (show or hide each panel) and the Layout menu (saved layouts), the frames dropped
-  since the page connected, Record, and Go Live / End stream. `RecordButton` and
+  since the page connected, the Privacy button (which the Pause key also toggles,
+  anywhere in the window), Record, and Go Live / End stream. `RecordButton` and
   `Dropped` are its logic, tested natively.
 - **Dock** (`dock.rs`): `Dock`, the model of which panel sits where: eight `Zone`s
   around the canvas, each holding `Group`s of tabbed `PanelId`s, the zones' sizes, and
@@ -52,7 +53,8 @@ Contents ([Design](#design) explains the choices):
 - **Store** (`store.rs`): `Studio`, the state the scene, sources and properties panels
   share: the collection as `state.get` last reported it (`Collection`, with its buses
   for the bus picker), the program
-  scene, the `Selection`, the source kinds and the kind descriptors read so far, and the
+  scene, whether the privacy screen is on (from `privacy.get` and `privacy.changed`,
+  which the header, the canvas and the mixer show), the `Selection`, the source kinds and the kind descriptors read so far, and the
   last failed call, and `keys_changed`, which the outputs panel bumps when a stream key
   is set or cleared. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
   `plan_summary` and `fresh_id`.
@@ -79,7 +81,8 @@ Contents ([Design](#design) explains the choices):
   stream keys, start and stop, and the pipeline's health), and the calls and
   logic behind it and the header's Go Live, tested natively against `MockEngine`; and `mixer.rs`: `Mixer`, the
   audio mixer (the master card with its loudness and true peak, the channels folded
-  under it with their meters, faders, dB fields, mutes and routing, and the buses),
+  under it with their meters, faders, dB fields, mutes and routing, each microphone
+  marked while the privacy screen mutes it, and the buses),
   also tested natively against `MockEngine`; and `studio.rs`:
   `StudioMode`, the Transitions panel (preview, program, Transition and Cut, the
   transition presets and each scene's overrides; [Design](#design)); and
@@ -131,7 +134,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **Events and the shared state.** One task reads the session's event stream. It keeps
   the header's revision current and hands each event to `Studio`, which re-reads
   the state with `state.get` after a `state.changed` newer than its copy (or after
-  `events.dropped`), and follows `studio.changed` for the program scene. Reads coalesce:
+  `events.dropped`), and follows `studio.changed` for the program scene and
+  `privacy.changed` for the privacy screen (read with `privacy.get` when the session
+  opens and again after `events.dropped`, so the indicator is never left wrong). The
+  privacy screen is runtime state with no `rev`; the header's button and the Pause key
+  send `privacy.set` and show the state only once the engine reports it. Reads coalesce:
   while one `state.get` is in flight, any number of further changes cost one more read.
   Panels never edit the copy: they send edits and the copy follows from the
   `state.changed` that comes back, so every client's change shows the same way. When
@@ -501,6 +508,10 @@ browser, and `mod.rs` is the component.
   why. WebCodecs is reached through `js_sys::Reflect`, because `web-sys` has it only
   behind the `web_sys_unstable_apis` build flag. A drag's live values (below) reach
   the output as it moves, so the preview follows the drag.
+- **The privacy screen.** While the engine reports it on, the frame (the preview and
+  the boxes) is blurred and dimmed, as the prototype does, under a centred notice,
+  "Privacy screen on · output blurred · mic muted". The engine covers the outputs
+  itself; the blur only makes the state hard to miss while editing.
 - **Selecting and dragging.** A press selects the topmost box under the pointer and
   drags it, or, on a box already selected, drags every selected box. Shift-click adds
   a box to the selection (and drags them all) or takes a selected one out. A press on
