@@ -55,7 +55,7 @@ in, and **What's left** lists each unfinished item with the steps it still needs
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `█████████░` 91% | 10 | 1 | 0 |
 | [M2: UI](ROADMAP.md#m2) | `████████░░` 82% | 23 | 3 | 2 |
-| [M3: Depth and reach](ROADMAP.md#m3) | `████░░░░░░` 38% | 6 | 2 | 8 |
+| [M3: Depth and reach](ROADMAP.md#m3) | `████░░░░░░` 38% | 6 | 3 | 7 |
 
 111 of 130 items are merged; 11 of those still wait on a run on Windows hardware.
 
