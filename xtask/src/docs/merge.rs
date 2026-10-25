@@ -592,6 +592,46 @@ pub(crate) fn merged_ledger(root: &Path, point: &MergePoint) -> Result<ledger::L
     ledger_at(root, &point.theirs, "on the merged side")
 }
 
+/// Refuses while a merge is in progress (`MERGE_HEAD` set): a verify then would read the
+/// branch's previous merge, or none, instead of this one (#855).
+pub(crate) fn refuse_merge_in_progress(root: &Path) -> Result<()> {
+    if git(root, &["rev-parse", "-q", "--verify", "MERGE_HEAD"])?
+        .status
+        .success()
+    {
+        bail!(
+            "a merge is in progress: resolve it and commit it (`git commit --no-edit`) first, \
+             so that verify reads this merge"
+        );
+    }
+    Ok(())
+}
+
+/// Checks that `point`'s merge brought in `origin/<branch>`, or a commit on it, for
+/// `docs verify --merge --from <branch>` (#855): `branch` is `main` or a `wave/<name>`
+/// branch, as for `merge-main --from`.
+pub(crate) fn check_merged_from(root: &Path, point: &MergePoint, branch: &str) -> Result<()> {
+    check_branch(branch, "--merge --from takes")?;
+    let upstream = format!("{REMOTE}/{branch}");
+    let on = git(
+        root,
+        &["merge-base", "--is-ancestor", &point.theirs, &upstream],
+    )?;
+    match on.status.code() {
+        Some(0) => Ok(()),
+        Some(1) => bail!(
+            "this branch's last merge brought in {}, which isn't on `{upstream}`: run \
+             `cargo xtask docs merge-main --from {branch}` first, or name the branch it merged",
+            &point.theirs[..point.theirs.len().min(12)]
+        ),
+        _ => bail!(
+            "`git merge-base --is-ancestor {} {upstream}` failed: {}",
+            point.theirs,
+            String::from_utf8_lossy(&on.stderr).trim()
+        ),
+    }
+}
+
 /// The ledger at `point`'s merge base: an entry of the merged side that differs from this
 /// one is a note that side wrote since the branch left it (#840).
 pub(crate) fn base_ledger(root: &Path, point: &MergePoint) -> Result<ledger::Ledger> {

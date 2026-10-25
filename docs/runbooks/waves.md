@@ -54,7 +54,9 @@ Verify each one with `docs verify --merge`, which keeps the note this PR already
 an entry and adds what the merge changed. A plain `--note` replaces that note, so the
 ledger no longer covers the PR's own change ([DOCS › notes](../DOCS.md#notes)). Every
 verify keeps the wave's own note on an entry the wave re-verified, after the new text, so
-write only this PR's text. To correct
+write only this PR's text. When the section's inputs need different notes, give each its
+own with `--per-input --merge-file <notes.toml> --from wave/<name>`
+([DOCS › verification](../DOCS.md#verification)). To correct
 a note on a section that is already fresh, use `--renote` with `--from wave/<name>`; a
 stacked PR names the branch it is stacked on, `--from <base branch>`.
 
