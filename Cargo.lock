@@ -2823,14 +2823,14 @@ dependencies = [
 
 [[package]]
 name = "jstream-browser-helper"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "jstream-browser",
 ]
 
 [[package]]
 name = "jstream-cli"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "jstream-control",
  "jstream-mcp",
@@ -2867,6 +2867,7 @@ dependencies = [
  "jstream-audio",
  "jstream-browser",
  "jstream-control",
+ "jstream-crash",
  "jstream-encode",
  "jstream-graph",
  "jstream-mcp",
@@ -2901,7 +2902,7 @@ dependencies = [
 
 [[package]]
 name = "jstream-daemon"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
  "futures-util",
@@ -2925,7 +2926,7 @@ dependencies = [
 
 [[package]]
 name = "jstream-desktop"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "anyhow",
  "getrandom 0.4.3",
@@ -3222,7 +3223,7 @@ version = "0.0.0"
 
 [[package]]
 name = "jstream-vcam-windows"
-version = "0.0.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "jstream-vcam-proto",
  "windows",

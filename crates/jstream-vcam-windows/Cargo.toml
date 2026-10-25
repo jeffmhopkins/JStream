@@ -1,6 +1,6 @@
 [package]
 name = "jstream-vcam-windows"
-version = "0.0.0"
+version.workspace = true
 description = "The virtual camera's COM media source DLL, loaded by the Windows camera Frame Server."
 edition.workspace = true
 license.workspace = true

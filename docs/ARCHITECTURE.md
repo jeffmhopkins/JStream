@@ -179,9 +179,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 │                  SourceAudio { enabled, follow: Always | WhenShown, gain_db, muted }
 ├── scenes         Scene { id, name, role: scene | group, variant_of?, overrides, folder?, background?,
 │                          icon, color, favourite, show_in_multiview, transition_in?, transition_out?,
-│                          items[] }   flat display order
+│                          filters { video[] }, items[] }   flat display order
 │                  SceneItem { id, source_id, geometry: ItemGeometry, crop, visible, opacity, blend,
-│                              effects[] (reserved, empty until built), transition }
+│                              effects[] (video filters), transition }
 ├── folders        Folder { id, name, parent? }   ordered; a tree; organising only
 ├── labels         Label { id, name, icon?, color }   ordered
 ├── hotkeys        [{ chord, action }]   chord → protocol action request
@@ -233,7 +233,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   that would close a cycle (`item.add`, and `item.set_source`). The graph accepts any
   acyclic depth, but the program mix (the live output and `video.snapshot` alike) draws
   at most **8 levels** of scene sources below the program scene: a scene source deeper
-  than that draws nothing, and the engine logs it at `debug`.
+  than that draws nothing, and the engine logs it at `debug`. A scene with a scene
+  filter is drawn once per frame as if it were the program scene, so the count restarts
+  below it ([ADR-0065](adr/0065-scene-chains-and-item-effects.md)), as it does below a
+  scene a `scene_mask` reads or an item with effects shows.
 - **Groups and keyframe scenes** ([ADR-0024](adr/0024-scene-structure.md)):
   - A **group** is a scene with `role = group`. The role changes no engine behaviour: a
     group renders, nests and takes filters like any scene, and clients hide groups from
@@ -292,10 +295,13 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   hold filters until video mixes run the video ones, and their filters can't hold a
   reference (a scene, source, bus or asset) yet. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
   multiplier in [0, 1]) and `blend` (default `normal`; a mode is rejected until the
-  compositor draws it). `SceneItem.effects[]` is reserved for per-placement effects, which
-  are in v1 ([ADR-0068](adr/0068-item-effects-in-v1.md), designed in
-  [ADR-0065](adr/0065-scene-chains-and-item-effects.md)), and stays empty until they are
-  built; the slot means the collection already has a place for them.
+  compositor draws it). A scene's `filters` and a placement's `effects[]` are video filter
+  chains, the owners `scene` and `item` of `filter.*`
+  ([ADR-0065](adr/0065-scene-chains-and-item-effects.md); item effects are in v1 under
+  [ADR-0068](adr/0068-item-effects-in-v1.md)). A reference in them is an edge of the
+  scene, so it counts for cycles and blocks deleting its target. A keyframe scene has
+  none of its own. The engine runs a scene's filters on its composite, and an item's
+  effects over its box in a layer grown by their outset, before its opacity and blend.
 - **Settings:** a source's `settings`, each filter's, and each transition preset's are a
   map of values described by its kind's descriptor, which the engine reports and
   validates against. References to scenes, sources, buses and asset files inside
@@ -347,8 +353,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   slate) and which sources it mutes, by default every audio input-device source,
   independently of each source's own mute. While on, it covers every output and every
   preview stream of a post-master stage. Built so far: on and off, covering every
-  output's video with the default blur. The look setting, the slate and the muted
-  sources are not built yet.
+  output's video with the default blur and muting the default set, every audio input
+  device. The look setting, the slate and choosing the muted sources are not built
+  yet.
 - **Audio** ([ADR-0028](adr/0028-audio-model-v2.md)): sources feed buses through the send
   matrix; buses feed outputs and monitors, never other buses. Every audio source gets a
   send to the master bus ("Program output") at 0 dB. Per source: stream → audio filters →
@@ -376,8 +383,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   scene, with `settings` checked against the kind's descriptor and stored complete, and
   its video and audio filter chains, each filter's settings checked the same way),
   scenes in display order, and items in stacking order with `source_id`, a placement,
-  `crop`, `visible`, `opacity` and `blend` (only `normal` is accepted), and the reserved
-  `effects[]`, which a collection file must leave empty. The placement is a `geometry` or, until 1.0, a
+  `crop`, `visible`, `opacity` and `blend` (only `normal` is accepted), and its
+  `effects[]`, a scene's `filters` beside them. The placement is a `geometry` or, until 1.0, a
   legacy placement (protocol 0.3's 2D transform as written), and the collection has
   its `canvas` (protocol 0.11); any 3D geometry the compositor can draw is accepted from
   protocol 0.34. Scenes have
@@ -420,7 +427,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   `VirtualCam`, which has no settings and ignores its profile. A stream
   key is never collection state: it lives in the OS credential store
   ([R-SEC-001](RULES.md#R-SEC-001)). Encoder profiles, ordered by ID, each a name and an
-  H.264 and AAC encoding (rate control, keyframe interval, hardware preference, audio bit
+  H.264, HEVC or AV1 and AAC encoding (rate control, keyframe interval, hardware preference, audio bit
   rate), checked against the ranges the protocol states. An output with no profile uses
   the engine's default; a profile an output uses can't be deleted. Video mixes
   (protocol 0.28), ordered by ID, each with a name besides the fields above: the
@@ -434,16 +441,18 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   cuts until a client adds another.
   Audio (protocol 0.19): an audio source's `audio` (`enabled`, `follow`, fader and
   mute; a nested scene source has no fader or mute), the master bus and up to 15
-  others with their faders, and the post-fader sends, a new channel source sending to
-  the master at 0 dB. A send always runs from a source to a bus, and filters have no
-  sidechain keys yet, so no edit can close an audio cycle. The engine routes these into
-  the program stage's mixer while it runs.
+  others with their faders and (protocol 0.42) each bus's optional monitor, an output
+  device and a tap point before or after its filters (`bus.set_monitor`), and the
+  post-fader sends, a new channel source sending to the master at 0 dB. A send always
+  runs from a source to a bus, and filters have no sidechain keys yet, so no edit can
+  close an audio cycle. The engine routes these into the program stage's mixer while it
+  runs, and plays each bus's monitor on its device (one it can't open stays silent and
+  is retried).
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
   and hotkey bindings (protocol 0.25), as the organisation bullet above describes.
   Not yet: settings migrations between kind versions (a source saved at another
   version is refused on load), blend modes
-  other than `normal`,
-  bus monitors, per-placement effects, a keyframe scene's overrides of a group's
+  other than `normal`, a keyframe scene's overrides of a group's
   children (so `scene.set_role` and removing or retargeting a group's item drop none
   yet, #702), `background`, output audio buses and chains, the `YouTube` kind, a virtual
   camera's video mix (it always shows the program), and everything outside `sources`,
@@ -602,8 +611,18 @@ the next tick: the engine stores it with release ordering under its lock, and th
 loads it with acquire ordering at the start of each tick. The blur pass's layers are
 kept whenever a mix is drawn, so turning privacy on allocates nothing on a real-time
 thread. The flag fails closed: a tick under privacy that couldn't draw pushes black,
-never the last frame. The mixer thread will read it the same way once privacy mutes
-sources; not built yet.
+never the last frame. The mixer reads a count of the screen's changes instead (odd
+while it is on, stored after the flag), with acquire ordering at each poll, so a screen
+turned on and off again between two polls still reaches it. It silences the inputs it
+mutes from the next block, before their filter chains (so no delay line holds what
+they captured meanwhile) and through their activity gain, so that takes a field store
+and allocates nothing either. Those inputs' audio threads load the count with acquire
+ordering too, and zero each packet as it arrives, before the input's ring, while it is
+odd or the mixer has not yet acted on it. Turning it off follows the capture
+time: blocks mixed late by the mixer's latency that start before the clock's frame at
+the first poll after it went off, plus 40 ms for an input's timing error, stay covered,
+and the audio threads zero a packet that its stamp, the input's timing of it or its
+placement starts before that frame, an atomic the mixer stores.
 
 <a id="protocol"></a>
 ## Control protocol
@@ -647,10 +666,14 @@ The wire format, versioning, error codes and compatibility policy are designed i
   master stage or an output, addressed by an `owner` and a filter ID;
   `SourceInfo.filters`, `OutputInfo.filters` and `state.get`'s `master` report them
   ([ADR-0026](adr/0026-source-filter-chains.md), protocol 0.22;
-  [ADR-0027](adr/0027-program-master-and-output-chains.md), protocol 0.29).
+  [ADR-0027](adr/0027-program-master-and-output-chains.md), protocol 0.29). Since 0.43
+  the owners `scene` and `item`, `SceneInfo.filters`, `ItemInfo.effects` and a
+  descriptor's `max_outset_px` are in the protocol
+  ([ADR-0065](adr/0065-scene-chains-and-item-effects.md)). The engine runs both.
   `source.set_audio`, `bus.create`, `bus.rename`, `bus.set_fader`, `bus.delete`,
   `send.set` and `send.remove` edit sources' audio, the buses and the send matrix
-  ([ADR-0028](adr/0028-audio-model-v2.md), protocol 0.19).
+  ([ADR-0028](adr/0028-audio-model-v2.md), protocol 0.19), and `bus.set_monitor` a
+  bus's monitor, an output device and a tap point (protocol 0.42).
   `hotkey.set` and `hotkey.clear` bind a key chord to an action and unbind it
   ([ADR-0024](adr/0024-scene-structure.md) §5, protocol 0.25). Deleting the scene,
   output or transition preset an action names removes its bindings in the same edit, the batch result lists
@@ -745,9 +768,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   dedicated to it because of its own video chain (0.33), plus the sessions and hardware
   sessions in use. A profile's settings and the output's video mix at start
   count, so an output started after `encoder.update` gets a session of its own, and
-  outputs on different mixes never share one. Planned: when the encoder refuses a
-  session, `output.start` fails with a stable session-limit error code naming the
-  outputs that hold sessions, with no fallback to a software encoder
+  outputs on different mixes never share one. While any output holds a hardware
+  session, a new one for a codec the machine lists a hardware encoder for opens with
+  `require`, and when the encoder refuses it
+  `output.start` fails with `hardware_session_limit` (0.44) naming the outputs that hold
+  hardware sessions, with no fallback to a software encoder
   ([ADR-0027](adr/0027-program-master-and-output-chains.md)).
 - **Queries** (`state.get` → state + `rev`, the canvas included, `scene.list`, `source.list`, `item.list`,
   `output.list`, `output.status`, `encoder.list` (protocol 0.13), `video_mix.list`
@@ -759,8 +784,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   label) with everything
   that refers to it, and the `rev` it was planned at, plus the hotkey bindings it removes (protocol 0.25); `bus.list` (protocol 0.19) → the buses and sends;
   `capture.targets` (protocol 0.27) → the displays and windows a `display` or `window`
-  source's `target` can name; audio levels are the `meters.tick` event, not a query).
-- **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops}`, `meters.tick`, …).
+  source's `target` can name; `source.sizes` (protocol 0.40) → each source's current
+  size, runtime state ([ADR-0022](adr/0022-item-transform-and-canvas.md) §4); audio
+  levels are the `meters.tick` event, not a query).
+- **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops}`, `meters.tick`,
+  `source.size_changed` (protocol 0.40), …).
   `stats.tick` (protocol 0.6) carries the pipeline's running drop totals
   ([R-RT-004](RULES.md#R-RT-004)), and `meters.tick` (protocol 0.19, about ten a second
   while the mixer runs) every source's and bus's levels and the master's loudness,
@@ -872,7 +900,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 706 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 728 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking
@@ -1001,7 +1029,9 @@ descriptors whose passes `apply_filter` draws from any image (an upload, a layer
 import, a browser page's included) into a premultiplied `Rgba16Float` layer, of the size the filter reports
 ([jstream-render › Filters](../crates/jstream-render/README.md#filters));
 `apply_filter_into` draws into a layer the caller keeps, which is how `jstream-core`'s
-chain runtime runs a source's video chain before placement without allocating per
+chain runtime runs a source's video chain before placement, and a scene's over its
+composite once per frame wherever the scene shows, and an item's effects over its box
+([ADR-0065](adr/0065-scene-chains-and-item-effects.md)), without allocating per
 frame. Still outside this crate: the render
 thread (in `jstream-core`), P010, loading effect packs (`jstream-effects`; this
 crate draws them through the filter harness), and the output path below.
@@ -1022,8 +1052,10 @@ reports the loss as an error rather than panicking. The third loss within
 60 s fails the output instead. Each loss is logged and counted in the output's stats
 ([jstream-core › Design](../crates/jstream-core/README.md#design)). Not built yet: the
 engine event for a loss (a protocol change), attributing a loss to the effect pack that
-was drawing, and quarantining that pack, all of which wait for packs to be drawn in the
-engine (X1).
+was drawing, quarantining that pack, and the GPU-time guard (timestamp queries that
+quarantine an effect whose pass runs over half the frame budget for 30 frames running,
+before Windows' TDR fires), all of which wait for packs to be drawn in the engine (V0's
+effect-pack kinds).
 
 **Transitions** ([ADR-0029](adr/0029-transitions.md), with
 [ADR-0052](adr/0052-transition-mechanics-and-studio-preview.md)'s mechanics). A Move is not a texture blend:
@@ -1172,8 +1204,9 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   version verbatim and is saved back as it was; the engine bypasses it until its kind
   appears.
   A placement's `opacity` and `blend` are written only when they differ from 1 and
-  `normal`, a geometry's `flip_h` and `flip_v` only when true, a disabled filter's `enabled` only when false, and the reserved `effects[]`
-  must be empty.
+  `normal`, a geometry's `flip_h` and `flip_v` only when true, a disabled filter's `enabled` only when false. Schema version 2 adds a scene's
+  `filters` and an item's `effects`, each omitted while empty; the migration from 1
+  changes nothing, and refuses a version 1 file that holds either.
 - **Installed WASM plugins:** `plugins.json` (version 0) in the plugin folder, by default
   `plugins` in the data directory: each plugin's package path, grant, manifest request
   and disabled reason. `jstream-core` loads it at startup, loading each enabled plugin
@@ -1197,34 +1230,47 @@ depends_on = ["docs/adr/0066-portable-windows-distribution-v2.md"]
 
 Windows ships as a **portable zip**: unzip and run `jstream.exe`, with no installer and no
 admin ([ADR-0066](adr/0066-portable-windows-distribution-v2.md)). The folder also holds
-`jstream-daemon.exe`, `jstream-cli.exe`, the `jstream-vcam-windows` DLL, and the CEF
-runtime for browser sources ([ADR-0021](adr/0021-browser-source.md)), in its own folder,
-with the sandboxed browser helper: CEF's `bootstrap.exe` renamed
-`jstream-browser-helper.exe` and `jstream-browser-helper.dll`, signed with the same
-certificate if releases are signed ([ADR-0048](adr/0048-sandboxed-browser-helper.md)).
-From M3 it also holds `jstream-plugin-host.exe`, the out-of-process CLAP plugin host
-([ADR-0035](adr/0035-clap-plugins-out-of-process.md)). Release builds
-link the C runtime statically and need only OS components (WebView2, Media Foundation,
-Direct3D 12).
+`jstream-daemon.exe`, `jstream-cli.exe`, the `jstream-vcam-windows` DLL, and, in its own
+`browser` folder, the CEF runtime for browser sources
+([ADR-0021](adr/0021-browser-source.md)) with the sandboxed browser helper: CEF's
+`bootstrap.exe` renamed `jstream-browser-helper.exe` and `jstream-browser-helper.dll`,
+signed with the same certificate if releases are signed
+([ADR-0048](adr/0048-sandboxed-browser-helper.md)). The hosts look for the helper there
+(`CefConfig::beside_exe`). From M3 it also holds `jstream-plugin-host.exe`, the
+out-of-process CLAP plugin host ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)).
+Release builds link the C runtime statically and need only OS components (WebView2, Media
+Foundation, Direct3D 12).
 
 - **State:** in `%APPDATA%\JStream`, or in a `data` folder beside the exe when a
   `portable` marker file is present. Every host finds it through `jstream-platform`'s
   `paths` module.
-- **Building the zip:** `cargo xtask dist`, on Windows with MSVC. It builds the web UI
-  for release with trunk (or takes a built one with `--ui-dir`), builds `jstream.exe`,
-  `jstream-daemon.exe`, `jstream-cli.exe` and the virtual-camera DLL for release, and
-  fails if any of them imports a Visual C++ runtime DLL (`vcruntime`, `msvcp`). The
-  Universal CRT (`api-ms-win-crt-*`) is allowed: it is part of Windows 10 and 11, and
-  `jstream.exe` imports it even with `crt-static` (from a prebuilt static library built
-  with `/MD`, most likely WebView2's loader). It zips them in one folder,
-  `jstream-<git describe>-windows-x64`, with the UI in `ui` (where `jstream.exe` looks),
-  the licenses and a `README.txt`, into `target/dist`. `.cargo/config.toml` links the C
-  runtime statically for every MSVC build. A `RUSTFLAGS` variable replaces the config's
-  flags, so `dist` adds `crt-static` back to it. The zip is written by `dist` itself,
-  deflated, with fixed timestamps, so the same files make the same zip. The `dist` job in
-  `after-review.yml` builds it with the release UI its `dist-ui` job builds, names it
-  after the commit tested (`--revision`), and uploads it as an artifact, as is, on `main`
-  and on a PR once review passes ([ADR-0054](adr/0054-platform-ci-after-review.md)). The sandboxed browser helper and the CEF runtime are not in it yet; they join it when the hosts turn their `cef` features on.
+- **Building the zip:** `cargo xtask dist`, on Windows with MSVC, CMake and Ninja. It
+  builds the web UI for release with trunk (or takes a built one with `--ui-dir`), builds
+  `jstream.exe`, `jstream-daemon.exe`, `jstream-cli.exe` and the virtual-camera DLL for
+  release with the hosts' `cef` features on, then the browser helper's DLL with its own
+  `cef` feature in a second `cargo build`: built together, Cargo would unify
+  `jstream-browser`'s `helper` feature into the hosts and link CEF into the engine's
+  process. The helper's build downloads the pinned CEF distribution and builds its C++
+  wrapper; `dist` finds the distribution's folder from that build's JSON messages
+  (`cef-dll-sys`'s link path that holds `bootstrap.exe`). It fails if any of the
+  binaries imports a Visual C++ runtime DLL (`vcruntime`, `msvcp`), or if a host imports
+  `libcef.dll`. The Universal CRT (`api-ms-win-crt-*`) is allowed: it is part of Windows
+  10 and 11, and `jstream.exe` imports it even with `crt-static` (from a prebuilt static
+  library built with `/MD`, most likely WebView2's loader). It zips them in one folder,
+  `jstream-<git describe>-windows-x64` (or `--revision`), with the UI in `ui` (where
+  `jstream.exe` looks), the licenses and a `README.txt`, into `target/dist`. The
+  `browser` folder holds CEF's runtime files (all of its distribution's top-level files
+  but import libraries, `archive.json`, `CMakeLists.txt` and the console bootstrap), its
+  `locales`, the renamed bootstrap and DLL, CEF's `CREDITS.html` (its licences, FFmpeg's
+  LGPL text among them) and a `CEF-VERSION.txt` naming the CEF and Chromium build, from
+  `archive.json`. `--no-browser` builds the zip without browser sources (no CMake or
+  Ninja needed). `.cargo/config.toml` links the C runtime statically for every MSVC
+  build. A `RUSTFLAGS` variable replaces the config's flags, so `dist` adds `crt-static`
+  back to it. The zip is written by `dist` itself, deflated, with fixed timestamps, so
+  the same files make the same zip. The `dist` job in `after-review.yml` builds it with
+  the release UI its `dist-ui` job builds, names it after the commit tested
+  (`--revision`), and uploads it as an artifact, as is, on `main` and on a PR once
+  review passes ([ADR-0054](adr/0054-platform-ci-after-review.md)).
 - **Virtual camera:** registering the COM media source is **optional**, an explicit
   step the user chooses; nothing registers it or asks for elevation on its own
   ([ADR-0066](adr/0066-portable-windows-distribution-v2.md)). The step costs **one UAC

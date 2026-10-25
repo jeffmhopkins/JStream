@@ -41,10 +41,17 @@ fn edges(state: &State, node: &Node) -> Vec<Node> {
         Node::Scene(id) => state
             .scene(id)
             .map(|s| {
+                let filters = s
+                    .filters
+                    .all()
+                    .chain(s.items.iter().flat_map(|i| i.effects.all()))
+                    .flat_map(|(_, filter)| filter.settings.references())
+                    .filter_map(|(_, reference)| reference_node(&reference));
                 s.items
                     .iter()
                     .map(|i| Node::Source(i.source_id.clone()))
                     .chain(s.variant_of.iter().map(|p| Node::Scene(p.clone())))
+                    .chain(filters)
                     .collect()
             })
             .unwrap_or_default(),
@@ -199,6 +206,37 @@ pub(crate) fn blockers(state: &State, target: &Node) -> Vec<Blocker> {
                         field: format!("filters.{}.{param}", filter.id),
                     }),
             );
+        }
+    }
+    // A scene's filters and its items' effects (ADR-0065 §3), in scene display order,
+    // each scene's filters before its items' effects in stacking order.
+    for scene in state.scenes() {
+        let owners = std::iter::once((
+            EntityKind::Scene,
+            scene.id.as_str(),
+            "filters",
+            &scene.filters,
+        ))
+        .chain(
+            scene
+                .items
+                .iter()
+                .map(|i| (EntityKind::Item, i.id.as_str(), "effects", &i.effects)),
+        );
+        for (entity, id, prefix, chains) in owners {
+            for (_, filter) in chains.all() {
+                out.extend(
+                    filter
+                        .settings
+                        .references()
+                        .filter(|(_, r)| reference_node(r).as_ref() == Some(target))
+                        .map(|(param, _)| Blocker {
+                            entity,
+                            id: id.to_owned(),
+                            field: format!("{prefix}.{}.{param}", filter.id),
+                        }),
+                );
+            }
         }
     }
     if let Node::Scene(scene_id) = target {

@@ -120,14 +120,15 @@ a stolen token, local denial of service.
 - Failed tokens are logged one by one only up to 10 a minute, then counted, so a flood
   of them can't fill the log (#354).
 - On Unix the token file is created `0600` and refused if group or others can read it.
-  On Windows (#548) the daemon's token, devices and log files, and the daemon's and the
-  desktop app's crash reports (#656), are created with a protected DACL for SYSTEM and the user
+  On Windows (#548) the daemon's token, devices and log files, the desktop app's log file
+  (#780), and the daemon's and the desktop app's crash reports (#656), are created with a protected DACL for SYSTEM and the user
   in the same `CreateFileW` call (`jstream_platform_windows::create_private_file`), so
   they never carry their folder's inherited entries. An existing token or devices file
   is refused unless its owner is the user, SYSTEM or Administrators and its DACL grants
   no one else more than reading its descriptor or attributes (`check_private_file`).
-  The daemon's log files and the crash reports are always new files, so nothing existing
-  is checked.
+  The daemon's log files and the crash reports are always new files, and the desktop
+  app deletes its old log file and creates a new one at each start (`0600` on Unix), so
+  nothing existing is checked.
 
 **Accepted:** the token is full access with no tiers ([ADR-0006](../adr/0006-mcp-full-access.md)).
 It doesn't expire or rotate; deleting the file and restarting makes a new one. A browser
@@ -309,8 +310,16 @@ before they reach the UI, agents or the log (#351).
   already change what runs as the user, so it is trusted as the collection file is. A
   grant of `outputs` lets a plugin start and stop existing outputs, never retarget one:
   creating and retargeting outputs and stream keys are never granted.
-- WGSL (#349): validation doesn't bound run time; a hanging shader resets the GPU, and
-  device loss isn't handled.
+- WGSL (#349): validation doesn't bound run time, so a hanging shader can reset the GPU.
+  The engine survives the lost device (#604): the render thread opens the compositor on a
+  new device, the output repeats its last frame meanwhile and stays up (a session on the
+  context's GPU encode path fails at once instead), the third loss
+  within 60 s fails the output, and each loss is logged and counted in the output's stats
+  ([ARCH › GPU pipeline](../ARCHITECTURE.md#gpu-pipeline)). The static load limits are
+  enforced (`jstream-effects`' shader contract, plus #538's 16 KiB value cap). Not built
+  yet, all waiting for packs to be drawn in the engine (X1): the engine event for a loss,
+  blaming a loss on the pack effect that was drawing and quarantining it, and the GPU-time
+  guard against long loops.
 
 <a id="mcp"></a>
 ## MCP agents
@@ -369,7 +378,13 @@ intercepted connection.
   the new server isn't read with the old one either.
 - OAuth uses PKCE and a `state` check on a one-shot loopback listener.
 - The daemon's and the desktop app's crash reports replace the control token, and every
-  stream key and refresh token their credential stores hold or load, with `***`.
+  stream key and refresh token their credential stores hold or load, with `***`. The
+  daemon's also replace every rotated refresh token and stream key YouTube hands its
+  client, a `youtube` output's key included, and every sign-in's access token, through
+  the YouTube setup's secret hook (#353). Of the access tokens the client refreshes to,
+  they replace the current one and the one it superseded, which a call made just before
+  the refresh may still hold; older ones are dropped, since the client no longer has
+  them, so hourly refreshes don't grow the list (#844).
 - `secrets_are_redacted` checks the engine's logs, replies, events and audit lines.
   Further tests check the server's WebSocket and MCP layers, the daemon's RTMP opener and
   its crash reports.
@@ -400,10 +415,6 @@ read the keys in it, and use them to broadcast as the user's channel. The mitiga
 A keyring that is locked, or whose unlock prompt is dismissed, fails the call and
 never sends the secret to the file. A secret cleared while no keyring is reachable is
 recorded as cleared, so the keyring's older copy is deleted rather than coming back.
-
-**Gaps:** the daemon's and the desktop app's crash reports redact the control token and the keys and refresh
-tokens that pass through their credential stores, but not a YouTube-bound output's key
-or the OAuth access token, which pass through neither (#353).
 
 <a id="vcam"></a>
 ## Virtual camera
@@ -465,14 +476,12 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 
 | Issue | Area | Gap | Severity |
 |---|---|---|---|
-| #344 | Server, pairing | Windows devices file and crash reports not yet checked user-only on hardware; token and daemon logs reported user-only (#546) | Low |
+| #344 | Server, pairing | Windows devices file, crash reports and the desktop app's log file (#780) not yet checked user-only on hardware; token and daemon logs reported user-only (#546) | Low |
 | #547 | Files | Windows audit log's user-only DACL not yet checked across a rotation on hardware (#574 landed in the wave) | Low |
-| #780 | Server | The desktop app's log file only inherits its folder's ACL on Windows and gets the umask's mode on Unix | Low |
 | #345 | Files | `absolute` asset paths accept UNC and device paths | Medium |
 | #347 | Browser | Permissions Chromium grants without a prompt; public names resolving locally (`*.nip.io`, DNS rebinding) and requests the handler doesn't see | Medium |
-| #348 | WASM | ADR-0069's capability classes, grants, `forbidden` error and untrusted-output handling are decided but not built (the CPU and memory limits, the command cap and the event queue are) | Medium |
-| #349 | WGSL | No GPU-hang or device-lost handling | Medium |
-| #353 | Secrets | Crash reports miss a YouTube-bound key and the access token | Low |
+| #348 | WASM | ADR-0069's capability checks on a plugin's calls, installing and granting plugins, disabling a failing plugin and untrusted-output handling are decided but not built; the protocol's command classes, `PluginGrant` and `forbidden` error are (#642), and so are the host's CPU and memory limits, command cap and event queue | Medium |
+| #349 | WGSL | A hanging shader can still reset the GPU: the engine survives a lost device (#604), but the loss event, blaming and quarantining the pack, and a GPU-time guard wait for packs to be drawn (X1) | Medium |
 | #355 | Files | A recording can replace a file created just before its rename | Low |
 | #356 | Virtual camera | A pre-created control mapping keeps its own DACL | Low |
 | #273 | Server | A hung engine hello escapes the handshake deadline | Low |

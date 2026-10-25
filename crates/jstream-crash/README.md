@@ -54,12 +54,29 @@ Contents:
 - `Redacting::new(secrets, store)` wraps a `StreamKeyStore` or an `OAuthTokenStore` and
   registers every key or refresh token it stores or loads (not on `is_set`, a failed
   read or an empty slot), before anything could format it (#353).
+- `Secrets::register_in(slot, value)` registers a secret that supersedes its slot's
+  earlier ones, such as an OAuth access token, refreshed about every hour. A slot keeps
+  its newest two values, so the one just superseded, which a call made before the switch
+  may still hold, is redacted too, and drops older ones, which their holder no longer
+  has. So a slot only takes a secret that supersedes its holder's last one; a value
+  that might not, such as a sign-in's token the store may refuse, is kept. The list
+  then stays bounded however often a token is refreshed (#844). `register` keeps a
+  secret for the life of the process, as the control token, stream keys and refresh
+  tokens need.
+- `Secrets::hook(slot)` is a closure that registers what it is handed with its kind
+  `K`, for a client that hands its secrets on as it gets them. `slot` maps a kind to
+  the slot it supersedes in, or `None` to keep it. The daemon gives
+  `hook(jstream_youtube::SecretKind::slot)` to the YouTube setup
+  (`jstream_youtube::SecretHook`), for the access tokens and the stream keys YouTube
+  sends (#353). The crate doesn't depend on `jstream-youtube`, which is on its layer:
+  the kind is the caller's type.
 
 Not yet: native crashes (access violations, aborts) write no report; a minidump would
 need its own ADR.
 
 **Tests** (`src/tests.rs`): redaction wherever a secret appears and at the message cut,
-UTC dates, `Secrets` shared by clones, `Redacting` on key and token stores, pruning to the
+UTC dates, `Secrets` shared by clones, a slot staying at two values across a thousand
+refreshes through the hook while kept secrets stay, `Redacting` on key and token stores, pruning to the
 cap without touching other files, a report made by the app's `create` (and the next name
 tried through it), the folder created user-only, and the real hook in a
 child process (this test binary again), whose report holds the facts and none of a fake

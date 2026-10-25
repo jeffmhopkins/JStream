@@ -148,19 +148,22 @@ fn with_youtube(engine: Engine, client: Option<youtube::Client>, secrets: &Secre
             }
         };
         // Behind `Redacting`, like the stream keys, so a refresh token is registered with
-        // the crash redaction as it is stored or loaded (#353).
+        // the crash redaction as it is stored or loaded; the setup's secret hook registers
+        // the access tokens and the stream keys YouTube hands the client (#353).
         let tokens = Arc::new(Redacting::new(
             secrets.clone(),
             Arc::new(jstream_platform_windows::WindowsCredentials),
         ));
         if let Some(client) = client {
             tracing::info!("YouTube sign-in is available, with the developer's OAuth client");
-            return youtube::set_up(engine, client, transport, tokens);
+            return youtube::set_up(engine, client, transport, tokens, secrets);
         }
         match jstream_core::YoutubeSetup::built_in(transport, tokens) {
             Some(setup) => {
                 tracing::info!("YouTube sign-in is available");
-                engine.with_youtube(setup)
+                engine.with_youtube(
+                    setup.with_secret_hook(secrets.hook(jstream_youtube::SecretKind::slot)),
+                )
             }
             None => engine,
         }
@@ -236,7 +239,8 @@ fn macos_backends() -> anyhow::Result<Backends> {
 ///
 /// CEF runs only in the sandboxed browser helper (ADR-0048), which starts when the first
 /// page opens: the helper (`jstream-browser-helper.exe` and its DLL) and CEF's runtime
-/// files go next to the daemon's exe, CEF's cache in the data directory's `cef` folder
+/// files go in the `browser` folder beside the daemon's exe (or next to it), CEF's cache
+/// in the data directory's `cef` folder
 /// and its log in the log directory's `cef.log`. Neither a
 /// missing data directory nor a device that won't open stops the daemon: without a
 /// device, pages still play their audio and only their frames are dropped, and when the

@@ -713,6 +713,7 @@ mod tests {
             version: 1,
             video: true,
             audio: false,
+            max_outset_px: None,
             params,
         }
     }

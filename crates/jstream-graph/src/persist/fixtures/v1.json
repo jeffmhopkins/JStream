@@ -419,7 +419,11 @@
       "id": "vod",
       "name": "VOD track",
       "gain_db": -6.0,
-      "muted": true
+      "muted": true,
+      "monitor": {
+        "device": "headphones",
+        "tap": "pre_filters"
+      }
     }
   ],
   "sends": [

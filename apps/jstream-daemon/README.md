@@ -67,7 +67,8 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   the log directory ([Design](#design)).
 - **Tests** (`serve.rs`, `token.rs`, `args.rs` and `logs.rs` unit tests, the token
   registered for redaction, and the stream key registered through the live engine's
-  `Redacting` store; the real `connect_rtmp` failing against loopback servers without
+  `Redacting` store; `set_up` registering the stored YouTube token through the setup's
+  secret hook, in `youtube.rs`; the real `connect_rtmp` failing against loopback servers without
   naming the key, through `serve::live_redacting`, in `serve.rs`; the publish opener and
   the live engine on the platform fakes, in `live.rs`; `tests/daemon.rs`, the built binary driven by
   `jstream-control`'s WebSocket client, a raw HTTP MCP client and raw HTTP UI
@@ -417,8 +418,8 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   runs only in the sandboxed browser helper, which the backend starts with the first
   page ([ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md)): the helper
   (`jstream-browser-helper.exe`, CEF's bootstrap exe renamed, and
-  `jstream-browser-helper.dll`) and CEF's runtime files must be next to
-  `jstream-daemon.exe`; its cache is the data directory's `cef` folder (else the log
+  `jstream-browser-helper.dll`) and CEF's runtime files must be in the `browser` folder
+  beside `jstream-daemon.exe`, as the portable zip has them, or next to it; its cache is the data directory's `cef` folder (else the log
   directory's) and its log the log directory's `cef.log`. Nothing about the browser
   stops the daemon: a device that won't open leaves pages playing audio with their
   frames dropped, a daemon whose own path is unknown leaves browser sources empty, and
@@ -530,10 +531,14 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   `Redacting`, which
   registers each secret as it is stored or loaded, and every YouTube refresh token,
   since `serve.rs` hands YouTube its Credential Manager token store behind
-  `Redacting` too. Secrets that pass through neither store are not registered
-  yet: a YouTube-bound output's stream key, which core reads with `Youtube::ingest`
-  and hands straight to its connect, and the OAuth access token (left open on #353);
-  only their length and BLAKE3 digest are kept, and the text is scanned for windows
+  `Redacting` too. The secrets that pass through neither store are registered by the
+  YouTube setup's secret hook (`Secrets::hook(SecretKind::slot)`, #353): every OAuth
+  access token and rotated refresh token the account's client gets, and every stream
+  key YouTube sends it, such as the one a `youtube` output's `Youtube::ingest` reads for
+  its connect. The client's access tokens share one slot, which keeps the newest and
+  the one it superseded, so hourly refreshes don't grow the list; a sign-in's access
+  token is kept, since the store may refuse it and leave the client on its own (#844).
+  Only their length and BLAKE3 digest are kept, and the text is scanned for windows
   with that digest, so the hook holds no plaintext. It replaces the default hook,
   whose stderr line would quote the message unredacted; `main.rs`'s `crash_line` prints
   the hook's redacted line instead (the crate never prints). A panic in a tokio task writes

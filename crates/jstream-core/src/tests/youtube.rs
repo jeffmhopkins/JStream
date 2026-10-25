@@ -21,7 +21,7 @@ use jstream_protocol::{
 };
 use jstream_youtube::fake::FakeTransport;
 use jstream_youtube::http::{HttpRequest, HttpResponse};
-use jstream_youtube::{HttpTransport, YoutubeError};
+use jstream_youtube::{HttpTransport, SecretKind, YoutubeError};
 use std::collections::BTreeSet;
 use std::io::{Read, Write};
 use std::net::TcpStream;
@@ -1232,4 +1232,216 @@ fn a_low_quota_stops_audience_reads() {
     .expect("creates");
     assert_eq!(quota(&control).used, 52);
     block_on(control.call(output_call("live", false))).expect("output.stop");
+}
+
+/// The setup's secret hook gets the stored refresh token, the access token and the key
+/// a `youtube` output publishes with, so a host's crash reports can redact them (#353).
+#[test]
+fn the_secret_hook_sees_the_tokens_and_a_youtube_outputs_key() {
+    let transport = FakeTransport::new();
+    transport
+        .respond(200, REFRESH)
+        .respond(200, BROADCASTS)
+        .respond(200, STREAMS)
+        .respond(200, HEALTH);
+    let seen: Arc<Mutex<Vec<String>>> = Arc::default();
+    let hook = {
+        let seen = Arc::clone(&seen);
+        Arc::new(move |_: SecretKind, secret: &str| {
+            seen.lock().expect("lock").push(secret.to_owned());
+        })
+    };
+    let engine = Engine::new()
+        .with_backends(backends())
+        .with_draw(cpu_draw())
+        .with_youtube(setup(&transport, &signed_in_store()).with_secret_hook(hook));
+    let publish = RecordingPublish::new();
+    engine
+        .youtube()
+        .expect("youtube")
+        .set_connect(Arc::new(move |_: &str, _: &Secret| {
+            Ok(Box::new(publish.clone()) as Box<dyn LivePublish>)
+        }));
+    assert_eq!(
+        *seen.lock().expect("lock"),
+        [STORED],
+        "the stored token at once"
+    );
+
+    let control = connected(&engine);
+    batch(&control, edits(vec![youtube_output("dQw4w9WgXcQ")])).expect("creates");
+    block_on(control.call(output_call("live", true))).expect("output.start");
+    let seen = seen.lock().expect("lock").clone();
+    assert!(
+        seen.iter().any(|s| s == STREAM_KEY),
+        "{} secrets",
+        seen.len()
+    );
+    assert!(
+        seen.iter().any(|s| s.starts_with("ya29.")),
+        "an access token"
+    );
+    drop(block_on(control.call(output_call("live", false))));
+}
+
+/// A client a sign-in makes has the hook too: it gets the grant's two tokens, and then
+/// the key of the stream a `youtube` output publishes to.
+#[test]
+fn the_secret_hook_sees_a_sign_ins_tokens_and_its_clients_stream_key() {
+    let transport = FakeTransport::new();
+    transport
+        .respond(200, EXCHANGE)
+        .respond(200, BROADCASTS)
+        .respond(200, STREAMS)
+        .respond(200, HEALTH);
+    let seen: Arc<Mutex<Vec<String>>> = Arc::default();
+    let kinds: Arc<Mutex<Vec<SecretKind>>> = Arc::default();
+    let hook = {
+        let seen = Arc::clone(&seen);
+        let kinds = Arc::clone(&kinds);
+        Arc::new(move |kind: SecretKind, secret: &str| {
+            seen.lock().expect("lock").push(secret.to_owned());
+            if secret == "ya29.a0AfH6SMfixture-access-1" {
+                kinds.lock().expect("lock").push(kind);
+            }
+        })
+    };
+    let tokens = MemoryTokenStore::new();
+    let engine = Engine::new()
+        .with_backends(backends())
+        .with_draw(cpu_draw())
+        .with_youtube(setup(&transport, &tokens).with_secret_hook(hook));
+    let publish = RecordingPublish::new();
+    engine
+        .youtube()
+        .expect("youtube")
+        .set_connect(Arc::new(move |_: &str, _: &Secret| {
+            Ok(Box::new(publish.clone()) as Box<dyn LivePublish>)
+        }));
+    let control = connected(&engine);
+    let mut events = control.events();
+    let Some(ActionResult::YoutubeSignIn { url }) =
+        action(&control, Action::YoutubeSignIn).expect("signs in")
+    else {
+        panic!("no consent URL");
+    };
+    let redirect_uri = param(&url, "redirect_uri").expect("redirect_uri");
+    let state = param(&url, "state").expect("state");
+    assert_eq!(statuses(&mut events), vec![YoutubeAuth::SigningIn]);
+    redirect(
+        &redirect_uri,
+        &format!("state={state}&code=4%2Ffixture-code"),
+    );
+    assert_eq!(
+        wait_for_status(&mut events, &mut Vec::new()),
+        YoutubeAuth::SignedIn
+    );
+    {
+        let seen = seen.lock().expect("lock");
+        assert!(seen.iter().any(|s| s == "1//0gfixture-signed-in-refresh"));
+        assert!(seen.iter().any(|s| s == "ya29.a0AfH6SMfixture-access-1"));
+        assert!(!seen.iter().any(|s| s == STREAM_KEY), "no key yet");
+    }
+    // Kept as the grant arrives, then in the slot once the new client takes it (#844).
+    assert_eq!(
+        *kinds.lock().expect("lock"),
+        [SecretKind::SignInAccessToken, SecretKind::AccessToken]
+    );
+
+    batch(&control, edits(vec![youtube_output("dQw4w9WgXcQ")])).expect("creates");
+    block_on(control.call(output_call("live", true))).expect("output.start");
+    assert!(
+        seen.lock().expect("lock").iter().any(|s| s == STREAM_KEY),
+        "the signed-in client's key"
+    );
+    drop(block_on(control.call(output_call("live", false))));
+}
+
+/// A grant the credential store refuses never becomes a client, but its two tokens
+/// still reach the hook, since they were exchanged before the store was asked.
+#[test]
+fn the_secret_hook_sees_a_refused_sign_ins_tokens() {
+    let transport = FakeTransport::new();
+    transport.respond(200, EXCHANGE);
+    let seen: Arc<Mutex<Vec<String>>> = Arc::default();
+    let hook = {
+        let seen = Arc::clone(&seen);
+        Arc::new(move |_: SecretKind, secret: &str| {
+            seen.lock().expect("lock").push(secret.to_owned());
+        })
+    };
+    let tokens = MemoryTokenStore::new();
+    let engine = Engine::new().with_youtube(setup(&transport, &tokens).with_secret_hook(hook));
+    let control = connected(&engine);
+    let mut events = control.events();
+    let Some(ActionResult::YoutubeSignIn { url }) =
+        action(&control, Action::YoutubeSignIn).expect("signs in")
+    else {
+        panic!("no consent URL");
+    };
+    let redirect_uri = param(&url, "redirect_uri").expect("redirect_uri");
+    let state = param(&url, "state").expect("state");
+    assert_eq!(statuses(&mut events), vec![YoutubeAuth::SigningIn]);
+    tokens.set_failing(true);
+    redirect(
+        &redirect_uri,
+        &format!("state={state}&code=4%2Ffixture-code"),
+    );
+    assert_eq!(
+        wait_for_status(&mut events, &mut Vec::new()),
+        YoutubeAuth::SignedOut
+    );
+    let seen = seen.lock().expect("lock").clone();
+    assert!(seen.iter().any(|s| s == "1//0gfixture-signed-in-refresh"));
+    assert!(seen.iter().any(|s| s == "ya29.a0AfH6SMfixture-access-1"));
+}
+
+/// Refused sign-ins don't push the signed-in client's access token out of the crash
+/// redaction's slot: their access tokens are kept apart, and the client still uses its
+/// own (#850 review B1).
+#[test]
+fn refused_sign_ins_keep_the_clients_access_token_redacted() {
+    const CLIENT_ACCESS: &str = "ya29.a0AfH6SMfixture-access-2";
+    let second = EXCHANGE.replace("fixture-access-1", "fixture-access-3");
+    let transport = FakeTransport::new();
+    transport
+        .respond(200, REFRESH)
+        .respond(200, BROADCASTS)
+        .respond(200, EXCHANGE)
+        .respond(200, second.as_str());
+    let secrets = jstream_crash::Secrets::new();
+    let tokens = signed_in_store();
+    let engine = Engine::new()
+        .with_youtube(setup(&transport, &tokens).with_secret_hook(secrets.hook(SecretKind::slot)));
+    let control = connected(&engine);
+    query(&control, list_all()).expect("lists");
+    assert!(secrets.is_registered(CLIENT_ACCESS), "the client's token");
+
+    let mut events = control.events();
+    tokens.set_failing(true);
+    for _ in 0..2 {
+        let Some(ActionResult::YoutubeSignIn { url }) =
+            action(&control, Action::YoutubeSignIn).expect("signs in")
+        else {
+            panic!("no consent URL");
+        };
+        let redirect_uri = param(&url, "redirect_uri").expect("redirect_uri");
+        let state = param(&url, "state").expect("state");
+        assert_eq!(statuses(&mut events), vec![YoutubeAuth::SigningIn]);
+        redirect(
+            &redirect_uri,
+            &format!("state={state}&code=4%2Ffixture-code"),
+        );
+        assert_eq!(
+            wait_for_status(&mut events, &mut Vec::new()),
+            YoutubeAuth::SignedIn,
+            "the refused sign-in leaves the account signed in"
+        );
+    }
+    assert!(secrets.is_registered("ya29.a0AfH6SMfixture-access-1"));
+    assert!(secrets.is_registered("ya29.a0AfH6SMfixture-access-3"));
+    assert!(
+        secrets.is_registered(CLIENT_ACCESS),
+        "the client still sends its token, so it stays redacted"
+    );
 }

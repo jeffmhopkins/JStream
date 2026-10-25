@@ -18,6 +18,7 @@ pub(crate) fn filter(id: &str, name: &str, params: Vec<ParamDescriptor>) -> Kind
         version: 1,
         video: true,
         audio: false,
+        max_outset_px: None,
         params,
     }
 }

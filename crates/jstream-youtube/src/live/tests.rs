@@ -679,3 +679,87 @@ fn a_malformed_response_is_reported_without_quoting_it() {
     ));
     assert!(!shown.contains("abcd-leak"), "{shown}");
 }
+
+/// What a recording hook was handed, in order.
+type Seen = Arc<std::sync::Mutex<Vec<(SecretKind, String)>>>;
+
+/// A hook that keeps what it is handed, for the tests.
+fn recording_hook() -> (SecretHook, Seen) {
+    let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let keep = Arc::clone(&seen);
+    let hook: SecretHook = Arc::new(move |kind: SecretKind, secret: &str| {
+        keep.lock().unwrap().push((kind, secret.to_owned()));
+    });
+    (hook, seen)
+}
+
+#[test]
+fn the_secret_hook_sees_every_token_and_stream_key_the_client_gets() {
+    let transport = FakeTransport::new();
+    transport
+        .respond(200, include_str!("../../fixtures/token_exchange.json"))
+        .respond(200, STREAMS);
+    let (hook, seen) = recording_hook();
+    let mut client = LiveClient::new(
+        Arc::new(transport.clone()),
+        oauth(),
+        Secret::new("1//0gold"),
+    )
+    .with_secret_hook(hook);
+    assert_eq!(
+        *seen.lock().unwrap(),
+        [(SecretKind::RefreshToken, "1//0gold".to_owned())],
+        "the refresh token at once"
+    );
+
+    client
+        .stream("UCfixturechannel000000000fixturestream1")
+        .unwrap();
+    assert_eq!(
+        *seen.lock().unwrap(),
+        [
+            (SecretKind::RefreshToken, "1//0gold".to_owned()),
+            (
+                SecretKind::RefreshToken,
+                "1//0gfixture-refresh-token".to_owned()
+            ),
+            (
+                SecretKind::AccessToken,
+                "ya29.a0AfH6SMfixture-access-1".to_owned()
+            ),
+            (SecretKind::StreamKey, "abcd-efgh-ijkl-mnop-qrst".to_owned()),
+        ],
+        "the rotated refresh token and the access token as the client refreshes, then the key"
+    );
+}
+
+#[test]
+fn the_secret_hook_sees_a_grants_tokens_and_a_new_streams_key() {
+    let transport = FakeTransport::new();
+    transport.respond(200, NEW_STREAM);
+    let (hook, seen) = recording_hook();
+    let mut client = signed_in(&transport, vec![Scope::Manage]).with_secret_hook(hook);
+    assert_eq!(
+        *seen.lock().unwrap(),
+        [
+            (SecretKind::RefreshToken, "1//0grefresh".to_owned()),
+            (SecretKind::AccessToken, "ya29.current".to_owned()),
+        ]
+    );
+
+    client.insert_stream(&NewStream::new("Main")).unwrap();
+    assert_eq!(
+        seen.lock().unwrap().last(),
+        Some(&(SecretKind::StreamKey, "wxyz-1234-5678-9abc-defg".to_owned()))
+    );
+}
+
+/// Only a client's access tokens supersede the ones before them: a sign-in's access
+/// token, the refresh token and stream keys are kept for the life of the process (#844).
+#[test]
+fn only_an_access_token_has_a_slot() {
+    assert_eq!(SecretKind::AccessToken.slot(), Some("youtube-access-token"));
+    assert_eq!(SecretKind::SignInAccessToken.slot(), None);
+    assert_eq!(SecretKind::RefreshToken.slot(), None);
+    assert_eq!(SecretKind::StreamKey.slot(), None);
+}

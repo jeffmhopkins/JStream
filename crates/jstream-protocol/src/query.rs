@@ -4,7 +4,7 @@ use crate::audio::{BusInfo, SendInfo, SourceAudio};
 use crate::command::{BlendMode, Crop, Edit, ItemTransform, SceneRole, SourceKind};
 use crate::encoder::{EncoderProfileInfo, EncoderSessionInfo};
 use crate::event::OutputState;
-use crate::filter::FilterChains;
+use crate::filter::{FilterChains, FilterInfo};
 use crate::finite::Finite32;
 use crate::geometry::{Canvas, ItemGeometry, PlacementForm};
 use crate::hotkey::HotkeyBinding;
@@ -48,6 +48,12 @@ pub enum Query {
     /// their own.
     #[serde(rename = "source.list")]
     SourceList,
+    /// Every source's current size (ADR-0022 §4, 0.40): runtime state, so the result
+    /// carries no `rev`. A source drawn at a density reports its own size, the size its
+    /// frames are placed at, not its pixels (ADR-0073). `source.size_changed` reports each
+    /// change after this.
+    #[serde(rename = "source.sizes")]
+    SourceSizes,
     /// Lists one scene's items, in stacking order (the first is at the bottom). Fails with
     /// `not_found` if the scene doesn't exist.
     #[serde(rename = "item.list")]
@@ -212,6 +218,7 @@ impl Query {
             Query::SceneList => "scene.list",
             Query::OutputStatus { .. } => "output.status",
             Query::SourceList => "source.list",
+            Query::SourceSizes => "source.sizes",
             Query::ItemList { .. } => "item.list",
             Query::StateGet => "state.get",
             Query::VideoSnapshot => "video.snapshot",
@@ -490,6 +497,12 @@ pub enum QueryResult {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         hotkeys: Vec<HotkeyBinding>,
     },
+    /// The result of `source.sizes`. Runtime state, so it carries no `rev`.
+    #[serde(rename = "source.sizes")]
+    SourceSizes {
+        /// Every source in the collection, ordered by ID.
+        sources: Vec<SourceSize>,
+    },
     /// The result of `capture.targets`.
     #[serde(rename = "capture.targets")]
     CaptureTargets {
@@ -529,6 +542,7 @@ impl QueryResult {
             QueryResult::YoutubeStats { .. } => "youtube.stats",
             QueryResult::BusList { .. } => "bus.list",
             QueryResult::DeletePlan { .. } => "delete.plan",
+            QueryResult::SourceSizes { .. } => "source.sizes",
             QueryResult::CaptureTargets { .. } => "capture.targets",
             QueryResult::DeviceList { .. } => "device.list",
         }
@@ -586,6 +600,17 @@ pub struct PixelSize {
     pub width: u32,
     /// Height in pixels.
     pub height: u32,
+}
+
+/// One source's current size, in a `source.sizes` result.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct SourceSize {
+    /// The source.
+    pub source_id: SourceId,
+    /// Its current frame's size. Omitted while the source has no video frame: it hasn't
+    /// started, it has no video (an audio-only kind), or it failed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<PixelSize>,
 }
 
 /// One scene in a `scene.list` result.
@@ -690,6 +715,13 @@ pub struct SceneInfo {
     /// when there are none, and for every scene that is not a variant.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub overrides: Vec<ItemOverride>,
+    /// Its filter chains (ADR-0065, since 0.43), which `filter.*` edits with the owner
+    /// `{"type":"scene","scene_id":…}`. They run on the scene's composite. Only the video
+    /// chain holds filters, and a keyframe scene has none of its own, since it shows its
+    /// parent's. Omitted while both are empty, so missing (also from an older server)
+    /// parses as none.
+    #[serde(default, skip_serializing_if = "FilterChains::is_empty")]
+    pub filters: FilterChains,
     /// Its items, in stacking order: the first is at the bottom. Always empty for a
     /// keyframe scene, which shows its parent's.
     pub items: Vec<ItemInfo>,
@@ -731,6 +763,12 @@ pub struct ItemInfo {
     /// was added with.
     #[serde(default, skip_serializing_if = "ItemTransition::is_default")]
     pub transition: ItemTransition,
+    /// Its effects (ADR-0065, since 0.43): a video chain, first filter first, which
+    /// `filter.*` edits with the owner `{"type":"item","item_id":…}`. They run on this
+    /// placement's cropped, fitted box, before its opacity and blend. Omitted while
+    /// empty, so missing (also from an older server) parses as none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effects: Vec<FilterInfo>,
 }
 
 fn opaque() -> Finite32 {

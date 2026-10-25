@@ -331,3 +331,99 @@ fn a_snapshot_mid_fade_mixes_both_scenes() {
     clock.advance(200_000);
     assert_eq!(centre(&control), Some([0, 0xff, 0, 0xff]), "the fade ended");
 }
+
+/// A scene with a scene filter (ADR-0065 §6) is one picture in a transition: it arrives
+/// and leaves as one track however many items it has, and pairs with nothing.
+#[test]
+fn a_scene_with_a_filter_transitions_as_one_picture() {
+    use jstream_protocol::{FilterChain, FilterId, FilterOwner};
+    let (engine, clock) = studio();
+    let control = connected(&engine);
+    let hub = engine.render_hub();
+    batch(
+        &control,
+        edits(vec![
+            add("b", "b2", "blue"),
+            add("b", "b3", "red"),
+            Edit::FilterAdd {
+                owner: FilterOwner::Scene {
+                    scene_id: SceneId::new("b"),
+                },
+                chain: FilterChain::Video,
+                filter_id: FilterId::new("grade"),
+                kind: "sharpen".into(),
+                settings: Settings::default(),
+                enabled: None,
+                index: None,
+            },
+        ]),
+    )
+    .expect("b filtered");
+
+    switch(&control, "b", Some("fade")).expect("to b");
+    assert_eq!(
+        hub.load().shot().transition_tracks(),
+        Some(2),
+        "a1 leaves, and b arrives whole"
+    );
+    clock.advance(400_000);
+    engine.replan();
+    assert_eq!(hub.load().shot().transition_tracks(), None);
+    switch(&control, "a", Some("fade")).expect("back to a");
+    assert_eq!(
+        hub.load().shot().transition_tracks(),
+        Some(2),
+        "b leaves whole, and a1 arrives"
+    );
+}
+
+/// A Move pairs two placements of a source only when their effects match (ADR-0065
+/// §6): `a1` and `b1` both place `red`, and pair until `b1` gets an effect.
+#[test]
+fn a_move_pairs_items_only_when_their_effects_match() {
+    use jstream_protocol::{FilterChain, FilterId, FilterOwner, ItemId};
+    let (engine, clock) = studio();
+    let control = connected(&engine);
+    let hub = engine.render_hub();
+    batch(
+        &control,
+        edits(vec![
+            preset("move", "move", 400),
+            Edit::ItemSetSource {
+                item_id: ItemId::new("b1"),
+                source_id: SourceId::new("red"),
+            },
+        ]),
+    )
+    .expect("b1 places red");
+    switch(&control, "b", Some("move")).expect("to b");
+    assert_eq!(
+        hub.load().shot().transition_tracks(),
+        Some(1),
+        "a1 glides to b1"
+    );
+    clock.advance(400_000);
+    engine.replan();
+
+    batch(
+        &control,
+        edits(vec![Edit::FilterAdd {
+            owner: FilterOwner::Item {
+                item_id: ItemId::new("a1"),
+            },
+            chain: FilterChain::Video,
+            filter_id: FilterId::new("sharp"),
+            kind: "sharpen".into(),
+            settings: Settings::default(),
+            enabled: None,
+            index: None,
+        }]),
+    )
+    .expect("a1 sharpened");
+    switch(&control, "a", Some("move")).expect("back to a");
+    assert_eq!(
+        hub.load().shot().transition_tracks(),
+        Some(2),
+        "b1 leaves and a1 arrives: their effects differ"
+    );
+}
