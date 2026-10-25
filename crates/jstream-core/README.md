@@ -50,7 +50,10 @@ state machine. Contents:
   transport and the `OAuthTokenStore`. `YoutubeSetup::built_in` uses JStream's built-in
   client (`jstream_youtube::BUILT_IN_CLIENT_ID`, ADR-0058), and is `None` while that is
   empty, as it is until the maintainer fills it in; `YoutubeSetup::new` takes another
-  client, for a developer override. It holds one `jstream-youtube` `LiveClient`
+  client, for a developer override. `YoutubeSetup::with_secret_hook` hands the
+  account's client a `jstream_youtube::SecretHook`, which it calls with each token and
+  stream key it gets, a `youtube` output's key included, so the host can redact them
+  from crash reports (#353). It holds one `jstream-youtube` `LiveClient`
   (one account, its refresh token stored under the fixed opaque ID `TOKEN_ACCOUNT`, so
   no email or other personal detail names the credential) and runs the `youtube.*`
   actions and queries with no engine lock held. `youtube.sign_in` asks for the full
@@ -1427,7 +1430,9 @@ token found there at setup signs the engine in.
   stream and that stream's `rtmps://` ingest address and key, then connects to it
   with `connect_rtmp`; the host's publish target and opener are not used. A broadcast
   with no bound stream fails the start with a reason naming `youtube.bind_broadcast`.
-  The key goes only to the connection ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
+  The key goes only to the connection ([R-SEC-001](../../docs/RULES.md#R-SEC-001)),
+  and to the setup's secret hook when the host gives one, for its crash reports'
+  redaction (#353).
 - Once such an output is `active`, its own `jstream-youtube-health` thread reads the
   stream's health every `HEALTH_INTERVAL` (15 s, one quota unit each) and emits
   `youtube.health_changed` on the first reading and whenever the status, rating or

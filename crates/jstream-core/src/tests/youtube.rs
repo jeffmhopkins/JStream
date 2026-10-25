@@ -1233,3 +1233,51 @@ fn a_low_quota_stops_audience_reads() {
     assert_eq!(quota(&control).used, 52);
     block_on(control.call(output_call("live", false))).expect("output.stop");
 }
+
+/// The setup's secret hook gets the stored refresh token, the access token and the key
+/// a `youtube` output publishes with, so a host's crash reports can redact them (#353).
+#[test]
+fn the_secret_hook_sees_the_tokens_and_a_youtube_outputs_key() {
+    let transport = FakeTransport::new();
+    transport
+        .respond(200, REFRESH)
+        .respond(200, BROADCASTS)
+        .respond(200, STREAMS)
+        .respond(200, HEALTH);
+    let seen: Arc<Mutex<Vec<String>>> = Arc::default();
+    let hook = {
+        let seen = Arc::clone(&seen);
+        Arc::new(move |secret: &str| seen.lock().expect("lock").push(secret.to_owned()))
+    };
+    let engine = Engine::new()
+        .with_backends(backends())
+        .with_draw(cpu_draw())
+        .with_youtube(setup(&transport, &signed_in_store()).with_secret_hook(hook));
+    let publish = RecordingPublish::new();
+    engine
+        .youtube()
+        .expect("youtube")
+        .set_connect(Arc::new(move |_: &str, _: &Secret| {
+            Ok(Box::new(publish.clone()) as Box<dyn LivePublish>)
+        }));
+    assert_eq!(
+        *seen.lock().expect("lock"),
+        [STORED],
+        "the stored token at once"
+    );
+
+    let control = connected(&engine);
+    batch(&control, edits(vec![youtube_output("dQw4w9WgXcQ")])).expect("creates");
+    block_on(control.call(output_call("live", true))).expect("output.start");
+    let seen = seen.lock().expect("lock").clone();
+    assert!(
+        seen.iter().any(|s| s == STREAM_KEY),
+        "{} secrets",
+        seen.len()
+    );
+    assert!(
+        seen.iter().any(|s| s.starts_with("ya29.")),
+        "an access token"
+    );
+    drop(block_on(control.call(output_call("live", false))));
+}

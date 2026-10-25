@@ -101,20 +101,20 @@ fn parse(text: &str) -> Result<Client, String> {
 }
 
 /// Gives `engine` YouTube with `client`, calling Google through `transport` and keeping
-/// the account's refresh token in `tokens`.
+/// the account's refresh token in `tokens`. Every token and stream key the account's
+/// client gets is registered with `secrets`, the crash reports' redaction (#353).
 #[cfg(any(windows, test))]
 pub fn set_up(
     engine: Engine,
     client: Client,
     transport: Arc<dyn HttpTransport>,
     tokens: Arc<dyn OAuthTokenStore>,
+    secrets: &jstream_crash::Secrets,
 ) -> Engine {
-    engine.with_youtube(YoutubeSetup::new(
-        client.id,
-        client.secret,
-        transport,
-        tokens,
-    ))
+    engine.with_youtube(
+        YoutubeSetup::new(client.id, client.secret, transport, tokens)
+            .with_secret_hook(secrets.hook()),
+    )
 }
 
 #[cfg(test)]
@@ -237,6 +237,7 @@ mod tests {
             },
             Arc::new(FakeTransport::new()),
             Arc::new(MemoryTokenStore::new()),
+            &jstream_crash::Secrets::new(),
         );
         assert_eq!(auth(&engine).await, YoutubeAuth::SignedOut);
     }

@@ -358,7 +358,10 @@ intercepted connection.
   the new server isn't read with the old one either.
 - OAuth uses PKCE and a `state` check on a one-shot loopback listener.
 - The daemon's and the desktop app's crash reports replace the control token, and every
-  stream key and refresh token their credential stores hold or load, with `***`.
+  stream key and refresh token their credential stores hold or load, with `***`. The
+  daemon's also replace every OAuth access token, rotated refresh token and stream key
+  YouTube hands its client, a `youtube` output's key included, through the YouTube
+  setup's secret hook (#353).
 - `secrets_are_redacted` checks the engine's logs, replies, events and audit lines.
   Further tests check the server's WebSocket and MCP layers, the daemon's RTMP opener and
   its crash reports.
@@ -384,10 +387,6 @@ read the keys in it, and use them to broadcast as the user's channel. The mitiga
 
 A keyring that is locked, or whose unlock prompt is dismissed, fails the call and
 never sends the secret to the file.
-
-**Gaps:** the daemon's and the desktop app's crash reports redact the control token and the keys and refresh
-tokens that pass through their credential stores, but not a YouTube-bound output's key
-or the OAuth access token, which pass through neither (#353).
 
 <a id="vcam"></a>
 ## Virtual camera
@@ -457,7 +456,6 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 | #348 | WASM | ADR-0069's capability classes, grants, `forbidden` error and untrusted-output handling are decided but not built (the CPU and memory limits, the command cap and the event queue are) | Medium |
 | #349 | WGSL | No GPU-hang or device-lost handling | Medium |
 | #351 | CLAP | Shared section naming, and validation of what the host sends back | Medium |
-| #353 | Secrets | Crash reports miss a YouTube-bound key and the access token | Low |
 | #355 | Files | A recording can replace a file created just before its rename | Low |
 | #356 | Virtual camera | A pre-created control mapping keeps its own DACL | Low |
 | #273 | Server | A hung engine hello escapes the handshake deadline | Low |

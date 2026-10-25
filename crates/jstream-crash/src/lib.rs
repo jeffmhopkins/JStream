@@ -86,6 +86,14 @@ impl Secrets {
         }
     }
 
+    /// A closure that registers what it is given, for a client that hands its secrets
+    /// on as it gets them (`jstream_youtube::SecretHook`, #353).
+    #[must_use]
+    pub fn hook(&self) -> Arc<dyn Fn(&str) + Send + Sync> {
+        let secrets = self.clone();
+        Arc::new(move |value: &str| secrets.register(value))
+    }
+
     /// Whether `value` is registered.
     #[must_use]
     pub fn is_registered(&self, value: &str) -> bool {
