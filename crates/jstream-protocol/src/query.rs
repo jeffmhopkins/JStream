@@ -48,6 +48,12 @@ pub enum Query {
     /// their own.
     #[serde(rename = "source.list")]
     SourceList,
+    /// Every source's current size (ADR-0022 §4, 0.40): runtime state, so the result
+    /// carries no `rev`. A source drawn at a density reports its own size, the size its
+    /// frames are placed at, not its pixels (ADR-0073). `source.size_changed` reports each
+    /// change after this.
+    #[serde(rename = "source.sizes")]
+    SourceSizes,
     /// Lists one scene's items, in stacking order (the first is at the bottom). Fails with
     /// `not_found` if the scene doesn't exist.
     #[serde(rename = "item.list")]
@@ -212,6 +218,7 @@ impl Query {
             Query::SceneList => "scene.list",
             Query::OutputStatus { .. } => "output.status",
             Query::SourceList => "source.list",
+            Query::SourceSizes => "source.sizes",
             Query::ItemList { .. } => "item.list",
             Query::StateGet => "state.get",
             Query::VideoSnapshot => "video.snapshot",
@@ -490,6 +497,12 @@ pub enum QueryResult {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         hotkeys: Vec<HotkeyBinding>,
     },
+    /// The result of `source.sizes`. Runtime state, so it carries no `rev`.
+    #[serde(rename = "source.sizes")]
+    SourceSizes {
+        /// Every source in the collection, ordered by ID.
+        sources: Vec<SourceSize>,
+    },
     /// The result of `capture.targets`.
     #[serde(rename = "capture.targets")]
     CaptureTargets {
@@ -529,6 +542,7 @@ impl QueryResult {
             QueryResult::YoutubeStats { .. } => "youtube.stats",
             QueryResult::BusList { .. } => "bus.list",
             QueryResult::DeletePlan { .. } => "delete.plan",
+            QueryResult::SourceSizes { .. } => "source.sizes",
             QueryResult::CaptureTargets { .. } => "capture.targets",
             QueryResult::DeviceList { .. } => "device.list",
         }
@@ -586,6 +600,17 @@ pub struct PixelSize {
     pub width: u32,
     /// Height in pixels.
     pub height: u32,
+}
+
+/// One source's current size, in a `source.sizes` result.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct SourceSize {
+    /// The source.
+    pub source_id: SourceId,
+    /// Its current frame's size. Omitted while the source has no video frame: it hasn't
+    /// started, it has no video (an audio-only kind), or it failed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<PixelSize>,
 }
 
 /// One scene in a `scene.list` result.

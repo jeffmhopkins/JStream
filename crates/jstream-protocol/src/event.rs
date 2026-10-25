@@ -3,9 +3,10 @@
 use crate::audio::{BusMeter, SourceMeter};
 use crate::command::Edit;
 use crate::history::HistoryDirection;
-use crate::id::{ClientId, GestureId, OutputId, PluginId, RequestId, Rev, SceneId};
+use crate::id::{ClientId, GestureId, OutputId, PluginId, RequestId, Rev, SceneId, SourceId};
 use crate::live::LiveOutcome;
 use crate::plugin::{PluginDisabledReason, PluginState};
+use crate::query::PixelSize;
 use crate::transition::TransitionStarted;
 use crate::youtube::{AudienceStatsInfo, HealthIssue, StreamHealth, StreamStatus, YoutubeAuth};
 use schemars::JsonSchema;
@@ -42,6 +43,17 @@ pub enum Event {
         output_id: OutputId,
         /// Its new state.
         state: OutputState,
+    },
+    /// A source's size changed (ADR-0022 §4, 0.40), including when it became known (its
+    /// first frame) or unknown (it stopped, failed, or was deleted). Runtime state, so it
+    /// carries no `rev`. The size is the one `source.sizes` reports.
+    #[serde(rename = "source.size_changed")]
+    SourceSizeChanged {
+        /// The source.
+        source_id: SourceId,
+        /// Its new size. Omitted when it has no video frame now.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        size: Option<PixelSize>,
     },
     /// The scene on program or on preview changed: after a `scene.switch` or a
     /// `studio.set_preview`, or after a batch, undo or redo deleted the scene (it gives
@@ -217,6 +229,7 @@ impl Event {
         match self {
             Event::StateChanged { .. } => Some("state.changed"),
             Event::OutputStateChanged { .. } => Some("output.state_changed"),
+            Event::SourceSizeChanged { .. } => Some("source.size_changed"),
             Event::EventsDropped { .. } => Some("events.dropped"),
             Event::StatsTick { .. } => Some("stats.tick"),
             Event::LiveChanged { .. } => Some("live.changed"),

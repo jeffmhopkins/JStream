@@ -409,8 +409,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the −14 LUFS target (70% along, where the prototype draws it), the three loudness
   readings in its tooltip, its true peak with "safe" or a warning over 0 dBTP, and a
   button that resets the integrated loudness (`audio.reset_loudness`). Its monitor
-  and FX buttons show disabled, since the engine has no monitor output and no master
-  chain yet. Each source gets a row, ordered by name: its meter, fader, a dB field
+  and FX buttons show disabled: the monitor control isn't built yet (MX-05), and the
+  engine has no master chain yet. Each source gets a row, ordered by name: its meter, fader, a dB field
   (the shared `NumberField`), mute and, folded under "Routing", whether its audio is
   on, when it is heard (`always` or `when_shown`) and its send into each bus (on or
   off, and its gain). A nested scene's row has only the routing toggles, since it has
@@ -481,8 +481,8 @@ browser, and `mod.rs` is the component.
   and the canvas size captioned bottom left. Boxes are outlined with
   `jstream-protocol`'s placement formula, so the overlay matches what the compositor
   draws. An item still stored as a 0.3 legacy placement is not drawn: its box depends
-  on the source's runtime size, which the protocol doesn't report yet (ADR-0022's
-  `source.sizes`), and a note top left counts such items. Hidden items are drawn
+  on the source's runtime size, which the UI doesn't read yet (ADR-0022's
+  `source.sizes`, protocol 0.40), and a note top left counts such items. Hidden items are drawn
   dashed, and the box under the pointer gets a light outline.
 - **The preview.** Under the boxes is the program mix, live, while the selected
   scene is the one on program; on another scene the background says the preview
@@ -531,8 +531,8 @@ browser, and `mod.rs` is the component.
   bounds' centre, in 45° steps with Ctrl. A move of several boxes snaps their bounds
   the way one box snaps, unless one of them is rotated.
 - **Crop** on the canvas (Alt on a handle, the crop tool) needs each source's size to
-  turn a dragged edge into source pixels, which the protocol doesn't report yet
-  (ADR-0022's `source.sizes`), so the canvas doesn't crop.
+  turn a dragged edge into source pixels, which the UI doesn't read yet (ADR-0022's
+  `source.sizes`, protocol 0.40), so the canvas doesn't crop.
 - **Snapping.** A moved upright box's edges and centre snap, within 6 screen pixels,
   to the canvas's edges and centre lines and to the other boxes' edges and centres,
   using each box's axis-aligned bounds; the lines it lands on are drawn as guides. An

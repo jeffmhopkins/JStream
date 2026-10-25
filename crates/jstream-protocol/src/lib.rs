@@ -37,8 +37,9 @@ mod version;
 mod youtube;
 
 pub use audio::{
-    AudioFollow, BusInfo, BusMeter, Loudness, MAX_BUSES, MAX_GAIN_DB, MIN_GAIN_DB, SendInfo,
-    SourceAudio, SourceMeter, gain_db_problem,
+    AudioFollow, BusInfo, BusMeter, BusMonitor, Loudness, MAX_BUSES, MAX_GAIN_DB,
+    MAX_MONITOR_DEVICE_LEN, MIN_GAIN_DB, MonitorTap, SendInfo, SourceAudio, SourceMeter,
+    gain_db_problem,
 };
 pub use command::{
     Action, Batch, BlendMode, Command, CommandClass, Crop, Edit, ItemTransform, SceneRole,
@@ -94,7 +95,7 @@ pub use preview::{
 };
 pub use query::{
     CaptureTargetInfo, CaptureTargetKind, DeleteTarget, DeviceInfo, ItemInfo, MasterInfo,
-    PixelSize, Query, QueryResult, SceneInfo, SceneSummary, SourceInfo,
+    PixelSize, Query, QueryResult, SceneInfo, SceneSummary, SourceInfo, SourceSize,
 };
 pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};

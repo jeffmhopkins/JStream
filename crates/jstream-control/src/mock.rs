@@ -11,6 +11,7 @@
 //! stream-key actions, `scene.switch`, `studio.set_preview` and the program and preview
 //! scenes they set (`studio.get`),
 //! `capture.targets` (one made-up primary display, [`MOCK_DISPLAY`]),
+//! `source.sizes` (every source without a size, since the mock makes no frames),
 //! `state.changed`, `studio.changed` and `output.state_changed` events, per-client undo
 //! and redo, and live-value gestures (`live.set`, `live.cancel`, `live.list`,
 //! `ends_gesture`, takeover and expiry). Each [`MockEngine::connect`] opens one client
@@ -41,8 +42,9 @@ use jstream_protocol::{
     MAX_LIVE_VALUES, OutputId, OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PixelSize,
     PlacementForm, ProtocolError, Query, QueryResult, RecordContainer, Reference, RequestId,
     Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, SecretString, Settings,
-    SourceAudio, SourceId, SourceInfo, SourceKind, TransitionPresetId, TransitionStarted,
-    TransitionsInfo, VideoMix, VideoMixId, VideoMixInfo, Welcome, is_live_adjustable,
+    SourceAudio, SourceId, SourceInfo, SourceKind, SourceSize, TransitionPresetId,
+    TransitionStarted, TransitionsInfo, VideoMix, VideoMixId, VideoMixInfo, Welcome,
+    is_live_adjustable,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future;
@@ -1002,6 +1004,18 @@ impl State {
             Query::SourceList => QueryResult::SourceList {
                 rev: self.collection.rev,
                 sources: self.collection.source_infos(),
+            },
+            // The mock makes no frames, so no source has a size.
+            Query::SourceSizes => QueryResult::SourceSizes {
+                sources: self
+                    .collection
+                    .sources
+                    .keys()
+                    .map(|source_id| SourceSize {
+                        source_id: source_id.clone(),
+                        size: None,
+                    })
+                    .collect(),
             },
             Query::ItemList { scene_id } => {
                 let index = self.collection.existing_scene(&scene_id)?;
@@ -3108,6 +3122,22 @@ mod tests {
         assert!(targets[0].primary);
     }
 
+    #[test]
+    fn source_sizes_lists_every_source_without_a_size() {
+        let (_engine, control) = parity_engine();
+        let Ok(QueryResult::SourceSizes { sources }) = query(&*control, Query::SourceSizes) else {
+            panic!("a source.sizes result");
+        };
+        assert!(!sources.is_empty(), "the parity collection has sources");
+        assert!(sources.iter().all(|entry| entry.size.is_none()));
+        assert!(
+            sources
+                .windows(2)
+                .all(|pair| pair[0].source_id < pair[1].source_id),
+            "ordered by ID"
+        );
+    }
+
     fn query(control: &dyn Control, query: Query) -> Result<QueryResult, ControlError> {
         match block_on(control.call(Call::Query { query }))?.result {
             CallResult::Query { result } => Ok(result),
@@ -3414,6 +3444,7 @@ mod tests {
                     name: "Master".into(),
                     gain_db: Finite32::ZERO,
                     muted: false,
+                    monitor: None,
                 }],
                 sends: vec![],
                 master: Default::default(),

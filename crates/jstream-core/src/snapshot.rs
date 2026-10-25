@@ -184,6 +184,11 @@ impl Frame {
         })
     }
 
+    /// The size it is placed at, which `source.sizes` reports (ADR-0073).
+    pub(crate) fn extent(&self) -> Option<FrameSize> {
+        FrameSize::new(self.extent[0], self.extent[1]).ok()
+    }
+
     /// The same frame placed as if it were `extent`: a frame its source drew at a
     /// density ([`jstream_sources::Source::set_density`]).
     pub(crate) fn placed_at(self, extent: FrameSize) -> Self {

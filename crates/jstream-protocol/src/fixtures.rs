@@ -23,8 +23,11 @@ use crate::{
     YoutubeAuth,
 };
 use crate::{AudienceStatsInfo, QuotaInfo, StatsPolling};
-use crate::{AudioFollow, BusId, BusInfo, BusMeter, Loudness, SendInfo, SourceAudio, SourceMeter};
-use crate::{CaptureTargetInfo, CaptureTargetKind, PixelSize};
+use crate::{
+    AudioFollow, BusId, BusInfo, BusMeter, BusMonitor, Loudness, MonitorTap, SendInfo, SourceAudio,
+    SourceMeter,
+};
+use crate::{CaptureTargetInfo, CaptureTargetKind, PixelSize, SourceSize};
 use crate::{Chord, DeviceId, DeviceInfo, HotkeyBinding};
 use crate::{DroppedOverride, ItemOverride, OverrideField};
 use crate::{
@@ -460,6 +463,17 @@ pub(crate) fn edits() -> Vec<Edit> {
             gain_db: Some(db(-3.0)),
             muted: Some(false),
         },
+        Edit::BusSetMonitor {
+            bus_id: BusId::new("bus_vod"),
+            monitor: Some(BusMonitor {
+                device: String::new(),
+                tap: MonitorTap::PreFilters,
+            }),
+        },
+        Edit::BusSetMonitor {
+            bus_id: BusId::master(),
+            monitor: None,
+        },
         Edit::SendSet {
             source_id: SourceId::new("src_mic"),
             bus_id: BusId::new("bus_vod"),
@@ -706,12 +720,17 @@ fn bus_infos() -> Vec<BusInfo> {
             name: "VOD track".into(),
             gain_db: db(0.0),
             muted: false,
+            monitor: Some(BusMonitor {
+                device: "{0.0.0.00000000}.{headphones}".into(),
+                tap: MonitorTap::PostFilters,
+            }),
         },
         BusInfo {
             bus_id: BusId::master(),
             name: "Master".into(),
             gain_db: db(-3.0),
             muted: false,
+            monitor: None,
         },
     ]
 }
@@ -793,6 +812,30 @@ fn encoder_infos() -> Vec<EncoderProfileInfo> {
             profile: EncoderProfile {
                 video: VideoEncoding {
                     hardware: HardwarePreference::Avoid,
+                    ..EncoderProfile::DEFAULT.video
+                },
+                ..EncoderProfile::DEFAULT
+            },
+        },
+        // HEVC and AV1 (0.41), for enhanced RTMP.
+        EncoderProfileInfo {
+            profile_id: EncoderProfileId::new("enc_hevc"),
+            name: "HEVC stream".into(),
+            profile: EncoderProfile {
+                video: VideoEncoding {
+                    codec: VideoCodec::Hevc,
+                    hardware: HardwarePreference::Require,
+                    ..EncoderProfile::DEFAULT.video
+                },
+                ..EncoderProfile::DEFAULT
+            },
+        },
+        EncoderProfileInfo {
+            profile_id: EncoderProfileId::new("enc_av1"),
+            name: "AV1 stream".into(),
+            profile: EncoderProfile {
+                video: VideoEncoding {
+                    codec: VideoCodec::Av1,
                     ..EncoderProfile::DEFAULT.video
                 },
                 ..EncoderProfile::DEFAULT
@@ -1032,6 +1075,7 @@ pub(crate) fn queries() -> Vec<Query> {
         },
         Query::DeviceList,
         Query::YoutubeStats,
+        Query::SourceSizes,
     ]
 }
 
@@ -1576,6 +1620,21 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             rev: Rev(12),
             video_mixes: mix_infos(),
         },
+        QueryResult::SourceSizes {
+            sources: vec![
+                SourceSize {
+                    source_id: SourceId::new("cam"),
+                    size: Some(PixelSize {
+                        width: 1920,
+                        height: 1080,
+                    }),
+                },
+                SourceSize {
+                    source_id: SourceId::new("mic"),
+                    size: None,
+                },
+            ],
+        },
         QueryResult::CaptureTargets {
             targets: vec![
                 CaptureTargetInfo {
@@ -1843,6 +1902,17 @@ pub(crate) fn events() -> Vec<Event> {
     });
     events.push(Event::YoutubeStats {
         stats: audience_stats(),
+    });
+    events.push(Event::SourceSizeChanged {
+        source_id: SourceId::new("window"),
+        size: Some(PixelSize {
+            width: 1280,
+            height: 720,
+        }),
+    });
+    events.push(Event::SourceSizeChanged {
+        source_id: SourceId::new("window"),
+        size: None,
     });
     events.push(Event::YoutubeStats {
         stats: AudienceStatsInfo {

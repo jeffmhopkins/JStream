@@ -31,7 +31,7 @@ pub const ERROR_ACTIVATE: u32 = 4;
 ///
 /// Every field is atomic, so both processes can read and write it at any time, and every
 /// bit pattern (including the OS's zero fill) is a valid value. Each field has one
-/// writer: the engine's control thread, the host, or the mixer thread.
+/// writer: the engine's control thread, the host, or the mixer thread (`reset_seq`).
 ///
 /// **Publishing.** The engine writes the configuration and clears everything else before
 /// storing [`MAGIC`](crate::MAGIC) (release); the host reads the configuration only after
@@ -81,18 +81,13 @@ pub struct Status {
     pub processed: AtomicU64,
     /// Blocks the host skipped: too late to be read, or rewritten while it copied them.
     pub host_skipped: AtomicU64,
-
-    // --- mixer ---
-    /// Blocks the mixer found missing and bypassed with its dry signal.
-    pub mixer_misses: AtomicU64,
-    /// Misses in a row, 0 after a block that arrived. The control thread marks the
-    /// filter degraded when this keeps growing.
-    pub mixer_miss_run: AtomicU64,
+    // The mixer's miss counters are not here: the host could reset them and hide a
+    // degraded filter, so the engine keeps them in its own memory (`MixerMisses`).
 }
 
 // The layout is the contract: any change here is a VERSION bump.
 const _: () = {
-    assert!(size_of::<Status>() == 96);
+    assert!(size_of::<Status>() == 80);
     assert!(align_of::<Status>() == 8);
     assert!(offset_of!(Status, magic) == 0);
     assert!(offset_of!(Status, version) == 4);
@@ -109,6 +104,4 @@ const _: () = {
     assert!(offset_of!(Status, heartbeat) == 56);
     assert!(offset_of!(Status, processed) == 64);
     assert!(offset_of!(Status, host_skipped) == 72);
-    assert!(offset_of!(Status, mixer_misses) == 80);
-    assert!(offset_of!(Status, mixer_miss_run) == 88);
 };

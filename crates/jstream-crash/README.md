@@ -54,6 +54,10 @@ Contents:
 - `Redacting::new(secrets, store)` wraps a `StreamKeyStore` or an `OAuthTokenStore` and
   registers every key or refresh token it stores or loads (not on `is_set`, a failed
   read or an empty slot), before anything could format it (#353).
+- `Secrets::hook()` is a closure that registers what it is handed, for a client that
+  hands its secrets on as it gets them: the daemon gives it to the YouTube setup
+  (`jstream_youtube::SecretHook`), for the access tokens and the stream keys YouTube
+  sends (#353).
 
 Not yet: native crashes (access violations, aborts) write no report; a minidump would
 need its own ADR.
