@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use jstream_media::FrameSize;
 
-use crate::{DeviceId, GpuContext, PlatformError, VideoSurface};
+use crate::{CaptureCursor, CursorCapture, DeviceId, GpuContext, PlatformError, VideoSurface};
 
 /// What to capture.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -24,6 +24,9 @@ pub struct CaptureOptions {
     /// The source the capture is for (its ID in the collection), or `None` for a capture
     /// no source owns.
     pub source: Option<String>,
+    /// How the pointer is captured: drawn into the frames (the default), or sent beside
+    /// them for the consumer to draw.
+    pub cursor: CursorCapture,
 }
 
 impl CaptureOptions {
@@ -31,7 +34,15 @@ impl CaptureOptions {
     pub fn for_source(source: impl Into<String>) -> Self {
         Self {
             source: Some(source.into()),
+            ..Self::default()
         }
+    }
+
+    /// These options with the pointer captured as `cursor` says.
+    #[must_use]
+    pub fn with_cursor(mut self, cursor: CursorCapture) -> Self {
+        self.cursor = cursor;
+        self
     }
 }
 
@@ -129,6 +140,18 @@ pub trait CaptureStream: Send {
 
     /// Counters since the capture started.
     fn stats(&self) -> CaptureStats;
+
+    /// The pointer as of the newest [`latest`](CaptureStream::latest) call: where it is
+    /// over that frame and what it looks like, when the capture was started with
+    /// [`CursorCapture::Metadata`] and the backend sends it. It can move while the screen
+    /// doesn't, so a `latest` that returns no frame still updates it. The default,
+    /// [`CaptureCursor::NotSent`], is for a stream that draws the pointer into its frames
+    /// or doesn't capture it.
+    ///
+    /// Must not block, as `latest` (R-RT-002).
+    fn cursor(&self) -> CaptureCursor {
+        CaptureCursor::NotSent
+    }
 }
 
 /// A capture stream's counters, reported in `stats.tick`.

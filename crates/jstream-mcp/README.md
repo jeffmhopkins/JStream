@@ -17,7 +17,8 @@ depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
 Protocol ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)), except YouTube's account
-features, which are for people, through the UI (ADR-0058 §3). It is written against
+features, which are for people, through the UI (ADR-0058 §3), and installing and
+granting plugins (ADR-0069 G1). It is written against
 `dyn Control` and `jstream-protocol` only, never the engine
 ([R-ARCH-003](../../docs/RULES.md#R-ARCH-003)): the host hands it a session, in process
 or over the WebSocket API. Layer 3: it builds on `jstream-control` (layer 2) and needs no
@@ -29,14 +30,14 @@ Contents (a first cut; [Design](#design) explains the choices):
   serves. A `video.snapshot` result leads with an image content block, the only place
   its PNG appears.
 - **Tools** (`tools.rs`): the tool table, generated from `jstream_protocol::json_schema()`,
-  less the people-only `youtube.*` ops (`PEOPLE_ONLY`), each with its MCP annotations
+  less the people-only `youtube.*` and `plugin.*` ops (`PEOPLE_ONLY`), each with its MCP annotations
   (`OPEN_WORLD` names the group tools that reach outside JStream, `output` and `source`;
   `batch`, which carries their edits, is open-world too), and the decoding of tool
   arguments into protocol calls, which refuses an output edit with a `youtube` target.
 - **Events** (`events.rs`): the `events` tool's feed, one event subscription pumped into
   a bounded, numbered buffer, beside the newest `stats.tick` and `meters.tick`; a
   `live.changed` may be merged into an unread one of its gesture, and `youtube.*`
-  events are dropped.
+  and `plugin.*` events are dropped.
 - **JSON-RPC** (`jsonrpc.rs`): parsing one message and building replies.
 - **stdio transport** (`stdio.rs`): `serve_stdio`, newline-delimited messages over any
   `BufRead`/`Write` pair.
@@ -63,14 +64,17 @@ change here, and a new noun becomes a new tool. The generated list is in the sna
 below; its shape is the following. The protocol's `youtube.*` ops get no tool, and a
 call naming one is an unknown op, so none reaches the engine: YouTube is for people,
 through the UI ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md) §3).
+So are the `plugin.*` ops (install, grant, re-enable) and `plugin.state_changed`: only a
+person installs or grants a plugin (ADR-0069 G1), so an agent can't hand its access to
+code that keeps running after the conversation.
 For the same reason an `output.create` or
 `output.set_target` with a `youtube { broadcast_id }` target, in a group tool or in
 `batch`, is refused with `invalid_argument` before it is sent (a `generic` RTMP(S)
-target stays open to agents), and the `events` feed drops `youtube.*` events. `describe_api` still returns the whole schema, YouTube included.
+target stays open to agents), and the `events` feed drops `youtube.*` and `plugin.*` events. `describe_api` still returns the whole schema, YouTube and plugins included.
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `history`, `hotkey`, `item`, `kind`, `live`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio`, `video`, `video_mix` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
+| one per noun (`audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pairing`, `preview`, `privacy`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `video`, `video_mix` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
 | `batch` | `edits`, `expected_rev`, `idempotency_key`, `ends_gesture`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |
@@ -243,8 +247,8 @@ event's, in place, when no read has returned that event yet, only `live.changed`
 follow it, and none of those sets a parameter the newer one sets. The merged event keeps
 its `seq`, so the numbers stay contiguous, `dropped` stays exact, nothing a reader has
 seen changes, and every value keeps its order. An unread drag holds one buffered event.
-`youtube.*` events are dropped as they arrive and take no `seq`: YouTube is for people
-(ADR-0058 §3). A read drains
+`youtube.*` and `plugin.*` events are dropped as they arrive and take no `seq`: YouTube
+and plugins are for people (ADR-0058 §3, ADR-0069). A read drains
 the subscription first, under the same lock, so it sees every event already delivered,
 then returns at most `PAGE_SIZE` events after `after`:
 

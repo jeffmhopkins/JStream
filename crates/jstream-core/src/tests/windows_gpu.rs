@@ -158,12 +158,19 @@ fn capture_targets_name_what_wgc_captures() {
     let capture = CaptureBackends {
         cpu: Arc::new(WgcCapture::new()),
         gpu: None,
+        devices: Arc::new(FakeVideoDevices::new(FakeClock::new(Timebase::MILLIS))),
+        codecs: Arc::new(FakeCodecs),
     };
     for spec in [
         CaptureSpec::Display(Some(display.target.clone())),
         CaptureSpec::Window(Some(window.target.clone())),
     ] {
-        let mut stream = start_capture(&capture, &spec).expect("the capture starts");
+        let key = crate::snapshot::CaptureKey {
+            spec: spec.clone(),
+            source: None,
+            show_cursor: true,
+        };
+        let mut stream = start_capture(&capture, &key).expect("the capture starts");
         let deadline = Instant::now() + Duration::from_secs(5);
         let frame = loop {
             match stream.latest() {

@@ -66,7 +66,8 @@ mod set {
     /// starts later isn't picked up until the next one.
     ///
     /// The engine's [`Backends`] also needs GPU interop and media-file decoders, which
-    /// this crate doesn't have yet; [`into_backends`](Self::into_backends) takes them.
+    /// [`into_backends`](Self::into_backends) takes from the host: `LinuxGpu` is this
+    /// crate's GPU interop, and it has no media-file decoders yet.
     ///
     /// [`audio_backend`]: Self::audio_backend
     /// [`pipewire_unavailable`]: Self::pipewire_unavailable

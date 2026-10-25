@@ -24,8 +24,8 @@
 //!   scene and source references in a source's or its filters' settings) have no cycle.
 //! - The canvas is at least 1×1 and at most [`MAX_CANVAS_EDGE`] on each side.
 //! - Every item's placement is a legacy transform or a valid geometry: positive size, a
-//!   positive perspective if any, and (until the compositor draws 3D) neutral tilt, turn,
-//!   depth and perspective.
+//!   positive perspective if any, and finite corners. Any 3D the compositor can draw is
+//!   valid (protocol 0.34, `ItemGeometry::check_drawable`).
 //! - Every RTMP output's URL is a valid `rtmp://` or `rtmps://` server URL that carries
 //!   no credential. Stream keys are never here (R-SEC-001): they live in the OS
 //!   credential store, outside the collection.
@@ -36,6 +36,11 @@
 //! - Every item's opacity is in [0, 1], and its blend mode is one the compositor draws
 //!   (`normal` so far). Its `effects[]` is empty: per-placement effects are reserved
 //!   (ADR-0023 §1), and [`Effect`] has no values yet.
+//! - There is at least one transition preset, and the default names one of them. Every
+//!   preset's kind is a transition kind the graph's kinds describe, with exactly its
+//!   parameters, and a duration of at most [`MAX_DURATION_MS`]. Every scene's
+//!   `transition_in` and `transition_out` name existing presets, and every item's
+//!   transition settings are valid (ADR-0029).
 //! - A source has audio settings exactly when it is an audio source: its kind produces
 //!   audio, or it is a `scene` source (ADR-0028). A `scene` source's fader is 0 dB and
 //!   unmuted.
@@ -45,17 +50,24 @@
 //!   exists. Sends only run from sources into buses, so the audio graph has no cycle.
 //! - Every hotkey binding's chord is valid, its action can be bound, and every object
 //!   its action names exists (ADR-0024 §5, ADR-0040 §3).
+//! - Folder and label IDs are non-empty and unique within their kind. Every scene's
+//!   folder and every folder's parent exists, and no folder sits inside itself. Every
+//!   label a source carries exists (ADR-0024 §3 and §4).
 //!
 //! The structs have private fields so that later additions (the full 3D transform,
 //! chains on buses and outputs) don't break callers.
 
+#[cfg(doc)]
+use jstream_protocol::MAX_DURATION_MS;
 use jstream_protocol::{
-    Action, BlendMode, BusId, Canvas, Chord, Crop, EncoderProfile, EncoderProfileId, FilterChain,
-    FilterId, Finite32, ItemGeometry, ItemId, ItemTransform, KindDescriptor, OutputId, OutputKind,
-    PlacementForm, Rev, SceneId, SceneRole, Settings, SourceAudio, SourceId, SourceKind,
-    VideoMix as MixSpec, VideoMixId,
+    Action, BlendMode, BusId, Canvas, Chord, Crop, Easing, EncoderProfile, EncoderProfileId,
+    FilterChain, FilterId, Finite32, FolderId, INITIAL_PRESET, ItemGeometry, ItemId, ItemTransform,
+    ItemTransition, KindDescriptor, LabelId, OutputId, OutputKind, PlacementForm, Rev, SceneId,
+    SceneMeta, SceneRole, Settings, SourceAudio, SourceId, SourceKind, TransitionPresetId,
+    TransitionPresetInfo, TransitionsInfo, VideoMix as MixSpec, VideoMixId,
+    builtin_transition_kinds, initial_preset,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub use jstream_protocol::MAX_CHAIN_FILTERS;
 
@@ -63,18 +75,32 @@ pub use jstream_protocol::MAX_CHAIN_FILTERS;
 ///
 /// Starts empty at rev 0. Each successful [`Graph::apply`](crate::Graph::apply) changes
 /// the [`State`] and increments the revision by exactly one. The kinds are not
-/// collection state: the engine supplies them, and `builtin` sources are validated
-/// against them.
-#[derive(Clone, Debug, Default, PartialEq)]
+/// collection state: the engine supplies them, and `builtin` sources and transition
+/// presets are validated against them.
+#[derive(Clone, Debug, PartialEq)]
 pub struct Graph {
     pub(crate) rev: Rev,
     pub(crate) state: State,
     pub(crate) kinds: BTreeMap<String, KindDescriptor>,
 }
 
+impl Default for Graph {
+    fn default() -> Self {
+        Graph {
+            rev: Rev::default(),
+            state: State::default(),
+            kinds: builtin_transition_kinds()
+                .into_iter()
+                .map(|k| (k.kind_id.clone(), k))
+                .collect(),
+        }
+    }
+}
+
 impl Graph {
-    /// An empty graph at rev 0 that describes no kinds, so it can hold only `scene`
-    /// sources until [`Graph::with_kinds`] adds some.
+    /// An empty graph at rev 0 that describes only the built-in transition kinds
+    /// (`cut`, `fade`, `move`), so it can hold only `scene` sources until
+    /// [`Graph::with_kinds`] adds source kinds.
     pub fn new() -> Self {
         Self::default()
     }
@@ -87,7 +113,7 @@ impl Graph {
         self
     }
 
-    /// Every kind this graph can create sources of, ordered by ID.
+    /// Every kind this graph can create sources or presets of, ordered by ID.
     pub fn kinds(&self) -> impl ExactSizeIterator<Item = &KindDescriptor> {
         self.kinds.values()
     }
@@ -124,6 +150,7 @@ pub struct State {
     pub(crate) scenes: Vec<Scene>,
     pub(crate) outputs: BTreeMap<OutputId, Output>,
     pub(crate) encoders: BTreeMap<EncoderProfileId, Encoder>,
+    pub(crate) transitions: Transitions,
     pub(crate) video_mixes: BTreeMap<VideoMixId, VideoMix>,
     /// The master bus among them.
     pub(crate) buses: BTreeMap<BusId, Bus>,
@@ -133,11 +160,15 @@ pub struct State {
     /// The master stage's chains (ADR-0027 §1).
     pub(crate) master: Chains,
     pub(crate) hotkeys: BTreeMap<Chord, Action>,
+    /// In folder order.
+    pub(crate) folders: Vec<Folder>,
+    /// In label order.
+    pub(crate) labels: Vec<Label>,
 }
 
 impl Default for State {
-    /// An empty collection: the default canvas, the master bus, and a master stage
-    /// without filters.
+    /// An empty collection: the default canvas, the master bus, a master stage without
+    /// filters, and the one `cut` transition preset.
     fn default() -> Self {
         let master_bus = Bus::new(BusId::master(), MASTER_NAME.to_owned());
         Self {
@@ -146,11 +177,14 @@ impl Default for State {
             scenes: Vec::new(),
             outputs: BTreeMap::new(),
             encoders: BTreeMap::new(),
+            transitions: Transitions::default(),
             video_mixes: BTreeMap::new(),
             buses: BTreeMap::from([(master_bus.id.clone(), master_bus)]),
             sends: BTreeMap::new(),
             master: Chains::default(),
             hotkeys: BTreeMap::new(),
+            folders: Vec::new(),
+            labels: Vec::new(),
         }
     }
 }
@@ -225,6 +259,29 @@ impl State {
         self.encoders.get(id)
     }
 
+    /// Every transition preset, ordered by ID.
+    pub fn presets(&self) -> impl ExactSizeIterator<Item = &Preset> {
+        self.transitions.presets.values()
+    }
+
+    /// The transition preset with this ID.
+    pub fn preset(&self, id: &TransitionPresetId) -> Option<&Preset> {
+        self.transitions.presets.get(id)
+    }
+
+    /// The default transition preset's ID. It always names a preset.
+    pub fn default_preset(&self) -> &TransitionPresetId {
+        &self.transitions.default
+    }
+
+    /// The presets and the default, as `state.get` reports them.
+    pub fn transitions_info(&self) -> TransitionsInfo {
+        TransitionsInfo {
+            presets: self.presets().map(Preset::to_info).collect(),
+            default: self.transitions.default.clone(),
+        }
+    }
+
     /// The encoding `output` uses: its profile's, or the engine's default when it has
     /// none. `None` for an output not in the collection.
     pub fn encoding_of(&self, output: &OutputId) -> Option<EncoderProfile> {
@@ -277,6 +334,26 @@ impl State {
         self.hotkeys.get(chord)
     }
 
+    /// Every folder of the scene list, in folder order.
+    pub fn folders(&self) -> &[Folder] {
+        &self.folders
+    }
+
+    /// The folder with this ID.
+    pub fn folder(&self, id: &FolderId) -> Option<&Folder> {
+        self.folders.iter().find(|f| &f.id == id)
+    }
+
+    /// Every label, in label order.
+    pub fn labels(&self) -> &[Label] {
+        &self.labels
+    }
+
+    /// The label with this ID.
+    pub fn label(&self, id: &LabelId) -> Option<&Label> {
+        self.labels.iter().find(|l| &l.id == id)
+    }
+
     pub(crate) fn scene_index(&self, id: &SceneId) -> Option<usize> {
         self.scenes.iter().position(|s| &s.id == id)
     }
@@ -301,6 +378,8 @@ pub struct Source {
     pub(crate) filters: Chains,
     /// Set exactly for an audio source.
     pub(crate) audio: Option<SourceAudio>,
+    pub(crate) labels: BTreeSet<LabelId>,
+    pub(crate) favourite: bool,
 }
 
 impl Source {
@@ -335,6 +414,17 @@ impl Source {
     /// a `scene` source.
     pub fn audio(&self) -> Option<&SourceAudio> {
         self.audio.as_ref()
+    }
+
+    /// The labels it carries, ordered by ID (ADR-0024 §4). Every item placing it shares
+    /// them.
+    pub fn labels(&self) -> &BTreeSet<LabelId> {
+        &self.labels
+    }
+
+    /// Whether it is a favourite.
+    pub fn favourite(&self) -> bool {
+        self.favourite
     }
 
     /// Its filter chains (ADR-0026).
@@ -420,12 +510,100 @@ impl Filter {
     }
 }
 
+/// The collection's transition presets and its default (ADR-0029).
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Transitions {
+    pub(crate) presets: BTreeMap<TransitionPresetId, Preset>,
+    pub(crate) default: TransitionPresetId,
+}
+
+impl Default for Transitions {
+    /// What a new collection starts with: the one `cut` preset, as its default.
+    fn default() -> Self {
+        let preset = Preset::from_info(initial_preset());
+        Transitions {
+            presets: [(preset.id.clone(), preset)].into_iter().collect(),
+            default: TransitionPresetId::new(INITIAL_PRESET),
+        }
+    }
+}
+
+/// One transition preset: which kind of transition a switch runs, and its timing.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Preset {
+    pub(crate) id: TransitionPresetId,
+    pub(crate) name: String,
+    pub(crate) kind: String,
+    pub(crate) duration_ms: u32,
+    pub(crate) easing: Easing,
+    pub(crate) settings: Settings,
+}
+
+impl Preset {
+    /// Its ID.
+    pub fn id(&self) -> &TransitionPresetId {
+        &self.id
+    }
+
+    /// Its display name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Its transition kind's ID (`cut`, `fade`, `move`).
+    pub fn kind(&self) -> &str {
+        &self.kind
+    }
+
+    /// How long one item takes, in milliseconds.
+    pub fn duration_ms(&self) -> u32 {
+        self.duration_ms
+    }
+
+    /// The curve its items follow unless they set their own.
+    pub fn easing(&self) -> Easing {
+        self.easing
+    }
+
+    /// Its kind's settings: every parameter of the kind.
+    pub fn settings(&self) -> &Settings {
+        &self.settings
+    }
+
+    /// As `state.get` reports it.
+    pub fn to_info(&self) -> TransitionPresetInfo {
+        TransitionPresetInfo {
+            preset_id: self.id.clone(),
+            name: self.name.clone(),
+            kind: self.kind.clone(),
+            duration_ms: self.duration_ms,
+            easing: self.easing,
+            settings: self.settings.clone(),
+        }
+    }
+
+    pub(crate) fn from_info(info: TransitionPresetInfo) -> Self {
+        Preset {
+            id: info.preset_id,
+            name: info.name,
+            kind: info.kind,
+            duration_ms: info.duration_ms,
+            easing: info.easing,
+            settings: info.settings,
+        }
+    }
+}
+
 /// A scene: a stack of items. A group is a scene too, with the role `group`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Scene {
     pub(crate) id: SceneId,
     pub(crate) name: String,
     pub(crate) role: SceneRole,
+    pub(crate) transition_in: Option<TransitionPresetId>,
+    pub(crate) transition_out: Option<TransitionPresetId>,
+    pub(crate) folder: Option<FolderId>,
+    pub(crate) meta: SceneMeta,
     pub(crate) items: Vec<Item>,
 }
 
@@ -445,9 +623,85 @@ impl Scene {
         self.role
     }
 
+    /// The preset a switch into it uses, unless the switch names one.
+    pub fn transition_in(&self) -> Option<&TransitionPresetId> {
+        self.transition_in.as_ref()
+    }
+
+    /// The preset a switch out of it uses, unless the switch or the next scene names one.
+    pub fn transition_out(&self) -> Option<&TransitionPresetId> {
+        self.transition_out.as_ref()
+    }
+
+    /// The folder it is filed in, if any. Folders change no engine behaviour.
+    pub fn folder(&self) -> Option<&FolderId> {
+        self.folder.as_ref()
+    }
+
+    /// Its organisation metadata: icon, colour, favourite and multiview flag.
+    pub fn meta(&self) -> &SceneMeta {
+        &self.meta
+    }
+
     /// Its items in stacking order: the first is at the bottom.
     pub fn items(&self) -> &[Item] {
         &self.items
+    }
+}
+
+/// One folder of the scene list (ADR-0024 §3): for organising only.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Folder {
+    pub(crate) id: FolderId,
+    pub(crate) name: String,
+    pub(crate) parent: Option<FolderId>,
+}
+
+impl Folder {
+    /// Its ID.
+    pub fn id(&self) -> &FolderId {
+        &self.id
+    }
+
+    /// Its display name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// The folder it sits in, or `None` at the top level.
+    pub fn parent(&self) -> Option<&FolderId> {
+        self.parent.as_ref()
+    }
+}
+
+/// One label that sources carry (ADR-0024 §4).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Label {
+    pub(crate) id: LabelId,
+    pub(crate) name: String,
+    pub(crate) color: String,
+    pub(crate) icon: Option<String>,
+}
+
+impl Label {
+    /// Its ID.
+    pub fn id(&self) -> &LabelId {
+        &self.id
+    }
+
+    /// Its display name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Its colour, as `#rrggbb`.
+    pub fn color(&self) -> &str {
+        &self.color
+    }
+
+    /// Its icon name, if any.
+    pub fn icon(&self) -> Option<&str> {
+        self.icon.as_deref()
     }
 }
 
@@ -483,6 +737,7 @@ pub struct Item {
     pub(crate) opacity: Finite32,
     pub(crate) blend: BlendMode,
     pub(crate) effects: Vec<Effect>,
+    pub(crate) transition: ItemTransition,
 }
 
 impl Item {
@@ -525,6 +780,11 @@ impl Item {
     /// (ADR-0023 §1).
     pub fn effects(&self) -> &[Effect] {
         &self.effects
+    }
+
+    /// Its transition settings (ADR-0029 §6).
+    pub fn transition(&self) -> &ItemTransition {
+        &self.transition
     }
 }
 
@@ -580,6 +840,13 @@ impl Output {
     /// The video mix it shows, or `None` for the program at the engine's canvas size.
     pub fn video_mix(&self) -> Option<&VideoMixId> {
         self.video_mix.as_ref()
+    }
+
+    /// Whether its own video filter chain has any filters. Such an output gets its own
+    /// render pass and encoder session (ADR-0027 §3). Outputs carry no video chain
+    /// until filters land, so this is `false` for every output.
+    pub fn has_video_chain(&self) -> bool {
+        false
     }
 }
 

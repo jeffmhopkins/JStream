@@ -319,6 +319,7 @@ mod tests {
     fn a_binding_reads_back_its_action_and_tolerates_unknown_ones() {
         let switch = Action::SceneSwitch {
             scene_id: SceneId::new("intro"),
+            preset_id: None,
         };
         let binding = HotkeyBinding::new(Chord::new("F1"), &switch);
         assert_eq!(

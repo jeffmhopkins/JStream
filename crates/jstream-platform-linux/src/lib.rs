@@ -1,18 +1,20 @@
-//! Linux platform backends: the implementations of the `jstream-platform` traits on Linux,
-//! as ADR-0060 lays them out. It has the `CLOCK_MONOTONIC` media clock
-//! (`MonotonicClock`), session and support-tier detection (`Session`), display and window
-//! capture through the ScreenCast portal and a PipeWire video stream (`PortalCapture`, on
-//! the crate's own minimal D-Bus client), webcams and capture cards through V4L2
-//! (`V4l2Devices`), run-time loading of libpipewire (`PipeWire`) with audio input, output
-//! and loopback through it (`PipeWireAudio`), ALSA audio input and output as ADR-0060 §4's
-//! fallback (`AlsaAudio`, libasound loaded at run time), libva, VA-API H.264 encoding
-//! from CPU frames behind `VaapiCodecs`, Cisco's OpenH264 binary as the software H.264
-//! encoder, downloaded only on the user's request and checked against its pin
-//! (`OpenH264Store`, `OpenH264Encoder`, ADR-0061), and AAC encoding on JStream's own
-//! AAC-LC encoder (`RustAacEncoder`, feature `aac-encoder`), which `VaapiCodecs` opens.
+//! Linux platform backends: the implementations of the `jstream-platform` traits on
+//! Linux, as ADR-0060 lays them out. It has the `CLOCK_MONOTONIC` media clock
+//! (`MonotonicClock`), session and support-tier detection (`Session`), display and
+//! window capture through the ScreenCast portal and a PipeWire video stream
+//! (`PortalCapture`, on the crate's own minimal D-Bus client), webcams and capture
+//! cards through V4L2 (`V4l2Devices`), the GPU interop on Vulkan that imports the
+//! stream's DMA-BUF frames into the engine's device (`LinuxGpu`), run-time loading of
+//! libpipewire (`PipeWire`) with audio input, output and loopback through it
+//! (`PipeWireAudio`), ALSA audio input and output as ADR-0060 §4's fallback
+//! (`AlsaAudio`, libasound loaded at run time), libva, VA-API H.264 encoding from CPU
+//! frames behind `VaapiCodecs`, Cisco's OpenH264 binary as the software H.264 encoder,
+//! downloaded only on the user's request and checked against its pin (`OpenH264Store`,
+//! `OpenH264Encoder`, ADR-0061), and AAC encoding on JStream's own AAC-LC encoder
+//! (`RustAacEncoder`, feature `aac-encoder`), which `VaapiCodecs` opens.
 //! `LinuxBackends` builds them together, choosing PipeWire or ALSA as ADR-0060 §4 says
-//! and pairing webcams with that backend's microphones (`PairedAudio`). Layer 2, and one
-//! of the crates allowed `unsafe` (R-UNSAFE-001): every system call is wrapped here
+//! and pairing webcams with that backend's microphones (`PairedAudio`). Layer 2, and
+//! one of the crates allowed `unsafe` (R-UNSAFE-001): every system call is wrapped here
 //! behind safe APIs.
 //!
 //! System libraries are loaded with `dlopen` when first needed, never linked, so the
@@ -33,6 +35,8 @@ mod codec;
 mod dbus;
 #[cfg(target_os = "linux")]
 mod dl;
+#[cfg(target_os = "linux")]
+mod gpu;
 #[cfg(target_os = "linux")]
 mod openh264;
 #[cfg(any(target_os = "linux", test))]
@@ -58,6 +62,8 @@ pub use clock::{hns_from_timespec, timebase};
 #[cfg(target_os = "linux")]
 pub use codec::VaapiCodecs;
 pub use codec::choose_encoder;
+#[cfg(target_os = "linux")]
+pub use gpu::LinuxGpu;
 #[cfg(target_os = "linux")]
 pub use openh264::{
     Fetch, HttpsFetch, MAX_DOWNLOAD_BYTES, OPENH264_COMPONENT, OPENH264_ENCODER_NAME,

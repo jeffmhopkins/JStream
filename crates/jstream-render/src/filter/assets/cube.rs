@@ -13,7 +13,8 @@ pub(crate) const MIN_SIZE: usize = 2;
 
 /// Why a lookup table could not be read.
 #[derive(Clone, Debug, PartialEq, thiserror::Error)]
-pub(crate) enum LutError {
+#[non_exhaustive]
+pub enum LutError {
     /// A `.cube` file declares a 1D table (`LUT_1D_SIZE`); only 3D tables are applied.
     #[error("line {line}: 1D LUTs are not supported, only LUT_3D_SIZE")]
     OneDimensional {
@@ -69,14 +70,14 @@ pub(crate) enum LutError {
 /// A 3D lookup table over the unit cube: `size³` RGB outputs, red varying fastest, then
 /// green, then blue (the `.cube` order).
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct Lut {
+pub struct Lut {
     size: usize,
     data: Vec<[f32; 3]>,
 }
 
 impl Lut {
     /// Points per side.
-    pub(crate) fn size(&self) -> usize {
+    pub fn size(&self) -> usize {
         self.size
     }
 
@@ -86,6 +87,7 @@ impl Lut {
     }
 
     /// The identity table with `size` points per side.
+    #[cfg(test)]
     pub(crate) fn identity(size: usize) -> Self {
         Self::from_fn(size, |rgb| rgb)
     }
@@ -108,7 +110,7 @@ impl Lut {
     /// `DOMAIN_MIN`, `DOMAIN_MAX`, `LUT_3D_INPUT_RANGE`, other keywords ignored, then
     /// `size³` rows of three numbers. A domain other than `0..1` is resampled onto
     /// `0..1`, where input outside the domain clamps to its edge.
-    pub(crate) fn parse_cube(text: &str) -> Result<Self, LutError> {
+    pub fn parse_cube(text: &str) -> Result<Self, LutError> {
         let mut size = None;
         let mut min = [0.0f32; 3];
         let mut max = [1.0f32; 3];
@@ -197,7 +199,7 @@ impl Lut {
     /// of `k * k` tiles of `k² x k²` pixels (512x512 for 64 points, `k` = 8), blue
     /// selecting the tile left to right then top to bottom, red along x and green along y
     /// inside it. Alpha is ignored. `k` is 2 to 8.
-    pub(crate) fn from_tiled_rgba8(width: u32, height: u32, rgba: &[u8]) -> Result<Self, LutError> {
+    pub fn from_tiled_rgba8(width: u32, height: u32, rgba: &[u8]) -> Result<Self, LutError> {
         let refused = || LutError::Tiled {
             width,
             height,

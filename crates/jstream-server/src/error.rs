@@ -29,6 +29,10 @@ pub enum ServerError {
         /// The [`ServerConfig`](crate::ServerConfig) field.
         field: &'static str,
     },
+    /// The configured liveness timeout is no longer than the ping interval, so an idle
+    /// client that answers every ping would still be closed.
+    #[error("invalid server config: `liveness_timeout` must be longer than `ping_interval`")]
+    LivenessTimeout,
     /// The configured UI directory is missing or isn't a directory.
     #[error("unusable UI directory `{}`: {source}", dir.display())]
     UiDir {

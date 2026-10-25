@@ -25,10 +25,11 @@ use crate::MonotonicClock;
 
 /// How the frames of the opened format become surfaces.
 pub(crate) enum Deliver {
-    /// Converted or copied into an engine frame; rows `stride` bytes apart.
+    /// Converted or copied into an engine frame; each buffer plane's rows `strides[i]`
+    /// bytes apart.
     Raw {
         encoding: CaptureEncoding,
-        stride: usize,
+        strides: Vec<usize>,
     },
     /// Handed to the engine's decoder.
     Decode(Box<dyn CaptureDecoder>),
@@ -220,12 +221,13 @@ fn frame(
     shared: &Shared,
 ) -> Option<VideoSurface> {
     shared.captured.fetch_add(1, Ordering::Relaxed);
-    if filled.flags & BUF_FLAG_ERROR != 0 || filled.bytes.is_empty() {
+    let first = filled.planes.first().copied().unwrap_or_default();
+    if filled.flags & BUF_FLAG_ERROR != 0 || first.is_empty() {
         return None;
     }
     let pts = pts(filled.flags, filled.timestamp, clock.now());
     match deliver {
-        Deliver::Raw { encoding, stride } => {
+        Deliver::Raw { encoding, strides } => {
             let info = VideoFrameInfo {
                 size,
                 // Set from the encoding.
@@ -233,14 +235,14 @@ fn frame(
                 color,
                 pts,
             };
-            raw_frame(*encoding, filled.bytes, *stride, info)
+            raw_frame(*encoding, &filled.planes, strides, info)
                 .ok()
                 .map(VideoSurface::Cpu)
         }
         Deliver::Decode(decoder) => {
             let decoded = decoder.decode(&CompressedFrame {
                 encoding: CaptureEncoding::Mjpeg,
-                data: filled.bytes,
+                data: first,
                 size,
                 pts,
             });
@@ -335,7 +337,7 @@ mod tests {
             index: 0,
             flags,
             timestamp,
-            bytes,
+            planes: vec![bytes],
         }
     }
 
@@ -347,7 +349,7 @@ mod tests {
         let color = ColorInfo::default();
         let mut raw = Deliver::Raw {
             encoding: CaptureEncoding::Yuy2,
-            stride: 8,
+            strides: vec![8],
         };
         // A monotonic timestamp from just now is the frame's time.
         let now = clock.now().ticks();
@@ -421,5 +423,38 @@ mod tests {
         assert_eq!(decoded.info().size, size);
         assert_eq!(shared.undecodable.load(Ordering::Relaxed), 1);
         assert_eq!(shared.captured.load(Ordering::Relaxed), 7);
+    }
+
+    /// A multi-planar NV12M buffer (luma and chroma in separate buffer planes) becomes
+    /// one NV12 frame; one missing its chroma plane is dropped.
+    #[test]
+    fn multi_planar_buffers_become_frames() {
+        let clock = MonotonicClock::new().expect("clock");
+        let shared = Shared::default();
+        let size = FrameSize::new(4, 2).expect("size");
+        let mut raw = Deliver::Raw {
+            encoding: CaptureEncoding::Raw(PixelFormat::Nv12),
+            strides: vec![4, 4],
+        };
+        let (luma, chroma) = ([1u8; 8], [2u8; 4]);
+        let two = Filled {
+            index: 1,
+            flags: 0,
+            timestamp: Timeval::default(),
+            planes: vec![&luma, &chroma],
+        };
+        let out =
+            frame(&two, &mut raw, size, ColorInfo::default(), &clock, &shared).expect("a frame");
+        let VideoSurface::Cpu(f) = out else {
+            panic!("a CPU frame");
+        };
+        assert_eq!(f.info().format, PixelFormat::Nv12);
+        assert_eq!(f.row(1, 0), Some(&[2, 2, 2, 2][..]));
+        let one = Filled {
+            planes: vec![&luma],
+            ..two
+        };
+        assert!(frame(&one, &mut raw, size, ColorInfo::default(), &clock, &shared).is_none());
+        assert_eq!(shared.captured.load(Ordering::Relaxed), 2);
     }
 }
