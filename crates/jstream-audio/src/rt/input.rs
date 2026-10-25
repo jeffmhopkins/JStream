@@ -82,6 +82,10 @@ pub(crate) struct InputShared {
     /// The activity gain, 0..=1, applied after the fader and meter and before the sends
     /// (ADR-0028's audio that follows the program).
     pub(crate) activity: AtomicF32,
+    /// Whether the privacy screen mutes this input: while the mixer's privacy screen is
+    /// on, it applies an activity gain of 0 to it instead
+    /// (docs/adr/0027-program-master-and-output-chains.md).
+    pub(crate) privacy_muted: AtomicBool,
     /// The input's row of the send matrix (post-fader).
     pub(crate) sends: Sends,
     pub(crate) meter: Meter,
@@ -111,6 +115,7 @@ impl InputShared {
         Self {
             gain: GainParam::new(),
             activity: AtomicF32::new(1.0),
+            privacy_muted: AtomicBool::new(false),
             sends: Sends::new(),
             meter: Meter::default(),
             packets: Counter::default(),

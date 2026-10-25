@@ -30,8 +30,8 @@ compensates their latency. It also has
 [ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)'s audio half: a
 master chain on every bus that feeds an output, output taps with their own chains for
 outputs that encode their own audio, and each bus's output before the master chain for
-monitoring. Each input has an activity gain (audio that follows the program) before
-its sends. Sidechain keys in the mixer
+monitoring, and the privacy screen's mute. Each input has an activity gain (audio that
+follows the program) before its sends. Sidechain keys in the mixer
 and the monitor devices themselves come later. The true-peak and loudness meters
 ([Meters](#meters)) exist as DSP but don't run in the mixer yet; `jstream-core`'s
 mixer thread runs them on the master block the mixer returns.
@@ -71,6 +71,15 @@ stamped on the clock, and no device is the master.
   after its fader, mute and meter: ADR-0028's activity gain, which `jstream-core` sets
   from what the Program mix shows. It ramps over one block with the sends, and a new
   input starts at 1.
+- `InputControl::set_privacy_muted` marks an input as one the privacy screen mutes
+  ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)), and
+  `Mixer::set_privacy` turns the screen on or off for the next block: the thread that
+  polls the mixer calls it before each poll. While it is on, a marked input's activity
+  gain is 0 in place of its own, so it ramps out over one block, feeds no bus and its
+  own block is silent, and its meter still reads. Its mute, sends and activity gain
+  are left as they are, so turning the screen off brings it back as it was. A new
+  input is unmarked, and one the mixer installs while the screen is on, marked before
+  that, starts silent.
 - `InputControl::add_filter` / `insert_filter` and the same on `BusControl` add a
   filter (`FilterSpec`: gain, noise gate, compressor, limiter or delay, built at the
   engine rate) to the chain, and return a `FilterControl` whose `set(FilterParams)`
@@ -141,6 +150,9 @@ not start. No variant allocates.
 - the mixer's gains, ramps, meters, under- and overrun counters, and clocked polling;
 - each input's own block after its fader, mute and activity gain, unaffected by its
   send gains, and gone once the input is removed;
+- the privacy screen silencing only the inputs it mutes, ramping out and back over a
+  block, with their meters, sends and activity gains untouched, and an input added
+  while it is on starting silent;
 - the send matrix: post-fader sends into each bus, each bus's own fader, mute and
   meter, sends ramping in and out, a muted input feeding no bus, buses added from
   another thread and removed, a send to a removed bus not reaching the bus that reuses
@@ -178,8 +190,8 @@ be.
 
 `tests/no_alloc.rs` is R-RT-001's `callback_does_not_allocate`: the real-time calls
 under `assert_no_alloc`, through the same kinds of glitches and live input, bus, send,
-filter, master-chain, output-tap and CLAP-filter changes, reading each output tap's and
-each input's block after every block
+filter, master-chain, output-tap and CLAP-filter changes and the privacy screen,
+reading each output tap's and each input's block after every block
 ([Real-time design](#realtime)).
 `tests/cost.rs` is an ignored measurement of what a block costs
 ([Real-time design](#realtime)).
@@ -200,8 +212,9 @@ Everything that runs on a real-time thread lives in `src/rt/`
 **audio thread** (the platform backend's, one per stream) calls
 `InputProducer::push_packet`. That call downmixes, tracks the device clock, resamples,
 and writes into the input's ring. The **mixer thread** calls `Mixer::poll`, which reads
-every ring for the block's window, applies faders, activity gains and sends, sums each
-bus and meters.
+every ring for the block's window, applies faders, activity gains (0 for an input the
+privacy screen mutes while it is on, a plain field `Mixer::set_privacy` sets on that
+thread) and sends, sums each bus and meters.
 Neither allocates,
 locks, blocks or logs after setup ([R-RT-001](../../docs/RULES.md#R-RT-001)). They
 share only the rings and atomics: gains, sends, meters and counters
@@ -394,8 +407,9 @@ limiter and removed, filters on an input and the master edited every 0.5 s, and 
 limiter added to and removed from an input (so the compensation delays move), master
 filters edited every 0.5 s and one added to both fed buses and removed, an output tap
 on the aux bus with its own chain (edited every 0.5 s, outliving its bus) whose block is
-read after each mix, a tap on the master added and removed, and every input's own
-block read after each mix. The test
+read after each mix, a tap on the master added and removed, every input's own
+block read after each mix, and the privacy screen going on and off over the microphone
+(`Mixer::set_privacy` before each poll). The test
 checks that each of those paths ran. Control-plane calls and dropping a producer (stream teardown) run
 outside the scope. Locks, blocking and logging are still left to review.
 
@@ -566,8 +580,6 @@ descriptors and the protocol. The kernels' cost in the mixer is measured in
   master bus and subscribed buses and sources) with their meter-stream fields and
   `audio.reset_loudness`, and monitor devices that play `bus_block`; and render-side
   resampling for output devices.
-- **The privacy screen's mute** from ADR-0027's audio half (the master chain and output
-  taps are driven by `jstream-core`).
 - **The engine side of CLAP filters**
   ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)): the mixer's side is
   here (`insert_host_filter`), and starting and watching the host process are built

@@ -347,8 +347,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   slate) and which sources it mutes, by default every audio input-device source,
   independently of each source's own mute. While on, it covers every output and every
   preview stream of a post-master stage. Built so far: on and off, covering every
-  output's video with the default blur. The look setting, the slate and the muted
-  sources are not built yet.
+  output's video with the default blur and muting the default set, every audio input
+  device. The look setting, the slate and choosing the muted sources are not built
+  yet.
 - **Audio** ([ADR-0028](adr/0028-audio-model-v2.md)): sources feed buses through the send
   matrix; buses feed outputs and monitors, never other buses. Every audio source gets a
   send to the master bus ("Program output") at 0 dB. Per source: stream → audio filters →
@@ -601,8 +602,9 @@ the next tick: the engine stores it with release ordering under its lock, and th
 loads it with acquire ordering at the start of each tick. The blur pass's layers are
 kept whenever a mix is drawn, so turning privacy on allocates nothing on a real-time
 thread. The flag fails closed: a tick under privacy that couldn't draw pushes black,
-never the last frame. The mixer thread will read it the same way once privacy mutes
-sources; not built yet.
+never the last frame. The mixer thread reads the same flag with acquire ordering before
+each poll, and the mixer silences the inputs it mutes from the next block, through their
+activity gain, so that takes a field store and allocates nothing either.
 
 <a id="protocol"></a>
 ## Control protocol

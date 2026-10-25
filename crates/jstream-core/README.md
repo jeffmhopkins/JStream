@@ -165,7 +165,7 @@ state machine. Contents:
   with the new scene's items, one `jstream-render` `Track` per item (`plan`).
 - **Privacy** (`privacy.rs`): whether the privacy screen is on and which client turned
   it on, runtime state under the collection lock that `privacy.set` sets and
-  `privacy.get` reads, with the atomic flag the render thread reads
+  `privacy.get` reads, with the atomic flag the render and mixer threads read
   ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
 - **Runtime** (`runtime/`): the `output.start` pipeline. Every running output shares
   one program stage: the render thread reads the platform capture mailbox of each
@@ -322,7 +322,10 @@ state machine. Contents:
   (`a_bus_a_source_draws_feeds_its_scope_while_an_output_runs`), and a source a
   `waveform` draws reaching its own scope after its fader while the program mix carries
   another source, then silence once it is muted
-  (`a_source_a_source_draws_feeds_its_scope_after_its_fader`)), the audio filter kinds
+  (`a_source_a_source_draws_feeds_its_scope_after_its_fader`), and the privacy screen
+  muting the default microphone, then an `audio_input` source, while desktop audio
+  plays on, and both back once it is off
+  (`the_privacy_screen_mutes_the_microphones`)), the audio filter kinds
   and their kernels (`filters.rs`: defaults, range edges, and a chain updated in place
   or rebuilt on a real mixer, and new settings a full command queue refuses kept off
   the record and tried again), item opacity in linear light through a nested scene
@@ -733,10 +736,20 @@ session on the GPU encode path is not pushed the mix's last encode target on suc
 tick, since that target may hold an uncovered frame: it misses the tick, counted in
 `encode_frames`, until a covered draw succeeds. The
 CPU stand-in draws covered frames black. `video.snapshot` and the preview streams show
-the editing view and are never covered. Only the default blur exists: the look setting, the slate and muting
-sources come later.
+the editing view and are never covered. Only the default blur exists: the look setting
+and the slate come later.
 
-The privacy screen covers video only; audio keeps playing. What a microphone records is
+It mutes the microphones: every input the program stage opens on an audio input device
+(the default microphone while the collection has no audio source, an `audio_input`
+source, and a webcam's paired input) is marked, before its stream starts, as one the
+privacy screen mutes. Desktop and application audio, a page's and a media file's sound
+play on. The mixer thread loads the same flag with acquire ordering before each poll
+and hands it to the mixer, which gives a marked input an activity gain of 0 while it is
+on: it ramps out over the next block, feeds no bus, and its scope draws silence, while
+its meter still reads, as for a source's own mute. Its own mute, fader, sends and follow
+mode are untouched, so turning privacy off brings it back as it was. This default set
+is the only one: choosing which sources it mutes comes with the look setting. What a
+microphone records is
 decided by the collection: a webcam's paired microphone opens only while its audio is
 on and the source has at least one send (see *Audio sources* below), so a webcam no bus
 hears never records.
@@ -1258,7 +1271,9 @@ brings the mixer in line with the collection under the collection lock:
   are the program scene (weight 1) and every nested scene source whose audio is on and
   follows `always` (weight 1 each). The mixer applies it after the input's fader and
   meter, scaling every send, and ramps to it over one block, so a cut never clicks
-  and the meter still reads a source that is off program. `scene.switch` and a batch
+  and the meter still reads a source that is off program. While the privacy screen is
+  on, the mixer applies 0 instead to the inputs it mutes (see *Privacy screen*), which
+  the routing leaves as they are. `scene.switch` and a batch
   that moves program sync too, after program is reconciled;
 - the bus scopes (#362): every bus a source's settings refer to (a `waveform` or
   `spectrum` drawing it) keeps a scope in the engine's `AudioScopes`, and the others
@@ -2063,7 +2078,9 @@ later on the media clock. The skips of every stream the pipeline ran are added u
 `capture_frames`. At the end of the render loop the captures are stopped and the
 `jstream-capture` thread joined, before the context is dropped.
 
-The mixer thread polls the media clock and pushes 48 kHz stereo
+The mixer thread polls the media clock, loading the privacy flag before each poll so
+that the mixer silences the microphones under the privacy screen (see *Privacy screen*
+in Design), and pushes 48 kHz stereo
 blocks mixed from the audio sources' inputs, the pages' audio and the media files' sound (see *Audio
 sources* in Design; the microphone and the desktop loopback while the collection has
 no audio source), meters each master block's true peak and loudness, and also pushes

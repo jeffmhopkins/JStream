@@ -2,8 +2,9 @@
 //!
 //! Like the program scene it is not collection state: `privacy.set` changes it without a
 //! new `rev`, undo never touches it, and it is not saved. The render thread reads it
-//! through a lock-free flag on every tick, so turning it on reaches the next frame
-//! without waiting on the engine's lock.
+//! through a lock-free flag on every tick, and the mixer thread before every block, so
+//! turning it on reaches the next frame and block without waiting on the engine's lock.
+//! The mixer then silences the microphones (`crate::audio_sources` marks their inputs).
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -13,7 +14,7 @@ use jstream_protocol::{ClientId, Event};
 /// The privacy screen's state the engine keeps under its collection lock.
 #[derive(Debug, Default)]
 pub(crate) struct Privacy {
-    /// What the render thread reads. Only [`set`](Self::set) writes it.
+    /// What the render and mixer threads read. Only [`set`](Self::set) writes it.
     flag: Arc<AtomicBool>,
     /// The client that turned it on, while it is on.
     by: Option<ClientId>,
@@ -35,7 +36,7 @@ impl Privacy {
         true
     }
 
-    /// The flag the render thread reads.
+    /// The flag the render and mixer threads read.
     pub(crate) fn flag(&self) -> Arc<AtomicBool> {
         Arc::clone(&self.flag)
     }

@@ -39,6 +39,11 @@
 //! collection made earlier is not silent. A page's audio, and a webcam's, don't count
 //! as an audio source here: they play alongside the defaults.
 //!
+//! Each input on an audio input device (a microphone: the default one, an
+//! `audio_input` source's, a webcam's paired input) is marked, before its stream
+//! starts, as one the privacy screen mutes (ADR-0027 §4's default set); the mixer
+//! thread silences it while the screen is on.
+//!
 //! Each source's open input (an audio source's, a page's or a media file's) is also
 //! listed in [`Routed`], where the engine's audio routing (`crate::audio`) finds it to
 //! set its fader, mute and sends. A source's input opens muted, so it is heard only once
@@ -370,6 +375,16 @@ impl Wants {
     fn names(&self, id: &SourceId) -> bool {
         self.targets.get(id).is_some_and(|target| target.on) || self.live.contains_key(id)
     }
+}
+
+/// Whether the privacy screen mutes what `target` records: an audio input device (a
+/// microphone, the default one or a chosen one, or a webcam's paired input), not
+/// desktop or application audio (ADR-0027 §4's default muted set).
+fn is_microphone(target: &AudioInputTarget) -> bool {
+    matches!(
+        target,
+        AudioInputTarget::DefaultInput | AudioInputTarget::Input(_)
+    )
 }
 
 /// The inputs to record: one per audio source, per running source's own audio and per
@@ -774,6 +789,8 @@ impl Open {
         if matches!(key, Key::Source(_)) {
             control.set_muted(true);
         }
+        // A microphone, before its stream starts: the privacy screen mutes it.
+        control.set_privacy_muted(is_microphone(&target));
         let stream = match self.audio.open_input(&target, Box::new(producer)) {
             Ok(stream) if stream.format() == format => stream,
             Ok(stream) => {

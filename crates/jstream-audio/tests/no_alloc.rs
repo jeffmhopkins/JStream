@@ -26,8 +26,10 @@
 //! latency, so the compensation delays move), master filters added to every bus's copy,
 //! edited and removed, output taps added (one with its own chain, on a bus that is
 //! later removed) and removed, and a CLAP filter whose host keeps up, then goes missing
-//! and comes back (its blocks bypassed and crossfaded), then is removed. The test
-//! asserts afterwards that each path actually ran.
+//! and comes back (its blocks bypassed and crossfaded), then is removed, and the privacy
+//! screen going on and off over the microphone (`Mixer::set_privacy` before each poll,
+//! as the mixer thread calls it). The test asserts afterwards that each path actually
+//! ran.
 //!
 //! Dropping an input's producer frees its resampler state, so a producer is dropped
 //! outside the checked scope: that is stream teardown, not steady state.
@@ -306,6 +308,10 @@ struct Sim {
     input_blocks: u64,
     /// The mixer thread does not run until this tick (a stall).
     mixer_stalled_until: u64,
+    /// The privacy flag the mixer thread reads before each poll, and the blocks it
+    /// mixed while it was on.
+    privacy: bool,
+    private_blocks: u64,
 }
 
 impl Sim {
@@ -318,12 +324,14 @@ impl Sim {
             return;
         }
         let now = clock(T0 + (tick + 1) as f64 * TICK_S);
+        self.mixer.set_privacy(self.privacy);
         while self
             .mixer
             .poll(now, &mut self.out)
             .expect("right length")
             .is_some()
         {
+            self.private_blocks += u64::from(self.privacy);
             self.chain.process(&mut self.out);
             for &tap in &self.taps {
                 if let Some((_, block)) = self.mixer.output_block(tap) {
@@ -398,7 +406,11 @@ mod rt {
             tap_blocks: 0,
             input_blocks: 0,
             mixer_stalled_until: 0,
+            privacy: false,
+            private_blocks: 0,
         };
+        // The privacy screen mutes the microphone (ADR-0027 §4).
+        sim.devices[0].control.set_privacy_muted(true);
         let control = sim.mixer.control();
         let bus = sim.mixer.bus();
         let limiter = |lookahead_ms| FilterSpec::Limiter {
@@ -600,6 +612,8 @@ mod rt {
                 sim.devices[0]
                     .control
                     .set_activity_gain(if tick % 400 == 0 { 0.0 } else { 1.0 });
+                // The privacy screen goes on and off.
+                sim.privacy = tick % 300 == 100;
                 bus.set_gain_db(db / 2.0);
                 for d in &sim.devices {
                     let _ = (d.control.take_meter(), d.control.stats());
@@ -653,6 +667,7 @@ mod rt {
             "{added:?}"
         );
         assert!(removed.packets > 0, "{removed:?}");
+        assert!(sim.private_blocks > 0, "no block under the privacy screen");
         assert!(bus.skipped_frames > 0, "{bus:?}");
         let host = host.expect("added");
         let misses = host

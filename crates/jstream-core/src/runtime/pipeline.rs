@@ -1180,7 +1180,7 @@ pub(crate) struct Parts {
     /// size follows it ([`output_size`]).
     canvas: (u32, u32),
     /// Whether the privacy screen is on: the engine sets it, the render thread reads it
-    /// every tick, with no lock (ADR-0027 §4).
+    /// every tick and the mixer thread before every block, with no lock (ADR-0027 §4).
     privacy: Arc<AtomicBool>,
 }
 
@@ -1549,7 +1549,11 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             scopes: engine.audio_scopes(),
             taps: Arc::clone(&scope_taps),
         };
-        let mixing = Mixing { mixer, metering };
+        let mixing = Mixing {
+            mixer,
+            metering,
+            privacy: Arc::clone(&parts.privacy),
+        };
         move || mixer_thread(mixing, clock, &out, stop, fail, &collector)
     }) {
         Ok(handle) => handle,
@@ -3047,10 +3051,13 @@ fn mixer_thread(
 }
 
 /// What the mixer thread owns: the mixer, and the master's true-peak and loudness
-/// meters, which it runs on every block.
+/// meters, which it runs on every block, and the privacy flag it reads before each poll.
 struct Mixing {
     mixer: Mixer,
     metering: MasterMetering,
+    /// Whether the privacy screen is on: the engine sets it, the mixer thread reads it
+    /// lock-free before each poll, so it mutes the microphones from the next block.
+    privacy: Arc<AtomicBool>,
 }
 
 /// Mixes on the media clock, meters the master, and pushes each block into the program
@@ -3064,6 +3071,7 @@ fn mixer_loop(
     Mixing {
         mut mixer,
         mut metering,
+        privacy,
     }: Mixing,
     clock: &dyn MediaClock,
     out: &MixOut,
@@ -3086,6 +3094,7 @@ fn mixer_loop(
     let silence = vec![0.0f32; samples_len];
     let mut targets: Vec<AudioTap> = Vec::new();
     'mix: while !stop.load(Ordering::Relaxed) {
+        mixer.set_privacy(privacy.load(Ordering::Acquire));
         match mixer.poll(clock.now(), &mut samples) {
             Ok(Some(block)) => {
                 metering.process(&samples);
