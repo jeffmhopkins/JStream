@@ -291,6 +291,8 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 <!-- @section
 -->
 
+To run a release instead, see [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md).
+
 You need Rust through `rustup`; `rust-toolchain.toml` pins the version and
 adds the Windows and `wasm32` targets. The media backends are Windows only: on Linux and
 macOS everything builds and the tests run on fakes, and the daemon serves the API with
@@ -334,6 +336,8 @@ depends_on = ["docs/adr/0008-windows-support-policy.md", "docs/adr/0063-macos-pl
 <!-- @section
 -->
 
+- [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md): running a release on Windows,
+  a first scene, going live, recording and the virtual camera
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how the system fits together
 - [docs/RULES.md](docs/RULES.md): engineering rules, each with a permanent ID
 - [docs/DOCS.md](docs/DOCS.md): how docs stay accurate (hash-checked sections, history from git)
@@ -342,6 +346,7 @@ depends_on = ["docs/adr/0008-windows-support-policy.md", "docs/adr/0063-macos-pl
   the item status the [Progress](#progress) table is generated from
 - [docs/runbooks/go-live.md](docs/runbooks/go-live.md): taking the daemon live on Windows,
   and the smoke script that checks it
+- [docs/runbooks/release.md](docs/runbooks/release.md): versioning and publishing a release
 - [docs/runbooks/waves.md](docs/runbooks/waves.md): which wave branch a PR targets, and
   how a wave lands in `main`
 - [docs/runbooks/windows-hardware-pass.md](docs/runbooks/windows-hardware-pass.md): every

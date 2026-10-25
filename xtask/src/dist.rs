@@ -82,7 +82,9 @@ const USAGE: &str = "usage: cargo xtask dist [--ui-dir <built UI folder>] [--out
 const README: &str = "\
 JStream, portable
 
-Run jstream.exe. Nothing is installed, and nothing needs admin rights.
+Run jstream.exe. Nothing is installed, and nothing needs admin rights. The guide to a
+first scene, going live and recording:
+https://github.com/jeffmhopkins/JStream/blob/main/docs/GETTING-STARTED.md
 
 Settings, scenes and logs go in %APPDATA%\\JStream. To keep them in this folder instead
 (for a USB stick), create an empty file named `portable` (no extension) next to

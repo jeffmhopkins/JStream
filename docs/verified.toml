@@ -1161,7 +1161,7 @@ stamp = { hash = "b3:c071ee089fb7ee64", by = "agent:wave-owner", note = "Merged 
 stamp = { hash = "b3:7d20d7a1c4f8bf54", by = "agent:claude-c8b1", note = "re-read after merging wave/m1 (#291): the helper DLL beside the renamed bootstrap exe and CEF runtime, started by jstream-browser's CEF backend, still matches ADR-0048, the browser crate's purpose and the crate map's apps row" }
 
 ["CRATE-jstream-browser-helper#purpose"."file:apps/jstream-browser-helper/Cargo.toml"]
-stamp = { hash = "b3:9313794338e1911e", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: rewritten for ADR-0048: a cdylib whose only code is the RunWinMain export, shipped beside CEF's bootstrap.exe renamed jstream-browser-helper.exe, which sets up the sandbox and hands the process to jstream_browser::run_helper; unsafe_allowed for the unmangled export; cef turns on jstream-browser's helper feature; the manifest and build.rs are gone; matches src/lib.rs and Cargo.toml" }
+stamp = { hash = "b3:287a592908043144", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "Cargo.toml only moves the package version to version.workspace = true (0.1.0-alpha.1, the release version, docs/runbooks/release.md); the section names no version, so it still holds" }
 
 ["CRATE-jstream-browser-helper#purpose"."file:apps/jstream-browser-helper/README.md"]
 stamp = { hash = "b3:82b317db97efee74", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: rewritten for ADR-0048: a cdylib whose only code is the RunWinMain export, shipped beside CEF's bootstrap.exe renamed jstream-browser-helper.exe, which sets up the sandbox and hands the process to jstream_browser::run_helper; unsafe_allowed for the unmangled export; cef turns on jstream-browser's helper feature; the manifest and build.rs are gone; matches src/lib.rs and Cargo.toml" }
@@ -1176,7 +1176,7 @@ stamp = { hash = "b3:cd070fd8dbcfb8ca", by = "agent:claude", note = "New bullet 
 stamp = { hash = "b3:980a0a517d0a22be", by = "agent:builder-core", note = "#839: its dependency control#design only changed the mock's plugin answers; the CLI sends no plugin call and its exit table's forbidden row still holds" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/Cargo.toml"]
-stamp = { hash = "b3:513b26286e4094af" }
+stamp = { hash = "b3:e0012441d40d5541", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "Cargo.toml only moves the package version to version.workspace = true (0.1.0-alpha.1, the release version, docs/runbooks/release.md); the section names no version, so it still holds" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/args.rs"]
 stamp = { hash = "b3:c7abbf160021c478", by = "agent:ab9c156e", note = "This PR (#629, X1 part 3, protocol 0.34): the engine accepts non-neutral 3D it can draw. graph apply.rs check_geometry and the mock's geometry_view drop the neutral-3D rejection and call ItemGeometry::check_drawable (drawn.rs): validate and project, then for non-neutral 3D the centre's coordinates, the size, |depth_px| and perspective_px must be at most MAX_DRAWN_PX = 1e15 (round 2 B4: in f32 the whole box's polygon doesn't bound a thin source's), and the whole box's drawn polygon must have finite vertices within it, else the new GeometryError::TooFar or NotFinite (round 1 B1). PROTOCOL_VERSION 0.34 (version.rs), on a base that now carries 0.33; the parity fixture drops the tilt rejection and adds a TooFar one; drawn/tests.rs has only_a_drawable_geometry_passes_check_drawable and a_3d_item_with_an_input_past_the_bound_is_refused (round 2's two cases); command.rs's item.set_geometry doc and ItemGeometry's doc say so, and is_neutral_3d's doc says earlier minors rejected a geometry it is false for (round 4 N8); against the base, protocol.snap changes in those descriptions and its title (0.33 to 0.34), tools.snap in the descriptions, examples.snap in the version numbers. args.rs changes only the item.set_geometry comment (the engine accepts any 3D it can draw from 0.34); control Design's mock list gains the drawability check; nothing the CLI design describes. MERGE: 50759497 merged wave/m3-3 at 6764765a (#767, main into the m3 wave, which brings wave/m1-3's landing #754). It brought the privacy on|off|get commands to args.rs (#317) and to control Design the mock's folders and labels (#619), studio preview and cut-only presets (T1 #260) and privacy (#317); the CLI's --mock text claims nothing about them. Holds" }
@@ -1746,7 +1746,7 @@ stamp = { hash = "b3:f169a1e80a38c344", by = "agent:claude", note = "WS liveness
 stamp = { hash = "b3:f4df41e03ac49768", by = "agent:builder-core", note = "#843: new Plugin folder bullet (main fills in the default, so serve::engine saves only where Options says and tests save none) and --plugin-dir in the hand-rolled parser's list; its dependencies core#design (WASM plugins' Saving and Updates) and ARCH#persistence (the plugins.json bullet) agree with it" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/Cargo.toml"]
-stamp = { hash = "b3:3f9ec788334eca2f", by = "agent:wave-owner", note = "Re-read after main's wave/m1-3 landing (#754) merged into wave/m3-3. This branch (#639): the Live on macOS bullet (macos_backends, NoGpuInterop, no vcam/CLAP/YouTube, MacosKeychain behind jstream_crash::Redacting with the daemon's Secrets through live_redacting), Dependencies adding jstream-platform-macos, and Cargo.toml's macOS target dependency; serve.rs keeps those cfgs on main's Secrets plumbing, and the macOS live_redacting call passes secrets. Main's side: #548's user-only token, devices and log files (protected DACLs, create_private_file, check_private_file), #565's opt-in administrators-only vcam copy and --unregister-vcam, #567's crash reports through jstream-crash (ADR-0067; Cargo.toml swaps blake3 for jstream-crash), ADR-0020 links moved to ADR-0066, the browser stage handing the context back when it leaves the GPU path mid-run, and the hand-rolled argument list. ARCH#persistence's change (main's omitted-at-default fields, the wave's Linux secrets file) states nothing Design depends on. Holds." }
+stamp = { hash = "b3:f7635b0c59fa8956", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "Cargo.toml only moves the package version to version.workspace = true (0.1.0-alpha.1, the release version, docs/runbooks/release.md); the section names no version, so it still holds" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/build.rs"]
 stamp = { hash = "b3:921cf5fc80e14748", by = "agent:mac1-audio", note = "This PR's change to build.rs: a macOS-only block passing -Wl,-sectcreate,__TEXT,__info_plist,Info.plist to the binary with rerun-if-changed, plus a comment saying Purpose describes it. Design needn't: it covers the Windows Media Foundation delay-load, whose bullet (link-arg-bins scope, DLL list, delayimp.lib) still matches the file; Purpose's build-script bullet describes the embedding" }
@@ -1941,7 +1941,7 @@ stamp = { hash = "b3:149754bd87c54333", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:d9f9c7618e5f7439", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "Browser sources paragraph: helper in the browser folder beside jstream.exe or next to it in a build folder; the feature is off by default because only Windows has the backend, and the zip turns it on (ARCH › Packaging), matching dist.rs's HOST_FEATURES" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/Cargo.toml"]
-stamp = { hash = "b3:b02a3868305bc338", by = "agent:claude-567", note = '''This PR's whole change to the desktop: crash.rs moved to jstream-crash (ADR-0067). lib.rs drops pub mod crash; main.rs makes one Secrets list and calls jstream_crash::install with Program, a clone of it and crash_line (cfg(windows), its stderr notifier), and passes Secrets to app::start; app.rs passes it to the host; host.rs registers the control token there and wraps the live engine's key store in jstream_crash::Redacting. The manifest drops blake3 and the jstream-platform fake dev-dependency, adds jstream-crash, and narrows the jstream-protocol comment; the section states nothing about dependencies. What a user sees is unchanged: logs\crash-<time>-<pid>-<n>.txt in the data folder, the newest 10 kept, nothing uploaded.''' }
+stamp = { hash = "b3:f2fc656b7b06f4e0", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "Cargo.toml only moves the package version to version.workspace = true (0.1.0-alpha.1, the release version, docs/runbooks/release.md); the section names no version, so it still holds" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/src/app.rs"]
 stamp = { hash = "b3:835a9cb93977b8e4", by = "agent:claude-567", note = '''This PR's whole change to the desktop: crash.rs moved to jstream-crash (ADR-0067). lib.rs drops pub mod crash; main.rs makes one Secrets list and calls jstream_crash::install with Program, a clone of it and crash_line (cfg(windows), its stderr notifier), and passes Secrets to app::start; app.rs passes it to the host; host.rs registers the control token there and wraps the live engine's key store in jstream_crash::Redacting. The manifest drops blake3 and the jstream-platform fake dev-dependency, adds jstream-crash, and narrows the jstream-protocol comment; the section states nothing about dependencies. What a user sees is unchanged: logs\crash-<time>-<pid>-<n>.txt in the data folder, the newest 10 kept, nothing uploaded.''' }
@@ -4614,7 +4614,7 @@ stamp = { hash = "b3:4e4a50b071e5d372", by = "agent:wave-owner", note = "Merged 
 stamp = { hash = "b3:21bfee63ca110182", by = "agent:vcam-242", note = "Citation and depends_on (and lib.rs's doc) moved from superseded ADR-0020 to ADR-0066; Packaging gained the #242 sentence and the accepted Program Files copy. The section's COM, frames, pacing, trust and HKLM DllRegisterServer description is current behaviour and still matches the crate until #561" }
 
 ["CRATE-jstream-vcam-windows#purpose"."file:crates/jstream-vcam-windows/Cargo.toml"]
-stamp = { hash = "b3:5d86cc2aab180d79" }
+stamp = { hash = "b3:aa423f9945ad6292", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "Cargo.toml only moves the package version to version.workspace = true (0.1.0-alpha.1, the release version, docs/runbooks/release.md); the section names no version, so it still holds" }
 
 ["CRATE-jstream-vcam-windows#purpose"."file:crates/jstream-vcam-windows/src/lib.rs"]
 stamp = { hash = "b3:1922a65b0579ca11", by = "agent:vcam-optin-561", note = "Only change to the crate's files is its crate root's //! Docs: line gaining the threat-model sections that now cover it (#377); re-read the section, no claim about the code changed, still holds | merge: re-read: lib.rs's Docs line now cites both the wave's ADR-0066 (from #556) and this branch's threat-model#vcam" }
@@ -4916,6 +4916,69 @@ stamp = { hash = "b3:c96607ecbfc52f86" }
 ["FUZZ#targets"."file:fuzz/fuzz_targets/protocol_decode.rs"]
 stamp = { hash = "b3:cbc148f78a6a98ff" }
 
+["GETTING-STARTED#install"."body"]
+stamp = { hash = "b3:352a0a7dfac91438", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = '''New: zip name jstream-v<version>-windows-x64.zip matches release.yml's --revision tag and dist's naming; ui and browser folders beside jstream.exe per ARCH Packaging; unsigned SmartScreen steps; %APPDATA%\JStream and the portable marker/data folder per desktop Usage''' }
+
+["GETTING-STARTED#install"."dep:apps/jstream-desktop/README.md#usage"]
+stamp = { hash = "b3:d9f9c7618e5f7439", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = '''New: zip name jstream-v<version>-windows-x64.zip matches release.yml's --revision tag and dist's naming; ui and browser folders beside jstream.exe per ARCH Packaging; unsigned SmartScreen steps; %APPDATA%\JStream and the portable marker/data folder per desktop Usage''' }
+
+["GETTING-STARTED#install"."dep:docs/ARCHITECTURE.md#packaging"]
+stamp = { hash = "b3:67130f6f84b33399", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = '''New: zip name jstream-v<version>-windows-x64.zip matches release.yml's --revision tag and dist's naming; ui and browser folders beside jstream.exe per ARCH Packaging; unsigned SmartScreen steps; %APPDATA%\JStream and the portable marker/data folder per desktop Usage''' }
+
+["GETTING-STARTED#live"."body"]
+stamp = { hash = "b3:747acc8bf268e7d7", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "New: Outputs' Add an output with Stream (RTMP) and the server URL without the key, the Stream key field kept in Credential Manager ('Stream key: set'), Go Live/End stream (HD-09) starting stream outputs whose key is set; YouTube sign-in rows are blocked on ADR-0058" }
+
+["GETTING-STARTED#live"."dep:apps/jstream-desktop/README.md#usage"]
+stamp = { hash = "b3:d9f9c7618e5f7439", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "New: Outputs' Add an output with Stream (RTMP) and the server URL without the key, the Stream key field kept in Credential Manager ('Stream key: set'), Go Live/End stream (HD-09) starting stream outputs whose key is set; YouTube sign-in rows are blocked on ADR-0058" }
+
+["GETTING-STARTED#live"."dep:docs/UI-FEATURES.md"]
+stamp = { hash = "b3:f1a93c7f5189c4fe", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "New: Outputs' Add an output with Stream (RTMP) and the server URL without the key, the Stream key field kept in Credential Manager ('Stream key: set'), Go Live/End stream (HD-09) starting stream outputs whose key is set; YouTube sign-in rows are blocked on ADR-0058" }
+
+["GETTING-STARTED#record"."body"]
+stamp = { hash = "b3:b21c49ef28545229", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "New: Recording (MP4) output with a file path, the header's Record/Stop recording (HD-07)" }
+
+["GETTING-STARTED#record"."dep:apps/jstream-desktop/README.md#usage"]
+stamp = { hash = "b3:d9f9c7618e5f7439", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "New: Recording (MP4) output with a file path, the header's Record/Stop recording (HD-07)" }
+
+["GETTING-STARTED#record"."dep:docs/UI-FEATURES.md"]
+stamp = { hash = "b3:f1a93c7f5189c4fe", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "New: Recording (MP4) output with a file path, the header's Record/Stop recording (HD-07)" }
+
+["GETTING-STARTED#requirements"."body"]
+stamp = { hash = "b3:33e39447d2457615", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "New: Windows 11 x64 build 22000 per README Platforms (fact min-windows-build), D3D12, Media Feature Pack on N editions (the desktop app's can't-start window), WebView2, no installer or admin per ADR-0066" }
+
+["GETTING-STARTED#requirements"."dep:README.md#platforms"]
+stamp = { hash = "b3:3a704f0eeb2803f9", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "New: Windows 11 x64 build 22000 per README Platforms (fact min-windows-build), D3D12, Media Feature Pack on N editions (the desktop app's can't-start window), WebView2, no installer or admin per ADR-0066" }
+
+["GETTING-STARTED#requirements"."dep:apps/jstream-desktop/README.md#usage"]
+stamp = { hash = "b3:d9f9c7618e5f7439", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "New: Windows 11 x64 build 22000 per README Platforms (fact min-windows-build), D3D12, Media Feature Pack on N editions (the desktop app's can't-start window), WebView2, no installer or admin per ADR-0066" }
+
+["GETTING-STARTED#requirements"."dep:docs/ARCHITECTURE.md#packaging"]
+stamp = { hash = "b3:67130f6f84b33399", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "New: Windows 11 x64 build 22000 per README Platforms (fact min-windows-build), D3D12, Media Feature Pack on N editions (the desktop app's can't-start window), WebView2, no installer or admin per ADR-0066" }
+
+["GETTING-STARTED#scene"."body"]
+stamp = { hash = "b3:acca3d7616867331", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "New: checked against the UI: Scenes' New scene menu item, Scene objects' Add source… (Create for new, Add for existing), the Add source types in add_source.rs, the program hover button and badge (SC-02), View and Layout menus (HD-02, HD-03)" }
+
+["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md"]
+stamp = { hash = "b3:f1a93c7f5189c4fe", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "New: checked against the UI: Scenes' New scene menu item, Scene objects' Add source… (Create for new, Add for existing), the Add source types in add_source.rs, the program hover button and badge (SC-02), View and Layout menus (HD-02, HD-03)" }
+
+["GETTING-STARTED#trouble"."body"]
+stamp = { hash = "b3:cdea88ae9fde1c6f", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = 'New: logs\jstream-desktop.log and cef.log, crash-*.txt with secrets redacted and never uploaded (R-SEC-004, desktop Usage), issue and private-advisory links (registered in external.toml), SECURITY.md' }
+
+["GETTING-STARTED#trouble"."dep:apps/jstream-desktop/README.md#usage"]
+stamp = { hash = "b3:d9f9c7618e5f7439", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = 'New: logs\jstream-desktop.log and cef.log, crash-*.txt with secrets redacted and never uploaded (R-SEC-004, desktop Usage), issue and private-advisory links (registered in external.toml), SECURITY.md' }
+
+["GETTING-STARTED#trouble"."dep:docs/RULES.md#R-SEC-004"]
+stamp = { hash = "b3:f3e3a293b719fe8d", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = 'New: logs\jstream-desktop.log and cef.log, crash-*.txt with secrets redacted and never uploaded (R-SEC-004, desktop Usage), issue and private-advisory links (registered in external.toml), SECURITY.md' }
+
+["GETTING-STARTED#vcam"."body"]
+stamp = { hash = "b3:34b7f47af3dd0255", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "New: optional step per ADR-0066, jstream-daemon --register-vcam (desktop Usage and the outputs panel's own hint), the Program Files copy, Virtual camera output, the 'registered, but not for this version' state in outputs.rs" }
+
+["GETTING-STARTED#vcam"."dep:apps/jstream-desktop/README.md#usage"]
+stamp = { hash = "b3:d9f9c7618e5f7439", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "New: optional step per ADR-0066, jstream-daemon --register-vcam (desktop Usage and the outputs panel's own hint), the Program Files copy, Virtual camera output, the 'registered, but not for this version' state in outputs.rs" }
+
+["GETTING-STARTED#vcam"."dep:docs/adr/0066-portable-windows-distribution-v2.md"]
+stamp = { hash = "b3:21bfee63ca110182", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "New: optional step per ADR-0066, jstream-daemon --register-vcam (desktop Usage and the outputs panel's own hint), the Program Files copy, Virtual camera output, the 'registered, but not for this version' state in outputs.rs" }
+
 ["README#platforms"."body"]
 stamp = { hash = "b3:3a704f0eeb2803f9", by = "agent:claude-mac1", note = "Re-read the platform table on ADR-0063's acceptance: the macOS row now says per ADR-0063, macOS 14 and later, Apple Silicon with Intel best effort, matching its decision 2 and answers 2 and 3; the section now depends on ADR-0063; Windows and Linux rows unchanged" }
 
@@ -5041,6 +5104,24 @@ stamp = { hash = "b3:676a9e2f1df57c0f", by = "agent:builder-core", note = "#843:
 
 ["RUNBOOK-GO-LIVE#steps"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:f169a1e80a38c344", by = "agent:claude", note = "WS liveness: re-read against the server README change; the steps connect with the CLI, whose client answers pings while it reads, so nothing in them changes" }
+
+["RUNBOOK-RELEASE#cut"."body"]
+stamp = { hash = "b3:4e7f39ab03f7cce6", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "New: matches release.yml: ui checks the tag against every shipped app's version then builds the UI with after-review's pins, zip runs dist --revision on windows-latest uncached and writes .sha256 and notes (CEF-VERSION.txt's first line), publish alone has contents: write and runs gh release create --verify-tag, --prerelease for a hyphenated version, --generate-notes" }
+
+["RUNBOOK-RELEASE#cut"."dep:docs/ARCHITECTURE.md#packaging"]
+stamp = { hash = "b3:67130f6f84b33399", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "New: matches release.yml: ui checks the tag against every shipped app's version then builds the UI with after-review's pins, zip runs dist --revision on windows-latest uncached and writes .sha256 and notes (CEF-VERSION.txt's first line), publish alone has contents: write and runs gh release create --verify-tag, --prerelease for a hyphenated version, --generate-notes" }
+
+["RUNBOOK-RELEASE#cut"."dep:docs/adr/0066-portable-windows-distribution-v2.md"]
+stamp = { hash = "b3:21bfee63ca110182", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "New: matches release.yml: ui checks the tag against every shipped app's version then builds the UI with after-review's pins, zip runs dist --revision on windows-latest uncached and writes .sha256 and notes (CEF-VERSION.txt's first line), publish alone has contents: write and runs gh release create --verify-tag, --prerelease for a hyphenated version, --generate-notes" }
+
+["RUNBOOK-RELEASE#cut"."file:.github/workflows/release.yml"]
+stamp = { hash = "b3:24b5b7075e9779b6", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "New: matches release.yml: ui checks the tag against every shipped app's version then builds the UI with after-review's pins, zip runs dist --revision on windows-latest uncached and writes .sha256 and notes (CEF-VERSION.txt's first line), publish alone has contents: write and runs gh release create --verify-tag, --prerelease for a hyphenated version, --generate-notes" }
+
+["RUNBOOK-RELEASE#version"."body"]
+stamp = { hash = "b3:045ecb82c5f6a48f", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "New: workspace.package version 0.1.0-alpha.1 taken by the five shipped apps via version.workspace (checked with cargo metadata), libraries at 0.0.0, daemon and CLI --version print CARGO_PKG_VERSION" }
+
+["RUNBOOK-RELEASE#version"."file:Cargo.toml"]
+stamp = { hash = "b3:2eb1c7ab7559fd00", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "New: workspace.package version 0.1.0-alpha.1 taken by the five shipped apps via version.workspace (checked with cargo metadata), libraries at 0.0.0, daemon and CLI --version print CARGO_PKG_VERSION" }
 
 ["RUNBOOK-WAVES#current"."body"]
 stamp = { hash = "b3:f4c8d34998b1aa24", by = "agent:ab9c156e", note = "Re-read against #855: the paragraph now points PRs whose section inputs need different notes to --per-input --merge-file <notes.toml> --from wave/<name>, which DOCS#verification describes; the --merge, --note and --renote guidance still matches it." }

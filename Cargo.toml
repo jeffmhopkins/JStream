@@ -3,6 +3,9 @@ resolver = "3"
 members = ["apps/*", "crates/*", "crates/jstream-ui/tests/e2e/mock-daemon", "xtask"]
 
 [workspace.package]
+# The release version, which the apps in the portable zip take (`version.workspace`); a
+# release tag is `v` and this (docs/runbooks/release.md). Libraries stay at 0.0.0.
+version = "0.1.0-alpha.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/jeffmhopkins/JStream"
