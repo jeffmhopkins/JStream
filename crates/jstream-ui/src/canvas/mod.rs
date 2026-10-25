@@ -1124,7 +1124,7 @@ fn group_readout_text(
 
 /// A box's outline as SVG `points`, from `jstream-protocol`'s placement formula, so it
 /// is exactly what the compositor draws. Empty if a corner is behind the viewer (only
-/// possible with 3D, which the engine doesn't accept yet).
+/// possible with 3D, which the engine accepts from protocol 0.34).
 fn outline(geometry: &ItemGeometry) -> String {
     let Ok(quad) = geometry.project() else {
         return String::new();

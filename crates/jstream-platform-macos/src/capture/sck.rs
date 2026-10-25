@@ -7,8 +7,7 @@
 //! panics (R-UNSAFE-005) and only touch the stream's `Shared` state.
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::ptr::{self, NonNull};
-use std::slice;
+use std::ptr;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -22,8 +21,8 @@ use jstream_platform::media::{
 };
 use jstream_platform::nv12::bgra_to_nv12;
 use jstream_platform::{
-    Capture, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo, PlatformError,
-    VideoSurface,
+    Capture, CaptureOptions, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo,
+    CursorCapture, PlatformError, VideoSurface,
 };
 use objc2::rc::Retained;
 use objc2::runtime::{NSObject, NSObjectProtocol, ProtocolObject};
@@ -33,12 +32,10 @@ use objc2_core_graphics::{
     CGMainDisplayID, CGPreflightScreenCaptureAccess, CGRequestScreenCaptureAccess,
     kCGColorSpaceSRGB,
 };
-use objc2_core_media::{CMSampleBuffer, CMTime, CMTimeFlags};
+use objc2_core_media::CMSampleBuffer;
 use objc2_core_video::{
-    CVPixelBuffer, CVPixelBufferGetBaseAddress, CVPixelBufferGetBytesPerRow,
-    CVPixelBufferGetHeight, CVPixelBufferGetPixelFormatType, CVPixelBufferGetWidth,
-    CVPixelBufferLockBaseAddress, CVPixelBufferLockFlags, CVPixelBufferUnlockBaseAddress,
-    kCVReturnSuccess,
+    CVPixelBufferGetBytesPerRow, CVPixelBufferGetHeight, CVPixelBufferGetPixelFormatType,
+    CVPixelBufferGetWidth,
 };
 use objc2_foundation::{NSArray, NSError, NSString};
 use objc2_screen_capture_kit::{
@@ -52,9 +49,12 @@ use super::policy::{
     frame_use, listable_window, pixel_size, resolve, sck_error, screen_recording_denied,
     stop_reason, window_id, window_name,
 };
-use crate::annexb::media_time_from_cm;
-use crate::fourcc::{CV_BGRA, os_status};
+use crate::fourcc::CV_BGRA;
+use crate::pixel_buffer::{ReadLocked, presentation_time};
 use crate::{MacosVersion, check_floor, timebase};
+
+/// A captured frame, as errors name it.
+const FRAME: &str = "a captured frame";
 
 /// How long listing and starting wait for ScreenCaptureKit's answer.
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(10);
@@ -64,8 +64,9 @@ const STOP_TIMEOUT: Duration = Duration::from_secs(2);
 /// Display and window capture through ScreenCaptureKit (ADR-0063 §3).
 ///
 /// It delivers `VideoSurface::Cpu` NV12 frames in BT.709 limited range, converted from
-/// ScreenCaptureKit's sRGB BGRA, with the cursor drawn in. `pts` is each frame's
-/// presentation time on the [`MachClock`](crate::MachClock) time line. A window's frames
+/// ScreenCaptureKit's sRGB BGRA, with the cursor drawn in unless
+/// [`CursorCapture::Hidden`] leaves it out. `pts` is each frame's presentation time on
+/// the [`MachClock`](crate::MachClock) time line. A window's frames
 /// keep the size it had when the capture started: a resized window is scaled to fit,
 /// keeping its aspect ratio.
 ///
@@ -159,6 +160,17 @@ impl Capture for ScreenCaptureKitCapture {
     }
 
     fn start(&self, target: &CaptureTarget) -> Result<Box<dyn CaptureStream>, PlatformError> {
+        self.start_with(target, &CaptureOptions::default())
+    }
+
+    /// As [`start`](Capture::start). This backend doesn't send the pointer apart from the
+    /// frames yet, so [`CursorCapture::Metadata`] draws it in; [`CursorCapture::Hidden`]
+    /// turns the configuration's `showsCursor` off.
+    fn start_with(
+        &self,
+        target: &CaptureTarget,
+        options: &CaptureOptions,
+    ) -> Result<Box<dyn CaptureStream>, PlatformError> {
         let wanted = resolve(target)?;
         self.access()?;
         // Off-screen windows too, so a window on another Space can be captured.
@@ -186,7 +198,11 @@ impl Capture for ScreenCaptureKitCapture {
                 (window_filter(&window), format!("window {id}"))
             }
         };
-        Ok(Box::new(SckStream::start(&filter, what)?))
+        Ok(Box::new(SckStream::start(
+            &filter,
+            what,
+            shows_cursor(options.cursor),
+        )?))
     }
 }
 
@@ -360,8 +376,15 @@ fn completed(
     wait(&rx, what, timeout)
 }
 
-/// The stream's settings for content of `size` pixels.
-fn configuration(size: FrameSize) -> Retained<SCStreamConfiguration> {
+/// Whether the stream draws the pointer for `cursor`: only [`CursorCapture::Hidden`]
+/// leaves it out.
+fn shows_cursor(cursor: CursorCapture) -> bool {
+    cursor != CursorCapture::Hidden
+}
+
+/// The stream's settings for content of `size` pixels, with the pointer drawn in when
+/// `cursor` is set.
+fn configuration(size: FrameSize, cursor: bool) -> Retained<SCStreamConfiguration> {
     // SAFETY: a fresh configuration, set up before any stream uses it. Each setter takes
     // a plain value, and `kCGColorSpaceSRGB` is a Core Graphics constant, set when the
     // framework loads and never written.
@@ -371,7 +394,7 @@ fn configuration(size: FrameSize) -> Retained<SCStreamConfiguration> {
         config.setHeight(size.height() as usize);
         config.setPixelFormat(CV_BGRA);
         config.setColorSpaceName(kCGColorSpaceSRGB);
-        config.setShowsCursor(true);
+        config.setShowsCursor(cursor);
         config.setScalesToFit(true);
         config.setPreservesAspectRatio(true);
         config
@@ -497,9 +520,9 @@ impl Ivars {
             return Ok(None);
         };
         // SAFETY: the sample is live for the callback.
-        let pts = presentation_time(unsafe { sample.presentation_time_stamp() })?;
+        let pts = presentation_time(unsafe { sample.presentation_time_stamp() }, FRAME)?;
         self.shared.captured.fetch_add(1, Ordering::Relaxed);
-        let locked = ReadLocked::lock(&image)?;
+        let locked = ReadLocked::lock(&image, FRAME)?;
         let stride = CVPixelBufferGetBytesPerRow(&image);
         let height = CVPixelBufferGetHeight(&image);
         let Some((w, h)) = bgra_frame_size(
@@ -566,66 +589,6 @@ fn frame_status(sample: &CMSampleBuffer) -> Option<i64> {
         .as_i64()
 }
 
-/// A presentation time on the host clock (the Mach time line) as a media-clock time.
-fn presentation_time(time: CMTime) -> Result<MediaTime, PlatformError> {
-    if !time.flags.contains(CMTimeFlags::Valid) {
-        return Err(no_answer(
-            "CMSampleBufferGetPresentationTimeStamp",
-            "a frame had no valid presentation time",
-        ));
-    }
-    media_time_from_cm(time.value, time.timescale, timebase())
-}
-
-/// A pixel buffer locked for reading, unlocked when dropped.
-struct ReadLocked<'a>(&'a CVPixelBuffer);
-
-impl<'a> ReadLocked<'a> {
-    fn lock(buffer: &'a CVPixelBuffer) -> Result<Self, PlatformError> {
-        // SAFETY: the buffer is live; a read-only lock maps it for reading.
-        let status =
-            unsafe { CVPixelBufferLockBaseAddress(buffer, CVPixelBufferLockFlags::ReadOnly) };
-        if status != kCVReturnSuccess {
-            return Err(os_status(
-                "CVPixelBufferLockBaseAddress",
-                status,
-                "locking a captured frame",
-            ));
-        }
-        Ok(Self(buffer))
-    }
-
-    /// The packed buffer's `height` rows of `stride` bytes, as `bgra_frame_size` checked
-    /// them against its format.
-    fn bytes(&self, stride: usize, height: usize) -> Result<&[u8], PlatformError> {
-        let base =
-            NonNull::new(CVPixelBufferGetBaseAddress(self.0).cast::<u8>()).ok_or_else(|| {
-                no_answer(
-                    "CVPixelBufferGetBaseAddress",
-                    "a captured frame had no pixels",
-                )
-            })?;
-        let len = stride.checked_mul(height).ok_or_else(|| {
-            no_answer(
-                "CVPixelBufferGetBytesPerRow",
-                "a captured frame's size overflows",
-            )
-        })?;
-        // SAFETY: while the buffer is locked, Core Video's base address of a packed
-        // (BGRA) buffer points at `height` rows of `stride` bytes it owns. The borrow is
-        // tied to `&self`, so it ends before the unlock, and nothing writes to a buffer
-        // locked read-only.
-        Ok(unsafe { slice::from_raw_parts(base.as_ptr(), len) })
-    }
-}
-
-impl Drop for ReadLocked<'_> {
-    fn drop(&mut self) {
-        // SAFETY: this buffer was locked with the same (read-only) flags in `lock`.
-        let _ = unsafe { CVPixelBufferUnlockBaseAddress(self.0, CVPixelBufferLockFlags::ReadOnly) };
-    }
-}
-
 /// A running capture. Dropping it stops the stream.
 struct SckStream {
     stream: Retained<SCStream>,
@@ -651,12 +614,12 @@ impl std::fmt::Debug for SckStream {
 }
 
 impl SckStream {
-    fn start(filter: &SCContentFilter, what: String) -> Result<Self, PlatformError> {
+    fn start(filter: &SCContentFilter, what: String, cursor: bool) -> Result<Self, PlatformError> {
         let size = filter_size(filter).ok_or_else(|| PlatformError::DeviceLost {
             what: what.clone(),
             reason: "it has no area to capture".into(),
         })?;
-        let config = configuration(size);
+        let config = configuration(size, cursor);
         let shared = Arc::new(Shared {
             mailbox: Mailbox::new(),
             captured: AtomicU64::new(0),
@@ -741,6 +704,16 @@ impl Drop for SckStream {
 #[cfg(test)]
 mod tests {
     use super::ScreenCaptureKitCapture;
+
+    /// Only `Hidden` turns `showsCursor` off; this backend doesn't send the pointer
+    /// apart yet, so `Metadata` draws it in.
+    #[test]
+    fn only_a_hidden_cursor_is_left_out() {
+        use jstream_platform::CursorCapture;
+        assert!(super::shows_cursor(CursorCapture::Drawn));
+        assert!(super::shows_cursor(CursorCapture::Metadata));
+        assert!(!super::shows_cursor(CursorCapture::Hidden));
+    }
 
     #[test]
     fn the_backend_opens_without_asking_for_anything() {

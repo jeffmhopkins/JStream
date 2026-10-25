@@ -1,5 +1,6 @@
-//! The encoder: input buffering, block switching, the filterbank, M/S stereo, rate
-//! control, and the `raw_data_block` syntax (ISO/IEC 14496-3 §4.4.2).
+//! The encoder: input buffering, block switching, the filterbank, temporal noise
+//! shaping (`tns`), M/S stereo, rate control, and the `raw_data_block` syntax
+//! (ISO/IEC 14496-3 §4.4.2).
 //!
 //! Rate control is ISO/IEC 13818-7 Annex B's bit reservoir: the mean bits per frame
 //! (`bit_rate * 1024 / sample_rate`) flow in every frame, a frame may spend what the
@@ -9,14 +10,17 @@
 //! suggests. M/S is decided per band by comparing the perceptual entropy of L/R and M/S
 //! coding, with the M and S thresholds at half the smaller of the L and R thresholds so
 //! that the noise of `L = M + S` stays masked (J. D. Johnston and A. J. Ferreira,
-//! "Sum-difference stereo transform coding", ICASSP 1992).
+//! "Sum-difference stereo transform coding", ICASSP 1992). Intensity stereo (`intensity`)
+//! is decided before M/S, on bands no TNS filter touches, and M/S is off on its bands.
 
 use crate::bits::BitWriter;
 use crate::huffman::{self, ZERO_HCB};
+use crate::intensity;
 use crate::mdct::{Mdct, WindowShape, Windows};
 use crate::psy::{self, AttackDetector, Layout};
 use crate::quant::{Channel, MAX_BANDS, Quantizer, Shape};
 use crate::tables::{SWB_LONG, SWB_SHORT};
+use crate::tns::{self, Analyser};
 use crate::{Config, Error, FRAME_LEN};
 
 /// Samples the encoder holds before it encodes a frame: the frame's 2048-sample window
@@ -80,6 +84,7 @@ pub struct Encoder {
     layout_long: Layout,
     layout_short: Layout,
     quantizer: Quantizer,
+    tns: Analyser,
     detector: AttackDetector,
     /// Whether the next frame's short-window region holds an attack.
     attack_next: Option<bool>,
@@ -89,6 +94,9 @@ pub struct Encoder {
     prev_thr: Vec<[f32; 49]>,
     state: Vec<Channel>,
     ms: [bool; MAX_BANDS],
+    /// Where intensity stereo starts, in Hz, and its slack over the masking threshold
+    /// (`intensity::start`); `None` when it is off.
+    intensity: Option<(f64, f32)>,
     /// Mean bits per frame, and the reservoir's fill and size.
     mean_bits: u32,
     reservoir: u32,
@@ -133,6 +141,7 @@ impl Encoder {
             layout_long: Layout::new(&SWB_LONG, 1024, config.sample_rate, bw),
             layout_short: Layout::new(&SWB_SHORT, 128, config.sample_rate, bw),
             quantizer: Quantizer::new(),
+            tns: Analyser::new(config.sample_rate, &SWB_LONG, &SWB_SHORT),
             detector: AttackDetector::default(),
             attack_next: None,
             prev_sequence: Sequence::OnlyLong,
@@ -140,12 +149,34 @@ impl Encoder {
             prev_thr: vec![[0.0; 49]; channels],
             state: (0..channels).map(|_| Channel::new()).collect(),
             ms: [false; MAX_BANDS],
+            intensity: if config.intensity && channels == 2 {
+                intensity::start(per_channel)
+            } else {
+                None
+            },
             mean_bits,
             reservoir: 0,
             reservoir_max: max_frame.saturating_sub(mean_bits),
             pe_mean: 0.0,
             windowed: vec![0.0; 2 * FRAME_LEN],
         })
+    }
+
+    /// Whether the last access unit sent TNS data on any channel.
+    #[cfg(test)]
+    pub(crate) fn used_tns(&self) -> bool {
+        self.state
+            .iter()
+            .any(|ch| ch.tns.filters.iter().any(|f| f.order > 0))
+    }
+
+    /// How many bands of the last access unit were intensity coded.
+    #[cfg(test)]
+    pub(crate) fn intensity_bands(&self) -> usize {
+        self.state
+            .iter()
+            .map(|ch| ch.is_book.iter().filter(|&&b| b != 0).count())
+            .sum()
     }
 
     /// The configuration the encoder was opened with.
@@ -317,13 +348,18 @@ impl Encoder {
             lines,
         };
 
-        // Filterbank and model.
+        // Filterbank, model and TNS. Each channel is filtered before M/S, since a decoder
+        // undoes M/S first and TNS after.
         let mut pe = [0.0f32; 2];
         for (c, pe) in pe.iter_mut().enumerate().take(self.channels) {
             self.analyse(c, sequence, shape);
             *pe = self.model(c, &frame, short);
+            if let Some(shaped) = self.shape_noise(c, &frame, short) {
+                *pe = shaped;
+            }
         }
         if self.channels == 2 {
+            self.decide_intensity(&frame);
             pe = self.decide_ms(&frame);
         } else {
             self.ms = [false; MAX_BANDS];
@@ -343,6 +379,7 @@ impl Encoder {
         let trailer = 3 + 7;
         let mut left = budget.saturating_sub(header + trailer);
         for c in 0..self.channels {
+            let fixed = fixed + self.state[c].tns.bits(&frame);
             let share = if c + 1 == self.channels {
                 1.0
             } else {
@@ -484,6 +521,101 @@ impl Encoder {
         pe
     }
 
+    /// Filters channel `c`'s spectrum with temporal noise shaping where it pays (`tns`),
+    /// and returns the perceptual entropy of the filtered spectrum, whose band energies
+    /// replace the model's. The thresholds are the unfiltered spectrum's, divided in the
+    /// filtered bands by the decoder filter's noise gain. `None` when no window is
+    /// filtered.
+    fn shape_noise(&mut self, c: usize, frame: &Shape<'_>, short: bool) -> Option<f32> {
+        let ch = &mut self.state[c];
+        if !self.config.tns {
+            ch.tns = Default::default();
+            return None;
+        }
+        // Only windows whose envelope is uneven in time: on a stationary one TNS would
+        // spread the noise between tonal peaks.
+        let x = &self.input[c];
+        let mut gate = [false; 8];
+        if short {
+            for (w, g) in gate.iter_mut().enumerate() {
+                *g = tns::uneven(&x[448 + 128 * w..704 + 128 * w]);
+            }
+        } else {
+            gate[0] = tns::uneven(&x[..2048]);
+        }
+        let mut gain = [1.0; 8];
+        self.tns
+            .apply(&mut ch.spec, frame, &gate, &mut ch.tns, &mut gain);
+        if !ch.tns.present(frame) {
+            return None;
+        }
+        // The decoder's filter amplifies the residual's quantization noise, so the
+        // filtered bands are quantized against thresholds lowered by its gain.
+        let (bands, lines) = (frame.bands, frame.lines);
+        for (w, &g) in gain[..frame.windows].iter().enumerate() {
+            for b in self.tns.bands(frame) {
+                ch.thr[w * bands + b] /= g;
+            }
+        }
+        let layout = if short {
+            &self.layout_short
+        } else {
+            &self.layout_long
+        };
+        let mut pe = 0.0;
+        for w in 0..frame.windows {
+            let spec = &ch.spec[w * lines..(w + 1) * lines];
+            let range = w * bands..(w + 1) * bands;
+            psy::band_energies(layout, spec, &mut ch.energy[range.clone()]);
+            pe += psy::entropy(layout, &ch.energy[range.clone()], &ch.thr[range]);
+        }
+        Some(pe)
+    }
+
+    /// Chooses the bands of a CPE that are coded as intensity stereo (`intensity`), and
+    /// sets them up: the left band holds the coded sum, with the threshold that keeps its
+    /// noise masked in both channels once the decoder scales it into the right one; the
+    /// right band is empty, with no energy to code, and names its codebook and position.
+    /// None in a frame where either channel has a TNS filter: a decoder runs each
+    /// channel's filter after rebuilding the right band from the left, so the right
+    /// channel's filter (or its absence) would apply to the left channel's residual.
+    fn decide_intensity(&mut self, frame: &Shape<'_>) {
+        let (a, b) = self.state.split_at_mut(1);
+        let (l, r) = (&mut a[0], &mut b[0]);
+        r.is_book = [0; MAX_BANDS];
+        let Some((start_hz, slack)) = self.intensity else {
+            return;
+        };
+        if l.tns.present(frame) || r.tns.present(frame) {
+            return;
+        }
+        let hz_per_line = f64::from(self.config.sample_rate) / (2.0 * frame.lines as f64);
+        for i in 0..frame.count() {
+            let band = i % frame.bands;
+            if f64::from(frame.offsets[band]) * hz_per_line < start_hz {
+                continue;
+            }
+            let range = frame.range(i);
+            let thr = [l.thr[i], r.thr[i]];
+            let Some(coded) = intensity::code(
+                &mut l.spec[range.clone()],
+                &r.spec[range.clone()],
+                thr,
+                slack,
+            ) else {
+                continue;
+            };
+            let el = l.energy[i];
+            let er = r.energy[i];
+            l.thr[i] = l.thr[i].min(r.thr[i] * el / er);
+            l.energy[i] = l.spec[range.clone()].iter().map(|x| x * x).sum();
+            r.spec[range].fill(0.0);
+            r.energy[i] = 0.0;
+            r.is_book[i] = coded.book();
+            r.is_position[i] = coded.position;
+        }
+    }
+
     /// Chooses L/R or M/S per band, converts the M/S bands' spectra, energies and
     /// thresholds, and returns each channel's perceptual entropy afterwards.
     fn decide_ms(&mut self, frame: &Shape<'_>) -> [f32; 2] {
@@ -494,6 +626,12 @@ impl Encoder {
         for i in 0..frame.count() {
             let range = frame.range(i);
             let width = range.len() as f32;
+            if r.is_book[i] != 0 {
+                // Intensity coded: the right channel has nothing to code here.
+                self.ms[i] = false;
+                pe[0] += bits(l.energy[i], l.thr[i], width);
+                continue;
+            }
             let (mut em, mut es) = (0.0f32, 0.0f32);
             for k in range.clone() {
                 let m = 0.5 * (l.spec[k] + r.spec[k]);
@@ -598,24 +736,37 @@ pub(crate) fn write_ics(
         huffman::write_sections(&ch.sections[g][..ch.section_count[g]], len_bits, w);
     }
     let mut last = ch.global_gain;
+    let mut last_position = 0;
     for g in 0..frame.windows {
         for s in &ch.sections[g][..ch.section_count[g]] {
             if s.book == ZERO_HCB {
                 continue;
             }
+            let is = intensity::is_intensity(s.book);
             for b in s.start..s.end {
-                let sf = ch.sf[g * frame.bands + usize::from(b)];
-                huffman::write_sf(sf - last, w);
-                last = sf;
+                let i = g * frame.bands + usize::from(b);
+                if is {
+                    let p = ch.is_position[i];
+                    huffman::write_sf(p - last_position, w);
+                    last_position = p;
+                } else {
+                    let sf = ch.sf[i];
+                    huffman::write_sf(sf - last, w);
+                    last = sf;
+                }
             }
         }
     }
     w.bit(false); // pulse_data_present
-    w.bit(false); // tns_data_present
+    let tns = ch.tns.present(frame);
+    w.bit(tns);
+    if tns {
+        ch.tns.write(w, frame);
+    }
     w.bit(false); // gain_control_data_present
     for g in 0..frame.windows {
         for s in &ch.sections[g][..ch.section_count[g]] {
-            if s.book == ZERO_HCB {
+            if s.book == ZERO_HCB || intensity::is_intensity(s.book) {
                 continue;
             }
             for b in s.start..s.end {

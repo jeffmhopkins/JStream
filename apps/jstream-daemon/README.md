@@ -39,8 +39,8 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   ([Design](#design)).
 - **Serving** (`serve.rs`): builds the engine (with the audit log, the `--collection`
   file and the placeholder outputs; on Windows a live one, through `live.rs`, that scans
-  the CLAP plugins, and with the `cef` feature also opens browser sources,
-  [Design](#design)), installs the signal handlers that stop it, then binds the server
+  the CLAP plugins, and with the `cef` feature also opens browser sources, and on
+  macOS a live one on the macOS backends built so far, [Design](#design)), installs the signal handlers that stop it, then binds the server
   with MCP on and, with `--ui-dir`, the web UI's files.
 - **Media Foundation check** (`main.rs`, `components.rs`, Windows only): exits with
   advice when Windows lacks Media Foundation or its AAC encoder, as N editions do
@@ -78,7 +78,7 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   scene and creates an RTMP output to a local
   loopback sink and a recording, the WebSocket client sets the key and starts the
   stream, MCP starts the recording, and the test checks `stats.tick`, what the sink
-  received and the recorded MP4. The binary has no backends off Windows, so it runs
+  received and the recorded MP4. The binary has no backends on Linux, so it runs
   in process, on the library's `live` and `rtmp`, the wiring `serve.rs` uses;
   `tests/delay_load.rs`, Windows MSVC only, which reads the built binary's PE headers to check that the
   backends' Media Foundation DLLs are delay-loaded and none is a load-time import;
@@ -116,7 +116,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | `--port <port>` | The port on `127.0.0.1`. Default `0`: the OS picks a free one, and the URL line says which. |
 | `--collection <path>` | Loads the collection from this JSON file and saves every change to it, so the next run starts where this one stopped. Created, holding the empty collection, if it doesn't exist. Default: none, the collection starts empty and is lost on exit. |
 | `--ui-dir <dir>` | Serves the web UI's built files (`trunk build`'s `dist`) from this directory at `http://127.0.0.1:<port>/`. The browser asks for a user name and password: the password is the token (see **Web UI** below). A path that isn't a directory fails with exit code 1, before the token or collection file is written. Default: no UI. |
-| `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. On Windows it has no target, so starting it fails: create outputs with `output.create` instead. |
+| `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. On Windows and macOS it has no target, so starting it fails: create outputs with `output.create` instead. |
 | `--log-dir <dir>` | Where the log files, crash reports and the audit log go, created (with its parents) if missing. Default: `logs` in the platform data directory (see **Log files** below). |
 | `--log-level <spec>` | The log filter, in `RUST_LOG`'s syntax, which it overrides. |
 | `--youtube-client <path>` | Windows, for developers: a Google OAuth client to use for YouTube sign-in instead of JStream's built-in one, the JSON Google Cloud gives for a "Desktop app" client (see **YouTube** below). Default: the `JSTREAM_YOUTUBE_CLIENT_ID` and `JSTREAM_YOUTUBE_CLIENT_SECRET` environment variables, else the built-in client. |
@@ -199,8 +199,9 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   or a secret set without an ID, is a startup failure (exit 1); the message names the
   file but never its contents or the secret
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
-- **Going live (Windows).** `output.create` with an RTMP(S) server URL, then
-  `output.set_key` (stored in Windows Credential Manager), then `output.start`
+- **Going live (Windows and macOS).** `output.create` with an RTMP(S) server URL, then
+  `output.set_key` (stored in Windows Credential Manager, or the login keychain on
+  macOS), then `output.start`
   connects and streams. A start fails with `action_failed` and a reason that says what
   to fix when the output has no target (a `--output` placeholder), no stream key, or
   the key can't be read. Elsewhere, `output.start` only steps the placeholder state
@@ -253,7 +254,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | Exit code | Meaning |
 |---|---|
 | 0 | Stopped by a signal, printed the help or version, or registered or unregistered the virtual camera (`--register-vcam`, `--unregister-vcam`) |
-| 1 | Failed: `--register-vcam` or `--unregister-vcam` could not finish (or isn't on Windows), the log directory, a log file or the audit log can't be created, the collection file can't be read, loaded or created, the YouTube client file can't be read or holds no client, the token file is unusable or can't be created, the device file is unusable, the media clock can't be opened (Windows), the port can't be bound, the `--ui-dir` directory isn't one, the signal handlers or runtime can't be set up, or the server failed while serving |
+| 1 | Failed: `--register-vcam` or `--unregister-vcam` could not finish (or isn't on Windows), the log directory, a log file or the audit log can't be created, the collection file can't be read, loaded or created, the YouTube client file can't be read or holds no client, the token file is unusable or can't be created, the device file is unusable, the media clock can't be opened, or on macOS a backend refuses to open (a release below the floor), the port can't be bound, the `--ui-dir` directory isn't one, the signal handlers or runtime can't be set up, or the server failed while serving |
 | 2 | Usage: the command line could not be parsed, names no token file, or `--log-level` or `RUST_LOG` doesn't parse |
 | 3 | Windows only: Media Foundation or its AAC encoder is not installed (see **Media Foundation** above) |
 
@@ -285,9 +286,24 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   `WindowsPluginHosts` (`Engine::scan_clap_plugins`), so they appear in `kind.list` as
   audio-filter kinds once found, and logs each file it couldn't scan; the daemon
   serves meanwhile. The engine keeps the hosts, and from then on starts a
-  `jstream-plugin-host.exe` for each CLAP filter in a source's audio chain. Without `jstream-plugin-host.exe` beside the daemon every file
-  fails to scan, and is logged. Elsewhere there are no backends yet, so outputs stay the placeholder state
-  machine ([jstream-core › Design](../../crates/jstream-core/README.md#design)).
+  `jstream-plugin-host.exe` for each CLAP filter in a source's audio chain. Without
+  `jstream-plugin-host.exe` beside the daemon every file fails to scan, and is logged.
+- **Live on macOS** (`serve.rs`). Under `cfg(target_os = "macos")` the engine gets
+  the `jstream-platform-macos` backends built so far (`macos_backends`):
+  - `MachClock`, `ScreenCaptureKitCapture`, `AvFoundationVideoDevices`, `CoreAudioIo`,
+    `VideoToolboxCodecs` and `AvMediaDecoders`;
+  - the stand-in `NoGpuInterop`, which sends the engine to its own device and CPU
+    frames until the Metal interop does;
+  - no virtual camera, no CLAP scan and no YouTube sign-in;
+  - `MacosKeychain` as its stream key store, behind `jstream_crash::Redacting` with
+    the daemon's `Secrets` through `live_redacting` as on Windows, and the same
+    publish opener.
+
+  Capture, webcams and Core Audio refuse a release below the floor when created, which fails
+  startup. Creating them asks for no permission: that happens when a pipeline first
+  uses them.
+- **Elsewhere** (Linux) there are no backends yet, so outputs stay the placeholder
+  state machine ([jstream-core › Design](../../crates/jstream-core/README.md#design)).
 - **The publish opener.** On each `output.start` it reads the output's server URL with
   `Engine::output_kind` and its key from the store, then calls `connect_rtmp`, so each
   start connects anew. It fails the start with its own reason (`PublishError::new`)
@@ -513,7 +529,8 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   `jstream-browser` (the `BrowserBackend` seam, and its CEF backend with the `cef`
   feature; already in the tree through core), `jstream-platform-windows` on Windows only
   (the backends, the key store, the Media Foundation check and the user-only token
-  and log files),
+  and log files), `jstream-platform-macos` on macOS only (the backends built so far,
+  the GPU-interop stand-in and the Keychain key store),
   `jstream-protocol` (`OutputId`, `OutputKind`), `jstream-media` (`Codec`, for the AAC
   check), `jstream-youtube` on Windows only (the HTTPS transport) and `serde_json` (the
   OAuth client file), `anyhow` and `tracing` (the startup line), all already in the

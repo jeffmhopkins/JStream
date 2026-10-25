@@ -54,7 +54,7 @@ depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web
 | Host (`apps/`) | What it is |
 |---|---|
 | `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. The first cut runs on Windows (WebView2), with a fresh in-memory token handed to the page at startup ([its README](../apps/jstream-desktop/README.md#design)). Its `cef` feature, off by default until the CEF runtime is packaged, opens browser sources' pages in CEF. |
-| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API, MCP over streamable HTTP and the UI's built files (`--ui-dir`), and loads and saves `--collection`, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S), registers (`--register-vcam`) and publishes (a `virtual_cam` output) the virtual camera, built with its `cef` feature, opens browser sources through CEF, and offers YouTube sign-in with JStream's own OAuth client, unavailable until that client is registered ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md), [its README](../apps/jstream-daemon/README.md#purpose)). |
+| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API, MCP over streamable HTTP and the UI's built files (`--ui-dir`), and loads and saves `--collection`, and on Windows links `jstream-platform-windows` (and on macOS `jstream-platform-macos`, on the backends built so far) to run the media pipeline and go live over RTMP(S), on Windows registers (`--register-vcam`) and publishes (a `virtual_cam` output) the virtual camera, built with its `cef` feature, opens browser sources through CEF, and offers YouTube sign-in with JStream's own OAuth client, unavailable until that client is registered ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md), [its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-browser-helper` | Not a host: the sandboxed browser helper, CEF's bootstrap exe renamed plus this crate's DLL, which a host's CEF backend starts and drives over pipes. Hosts that turn on browser sources ship it next to their own exe ([ADR-0048](adr/0048-sandboxed-browser-helper.md), [its README](../apps/jstream-browser-helper/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
 | `jstream-plugin-host` | Not a host of the engine: the out-of-process CLAP plugin host, one process per CLAP filter instance, started by the engine ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)). It talks to the engine only through a shared-memory block and framed messages on its stdin and stdout, never the protocol ([its README](../apps/jstream-plugin-host/README.md#purpose)). |
@@ -144,15 +144,15 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 2 | `jstream-crash` | Local crash reports for the apps ([ADR-0067](adr/0067-shared-crash-reports.md)): the panic hook, redaction of registered secrets by BLAKE3 digest, the report format and pruning, and `Redacting`, which registers each stream key and refresh token passing through a credential store. The secrets live in a `Secrets` handle the app holds, not in global state | no |
 | 2 | `jstream-youtube` | OAuth plus the YouTube Live API client (broadcasts, streams, health, chat reading and sending as the channel, audience stats; [ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)). No media code. | no |
 | 2 | `jstream-platform-windows` | WGC capture, MF webcam and capture-card capture (with MJPEG decode), WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, Credential Manager store for stream keys, vcam sink side, CLAP plugin-host launcher (job object, scrubbed environment) and shared block | **yes** |
-| 2 | `jstream-platform-macos` | ScreenCaptureKit, Core Audio (incl. process taps), VideoToolbox/AudioToolbox, IOSurface↔Metal, Keychain store for stream keys and OAuth tokens (M3; [ADR-0063](adr/0063-macos-platform-support.md); Apple frameworks through the objc2 crates) | **yes** |
-| 2 | `jstream-platform-linux` | PipeWire, VAAPI, dmabuf↔Vulkan, the OpenH264 loader, AAC encoding through `jstream-aac` (M3; [ADR-0060](adr/0060-linux-platform-support.md), [ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md); a crate loading its system libraries at run time) | **yes** |
+| 2 | `jstream-platform-macos` | ScreenCaptureKit, Core Audio (incl. process taps), AVFoundation webcams, VideoToolbox/AudioToolbox, AVFoundation media files, IOSurface↔Metal, Keychain store for stream keys and OAuth tokens (M3; [ADR-0063](adr/0063-macos-platform-support.md); Apple frameworks through the objc2 crates) | **yes** |
+| 2 | `jstream-platform-linux` | PipeWire, with ALSA as the audio fallback, V4L2 webcams and capture cards paired with their microphones, VAAPI, dmabuf↔Vulkan, the OpenH264 loader, AAC encoding through `jstream-aac`, secrets in the Secret Service with a `0600` file fallback (M3; [ADR-0060](adr/0060-linux-platform-support.md), [ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md), [ADR-0071](adr/0071-linux-secret-store.md); a crate loading its system libraries at run time) | **yes** |
 | 2 | `jstream-plugin-clap` | Safe wrapper over the CLAP plugin ABI ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): loading a plugin file, its stereo audio effects, parameters, latency and saved state, and real-time processing. Only `jstream-plugin-host` links it | **yes** |
 | 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0066](adr/0066-portable-windows-distribution-v2.md)). Depends only on L0 and `windows`, so it logs through its own sink (the debugger and a capped file in the host account's profile), not `tracing`: no subscriber exists inside Frame Server. | **yes** |
 | 3 | `jstream-encode` | Encoder sessions: outputs with no video chain share one per (mix, encoder profile), and an output with a video chain gets its own ([ADR-0027](adr/0027-program-master-and-output-chains.md)); rate control; fan-out of packet streams | no |
 | 3 | `jstream-effects` | WGSL effect packs ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): `effect.toml` manifests, WGSL validation with naga, parameters as `<pack>/<effect>` kind descriptors with a uniform layout, hot reload by polling; draws an effect through `jstream-render`'s filter harness. No GPU device of its own | no |
 | 3 | `jstream-mcp` | MCP server over `dyn Control`: generated grouped tools and the stdio transport; its streamable-HTTP transport is served by `jstream-server` | no |
 | 3 | `jstream-browser` | Browser sources' engine ([ADR-0021](adr/0021-browser-source.md), [ADR-0046](adr/0046-browser-crate-and-helper.md), [ADR-0048](adr/0048-sandboxed-browser-helper.md)): the `BrowserBackend` seam, pages' audio hand-off, custom CSS and request policy; the CEF backend (Windows, feature `cef`), which drives the sandboxed browser helper over pipes and copies its shared-texture frames onto the engine's device; and the CEF code the helper runs (feature `helper`) | **yes** |
-| 3 | `jstream-plugin-wasm` | wasmtime host for automation plugins ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): calls the API through `Control`, limited to a per-plugin list of granted commands (empty by default); fuel and memory limits; no WASI | no |
+| 3 | `jstream-plugin-wasm` | wasmtime host for automation plugins ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): calls the API through `Control`, limited to a per-plugin list of granted commands (empty by default); fuel, wall-time and memory limits; no WASI | no |
 | 4 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; token and Origin checks; serves UI assets; serves MCP's streamable-HTTP transport on the control port behind the same checks | no |
 | 4 | `jstream-sources` | `Source` trait plus built-ins ([ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md)): display, window, video capture device, image, color, text, browser, audio input, desktop audio, application audio, scene (M1b); media file, audio waveform, audio spectrum (M2); YouTube chat message ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)) (M3); Spout2 receiver (later). Uses platform traits; backends are injected. Images and fonts use pure-Rust crates. | no |
 | 4 | `jstream-outputs` | RTMP(S) publish client with reconnect, and the recording file sink. Uses `mux`. Planned: the `Output` trait, and use of `encode` and platform traits. The virtual-camera output runs in `jstream-core`'s runtime. | no |
@@ -379,7 +379,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   `crop`, `visible`, `opacity` and `blend` (only `normal` is accepted), and the reserved
   `effects[]`, which a collection file must leave empty. The placement is a `geometry` or, until 1.0, a
   legacy placement (protocol 0.3's 2D transform as written), and the collection has
-  its `canvas` (protocol 0.11); non-neutral 3D geometry is still rejected. Scenes have
+  its `canvas` (protocol 0.11); any 3D geometry the compositor can draw is accepted from
+  protocol 0.34. Scenes have
   a `role` (`scene` or `group`, set by `scene.create` or `scene.set_role`), and `item.move` moves an item
   to another scene keeping its id, under the same cycle check. The placement edits take
   an optional `scene_id`, accepted only when it names the item's own scene until
@@ -438,8 +439,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   Not yet: settings migrations between kind versions (a source saved at another
   version is refused on load), blend modes
   other than `normal`,
-  bus monitors, per-placement effects, 3D
-  geometry, variants and overrides (so no edit drops
+  bus monitors, per-placement effects, variants and overrides (so no edit drops
   any yet), `background`, output audio buses and chains, the `YouTube` kind, a virtual
   camera's video mix (it always shows the program), and everything outside `sources`,
   `scenes`, `outputs`, `encoders`, `video_mixes`, `audio`, `folders`, `labels`,
@@ -675,6 +675,17 @@ The wire format, versioning, error codes and compatibility policy are designed i
   whom a listener admits, so `jstream-server` answers them, and a session with no server
   in front, or one whose server pairs nothing (the desktop app's), answers `unsupported`
   ([ADR-0057](adr/0057-server-answers-credential-calls.md)).
+- **Plugins** (protocol 0.35, [ADR-0069](adr/0069-wasm-plugin-limits-and-capabilities.md)): the actions
+  `plugin.install`, `plugin.grant` and `plugin.enable` install a WASM automation plugin
+  with what a person grants it, change the grant and re-enable it; they are for a person,
+  so no MCP tool, plugin or hotkey carries them. The event `plugin.state_changed` reports
+  a plugin enabled or disabled, with why the engine disabled it. A plugin calls the API
+  through a scoped `Control` that checks each call against its grant, using
+  `jstream-protocol`'s table of every command's class (`read`, `edit`, `live`, `outputs`
+  or never), and the hosts and files a call's settings name against the grant's hosts
+  and folders, since a class never widens network or filesystem reach; a call outside
+  the grant fails with `forbidden` and never reaches the engine. The engine and the mock answer the actions with `unsupported` until the engine
+  hosts plugins.
 - **Studio mode** (protocol 0.30): the action `studio.set_preview { scene_id }` puts a
   scene on preview, also with no `rev` change; `studio.get` and `studio.changed` carry
   `preview_scene` beside `program_scene`.
@@ -823,7 +834,9 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
-  the UI ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md) §3).
+  the UI ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md) §3). The same
+  holds for the `plugin.*` ops and events: only a person installs or grants a plugin
+  (ADR-0069 G1).
 - **Events** reach agents through the `events` tool, which returns the engine's events
   after a cursor from a bounded buffer and reports any it dropped
   ([ADR-0036](adr/0036-mcp-events-polling-tool.md)). The high-rate `stats.tick` is kept
@@ -833,10 +846,10 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   `live.changed` events are merged, in place, into the newest one of their gesture that
   no read has returned yet, while only `live.changed` events for other parameters follow
   it, so an unread drag holds one buffered event and `seq` has no gaps. `youtube.*`
-  events are not returned to agents (ADR-0058 §3).
+  and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 667 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 687 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking
@@ -911,7 +924,13 @@ is evaluated with `jstream-protocol`'s shared formula in either of ADR-0022's fo
 geometry (crop in source pixels, fitted into the box by `stretch`, `fit` or `fill`,
 which is clipped to the box, mirrored by its flips, then rotated about the box centre), or a legacy 0.3
 transform through `legacy_quad` (crop, scale against the current source size,
-top-left at `position`, clockwise rotation about that corner). Opacity is a straight multiplier in `[0, 1]` and the blend is premultiplied
+top-left at `position`, clockwise rotation about that corner). A geometry with
+non-neutral 3D draws [ADR-0050](adr/0050-3d-transforms-rendering.md)'s drawn polygon,
+clipped by the near plane, with a per-vertex `w` for perspective-correct texturing and
+analytic edge coverage, sampled from a mip chain of its cropped source (rebuilt on the
+GPU once per change to the source, so at most once per source and frame) with 16×
+anisotropic filtering. The engine accepts any 3D it can draw from protocol 0.34.
+Opacity is a straight multiplier in `[0, 1]` and the blend is premultiplied
 src-over. The composite pass writes premultiplied linear light into `Rgba16Float`; a
 resolve pass un-premultiplies into
 `Rgba8UnormSrgb`, which a snapshot can read back. The device is the platform `GpuContext`
@@ -952,7 +971,7 @@ import, a browser page's included) into a premultiplied `Rgba16Float` layer, of 
 `apply_filter_into` draws into a layer the caller keeps, which is how `jstream-core`'s
 chain runtime runs a source's video chain before placement without allocating per
 frame. Still outside this crate: the render
-thread (in `jstream-core`), P010, 3D, loading effect packs (`jstream-effects`; this
+thread (in `jstream-core`), P010, loading effect packs (`jstream-effects`; this
 crate draws them through the filter harness), and the output path below.
 
 **Device loss** (#349). A GPU hang that Windows resets (TDR), a driver reset or a removed
@@ -1124,7 +1143,9 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   `normal`, a geometry's `flip_h` and `flip_v` only when true, a disabled filter's `enabled` only when false, and the reserved `effects[]`
   must be empty.
 - **App settings:** `jstream.toml` in the platform config directory.
-- **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store.
+- **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store. On
+  Linux, where no Secret Service is reachable, they are kept in a `0600` `secrets` file
+  in the config directory instead ([ADR-0071](adr/0071-linux-secret-store.md)).
 - **Control token:** a random token in a user-only file in the config directory
   (Windows ACL restricted to the user). It is rotated on demand.
 - **Logs and crash dumps:** rotating logs and local minidumps in the data directory

@@ -1,14 +1,14 @@
 //! The engine behind the server: one `Engine`, one `InProcessControl` session per
 //! WebSocket connection and per MCP session, and the signals that stop it. On Windows
-//! the engine is live: it runs the media pipeline on the OS backends and publishes
-//! over RTMP(S).
+//! and macOS the engine is live: it runs the media pipeline on the OS backends and
+//! publishes over RTMP(S).
 
 use crate::args::Options;
 use crate::youtube;
 use anyhow::Context;
 use jstream_core::{AuditSink, Engine};
 use jstream_crash::Secrets;
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 use jstream_daemon::live::rtmp;
 use jstream_server::{Connector, Server, ServerConfig, Token};
 use std::future::Future;
@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 #[cfg(any(all(windows, feature = "cef"), test))]
 use {jstream_browser::BrowserBackend, jstream_platform::GpuContext};
-#[cfg(any(windows, test))]
+#[cfg(any(windows, target_os = "macos", test))]
 use {
     jstream_crash::Redacting,
     jstream_daemon::live::{Connect, live},
@@ -32,12 +32,15 @@ use {
 ///
 /// On Windows it is live (see `jstream_daemon::live`): the OS backends (WGC capture, WASAPI audio, Media
 /// Foundation codecs and webcams, the QPC clock), stream keys in Credential Manager, and a publish
-/// opener that connects RTMP(S) on each `output.start`. Elsewhere there are no
-/// backends yet, so output actions only step the placeholder state machine.
+/// opener that connects RTMP(S) on each `output.start`. On macOS it is live the same
+/// way on the backends built so far (`macos_backends`), with stream keys in the
+/// Keychain. Elsewhere there are no backends yet, so output actions only step the
+/// placeholder state machine.
 ///
 /// # Errors
-/// When the collection file can't be read, loaded or created, and on Windows, when a
-/// backend can't be created (the QPC clock).
+/// When the collection file can't be read, loaded or created, and on Windows and macOS,
+/// when a backend can't be created (the QPC or Mach clock, or on macOS a release below
+/// the floor).
 pub fn engine(
     options: &Options,
     audit: Arc<dyn AuditSink>,
@@ -76,7 +79,15 @@ pub fn engine(
         let _ = cef_browser(Engine::clone(&engine), gpu.as_ref(), clock, options);
         engine
     };
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    let engine = live_redacting(
+        engine,
+        macos_backends()?,
+        Arc::new(jstream_platform_macos::MacosKeychain),
+        rtmp(),
+        secrets,
+    );
+    #[cfg(not(any(windows, target_os = "macos")))]
     let engine = Arc::new(engine);
     #[cfg(windows)]
     scan_clap_plugins(&engine);
@@ -157,7 +168,7 @@ fn with_youtube(engine: Engine, client: Option<youtube::Client>, secrets: &Secre
             drop((client.id, client.secret));
             tracing::warn!(
                 "YouTube is unavailable: it keeps its sign-in in the OS credential store, \
-                 which the daemon has only on Windows"
+                 which the daemon sets up for YouTube only on Windows"
             );
         }
         engine
@@ -182,6 +193,35 @@ fn windows_backends() -> anyhow::Result<Backends> {
         gpu: Arc::new(WindowsGpu::new()),
         media: Arc::new(MfMediaDecoders::new()),
         vcam: Some(Box::new(WindowsVcam::new())),
+    })
+}
+
+/// The macOS backends, as far as they are built (ADR-0063): ScreenCaptureKit capture,
+/// AVFoundation webcams, Core Audio, VideoToolbox and AudioToolbox codecs, the Mach
+/// media clock and AVFoundation media files. GPU interop is a stand-in until it lands
+/// (`NoGpuInterop` sends the engine to its own device and CPU frames, until the Metal
+/// interop), and there is no virtual camera. Creating them opens no device; capture,
+/// webcams and audio check the release floor, and ask for their permissions only when a
+/// pipeline first uses them.
+#[cfg(target_os = "macos")]
+fn macos_backends() -> anyhow::Result<Backends> {
+    use jstream_platform_macos::{
+        AvFoundationVideoDevices, AvMediaDecoders, CoreAudioIo, MachClock, NoGpuInterop,
+        ScreenCaptureKitCapture, VideoToolboxCodecs,
+    };
+    Ok(Backends {
+        clock: Arc::new(MachClock::new().context("could not open the Mach media clock")?),
+        capture: Arc::new(
+            ScreenCaptureKitCapture::new().context("could not open ScreenCaptureKit capture")?,
+        ),
+        video_devices: Arc::new(
+            AvFoundationVideoDevices::new().context("could not open AVFoundation webcams")?,
+        ),
+        audio: Arc::new(CoreAudioIo::new().context("could not open Core Audio")?),
+        codecs: Arc::new(VideoToolboxCodecs::new()),
+        gpu: Arc::new(NoGpuInterop),
+        media: Arc::new(AvMediaDecoders::new()),
+        vcam: None,
     })
 }
 
@@ -252,7 +292,7 @@ pub fn browse(
 /// opener, so every stream key stored (`output.set_key`) or read (each `output.start`)
 /// is registered with `secrets`, the crash reports' redaction (#353). It wraps the store
 /// here, before the library sees it.
-#[cfg(any(windows, test))]
+#[cfg(any(windows, target_os = "macos", test))]
 fn live_redacting(
     engine: Engine,
     backends: Backends,

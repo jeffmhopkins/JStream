@@ -20,7 +20,13 @@ fn steady_state_encoding_does_not_allocate() {
     assert!(violation_count() > before);
     drop(v);
 
-    for (channels, shape) in [(2u8, WindowShape::Sine), (1, WindowShape::Kbd)] {
+    // The panned stream's right channel is the left one at -8 dB, so intensity stereo is
+    // exercised too.
+    for (channels, shape, panned) in [
+        (2u8, WindowShape::Sine, false),
+        (1, WindowShape::Kbd, false),
+        (2, WindowShape::Sine, true),
+    ] {
         let config = Config {
             window_shape: shape,
             ..Config::new(48_000, channels, 64_000 * u32::from(channels))
@@ -41,6 +47,11 @@ fn steady_state_encoding_does_not_allocate() {
                     0.05
                 };
                 *s = noise * burst;
+            }
+            if panned {
+                for f in buf.chunks_exact_mut(2) {
+                    f[1] = 0.4 * f[0];
+                }
             }
         };
         // Warm up: the input buffers reach their working size.

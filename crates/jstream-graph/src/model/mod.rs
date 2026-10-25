@@ -24,8 +24,8 @@
 //!   scene and source references in a source's or its filters' settings) have no cycle.
 //! - The canvas is at least 1×1 and at most [`MAX_CANVAS_EDGE`] on each side.
 //! - Every item's placement is a legacy transform or a valid geometry: positive size, a
-//!   positive perspective if any, and (until the compositor draws 3D) neutral tilt, turn,
-//!   depth and perspective.
+//!   positive perspective if any, and finite corners. Any 3D the compositor can draw is
+//!   valid (protocol 0.34, `ItemGeometry::check_drawable`).
 //! - Every RTMP output's URL is a valid `rtmp://` or `rtmps://` server URL that carries
 //!   no credential. Stream keys are never here (R-SEC-001): they live in the OS
 //!   credential store, outside the collection.
