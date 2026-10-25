@@ -145,7 +145,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 2 | `jstream-youtube` | OAuth plus the YouTube Live API client (broadcasts, streams, health, chat reading and sending as the channel, audience stats; [ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)). No media code. | no |
 | 2 | `jstream-platform-windows` | WGC capture, MF webcam and capture-card capture (with MJPEG decode), WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, Credential Manager store for stream keys, vcam sink side, CLAP plugin-host launcher (job object, scrubbed environment) and shared block | **yes** |
 | 2 | `jstream-platform-macos` | ScreenCaptureKit, Core Audio (incl. process taps), AVFoundation webcams, VideoToolbox/AudioToolbox, AVFoundation media files, IOSurface↔Metal, Keychain store for stream keys and OAuth tokens (M3; [ADR-0063](adr/0063-macos-platform-support.md); Apple frameworks through the objc2 crates) | **yes** |
-| 2 | `jstream-platform-linux` | PipeWire, VAAPI, dmabuf↔Vulkan, the OpenH264 loader, AAC encoding through `jstream-aac` (M3; [ADR-0060](adr/0060-linux-platform-support.md), [ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md); a crate loading its system libraries at run time) | **yes** |
+| 2 | `jstream-platform-linux` | PipeWire, with ALSA as the audio fallback, V4L2 webcams and capture cards paired with their microphones, VAAPI, dmabuf↔Vulkan, the OpenH264 loader, AAC encoding through `jstream-aac`, secrets in the Secret Service with a `0600` file fallback (M3; [ADR-0060](adr/0060-linux-platform-support.md), [ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md), [ADR-0071](adr/0071-linux-secret-store.md); a crate loading its system libraries at run time) | **yes** |
 | 2 | `jstream-plugin-clap` | Safe wrapper over the CLAP plugin ABI ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): loading a plugin file, its stereo audio effects, parameters, latency and saved state, and real-time processing. Only `jstream-plugin-host` links it | **yes** |
 | 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0066](adr/0066-portable-windows-distribution-v2.md)). Depends only on L0 and `windows`, so it logs through its own sink (the debugger and a capped file in the host account's profile), not `tracing`: no subscriber exists inside Frame Server. | **yes** |
 | 3 | `jstream-encode` | Encoder sessions: outputs with no video chain share one per (mix, encoder profile), and an output with a video chain gets its own ([ADR-0027](adr/0027-program-master-and-output-chains.md)); rate control; fan-out of packet streams | no |
@@ -491,8 +491,9 @@ model; a change that would contradict it edits it in the same PR.
 (`jstream-plugin-proto`), the mixer's side of it (`jstream-audio`) and the host
 process (`jstream-plugin-host`) are built, and so are starting hosts
 (`jstream-platform-windows`) and watching and restarting them on a control thread
-(`jstream-core`'s `HostSupervisor`); running a CLAP filter from the graph, which would
-start that supervisor, and the `stats.tick` count are not yet. Each CLAP filter
+(`jstream-core`'s `HostSupervisor`), and a source's audio chain runs CLAP filters, each
+with its own supervisor; CLAP filters on the master's and outputs' chains, and the
+`stats.tick` count, are not yet. Each CLAP filter
 instance runs in its own `jstream-plugin-host` process, on a real-time thread registered
 with MMCSS "Pro Audio" and woken by its own timer on the media clock, which both
 processes read from the same OS counter (not built yet: for now the host sleeps a
@@ -500,8 +501,8 @@ quarter block between passes). Audio crosses through shared-memory rings, and
 the mixer never waits on the host: it writes block *n* and reads the processed block
 *n − d* (by default *d* is two engine blocks), with no syscall or lock for the plugin
 ([R-RT-001](RULES.md#R-RT-001)). A late block is bypassed with a short crossfade, by
-the dry signal delayed the same amount, and counted in the shared block for
-`stats.tick`. The filter's latency is *d* plus the plugin's own, and latency
+the dry signal delayed the same amount, and counted for `stats.tick` in the engine's
+own memory beside the block (`EngineBlock`), where the host can't reset it. The filter's latency is *d* plus the plugin's own, and latency
 compensation keeps audio and video in sync. A host that dies is restarted by the control
 thread with backoff while the mixer bypasses it.
 
@@ -963,8 +964,9 @@ thread composites on the platform's `GpuContext`, and capture moves onto it thro
 sampled with no CPU copy, its alpha read as 1 as on the CPU path, the frame's fence hold is staged on each submit that reads it
 and dropped when the frame ends, and the submit hands the texture back in `PRESENT`.
 Staging attaches to the queue's next submit, so render holds the context's
-`SubmitLock` from staging through its submit, and other threads that submit on that
-queue (the browser source's copies) take it too.
+`SubmitLock` from staging through its submit (the composite's and the NV12
+conversion's), and other threads that submit on that queue (the browser source's
+copies, Linux's PipeWire capture copies) take it too.
 Without a context, or a capture that can deliver on it, the engine keeps CPU frames
 (step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). A
 browser source's page paints on the same context and is imported the same way, read
@@ -1152,6 +1154,10 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   version, migrated on load like the collection
   ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). Until kinds ship settings
   migrations, a source, filter or preset saved at another version is refused on load.
+  A filter whose kind the engine doesn't describe (a pack that isn't installed, or a
+  CLAP plugin before the scan that runs after the load) loads with its settings and
+  version verbatim and is saved back as it was; the engine bypasses it until its kind
+  appears.
   A placement's `opacity` and `blend` are written only when they differ from 1 and
   `normal`, a geometry's `flip_h` and `flip_v` only when true, a disabled filter's `enabled` only when false, and the reserved `effects[]`
   must be empty.

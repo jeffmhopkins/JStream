@@ -17,6 +17,11 @@ pub const MAX_FRAME: usize = 4 * 1024 * 1024;
 /// The most entries a list (plugins, parameters) may hold in one message.
 pub const MAX_LIST: usize = 16_384;
 
+/// The largest saved state, bytes, the engine takes from a host (ROADMAP M3: a CLAP
+/// filter's state may be 2 MiB). The host refuses to save more, and the engine ignores a
+/// larger [`FromHost::State`].
+pub const MAX_STATE: usize = 2 * 1024 * 1024;
+
 /// One of a plugin's parameters, as the host reports it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ParamDesc {
@@ -34,6 +39,50 @@ pub struct ParamDesc {
     pub default: f64,
     /// `PARAM_*` flags.
     pub flags: u32,
+}
+
+impl ParamDesc {
+    /// Whether the range is usable: `min`, `max` and `default` are finite, `min` is at
+    /// most `max`, and `default` is within them. A host is another process, so the
+    /// engine keeps only descriptions that pass ([`valid_params`]).
+    pub fn is_valid(&self) -> bool {
+        self.min.is_finite()
+            && self.max.is_finite()
+            && self.default.is_finite()
+            && self.min <= self.max
+            && (self.min..=self.max).contains(&self.default)
+    }
+
+    /// Whether `value` may be this parameter's value: finite and within its range.
+    pub fn accepts(&self, value: f64) -> bool {
+        value.is_finite() && (self.min..=self.max).contains(&value)
+    }
+}
+
+/// The parameter descriptions a host sent, minus the ones the engine can't use: those
+/// that aren't [`ParamDesc::is_valid`], and any whose id an earlier one already has.
+/// Also returns how many were dropped, for the log.
+pub fn valid_params(params: Vec<ParamDesc>) -> (Vec<ParamDesc>, usize) {
+    let sent = params.len();
+    let mut kept: Vec<ParamDesc> = Vec::with_capacity(sent);
+    for p in params {
+        if p.is_valid() && !kept.iter().any(|k| k.id == p.id) {
+            kept.push(p);
+        }
+    }
+    let dropped = sent - kept.len();
+    (kept, dropped)
+}
+
+/// `event` when it names one of `params` and [`ParamDesc::accepts`] its value: the check
+/// a parameter change coming back from a host (its control messages or the block's
+/// `params_out` ring) passes before the engine uses it.
+pub fn check_param_event(params: &[ParamDesc], event: ParamEvent) -> Option<ParamEvent> {
+    params
+        .iter()
+        .find(|p| p.id == event.id)
+        .filter(|p| p.accepts(event.value))
+        .map(|_| event)
 }
 
 /// Whole steps only.
@@ -67,8 +116,15 @@ pub struct PluginDesc {
 /// A message from the engine to a host.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ToHost {
-    /// The first message of a run: start the plugin, restoring `state` first when it is
-    /// given.
+    /// Where the shared block is, sent before `Start` where the platform hands the block
+    /// over as a handle (Windows): `handle` is the block's unnamed section, already
+    /// duplicated into the host's process, so no other process can open it by name.
+    Block {
+        /// The section handle's value in the host's process.
+        handle: u64,
+    },
+    /// The first message of a run (after any `Block`): start the plugin, restoring
+    /// `state` first when it is given.
     Start {
         /// A state an earlier run saved, or `None` for the plugin's defaults.
         state: Option<Vec<u8>>,
@@ -131,6 +187,7 @@ impl std::error::Error for DecodeError {}
 const TAG_START: u8 = 1;
 const TAG_SAVE_STATE: u8 = 2;
 const TAG_STOP: u8 = 3;
+const TAG_BLOCK: u8 = 4;
 const TAG_PARAMS: u8 = 64;
 const TAG_STATE: u8 = 65;
 const TAG_STATE_DIRTY: u8 = 66;
@@ -152,6 +209,10 @@ impl ToHost {
             }
             Self::SaveState => w.u8(TAG_SAVE_STATE),
             Self::Stop => w.u8(TAG_STOP),
+            Self::Block { handle } => {
+                w.u8(TAG_BLOCK);
+                w.u64(*handle);
+            }
         }
         w.finish()
     }
@@ -173,6 +234,7 @@ impl ToHost {
             }
             TAG_SAVE_STATE => Self::SaveState,
             TAG_STOP => Self::Stop,
+            TAG_BLOCK => Self::Block { handle: r.u64()? },
             tag => return Err(DecodeError::UnknownTag(tag)),
         };
         r.end()?;
@@ -303,6 +365,10 @@ impl Writer {
         self.0.extend_from_slice(&v.to_le_bytes());
     }
 
+    fn u64(&mut self, v: u64) {
+        self.0.extend_from_slice(&v.to_le_bytes());
+    }
+
     fn f64(&mut self, v: f64) {
         self.0.extend_from_slice(&v.to_le_bytes());
     }
@@ -365,6 +431,10 @@ impl<'a> Reader<'a> {
 
     fn u32(&mut self) -> Result<u32, DecodeError> {
         self.array().map(u32::from_le_bytes)
+    }
+
+    fn u64(&mut self) -> Result<u64, DecodeError> {
+        self.array().map(u64::from_le_bytes)
     }
 
     fn f64(&mut self) -> Result<f64, DecodeError> {
@@ -450,6 +520,9 @@ mod tests {
             },
             ToHost::SaveState,
             ToHost::Stop,
+            ToHost::Block {
+                handle: 0x1234_5678_9abc,
+            },
         ] {
             assert_eq!(round_trip(&m.encode(), ToHost::decode), m);
         }
@@ -481,6 +554,10 @@ mod tests {
         assert_eq!(ToHost::decode(&[]), Err(DecodeError::Truncated));
         assert_eq!(ToHost::decode(&[200]), Err(DecodeError::UnknownTag(200)));
         assert_eq!(ToHost::decode(&[TAG_STOP, 0]), Err(DecodeError::Trailing));
+        assert_eq!(
+            ToHost::decode(&[TAG_BLOCK, 1, 2, 3]),
+            Err(DecodeError::Truncated)
+        );
         // A state claiming more bytes than the frame holds.
         assert_eq!(
             ToHost::decode(&[TAG_START, 1, 9, 0, 0, 0, 1]),
@@ -523,5 +600,79 @@ mod tests {
             read_frame(&mut big).unwrap_err().kind(),
             std::io::ErrorKind::InvalidData
         );
+    }
+
+    #[test]
+    fn param_descriptions_with_unusable_ranges_are_dropped() {
+        let ok = gain();
+        assert!(ok.is_valid());
+        let bad = [
+            ParamDesc {
+                min: f64::NAN,
+                ..gain()
+            },
+            ParamDesc {
+                max: f64::INFINITY,
+                ..gain()
+            },
+            ParamDesc {
+                default: f64::NEG_INFINITY,
+                ..gain()
+            },
+            ParamDesc {
+                min: 3.0,
+                max: 2.0,
+                default: 2.5,
+                ..gain()
+            },
+            ParamDesc {
+                default: 2.5,
+                ..gain()
+            },
+            ParamDesc {
+                default: -0.5,
+                ..gain()
+            },
+        ];
+        for p in &bad {
+            assert!(!p.is_valid(), "{p:?}");
+        }
+        let mut sent: Vec<ParamDesc> = bad
+            .iter()
+            .cloned()
+            .enumerate()
+            .map(|(i, p)| ParamDesc {
+                id: i as u32 + 100,
+                ..p
+            })
+            .collect();
+        sent.push(ok.clone());
+        // A second description of the same id is dropped too: the first one stands.
+        sent.push(ParamDesc { max: 9.0, ..gain() });
+        let (kept, dropped) = valid_params(sent);
+        assert_eq!(kept, vec![ok]);
+        assert_eq!(dropped, bad.len() + 1);
+        assert_eq!(valid_params(Vec::new()), (Vec::new(), 0));
+    }
+
+    #[test]
+    fn param_events_must_name_a_parameter_and_fit_its_range() {
+        let params = [gain()];
+        let event = |id, value| ParamEvent { id, value };
+        for good in [event(7, 0.0), event(7, 1.5), event(7, 2.0)] {
+            assert_eq!(check_param_event(&params, good), Some(good));
+        }
+        for bad in [
+            event(8, 1.0),
+            event(7, f64::NAN),
+            event(7, f64::INFINITY),
+            event(7, f64::NEG_INFINITY),
+            event(7, -0.001),
+            event(7, 2.001),
+            event(7, f64::MAX),
+        ] {
+            assert_eq!(check_param_event(&params, bad), None, "{bad:?}");
+        }
+        assert_eq!(check_param_event(&[], event(7, 1.0)), None);
     }
 }

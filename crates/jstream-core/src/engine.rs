@@ -200,11 +200,25 @@ impl Engine {
     /// earlier scan found stays. Each plugin file is scanned in its own host process, so
     /// this can take seconds: call it from a worker thread. The engine's locks are held
     /// only to add the kinds, after the scan.
-    pub fn scan_clap_plugins(&self, hosts: &dyn PluginHosts) -> ClapScan {
-        let scan = clap_kinds::scan(hosts);
+    ///
+    /// From then on a source's audio chain runs its CLAP filters, each in a host process
+    /// `hosts` starts. A collection may hold CLAP filters before the scan that
+    /// describes their kinds (it loads before the scan runs): they are bypassed until
+    /// then.
+    pub fn scan_clap_plugins(&self, hosts: Arc<dyn PluginHosts>) -> ClapScan {
+        let scan = clap_kinds::scan(hosts.as_ref());
         let mut state = lock(&self.shared.state);
         state.graph = std::mem::take(&mut state.graph)
             .with_kinds(scan.kinds.iter().map(|k| k.descriptor.clone()));
+        state.audio.add_clap_plugins(
+            hosts,
+            scan.kinds.iter().map(|k| {
+                (
+                    k.descriptor.kind_id.clone(),
+                    (k.file.clone(), k.plugin_id.clone()),
+                )
+            }),
+        );
         scan
     }
 
@@ -2305,8 +2319,7 @@ impl State {
     /// A batch whose idempotency key this client already used is not applied again: it
     /// gets the result of the first call with that key, and emits nothing. That check
     /// comes first, so a retry succeeds even after `rev` moved on. An `ends_gesture` the
-    /// client has no open gesture for is refused next, as the mock does, and then a
-    /// `filter.add` of a scanned CLAP kind, since nothing runs CLAP filters yet.
+    /// client has no open gesture for is refused next, as the mock does.
     fn batch(
         &mut self,
         client_id: &ClientId,
@@ -2329,7 +2342,6 @@ impl State {
                 format!("the client has no open gesture `{gesture_id}`"),
             ));
         }
-        clap_kinds::refuse_filters(&batch.edits)?;
         // A running output can't be deleted.
         let applied = self.graph.apply_with_running(
             &batch.edits,

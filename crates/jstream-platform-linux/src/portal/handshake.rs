@@ -81,14 +81,29 @@ impl PortalInfo {
     }
 }
 
-/// The cursor mode to ask for, for CPU frames: drawn into them where the portal can,
-/// since nothing composites a metadata cursor yet; else hidden.
+/// The cursor mode to ask for when the pointer isn't wanted as metadata: drawn into the
+/// frames where the portal can, else hidden.
 pub(crate) fn cursor_mode_for_cpu_frames(available: CursorModes) -> CursorModes {
     if available.0 & CursorModes::EMBEDDED.0 != 0 {
         CursorModes::EMBEDDED
     } else {
         CursorModes::HIDDEN
     }
+}
+
+/// The cursor mode to ask for when the pointer is to be left out
+/// ([`CursorCapture::Hidden`](jstream_platform::CursorCapture::Hidden)): hidden where the
+/// portal offers it, else as metadata, which the stream then doesn't ask PipeWire for,
+/// else drawn in, the one mode left.
+pub(crate) fn cursor_mode_for_hidden(available: CursorModes) -> CursorModes {
+    [
+        CursorModes::HIDDEN,
+        CursorModes::METADATA,
+        CursorModes::EMBEDDED,
+    ]
+    .into_iter()
+    .find(|m| available.0 & m.0 != 0)
+    .unwrap_or(CursorModes::HIDDEN)
 }
 
 /// One stream `Start` granted.
@@ -168,6 +183,10 @@ pub(crate) struct Handshake {
     session: Option<String>,
     streams: Vec<PortalStream>,
     new_token: Option<String>,
+    /// Whether the pointer is wanted as metadata ([`Handshake::with_cursor_metadata`]).
+    cursor_metadata: bool,
+    /// Whether the pointer is to be left out ([`Handshake::with_cursor_hidden`]).
+    cursor_hidden: bool,
 }
 
 fn bad_reply(what: &'static str, why: &str) -> PlatformError {
@@ -213,7 +232,31 @@ impl Handshake {
             session: None,
             streams: Vec::new(),
             new_token: None,
+            cursor_metadata: false,
+            cursor_hidden: false,
         })
+    }
+
+    /// This handshake asking for the pointer to be left out, in the first mode the
+    /// portal offers that does ([`cursor_mode_for_hidden`]).
+    pub(crate) fn with_cursor_hidden(mut self) -> Self {
+        self.cursor_hidden = true;
+        self
+    }
+
+    /// This handshake asking for the pointer as cursor metadata, beside the frames,
+    /// when the portal offers that mode; else it is drawn into them as without.
+    pub(crate) fn with_cursor_metadata(mut self) -> Self {
+        self.cursor_metadata = true;
+        self
+    }
+
+    /// Whether `SelectSources` asks for the pointer as metadata: it was wanted, and the
+    /// portal (version 2 or later) offers the mode.
+    pub(crate) fn sends_cursor_metadata(&self) -> bool {
+        self.cursor_metadata
+            && self.info.version >= CURSOR_VERSION
+            && self.info.cursor_modes.0 & CursorModes::METADATA.0 != 0
     }
 
     /// The session's path, once `CreateSession` has answered, so a failed handshake can
@@ -270,7 +313,13 @@ impl Handshake {
                     ("multiple", Value::Bool(false)),
                 ];
                 if self.info.version >= CURSOR_VERSION {
-                    let mode = cursor_mode_for_cpu_frames(self.info.cursor_modes);
+                    let mode = if self.sends_cursor_metadata() {
+                        CursorModes::METADATA
+                    } else if self.cursor_hidden {
+                        cursor_mode_for_hidden(self.info.cursor_modes)
+                    } else {
+                        cursor_mode_for_cpu_frames(self.info.cursor_modes)
+                    };
                     options.push(("cursor_mode", Value::U32(mode.0)));
                 }
                 if self.info.version >= PERSIST_VERSION {
@@ -499,7 +548,7 @@ fn parse_streams(v: &Value) -> Result<Vec<PortalStream>, PlatformError> {
 mod tests {
     use super::{
         Granted, Handshake, Next, PICKER, PortalInfo, PortalStream, QUICK, close_session,
-        cursor_mode_for_cpu_frames, is_session_closed, portal_owner_query,
+        cursor_mode_for_cpu_frames, cursor_mode_for_hidden, is_session_closed, portal_owner_query,
     };
     use crate::dbus::{Kind, Message, Value, lookup};
     use crate::portal::{CursorModes, PortalPick, SourceTypes};
@@ -682,6 +731,63 @@ mod tests {
     }
 
     #[test]
+    fn the_pointer_is_asked_for_as_metadata_only_where_the_portal_offers_it() {
+        let cursor_mode = |h: &mut Handshake| {
+            let (create, _) = request(h);
+            let path1 = "/org/freedesktop/portal/desktop/request/1_42/jstream_1";
+            assert_eq!(create.member.as_deref(), Some("CreateSession"));
+            h.on_response(&signal(
+                path1,
+                0,
+                vec![("session_handle", Value::Str(SESSION.into()))],
+            ))
+            .expect("session created");
+            let (select, _) = request(h);
+            let o = options(&select);
+            o.iter()
+                .find(|(key, _)| key == "cursor_mode")
+                .map(|(_, v)| v.clone())
+        };
+        let mut wanted = Handshake::new(PortalPick::Display, info(5), ME, PORTAL, None)
+            .expect("new")
+            .with_cursor_metadata();
+        assert!(wanted.sends_cursor_metadata());
+        assert_eq!(cursor_mode(&mut wanted), Some(Value::U32(4)), "metadata");
+
+        let embedded_only = PortalInfo {
+            cursor_modes: CursorModes(3),
+            ..info(5)
+        };
+        let mut fallback = Handshake::new(PortalPick::Display, embedded_only, ME, PORTAL, None)
+            .expect("new")
+            .with_cursor_metadata();
+        assert!(!fallback.sends_cursor_metadata());
+        assert_eq!(
+            cursor_mode(&mut fallback),
+            Some(Value::U32(2)),
+            "drawn in, where metadata isn't offered"
+        );
+
+        let mut old = Handshake::new(PortalPick::Display, info(1), ME, PORTAL, None)
+            .expect("new")
+            .with_cursor_metadata();
+        assert!(
+            !old.sends_cursor_metadata(),
+            "version 1 has no cursor modes"
+        );
+        assert_eq!(cursor_mode(&mut old), None);
+
+        let plain = Handshake::new(PortalPick::Display, info(5), ME, PORTAL, None).expect("new");
+        assert!(!plain.sends_cursor_metadata(), "not asked for");
+
+        let mut hidden = Handshake::new(PortalPick::Display, info(5), ME, PORTAL, None)
+            .expect("new")
+            .with_cursor_hidden();
+        assert!(!hidden.sends_cursor_metadata(), "no metadata to read");
+        assert_eq!(cursor_mode(&mut hidden), Some(Value::U32(1)), "left out");
+    }
+
+    #[test]
     fn cancelling_and_failures_are_errors() {
         let path1 = "/org/freedesktop/portal/desktop/request/1_42/jstream_1";
         let mut h = Handshake::new(PortalPick::Display, info(5), ME, PORTAL, None).expect("new");
@@ -773,6 +879,17 @@ mod tests {
         assert_eq!(
             cursor_mode_for_cpu_frames(CursorModes(7)),
             CursorModes::EMBEDDED
+        );
+        assert_eq!(cursor_mode_for_hidden(CursorModes(7)), CursorModes::HIDDEN);
+        assert_eq!(
+            cursor_mode_for_hidden(CursorModes(6)),
+            CursorModes::METADATA,
+            "metadata the stream doesn't read leaves it out too"
+        );
+        assert_eq!(
+            cursor_mode_for_hidden(CursorModes(2)),
+            CursorModes::EMBEDDED,
+            "drawn in, the only mode offered"
         );
 
         let close = close_session(SESSION);
