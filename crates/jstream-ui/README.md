@@ -40,7 +40,8 @@ Contents ([Design](#design) explains the choices):
   `save_as_new`, `apply`, `reset`), and it reads and writes itself as JSON. Tested
   natively.
 - **Workspace** (`workspace.rs`): `Workspace`, which draws the dock around the canvas,
-  with the splitters, dividers, tabs and close buttons, and drags a tab to dock it;
+  with the splitters, dividers, tabs and close buttons (and the mixer's meter flip in
+  its title bar), and drags a tab to dock it;
   `DockState`, the dock as context, which the header's menus change; and `restore`,
   the dock the browser kept.
 - **Host detection** (`host.rs`): `desktop()`, the engine URL and token the desktop
