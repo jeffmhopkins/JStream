@@ -4470,7 +4470,7 @@ stamp = { hash = "b3:e7d2b3325e5ac572", by = "agent:a2656", note = "Dependabot #
 stamp = { hash = "b3:063a37f95f399bff" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/canvas.spec.js"]
-stamp = { hash = "b3:b348474fc3d7553c", by = "agent:ui-parity", note = "Checked fixtures.js: openAddSource right-clicks just under the last row of Scene objects and nestScene goes through it; the other helpers are as described." }
+stamp = { hash = "b3:0b33fafc1e51563f", by = "agent:claude", note = "canvas.spec.js now waits for the revision with expect.poll(() => rev(page)) after the drop, after undo and redo, and after the nudges, instead of reading it once (#848). Harness's description of rev (the revision the header last heard of) still holds and is why the poll is needed; no fixture or config changed." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/connect.spec.js"]
 stamp = { hash = "b3:10a4b3cdfca0b4e0", by = "agent:claude-ui-features", note = "fixtures.js: connect waits for header.app-header, new disconnect (File menu) and rev (header data-rev), now listed in the Harness bullet; connect.spec.js uses the disconnect fixture and the File menu; outputs.spec.js adds header Record steps using connect and inspectorPage as described. Daemon, console-error and setup behaviour unchanged." }
@@ -4518,7 +4518,7 @@ stamp = { hash = "b3:063a37f95f399bff" }
 stamp = { hash = "b3:4415445e80dd1ce6", by = "agent:ui-parity", note = "Mixer slice: new Mixer bullet for mixer.spec.js's three tests (the master card's count, disabled Hear and FX, folding the channel rows; typed and stepped gains as one edit each with the fader following; meterTicks loudness, tooltip, bar fill and true-peak note and warning; the folded Buses section adding a bus). The Menus bullet now says the Add source dialog's types start with the seed's audio inputs and the test picks Color, as menus.spec.js does." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/canvas.spec.js"]
-stamp = { hash = "b3:b348474fc3d7553c", by = "agent:ui-parity", note = "Checked each spec against its bullet: canvas live.set and live.cancel checks and the double click opening Properties, the new menus and properties specs, and inspector and transform now adding their second item through the Add source dialog and a nested scene." }
+stamp = { hash = "b3:0b33fafc1e51563f", by = "agent:claude", note = "canvas.spec.js's drag and nudge specs now poll the revision until it reaches startRev + 1 and startRev + 3 rather than reading it once (#848). The assertions are as strict as before, so the Canvas bullet (one edit ending the gesture, Ctrl+Z and Ctrl+Shift+Z reverse it, nudges and Ctrl+Z) still holds." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/connect.spec.js"]
 stamp = { hash = "b3:10a4b3cdfca0b4e0", by = "agent:claude-ui-features", note = "connect.spec.js: File menu shows URL and protocol, Escape closes it, Disconnect through it, as the Connecting bullet says; outputs.spec.js: Go Live and End stream from the header and the header's Record starting and stopping a recording, as the Outputs bullet says." }
