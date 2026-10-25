@@ -5,10 +5,11 @@
 //!
 //! - `jstream-plugin-host scan <file>` writes one `Plugins` control message (the file's
 //!   hostable audio effects and their parameters) to stdout and exits.
-//! - `jstream-plugin-host run <block> <file> <plugin-id>` opens the shared block named
-//!   `<block>` the engine created, and runs that plugin over it (`session`) on a
-//!   real-time thread registered with MMCSS (`rt`), with control messages on stdin and
-//!   stdout, until the engine stops it. Windows only, for now.
+//! - `jstream-plugin-host run <file> <plugin-id>` maps the shared block the engine
+//!   created from the handle in its first control message (`ToHost::Block`: the block
+//!   has no name, so nothing else can open it), and runs that plugin over it
+//!   (`session`) on a real-time thread registered with MMCSS (`rt`), with control
+//!   messages on stdin and stdout, until the engine stops it. Windows only, for now.
 //!
 //! Exit status: 0 after a clean run or scan, 1 on a failure (also reported on stdout as
 //! an `Error` message, and on the block), 2 for a usage error.
@@ -34,8 +35,8 @@ use std::io::Write;
 use std::path::Path;
 use std::process::ExitCode;
 
-use jstream_plugin_clap::Library;
-use jstream_plugin_proto::control::FromHost;
+use jstream_plugin_clap::{Library, MAX_STATE_BYTES};
+use jstream_plugin_proto::control::{FromHost, MAX_STATE};
 
 use crate::session::Outbox;
 
@@ -45,9 +46,12 @@ use crate::session::Outbox;
 #[global_allocator]
 static ALLOC: assert_no_alloc::AllocDisabler = assert_no_alloc::AllocDisabler;
 
+// The host refuses to save a state larger than the engine takes.
+const _: () = assert!(MAX_STATE_BYTES <= MAX_STATE);
+
 const USAGE: &str = "\
 usage: jstream-plugin-host scan <plugin-file>
-       jstream-plugin-host run <block-name> <plugin-file> <plugin-id>
+       jstream-plugin-host run <plugin-file> <plugin-id>
        jstream-plugin-host --version
 
 The engine starts this program; it isn't meant to be run by hand.
@@ -58,7 +62,7 @@ fn main() -> ExitCode {
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
     match args.as_slice() {
         ["scan", file] => scan(Path::new(file)),
-        ["run", block, file, id] => run(block, Path::new(file), id),
+        ["run", file, id] => run(Path::new(file), id),
         ["--version"] => {
             let _ = writeln!(
                 std::io::stdout(),
@@ -89,13 +93,15 @@ fn scan(file: &Path) -> ExitCode {
 }
 
 #[cfg(windows)]
-fn run(block: &str, file: &Path, id: &str) -> ExitCode {
+fn run(file: &Path, id: &str) -> ExitCode {
     use jstream_platform_windows::{PluginBlock, ProAudioThread};
     use jstream_plugin_proto::{ERROR_LOAD, STATE_FAILED};
     use std::sync::atomic::Ordering;
 
     let mut out = Outbox(std::io::stdout().lock());
-    let block = match PluginBlock::open(block) {
+    let block = match session::block_handle(&mut std::io::stdin())
+        .and_then(|handle| PluginBlock::from_handle(handle).map_err(|e| e.to_string()))
+    {
         Ok(block) => block,
         Err(e) => {
             out.send(&FromHost::Error(format!("opening the shared block: {e}")));
@@ -132,7 +138,7 @@ fn run(block: &str, file: &Path, id: &str) -> ExitCode {
 }
 
 #[cfg(not(windows))]
-fn run(_block: &str, _file: &Path, _id: &str) -> ExitCode {
+fn run(_file: &Path, _id: &str) -> ExitCode {
     Outbox(std::io::stdout().lock()).send(&FromHost::Error(
         "the plugin host runs plugins on Windows only, for now".into(),
     ));

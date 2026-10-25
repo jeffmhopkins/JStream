@@ -181,7 +181,10 @@ the batch **touched**.
   `filter.reorder` by the previous values. `source.duplicate` copies both chains with
   their IDs, `source.delete`'s inverse re-adds every filter after `source.create`,
   `output.delete`'s re-adds the output's after `output.create`, and `source.create`
-  refuses a filter kind.
+  refuses a filter kind. A filter whose kind the graph doesn't describe
+  can only come from a load (below); its settings stay as loaded, `filter.set_settings`
+  on it is `invalid_argument` until the kind is described, and an undo or duplicate
+  that would re-add it fails like any `filter.add` of an unknown kind.
 - **Outputs** (`target.rs` checks the URL): `output.create` and `output.set_target`
   reject, with `invalid_argument` and a fixed reason that never repeats the URL, one
   that isn't an `rtmp://` or `rtmps://` server URL with a host and an application
@@ -405,7 +408,15 @@ the engine's; this crate does no I/O.
   dangling reference, a cycle, settings that don't fit the kind, an unknown kind or a
   URL with a credential fails as `LoadError::Invalid`, naming the object
   (`` item `i1` ``) and the protocol error (boxed, so `Result`s carrying a
-  `LoadError` stay small); nothing is partly loaded. Then `rev` is set
+  `LoadError` stay small); nothing is partly loaded. The exception is a filter of an
+  unknown kind: a pack that isn't installed, or a CLAP plugin the engine hasn't
+  scanned yet (the file loads before the scan). It is put on its chain as saved, its
+  settings unchecked and its `kind_version` kept for the next save, so a build without
+  the kind destroys nothing
+  ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md) › Versioning a
+  kind); its source, output or the master must still have that chain, and a reference
+  in its settings must name something that exists and close no cycle (a master or
+  output filter holds none). Then `rev` is set
   to the file's, so revisions keep increasing across restarts. A source, filter or preset whose
   `kind_version` differs from its kind's descriptor is refused
   (`LoadError::KindVersion`) until kinds ship settings migrations.
@@ -433,8 +444,9 @@ video mix edits and their inverses, a mix blocking its scene's delete and the pl
 pointing it at the program,
 opacity and blend checks and inverses, the filter edits (`tests/filters.rs`: each
 check's field, exact inverses, duplicate and delete, references in filter settings as
-cycles, blockers and plans, the collection file, and the master's and outputs' audio
-chains with their checks), audio defaults by kind, a
+cycles, blockers and plans, the collection file, with a filter of a missing kind
+loaded and saved verbatim but still refused by `filter.add`, and the master's and
+outputs' audio chains with their checks), audio defaults by kind, a
 duplicate's audio and a delete's restore, a bus deleted with its sends and undone
 exactly, bus references (#362: `a_bus_reference_must_name_a_bus`,
 `a_drawn_bus_is_deleted_only_with_its_references_cleared`, and in `persist/tests.rs`
