@@ -69,8 +69,7 @@ test('a double click opens the scene properties, which set its name and hotkey',
   await expect(dialog).toBeHidden();
   await expect(page.locator('.scenes-panel .tree-label')).toHaveText(['Opening', 'Main']);
 
-  // The Inspector names the hotkey, and the dialog reads it back.
-  await expect(page.locator('.inspector .key-value').filter({ hasText: 'Hotkey' })).toContainText('F3');
+  // The dialog reads the hotkey back.
   await scene(page, 'Opening').click({ button: 'right' });
   await menu(page).getByRole('menuitem', { name: 'Properties…' }).click();
   await expect(dialog.getByLabel('Hotkey')).toHaveValue('F3');

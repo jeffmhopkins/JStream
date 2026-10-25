@@ -66,8 +66,8 @@ Contents ([Design](#design) explains the choices):
   (`sources.rs`), what those two share (`tree.rs`: the search box, the favourites
   filter, the star and drag reordering, with the matching and the drop's index tested
   natively), the Inspector (`inspector.rs`: the selected item's box, crop,
-  blending, scene switches and settings, or the selected scene's objects, uses, hotkey
-  and transitions), the
+  blending, scene switches and settings, or the selected scene's objects, uses and
+  transitions), the
   properties form inside it (`properties.rs`), the Add source dialog (`add_source.rs`:
   `AddSource` and the `AddSourceDialog` context that opens it, with its type list and
   the edits it sends, tested natively), the Properties dialog (`source_properties.rs`:
@@ -229,8 +229,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Scene switches (folded: the item's delay, easing, glide and appear and disappear
   effects, each change one `item.set_transition` with the whole settings, "customised"
   while they differ from the defaults) and Properties, the source's settings form. A
-  scene shows its object count, the scenes that use it as a source, the hotkey that
-  switches to it, and its Transition in and out (`scene.set_transitions`, with the
+  scene shows its object count, the scenes that use it as a source, and its
+  Transition in and out (`scene.set_transitions`, with the
   presets from the shared collection). The panel is built
   once per selected item or scene and each field follows the collection, so an edit
   doesn't rebuild it or take the focus. The fields show committed values: a canvas drag

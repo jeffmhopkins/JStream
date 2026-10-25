@@ -10,7 +10,6 @@
 
 use super::Properties;
 use super::number::NumberField;
-use super::scene_properties::chord_label;
 use super::studio;
 use crate::app::SessionContext;
 use crate::store::{Collection, Studio};
@@ -870,16 +869,6 @@ fn SceneSections(scene: SceneId) -> impl IntoView {
             .collection
             .with(|c| c.as_ref().map(|c| c.transitions.clone()))
     });
-    let hotkey = move || {
-        studio
-            .collection
-            .with(|c| {
-                c.as_ref()
-                    .and_then(|c| c.scene_hotkey(&id.get_value()))
-                    .map(|b| chord_label(&b.chord))
-            })
-            .unwrap_or_else(|| "none".to_owned())
-    };
     let overrides = move || {
         info.with(|s| {
             s.as_ref()
@@ -960,7 +949,6 @@ fn SceneSections(scene: SceneId) -> impl IntoView {
         <Fold title="Scene" open=true>
             <div class="key-value"><span class="key">"Objects"</span><span>{objects}</span></div>
             <div class="key-value"><span class="key">"Used as a source in"</span><span>{used}</span></div>
-            <div class="key-value"><span class="key">"Hotkey"</span><span class="mono">{hotkey}</span></div>
         </Fold>
         <Fold title="Transitions" open=true hint=hint>
             {select(true, "Transition in")}

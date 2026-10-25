@@ -62,7 +62,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Dialogs and windows](#dialogs) | 8 | 4 | 2 | 0 | 2 | 0 |
 | [Scenes panel](#scenes) | 10 | 5 | 3 | 2 | 0 | 0 |
 | [Scene objects panel](#objects) | 9 | 6 | 1 | 1 | 1 | 0 |
-| [Inspector](#inspector) | 10 | 7 | 1 | 2 | 0 | 0 |
+| [Inspector](#inspector) | 10 | 6 | 2 | 2 | 0 | 0 |
 | [Transform panel](#transform) | 4 | 4 | 0 | 0 | 0 | 0 |
 | [Filters](#filters) | 8 | 5 | 0 | 0 | 3 | 0 |
 | [Mixer](#mixer) | 7 | 4 | 0 | 2 | 1 | 0 |
@@ -70,7 +70,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Transitions](#transitions) | 6 | 6 | 0 | 0 | 0 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
 | [Keyboard](#keyboard) | 7 | 1 | 3 | 1 | 2 | 0 |
-| **Total** | **130** | **70** | **26** | **13** | **20** | **1** |
+| **Total** | **130** | **69** | **27** | **13** | **20** | **1** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -272,7 +272,7 @@ in the Inspector until the Inspector's own rows say otherwise.
 | IN-05 | 3D | Tilt, Turn, Depth, Perspective, folded by default. | ⬜ | `item.set_geometry` takes any 3D it can draw from protocol 0.34 ([ADR-0050](adr/0050-3d-transforms-rendering.md)). |
 | IN-06 | Crop | Left, Right, Top, Bottom in px. | ✅ | `item.set_crop`, in source pixels. The canvas doesn't draw crop yet (CV-08). |
 | IN-07 | Blending | Mode (9 modes) and Opacity %. | ✅ | Opacity is `item.set_opacity`. The select lists all nine modes; the engine accepts only `normal`, so the others are disabled until it draws them. |
-| IN-08 | Scene section | Objects count, "Used as a source in", hotkey. | ✅ | Objects, "Used as a source in", and the Hotkey: the chord bound to `scene.switch` of the scene (as "Ctrl+1" or "F1"), or "none". It is set in the scene's Properties ([DL-03](#dialogs)); pressing it waits on [KB-07](#keyboard). |
+| IN-08 | Scene section | Objects count, "Used as a source in", hotkey. | 🟡 | Objects and "Used as a source in" are built. The hotkey row waits on K1. |
 | IN-09 | Scene transitions | Transition in and out selects, with the "next scene's in wins" note. | ✅ | `scene.set_transitions`, with "Default (<name>)" for none and the folded hint. The presets come from the shared collection. |
 | IN-10 | Scene switches per item | Delay, easing, glide, appear and disappear effects. | ✅ | The "Scene switches" section, folded, with "customised" while any value differs from the default: Delay (0–3000 ms, step 10), Easing (Inherit, Ease in-out, Ease out, Linear, Spring), Glide to other scenes (Auto, Never), Appear and Disappear (Inherit, Fade, Scale, Slide, None). Each change sends `item.set_transition` with the whole settings. Hiding it in a keyframe waits on the keyframe rows ([SC-07](#scenes)). |
 
