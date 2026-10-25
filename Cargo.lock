@@ -2867,6 +2867,7 @@ dependencies = [
  "jstream-audio",
  "jstream-browser",
  "jstream-control",
+ "jstream-crash",
  "jstream-encode",
  "jstream-graph",
  "jstream-mcp",
