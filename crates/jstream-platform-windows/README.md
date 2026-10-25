@@ -328,13 +328,14 @@ The code is ported from spikes S1 to S3. This first cut has:
     sample's time counted in frames at the stream's rate. The reader leaves in the
     encoder's priming and padding, which a looping file heard as a 25-40 ms hole at
     each wrap (#445), so `decode/gapless.rs` cuts them: the priming is
-    `MF_SD_AUDIO_ENCODER_DELAY` when the source reports it, else for an MP3 what its
-    LAME tag says (`decode/lame.rs`: the encoder's priming plus the decoder's 529
-    frames, plus the Info frame, which the decoder most likely decodes as silence), else
-    1024 frames for AAC (FFmpeg's, whose edit list Media Foundation doesn't apply), else
-    none; the padding is `MF_SD_AUDIO_ENCODER_PADDING`, or the LAME tag's less 529, for
-    which the last block is held back until the end of the stream shows it is the last;
-    and nothing past `MF_PD_DURATION` is kept. For an MP3 cut from its LAME tag, a whole
+    `MF_SD_AUDIO_ENCODER_DELAY` when the source reports it, else 1024 frames for AAC
+    (FFmpeg's, whose edit list Media Foundation doesn't apply), else none; the padding is
+    `MF_SD_AUDIO_ENCODER_PADDING`, for which the last block is held back until the end
+    of the stream shows it is the last. For an MP3 whose source reports neither (the
+    reported values are logged), both come from its LAME tag instead (`decode/lame.rs`):
+    the priming is the encoder's plus the decoder's 529 frames, plus the Info frame,
+    which the decoder most likely decodes as silence, and the padding is the encoder's
+    less 529. Either way, nothing past `MF_PD_DURATION` is kept. For an MP3 cut from its LAME tag, a whole
     pass from the start counts its frames: when the count says the Info frame wasn't
     decoded after all, the passes after it cut one frame less (both choices are logged,
     for the hardware rerun).

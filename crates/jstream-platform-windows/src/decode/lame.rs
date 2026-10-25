@@ -140,31 +140,81 @@ fn be32(bytes: &[u8], at: usize) -> Option<u32> {
 mod tests {
     use super::{Mp3Gapless, read};
 
-    /// The first bytes of an MP3: an optional ID3v2 tag of `id3` bytes, then an MPEG-1
-    /// Layer III stereo frame header without CRC, its 32 bytes of side info, and an
-    /// Info header with a frame count and a LAME tag of `delay` and `padding`.
-    fn mp3(id3: usize, frames: u32, delay: u32, padding: u32) -> Vec<u8> {
+    /// How [`mp3`] lays out the first frame.
+    #[derive(Clone, Copy)]
+    struct Layout {
+        /// The second header byte: sync bits, MPEG version, layer and CRC bit.
+        header1: u8,
+        /// Channel mode 3 (mono) instead of joint stereo.
+        mono: bool,
+        /// Side info bytes after the header (and CRC).
+        side_info: usize,
+        /// The Xing flags: 1 frames, 2 bytes, 4 table of contents, 8 quality.
+        flags: u32,
+        /// An ID3v2.4 tag with a footer, instead of one without.
+        footer: bool,
+        encoder: &'static [u8; 4],
+    }
+
+    /// MPEG-1 Layer III joint stereo without CRC, with only a frame count.
+    const MPEG1: Layout = Layout {
+        header1: 0xFB,
+        mono: false,
+        side_info: 32,
+        flags: 1,
+        footer: false,
+        encoder: b"LAME",
+    };
+
+    /// The first bytes of an MP3: an optional ID3v2 tag of `id3` bytes holding the start
+    /// of a JPEG, then a Layer III frame header laid out as `layout` says, its side info,
+    /// and an Info header with a frame count and a LAME tag of `delay` and `padding`.
+    fn mp3_with(layout: Layout, id3: usize, frames: u32, delay: u32, padding: u32) -> Vec<u8> {
         let mut bytes = Vec::new();
         if id3 > 0 {
             let size = id3 - 10;
-            bytes.extend(b"ID3\x04\x00\x00");
+            let flags = if layout.footer { 0x10 } else { 0 };
+            bytes.extend([b'I', b'D', b'3', 4, 0, flags]);
             for shift in [21, 14, 7, 0] {
                 bytes.push(u8::try_from((size >> shift) & 0x7F).unwrap_or(0));
             }
+            // Cover art: a JPEG's start and APP0 markers look like a frame's sync bits.
+            bytes.extend([0xFF, 0xD8, 0xFF, 0xE0]);
             bytes.resize(id3, 0);
+            if layout.footer {
+                bytes.extend(b"3DI\x04\x00\x10");
+                bytes.resize(bytes.len() + 4, 0);
+            }
         }
-        bytes.extend([0xFF, 0xFB, 0x90, 0x44]);
-        bytes.resize(bytes.len() + 32, 0);
+        let mode = if layout.mono { 0xC4 } else { 0x44 };
+        bytes.extend([0xFF, layout.header1, 0x90, mode]);
+        bytes.resize(bytes.len() + layout.side_info, 0);
         bytes.extend(b"Info");
-        bytes.extend(1u32.to_be_bytes());
-        bytes.extend(frames.to_be_bytes());
-        bytes.extend(b"LAME3.100");
+        bytes.extend(layout.flags.to_be_bytes());
+        if layout.flags & 1 != 0 {
+            bytes.extend(frames.to_be_bytes());
+        }
+        if layout.flags & 2 != 0 {
+            bytes.extend(417_792u32.to_be_bytes());
+        }
+        if layout.flags & 4 != 0 {
+            bytes.extend((0..100u8).map(|at| at.wrapping_mul(2)));
+        }
+        if layout.flags & 8 != 0 {
+            bytes.extend(57u32.to_be_bytes());
+        }
+        bytes.extend(layout.encoder);
+        bytes.extend(b"3.100");
         bytes.resize(bytes.len() + 12, 0);
         bytes.push(u8::try_from(delay >> 4).unwrap_or(0));
         bytes.push(u8::try_from(((delay & 0x0F) << 4) | (padding >> 8)).unwrap_or(0));
         bytes.push(u8::try_from(padding & 0xFF).unwrap_or(0));
         bytes.resize(bytes.len() + 64, 0);
         bytes
+    }
+
+    fn mp3(id3: usize, frames: u32, delay: u32, padding: u32) -> Vec<u8> {
+        mp3_with(MPEG1, id3, frames, delay, padding)
     }
 
     #[test]
@@ -203,11 +253,141 @@ mod tests {
         assert_eq!(gapless.header_was_decoded(193 * 1152), Some(true));
         assert_eq!(gapless.header_was_decoded(192 * 1152), Some(false));
         assert_eq!(gapless.header_was_decoded(192 * 1152 + 100), Some(false));
+        assert_eq!(
+            gapless.header_was_decoded(192 * 1152 + 576),
+            Some(false),
+            "halfway counts as not decoded"
+        );
         let uncounted = Mp3Gapless {
             frames: None,
             ..gapless
         };
         assert_eq!(uncounted.header_was_decoded(193 * 1152), None);
+    }
+
+    #[test]
+    fn every_layout_lame_writes_puts_the_tag_where_it_is_read() {
+        let full = Layout {
+            flags: 0x0F,
+            ..MPEG1
+        };
+        let cases = [
+            ("all four Xing fields, as LAME writes them", full, 1152),
+            (
+                "MPEG-1 mono",
+                Layout {
+                    mono: true,
+                    side_info: 17,
+                    ..full
+                },
+                1152,
+            ),
+            (
+                "MPEG-1 with CRC",
+                Layout {
+                    header1: 0xFA,
+                    side_info: 34,
+                    ..full
+                },
+                1152,
+            ),
+            (
+                "MPEG-2 stereo",
+                Layout {
+                    header1: 0xF3,
+                    side_info: 17,
+                    ..full
+                },
+                576,
+            ),
+            (
+                "MPEG-2 mono",
+                Layout {
+                    header1: 0xF3,
+                    mono: true,
+                    side_info: 9,
+                    ..full
+                },
+                576,
+            ),
+            (
+                "MPEG-2.5 stereo",
+                Layout {
+                    header1: 0xE3,
+                    side_info: 17,
+                    ..full
+                },
+                576,
+            ),
+            (
+                "FFmpeg's encoder",
+                Layout {
+                    encoder: b"Lavc",
+                    ..full
+                },
+                1152,
+            ),
+            (
+                "FFmpeg's muxer",
+                Layout {
+                    encoder: b"Lavf",
+                    ..full
+                },
+                1152,
+            ),
+        ];
+        for (what, layout, frame_samples) in cases {
+            for id3 in [0, 1034] {
+                assert_eq!(
+                    read(&mp3_with(layout, id3, 192, 576, 1260)),
+                    Some(Mp3Gapless {
+                        frame_samples,
+                        frames: Some(192),
+                        encoder_delay: 576,
+                        encoder_padding: 1260,
+                    }),
+                    "{what}, ID3 tag of {id3} bytes"
+                );
+            }
+        }
+        let footer = Layout {
+            footer: true,
+            ..full
+        };
+        assert_eq!(
+            read(&mp3_with(footer, 1034, 192, 576, 1260)).map(|gapless| gapless.encoder_delay),
+            Some(576),
+            "an ID3v2.4 tag with a footer"
+        );
+        let uncounted = Layout {
+            flags: 0x0E,
+            ..full
+        };
+        assert_eq!(
+            read(&mp3_with(uncounted, 0, 192, 576, 1260)).map(|gapless| gapless.frames),
+            Some(None),
+            "no frame count"
+        );
+    }
+
+    #[test]
+    fn headers_that_are_not_layer_three_give_nothing() {
+        // Laid out as MPEG-2 would be, so only the version bits are wrong.
+        let reserved = Layout {
+            header1: 0xEB,
+            side_info: 17,
+            ..MPEG1
+        };
+        assert_eq!(
+            read(&mp3_with(reserved, 0, 192, 576, 1260)),
+            None,
+            "MPEG version 01"
+        );
+        let layer2 = Layout {
+            header1: 0xFD,
+            ..MPEG1
+        };
+        assert_eq!(read(&mp3_with(layer2, 0, 192, 576, 1260)), None, "Layer II");
     }
 
     #[test]

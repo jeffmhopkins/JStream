@@ -347,9 +347,9 @@ fn audio_format(reader: &IMFSourceReader) -> Result<Option<AudioFormat>, Platfor
 }
 
 /// What to cut from the audio stream: the priming and padding the source reports
-/// (`MF_SD_AUDIO_ENCODER_DELAY` and `_PADDING`, from an MP4's `iTunSMPB`), else for an
-/// MP3 what its LAME tag says ([`lame`](super::lame)), else for AAC the usual 1024 frames
-/// of priming, and whatever runs past the file's duration (`MF_PD_DURATION`, which an
+/// (`MF_SD_AUDIO_ENCODER_DELAY` and `_PADDING`, from an MP4's `iTunSMPB`); for an MP3
+/// whose source reports neither, what its LAME tag says ([`lame`](super::lame)); else for
+/// AAC the usual 1024 frames of priming, and whatever runs past the file's duration (`MF_PD_DURATION`, which an
 /// MP4's edit list sets to the content's length). The reader applies none of these itself
 /// (#445). For an MP3 cut from its LAME tag, also what the next passes check.
 fn gapless(
@@ -374,6 +374,13 @@ fn gapless(
     let reported = (
         attribute(&MF_SD_AUDIO_ENCODER_DELAY),
         attribute(&MF_SD_AUDIO_ENCODER_PADDING),
+    );
+    // Logged so a rerun shows which branch below ran (#445).
+    tracing::info!(
+        ?subtype,
+        delay = ?reported.0,
+        padding = ?reported.1,
+        "the audio stream's reported priming and padding"
     );
     let mp3 = (subtype == Some(MFAudioFormat_MP3) && reported == (None, None))
         .then(|| read_lame(path))
