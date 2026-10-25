@@ -324,8 +324,9 @@ state machine. Contents:
   second hardware session refused as `hardware_session_limit` naming the holder, under
   `prefer` or `require`, with `avoid` opening software beside it and `prefer` still
   falling back when no hardware session is open, and an HEVC start the machine lists no
-  hardware encoder for kept at `prefer` and failing as `action_failed`
-  (`src/tests/cpu_pipeline/hardware_sessions.rs`), a
+  hardware encoder for kept at `prefer` and failing as `action_failed`, and a start
+  beside a stopping holder whose session is still closing refused as
+  `hardware_session_limit` naming it (`src/tests/cpu_pipeline/hardware_sessions.rs`), a
   virtual camera publishing the program as BGRA at the canvas size (fitted into a canvas of another size, started again after a stop, running beside
   a stream, refused without a camera in the backends or while another output uses
   it, a refused start keeping the sink, a failed publish failing only that output, black under the privacy screen), a render panic failing both outputs, overload drops from a
@@ -1553,7 +1554,12 @@ encoder's message (0.44, `StartError`; ADR-0027 §3, #443). This holds only for 
 the platform lists a hardware encoder for, or when it can't list them: a held session
 can't be what refuses a codec the machine has no hardware encoder for (HEVC or AV1 on
 many GPUs), so that session opens with its own preference, `prefer` falls back, and a
-failure stays `action_failed` with what the machine lacks. An output that joins an
+failure stays `action_failed` with what the machine lacks. An output that is stopping,
+or failed and is being joined, still holds its hardware session until that join ends
+(`Gate::drain`, then `drained`), so a start in that window counts it and names it
+among the holders, rather than falling back on a cap that is still full while another
+output keeps the program stage up (#834). The codec list is read only while a hardware
+session is held. An output that joins an
 open session opens nothing, so it is never refused. With no hardware session open,
 `prefer` still falls back to software when hardware refuses (ADR-0031). A hardware
 encoder that takes the session and then refuses its first frame no longer falls back

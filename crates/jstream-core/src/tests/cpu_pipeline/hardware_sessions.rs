@@ -3,9 +3,10 @@
 //! refusal is `hardware_session_limit` naming the holders, never a silent fallback to
 //! software. `avoid` still opens software, and with no hardware session open `prefer`
 //! falls back as before. A codec the machine lists no hardware encoder for isn't held
-//! to `require`, so its failure stays `action_failed`.
+//! to `require`, so its failure stays `action_failed`. An output that is stopping still
+//! holds its hardware session until it closes (#834).
 
-use super::super::{batch, block_on, edits, output_call};
+use super::super::{batch, block_on, connected, edits, output_call};
 use super::{TempDir, encoder_status, fakes, streaming_and_recording};
 use crate::runtime::cpu_draw;
 use crate::{Engine, InProcessControl, RecordingPublish};
@@ -18,10 +19,12 @@ use jstream_platform::{
 };
 use jstream_protocol::{
     Edit, EncoderProfile, EncoderProfileId, HardwarePreference as ProfileHardware, OutputId,
-    OutputState, ProtocolError, RateControl, VideoCodec,
+    OutputKind, OutputState, ProtocolError, RateControl, RecordContainer, VideoCodec,
 };
 use std::sync::Arc;
+use std::sync::Condvar;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Duration;
 
 /// Codecs with a hardware video encoder that takes `cap` sessions at a time, as a GPU's
 /// session limit does, and the fakes' software encoder besides. Under `prefer` a full
@@ -32,6 +35,53 @@ struct LimitedHardware {
     open: Arc<AtomicUsize>,
     /// Every hardware preference an open asked for, in order.
     asked: Arc<std::sync::Mutex<Vec<HardwarePreference>>>,
+    /// Holds a hardware session's close while a test says so.
+    linger: Arc<Linger>,
+}
+
+/// Keeps a closing hardware session open while held, as a teardown still releasing
+/// it would, and tells the test when one is waiting.
+#[derive(Default)]
+struct Linger {
+    state: std::sync::Mutex<LingerState>,
+    changed: Condvar,
+}
+
+#[derive(Default)]
+struct LingerState {
+    held: bool,
+    closing: bool,
+}
+
+impl Linger {
+    fn hold(&self) {
+        self.state.lock().expect("linger").held = true;
+    }
+
+    fn release(&self) {
+        self.state.lock().expect("linger").held = false;
+        self.changed.notify_all();
+    }
+
+    /// Whether a session started closing within ten seconds.
+    fn wait_for_close(&self) -> bool {
+        let state = self.state.lock().expect("linger");
+        let (state, _) = self
+            .changed
+            .wait_timeout_while(state, Duration::from_secs(10), |state| !state.closing)
+            .expect("linger");
+        state.closing
+    }
+
+    /// Called as a session closes: waits while held.
+    fn close(&self) {
+        let mut state = self.state.lock().expect("linger");
+        state.closing = true;
+        self.changed.notify_all();
+        while state.held {
+            state = self.changed.wait(state).expect("linger");
+        }
+    }
 }
 
 impl LimitedHardware {
@@ -40,6 +90,7 @@ impl LimitedHardware {
             cap,
             open: Arc::new(AtomicUsize::new(0)),
             asked: Arc::default(),
+            linger: Arc::default(),
         }
     }
 }
@@ -49,10 +100,12 @@ struct HardwareVideo {
     inner: Box<dyn VideoEncoder>,
     info: CodecInfo,
     open: Arc<AtomicUsize>,
+    linger: Arc<Linger>,
 }
 
 impl Drop for HardwareVideo {
     fn drop(&mut self) {
+        self.linger.close();
         self.open.fetch_sub(1, Ordering::AcqRel);
     }
 }
@@ -132,6 +185,7 @@ impl Codecs for LimitedHardware {
             inner,
             info,
             open: Arc::clone(&self.open),
+            linger: Arc::clone(&self.linger),
         }))
     }
 
@@ -348,4 +402,79 @@ fn a_codec_without_hardware_is_no_session_limit() {
         "the HEVC open keeps its own preference"
     );
     assert_eq!(both.status("yt"), (OutputState::Active, Some(true), 1, 1));
+}
+
+/// A start beside an output that is stopping, while that output's hardware session is
+/// still closing and the program stage stays up for `rec`, counts the session as held
+/// (#834): with the cap still full it fails as `hardware_session_limit` naming the
+/// stopping output, rather than falling back to software.
+#[test]
+fn a_stopping_holder_still_holds_its_hardware_session() {
+    let dir = TempDir::new("hw-stopping");
+    let codecs = LimitedHardware::new(1);
+    let linger = Arc::clone(&codecs.linger);
+    let mut fakes = fakes();
+    fakes.backends.codecs = Arc::new(codecs);
+    let publish = RecordingPublish::new();
+    let (engine, control, _events) =
+        streaming_and_recording(&fakes, cpu_draw(), &publish, &dir.join("show.mp4"));
+    let profile = |kbps, hardware| {
+        let mut profile = EncoderProfile::DEFAULT;
+        profile.video.rate_control = RateControl::Cbr { kbps };
+        profile.video.hardware = hardware;
+        profile
+    };
+    let encoder = |id: &str, profile| Edit::EncoderCreate {
+        profile_id: EncoderProfileId::new(id),
+        name: id.into(),
+        profile,
+    };
+    let set = |output: &str, profile: &str| Edit::OutputSetEncoder {
+        output_id: OutputId::new(output),
+        profile_id: Some(EncoderProfileId::new(profile)),
+    };
+    let second = dir.join("second.mp4");
+    batch(
+        &control,
+        edits(vec![
+            encoder("soft", profile(4000, ProfileHardware::Avoid)),
+            encoder("hq", profile(8000, ProfileHardware::Prefer)),
+            Edit::OutputCreate {
+                output_id: OutputId::new("rec2"),
+                kind: OutputKind::Record {
+                    path: second.to_str().expect("a UTF-8 temp path").into(),
+                    container: RecordContainer::Mp4,
+                },
+            },
+            set("rec", "soft"),
+            set("rec2", "hq"),
+        ]),
+    )
+    .expect("encoder edits");
+    // `rec` keeps the program stage up on software; `yt` takes the one hardware session.
+    block_on(control.call(output_call("rec", true))).expect("rec start");
+    block_on(control.call(output_call("yt", true))).expect("yt start");
+    assert_eq!(
+        encoder_status(&control, "yt").1.map(|e| e.hardware),
+        Some(true)
+    );
+
+    linger.hold();
+    let stopper = connected(&engine);
+    let stop = std::thread::spawn(move || block_on(stopper.call(output_call("yt", false))));
+    let closing = linger.wait_for_close();
+    let started = closing.then(|| block_on(control.call(output_call("rec2", true))));
+    linger.release();
+    stop.join().expect("the stop thread").expect("yt stop");
+    assert!(closing, "yt's hardware session never started closing");
+
+    match started.map(|started| started.map_err(|err| err.protocol().cloned())) {
+        Some(Err(Some(ProtocolError::HardwareSessionLimit { outputs, .. }))) => {
+            assert_eq!(outputs, vec![OutputId::new("yt")]);
+        }
+        other => panic!("rec2 wasn't refused as the session limit: {other:?}"),
+    }
+    assert_eq!(encoder_status(&control, "yt").0, OutputState::Stopped);
+    assert_eq!(encoder_status(&control, "rec2").0, OutputState::Failed);
+    let _ = block_on(control.call(output_call("rec", false)));
 }
