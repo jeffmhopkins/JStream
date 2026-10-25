@@ -225,7 +225,12 @@ fn check_media_foundation() -> Result<(), Failure> {
 }
 
 /// Loads or creates the token, then serves until a signal arrives.
-fn run(options: Options) -> Result<(), Failure> {
+fn run(mut options: Options) -> Result<(), Failure> {
+    // Installed plugins are saved beside the daemon's other state unless told otherwise.
+    if options.plugin_dir.is_none() {
+        options.plugin_dir = jstream_platform::paths::data_dir()
+            .map(|dir| dir.join("plugins").to_string_lossy().into_owned());
+    }
     let path = match options.token_file.clone() {
         Some(path) => PathBuf::from(path),
         None => match std::env::var_os(TOKEN_FILE_ENV) {

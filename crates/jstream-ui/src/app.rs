@@ -11,6 +11,7 @@ use crate::panels::add_source::AddSourceDialog;
 use crate::panels::filters::{AddFilter, FilterDialogs, FilterSettings};
 use crate::panels::inspector::Folds;
 use crate::panels::labels::LabelManager;
+use crate::panels::mixer::MixerOrientation;
 use crate::panels::source_properties::{PropertiesDialog, SourceProperties};
 use crate::session::{Session, engine_url_for_page};
 use crate::store::Studio;
@@ -254,6 +255,7 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
     provide_context(FilterDialogs::new());
     provide_context(Folds::restore());
     provide_context(LabelManager::new());
+    provide_context(MixerOrientation::new());
     view! {
         <div class="shell">
             <Header info=info disconnect=disconnect />

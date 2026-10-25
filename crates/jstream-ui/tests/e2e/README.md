@@ -154,12 +154,18 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   after its row was closed, and one after the Filter settings dialog was cancelled,
   each in the problem bar.
 - **Mixer** (`mixer.spec.js`, on the Audio mixer tab): the master card counting the
-  seed's two channels, its Hear and FX buttons disabled, and its button unfolding the
-  channel rows by name and folding them again; a typed gain in the Mic's dB field and
+  seed's two channels, its Hear and FX buttons disabled, and its button (with its
+  tooltip) unfolding the channel rows by name and folding them again; a typed gain in the Mic's dB field and
   its + stepper each as one edit, with the fader following; with `meterTicks`, the
   short-term loudness and its tooltip, the bar's fill against the target, and the true
-  peak "safe", then the warning over 0 dBTP; and the Buses section folded under its
-  count, the master first, adding a bus.
+  peak "safe" with nothing announced, then the warning over 0 dBTP, announced; and the Buses section folded under its
+  count, the master first, adding a bus. A tab click elsewhere in the dock leaving a
+  channel's open Routing open (the rows aren't rebuilt). The title bar's flip button turning the meters
+  vertical: the master strip and its channels folded beside it by short name, the
+  Mic's stacked field scrubbed upwards and stepped down as one edit each, and its mute;
+  docked in the Right sidebar the strips start vertical, 64px wide, and the button
+  flips them back; and, with `meterTicks`, the vertical meters filling upwards and the
+  master strip's loudness and true-peak warning, announced only once over 0 dBTP.
 - **Labels** (`labels.spec.js`): the label manager, opened from the Scene objects
   panel's filter, adding a label (its icon picker open on the tag), renaming it,
   choosing an icon and a colour, a second label taking the next swatch, and Done; a
