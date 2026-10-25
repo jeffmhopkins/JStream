@@ -26,7 +26,9 @@ covers = ["xtask/src/docs/**"]
 The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROADMAP.md#m0)).
 
 - **Available now:** `cargo xtask docs check` validates doc identity and metadata
-  schema, sections and rules (anchors, blocks, `enforced_by` vocabulary and check names),
+  schema, sections and rules (anchors, blocks, and every `enforced_by` entry against
+  [what it names](#rules): CI checks, configured lints, `deny.toml` sections, and tests
+  read from the source),
   references (links, anchors, registered external URLs, superseded ADRs, `depends_on`), and
   facts. It also refuses git conflict markers left in a doc by a merge committed with its
   conflicts unresolved. It runs as the `docs` CI check.
@@ -60,11 +62,14 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
   `cargo xtask docs review` writes a doc's `reviewed` stamp.
 - **`cargo xtask docs merge-main`** ([Hash-bound verification](#verification)): merges
   `origin/main` (or, with `--from wave/<name>`, the wave a PR targets), resolves conflicts
-  that are only between stamps or only inside `@generated` blocks, moves inline stamps a branch from before ADR-0053 still
+  that are only between stamps or only inside `@generated` blocks, takes main's `by` and note
+  for each ledger entry both sides recorded at the same content, moves inline stamps a branch from before ADR-0053 still
   has, and lists the sections left stale: each stale input with the note the branch had
-  written on it and the merged commits that changed it. `docs verify --merge` then keeps
-  those notes and adds what the merge changed ([Verification notes](#notes)), and refuses
-  an input whose file the branch changed after the merge.
+  written on it and the merged commits that changed it, then the PRs those commits came
+  from. `docs verify --merge` then keeps those notes and adds what the merge changed
+  ([Verification notes](#notes)), and refuses an input whose file the branch changed after
+  the merge. It and `--renote` list the merged PRs behind the entries they rewrite and
+  name any the note leaves out.
 - **Weekly sweep** ([Time-based review](#ttl)): the scheduled `sweep` workflow reports
   `cargo deny` findings, docs due for review, `cargo update --dry-run` and the override
   audit list in one issue. The parts that [Time-based review](#ttl) lists as not built
@@ -323,7 +328,15 @@ cargo xtask docs migrate                       # move inline stamps to the ledge
 wave's ([runbook](runbooks/waves.md#current)). Every
 conflict in the ledger takes main's side: a merge never leaves a section falsely fresh,
 and a conflict usually leaves it stale, for a re-read. The result must parse, and is
-rewritten in canonical form. In a doc, a conflict whose two sides are only inline `verified` lines
+rewritten in canonical form. Once the ledger has no conflict left, each entry whose hash
+equals main's entry for the same input takes main's entry, `by` and note included,
+whether it conflicted or not. Both sides verified the same content of that input, so no
+section's freshness changes; but the last note on it becomes the one main wrote for it,
+and the branch's ledger diff keeps only the inputs it verified at other content. This goes
+into the merge commit itself, and `merge-main` names each section it changed. A
+fast-forward, or a merge with nothing to bring in, makes no merge commit and takes
+nothing; neither does a merge whose ledger doesn't parse, which the steps after the commit
+report. In a doc, a conflict whose two sides are only inline `verified` lines
 inside `@section` blocks (either side may have none, as when `main` moved them to the
 ledger) takes main's side too. A conflict whose two sides lie wholly inside `@generated`
 blocks that `docs generate` writes, such as two PRs each regenerating the README's progress
@@ -336,7 +349,9 @@ resolved this way it commits the merge, runs
 `docs migrate` and commits what that changed separately, and prints the sections that are
 now stale, for `docs verify` after a re-read. Under each one it prints each stale input,
 the note this branch had written on it before the merge, and the merged commits that
-changed the file the input lives in.
+changed the file the input lives in (for a merge commit, against its first parent). For a
+`dep:` input, only those that changed the text it names count: the anchor's section or
+row, or the whole doc's body.
 
 `docs verify <DOC#anchor> --by <who> --merge "<text>"` re-verifies such a section after the
 re-read. It finds the branch's latest merge (one that no `origin/main` or `origin/wave/*`
@@ -363,9 +378,15 @@ lists the branch's notes, after it has committed the merge.
 section that is already fresh, as when a reviewer asks for a better note, without touching
 any hash. It rewrites only the entries this branch wrote: those that differ from the ledger
 at the merge base of `HEAD` and `origin/main`, or of the wave named with
-`--from wave/<name>`. It refuses a stale section, which needs a re-read and `--note` or
-`--merge`, and a section this branch never stamped. It fails when the ledger at that merge
-base doesn't parse, rather than taking every entry for this branch's own.
+`--from wave/<name>`. A PR stacked on another PR's branch names that branch instead,
+`--from <base branch>`, which must be an ancestor of `HEAD` (merge it first), so the base
+PR's entries keep their notes. An entry equal to the one where `HEAD` left `origin/main`
+or any `origin/wave/*` is kept too, so main's or a wave's notes survive when the stacked PR
+has merged them ahead of its base. A bare `--renote` on a stacked PR compares against
+`origin/main` and so rewrites the base PR's entries as well: name the base. It refuses a
+stale section, which needs a re-read and `--note` or `--merge`, and a section this branch
+never stamped. It fails when the ledger at that merge base doesn't parse, rather than
+taking every entry for this branch's own.
 
 `docs migrate` moves inline `verified` stamps, from before the ledger, into it. A stamp
 whose hash is still what the inline rule (one hash over all the inputs above) computes
@@ -465,8 +486,21 @@ holds**. The note says what was checked and why it still holds, e.g.:
   said about this PR's change, plus what the merge changed in that section's inputs.
   `docs verify --merge "<what the merge changed>"` keeps the earlier note on each entry
   this PR changes and adds the text. On an input whose hash equals the merged side's
-  entry, it keeps that entry as it is. `merge-main` prints the merged commits behind each
-  stale input to write it from ([Hash-bound verification](#verification)). The text is
+  entry, it keeps that entry as it is, which `merge-main` has already given main's note.
+  `merge-main` prints the merged commits behind each
+  stale input to write it from ([Hash-bound verification](#verification)), and under each
+  stale section the PRs (`(#N)` in their subjects) those commits came from. A wave's
+  landing squash (`chore(wave): land …`) counts as its own PR and the PRs the merge
+  brought in through it. Its body is GitHub's list of every commit on the wave branch,
+  with their bodies, so of its `* <subject> (#N)` lines only those naming a PR the
+  branch's base doesn't already have count, and not an issue a subject cites as `(#A)`
+  before its own `(#B)` or the body closes (`Closes #N`). Each counts whether or not that
+  PR touched the input. The list can still hold an issue number that a wave-branch
+  commit's subject ends with, since the history can't tell it from a PR's: don't credit
+  a number that isn't a PR. `--merge` and
+  `--renote` print the PRs behind the entries they rewrite (an entry kept as the merged
+  side wrote it is left out) and name any the text leaves out: credit each PR whose change
+  the note covers, by number. The text is
   still per section: one stock text across every stale section, such as "rechecked after merging
   main", fails review. A section this PR also changed after the merge takes `--note`, and
   `--merge` refuses it.
@@ -562,9 +596,9 @@ replaced_by = "R-RT-009"                           # retired rules only, with a 
 | Entry | Meaning | Checked how |
 |---|---|---|
 | `ci:<check>` | A required CI check | Must be in [the check list](RULES.md#R-GIT-003). Once that check's milestone has passed, the workflow must contain it. |
-| `lint:<lint>` | A rustc or clippy lint | Must be configured in `[workspace.lints]` |
-| `deny:<section>` | A cargo-deny policy | Section exists in `deny.toml` |
-| `test:<path>` | A named test | Must appear in `cargo test -- --list` once its crate exists. Until then it is *pending*. |
+| `lint:<lint>` | A rustc, clippy or other tool's lint | Must be set to a level other than `allow` in the root `Cargo.toml`'s `[workspace.lints]`. A `<tool>::<name>` entry (`clippy::`, `rustdoc::`) is looked up as `<name>` under that tool's own `[workspace.lints.<tool>]` table, and a name without a prefix under `[workspace.lints.rust]`. |
+| `deny:<section>` | A cargo-deny policy | `deny.toml` has a top-level `[<section>]` table |
+| `test:<path>` | A named test, or a module of tests | `<path>` is a crate (`-` written `_`) or an integration test target, then the test's path as `cargo test -- --list` lists it in one of that crate's targets, or in that target. The tool reads the path from the source without building, so tests a macro generates aren't seen. A module is accepted only as a prefix that ends at a `::` boundary with at least one test under it. A crate on the [crate map](ARCHITECTURE.md#crate-map) that doesn't exist yet makes the entry *pending*. |
 | `review` | Judged by the reviewer agent ([REVIEW.md](../REVIEW.md)) | — |
 | `human` | Needs the maintainer's judgment | — |
 
@@ -624,7 +658,7 @@ It also generates one block from data rather than from docs:
   an item updates its entry, so the README changes with the work.
   `cargo xtask docs progress` compares the file with the merged history (the `(#N)` of
   each squash commit, the `(#N)` of each `* …` line in a wave's landing squash, which
-  lists the PRs the wave carried, and item IDs that PR titles name in parentheses) and
+  lists the wave's PRs among every commit on the wave branch, and item IDs that PR titles name in parentheses) and
   prints, as Markdown, the entries it contradicts, the `planned` and `review` items with
   no `needs` and the `done` items still listing it; the weekly `sweep` reports them. It
   never fails a PR, because a PR's own merge commit doesn't exist yet.

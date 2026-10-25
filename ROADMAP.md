@@ -40,8 +40,8 @@ Two tracks run in parallel.
   Foundation H.264 encode, at 1080p60 with no CPU copy. Measured on named hardware.
 - **S2 Virtual camera:** Rust COM media source loaded by Frame Server, fed cross-process
   through a shared texture. Also answers whether Frame Server accepts a per-user (HKCU)
-  registration, or needs a one-time elevated machine-wide one
-  ([ADR-0020](docs/adr/0020-portable-windows-distribution.md)).
+  registration, or needs a one-time elevated machine-wide one (ADR-0020, since superseded
+  by [ADR-0066](docs/adr/0066-portable-windows-distribution-v2.md)).
 - **S3 Clock:** WASAPI mic + loopback timestamps mapped to QPC, drift measured over an hour,
   adaptive resampler validated.
 - **S4 Browser source:** a CEF off-screen page delivered as a shared GPU texture
@@ -56,7 +56,7 @@ but needed one before the browser source is built).
 <a id="m1"></a>
 ## M1: Headless engine, driven by agents (Windows)
 <!-- @section
-depends_on = ["docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0020-portable-windows-distribution.md"]
+depends_on = ["docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0066-portable-windows-distribution-v2.md"]
 -->
 
 - **M1a Thin slice to YouTube:** WGC display capture → compositor (one scene) → MF H.264 +
@@ -93,7 +93,7 @@ depends_on = ["docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0
     The `Output` model reserves its video and audio chains, empty by default
     ([ADR-0027](docs/adr/0027-program-master-and-output-chains.md)).
 - **M1c Virtual camera:** `jstream-vcam-windows` with in-app registration, shipped in the
-  portable zip ([ADR-0020](docs/adr/0020-portable-windows-distribution.md); from spike S2).
+  portable zip ([ADR-0066](docs/adr/0066-portable-windows-distribution-v2.md); from spike S2).
 - **M1d Hardening:** RTMP reconnect with backoff, log rotation, local minidumps, `stats.tick`,
   N-edition detection, `multiple-versions = "deny"` in `deny.toml`, the weekly `sweep` job.
 

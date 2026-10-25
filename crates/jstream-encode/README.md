@@ -29,9 +29,9 @@ an output with a video chain gets its own) needs no new shape.
 
 Its only JStream dependency is `jstream-platform` (layer 1), whose `media` re-export
 supplies the frame, sample and packet types; besides that, `thiserror`. Dev-dependencies:
-`jstream-platform`'s `fake` feature, for `FakeCodecs`, and `wgpu` at the workspace pin
+`jstream-platform`'s `fake` feature, for `FakeCodecs`, `wgpu` at the workspace pin
 with jstream-render's backends, so the GPU-frame tests can make textures on a software
-adapter.
+adapter, and `criterion`, for the benchmarks.
 
 Why a crate: the crate map puts encoder sessions in their own layer-3 crate, between
 the platform traits they drive and the layer-4 outputs that consume them, and it keeps
@@ -47,6 +47,9 @@ the encode thread's rules ([R-RT-002](../../docs/RULES.md#R-RT-002),
   otherwise a CPU one; `path()` returns the `VideoPath` it took.
   `input()`, `subscribe()`, `subscribe_with_capacity(n)`, `request_keyframe()`,
   `info()`, `stats()` and `finish()`. Sessions are `Send + Sync`, so outputs can share one through an `Arc`.
+  `VideoSession::codec()` is the codec encoding now: `info()`'s, or the one the encoder
+  fell back to after it opened (a hardware encoder refusing its first frame, #443),
+  which the encode thread records once.
 - `VideoInput` / `AudioInput`: cloneable push handles. `push` never blocks.
 - `Subscription`: `recv`, `try_recv`, `recv_timeout`, each returning packets in decode
   order and then a `StreamEnd`; `info()`, per-subscriber `stats()`, and
@@ -68,7 +71,10 @@ next regular one when the encoder can't force it; keyframe requests coalesce; `f
 drains; an encoder error and a panic reach every subscriber; dropping a session closes
 the streams and joins the thread; dropped audio blocks become silence, also when that
 silence is first refused as busy; the fan-out's
-keyframe resync; and the registry. `src/gpu_tests.rs` covers `open_on` on every
+keyframe resync; the registry; and one invariant, checked by snapshotting a video
+session while another thread pushes, that must hold on every interleaving: a snapshot
+never shows more encoded, busy-dropped or published frames than received ones, nor
+more keyframes than packets (#709). `src/gpu_tests.rs` covers `open_on` on every
 platform, with GPU frames that are textures on a software adapter: CPU frames without a
 context, the CPU fallback (opened as configured, with its reason) for a backend with no
 GPU path, one that refuses the context and one whose GPU encoder fails to open, and a
@@ -96,10 +102,12 @@ and polls again, leaving inputs in the queue. It never waits on the control plan
 and the packet and subscriber vectors are reused, so this crate's loop does not
 allocate per frame (the encoder itself may).
 
-Handles talk to the thread through `std::sync::mpsc` channels and atomics only: a
-bounded channel for inputs, an unbounded one for new subscribers, atomic counters, and
-`finishing`/`aborting` flags, with a `Wake` message and `unpark` so a flag is seen
-without waiting out the interval. `std` covers this; the workspace has no channel
+Handles talk to the thread through `std::sync::mpsc` channels, atomics and two set-once
+`OnceLock` cells only: a bounded channel for inputs, an unbounded one for new
+subscribers, atomic counters, and `finishing`/`aborting` flags, with a `Wake` message
+and `unpark` so a flag is seen without waiting out the interval. The encode thread sets
+the cells, the stream's end and the codec a fallback moved to (`VideoSession::codec`),
+and reading one never waits on it. `std` covers this; the workspace has no channel
 crate.
 
 ### Queues and drop policies (R-RT-004)
@@ -200,8 +208,16 @@ lives while an output holds its `Arc`; the output that lets go last should `fini
 
 `SessionStats`: inputs `received`, `dropped_queue_full`, `dropped_encoder_busy`,
 `encoded`, `packets`, `keyframes`, `keyframes_requested` (requests the encoder
-accepted), current `subscribers`, `subscriber_drops` and `silence_frames`. `SubscriberStats`: `delivered` and `dropped`. All are relaxed atomic
-counters read without stopping the thread. The engine maps a video session's input
+accepted), current `subscribers`, `subscriber_drops` and `silence_frames`. `SubscriberStats`: `delivered` and `dropped`. All are atomic counters
+read without stopping the thread, so a snapshot can be mid-update, but never ahead of
+itself: an input is counted `received` before it is queued, the later stages count it
+with release ordering, and the snapshot reads them in reverse with acquire. So a
+snapshot never shows more `encoded` plus `dropped_encoder_busy` than `received`, nor
+more `keyframes` than `packets`; in a video session, which publishes one packet per
+frame encoded, nor more `packets` than `received` either. An audio session can: a block
+may give several packets, and gap-fill silence gives packets for blocks never received.
+A push that is refused counts its input `received` and takes it back, so a snapshot
+taken in between may briefly count an input that is then dropped. The engine maps a video session's input
 drops to `encode_frames` and an audio session's to `encode_blocks`, and both sessions'
 `subscriber_drops` to `output_packets`, in `stats.tick`
 ([R-RT-004](../../docs/RULES.md#R-RT-004)). `silence_frames` is gap-fill, not a drop.

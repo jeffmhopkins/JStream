@@ -110,6 +110,7 @@ jobs:
   # then a trunk build. trunk and the wasm-bindgen CLI are downloaded at pinned versions
   # and checked against pinned SHA-256 sums; the wasm-bindgen CLI must match Cargo.lock.
   # `ui-e2e` and `dist-ui` in after-review.yml pin the same versions: change them together.
+  # The debug bundle's wasm must fit under the cap jstream-server serves files up to (#678).
   wasm:
     if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && !startsWith(github.base_ref, 'wave/'))
     runs-on: ubuntu-latest
@@ -145,6 +146,31 @@ jobs:
       - name: Build the UI
         working-directory: crates/jstream-ui
         run: trunk build --locked --offline
+      - name: The wasm fits under the server's file cap
+        working-directory: crates/jstream-ui
+        run: |
+          set -euo pipefail
+          # Read from the server, not restated: `const MAX_FILE_BYTES: u64 = <MiB> << 20;`.
+          mib=$(sed -nE 's/^const MAX_FILE_BYTES: u64 = ([0-9]+) << 20;$/\1/p' ../jstream-server/src/ui.rs)
+          if [ -z "$mib" ]; then
+            echo "::error::MAX_FILE_BYTES in crates/jstream-server/src/ui.rs is no longer \`<MiB> << 20\`: update this step"
+            exit 1
+          fi
+          limit=$((mib << 20))
+          shopt -s nullglob
+          files=(dist/*_bg.wasm)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::trunk build left no dist/*_bg.wasm"
+            exit 1
+          fi
+          for f in "${files[@]}"; do
+            size=$(stat -c %s "$f")
+            echo "$f: $size bytes (cap $limit)"
+            if [ "$size" -gt "$limit" ]; then
+              echo "::error::$f is $size bytes, over jstream-server's $mib MiB file cap, so the server refuses it and ui-e2e fails"
+              exit 1
+            fi
+          done
 
   pr-title:
     if: github.event_name == 'pull_request' && !github.event.pull_request.draft

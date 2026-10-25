@@ -18,8 +18,9 @@ depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-linux", "docs/ARC
 The Linux implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
 traits, as [ADR-0060](../../docs/adr/0060-linux-platform-support.md) lays them out. That
 ADR is **accepted**; this crate has its first three parts (the platform basics, screen
-capture, then VA-API H.264 encoding), ALSA audio input and output, and the capture's
-DMA-BUF import into Vulkan, and the rest follows in later PRs. Layer 2, and one
+capture, then VA-API H.264 encoding), the software H.264 and AAC encoders, PipeWire and
+ALSA audio input and output, V4L2 webcams and capture cards, and the capture's DMA-BUF import into Vulkan, and the rest
+follows in later PRs. Layer 2, and one
 of the crates allowed `unsafe` ([R-UNSAFE-001](../../docs/RULES.md#R-UNSAFE-001)): every
 system call is wrapped here behind safe APIs, with RAII types for what the system hands
 back ([R-UNSAFE-003](../../docs/RULES.md#R-UNSAFE-003)).
@@ -82,8 +83,20 @@ It has:
   modifiers the device can import as a single-plane DMA-BUF and sample
   (`vkGetPhysicalDeviceFormatProperties2` and `…ImageFormatProperties2` through `ash`).
   Multi-plane layouts (Intel CCS, AMD DCC with metadata) are left out, because
-  wgpu-hal's `texture_from_dmabuf_fd` takes one plane. There are no encode targets yet
-  (`encode_target` is `Unsupported`): the encoders take CPU frames.
+  wgpu-hal's `texture_from_dmabuf_fd` takes one plane. Its encode targets
+  (`encode_target`, `gpu/export.rs`) are NV12 images in the `LINEAR` DRM layout with
+  dedicated memory exported as a DMA-BUF (`vkGetMemoryFdKHR`), one object holding both
+  planes. The image lists its view formats (NV12, and the R8 and RG8 plane views),
+  which a mutable-format image in a DRM layout must, and the export check asks about
+  the same image. A device has them when it can export such an image render draws
+  into and samples, has Vulkan 1.2 (timeline semaphores) and wgpu's NV12 and DMA-BUF features,
+  and names its DRM render node (`VK_EXT_physical_device_drm`); otherwise
+  `encode_target` is `Unsupported` and the encoders take CPU frames. A target's
+  `FrameSync` adds a signal of the context's timeline semaphore to the submit that
+  writes it, and the encoder waits for that value. Render hands a target back in
+  `PRESENT` (`PRESENT_SRC_KHR`), not through a release to the foreign queue family; a
+  `LINEAR` image has no compression, so its memory holds the picture whatever the
+  layout.
 - **The D-Bus client** (`dbus.rs`) is the crate's own: the wire format in both byte
   orders, `EXTERNAL` authentication with file descriptor passing, and blocking calls
   with timeouts over the session bus socket. Received messages are untrusted: lengths
@@ -125,8 +138,39 @@ It has:
   The portal protocol's option values are here too: source types, cursor modes,
   `persist_mode`, request handle tokens and request object paths.
 - **`PipeWire`** loads `libpipewire-0.3.so.0` and checks it is at least ADR-0060's floor
-  (1.0). **`PipeWireAudio`** (`AudioIo`) is built on it; listing devices and opening
-  streams report `Unsupported` for now.
+  (1.0). **`PipeWireAudio`** (`AudioIo`, ADR-0060 §4) is built on it. Each call
+  connects to the user's daemon on its own `pw_thread_loop` (`pipewire/audio.rs`) and
+  reads the registry with two core round trips: nodes, clients, the core's
+  `default.clock.rate`, the `default` metadata's `default.audio.source` and
+  `default.audio.sink`, and each device node's info, bound for its channel count
+  (`audio.channels`, else the length of `audio.position`), which a registry global
+  never carries (a node's proxy is destroyed when its global goes). No daemon is a missing component whose remedy starts it.
+  `pipewire/graph.rs` turns that into devices (`Audio/Source`, `Audio/Source/Virtual`,
+  `Audio/Sink` and `Audio/Duplex` nodes, with `node.name` as the stable id), the
+  processes playing audio (`Stream/Output/Audio` nodes, with the pid from their
+  client's `pipewire.sec.pid` and the executable's name from `/proc`, else the
+  application's name), and which node each target connects to: `target.object`, with
+  `stream.capture.sink` for an output's loopback, and a process's loopback recording
+  its first playback stream. A stream is fixed to interleaved `f32` at the graph's rate
+  in the device's layout (mono, stereo or 5.1; any other count, or a default with no
+  device, as stereo; `spa/audio.rs` builds and parses the format pods), so PipeWire
+  converts and the handler never sees a format change. The stream is connected with
+  `RT_PROCESS`, so `process` runs on its context's own data loop, PipeWire's real-time
+  thread (with real-time priority from `module-rt` where the system grants it), while
+  registry, metadata and the stream's state and format events stay on the loop thread.
+  `process` touches only the stream's own state, shared with the loop thread through
+  atomics (`Gate`: it calls the handler only while the stream hasn't failed, and failing
+  it waits for a running call to return), so it doesn't allocate, lock or wait: input
+  packets carry their device position and a media-clock time from
+  `pw_stream_get_time_n` (the capture time, before the device's delay), a corrupted
+  buffer marks a discontinuity and its frames still count in the position, an empty one
+  (nothing playing into the source) is a silent packet, and output
+  asks the handler to fill each buffer. A named device or process whose node is
+  removed is `DeviceLost`; a default follows the session manager. The callbacks catch
+  panics (R-UNSAFE-005): a panicking handler is told once, with `InvalidState`, and
+  isn't called again. Dropping the stream stops its callbacks before it returns,
+  without telling the handler it failed. Choosing between PipeWire and the ALSA
+  fallback (ADR-0060 §8) isn't wired yet.
 - **`AlsaAudio`** (`AudioIo`): audio input and output through ALSA, the fallback
   ADR-0060 §4 names for a machine without a PipeWire daemon, on `libasound.so.2` loaded
   at run time. `devices` lists the PCMs in ALSA's name hints (`default`, `sysdefault:`,
@@ -151,6 +195,36 @@ It has:
   and ADR-0060 §4 leaves them to PipeWire. alsa-lib prints its own error lines to stderr
   (such as for an unknown PCM); silencing them needs a variadic C callback, which stable
   Rust can't define.
+- **`V4l2Devices`** (`VideoDevices`): webcams and capture cards through V4L2, the "plain
+  V4L2 backend" ADR-0060 §9 keeps in scope. There is no library: the nodes are driven
+  with `ioctl`s declared by hand from `<linux/videodev2.h>` (`v4l2/abi.rs`, the 64-bit
+  layouts, checked against the kernel headers; the backend isn't built for 32-bit
+  targets). `devices` lists each `/dev/videoN` that captures video with streaming I/O
+  through the single-planar API or, failing that, the multi-planar one (SoC cameras and
+  HDMI capture bridges; a UVC webcam's metadata node captures neither), named by its
+  card name, with udev's `/dev/v4l/by-id/` link as the ID where there is one (it
+  survives replugging and renumbering), else the node's path. Only such paths are ever
+  opened, since an ID can come from a saved collection. Nodes the user can't open are
+  left out, and no microphone is paired yet. `formats` lists every enumerated size and
+  frame interval of the pixel formats it delivers: YUYV (as `Yuy2`, converted to NV12),
+  NV12 and I420 as they are (also the multi-planar `NV12M` and `YUV420M`, each image
+  plane in its own buffer plane, mapped on its own and copied with
+  `jstream_platform::yuv::copy_planes` at that plane's stride, refused as `Unsupported`
+  if the driver settles on another plane count), and MJPEG (`MJPG` or `JPEG`) for the
+  engine's decoder. Where two FourCCs deliver the same encoding, `open` asks for one
+  whose own sizes list the format. A stepwise size range offers its largest size and the
+  common sizes its steps reach, a stepwise interval its shortest, and a driver that
+  enumerates no sizes or no intervals its current ones. `open` sets the format (refused
+  as `Unsupported` if the driver settles on another) and frame interval, maps four
+  driver buffers, and starts a capture thread that waits on the node and an `eventfd`,
+  converts each filled buffer with `jstream_platform::yuv` or hands it to the decoder,
+  queues it back, and fills the single-slot mailbox. A frame's time is its
+  `CLOCK_MONOTONIC` buffer timestamp when it is recent, else the clock's `now`. Buffers
+  the driver marks as corrupt and short raw frames are dropped, rejected JPEGs counted.
+  Raw colour is what the driver reports, else the colour space's default, else BT.601
+  below 720 lines and BT.709 from there, in limited range. An unplug is `DeviceLost`, a
+  device another application streams from `Busy`. Dropping the stream wakes and joins
+  the thread, which turns the stream off, unmaps the buffers and closes the node.
 - **`probe_encoders`** opens each DRM render node (`/dev/dri/renderD*`) through libva and
   libva-drm, and records the best H.264 profile (High, then Main, then Constrained
   Baseline) and encode entry point (full, then low-power) its driver offers. The display
@@ -158,11 +232,24 @@ It has:
   hardware H.264 encoders and picks one for a configuration with `choose_encoder`. That
   refuses other codecs and a software-only request (software H.264 is OpenH264's, below),
   and reports a machine with no H.264 encode driver as a missing component with the
-  distributions' packages (ADR-0060 §6). Decoding is out of the ADR's scope.
+  distributions' packages (ADR-0060 §6). Decoding is out of the ADR's scope. Its
+  `on_context`, on a context with encode targets, keeps the encoders whose render node
+  (the node file's device number) is the context's, since the DMA-BUF imports only on
+  the GPU that made it; their sessions take GPU frames, and a software-only request is
+  `Unsupported` there. With none, or on a context without encode targets, it is
+  `Ok(None)`, and on another platform's context `InvalidState`.
 - **The VA-API H.264 session** (`VideoEncoder`) opens its own display on the chosen
   node: a config with the rate-control mode (CBR or VBR, refused if the driver lacks it),
   a context, four input surfaces with a coded buffer each, and three reconstructed
-  surfaces. It takes CPU frames: NV12, or the compositor's RGBA and BGRA converted to
+  surfaces. Opened through `on_context` it takes the context's NV12 encode targets
+  instead: each target's DMA-BUF is imported once as an input surface (`vaCreateSurfaces`
+  with a DRM PRIME 2 descriptor of one object and one two-plane NV12 layer), cached
+  against a weak hold on the target so the encode ring still sees it free, and destroyed
+  once the target is gone. An encode waits up to a second for render's write of the
+  frame, and the session holds the frame until its picture is collected, since the
+  driver reads the surface until then; up to four targets are held that way. Its
+  context's render targets are only the reconstructed surfaces. Otherwise it takes CPU
+  frames: NV12, or the compositor's RGBA and BGRA converted to
   BT.709 limited NV12 by `jstream_platform::nv12`, the Windows encoder's converter,
   written through `vaDeriveImage`, or a staging image and `vaPutImage` where the driver
   can't map its
@@ -215,40 +302,49 @@ It has:
   feature out of the defaults. Without it, `jstream-aac` leaves the build, the list has
   no AAC encoder, and opening one reports `Unsupported`.
 
+The engine starts each display and window source's capture with `start_with` and
+`CaptureOptions::for_source`, asks for `Drawn` when the source's `show_cursor` setting
+(protocol 0.36) is on and `Hidden` when it's off, and never draws the pointer itself.
+It calls `forget_source` when the source is deleted.
+
 Not here yet, in roughly the order they follow:
-- display and window sources' `show_cursor` setting (protocol 0.36), after the main
-  sync (#521): the engine asks for `Drawn` when it's on and `Hidden` when it's off, and
-  never draws the pointer itself (the cursor is drawn into the frames until then);
-- the engine starting each portal source's capture with `start_with` and
-  `CaptureOptions::for_source`, and calling `forget_source` when the source is deleted,
-  once captures follow sources on this wave (it captures the primary display for now);
-- PipeWire audio streams (ADR-0060 §4), including desktop and application audio, and
-  choosing between PipeWire and ALSA where both are present;
-- DMA-BUF import into the VA-API encoder, so GPU encode targets skip the CPU copy;
-- V4L2 webcams;
+- choosing between PipeWire and ALSA (ADR-0060 §8): ALSA when no PipeWire daemon runs,
+  and which one where both are present;
+- pairing a V4L2 webcam with its microphone, and DMA-BUF export from V4L2;
 - the stream-key store.
 
 The virtual camera is out of scope (`Backends::vcam` is `None` on Linux).
 
 Tests run on every platform where they can: D-Bus messages, the portal handshake, SPA
 pods (the DMA-BUF offer was checked byte for byte against libspa's builder), the frame
-copy, the cursor metadata, and the H.264 parameters, parameter sets, GOP and upload are
-platform-independent. The GPU interop's tests open a device on a software Vulkan
+copy, the cursor metadata, the H.264 parameters, parameter sets, GOP and upload, and V4L2's ABI layouts,
+formats list, colour, buffer times and device IDs are platform-independent. The GPU interop's tests open a device on a software Vulkan
 adapter where there is no GPU, and skip without one: the frame copy (crop, opaque
-padding, slots reused only once free) and the context checks. DMA-BUF import needs a
-GPU driver, so it is tested only in the `hw-tests` portal capture on the GPU. The Linux ones (the clock, loading libc through the loader,
+padding, slots reused only once free) and the context checks. The VA-API surface
+attributes and DRM PRIME descriptor are checked against libva's layout at compile time
+and built in a test, and render-node numbers are split as glibc does. DMA-BUF import
+and export need a GPU driver, so they are tested only in the `hw-tests` portal capture
+on the GPU and the GPU encode of the context's encode targets. The Linux ones (the clock, loading libc through the loader,
 passing a file descriptor over a socket pair, restore token files, the PipeWire and
 libva probes, and ALSA through its sound-card-free `null` PCM: recording, playing,
 stopping on drop, a capture stream running again after an overrun, loopback refused, an
-unknown PCM and the listing) pass with or without those libraries installed and need no
-GPU, session or daemon. ALSA's sample conversion, channel layouts, listed names and frame
-times are platform-independent. The OpenH264 tests use a fake download and a fake
-encoder behind the library's vtable, and the bzip2 decoder is tested on files `bzip2` wrote
+unknown PCM and the listing; V4L2's refusal of IDs that aren't video nodes and of a
+node that isn't V4L2, and its handling of filled buffers) pass with or without those libraries installed and need no
+GPU, session or daemon; a missing PipeWire daemon is tried on a socket name nothing
+listens on. The registry reading and stream planning (`pipewire/graph.rs`), the audio
+format pods, the `process` gate's hand-off between threads (`pipewire/audio.rs`), and
+ALSA's sample conversion, channel layouts, listed names and frame times are
+platform-independent. The OpenH264 tests use a fake download and a fake encoder
+behind the library's vtable, and the bzip2 decoder is tested on files `bzip2` wrote
 (`openh264/testdata`). The one test that downloads from Cisco, which is how the pin is
 recorded, needs the `openh264-download` feature and `--ignored`; CI runs neither. The
 `hw-tests` feature holds the tests against a real desktop, `#[ignore]`d
-and run by hand: the session bus (`dbus-run-session` is enough), portal captures in a
-GNOME or KDE session with PipeWire (frames on the CPU path, and on the GPU path with a
-Vulkan driver that imports DMA-BUFs, and the pointer as metadata), VA-API H.264 encodes
-on a GPU with an encode driver, and a second of ALSA's default input on a sound card
-(`null` isn't paced, so only a real device shows real-time recording).
+and run by hand: the session bus (`dbus-run-session` is enough), a portal capture in a
+GNOME or KDE session with PipeWire (on the CPU path, and on the GPU path with a Vulkan
+driver that imports DMA-BUFs, and the pointer as metadata), VA-API H.264 encodes on a GPU with an encode driver,
+from CPU frames and from the context's encode targets (which needs the Vulkan and
+VA-API drivers on one render node), `PipeWireAudio` recording (on the data loop),
+playing and looping back on a PipeWire daemon (`pipewire/audio_tests.rs`; null nodes
+are enough, no sound card), and a second of ALSA's default input on a sound card (`null`
+isn't paced, so only a real device shows real-time recording), and V4L2 capture from a webcam or capture card (the `vivid` test
+driver will do).
