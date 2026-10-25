@@ -2818,7 +2818,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "A scene's filters, which run on the scene's whole composite wherever it renders\n(ADR-0065 §5, since 0.43). A video chain only: `chain: \"audio\"` is\n`invalid_argument` on `chain`. Never a keyframe scene, which shows its parent's.\nThe engine refuses this owner with `invalid_argument` on `owner` until scene\nchains are built.",
+                "description": "A scene's filters, which run on the scene's whole composite wherever it renders\n(ADR-0065 §5, since 0.43). A video chain only: `chain: \"audio\"` is\n`invalid_argument` on `chain`. Never a keyframe scene, which shows its parent's.\nThe engine runs this chain on the scene's composite.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -4722,7 +4722,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "A scene's filters, which run on the scene's whole composite wherever it renders\n(ADR-0065 §5, since 0.43). A video chain only: `chain: \"audio\"` is\n`invalid_argument` on `chain`. Never a keyframe scene, which shows its parent's.\nThe engine refuses this owner with `invalid_argument` on `owner` until scene\nchains are built.",
+                "description": "A scene's filters, which run on the scene's whole composite wherever it renders\n(ADR-0065 §5, since 0.43). A video chain only: `chain: \"audio\"` is\n`invalid_argument` on `chain`. Never a keyframe scene, which shows its parent's.\nThe engine runs this chain on the scene's composite.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -8043,7 +8043,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "A scene's filters, which run on the scene's whole composite wherever it renders\n(ADR-0065 §5, since 0.43). A video chain only: `chain: \"audio\"` is\n`invalid_argument` on `chain`. Never a keyframe scene, which shows its parent's.\nThe engine refuses this owner with `invalid_argument` on `owner` until scene\nchains are built.",
+                "description": "A scene's filters, which run on the scene's whole composite wherever it renders\n(ADR-0065 §5, since 0.43). A video chain only: `chain: \"audio\"` is\n`invalid_argument` on `chain`. Never a keyframe scene, which shows its parent's.\nThe engine runs this chain on the scene's composite.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -12835,7 +12835,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "A scene's filters, which run on the scene's whole composite wherever it renders\n(ADR-0065 §5, since 0.43). A video chain only: `chain: \"audio\"` is\n`invalid_argument` on `chain`. Never a keyframe scene, which shows its parent's.\nThe engine refuses this owner with `invalid_argument` on `owner` until scene\nchains are built.",
+                "description": "A scene's filters, which run on the scene's whole composite wherever it renders\n(ADR-0065 §5, since 0.43). A video chain only: `chain: \"audio\"` is\n`invalid_argument` on `chain`. Never a keyframe scene, which shows its parent's.\nThe engine runs this chain on the scene's composite.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",

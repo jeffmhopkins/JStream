@@ -394,9 +394,17 @@ impl LiveSources {
     /// ones no filter reads any more and returns a load for each new one. Every filter
     /// counts, enabled or not, so enabling one shows its asset at once.
     fn sync_assets(&mut self, state: &jstream_graph::State) -> Vec<AssetJob> {
-        let wanted: HashSet<AssetKey> = state
+        // Every video chain that can read an asset: each source's and each scene's
+        // (ADR-0065).
+        let sources = state
             .sources()
-            .flat_map(|source| source.filters().chain(FilterChain::Video).iter())
+            .flat_map(|source| source.filters().chain(FilterChain::Video).iter());
+        let scenes = state
+            .scenes()
+            .iter()
+            .flat_map(|scene| scene.filters().chain(FilterChain::Video).iter());
+        let wanted: HashSet<AssetKey> = sources
+            .chain(scenes)
             .filter_map(|filter| filter_assets::wanted(filter.kind(), filter.settings()))
             .collect();
         let before = self.assets.len();

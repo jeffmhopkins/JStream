@@ -135,10 +135,10 @@ state machine. Contents:
     settings); a new mixer filter when a restarted plugin reports a new latency; the
     plugin's editor; rescanning; and stopping a removed filter's host off the
     `jstream-audio-sources` thread (now each stop waits up to `STOP_GRACE` there).
-- **Not yet: scene filters and item effects** (ADR-0065, ADR-0068). The graph holds
-  them, but nothing renders them, so the engine refuses a `filter.*` edit whose owner is
-  a scene or an item (`invalid_argument` on `edits.N.owner`). It validates the batch
-  first, so a batch the graph refuses gets the graph's answer.
+- **Not yet: item effects** (ADR-0065, ADR-0068). The graph holds them, but nothing
+  renders them, so the engine refuses a `filter.*` edit whose owner is an item
+  (`invalid_argument` on `edits.N.owner`). It validates the batch first, so a batch
+  the graph refuses gets the graph's answer. Scene filters run (Video chains, below).
 - **Live sources** (`live.rs`): a running `jstream-sources` source for every source
   in the collection, built when it is created, rebuilt when its settings change and
   dropped when it is deleted, on the engine's `jstream-sources` thread. The program
@@ -830,7 +830,9 @@ the next frame while the program still nests it. A nested scene has no backgroun
 draws nothing and the scene under it shows through; the program scene is drawn over
 opaque black. A scene placed more than once at the same depth is composited once.
 Depth is bounded: the program scene is depth 0, and a scene source more than 8
-levels below it draws nothing (logged at `debug`). It is one limit,
+levels below it draws nothing (logged at `debug`). A scene with a scene filter
+(ADR-0065) is composited once per frame at depth 0 wherever it shows, so the count
+restarts below it, and a scene a `scene_mask` reads restarts it at 1. It is one limit,
 `snapshot::MAX_NESTING`, for the render thread and `video.snapshot` alike, and ARCH ›
 Data model states it for clients. Width is not bounded: each distinct `(scene, depth)`
 keeps its own canvas-sized FP16 layer, so a program with *k* distinct nested scene
@@ -912,10 +914,23 @@ running transition. `video.snapshot` runs the chains on its own compositor, so a
 stateful kind (a video delay) starts empty there. The built-in video filter kinds are
 in `kind.list` and `filter.add` takes them on a video chain.
 
+A scene's video chain ([ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md),
+a keyframe scene's being its parent's) runs the same way, keyed by its owner
+(`ChainOwner`), over the scene's composite: when a filter of it runs, the chain phase
+draws the scene once per frame into `GpuKey::Composite`, at depth 0 as the program
+scene is, and runs the chain into `GpuKey::Filtered`. Every place
+that shows the scene shows that output: a `scene` source's item, a `scene_mask` that
+reads it, and the program or a video mix, which places it over the canvas. So it runs
+once per frame however many mixes and places show it, and a disabled or empty chain
+leaves the scene composited as before. In a transition the scene is one picture
+(ADR-0065 §6): one track over the canvas that pairs with nothing, so Fade crossfades
+it, Move falls back to that, and a filtered nested scene is never flattened into its
+items.
+
 A filter that reads an asset (`apply_lut`'s `lut`, a `.cube` file or a tiled PNG, and
 `image_mask`'s `image`, whose first frame is the mask) gets it through the live
 sources (`filter_assets.rs`). Each sync lists the assets the collection's video filters
-name, enabled or not, so enabling one needs no load. The `jstream-sources` thread
+name, a source's or a scene's, enabled or not, so enabling one needs no load. The `jstream-sources` thread
 reads and decodes each new one, as it builds sources, and an asset no filter names any
 more is let go. A plan hands each chain filter the asset it names, numbered by its load,
 and each compositor makes the filter's reference image from it once: the LUT's tile
