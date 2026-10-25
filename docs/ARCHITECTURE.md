@@ -993,7 +993,7 @@ import, a browser page's included) into a premultiplied `Rgba16Float` layer, of 
 ([jstream-render › Filters](../crates/jstream-render/README.md#filters));
 `apply_filter_into` draws into a layer the caller keeps, which is how `jstream-core`'s
 chain runtime runs a source's video chain before placement, and a scene's over its
-composite once per frame wherever the scene shows
+composite once per frame wherever the scene shows, and an item's effects over its box
 ([ADR-0065](adr/0065-scene-chains-and-item-effects.md)), without allocating per
 frame. Still outside this crate: the render
 thread (in `jstream-core`), P010, loading effect packs (`jstream-effects`; this
