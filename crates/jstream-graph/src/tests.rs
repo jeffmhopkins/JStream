@@ -39,6 +39,7 @@ fn kinds() -> Vec<KindDescriptor> {
             version: 1,
             video: true,
             audio: false,
+            max_outset_px: None,
             params: vec![
                 param(
                     "color",
@@ -74,6 +75,7 @@ fn kinds() -> Vec<KindDescriptor> {
             version: 1,
             video: false,
             audio: true,
+            max_outset_px: None,
             params: vec![],
         },
         KindDescriptor {
@@ -83,6 +85,7 @@ fn kinds() -> Vec<KindDescriptor> {
             version: 1,
             video: true,
             audio: false,
+            max_outset_px: None,
             params: vec![param("audio", ParamType::Bus, Value::Null)],
         },
         KindDescriptor {
@@ -92,6 +95,7 @@ fn kinds() -> Vec<KindDescriptor> {
             version: 1,
             video: true,
             audio: false,
+            max_outset_px: None,
             params: vec![
                 param(
                     "amount",
@@ -113,6 +117,7 @@ fn kinds() -> Vec<KindDescriptor> {
             version: 1,
             video: false,
             audio: true,
+            max_outset_px: None,
             params: vec![param(
                 "gain_db",
                 ParamType::Float {
@@ -4150,6 +4155,7 @@ fn a_filter_kind_cannot_be_created_as_a_source() {
         version: 1,
         video: false,
         audio: true,
+        max_outset_px: None,
         params: vec![],
     }]);
     let (field, reason) = invalid_reason(apply_err(

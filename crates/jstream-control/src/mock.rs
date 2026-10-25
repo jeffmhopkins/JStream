@@ -1017,6 +1017,7 @@ impl State {
                     .iter()
                     .map(|scene| SceneInfo {
                         overrides: Vec::new(),
+                        filters: Default::default(),
                         variant_of: None,
                         scene_id: scene.id.clone(),
                         name: scene.name.clone(),
@@ -2164,6 +2165,7 @@ impl Collection {
                     geometry: item.geometry,
                     crop: item.crop,
                     visible: item.visible,
+                    effects: Vec::new(),
                     opacity: item.opacity,
                     blend: item.blend,
                     transition: ItemTransition::default(),

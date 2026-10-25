@@ -168,7 +168,10 @@ the batch **touched**.
   accept only `normal` until the compositor draws the other modes. Each is undone by
   the previous value, and removing an item restores both.
 - **Filters** (`filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
-  `filter.add` checks, in order, the owner (a source, an output or the master stage),
+  every filter edit first refuses the `scene` and `item` owners (protocol 0.43,
+  [ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md)) with
+  `invalid_argument` on `owner`, since the model holds no scene chains or item effects
+  yet. `filter.add` checks, in order, the owner (a source, an output or the master stage),
   the filter ID (non-empty, unused on the owner), that the owner has the chain (a
   source: video if its kind produces video, audio if it produces audio and it is not a
   `scene` source; the master and an output that carries audio: audio only, ADR-0027),

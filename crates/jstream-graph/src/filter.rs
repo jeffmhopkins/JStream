@@ -7,7 +7,8 @@
 //! and source references in a source's filter settings are edges of that source
 //! ([`crate::deps`]), so the edits that set them run the cycle check. The master's and
 //! outputs' filters take no references yet: nothing would keep what they name from
-//! being deleted.
+//! being deleted. The scene and item owners (protocol 0.43, ADR-0065) are refused on
+//! `owner` until the model holds scene chains and item effects.
 
 use crate::apply::{
     Kinds, already_exists, check_id, check_index, check_value, complete_settings, invalid,
@@ -29,6 +30,11 @@ pub(crate) fn apply(
     edit: &Edit,
     at: usize,
 ) -> Option<Result<Vec<Edit>, ProtocolError>> {
+    if let Some(owner) = edit_owner(edit)
+        && let Err(error) = check_owner_built(owner, at)
+    {
+        return Some(Err(error));
+    }
     Some(match edit {
         Edit::FilterAdd { .. } => add(state, kinds, edit, at),
         Edit::FilterRemove { owner, filter_id } => remove(state, owner, filter_id),
@@ -49,6 +55,30 @@ pub(crate) fn apply(
         } => reorder(state, owner, filter_id, *index, at),
         _ => return None,
     })
+}
+
+/// The owner a `filter.*` edit addresses, or `None` for any other edit.
+fn edit_owner(edit: &Edit) -> Option<&FilterOwner> {
+    match edit {
+        Edit::FilterAdd { owner, .. }
+        | Edit::FilterRemove { owner, .. }
+        | Edit::FilterSetEnabled { owner, .. }
+        | Edit::FilterSetSettings { owner, .. }
+        | Edit::FilterReorder { owner, .. } => Some(owner),
+        _ => None,
+    }
+}
+
+/// Refuses the scene and item owners (protocol 0.43, ADR-0065) with `invalid_argument`
+/// on `owner` until their chains are built: the model has no place for them yet.
+fn check_owner_built(owner: &FilterOwner, at: usize) -> Result<(), ProtocolError> {
+    match owner {
+        FilterOwner::Scene { .. } => {
+            Err(invalid(at, "owner", "scene filters are not available yet"))
+        }
+        FilterOwner::Item { .. } => Err(invalid(at, "owner", "item effects are not available yet")),
+        _ => Ok(()),
+    }
 }
 
 /// The edits that re-create `source`'s filters after `source.create`, video chain first:

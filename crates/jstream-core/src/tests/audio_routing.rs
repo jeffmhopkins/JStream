@@ -130,6 +130,7 @@ fn when_shown_audio_follows_the_program() {
         version: 1,
         video: true,
         audio: true,
+        max_outset_px: None,
         params: vec![],
     };
     let engine = Engine::new().with_extra_kinds(vec![clip]);
@@ -239,6 +240,7 @@ fn a_drawn_bus_gets_a_scope_fed_from_its_mixer_bus() {
         version: 1,
         video: false,
         audio: true,
+        max_outset_px: None,
         params: vec![],
     };
     let engine = Engine::new().with_extra_kinds(vec![clip]);
@@ -390,6 +392,7 @@ fn a_drawn_source_gets_a_scope_fed_from_its_mixer_input() {
         version: 1,
         video: false,
         audio: true,
+        max_outset_px: None,
         params: vec![],
     };
     let engine = Engine::new().with_extra_kinds(vec![clip]);

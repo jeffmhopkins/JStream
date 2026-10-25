@@ -12,6 +12,7 @@ pub(crate) fn kind(id: &str, name: &str, video: bool, audio: bool) -> KindDescri
         version: 1,
         video,
         audio,
+        max_outset_px: None,
         params: vec![],
     }
 }

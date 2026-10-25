@@ -562,6 +562,7 @@ fn master_and_output_chains_are_validated() {
         version: 1,
         video: false,
         audio: true,
+        max_outset_px: None,
         params: vec![ParamDescriptor {
             id: "key".into(),
             ty: ParamType::Source { media: None },

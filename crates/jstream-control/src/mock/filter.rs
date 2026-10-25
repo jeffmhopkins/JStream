@@ -4,7 +4,8 @@
 //! kinds, so it doesn't check a filter's kind, or whether a builtin source has the chain
 //! (a `scene` source has no audio chain, and that it does check), and stores settings as
 //! given. The master stage and each output that carries audio have an audio chain only,
-//! whose filters can't hold a reference (ADR-0027); those it checks too.
+//! whose filters can't hold a reference (ADR-0027); those it checks too. The scene and
+//! item owners it refuses on `owner`, as the graph does until it builds them.
 
 use super::{
     Collection, already_exists, check_id, check_index, invalid, not_found, unimplemented_by_mock,
@@ -15,6 +16,18 @@ use jstream_protocol::{
     MAX_CHAIN_FILTERS, OutputKind, ProtocolError, Reference, Settings, SourceKind,
 };
 
+/// Refuses the scene and item owners (protocol 0.43) as the graph does until it builds
+/// their chains: `invalid_argument` on `owner`, before any other check.
+fn check_owner_built(owner: &FilterOwner, at: usize) -> Result<(), ProtocolError> {
+    match owner {
+        FilterOwner::Scene { .. } => {
+            Err(invalid(at, "owner", "scene filters are not available yet"))
+        }
+        FilterOwner::Item { .. } => Err(invalid(at, "owner", "item effects are not available yet")),
+        _ => Ok(()),
+    }
+}
+
 impl Collection {
     /// Applies a `filter.*` edit and returns the edits that undo it.
     pub(super) fn apply_filter(
@@ -22,6 +35,14 @@ impl Collection {
         edit: Edit,
         at: usize,
     ) -> Result<Vec<Edit>, ProtocolError> {
+        if let Edit::FilterAdd { owner, .. }
+        | Edit::FilterRemove { owner, .. }
+        | Edit::FilterSetEnabled { owner, .. }
+        | Edit::FilterSetSettings { owner, .. }
+        | Edit::FilterReorder { owner, .. } = &edit
+        {
+            check_owner_built(owner, at)?;
+        }
         match edit {
             Edit::FilterAdd {
                 owner,

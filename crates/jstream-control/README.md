@@ -153,7 +153,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   - an `opacity` outside 0 to 1 and a blend mode other than `normal`, in `item.add`,
     `item.set_opacity` and `item.set_blend`;
   - the filter edits (`mock/filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
-    a missing owner or filter, an empty or duplicate filter ID, an audio chain on a
+    the `scene` and `item` owners (protocol 0.43), refused on `owner` first as the
+    graph refuses them, a missing owner or filter, an empty or duplicate filter ID, an audio chain on a
     `scene` source, a full chain and an index out of range. The master stage and
     outputs ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)) take
     audio filters only, an output only if it carries audio, and their filters no scene

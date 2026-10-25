@@ -4363,7 +4363,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "FilterOwner": {
-      "description": "What owns a filter chain. Serialized with an internal `type` tag. Sources, the master\nstage and outputs own chains so far; buses and scenes will be further variants.",
+      "description": "What owns a filter chain. Serialized with an internal `type` tag. Sources, the master\nstage, outputs, scenes and items own chains so far; buses may be further variants.",
       "oneOf": [
         {
           "description": "A source's chains, which apply wherever it is placed (ADR-0023).",
@@ -4411,6 +4411,42 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "output_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A scene's filters, which run on the scene's whole composite wherever it renders\n(ADR-0065 §5, since 0.43). A video chain only: `chain: \"audio\"` is\n`invalid_argument` on `chain`. Never a keyframe scene, which shows its parent's.\nThe engine refuses this owner with `invalid_argument` on `owner` until scene\nchains are built.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene."
+            },
+            "type": {
+              "const": "scene",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "An item's effects, which run on that one placement's cropped, fitted box, before\nits opacity and blend (ADR-0065 §5, since 0.43). A video chain only. Item IDs are\nunique across scenes, so no scene is named. The engine refuses this owner with\n`invalid_argument` on `owner` until item effects are built.",
+          "properties": {
+            "item_id": {
+              "$ref": "#/$defs/ItemId",
+              "description": "The item."
+            },
+            "type": {
+              "const": "item",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "item_id"
           ],
           "type": "object"
         }
@@ -4821,6 +4857,13 @@ source: crates/jstream-protocol/src/fixtures.rs
           "$ref": "#/$defs/Crop",
           "description": "How much of the source it cuts off."
         },
+        "effects": {
+          "description": "Its effects (ADR-0065, since 0.43): a video chain, first filter first, which\n`filter.*` edits with the owner `{\"type\":\"item\",\"item_id\":…}`. They run on this\nplacement's cropped, fitted box, before its opacity and blend. Omitted while\nempty, so missing (also from an older server) parses as none.",
+          "items": {
+            "$ref": "#/$defs/FilterInfo"
+          },
+          "type": "array"
+        },
         "geometry": {
           "anyOf": [
             {
@@ -5031,6 +5074,15 @@ source: crates/jstream-protocol/src/fixtures.rs
         "kind_id": {
           "description": "The kind's ID, as in [`KindSummary::kind_id`].",
           "type": "string"
+        },
+        "max_outset_px": {
+          "description": "For a `video_filter` kind that draws outside its input (a drop shadow, a glow, an\noutline): the most it can draw beyond each edge, in pixels, at any settings\n(ADR-0065 §5, since 0.43). An item's effects layer is padded by the sum over its\nenabled effects, so a live edit never resizes it. On a source's or a scene's chain\nit is ignored, since the output there is the input's size. Omitted for none,\nand for every other category.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "name": {
           "description": "Display name.",
@@ -7160,6 +7212,10 @@ source: crates/jstream-protocol/src/fixtures.rs
           "description": "Whether it is a favourite. JStream is single-user, so this is not per person.\nOmitted for `false`.",
           "type": "boolean"
         },
+        "filters": {
+          "$ref": "#/$defs/FilterChains",
+          "description": "Its filter chains (ADR-0065, since 0.43), which `filter.*` edits with the owner\n`{\"type\":\"scene\",\"scene_id\":…}`. They run on the scene's composite. Only the video\nchain holds filters, and a keyframe scene has none of its own, since it shows its\nparent's. Omitted while both are empty, so missing (also from an older server)\nparses as none."
+        },
         "folder": {
           "anyOf": [
             {
@@ -8334,5 +8390,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.39"
+  "title": "JStream protocol 0.43"
 }

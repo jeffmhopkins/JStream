@@ -130,6 +130,7 @@ pub fn descriptor(plugin: &PluginDesc) -> KindDescriptor {
         version: 1,
         video: false,
         audio: true,
+        max_outset_px: None,
         params: plugin.params.iter().filter_map(param).collect(),
     }
 }

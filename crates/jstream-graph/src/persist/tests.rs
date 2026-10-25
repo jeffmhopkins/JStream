@@ -25,6 +25,7 @@ fn kinds() -> Vec<KindDescriptor> {
         version: 2,
         video: true,
         audio: false,
+        max_outset_px: None,
         params: vec![
             ParamDescriptor {
                 id: "color".into(),
@@ -57,6 +58,7 @@ fn kinds() -> Vec<KindDescriptor> {
         version: 1,
         video: true,
         audio: false,
+        max_outset_px: None,
         params: vec![ParamDescriptor {
             id: "audio".into(),
             ty: ParamType::Bus,

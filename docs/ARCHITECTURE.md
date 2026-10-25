@@ -646,7 +646,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   master stage or an output, addressed by an `owner` and a filter ID;
   `SourceInfo.filters`, `OutputInfo.filters` and `state.get`'s `master` report them
   ([ADR-0026](adr/0026-source-filter-chains.md), protocol 0.22;
-  [ADR-0027](adr/0027-program-master-and-output-chains.md), protocol 0.29).
+  [ADR-0027](adr/0027-program-master-and-output-chains.md), protocol 0.29). Since 0.43
+  the owners `scene` and `item`, `SceneInfo.filters`, `ItemInfo.effects` and a
+  descriptor's `max_outset_px` are in the protocol
+  ([ADR-0065](adr/0065-scene-chains-and-item-effects.md)); the engine refuses both
+  owners on `owner` until scene chains and item effects are built.
   `source.set_audio`, `bus.create`, `bus.rename`, `bus.set_fader`, `bus.delete`,
   `send.set` and `send.remove` edit sources' audio, the buses and the send matrix
   ([ADR-0028](adr/0028-audio-model-v2.md), protocol 0.19).
@@ -860,7 +864,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 706 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 713 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking

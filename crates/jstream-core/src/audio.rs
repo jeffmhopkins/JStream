@@ -630,6 +630,7 @@ mod tests {
             version: 1,
             video: false,
             audio: true,
+            max_outset_px: None,
             params: vec![],
         };
         let mut graph = Graph::new().with_kinds(vec![kind]);

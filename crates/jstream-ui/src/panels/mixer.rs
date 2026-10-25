@@ -1212,6 +1212,7 @@ mod tests {
             version: 1,
             video: false,
             audio: true,
+            max_outset_px: None,
             params: Vec::new(),
         }
     }
