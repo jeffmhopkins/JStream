@@ -51,7 +51,7 @@ in, and **What's left** lists each unfinished item with the steps it still needs
 |---|---|---|---|---|
 | [M0: Foundation and risk spikes](ROADMAP.md#m0) | `██████████` 100% | 11 | 0 | 0 |
 | [M1a: Thin slice to YouTube](ROADMAP.md#m1) | `██████████` 100% | 18 | 0 | 0 |
-| [M1b: Scenes and mixing](ROADMAP.md#m1) | `█████████░` 92% | 36 | 1 | 2 |
+| [M1b: Scenes and mixing](ROADMAP.md#m1) | `█████████░` 92% | 36 | 2 | 1 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `█████████░` 91% | 10 | 1 | 0 |
 | [M2: UI](ROADMAP.md#m2) | `████████░░` 82% | 23 | 2 | 3 |
@@ -73,7 +73,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | C8 | Browser source (CEF) | M1b | 🔨 build, then 🧪 Windows run | the Windows runs #335 (steps 1 to 4) and #336 passed; #341 passed except its refused-request count (2, not 1), so page_check needs to name the refused URLs, then a rerun; Ctrl-C with CEF running skips the graceful stop (#436), a fix to build, then #335's step 5 runs again | #283, #289, #298, #326 |
 | V0 | Video filter chain runtime | M1b | 🔨 build | part 1 runs the built-in kinds, part 2 loads apply_lut and image_mask assets, part 3 gives scene_mask its scene, part 4 pools scratch layers and each draw's uniform buffers, and #730 uploads LUT tables directly; then effect-pack kinds. No bounds inset: on a source chain shadow, outline and glow draw within the frame (ADR-0065 §5) | #595, #607, #626, #712, #717, #718, #730 |
 | V4 | Scene filter chains and item effects | M1b | 🔨 build | ADR-0065 designs a video chain owned by a scene or by one placement, and ADR-0068 puts item effects in v1; built after V0: the scene and item owners in the protocol, graph, core and render, then the UI's scene filters (FL-06). The engine rejects both owners today (#529) |  |
-| D9 | Audio monitoring: a bus's monitor device and tap point | M1b | 🔨 build | ADR-0028 gives a bus a monitor, a device and a tap point before or after its filters (decision register D22); nothing in the protocol yet, and the mixer's Hear: before or after FX row (MX-05) waits on it |  |
+| D9 | Audio monitoring: a bus's monitor device and tap point | M1b | 🔨 build | ADR-0028 gives a bus a monitor, a device and a tap point before or after its filters (decision register D22). #801 is the mixer's monitor taps and player; the protocol's bus monitor, its edits and the engine wiring come next, and the mixer's Hear: before or after FX row (MX-05) waits on them | #801 |
 | G2 | vcam media source DLL | M1c | 🧪 Windows run | the pacing rerun (#777, with item 6 of the Windows hardware pass) | #174, #195, #200, #229 |
 | G3c | --register-vcam | M1c | 🧪 Windows run | Windows run (#563) | #235, #565 |
 | H8 | Hardware acceleration by default, with GPU fallback and device-loss recovery | M1d | 🧪 Windows run | #437 on main; the encoder's software fallback (#568), the mid-run GPU capture fallback (#569, #580), device-loss recovery (#604) and sessions after a fallback (#708) landed with wave/m1-3 (#754); Windows runs: the mid-run fallback (#576) and a forced TDR (#620); open follow-ups #734, #443 and #667 | #437, #568, #569, #580, #604, #708 |
@@ -188,7 +188,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | F3 | Encoder profiles and sharing | ✅ merged | #208 |
 | I2 | Live values | ✅ merged | #244 |
 | V4 | Scene filter chains and item effects | ⏳ planned: ADR-0065 designs a video chain owned by a scene or by one placement, and ADR-0068 puts item effects in v1; built after V0: the scene and item owners in the protocol, graph, core and render, then the UI's scene filters (FL-06). The engine rejects both owners today (#529) |  |
-| D9 | Audio monitoring: a bus's monitor device and tap point | ⏳ planned: ADR-0028 gives a bus a monitor, a device and a tap point before or after its filters (decision register D22); nothing in the protocol yet, and the mixer's Hear: before or after FX row (MX-05) waits on it |  |
+| D9 | Audio monitoring: a bus's monitor device and tap point | 🔍 in review: ADR-0028 gives a bus a monitor, a device and a tap point before or after its filters (decision register D22). #801 is the mixer's monitor taps and player; the protocol's bus monitor, its edits and the engine wiring come next, and the mixer's Hear: before or after FX row (MX-05) waits on them | #801 |
 
 </details>
 
