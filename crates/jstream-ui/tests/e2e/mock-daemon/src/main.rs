@@ -14,7 +14,8 @@
 
 use jstream_control::protocol::{
     Action, Batch, Call, Edit, EncoderProfile, EncoderProfileId, FilterChain, FilterId,
-    FilterOwner, Hello, ItemGeometry, PROTOCOL_VERSION, Settings, Size, SourceId, SourceKind, Vec2,
+    FilterOwner, Finite32, Hello, ItemGeometry, KindCategory, KindDescriptor, PROTOCOL_VERSION,
+    Settings, Size, SourceId, SourceKind, Vec2,
 };
 use jstream_control::{Control, MockEngine};
 use jstream_server::{Connector, Server, ServerConfig, Token};
@@ -54,8 +55,9 @@ fn parse_args() -> Result<Args> {
 
 /// The studio every test starts from: two scenes with `Main` on program, holding one
 /// colour item as a 640×360 box at the canvas's centre, whose source has two video
-/// filters (Sharpen, then Blur turned off), and one encoder profile. No
-/// outputs: the tests create them through the UI.
+/// filters (Sharpen, then Blur turned off); two audio inputs no scene shows, the mic at
+/// −3 dB and desktop audio at −8.5 dB; and one encoder profile. No outputs: the tests
+/// create them through the UI.
 async fn seed(engine: &MockEngine) -> Result<()> {
     let control = engine.connect();
     control
@@ -118,6 +120,10 @@ async fn seed(engine: &MockEngine) -> Result<()> {
             opacity: None,
             blend: None,
         },
+        audio_input("mic", "Mic · ES-9 Line"),
+        audio_input("desktop", "Desktop audio"),
+        gain("mic", -3.0)?,
+        gain("desktop", -8.5)?,
         Edit::EncoderCreate {
             profile_id: EncoderProfileId::new("hq"),
             name: "High quality".into(),
@@ -143,10 +149,47 @@ async fn seed(engine: &MockEngine) -> Result<()> {
     Ok(())
 }
 
+/// The audio input kind, so the mock gives its sources a mixer channel.
+fn audio_input_kind() -> KindDescriptor {
+    KindDescriptor {
+        kind_id: "audio_input".into(),
+        category: KindCategory::Source,
+        name: "Audio input".into(),
+        version: 1,
+        video: false,
+        audio: true,
+        params: Vec::new(),
+    }
+}
+
+/// Creates an audio input source.
+fn audio_input(id: &str, name: &str) -> Edit {
+    Edit::SourceCreate {
+        source_id: SourceId::new(id),
+        name: name.into(),
+        kind: SourceKind::Builtin {
+            kind: "audio_input".into(),
+        },
+        settings: Settings::default(),
+        duplicated_from: None,
+    }
+}
+
+/// Sets a source's fader.
+fn gain(id: &str, db: f32) -> Result<Edit> {
+    Ok(Edit::SourceSetAudio {
+        source_id: SourceId::new(id),
+        enabled: None,
+        follow: None,
+        gain_db: Some(Finite32::new(db).ok_or("a finite gain")?),
+        muted: None,
+    })
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let args = parse_args()?;
-    let engine = MockEngine::new();
+    let engine = MockEngine::new().with_kinds([audio_input_kind()]);
     seed(&engine)
         .await
         .map_err(|error| format!("seeding the mock engine: {error}"))?;
