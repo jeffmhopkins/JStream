@@ -46,7 +46,8 @@ today's limit, and a **frame limit** of 16 MiB.
 - A message over the request limit but at or under the frame limit is read and refused
   with `too_large`. The connection stays open. Nothing in the message is applied.
 - A message over the frame limit closes the connection, as a message over 4 MiB does
-  today, with WebSocket close code 1009 (message too big).
+  today. Today the server drops the connection without a close frame; from now on it
+  sends one first, with close code 1009 (message too big).
 
 **2. The `too_large` error.** `ProtocolError` gains `too_large { size_bytes, limit_bytes }`:
 the message's size in bytes and the request limit. It answers the request's `id` when the
@@ -69,8 +70,12 @@ protocol message" now reads: one `state` fits in one request, and a request that
 fit is refused with `too_large`.
 
 **5. MCP.** The MCP endpoint takes the same two limits. A body over the request limit
-and at or under the frame limit is answered with a JSON-RPC error that carries the
-`too_large` code and both sizes, so the agent sees a tool error it can act on. A body
+and at or under the frame limit is answered with a JSON-RPC error, code `-32023` (in the
+server-error range, beside the endpoint's `-32022`), whose `data` is
+`{ "code": "too_large", "size_bytes", "limit_bytes" }`. The server never parses an
+oversized body, so it answers the request's `id` when it can read one, and can't tell
+whether the body was a `tools/call`: the agent gets a JSON-RPC error it can act on, not a
+tool result with `isError`. A body
 over the frame limit, or one that declares a `Content-Length` over it, stays HTTP 413
 and is refused before it is read.
 
