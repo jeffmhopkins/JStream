@@ -20,6 +20,7 @@ use crate::id::{
     BusId, DeviceId, EncoderProfileId, FilterId, FolderId, GestureId, IdempotencyKey, ItemId,
     LabelId, OutputId, PluginId, Rev, SceneId, SourceId, TransitionPresetId, VideoMixId,
 };
+use crate::keyframe::OverrideField;
 use crate::mix::VideoMix;
 use crate::organise::{SceneMeta, SourceMeta};
 use crate::output::{OutputKind, RtmpTarget, SecretString};
@@ -55,6 +56,39 @@ pub enum Edit {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         role: Option<SceneRole>,
     },
+    /// Creates a keyframe scene (a variant) of `variant_of` (ADR-0024 §2, ADR-0049): a
+    /// scene with no items of its own that shows its parent's items, each at its parent's
+    /// values until the variant overrides a field. Placement edits with `scene_id` set to
+    /// the variant write its overrides; `item.clear_override` removes them. `variant_of`
+    /// must name an existing scene that is not itself a variant (a keyframe of a keyframe
+    /// is made on the parent), else `invalid_argument`; a missing one is `not_found`.
+    /// The variant has the role `scene`, no folder (it sits under its parent) and no
+    /// transition overrides; its own `scene.set_transitions` and `scene.set_meta` apply.
+    /// Inverse: `scene.delete`.
+    #[serde(rename = "scene.create_variant")]
+    SceneCreateVariant {
+        /// The new scene's ID, chosen by the client. Rejected if it exists.
+        scene_id: SceneId,
+        /// The scene it is a keyframe of.
+        variant_of: SceneId,
+        /// Display name.
+        name: String,
+    },
+    /// Removes one field of a keyframe scene's override of an item (ADR-0049 §2), so
+    /// that field follows the parent again. "Reset keyframe" is a batch of these.
+    /// `scene_id` must name a keyframe scene and `item_id` an item of its parent, else
+    /// `invalid_argument` (`not_found` for a missing one). Clearing a field the variant
+    /// doesn't override is allowed and changes nothing. Inverse: the placement edit that
+    /// writes the old value with `scene_id` set, or nothing when the field was absent.
+    #[serde(rename = "item.clear_override")]
+    ItemClearOverride {
+        /// The keyframe scene.
+        scene_id: SceneId,
+        /// The parent's item.
+        item_id: ItemId,
+        /// The field to clear.
+        field: OverrideField,
+    },
     /// Renames a scene. Inverse: `scene.rename` back to the previous name.
     #[serde(rename = "scene.rename")]
     SceneRename {
@@ -79,10 +113,13 @@ pub enum Edit {
     /// settings refer to it: delete those sources, point those mixes elsewhere, or clear
     /// those references, first (in the same batch if needed). Hotkey bindings whose
     /// action names the scene are not blockers: they are removed with it (ADR-0040 §3).
-    /// Inverse: `scene.create` with its role (omitted for `scene`), then `scene.reorder`
+    /// A scene with keyframe scenes is refused the same way, the variants listed as its
+    /// blockers; delete them first. Inverse: `scene.create` with its role (omitted for
+    /// `scene`), or `scene.create_variant` for a keyframe scene, then `scene.reorder`
     /// to its old display position (unless it was last), `scene.set_transitions` if it
     /// had an override, `scene.set_folder` and `scene.set_meta` if it had a folder or
-    /// metadata, then each deleted item's `item.remove` inverse, from bottom to top, then
+    /// metadata, then each deleted item's `item.remove` inverse, from bottom to top (a
+    /// keyframe scene's overrides instead, as placement edits with its `scene_id`), then
     /// `hotkey.set` for each removed binding.
     #[serde(rename = "scene.delete")]
     SceneDelete {
@@ -125,12 +162,15 @@ pub enum Edit {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         blend: Option<BlendMode>,
     },
-    /// Removes an item from its scene. The source itself stays. Inverse: `item.add` with
+    /// Removes an item from its scene. The source itself stays. Every keyframe scene of
+    /// that scene loses its override of the item, reported in the batch result's
+    /// `dropped_overrides` (ADR-0040 §1). Inverse: `item.add` with
     /// the removed item's scene, ID and source, its placement in the field matching its
     /// form (`transform` or `geometry`), and its opacity and blend where they differ from
     /// the defaults, then `item.reorder` to its old stacking position (unless it was on
-    /// top), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden, and
-    /// `item.set_transition` if its transition settings were not the default.
+    /// top), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,
+    /// `item.set_transition` if its transition settings were not the default, and the
+    /// placement edits that write each dropped override back.
     #[serde(rename = "item.remove")]
     ItemRemove {
         /// The item to remove.
@@ -140,8 +180,11 @@ pub enum Edit {
     /// placement, crop and visibility (ADR-0024 §1). Grouping is a batch that creates a
     /// group scene, places it, and moves the selected items into it. Rejected with
     /// `invalid_argument` if the move would make a scene contain itself (field
-    /// `scene_id`, naming the cycle) or if the index is out of range. Inverse:
-    /// `item.move` back to its previous scene and index.
+    /// `scene_id`, naming the cycle), if the index is out of range, or if the scene is
+    /// a keyframe scene, which has no items of its own. A move to another scene drops
+    /// the item's overrides in the keyframe scenes of the scene it leaves, as
+    /// `item.remove` does. Inverse: `item.move` back to its previous scene and index,
+    /// then the placement edits that write each dropped override back.
     #[serde(rename = "item.move")]
     ItemMove {
         /// The item to move.
@@ -194,9 +237,11 @@ pub enum Edit {
         /// The item to show or hide.
         item_id: ItemId,
         /// The scene whose placement of the item to change, as every placement edit
-        /// takes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item.
-        /// Any other scene is `invalid_argument` until keyframe scenes exist, when naming
-        /// a keyframe scene of the item's scene will write that scene's override.
+        /// takes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item. A
+        /// keyframe scene of the item's scene writes that scene's override of this
+        /// field (since 0.39), whose inverse is `item.clear_override` if the field was
+        /// not overridden and this edit with the old value if it was. Any other scene is
+        /// `invalid_argument`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         scene_id: Option<SceneId>,
         /// Whether the item is drawn. Items are visible when added.
@@ -912,6 +957,8 @@ impl Edit {
     pub fn name(&self) -> &'static str {
         match self {
             Edit::SceneCreate { .. } => "scene.create",
+            Edit::SceneCreateVariant { .. } => "scene.create_variant",
+            Edit::ItemClearOverride { .. } => "item.clear_override",
             Edit::SceneRename { .. } => "scene.rename",
             Edit::SceneSetRole { .. } => "scene.set_role",
             Edit::SceneDelete { .. } => "scene.delete",
@@ -1035,8 +1082,9 @@ pub enum Action {
     /// the same parameter, and takes the parameter over from any other gesture that held
     /// it. Values are validated as a batch's edits are (`not_found`, `invalid_argument`
     /// with the field `values.<n>.<field>`); a value that is not a live-adjustable
-    /// setter (`item.set_transform`, `item.set_geometry`, `item.set_crop`), an empty or
-    /// over-256 list, and a 17th open gesture are `invalid_argument`. Nothing in a
+    /// setter (`item.set_transform`, `item.set_geometry`, `item.set_crop`), a value whose
+    /// `scene_id` names a keyframe scene (until #702), an empty or over-256 list, and a
+    /// 17th open gesture are `invalid_argument`. Nothing in a
     /// rejected message is applied. The gesture ends with a batch carrying
     /// `ends_gesture`, with `live.cancel`, or when its client's session ends.
     #[serde(rename = "live.set")]

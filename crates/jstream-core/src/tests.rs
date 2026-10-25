@@ -8,6 +8,7 @@ mod audio_routing;
 mod collection;
 mod gpu_capture;
 mod history;
+mod keyframes;
 mod live_values;
 mod preview;
 mod sources;

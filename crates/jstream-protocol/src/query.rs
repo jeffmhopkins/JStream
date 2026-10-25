@@ -12,6 +12,7 @@ use crate::id::{
     BusId, DeviceId, FolderId, ItemId, LabelId, OutputId, Rev, SceneId, SourceId,
     TransitionPresetId,
 };
+use crate::keyframe::ItemOverride;
 use crate::kind::{KindDescriptor, KindSummary};
 use crate::live::GestureInfo;
 use crate::mix::VideoMixInfo;
@@ -681,7 +682,16 @@ pub struct SceneInfo {
     /// Its organisation metadata, each field omitted while it has its default.
     #[serde(flatten)]
     pub meta: SceneMeta,
-    /// Its items, in stacking order: the first is at the bottom.
+    /// The scene this one is a keyframe scene of (ADR-0024 §2, protocol 0.39), whose
+    /// items it shows. Omitted for a scene that is not a variant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub variant_of: Option<SceneId>,
+    /// A keyframe scene's overrides of its parent's items, in item ID order. Omitted
+    /// when there are none, and for every scene that is not a variant.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub overrides: Vec<ItemOverride>,
+    /// Its items, in stacking order: the first is at the bottom. Always empty for a
+    /// keyframe scene, which shows its parent's.
     pub items: Vec<ItemInfo>,
 }
 

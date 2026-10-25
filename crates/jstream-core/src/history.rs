@@ -89,7 +89,9 @@ impl History {
 
     /// Records a batch `client_id` applied: a new step on its undo stack, holding
     /// `inverse`, and its redo stack cleared. `touched` is what the graph says it
-    /// touched.
+    /// touched. A batch with no inverse changed nothing (only `item.clear_override`s of
+    /// fields that weren't overridden, ADR-0049 §2), so it is logged but is no step: an
+    /// undo of it would be an empty batch, and its redo stack is kept.
     pub(crate) fn record_batch(
         &mut self,
         client_id: &ClientId,
@@ -98,7 +100,7 @@ impl History {
         inverse: Vec<Edit>,
     ) {
         self.log(client_id, rev, touched.clone());
-        if self.limit > 0 {
+        if self.limit > 0 && !inverse.is_empty() {
             let stacks = self.clients.entry(client_id.clone()).or_default();
             stacks.redo.clear();
             stacks.undo.push_back(Step {

@@ -16,6 +16,7 @@ mod deps;
 mod encoder;
 mod filter;
 mod hotkey;
+mod keyframe;
 mod mix;
 mod model;
 mod organise;
@@ -29,7 +30,7 @@ mod transition;
 pub use apply::Applied;
 pub use model::{
     Bus, Chains, Effect, Encoder, Filter, Folder, Graph, Item, Label, MAX_BUSES, MAX_CANVAS_EDGE,
-    MAX_CHAIN_FILTERS, Output, Placement, Preset, Scene, Source, State, VideoMix,
+    MAX_CHAIN_FILTERS, Output, Overrides, Placement, Preset, Scene, Source, State, VideoMix,
 };
 pub use persist::{LoadError, SCHEMA_VERSION};
 pub use touched::Touched;

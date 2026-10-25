@@ -435,11 +435,20 @@ fn write_response(out: &mut dyn Write, response: &Response, json: bool) -> Resul
         CallResult::Batch {
             rev,
             removed_hotkeys,
+            dropped_overrides,
         } => {
             writeln!(out, "applied: rev {rev} ({})", response.id)?;
             // ADR-0040 §3: a delete takes the hotkeys naming its target with it.
             for binding in removed_hotkeys {
                 writeln!(out, "removed hotkey {}", binding.chord)?;
+            }
+            // ADR-0040 §1: an item leaving its scene takes its keyframe overrides.
+            for dropped in dropped_overrides {
+                writeln!(
+                    out,
+                    "dropped the overrides of item {} in scene {}",
+                    dropped.dropped.item_id, dropped.scene_id
+                )?;
             }
         }
         CallResult::Action { result: None } => writeln!(out, "accepted ({})", response.id)?,

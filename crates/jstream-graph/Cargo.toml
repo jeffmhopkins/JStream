@@ -16,6 +16,8 @@ unsafe_allowed = false
 workspace = true
 
 [dependencies]
+# A keyframe scene's overrides and their inverses (ADR-0049 §6).
+jstream-anim.workspace = true
 jstream-protocol.workspace = true
 # The collection file's shape (`persist/`).
 serde.workspace = true

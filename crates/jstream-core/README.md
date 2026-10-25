@@ -147,7 +147,9 @@ state machine. Contents:
   thread draws them, and the program mix as the preview thread and `video.snapshot`
   draw it (`plan`, `compose`, each with the live values), and `video.snapshot`, the program mix
   read back as a PNG on the engine's own snapshot thread, which owns the snapshot
-  compositor.
+  compositor. A keyframe scene draws its parent's items at their effective values
+  (`State::shown_items`), so it follows every edit to the parent; so does what the
+  scene reaches for audio (`activity.rs`).
 - **Studio** (`studio.rs`): which scene is on program and which on preview, and the
   transition running onto program, runtime state under the collection lock that
   `scene.switch` and `studio.set_preview` set and `studio.get` reads
@@ -201,7 +203,9 @@ state machine. Contents:
 - **History** (`history.rs`): per-client undo and redo
   ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): each client's undo and redo
   stacks, built from the inverse batches `Graph::apply` returns, and the log of what
-  each recent change touched, which `undo_conflict` is checked against.
+  each recent change touched, which `undo_conflict` is checked against. A batch with an
+  empty inverse changed nothing (only `item.clear_override`s of absent fields), so it
+  is logged but is no step, and the redo stack is kept.
 - **Gestures** (`gesture.rs`): live values
   ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): every client's open
   gestures, which one holds each parameter, the `live.changed` events each owes, and
@@ -347,7 +351,11 @@ state machine. Contents:
   scene's rules (in `tests.rs`, the differential script and `studio.rs`), a snapshot
   that follows program, transitions and preview (`src/tests/transitions.rs`: preset
   resolution, a fade that ends on the clock, a switch mid-transition, and a GPU
-  snapshot mid-fade), YouTube on `jstream-youtube`'s `FakeTransport` and fixtures
+  snapshot mid-fade), keyframe scenes (`src/tests/keyframes.rs`: a variant drawing its
+  parent's items with its overrides and following the parent, a `move` between a parent
+  and its variant pairing by item where pairing by source would cross, and the
+  overrides a batch drops reported and restored by undo, with a no-op clear that is no
+  undo step, and a live value on a keyframe scene refused; `transition.rs` pairs a source placed twice by item), YouTube on `jstream-youtube`'s `FakeTransport` and fixtures
   (`src/tests/youtube.rs`: sign-in through a real loopback redirect, sign-out, the
   broadcast actions and lists, quota and refused tokens, a `youtube` output
   publishing to its broadcast's ingest on the CPU stand-in, with the key and tokens in
@@ -494,7 +502,8 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   edits in order on a working copy, the first failure aborting with `not_found`,
   `already_exists` or `invalid_argument` (`edits.<n>.<field>`) and nothing applied; on
   success `rev` goes up by exactly one, and the batch result lists the hotkey bindings
-  the batch's deletes removed (`removed_hotkeys`). The engine adds the per-client **idempotency
+  the batch's deletes removed (`removed_hotkeys`) and the keyframe overrides it dropped
+  (`dropped_overrides`, ADR-0040 §1). The engine adds the per-client **idempotency
   keys** ([R-API-004](../../docs/RULES.md#R-API-004)): a batch whose key this client
   already used is not applied again and gets the `rev` it produced, even after `rev`
   moved on (the key check comes first) and without an event. Only applied batches
@@ -600,8 +609,10 @@ Live values ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)) live in
 `gesture.rs`'s table, under the collection lock, and reach the render thread through
 the render parameter channel, never through the collection:
 - **`live.set`** checks the message's shape (1 to 256 values, each a live-adjustable
-  setter, room for a new gesture among the client's 16), then applies the values to a
-  copy of the graph exactly as a batch would, naming a failure `values.<n>.<field>`.
+  setter, room for a new gesture among the client's 16), refuses a value whose
+  `scene_id` names a keyframe scene (`values.<n>.scene_id`: the parameters are per
+  item, so it would move the parent's item wherever it is drawn; #702 builds them),
+  then applies the values to a copy of the graph exactly as a batch would, naming a failure `values.<n>.<field>`.
   The copy is thrown away: `rev`, the undo history, the collection file and every
   collection read stay as they were. The values go into the gesture, each taking its
   parameter (an item's placement, set by `item.set_transform` or `item.set_geometry`,
@@ -688,7 +699,10 @@ Pairing and its inputs: each visible item that has a frame (or places a nested s
 or a `display` or `window` source showing its capture) becomes a `Visual` at its stored opacity, its
 placement converted to a geometry (a legacy placement through `ItemGeometry::from_legacy`
 at its frame size; a reflection is not kept mid-transition). `move` pairs by source as
-the protocol says; for it, a nested scene's items are flattened into its parent only
+the protocol says, except between two members of one family (a scene and its keyframe
+scenes, `State::family_of`, decided when the switch starts): those show the same items,
+so it pairs each item with itself (`Running::by_item`, ADR-0049 §3), which stays exact
+when a source is placed twice or an item is hidden on one side. For `move`, a nested scene's items are flattened into its parent only
 when its item covers the canvas exactly (an identity placement, no crop, not rotated)
 and is opaque, so a scene shown at another size or faded moves as one image
 (ADR-0052 §2). Stagger delays only

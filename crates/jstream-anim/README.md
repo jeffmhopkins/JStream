@@ -20,9 +20,11 @@ Layer-0 model of keyframe scenes
 [ADR-0024](../../docs/adr/0024-scene-structure.md) §2): what a variant of a scene
 stores, what its items look like, and what a switch between two keyframes of one scene
 animates. No dependencies, no `unsafe` and no I/O. Geometry and crop are type
-parameters, so it doesn't depend on `jstream-protocol`: the graph will instantiate it
-with the protocol's `ItemGeometry` and `Crop` when variants are built, and a client can
-use it to preview a keyframe as the engine resolves it. Nothing uses it yet.
+parameters, so it doesn't depend on `jstream-protocol`: `jstream-graph` instantiates
+it with its placement and the protocol's `Crop` for a keyframe scene's overrides, and a
+client can use it to preview a keyframe as the engine resolves it. The engine pairs a
+switch within a family by item in its own transition planner, not through
+`plan_switch` yet.
 
 Contents:
 - `Field`: the four keyable fields, `geometry`, `crop`, `visible` and `opacity`, with

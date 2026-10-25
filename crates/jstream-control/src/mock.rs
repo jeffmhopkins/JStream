@@ -628,6 +628,7 @@ impl State {
         let (rev, inverse, removed_hotkeys) = self.apply(batch.edits)?;
         self.history.record_batch(client_id, rev, inverse);
         let result = CallResult::Batch {
+            dropped_overrides: Vec::new(),
             rev,
             removed_hotkeys,
         };
@@ -1015,6 +1016,8 @@ impl State {
                     .scenes
                     .iter()
                     .map(|scene| SceneInfo {
+                        overrides: Vec::new(),
+                        variant_of: None,
                         scene_id: scene.id.clone(),
                         name: scene.name.clone(),
                         role: scene.role,

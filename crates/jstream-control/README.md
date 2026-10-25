@@ -114,7 +114,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   shared with history calls. A retry with a known key gets its first result; then, in `Graph::apply`'s order, a stale
   `expected_rev` fails with `rev_conflict` before an empty batch fails with
   `empty_batch`;
-- every protocol edit but the transition ones (below), with the
+- every protocol edit but the transition ones (below) and the keyframe-scene ones
+  (`scene.create_variant` and `item.clear_override` answer `internal`, as an edit the
+  mock doesn't implement; with no keyframe scenes its `state.get` reports none and its
+  batch results drop no overrides), with the
   checks `jstream-graph` makes, in the same order per
   edit, and the same error codes and `edits.<n>.<field>` paths:
   - `not_found` and `already_exists`;
