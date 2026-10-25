@@ -276,7 +276,7 @@ fn verify(root: &Path, target: &str, by: &str, note: &str) -> Result<()> {
     verify_text(root, target, by, &Text::One(note.to_owned()))
 }
 
-/// [`verify`] with the note given as a [`Text`]: one for every rewritten entry, or one per
+/// `verify` (above) with the note given as a [`Text`]: one for every rewritten entry, or one per
 /// input (#855).
 fn verify_text(root: &Path, target: &str, by: &str, text: &Text) -> Result<()> {
     text.check(by)?;
@@ -491,7 +491,7 @@ fn verify_merge(root: &Path, target: &str, by: &str, text: &str) -> Result<Vec<u
     verify_merge_text(root, target, by, &Text::One(text.to_owned()), None)
 }
 
-/// [`verify_merge`] with the text given as a [`Text`] (#855). With `from`, it first checks
+/// `verify_merge` (above) with the text given as a [`Text`] (#855). With `from`, it first checks
 /// that the merge it carries notes across brought in `origin/<from>` (or a commit on it).
 fn verify_merge_text(
     root: &Path,
@@ -574,7 +574,7 @@ fn verify_renote(
     verify_renote_text(root, target, by, &Text::One(note.to_owned()), branch)
 }
 
-/// [`verify_renote`] with the note given as a [`Text`] (#855).
+/// `verify_renote` (above) with the note given as a [`Text`] (#855).
 fn verify_renote_text(
     root: &Path,
     target: &str,
