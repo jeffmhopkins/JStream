@@ -1453,7 +1453,13 @@ H.264 keyframe; until the muxer has a decoder configuration, such a keyframe get
 stand-in parameter sets in front (`with_parameter_sets`). A later one goes out as it
 is, since a stand-in SPS would replace the encoder's own, which shares its id. The protocol's `VideoCodec` names
 only H.264 so far, so a profile can't select HEVC or AV1 yet. MP4 recording takes H.264
-only: another codec fails the start with `recording … is not supported yet`.
+only: another codec fails the start with `recording … is not supported yet`. Before a
+video session opens, `check_video_encoder` reads the platform's `codecs.list()` and
+fails the start when no encoder there fits the profile, naming what the machine lacks:
+`this machine has no AV1 encoder`, or no hardware one for `hardware: require`, or no
+software one for `avoid`. A profile's codec is collection state, valid on any machine, so
+this is checked at the start and never at the edit. A platform that can't list its
+codecs passes the check, and opening the encoder reports the failure.
 
 **Virtual camera.** `with_backends` takes the backends' `VcamSink` out and keeps it for
 the engine's life. When the collection's output is `VirtualCam`, the start takes that
