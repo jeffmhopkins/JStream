@@ -489,7 +489,9 @@ defaults pass its descriptor, and that they build its pass.
 
 **Where they run.** `jstream-core`'s chain runtime (roadmap V0,
 [core › Design](../jstream-core/README.md#design)) keeps a `VideoFilter` per enabled
-filter of a source's video chain and runs them in order before placement, each into a
+filter of a source's video chain and runs them in order before placement, and of a
+scene's over its composite
+([ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md)), each into a
 cached layer with `apply_filter_into`. `video_filter_descriptors()` is how its
 `kind.list` gets these kinds.
 

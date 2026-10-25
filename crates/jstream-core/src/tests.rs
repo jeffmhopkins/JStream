@@ -517,11 +517,12 @@ fn scanned_clap_plugins_are_audio_filter_kinds() {
     );
 }
 
-/// The graph holds scene filters and item effects (ADR-0065), but nothing renders them
-/// yet, so the engine refuses a filter edit on a scene or an item, on `owner`, once the
-/// graph's own checks pass; a batch the graph would refuse gets the graph's answer.
+/// The engine takes scene filters (ADR-0065), which run on the scene's composite. The
+/// graph holds item effects too, but nothing renders them yet, so the engine refuses a
+/// filter edit on an item, on `owner`, once the graph's own checks pass; a batch the
+/// graph would refuse gets the graph's answer.
 #[test]
-fn scene_and_item_filter_owners_are_refused_until_rendered() {
+fn scene_filters_are_taken_and_item_effects_refused_until_rendered() {
     use jstream_protocol::{FilterChain, FilterId, FilterOwner, ItemId, SceneId};
     let engine = Engine::new();
     let control = connected(&engine);
@@ -569,35 +570,33 @@ fn scene_and_item_filter_owners_are_refused_until_rendered() {
         enabled: None,
         index: None,
     };
-    let owners = [
-        FilterOwner::Scene {
-            scene_id: SceneId::new("s"),
-        },
-        FilterOwner::Item {
-            item_id: ItemId::new("i"),
-        },
-    ];
-    for owner in owners {
-        let error = batch(&control, Batch::single(sharpen(owner.clone()))).expect_err("refused");
-        assert!(
-            matches!(
-                error.protocol(),
-                Some(ProtocolError::InvalidArgument { field, reason, .. })
-                    if field == "edits.0.owner" && reason.contains("not rendered yet")
-            ),
-            "{owner:?}: {error:?}"
-        );
-        assert_eq!(engine.rev(), rev, "nothing applied");
-    }
-    let ghost = FilterOwner::Scene {
-        scene_id: SceneId::new("ghost"),
+    let item = FilterOwner::Item {
+        item_id: ItemId::new("i"),
+    };
+    let error = batch(&control, Batch::single(sharpen(item))).expect_err("refused");
+    assert!(
+        matches!(
+            error.protocol(),
+            Some(ProtocolError::InvalidArgument { field, reason, .. })
+                if field == "edits.0.owner" && reason.contains("not rendered yet")
+        ),
+        "{error:?}"
+    );
+    assert_eq!(engine.rev(), rev, "nothing applied");
+    let scene = FilterOwner::Scene {
+        scene_id: SceneId::new("s"),
+    };
+    let taken = batch(&control, Batch::single(sharpen(scene))).expect("a scene filter");
+    assert!(taken > rev);
+    let ghost = FilterOwner::Item {
+        item_id: ItemId::new("ghost"),
     };
     let error = batch(&control, Batch::single(sharpen(ghost))).expect_err("not found");
     assert!(
         matches!(
             error.protocol(),
             Some(ProtocolError::NotFound {
-                entity: EntityKind::Scene,
+                entity: EntityKind::Item,
                 ..
             })
         ),

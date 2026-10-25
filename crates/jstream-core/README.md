@@ -116,10 +116,10 @@ state machine. Contents:
     the scan describes the kind. So nothing hosts a CLAP filter, keeps its saved state,
     runs a supervisor or reports its events. Also not yet: the plugin's editor, and
     rescanning.
-- **Not yet: scene filters and item effects** (ADR-0065, ADR-0068). The graph holds
-  them, but nothing renders them, so the engine refuses a `filter.*` edit whose owner is
-  a scene or an item (`invalid_argument` on `edits.N.owner`). It validates the batch
-  first, so a batch the graph refuses gets the graph's answer.
+- **Not yet: item effects** (ADR-0065, ADR-0068). The graph holds them, but nothing
+  renders them, so the engine refuses a `filter.*` edit whose owner is an item
+  (`invalid_argument` on `edits.N.owner`). It validates the batch first, so a batch
+  the graph refuses gets the graph's answer. Scene filters run (Video chains, below).
 - **Live sources** (`live.rs`): a running `jstream-sources` source for every source
   in the collection, built when it is created, rebuilt when its settings change and
   dropped when it is deleted, on the engine's `jstream-sources` thread. The program
@@ -853,6 +853,19 @@ changing with time (`Shot::changes_with_time`), so the preview redraws it like a
 running transition. `video.snapshot` runs the chains on its own compositor, so a
 stateful kind (a video delay) starts empty there. The built-in video filter kinds are
 in `kind.list` and `filter.add` takes them on a video chain.
+
+A scene's video chain ([ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md),
+a keyframe scene's being its parent's) runs the same way, keyed by its owner
+(`ChainOwner`), over the scene's composite: when a filter of it runs, the chain phase
+draws the scene once per frame into `GpuKey::Composite`, at the depth a filter's
+scene reference is drawn at, and runs the chain into `GpuKey::Filtered`. Every place
+that shows the scene shows that output: a `scene` source's item, a `scene_mask` that
+reads it, and the program or a video mix, which places it over the canvas. So it runs
+once per frame however many mixes and places show it, and a disabled or empty chain
+leaves the scene composited as before. In a transition the scene is one picture
+(ADR-0065 §6): one track over the canvas that pairs with nothing, so Fade crossfades
+it, Move falls back to that, and a filtered nested scene is never flattened into its
+items.
 
 A filter that reads an asset (`apply_lut`'s `lut`, a `.cube` file or a tiled PNG, and
 `image_mask`'s `image`, whose first frame is the mask) gets it through the live

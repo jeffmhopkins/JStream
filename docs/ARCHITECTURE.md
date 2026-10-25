@@ -297,8 +297,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   ([ADR-0065](adr/0065-scene-chains-and-item-effects.md); item effects are in v1 under
   [ADR-0068](adr/0068-item-effects-in-v1.md)). A reference in them is an edge of the
   scene, so it counts for cycles and blocks deleting its target. A keyframe scene has
-  none of its own. The graph holds them; the engine refuses both owners until it renders
-  them.
+  none of its own. The engine runs a scene's filters on its composite; it refuses the
+  `item` owner until it renders item effects.
 - **Settings:** a source's `settings`, each filter's, and each transition preset's are a
   map of values described by its kind's descriptor, which the engine reports and
   validates against. References to scenes, sources, buses and asset files inside
@@ -652,9 +652,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   [ADR-0027](adr/0027-program-master-and-output-chains.md), protocol 0.29). Since 0.43
   the owners `scene` and `item`, `SceneInfo.filters`, `ItemInfo.effects` and a
   descriptor's `max_outset_px` are in the protocol
-  ([ADR-0065](adr/0065-scene-chains-and-item-effects.md)). The graph holds them, and
-  the engine refuses both owners on `owner` until it renders scene filters and item
-  effects.
+  ([ADR-0065](adr/0065-scene-chains-and-item-effects.md)). The engine runs scene
+  filters, and refuses the `item` owner on `owner` until it renders item effects.
   `source.set_audio`, `bus.create`, `bus.rename`, `bus.set_fader`, `bus.delete`,
   `send.set` and `send.remove` edit sources' audio, the buses and the send matrix
   ([ADR-0028](adr/0028-audio-model-v2.md), protocol 0.19).
@@ -994,7 +993,9 @@ descriptors whose passes `apply_filter` draws from any image (an upload, a layer
 import, a browser page's included) into a premultiplied `Rgba16Float` layer, of the size the filter reports
 ([jstream-render › Filters](../crates/jstream-render/README.md#filters));
 `apply_filter_into` draws into a layer the caller keeps, which is how `jstream-core`'s
-chain runtime runs a source's video chain before placement without allocating per
+chain runtime runs a source's video chain before placement, and a scene's over its
+composite once per frame wherever the scene shows
+([ADR-0065](adr/0065-scene-chains-and-item-effects.md)), without allocating per
 frame. Still outside this crate: the render
 thread (in `jstream-core`), P010, loading effect packs (`jstream-effects`; this
 crate draws them through the filter harness), and the output path below.
