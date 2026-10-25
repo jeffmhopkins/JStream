@@ -378,8 +378,16 @@ fn ledger_text_at(root: &Path, rev: &str) -> Result<Option<String>> {
 
 /// The latest merge on this branch's first-parent chain, unless it is already on
 /// `origin/main` or an `origin/wave/*` branch (a merge the branch inherited, not one it
-/// made); `None` when there is no such merge.
+/// made); `None` when there is no such merge, or no commit yet.
 pub(crate) fn last_merge(root: &Path) -> Result<Option<MergePoint>> {
+    // A tree with no commit yet (or outside git) has made no merge; `docs verify` still
+    // runs there.
+    if !git(root, &["rev-parse", "-q", "--verify", "HEAD^{commit}"])?
+        .status
+        .success()
+    {
+        return Ok(None);
+    }
     let merge = git_ok(
         root,
         &["rev-list", "--first-parent", "--merges", "-n1", "HEAD"],
@@ -582,6 +590,12 @@ pub(crate) fn branch_entries(
 /// is an error, since an empty one would hand every input back to the branch's notes.
 pub(crate) fn merged_ledger(root: &Path, point: &MergePoint) -> Result<ledger::Ledger> {
     ledger_at(root, &point.theirs, "on the merged side")
+}
+
+/// The ledger at `point`'s merge base: an entry of the merged side that differs from this
+/// one is a note that side wrote since the branch left it (#840).
+pub(crate) fn base_ledger(root: &Path, point: &MergePoint) -> Result<ledger::Ledger> {
+    ledger_at(root, &point.base, "at the merge's base")
 }
 
 /// Added to an error from the steps after the merge commit (moving inline stamps, listing
