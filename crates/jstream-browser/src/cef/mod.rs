@@ -33,8 +33,12 @@ use crate::link::Link;
 use crate::{BrowserBackend, BrowserError, BrowserPage, PageSpec};
 use gpu::{DeviceSlot, HelperFrames};
 
-/// The helper exe, next to the host's exe by default.
+/// The helper exe, in [`HELPER_DIR`] beside the host's exe, or beside the exe itself.
 const HELPER_EXE: &str = "jstream-browser-helper.exe";
+
+/// The folder beside the host's exe that holds the helper and CEF's runtime in the
+/// portable zip (ARCH › Packaging).
+const HELPER_DIR: &str = "browser";
 
 /// How long the helper may take to connect to its pipes.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
@@ -60,8 +64,8 @@ pub struct CefConfig {
 }
 
 impl CefConfig {
-    /// The helper next to the running exe, and a cache under `state_dir` (the app's
-    /// state folder): `state_dir/cef`.
+    /// The helper beside the running exe (see [`helper_in`]), and a cache under
+    /// `state_dir` (the app's state folder): `state_dir/cef`.
     ///
     /// # Errors
     /// [`BrowserError::Start`] when the running exe's path is unknown.
@@ -71,10 +75,22 @@ impl CefConfig {
             .parent()
             .ok_or_else(|| start("the running exe has no folder".into()))?;
         Ok(Self {
-            helper: dir.join(HELPER_EXE),
+            helper: helper_in(dir),
             cache_root: state_dir.join("cef"),
             log_file: None,
         })
+    }
+}
+
+/// The helper exe for a host in `dir`: in its `browser` folder, as the portable zip lays
+/// it out, else beside the host (a build folder the helper was laid out in, as
+/// `page_check` does).
+fn helper_in(dir: &std::path::Path) -> PathBuf {
+    let shipped = dir.join(HELPER_DIR).join(HELPER_EXE);
+    if shipped.is_file() {
+        shipped
+    } else {
+        dir.join(HELPER_EXE)
     }
 }
 
@@ -284,4 +300,25 @@ fn kill(child: &mut Child) {
 
 fn start(reason: String) -> BrowserError {
     BrowserError::Start { reason }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{HELPER_DIR, HELPER_EXE, helper_in};
+
+    #[test]
+    fn the_helper_is_found_in_the_zips_browser_folder_else_beside_the_host() {
+        let dir = std::env::temp_dir().join(format!("jstream-helper-in-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(HELPER_DIR)).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(helper_in(&dir), dir.join(HELPER_EXE), "a build folder");
+        std::fs::write(dir.join(HELPER_DIR).join(HELPER_EXE), b"")
+            .unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(
+            helper_in(&dir),
+            dir.join(HELPER_DIR).join(HELPER_EXE),
+            "the portable zip's layout"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

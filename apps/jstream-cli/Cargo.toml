@@ -1,6 +1,6 @@
 [package]
 name = "jstream-cli"
-version = "0.0.0"
+version.workspace = true
 description = "The JStream command-line client: drives an engine through the Control trait."
 edition.workspace = true
 license.workspace = true

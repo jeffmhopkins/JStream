@@ -113,7 +113,7 @@ pub fn set_up(
 ) -> Engine {
     engine.with_youtube(
         YoutubeSetup::new(client.id, client.secret, transport, tokens)
-            .with_secret_hook(secrets.hook()),
+            .with_secret_hook(secrets.hook(jstream_youtube::SecretKind::slot)),
     )
 }
 
