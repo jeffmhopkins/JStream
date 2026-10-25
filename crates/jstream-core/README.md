@@ -768,7 +768,9 @@ the next frame while the program still nests it. A nested scene has no backgroun
 draws nothing and the scene under it shows through; the program scene is drawn over
 opaque black. A scene placed more than once at the same depth is composited once.
 Depth is bounded: the program scene is depth 0, and a scene source more than 8
-levels below it draws nothing (logged at `debug`). It is one limit,
+levels below it draws nothing (logged at `debug`). A scene with a scene filter
+(ADR-0065) is composited once per frame at depth 0 wherever it shows, so the count
+restarts below it, and a scene a `scene_mask` reads restarts it at 1. It is one limit,
 `snapshot::MAX_NESTING`, for the render thread and `video.snapshot` alike, and ARCH ›
 Data model states it for clients. Width is not bounded: each distinct `(scene, depth)`
 keeps its own canvas-sized FP16 layer, so a program with *k* distinct nested scene
@@ -853,8 +855,8 @@ in `kind.list` and `filter.add` takes them on a video chain.
 A scene's video chain ([ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md),
 a keyframe scene's being its parent's) runs the same way, keyed by its owner
 (`ChainOwner`), over the scene's composite: when a filter of it runs, the chain phase
-draws the scene once per frame into `GpuKey::Composite`, at the depth a filter's
-scene reference is drawn at, and runs the chain into `GpuKey::Filtered`. Every place
+draws the scene once per frame into `GpuKey::Composite`, at depth 0 as the program
+scene is, and runs the chain into `GpuKey::Filtered`. Every place
 that shows the scene shows that output: a `scene` source's item, a `scene_mask` that
 reads it, and the program or a video mix, which places it over the canvas. So it runs
 once per frame however many mixes and places show it, and a disabled or empty chain
@@ -876,8 +878,9 @@ with its fit and flips, and its live values applied. Then the chain runs into
 item's box grown by the outset in proportion, and turned and projected as the box is,
 before its opacity and blend. So a live resize draws the same layer, scaled, until
 the plan is made again. What the item shows is read as the chain phase draws it: a
-source's frame or chain output, a capture, or a nested scene drawn at the reference
-depth or through its own chain. A legacy transform has the box its quad covers, so
+source's frame or chain output, a capture, or a nested scene through its own chain or
+drawn as a `scene_mask`'s scene is, at depth 1, so the nesting count restarts below
+it. A legacy transform has the box its quad covers, so
 over a capture, whose size isn't known when planning, its effects are bypassed. A
 source's own chain still runs once, wherever it is placed. In a transition an item
 with effects is its effects' layer over its grown box, uncropped, and two items pair
@@ -888,7 +891,7 @@ fields.
 A filter that reads an asset (`apply_lut`'s `lut`, a `.cube` file or a tiled PNG, and
 `image_mask`'s `image`, whose first frame is the mask) gets it through the live
 sources (`filter_assets.rs`). Each sync lists the assets the collection's video filters
-name, enabled or not, so enabling one needs no load. The `jstream-sources` thread
+name, a source's, a scene's or an item's, enabled or not, so enabling one needs no load. The `jstream-sources` thread
 reads and decodes each new one, as it builds sources, and an asset no filter names any
 more is let go. A plan hands each chain filter the asset it names, numbered by its load,
 and each compositor makes the filter's reference image from it once: the LUT's tile
