@@ -52,8 +52,10 @@ Contents ([Design](#design) explains the choices):
 - **Store** (`store.rs`): `Studio`, the state the scene, sources and properties panels
   share: the collection as `state.get` last reported it (`Collection`, with its buses
   for the bus picker), the program
-  scene, the `Selection`, the source kinds and the kind descriptors read so far, and the
-  last failed call, and `keys_changed`, which the outputs panel bumps when a stream key
+  scene, the `Selection`, each source's size (`Sizes`, from `source.sizes` and
+  `source.size_changed`; `Collection::source_size` adds a nested scene's, the canvas),
+  whether the canvas is in crop mode (which a switch of scene leaves), the source kinds
+  and the kind descriptors read so far, and the last failed call, and `keys_changed`, which the outputs panel bumps when a stream key
   is set or cleared. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
   `plan_summary` and `fresh_id`.
 - **Menus, dialogs and icons**: `menu.rs` (`ContextMenu`, the right-click menu, and
@@ -178,7 +180,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   unless it was selected and opens `item_menu.rs`'s menu for the selection: Properties
   (the Properties dialog), the Audio check (`source.set_audio`), layer order
   (`item.reorder`s that keep the selected items' order), Center, Fit and Stretch to
-  canvas and Reset rotation (`item.set_geometry`), Clear crop, Duplicate as reference
+  canvas and Reset rotation (`item.set_geometry`), Clear crop (`item.set_crop`, with
+  each item's uncropped extent as its box while its source's size is known), Crop
+  (crop mode, for one item), Duplicate as reference
   (`item.add` of the same source, 40 pixels down and right, just above the original)
   or as clone (`source.duplicate` first), and Remove from scene, each one batch; in
   the sources list, one item's menu ends with deleting its source everywhere. A
@@ -193,7 +197,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `item.add` as one batch, with a box of the prototype's native size for the type,
   centred and scaled down to fit the canvas (ADR-0022's `fit` keeps the picture's
   aspect within it). An existing source is placed again 40 pixels right of and below
-  its first placement. A scene is nested through a `scene` source, reusing one that
+  its first placement, or, placed nowhere, at its own size when the engine reports one
+  (`source.sizes`), scaled down to fit. A scene is nested through a `scene` source, reusing one that
   already shows it. The new item is selected; a new source's Properties dialog opens
   once the engine has accepted the batch, waiting for the collection to list the
   source, and a placement of an existing one shows in the Inspector. A `kind.list`
@@ -204,8 +209,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   its name, kind, "+N" for the other selected items and a favourite star
   (`source.set_meta` or `scene.set_meta`). An item's name is in italics when its source
   is placed in another scene too. Its sections fold: Parameters (X and Y of the
-  unrotated box's top-left corner, W, H and Rotation, sent as `item.set_geometry`; the
-  W/H link, on by default, keeps the aspect ratio when either side changes), Crop
+  unrotated box's top-left corner, W, H, W % and H % of the source's own size (blank
+  while the engine knows none) and Rotation, sent as `item.set_geometry`; the W/H link,
+  on by default, keeps the aspect ratio when either side changes), Crop
   (`item.set_crop`, in source pixels), Blending (the nine modes, of which the engine
   draws only Normal so the others are disabled, and Opacity, `item.set_opacity`) and
   Properties, the source's settings form. A scene shows its object count, the scenes
@@ -231,7 +237,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   evens the gaps in centre order, keeping the first and last; Center moves the
   selection as a block; Fit and Stretch also stand the item upright; Match width and
   height take the primary item's. `plan` works out the new boxes, and each press sends
-  the changed ones as one batch of `item.set_geometry` (Clear crop: `item.set_crop`),
+  the changed ones as one batch of `item.set_geometry` (Clear crop: `item.set_crop`, and the
+  uncropped box while the source's size is known, `canvas::crop::clear`),
   so it is one undo step. Items still in the legacy form are left alone, and Match does
   nothing while the primary item is one.
 - **The properties form** is generated from the kind's descriptor (`kind.describe`,
@@ -468,7 +475,8 @@ depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0032-live-
 
 The canvas edits the boxes of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)
 in canvas pixels. `transform.rs` maps the page to the canvas, hit-tests boxes and
-handles, and turns a drag into a new geometry; `group.rs` does the same for several
+handles, and turns a drag into a new geometry; `crop.rs` turns a crop handle's drag
+into a new box and crop, from the source's size; `group.rs` does the same for several
 selected items and the box select; `snap.rs` snaps; `model.rs` lays out the scene and
 sends the edits; `preview.rs` chooses the preview stream and decides what to do with
 each H.264 frame and when each JPEG decodes. These are pure and tested natively,
@@ -476,13 +484,13 @@ each H.264 frame and when each JPEG decodes. These are pure and tested natively,
 browser, and `mod.rs` is the component.
 
 - **What it shows.** The selected scene ([Design › Selection](#design)), laid out with
-  `Layout::of` from the shared collection, so it follows every state change the app
+  `Layout::sized` from the shared collection and the sources' sizes, so it follows every state change the app
   reads. The frame is the largest 16:9 box in the canvas area, with the scene's name
   and the canvas size captioned bottom left. Boxes are outlined with
   `jstream-protocol`'s placement formula, so the overlay matches what the compositor
   draws. An item still stored as a 0.3 legacy placement is not drawn: its box depends
-  on the source's runtime size, which the UI doesn't read yet (ADR-0022's
-  `source.sizes`, protocol 0.40), and a note top left counts such items. Hidden items are drawn
+  on the source's runtime size, which the canvas doesn't evaluate a legacy transform
+  against yet (ADR-0022 decision 5), and a note top left counts such items. Hidden items are drawn
   dashed, and the box under the pointer gets a light outline.
 - **The preview.** Under the boxes is the program mix, live, while the selected
   scene is the one on program; on another scene the background says the preview
@@ -530,9 +538,20 @@ browser, and `mod.rs` is the component.
   aspect unless Ctrl is held, down to 20 pixels; the knob turns every box about the
   bounds' centre, in 45° steps with Ctrl. A move of several boxes snaps their bounds
   the way one box snaps, unless one of them is rotated.
-- **Crop** on the canvas (Alt on a handle, the crop tool) needs each source's size to
-  turn a dragged edge into source pixels, which the UI doesn't read yet (ADR-0022's
-  `source.sizes`, protocol 0.40), so the canvas doesn't crop.
+- **Crop.** In crop mode (the Crop tool or C; V, the Move tool, Escape or a switch of
+  scene leaves it) every resize handle of the one selected box crops, and outside it
+  Alt on a handle does. The crop is in source pixels, so it needs the source's size
+  (`source.sizes`, ADR-0022 decision 4). The handles sit on the item's picture: the
+  part of the box the source fills, which `jstream-protocol`'s `content` gives for its
+  fit mode, clipped to the box. A drag moves that edge of the picture, which keeps its
+  scale, and stops at the uncropped extent, leaving at least 10 pixels; the box becomes
+  the picture's rectangle and the crop is rounded to whole source pixels (a `fill`
+  box's clipped margins count as crop). A flipped box crops the source's side it
+  shows. In crop mode the outline, the handles (12 px, filled) and the readout are
+  amber, and the uncropped extent is drawn as a dashed amber ghost, as it is whenever
+  the selected item is cropped. While a crop drag goes on the readout says
+  `crop l / r / t / b`; at rest it adds ` · cropped` for a cropped item, or, in crop
+  mode with no size known, ` · no source size yet`, and then there are no crop handles.
 - **Snapping.** A moved upright box's edges and centre snap, within 6 screen pixels,
   to the canvas's edges and centre lines and to the other boxes' edges and centres,
   using each box's axis-aligned bounds; the lines it lands on are drawn as guides. An
@@ -543,7 +562,7 @@ browser, and `mod.rs` is the component.
   menu, and on an item the selected items' menu ([Design](#design)).
 - **Undoable edits.** A drag changes no stored state until it ends: the overlay draws
   the gesture locally, and on release one batch with an `item.set_geometry` per item it
-  changed commits it, so each gesture (and each nudge) is one undo step. Meanwhile the
+  changed (and an `item.set_crop` for a crop) commits it, so each gesture (and each nudge) is one undo step. Meanwhile the
   drag opens a gesture (`live.rs`) whose `live.set` carries the same edits as live
   values ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), so the output and
   the preview follow the drag without changing `rev`. The calls go one at a time, the
