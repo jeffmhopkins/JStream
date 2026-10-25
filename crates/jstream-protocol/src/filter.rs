@@ -46,8 +46,7 @@ pub enum FilterOwner {
     /// A scene's filters, which run on the scene's whole composite wherever it renders
     /// (ADR-0065 §5, since 0.43). A video chain only: `chain: "audio"` is
     /// `invalid_argument` on `chain`. Never a keyframe scene, which shows its parent's.
-    /// The engine refuses this owner with `invalid_argument` on `owner` until scene
-    /// chains are built.
+    /// The engine runs this chain on the scene's composite.
     Scene {
         /// The scene.
         scene_id: SceneId,
