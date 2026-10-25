@@ -1908,6 +1908,28 @@ mod tests {
             ledger::keep_notes("new", Some(&earlier), Some("W2")),
             format!("new{k}W1{k}W2")
         );
+        // #842: dedupe is per segment. A record that the branch kept and that the merged
+        // side's note kept in turn appears once, and the merged side's own text follows.
+        let both = format!("o{k}W1{k}W2");
+        assert_eq!(
+            ledger::keep_notes("new", Some(&both), Some(&format!("W3{k}W2"))),
+            format!("new{k}W1{k}W2{k}W3")
+        );
+        // A segment that holds several kept ones in full replaces them, in the first's place.
+        assert_eq!(
+            ledger::keep_notes("new", Some(&both), Some("W1, W2 and W3")),
+            format!("new{k}W1, W2 and W3")
+        );
+        // A shorter segment met after a kept one that holds it is left out (#849 r1 N1).
+        assert_eq!(
+            ledger::keep_notes("new", Some(&format!("o{k}W1 and W2")), Some("W2")),
+            format!("new{k}W1 and W2")
+        );
+        // A kept segment the new text already holds is left out, the rest stay.
+        assert_eq!(
+            ledger::keep_notes("new, W2", Some(&both), None),
+            format!("new, W2{k}W1")
+        );
         // Text the new note already holds isn't added again.
         assert_eq!(
             ledger::keep_notes("new, W1", Some(&earlier), Some("W1")),
