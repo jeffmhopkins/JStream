@@ -11,6 +11,7 @@
 //! stream-key actions, `scene.switch`, `studio.set_preview` and the program and preview
 //! scenes they set (`studio.get`),
 //! `capture.targets` (one made-up primary display, [`MOCK_DISPLAY`]),
+//! `source.sizes` (every source without a size, since the mock makes no frames),
 //! `state.changed`, `studio.changed` and `output.state_changed` events, per-client undo
 //! and redo, and live-value gestures (`live.set`, `live.cancel`, `live.list`,
 //! `ends_gesture`, takeover and expiry). Each [`MockEngine::connect`] opens one client
@@ -41,8 +42,9 @@ use jstream_protocol::{
     MAX_LIVE_VALUES, OutputId, OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PixelSize,
     PlacementForm, ProtocolError, Query, QueryResult, RecordContainer, Reference, RequestId,
     Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, SecretString, Settings,
-    SourceAudio, SourceId, SourceInfo, SourceKind, TransitionPresetId, TransitionStarted,
-    TransitionsInfo, VideoMix, VideoMixId, VideoMixInfo, Welcome, is_live_adjustable,
+    SourceAudio, SourceId, SourceInfo, SourceKind, SourceSize, TransitionPresetId,
+    TransitionStarted, TransitionsInfo, VideoMix, VideoMixId, VideoMixInfo, Welcome,
+    is_live_adjustable,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future;
@@ -560,6 +562,8 @@ struct Scene {
     /// The folder it is filed in, if any.
     folder: Option<jstream_protocol::FolderId>,
     meta: jstream_protocol::SceneMeta,
+    /// Its filters (ADR-0065), settings as given: a video chain only.
+    filters: jstream_protocol::FilterChains,
 }
 
 /// An item: the scene that holds it, the source it places, and every property an edit
@@ -575,6 +579,8 @@ struct Item {
     visible: bool,
     opacity: Finite32,
     blend: BlendMode,
+    /// Its effects (ADR-0065), settings as given: only the video chain holds any.
+    effects: jstream_protocol::FilterChains,
 }
 
 impl State {
@@ -1001,6 +1007,18 @@ impl State {
                 rev: self.collection.rev,
                 sources: self.collection.source_infos(),
             },
+            // The mock makes no frames, so no source has a size.
+            Query::SourceSizes => QueryResult::SourceSizes {
+                sources: self
+                    .collection
+                    .sources
+                    .keys()
+                    .map(|source_id| SourceSize {
+                        source_id: source_id.clone(),
+                        size: None,
+                    })
+                    .collect(),
+            },
             Query::ItemList { scene_id } => {
                 let index = self.collection.existing_scene(&scene_id)?;
                 QueryResult::ItemList {
@@ -1019,6 +1037,7 @@ impl State {
                     .iter()
                     .map(|scene| SceneInfo {
                         overrides: Vec::new(),
+                        filters: scene.filters.clone(),
                         variant_of: None,
                         scene_id: scene.id.clone(),
                         name: scene.name.clone(),
@@ -1299,6 +1318,7 @@ impl Collection {
                     items: Vec::new(),
                     folder: None,
                     meta: Default::default(),
+                    filters: Default::default(),
                 });
                 vec![Edit::SceneDelete { scene_id }]
             }
@@ -1378,6 +1398,10 @@ impl Collection {
                         meta: scene.meta.clone(),
                     });
                 }
+                let owner = jstream_protocol::FilterOwner::Scene {
+                    scene_id: scene.id.clone(),
+                };
+                inverse.extend(filter::restore_all(&owner, scene.filters.clone()));
                 // Re-adding bottom to top puts each item back at its own index.
                 for (position, item_id) in scene.items.iter().enumerate() {
                     if let Some(item) = self.items.remove(item_id) {
@@ -1441,6 +1465,7 @@ impl Collection {
                         visible: true,
                         opacity,
                         blend,
+                        effects: Default::default(),
                     },
                 );
                 vec![Edit::ItemRemove { item_id }]
@@ -2082,12 +2107,21 @@ impl Collection {
     /// Whether any source's settings, or its filters' settings, hold a reference
     /// matching `is_target`.
     fn is_referred_to(&self, is_target: impl Fn(&Reference) -> bool) -> bool {
-        self.sources.values().any(|source| {
+        let refers = |settings: &Settings| settings.references().any(|(_, r)| is_target(&r));
+        let sources = self.sources.values().any(|source| {
             let filters = source.filters.video.iter().chain(&source.filters.audio);
             std::iter::once(&source.settings)
                 .chain(filters.map(|f| &f.settings))
-                .any(|settings| settings.references().any(|(_, r)| is_target(&r)))
-        })
+                .any(refers)
+        });
+        // A scene's filters and an item's effects refer too (ADR-0065 §3).
+        let scenes = self.scenes.iter().map(|s| &s.filters);
+        let items = self.items.values().map(|i| &i.effects);
+        sources
+            || scenes
+                .chain(items)
+                .flat_map(|chains| chains.video.iter().chain(&chains.audio))
+                .any(|f| refers(&f.settings))
     }
 
     /// Every source, ordered by ID, as queries report them.
@@ -2166,6 +2200,7 @@ impl Collection {
                     geometry: item.geometry,
                     crop: item.crop,
                     visible: item.visible,
+                    effects: item.effects.video.clone(),
                     opacity: item.opacity,
                     blend: item.blend,
                     transition: ItemTransition::default(),
@@ -2415,6 +2450,10 @@ fn restore_item(
             visible: false,
         });
     }
+    let owner = jstream_protocol::FilterOwner::Item {
+        item_id: item_id.clone(),
+    };
+    edits.extend(filter::restore_all(&owner, item.effects.clone()));
     Ok(edits)
 }
 
@@ -3085,6 +3124,22 @@ mod tests {
         assert!(targets[0].primary);
     }
 
+    #[test]
+    fn source_sizes_lists_every_source_without_a_size() {
+        let (_engine, control) = parity_engine();
+        let Ok(QueryResult::SourceSizes { sources }) = query(&*control, Query::SourceSizes) else {
+            panic!("a source.sizes result");
+        };
+        assert!(!sources.is_empty(), "the parity collection has sources");
+        assert!(sources.iter().all(|entry| entry.size.is_none()));
+        assert!(
+            sources
+                .windows(2)
+                .all(|pair| pair[0].source_id < pair[1].source_id),
+            "ordered by ID"
+        );
+    }
+
     fn query(control: &dyn Control, query: Query) -> Result<QueryResult, ControlError> {
         match block_on(control.call(Call::Query { query }))?.result {
             CallResult::Query { result } => Ok(result),
@@ -3391,6 +3446,7 @@ mod tests {
                     name: "Master".into(),
                     gain_db: Finite32::ZERO,
                     muted: false,
+                    monitor: None,
                 }],
                 sends: vec![],
                 master: Default::default(),
