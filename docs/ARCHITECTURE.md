@@ -420,7 +420,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   `VirtualCam`, which has no settings and ignores its profile. A stream
   key is never collection state: it lives in the OS credential store
   ([R-SEC-001](RULES.md#R-SEC-001)). Encoder profiles, ordered by ID, each a name and an
-  H.264 and AAC encoding (rate control, keyframe interval, hardware preference, audio bit
+  H.264, HEVC or AV1 and AAC encoding (rate control, keyframe interval, hardware preference, audio bit
   rate), checked against the ranges the protocol states. An output with no profile uses
   the engine's default; a profile an output uses can't be deleted. Video mixes
   (protocol 0.28), ordered by ID, each with a name besides the fields above: the
@@ -864,7 +864,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 707 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 709 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking

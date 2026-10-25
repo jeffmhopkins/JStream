@@ -1896,12 +1896,13 @@ fn gpu_capture(capture: &dyn Capture, context: &GpuContext) -> Option<Arc<dyn Ca
     }
 }
 
-/// The codec `profile` encodes video in. HEVC and AV1 map here once the protocol's
-/// `VideoCodec` names them; the encoders (`MfCodecs`) and the FLV sink already take them,
-/// and [`check_video_encoder`] already names the ones a platform lacks.
+/// The codec `profile` encodes video in. A machine without that encoder fails at the
+/// open, and [`check_video_encoder`] names the ones a platform lacks.
 fn video_codec(profile: &EncoderProfile) -> Result<Codec, String> {
     match profile.video.codec {
         VideoCodec::H264 => Ok(Codec::H264),
+        VideoCodec::Hevc => Ok(Codec::Hevc),
+        VideoCodec::Av1 => Ok(Codec::Av1),
         _ => Err("the encoder profile's video codec is not one this engine knows".into()),
     }
 }
@@ -3671,10 +3672,20 @@ mod tests {
         assert!(video_config(size, &profile).is_err());
 
         let mut profile = EncoderProfile::DEFAULT;
-        assert_eq!(
-            video_config(size, &profile).expect("h264").codec,
-            Codec::H264
-        );
+        for (codec, want) in [
+            (VideoCodec::H264, Codec::H264),
+            (VideoCodec::Hevc, Codec::Hevc),
+            (VideoCodec::Av1, Codec::Av1),
+        ] {
+            profile.video.codec = codec;
+            assert_eq!(video_config(size, &profile).expect("known").codec, want);
+            assert_eq!(
+                stream_info(size, MediaTime::zero(Timebase::MICROS), &profile)
+                    .expect("known")
+                    .codec,
+                want
+            );
+        }
         profile.video.codec = VideoCodec::Unknown;
         assert!(video_config(size, &profile).is_err());
         assert!(stream_info(size, MediaTime::zero(Timebase::MICROS), &profile).is_err());

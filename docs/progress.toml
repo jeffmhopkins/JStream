@@ -1014,8 +1014,8 @@ id = "F6b"
 milestone = "M3"
 title = "Choose HEVC or AV1 from a client"
 status = "review"
-prs = [807]
-note = "F6 built the encoders, but an encoder profile accepts only h264 (EncoderProfile::problem refuses the rest), so no client can pick them yet. #807 names the encoder a machine lacks at output.start; hevc and av1 in the protocol's VideoCodec come in a protocol bump"
+prs = [807, 814]
+note = "F6 built the encoders; #807 names the encoder a machine lacks at output.start, and #814 (protocol 0.41) adds hevc and av1 to VideoCodec and lets an encoder profile take them"
 needs = ["build"]
 
 [[item]]

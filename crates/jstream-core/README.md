@@ -1583,13 +1583,14 @@ stream: a stand-in Baseline 3.0 SPS with no frame size made Windows refuse the
 recordings and YouTube drop the publish. Only the fake encoder sends a bare first
 H.264 keyframe; until the muxer has a decoder configuration, such a keyframe gets
 stand-in parameter sets in front (`with_parameter_sets`). A later one goes out as it
-is, since a stand-in SPS would replace the encoder's own, which shares its id. The protocol's `VideoCodec` names
-only H.264 so far, so a profile can't select HEVC or AV1 yet. MP4 recording takes H.264
-only: another codec fails the start with `recording … is not supported yet`. The open
-decides whether a video encoder is there. When it fails (`video_open_failure`), a
-missing component keeps the platform's own error and its remedy: a VA-API driver
-package, or the OpenH264 download ([ADR-0060](../../docs/adr/0060-linux-platform-support.md)
-§6). Otherwise `check_video_encoder` reads the platform's `codecs.list()`, and if no
+is, since a stand-in SPS would replace the encoder's own, which shares its id. The
+protocol's `VideoCodec` names H.264, HEVC and AV1 (the last two since 0.41), and each
+maps to the platform codec of the same name. MP4 recording takes H.264 only: another
+codec fails the start with `recording … is not supported yet`. The open decides
+whether a video encoder is there. When it fails (`video_open_failure`), a missing
+component keeps the platform's own error and its remedy: a VA-API driver package, or
+the OpenH264 download ([ADR-0060](../../docs/adr/0060-linux-platform-support.md) §6).
+Otherwise `check_video_encoder` reads the platform's `codecs.list()`, and if no
 encoder there fits the profile, the start fails naming what the machine lacks:
 `this machine has no AV1 encoder`, or no hardware one for `hardware: require`, or no
 software one for `avoid`, and the open's own error goes to the log at `warn`, so a list
