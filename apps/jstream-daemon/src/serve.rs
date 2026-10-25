@@ -54,6 +54,10 @@ pub fn engine(
             .with_collection_file(path)
             .context("could not open the collection")?;
     }
+    if let Some(dir) = &options.plugin_dir {
+        // After the collection, so a saved plugin's first events see the loaded scenes.
+        engine = engine.with_plugin_dir(dir);
+    }
     // Declared outputs survive a load, so this order is only for reading.
     let engine = options
         .outputs

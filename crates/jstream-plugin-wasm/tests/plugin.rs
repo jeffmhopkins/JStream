@@ -244,14 +244,15 @@ fn a_start_function_that_spins_fails_the_load() {
 }
 
 #[test]
-fn memory_cannot_grow_past_the_limit() {
-    // Starts with one page, may grow to four; `grow` reports what `memory.grow` answered.
+fn growing_memory_past_the_limit_is_a_memory_limit_trap() {
+    // Starts with one page, may grow to four. `grow_too_far` would carry on if
+    // `memory.grow` answered -1: the cap must stop it instead.
     let wat = r#"(module
         (memory (export "memory") 1)
         (func (export "grow_ok")
             (if (i32.eq (memory.grow (i32.const 3)) (i32.const -1)) (then unreachable)))
         (func (export "grow_too_far")
-            (if (i32.ne (memory.grow (i32.const 1)) (i32.const -1)) (then unreachable))))"#;
+            (drop (memory.grow (i32.const 1)))))"#;
     let config = PluginConfig {
         limits: Limits::default().with_memory_bytes(4 * 65_536),
         ..PluginConfig::default()
@@ -261,9 +262,8 @@ fn memory_cannot_grow_past_the_limit() {
     plugin
         .invoke("grow_ok", &[])
         .expect("growing to the limit works");
-    plugin
-        .invoke("grow_too_far", &[])
-        .expect("growing past the limit fails with -1");
+    let grown = plugin.invoke("grow_too_far", &[]);
+    assert!(matches!(grown, Err(Error::MemoryLimit(_))), "{grown:?}");
 }
 
 #[test]
@@ -273,14 +273,50 @@ fn the_default_memory_limit_holds() {
         r#"(module
             (memory (export "memory") 1)
             (func (export "grow_too_far")
-                (if (i32.ne (memory.grow (i32.const {pages})) (i32.const -1))
-                    (then unreachable))))"#
+                (drop (memory.grow (i32.const {pages})))))"#
     );
     let (plugin, _) = load(&wat, PluginConfig::default());
     let mut plugin = plugin.expect("the plugin loads");
+    let grown = plugin.invoke("grow_too_far", &[]);
+    assert!(
+        matches!(grown, Err(Error::MemoryLimit(_))),
+        "one page more than the limit: {grown:?}"
+    );
+}
+
+#[test]
+fn growing_the_table_past_the_limit_is_a_memory_limit_trap() {
+    let wat = r#"(module
+        (memory (export "memory") 1)
+        (table 1 funcref)
+        (func (export "grow_ok")
+            (if (i32.eq (table.grow (ref.null func) (i32.const 9)) (i32.const -1))
+                (then unreachable)))
+        (func (export "grow_too_far")
+            (drop (table.grow (ref.null func) (i32.const 1)))))"#;
+    let config = PluginConfig {
+        limits: Limits::default().with_table_elements(10),
+        ..PluginConfig::default()
+    };
+    let (plugin, _) = load(wat, config);
+    let mut plugin = plugin.expect("the plugin loads");
+    plugin.invoke("grow_ok", &[]).expect("up to the cap works");
+    let grown = plugin.invoke("grow_too_far", &[]);
+    assert!(matches!(grown, Err(Error::MemoryLimit(_))), "{grown:?}");
+}
+
+#[test]
+fn growing_past_the_modules_own_maximum_answers_minus_one() {
+    // The module's own maximum is two pages, below the cap: its limit, not the host's.
+    let wat = r#"(module
+        (memory (export "memory") 1 2)
+        (func (export "grow_too_far")
+            (if (i32.ne (memory.grow (i32.const 2)) (i32.const -1)) (then unreachable))))"#;
+    let (plugin, _) = load(wat, PluginConfig::default());
+    let mut plugin = plugin.expect("the plugin loads");
     plugin
         .invoke("grow_too_far", &[])
-        .expect("one page more than the limit is refused");
+        .expect("past its own maximum, memory.grow answers -1");
 }
 
 #[test]
@@ -291,7 +327,7 @@ fn a_memory_that_starts_above_the_limit_is_refused() {
         ..PluginConfig::default()
     };
     let (plugin, _) = load(wat, config);
-    assert!(matches!(plugin, Err(Error::Instantiate(_))));
+    assert!(matches!(plugin, Err(Error::MemoryLimit(_))));
 }
 
 #[test]

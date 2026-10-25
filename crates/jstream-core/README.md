@@ -33,7 +33,8 @@ state machine. Contents:
   `Engine::new()`, `with_output(id)`, `with_backends`, `with_publish`,
   `with_publish_opener`, `with_key_store`, `with_youtube`, `with_audit`,
   `with_history_limit`, `with_browser` (the browser engine `browser` sources and their
-  `youtube_chat` preset open pages in) and `with_collection_file`; `scan_clap_plugins`
+  `youtube_chat` preset open pages in), `with_collection_file` and `with_plugin_dir`
+  (where installed WASM plugins are saved, ADR-0076); `scan_clap_plugins`
   adds the CLAP filter kinds;
   `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
   frame of a source; `output_stats` reads a running output's pipeline counters
@@ -133,10 +134,13 @@ state machine. Contents:
     `jstream-audio-sources` thread (now each stop waits up to `STOP_GRACE` there).
 - **WASM automation plugins** (`plugins/automation.rs`, the `wasm-plugins` feature, on
   by default; [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md),
-  [ADR-0075](../../docs/adr/0075-wasm-plugin-host-in-the-engine.md)): `plugin.install`
-  loads a package's module on `jstream-plugin-wasm`'s host, `plugin.grant` replaces what
-  it may do, and `plugin.enable` loads it again after the engine disabled it. See
-  *WASM plugins* under Design.
+  [ADR-0075](../../docs/adr/0075-wasm-plugin-host-in-the-engine.md),
+  [ADR-0076](../../docs/adr/0076-saved-wasm-plugins-and-manifest-requests.md)):
+  `plugin.install` loads a package's module on `jstream-plugin-wasm`'s host,
+  `plugin.grant` replaces what it may do, never past what its manifest asks for, and
+  `plugin.enable` loads it again after the engine disabled it. With a plugin folder
+  (`with_plugin_dir`), the installed plugins and their grants are saved in its
+  `plugins.json` and loaded again at the next start. See *WASM plugins* under Design.
 - **Live sources** (`live.rs`): a running `jstream-sources` source for every source
   in the collection, built when it is created, rebuilt when its settings change and
   dropped when it is deleted, on the engine's `jstream-sources` thread. The program
@@ -479,7 +483,8 @@ publisher and the recording file sink), `jstream-sources` (the built-in kinds: t
 descriptors and the sources that draw them), `jstream-plugin-proto` (the CLAP host
 supervisor's block and control messages), `jstream-plugin-wasm` (the wasmtime host the
 WASM automation plugins run on; optional, behind the `wasm-plugins` feature, which is on
-by default, ADR-0075), `jstream-youtube` (Google sign-in and the
+by default, ADR-0075), `serde` (the derives of the installed plugins' file,
+ADR-0076), `jstream-youtube` (Google sign-in and the
 Live API client behind the YouTube commands and `youtube` outputs), `serde_json` (settings
 values: the audio filter kinds' defaults, what the mixer kernels read from a filter's
 settings, and the CLAP kinds' parameter defaults), `png`
@@ -1798,18 +1803,24 @@ and that `rtmps://` and loopback log none.
 ### WASM plugins
 
 The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in process
-(ADR-0075), under ADR-0069's limits and grants. The installed plugins last for the run:
-none is saved yet.
+(ADR-0075), under ADR-0069's limits and grants. With a plugin folder, it saves them
+(ADR-0076).
 
 - **Package.** `plugin.install`'s `path` is an absolute directory on the engine's machine
-  holding `plugin.wasm` and, optionally, `manifest.json`, a JSON object whose `name`, a
+  holding `plugin.wasm` and, optionally, `manifest.json`, a JSON object. Its `name`, a
   string, is the plugin's own text: `plugin.state_changed` carries it as `remote_name`.
+  What it asks for (`Request`) is its `classes` (capability classes), `hosts` (as
+  `scheme://host:port`) and `folders` (true for folders a person picks), each optional.
   Other manifest fields are ignored. Like the ABI, the layout is version 0.
 - **Install.** It fails with `invalid_argument` for a grant whose `problem` names a field
-  (`grant.hosts.0`) or that names a folder this OS doesn't read as absolute
-  (`grant.folders.0`), and on `path` for a relative path, a directory without a readable
-  `plugin.wasm`, a manifest that isn't a JSON object with a string `name`, or a module
-  that isn't a plugin (not WASM, an import besides the ABI's, no `memory` export). It
+  (`grant.hosts.0`), that names a folder this OS doesn't read as absolute
+  (`grant.folders.0`), or that gives more than the manifest asks for (a class, host or
+  folders on `grant.classes.N`, `grant.hosts.N` or `grant.folders.0`; `read` is every
+  plugin's), and on `path` for a relative path, a directory without a readable
+  `plugin.wasm`, a manifest that isn't a JSON object, has a `name` that isn't a string,
+  or asks for an unknown class, a host `problem` refuses or a `folders` that isn't true
+  or false, or a module that isn't a plugin (not WASM, an import besides the ABI's, no
+  `memory` export). It
   fails with `already_exists` for an ID in use, and `action_failed` when the module's
   `start` function traps or runs past its limits; a failed install leaves no plugin.
   Otherwise the plugin is enabled when the call returns, and `plugin.state_changed`
@@ -1834,19 +1845,39 @@ none is saved yet.
   without reaching the engine for one outside it. So a call outside the grant counts
   against the cap of 50 commands a second, which the host checks first. A call past the
   cap is `forbidden` too, and neither stops the plugin. `plugin.grant` replaces the grant
-  the running plugin's next call is checked against. Ending a run ends the session, as
-  a disconnect does.
-- **Disabling.** A plugin that traps, runs out of fuel or runs past its deadline while
-  handling an event is disabled: its subscription closes, its instance drops, a warning
-  is logged, and `plugin.state_changed` carries `disabled` with `cpu_limit` (fuel or the
-  deadline) or `trap` (anything else, including a trap after `memory.grow` failed at the
-  cap). The engine never re-enables it. `plugin.enable` reads the package again and
-  loads it as an install does, answering `action_failed` if that fails, which leaves it
-  disabled; for a running plugin it succeeds and changes nothing. `plugin.grant` and
-  `plugin.enable` fail with `not_found` for a plugin that isn't installed.
-- **Not yet:** saving installed plugins and their grants, the manifest's classes and the
-  `needs_grant` check on an update, a private data folder per plugin, and the
-  `memory_limit` reason.
+  the running plugin's next call is checked against, refusing one that gives more than
+  the manifest asks for as an install does. Ending a run ends the session, as a
+  disconnect does.
+- **Disabling.** A plugin that traps, runs out of fuel, runs past its deadline or grows
+  its memory or table past the cap while handling an event is disabled: its subscription
+  closes, its instance drops, a warning is logged, and `plugin.state_changed` carries
+  `disabled` with `cpu_limit` (fuel or the deadline), `memory_limit` (a cap; the host
+  makes growing past one a trap, `Error::MemoryLimit`) or `trap` (anything else). The
+  engine never re-enables it. `plugin.enable` reads the package again and loads it as an
+  install does, answering `action_failed` if that fails, which leaves it disabled; for a
+  running plugin it succeeds and changes nothing. `plugin.grant` and `plugin.enable` fail
+  with `not_found` for a plugin that isn't installed.
+- **Updates.** Each load of a package (`plugin.enable`, and the start of a saved plugin)
+  compares what its manifest asks for with what it asked for when a person last granted
+  the plugin, at install or with `plugin.grant`. One that asks for more stays disabled
+  as `needs_grant` (`plugin.state_changed` says so when the reason changes), and
+  `plugin.enable` answers `action_failed` naming what is new; a `plugin.grant`
+  acknowledges what it asks for now, and the plugin can be enabled after it. One that
+  asks for less has its grant narrowed to match. A running plugin keeps the module it
+  loaded.
+- **Saving.** `with_plugin_dir(dir)` creates `dir` if missing and reads its
+  `plugins.json` (`PLUGINS_FILE`, version 0): each plugin's ID, package, grant, name,
+  request, what it asked for when last granted, and its disabled reason, if any. Each
+  saved as enabled is loaded as `plugin.enable` loads it, and one that no longer loads
+  stays disabled as `trap` (or `needs_grant`), with the cause in the log. From then on
+  the file is replaced atomically (`collection::write_atomically`, user-only) after every
+  install, failed install, grant, enable and disable; a failed save is logged at
+  `error`, and the next change saves again. A file that can't be read, or of a version
+  it doesn't know, is logged at `error` and left as it is, and nothing is loaded or saved
+  that run. Without a plugin folder, the installed plugins last for the run.
+- **Not yet:** a private data folder per plugin, deferred until the file imports a plugin
+  would need to use it are designed (ADR-0076); a query that lists the installed plugins;
+  and the UI's grant flow.
 
 ### Locking
 
@@ -1887,7 +1918,9 @@ and release committed values, and sleeps without it. The WASM plugins' registry 
 and the host's lock are taken with no other engine lock held, and released before a
 plugin loads, before an event is emitted and before a subscription closes; under the
 registry lock, an entry's grant lock is a leaf, which a plugin's session also takes
-alone. A plugin's thread holds no engine lock while the plugin runs, so the plugin's
+alone. The plugin file's lock comes before the registry lock: a save holds it while it
+reads the plugins and writes `plugins.json`, and nothing takes it under the registry
+lock. A plugin's thread holds no engine lock while the plugin runs, so the plugin's
 calls take the collection lock as any session's do. A stream's poll takes only its queue's lock. No lock
 is held across an `await`, and a snapshot's reply slot is not held across a wake.
 `output.start`

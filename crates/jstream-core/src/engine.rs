@@ -292,6 +292,25 @@ impl Engine {
         self
     }
 
+    /// Saves the installed WASM plugins and their grants in `plugins.json` in the folder
+    /// `dir` from now on, after every install, grant, enable and disable, and loads the
+    /// ones saved there now: each that was enabled is loaded again, as `plugin.enable`
+    /// loads it (ADR-0076). The folder and file are created if missing. A file that can't
+    /// be read, or that a newer version wrote, is logged at `error` and left as it is, and
+    /// then no plugin is loaded or saved this run. Built without the `wasm-plugins`
+    /// feature, the engine runs no plugins and this does nothing.
+    #[must_use]
+    pub fn with_plugin_dir(self, dir: impl Into<PathBuf>) -> Self {
+        #[cfg(feature = "wasm-plugins")]
+        crate::plugins::automation::open_dir(&self, dir.into());
+        #[cfg(not(feature = "wasm-plugins"))]
+        {
+            let _ = dir.into();
+            tracing::debug!("built without WASM plugins: no plugin folder to open");
+        }
+        self
+    }
+
     /// Loads the collection from the file at `path` and saves it there after every
     /// change. Configure this before [`connect`](Self::connect): it replaces the
     /// collection and its `rev` with the file's.

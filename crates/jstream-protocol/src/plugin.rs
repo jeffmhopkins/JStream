@@ -279,8 +279,8 @@ pub struct PluginGrant {
     /// `ws` or `wss`). Omitted for none.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub hosts: Vec<String>,
-    /// The folders the person picked for it, as absolute paths on the engine's machine,
-    /// besides its own private data folder. Omitted for none.
+    /// The folders the person picked for it, as absolute paths on the engine's machine.
+    /// Omitted for none.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub folders: Vec<String>,
 }

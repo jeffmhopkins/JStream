@@ -517,6 +517,7 @@ fn instructions_mark_remote_text_and_tools_carry_annotations() {
         "whole `action_failed` `reason`",
         "`destructiveHint`",
         "`source`, whose `browser` kind loads any http or https page",
+        "set by any client or plugin",
     ] {
         assert!(legacy.contains(needle), "{needle}: {legacy}");
     }

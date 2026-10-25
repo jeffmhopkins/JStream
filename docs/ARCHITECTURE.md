@@ -1167,6 +1167,11 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   A placement's `opacity` and `blend` are written only when they differ from 1 and
   `normal`, a geometry's `flip_h` and `flip_v` only when true, a disabled filter's `enabled` only when false, and the reserved `effects[]`
   must be empty.
+- **Installed WASM plugins:** `plugins.json` (version 0) in the plugin folder, by default
+  `plugins` in the data directory: each plugin's package path, grant, manifest request
+  and disabled reason. `jstream-core` loads it at startup, loading each enabled plugin
+  again, and replaces it atomically after every change. A file it can't read is left as
+  it is ([ADR-0076](adr/0076-saved-wasm-plugins-and-manifest-requests.md)).
 - **App settings:** `jstream.toml` in the platform config directory.
 - **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store. On
   Linux, where no Secret Service is reachable, they are kept in a `0600` `secrets` file

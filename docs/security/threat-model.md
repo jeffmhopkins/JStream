@@ -276,7 +276,7 @@ depends_on = ["docs/RULES.md#R-SEC-003", "docs/adr/0035-clap-plugins-out-of-proc
 | Kind | Trust | On main | Boundary |
 |---|---|---|---|
 | CLAP audio plugins | Trusted native code the user installed; adding one shows a warning | The shared-memory contract (`jstream-plugin-proto`), the mixer's side, the host process, its launcher and supervisor, and CLAP filters in a source's chain | One host process per instance, in a kill-on-close job, with no token, no protocol connection and a scrubbed environment ([ADR-0035](../adr/0035-clap-plugins-out-of-process.md)). It isolates crashes, not capabilities |
-| WASM automation plugins | Untrusted | The `jstream-plugin-wasm` host (#486, #623, #722): a fixed set of five imports and no WASI, an empty capability list by default, a fuel budget, a wall-time deadline per entry (100 ms an invocation, 1 s the load), 64 MiB of memory, 10,000 table elements, a 512 KiB stack and 50 commands to `Control` a second, each edit of a batch counted. The engine runs it in process ([ADR-0075](../adr/0075-wasm-plugin-host-in-the-engine.md)): `plugin.install` loads a package a person names, with the grant they give it | wasmtime with no ambient imports, so no filesystem, network or clock; each plugin's own engine session checks every call against its grant (its classes, a hotkey's bound action, and the hosts and folders a call's settings reach) and answers `forbidden` for one outside it ([R-SEC-003](../RULES.md#R-SEC-003), [ADR-0069](../adr/0069-wasm-plugin-limits-and-capabilities.md)) |
+| WASM automation plugins | Untrusted | The `jstream-plugin-wasm` host (#486, #623, #722): a fixed set of five imports and no WASI, an empty capability list by default, a fuel budget, a wall-time deadline per entry (100 ms an invocation, 1 s the load), 64 MiB of memory, 10,000 table elements, a 512 KiB stack and 50 commands to `Control` a second, each edit of a batch counted. The engine runs it in process ([ADR-0075](../adr/0075-wasm-plugin-host-in-the-engine.md)): `plugin.install` loads a package a person names, with the grant they give it, never more than its manifest asks for; installed plugins and their grants are saved in the plugin folder ([ADR-0076](../adr/0076-saved-wasm-plugins-and-manifest-requests.md)) | wasmtime with no ambient imports, so no filesystem, network or clock; each plugin's own engine session checks every call against its grant (its classes, a hotkey's bound action, and the hosts and folders a call's settings reach) and answers `forbidden` for one outside it ([R-SEC-003](../RULES.md#R-SEC-003), [ADR-0069](../adr/0069-wasm-plugin-limits-and-capabilities.md)) |
 | WGSL effect packs | Untrusted GPU code | Nothing (X1); only built-in shaders | naga validation ([ARCH › GPU pipeline](../ARCHITECTURE.md#gpu-pipeline)) |
 
 What the engine reads back from a CLAP host is checked: the block's magic, version and
@@ -296,14 +296,19 @@ before they reach the UI, agents or the log (#351).
   deadlines, 64 MiB and 10,000 table elements) and a fuel budget, the cap of 50 commands
   a second, the 1,000-event queue with its `events.dropped` notice, the capability
   classes checked against the protocol's table, `forbidden` for a call outside the grant
-  or past the cap, and disabling a plugin that traps or runs past a limit until a person
-  re-enables it. Installing, granting and re-enabling are people-only actions with no
-  MCP tool, and the manifest's `name` reaches clients only as `remote_name`. Not built
-  yet: the MCP instructions saying state text can come from a plugin (U1), saving the
-  installed plugins, the manifest's classes and the `needs_grant` check on an update,
-  and a plugin's private data folder. A grant of `outputs` lets a plugin start and stop
-  existing outputs, never retarget one: creating and retargeting outputs and stream keys
-  are never granted.
+  or past the cap, and disabling a plugin that traps or runs past a limit (`memory_limit`
+  for a cap, which the host makes a trap) until a person re-enables it. Installing,
+  granting and re-enabling are people-only actions with no MCP tool, and the manifest's
+  `name` reaches clients only as `remote_name`. A grant gives no class, host or folders
+  its manifest doesn't ask for (R-SEC-003), and an update whose manifest asks for more
+  stays disabled as `needs_grant` until a person grants it again
+  ([ADR-0076](../adr/0076-saved-wasm-plugins-and-manifest-requests.md)). The MCP
+  instructions say state text can come from any client or plugin (U1). Not built yet:
+  a plugin's private data folder, deferred with the file imports it would need. The
+  saved `plugins.json` is user-only, but anyone who can write the user's data folder can
+  already change what runs as the user, so it is trusted as the collection file is. A
+  grant of `outputs` lets a plugin start and stop existing outputs, never retarget one:
+  creating and retargeting outputs and stream keys are never granted.
 - WGSL (#349): validation doesn't bound run time; a hanging shader resets the GPU, and
   device loss isn't handled.
 

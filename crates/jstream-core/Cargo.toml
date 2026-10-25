@@ -50,6 +50,8 @@ jstream-render.workspace = true
 jstream-sources.workspace = true
 # PNG for `video.snapshot` (ADR-0061). Encoding only; deflate stays pure Rust.
 png.workspace = true
+# The installed WASM plugins' file (`plugins.json`, ADR-0076).
+serde.workspace = true
 # Settings values: the audio filter kinds' defaults and the mixer kernels read from them
 # (ADR-0025, ADR-0026), the CLAP kinds' parameter defaults, and saved collection files in
 # the engine tests.

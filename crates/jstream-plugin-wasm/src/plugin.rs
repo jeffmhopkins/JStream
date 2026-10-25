@@ -5,7 +5,7 @@ use crate::block_on::block_on;
 use crate::capability::{Capabilities, command_names};
 use crate::error::Error;
 use crate::events::EventSender;
-use crate::limits::{self, Limits};
+use crate::limits::{self, Caps, Limits};
 use crate::rate::CommandRate;
 use jstream_control::protocol::{Call, ProtocolError, WireError};
 use jstream_control::{Control, ControlError};
@@ -15,7 +15,6 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 use wasmtime::{
     AsContextMut, Caller, Config, Engine, Extern, Instance, Linker, Memory, Module, Store,
-    StoreLimits, StoreLimitsBuilder,
 };
 
 /// The deepest the WASM stack of a plugin may grow, in bytes. Fixed for every plugin,
@@ -123,7 +122,7 @@ struct HostState {
     control: Arc<dyn Control>,
     capabilities: Capabilities,
     refusals: Refusals,
-    limits: StoreLimits,
+    limits: Caps,
     /// What the last `call` answered, for `result_read`.
     result: Vec<u8>,
     /// What the host passed to the current invocation, for `input_read`.
@@ -181,13 +180,7 @@ impl Plugin {
             control,
             capabilities: config.capabilities,
             refusals: config.refusals,
-            limits: StoreLimitsBuilder::new()
-                .memory_size(limits.memory_bytes())
-                .table_elements(limits.table_elements())
-                .instances(1)
-                .memories(1)
-                .tables(1)
-                .build(),
+            limits: Caps::new(&limits),
             result: Vec::new(),
             input: Vec::new(),
             rate: CommandRate::new(limits.commands_per_second()),
