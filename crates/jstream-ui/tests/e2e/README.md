@@ -26,8 +26,10 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   ephemeral port, serves the UI's `dist/` from the same port, and prints the page's URL
   as its first line. It seeds a small studio: scenes `Intro` and `Main` (on program),
   one colour source `Backdrop` placed in `Main` as a 640×360 box at the centre of the
-  1920×1080 canvas, with two video filters (`sharpen`, then `blur` turned off), and the
-  encoder profile `High quality`. It has no outputs. It stops
+  1920×1080 canvas, with two video filters (`sharpen`, then `blur` turned off), two
+  audio inputs no scene shows (`Mic · ES-9 Line` at −3 dB and `Desktop audio` at
+  −8.5 dB; the mock is told `audio_input` produces audio, so they get mixer
+  channels), and the encoder profile `High quality`. It has no outputs. It stops
   when its standard input closes. It is a crate of its own because `jstream-ui` (layer
   3) may not depend on `jstream-server` (layer 4), not even for tests
   ([R-ARCH-002](../../../../docs/RULES.md#R-ARCH-002)). Nothing ships it.
@@ -44,6 +46,8 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   descriptors a test gives, which the mock engine can't, and passes every other message
   on; given `refuse`, it also holds back the requests that function names and refuses
   them, as `invalid_argument`, when the test calls the `release()` it returns.
+  `meterTicks` routes it too, passing everything on, and returns a function that
+  sends the page a `meters.tick`, which the mock engine never sends.
 - **Console errors fail a test.** Every console error and uncaught exception on a
   test's pages fails it, unless the test allows that message. A Content-Security-Policy
   violation is a console error, so a style or script the policy refuses fails too.
@@ -108,9 +112,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   frame (its items, Paste disabled, turning snapping off and Select all) and on the
   margin, which Escape closes; the arrow keys move through a menu, skipping a disabled
   item and wrapping, Enter chooses, and a press outside closes it; the Scene objects
-  panel's menu opens the Add source dialog, which places the seed's Backdrop again as
-  a reference 40 px down and right, selected (the mock lists no kinds, so its Color
-  type can't create); a scene nests once and isn't offered again, and the backdrop
+  panel's menu opens the Add source dialog, whose types start with the seed's audio
+  inputs, and its Color type places the seed's Backdrop again as a reference 40 px
+  down and right, selected (the mock lists no kinds, so Color can't create); a scene nests once and isn't offered again, and the backdrop
   cancels the dialog. An item row's menu lists the item menu's lines and Delete source everywhere…, Send to back
   restacks in one edit and Stretch to canvas fills the canvas; on the canvas the menu
   ends with Select all, Duplicate as clone adds "Backdrop copy" selected, two selected
@@ -149,6 +153,13 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   edit and updates the summary. With one setting refused late: a refusal that arrives
   after its row was closed, and one after the Filter settings dialog was cancelled,
   each in the problem bar.
+- **Mixer** (`mixer.spec.js`, on the Audio mixer tab): the master card counting the
+  seed's two channels, its Hear and FX buttons disabled, and its button unfolding the
+  channel rows by name and folding them again; a typed gain in the Mic's dB field and
+  its + stepper each as one edit, with the fader following; with `meterTicks`, the
+  short-term loudness and its tooltip, the bar's fill against the target, and the true
+  peak "safe", then the warning over 0 dBTP; and the Buses section folded under its
+  count, the master first, adding a bus.
 - **Transform** (`transform.spec.js`, on the Transform tab): the summary and the disabled buttons with
   nothing selected; with one item, Selection off and Canvas on, Stretch as one edit
   Ctrl+Z undoes, and Reset rotation and Clear crop sending nothing when nothing

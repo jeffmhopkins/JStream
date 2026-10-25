@@ -299,7 +299,7 @@ pub fn Inspector() -> impl IntoView {
 /// A foldable section: an uppercase title, a hint shown while folded, an optional
 /// control at the right of its title row, and its body.
 #[component]
-fn Fold(
+pub(crate) fn Fold(
     title: &'static str,
     open: bool,
     #[prop(optional, into)] hint: Signal<String>,
