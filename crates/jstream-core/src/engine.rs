@@ -2306,8 +2306,7 @@ impl State {
     /// gets the result of the first call with that key, and emits nothing. That check
     /// comes first, so a retry succeeds even after `rev` moved on. An `ends_gesture` the
     /// client has no open gesture for is refused next, as the mock does, and then a
-    /// `filter.add` of a scanned CLAP kind, since nothing runs CLAP filters yet, and any
-    /// filter edit on a scene or an item, since nothing renders those yet (ADR-0065).
+    /// `filter.add` of a scanned CLAP kind, since nothing runs CLAP filters yet.
     fn batch(
         &mut self,
         client_id: &ClientId,
@@ -2331,16 +2330,6 @@ impl State {
             ));
         }
         clap_kinds::refuse_filters(&batch.edits)?;
-        // A batch the graph would refuse gets the graph's answer, as the parity fixture
-        // holds the engine to; one it would take is refused, on a copy so nothing changes.
-        if let Err(refused) = crate::chain::refuse_unrendered_owners(&batch.edits) {
-            self.graph.clone().apply_with_running(
-                &batch.edits,
-                batch.expected_rev,
-                &self.outputs.running(),
-            )?;
-            return Err(refused);
-        }
         // A running output can't be deleted.
         let applied = self.graph.apply_with_running(
             &batch.edits,

@@ -297,8 +297,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   ([ADR-0065](adr/0065-scene-chains-and-item-effects.md); item effects are in v1 under
   [ADR-0068](adr/0068-item-effects-in-v1.md)). A reference in them is an edge of the
   scene, so it counts for cycles and blocks deleting its target. A keyframe scene has
-  none of its own. The engine runs a scene's filters on its composite; it refuses the
-  `item` owner until it renders item effects.
+  none of its own. The engine runs a scene's filters on its composite, and an item's
+  effects over its box in a layer grown by their outset, before its opacity and blend.
 - **Settings:** a source's `settings`, each filter's, and each transition preset's are a
   map of values described by its kind's descriptor, which the engine reports and
   validates against. References to scenes, sources, buses and asset files inside
@@ -652,8 +652,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   [ADR-0027](adr/0027-program-master-and-output-chains.md), protocol 0.29). Since 0.43
   the owners `scene` and `item`, `SceneInfo.filters`, `ItemInfo.effects` and a
   descriptor's `max_outset_px` are in the protocol
-  ([ADR-0065](adr/0065-scene-chains-and-item-effects.md)). The engine runs scene
-  filters, and refuses the `item` owner on `owner` until it renders item effects.
+  ([ADR-0065](adr/0065-scene-chains-and-item-effects.md)). The engine runs both.
   `source.set_audio`, `bus.create`, `bus.rename`, `bus.set_fader`, `bus.delete`,
   `send.set` and `send.remove` edit sources' audio, the buses and the send matrix
   ([ADR-0028](adr/0028-audio-model-v2.md), protocol 0.19).
