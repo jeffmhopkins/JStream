@@ -2400,8 +2400,7 @@ impl State {
     /// A batch whose idempotency key this client already used is not applied again: it
     /// gets the result of the first call with that key, and emits nothing. That check
     /// comes first, so a retry succeeds even after `rev` moved on. An `ends_gesture` the
-    /// client has no open gesture for is refused next, as the mock does, and then any
-    /// filter edit on an item, since nothing renders item effects yet (ADR-0065).
+    /// client has no open gesture for is refused next, as the mock does.
     fn batch(
         &mut self,
         client_id: &ClientId,
@@ -2423,16 +2422,6 @@ impl State {
                 "ends_gesture",
                 format!("the client has no open gesture `{gesture_id}`"),
             ));
-        }
-        // A batch the graph would refuse gets the graph's answer, as the parity fixture
-        // holds the engine to; one it would take is refused, on a copy so nothing changes.
-        if let Err(refused) = crate::chain::refuse_unrendered_owners(&batch.edits) {
-            self.graph.clone().apply_with_running(
-                &batch.edits,
-                batch.expected_rev,
-                &self.outputs.running(),
-            )?;
-            return Err(refused);
         }
         // A running output can't be deleted.
         let applied = self.graph.apply_with_running(
