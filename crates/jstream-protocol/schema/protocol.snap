@@ -406,7 +406,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Installs a WASM automation plugin from the package at `path` on the engine's\nmachine, with what the person granted it after seeing its manifest (0.35,\nADR-0069). It starts enabled, and `plugin.state_changed` reports it. For a person\nonly: no MCP tool carries it, and no plugin is ever granted it. Fails with\n`already_exists` for a plugin ID in use, `invalid_argument` for a grant whose\n`problem` names a field (`grant.hosts.0`) or a package that isn't a plugin, and\n`unsupported` from an engine that hosts no plugins.",
+          "description": "Installs a WASM automation plugin from the package at `path` on the engine's\nmachine, with what the person granted it after seeing its manifest (0.35,\nADR-0069). It starts enabled, and `plugin.state_changed` reports it. For a person\nonly: no MCP tool carries it, and no plugin is ever granted it. Fails with\n`already_exists` for a plugin ID in use, `invalid_argument` for a grant whose\n`problem` names a field (`grant.hosts.0`), a grant that gives more than the\nmanifest asks for (`grant.classes.0`, `grant.hosts.0`, `grant.folders.0`), or a\npackage that isn't a plugin, `action_failed` for a module whose `start` function\ntraps or runs past its limits, and `unsupported` from an engine that hosts no\nplugins.",
           "properties": {
             "grant": {
               "$ref": "#/$defs/PluginGrant",
@@ -434,7 +434,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Replaces an installed plugin's grant, widening or narrowing it (0.35). A plugin\ndisabled because an update asks for more (`needs_grant`) stays disabled until a\ngrant covers the difference and it is re-enabled. For a person only, like\n`plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin that isn't\ninstalled.",
+          "description": "Replaces an installed plugin's grant, widening or narrowing it (0.35), never past\nwhat its manifest asks for (`invalid_argument`, as for `plugin.install`). The\nperson grants it knowing what the manifest asks for now, so a plugin disabled\nbecause an update asks for more (`needs_grant`) can then be re-enabled. For a\nperson only, like `plugin.install`. Fails with `not_found` (entity `plugin`) for a\nplugin that isn't installed.",
           "properties": {
             "grant": {
               "$ref": "#/$defs/PluginGrant",
@@ -5996,7 +5996,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "uniqueItems": true
         },
         "folders": {
-          "description": "The folders the person picked for it, as absolute paths on the engine's machine,\nbesides its own private data folder. Omitted for none.",
+          "description": "The folders the person picked for it, as absolute paths on the engine's machine.\nOmitted for none.",
           "items": {
             "type": "string"
           },

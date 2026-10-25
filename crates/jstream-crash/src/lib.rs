@@ -51,6 +51,43 @@ const REDACTED: &str = "***";
 /// A secret to redact: its length in bytes and its BLAKE3 digest.
 type Secret = (usize, blake3::Hash);
 
+/// How many values a slot keeps: the newest, and the one it superseded, which a call
+/// made just before the switch may still hold (#844).
+const SLOT_DEPTH: usize = 2;
+
+/// The registered secrets: those kept for the life of the process, and each slot's
+/// newest values.
+#[derive(Default)]
+struct Registry {
+    kept: Vec<Secret>,
+    /// Each slot's name and its values, the oldest first, at most [`SLOT_DEPTH`].
+    slots: Vec<(&'static str, Vec<Secret>)>,
+}
+
+impl Registry {
+    /// Every registered secret, for one report.
+    fn all(&self) -> Vec<Secret> {
+        self.kept
+            .iter()
+            .chain(self.slots.iter().flat_map(|(_, values)| values))
+            .copied()
+            .collect()
+    }
+
+    fn contains(&self, secret: &Secret) -> bool {
+        self.kept.contains(secret) || self.slots.iter().any(|(_, values)| values.contains(secret))
+    }
+
+    fn count(&self) -> usize {
+        self.kept.len()
+            + self
+                .slots
+                .iter()
+                .map(|(_, values)| values.len())
+                .sum::<usize>()
+    }
+}
+
 /// The program a report names on its `program:` line.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Program {
@@ -60,11 +97,20 @@ pub struct Program {
     pub version: &'static str,
 }
 
+/// What [`Secrets::hook`] makes: a closure a client calls with each secret it gets and
+/// that secret's kind.
+pub type Hook<K> = Arc<dyn Fn(K, &str) + Send + Sync>;
+
 /// The secrets to redact from crash reports, as a shared handle: clones share one list.
 /// The app makes one, hands a clone to [`install`] and to each [`Redacting`] store, and
 /// registers its control token with it. Only digests are kept.
+///
+/// A secret [`register`](Self::register)ed is kept for the life of the process. One
+/// that a newer value supersedes, such as an OAuth access token, which is refreshed
+/// about every hour, goes in a named slot with [`register_in`](Self::register_in)
+/// instead, so the list stays bounded however often it is refreshed (#844).
 #[derive(Clone, Default)]
-pub struct Secrets(Arc<Mutex<Vec<Secret>>>);
+pub struct Secrets(Arc<Mutex<Registry>>);
 
 impl Secrets {
     /// An empty list.
@@ -80,18 +126,61 @@ impl Secrets {
             return;
         }
         let secret = digest(value);
-        let mut secrets = self.0.lock().unwrap_or_else(PoisonError::into_inner);
-        if !secrets.contains(&secret) {
-            secrets.push(secret);
+        let mut registry = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        if !registry.kept.contains(&secret) {
+            registry.kept.push(secret);
         }
     }
 
+    /// Registers `value` in `slot`, a value that supersedes the slot's earlier ones (an
+    /// access token that replaces the one before it). The slot keeps its newest two
+    /// values, so the one just superseded, which a call made before the switch may still
+    /// hold, is redacted too, and anything older is dropped. So only a secret its holder
+    /// no longer has may go in a slot: a value that might never replace the holder's
+    /// own, such as a sign-in's token the store may refuse, is [`register`](Self::register)ed instead. Empty
+    /// values, and the slot's newest value again, are ignored.
+    pub fn register_in(&self, slot: &'static str, value: &str) {
+        if value.is_empty() {
+            return;
+        }
+        let secret = digest(value);
+        let mut registry = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        let index = match registry.slots.iter().position(|(name, _)| *name == slot) {
+            Some(index) => index,
+            None => {
+                registry.slots.push((slot, Vec::with_capacity(SLOT_DEPTH)));
+                registry.slots.len() - 1
+            }
+        };
+        let values = &mut registry.slots[index].1;
+        if values.last() == Some(&secret) {
+            return;
+        }
+        values.retain(|kept| *kept != secret);
+        if values.len() == SLOT_DEPTH {
+            values.remove(0);
+        }
+        values.push(secret);
+    }
+
     /// A closure that registers what it is given, for a client that hands its secrets
-    /// on as it gets them (`jstream_youtube::SecretHook`, #353).
+    /// on as it gets them, each with its kind `K` (`jstream_youtube::SecretHook` and its
+    /// `SecretKind`, #353). `slot` names the slot a kind of secret supersedes its earlier
+    /// values in ([`register_in`](Self::register_in)), or is `None` for one kept for
+    /// the life of the process ([`register`](Self::register)).
     #[must_use]
-    pub fn hook(&self) -> Arc<dyn Fn(&str) + Send + Sync> {
+    pub fn hook<K: 'static>(&self, slot: fn(K) -> Option<&'static str>) -> Hook<K> {
         let secrets = self.clone();
-        Arc::new(move |value: &str| secrets.register(value))
+        Arc::new(move |kind: K, value: &str| match slot(kind) {
+            Some(slot) => secrets.register_in(slot, value),
+            None => secrets.register(value),
+        })
+    }
+
+    /// Every registered digest, as the panic hook redacts with them.
+    #[cfg(test)]
+    fn digests(&self) -> Vec<Secret> {
+        self.0.lock().unwrap_or_else(PoisonError::into_inner).all()
     }
 
     /// Whether `value` is registered.
@@ -108,7 +197,11 @@ impl Secrets {
 /// Shows how many secrets are registered, never their digests.
 impl fmt::Debug for Secrets {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let count = self.0.lock().unwrap_or_else(PoisonError::into_inner).len();
+        let count = self
+            .0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .count();
         f.debug_struct("Secrets").field("count", &count).finish()
     }
 }
@@ -245,12 +338,16 @@ fn on_panic(
         location: &location,
     };
     let (report, summary) = match secrets.0.try_lock() {
-        Ok(secrets) => (
-            redacted_report(&facts, &message, &backtrace, &secrets),
-            redact(&message, &secrets),
-        ),
-        Err(TryLockError::Poisoned(secrets)) => {
-            let secrets = secrets.into_inner();
+        Ok(registry) => {
+            let secrets = registry.all();
+            drop(registry);
+            (
+                redacted_report(&facts, &message, &backtrace, &secrets),
+                redact(&message, &secrets),
+            )
+        }
+        Err(TryLockError::Poisoned(registry)) => {
+            let secrets = registry.into_inner().all();
             (
                 redacted_report(&facts, &message, &backtrace, &secrets),
                 redact(&message, &secrets),

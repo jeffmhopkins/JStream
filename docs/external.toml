@@ -627,3 +627,27 @@ relied_on = "Secret Service API: the service object is /org/freedesktop/secrets 
 review_every = "365d"
 status = "ok"
 checked_note = "Re-read the object paths, the plain algorithm and the unlocking chapter"
+
+[[external]]
+id = "gh-releases"
+url = "https://github.com/jeffmhopkins/JStream/releases"
+relied_on = "The repository's releases page, where the release workflow publishes each portable zip and its SHA-256 (docs/runbooks/release.md)"
+review_every = "365d"
+status = "unverified"
+checked_note = "Not loaded from the builder sandbox (proxy refuses github.com pages)"
+
+[[external]]
+id = "gh-new-issue"
+url = "https://github.com/jeffmhopkins/JStream/issues/new"
+relied_on = "Opens a new issue on the repository, for bug reports from the getting-started guide"
+review_every = "365d"
+status = "unverified"
+checked_note = "Not loaded from the builder sandbox (proxy refuses github.com pages)"
+
+[[external]]
+id = "semver"
+url = "https://semver.org/spec/v2.0.0.html"
+relied_on = "Semantic Versioning 2.0.0: MAJOR.MINOR.PATCH, a pre-release part after a hyphen (1.0.0-alpha.1) sorting before its release, and 0.y.z for initial development"
+review_every = "365d"
+status = "unverified"
+checked_note = "Not loaded from the builder sandbox"

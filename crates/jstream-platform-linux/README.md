@@ -18,7 +18,7 @@ depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-linux", "docs/ARC
 The Linux implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
 traits, as [ADR-0060](../../docs/adr/0060-linux-platform-support.md) lays them out. That
 ADR is **accepted**; this crate has its first three parts (the platform basics, screen
-capture, then VA-API H.264 encoding), the software H.264 and AAC encoders, PipeWire and
+capture, then VA-API H.264 and HEVC encoding), the software H.264 and AAC encoders, PipeWire and
 ALSA audio input and output, V4L2 webcams and capture cards, the capture's DMA-BUF import into Vulkan, and the secret
 store of [ADR-0071](../../docs/adr/0071-linux-secret-store.md), and the rest follows in later
 PRs. Layer 2, and one
@@ -274,18 +274,19 @@ It has:
   for the engine's `Backends`.
 - **`probe_encoders`** opens each DRM render node (`/dev/dri/renderD*`) through libva and
   libva-drm, and records the best H.264 profile (High, then Main, then Constrained
-  Baseline) and encode entry point (full, then low-power) its driver offers. The display
-  is terminated before its node is closed. **`VaapiCodecs`** (`Codecs`) lists those as
-  hardware H.264 encoders and picks one for a configuration with `choose_encoder`. That
-  refuses other codecs and a software-only request (software H.264 is OpenH264's, below),
-  and reports a machine with no H.264 encode driver as a missing component with the
-  distributions' packages (ADR-0060 §6). Decoding is out of the ADR's scope. Its
+  Baseline) its driver offers, then HEVC Main, each with its encode entry point (full,
+  then low-power). The display is terminated before its node is closed.
+  **`VaapiCodecs`** (`Codecs`) lists those as hardware H.264 and HEVC encoders and picks
+  one for a configuration with `choose_encoder`: the first that encodes its codec. That
+  refuses other codecs and a software-only request (software H.264 is OpenH264's, below,
+  and there is no software HEVC), and reports a machine with no encode driver for the
+  codec as a missing component with the distributions' packages (ADR-0060 §6). Decoding is out of the ADR's scope. Its
   `on_context`, on a context with encode targets, keeps the encoders whose render node
   (the node file's device number) is the context's, since the DMA-BUF imports only on
   the GPU that made it; their sessions take GPU frames, and a software-only request is
   `Unsupported` there. With none, or on a context without encode targets, it is
   `Ok(None)`, and on another platform's context `InvalidState`.
-- **The VA-API H.264 session** (`VideoEncoder`) opens its own display on the chosen
+- **The VA-API session** (`VideoEncoder`), H.264 or HEVC, opens its own display on the chosen
   node: a config with the rate-control mode (CBR or VBR, refused if the driver lacks it),
   a context, four input surfaces with a coded buffer each, and three reconstructed
   surfaces. Opened through `on_context` it takes the context's NV12 encode targets
@@ -303,16 +304,23 @@ It has:
   surfaces. The stream is I and P frames with one reference and one slice per picture,
   so packets are Annex B in presentation order with `dts == pts`. IDR frames come every
   `keyframe_interval` frames and on `request_keyframe`, which restarts the cadence, and
-  carry the SPS and PPS: JStream's own (packed headers: BT.709 limited range, frame
-  timing, no reordering) when the driver takes them, the driver's otherwise. The level
-  is the lowest that fits the size, frame rate and peak rate. `poll` never blocks; up
+  carry the parameter sets (H.264's SPS and PPS, HEVC's VPS, SPS and PPS): JStream's own
+  (packed headers: BT.709 limited range, frame timing, no reordering) when the driver
+  takes them, the driver's otherwise. HEVC is Main profile and Main tier, coded with the
+  block sizes and tools (AMP, SAO, temporal MVP, transform skip, CU QP deltas) the
+  driver's config attributes advertise, or FFmpeg's defaults where it advertises none.
+  A driver that requires a tool JStream's parameter sets turn off (scaling lists, PCM,
+  sign data hiding, weighted prediction and the like) is refused as unsupported.
+  JStream writes each slice header too where the driver takes packed slice headers along
+  with JStream's packed parameter sets, and a driver that codes no P slices gets each P
+  frame as a B slice with the reference in both lists. The level is the lowest that fits the size, frame rate and peak rate. `poll` never blocks; up
   to four frames are in flight, and a fifth is refused as busy. The libva structs are
   hand-written and checked against libva 2.20.0's headers, with their sizes and offsets
   asserted at compile time.
 - **Cisco's OpenH264** is the software H.264 encoder
   ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), last in line:
   `VaapiCodecs` opens it for `HardwarePreference::Avoid`, and for `Prefer` when there is
-  no VA-API encoder (`wants_software`), and lists it once it is downloaded. JStream
+  no VA-API H.264 encoder (`wants_software`), and lists it once it is downloaded. JStream
   never ships or builds it. **`OpenH264Store`** keeps it in the data folder
   (`<data>/codecs/openh264`, a 0700 folder holding a 0600 file). `install`, which only a
   host acting on the user's explicit request calls, after showing `OPENH264_NOTICE` and
@@ -365,7 +373,8 @@ The virtual camera is out of scope (`Backends::vcam` is `None` on Linux).
 
 Tests run on every platform where they can: D-Bus messages, the portal handshake, SPA
 pods (the DMA-BUF offer was checked byte for byte against libspa's builder), the frame
-copy, the cursor metadata, the H.264 parameters, parameter sets, GOP and upload, and V4L2's ABI layouts,
+copy, the cursor metadata, the H.264 and HEVC parameters, parameter sets (checked with FFmpeg's
+`trace_headers`, as are HEVC's slice headers), GOPs and upload, and V4L2's ABI layouts,
 formats list, colour, buffer times and device IDs are platform-independent. The GPU interop's tests open a device on a software Vulkan
 adapter where there is no GPU, and skip without one: the frame copy (crop, opaque
 padding, slots reused only once free) and the context checks. The VA-API surface
@@ -394,8 +403,8 @@ recorded, needs the `openh264-download` feature and `--ignored`; CI runs neither
 `hw-tests` feature holds the tests against a real desktop, `#[ignore]`d
 and run by hand: the session bus (`dbus-run-session` is enough), a portal capture in a
 GNOME or KDE session with PipeWire (on the CPU path, and on the GPU path with a Vulkan
-driver that imports DMA-BUFs, and the pointer as metadata), VA-API H.264 encodes on a GPU with an encode driver,
-from CPU frames and from the context's encode targets (which needs the Vulkan and
+driver that imports DMA-BUFs, and the pointer as metadata), VA-API H.264 and HEVC encodes from CPU frames on a GPU
+with an encode driver, and H.264 from the context's encode targets (which needs the Vulkan and
 VA-API drivers on one render node), `PipeWireAudio` recording (on the data loop),
 playing and looping back on a PipeWire daemon (`pipewire/audio_tests.rs`; null nodes
 are enough, no sound card, and one says it is on ALSA card 7 for the pairing test),

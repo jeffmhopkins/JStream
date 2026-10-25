@@ -152,11 +152,11 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 3 | `jstream-effects` | WGSL effect packs ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): `effect.toml` manifests, WGSL validation with naga, parameters as `<pack>/<effect>` kind descriptors with a uniform layout, hot reload by polling; draws an effect through `jstream-render`'s filter harness. No GPU device of its own | no |
 | 3 | `jstream-mcp` | MCP server over `dyn Control`: generated grouped tools and the stdio transport; its streamable-HTTP transport is served by `jstream-server` | no |
 | 3 | `jstream-browser` | Browser sources' engine ([ADR-0021](adr/0021-browser-source.md), [ADR-0046](adr/0046-browser-crate-and-helper.md), [ADR-0048](adr/0048-sandboxed-browser-helper.md)): the `BrowserBackend` seam, pages' audio hand-off, custom CSS and request policy; the CEF backend (Windows, feature `cef`), which drives the sandboxed browser helper over pipes and copies its shared-texture frames onto the engine's device; and the CEF code the helper runs (feature `helper`) | **yes** |
-| 3 | `jstream-plugin-wasm` | wasmtime host for automation plugins ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): calls the API through `Control`, limited to a per-plugin list of granted commands (empty by default); fuel, wall-time and memory limits; no WASI | no |
+| 3 | `jstream-plugin-wasm` | wasmtime host for automation plugins ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): calls the API through `Control`, limited to a per-plugin list of granted commands (empty by default) or to what that `Control` allows, with refusals as ABI statuses or `forbidden`; fuel, wall-time and memory limits; no WASI | no |
 | 4 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; token and Origin checks; serves UI assets; serves MCP's streamable-HTTP transport on the control port behind the same checks | no |
 | 4 | `jstream-sources` | `Source` trait plus built-ins ([ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md)): display, window, video capture device, image, color, text, browser, audio input, desktop audio, application audio, scene (M1b); media file, audio waveform, audio spectrum (M2); YouTube chat message ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)) (M3); Spout2 receiver (later). Uses platform traits; backends are injected. Images and fonts use pure-Rust crates. | no |
 | 4 | `jstream-outputs` | RTMP(S) publish client with reconnect, and the recording file sink. Uses `mux`. Planned: the `Output` trait, and use of `encode` and platform traits. The virtual-camera output runs in `jstream-core`'s runtime. | no |
-| 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl`; CLAP filter kinds from plugin scans and the host supervisor (ADR-0035) | no |
+| 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl`; CLAP filter kinds from plugin scans and the host supervisor (ADR-0035); runs WASM automation plugins on `jstream-plugin-wasm`'s host, behind the default `wasm-plugins` feature ([ADR-0075](adr/0075-wasm-plugin-host-in-the-engine.md)) | no |
 | 3 | `jstream-ui` | Leptos app compiled to WASM ([ADR-0045](adr/0045-leptos-web-ui.md)); depends on `jstream-protocol` and `jstream-control` only | no |
 | 6 | `jstream-ui-e2e` | Test-only harness at `crates/jstream-ui/tests/e2e/mock-daemon`: `MockEngine` behind `jstream-server`, serving the built UI for the Playwright tests; never shipped | no |
 | 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server, and the platform crate of the OS they run on; `jstream-desktop` also links sources, and `jstream-browser` with its `cef` feature; `jstream-daemon` always links `jstream-browser` to give the engine a browser backend, CEF's with its `cef` feature); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host (plugin-clap, which only it may link, plugin-proto, and the Windows platform crate for its shared block; [ADR-0035](adr/0035-clap-plugins-out-of-process.md)); `jstream-browser-helper`, the sandboxed browser helper's DLL ([ADR-0048](adr/0048-sandboxed-browser-helper.md); it declares `unsafe` for its one export) | no |
@@ -716,8 +716,19 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `jstream-protocol`'s table of every command's class (`read`, `edit`, `live`, `outputs`
   or never), and the hosts and files a call's settings name against the grant's hosts
   and folders, since a class never widens network or filesystem reach; a call outside
-  the grant fails with `forbidden` and never reaches the engine. The engine and the mock answer the actions with `unsupported` until the engine
-  hosts plugins.
+  the grant fails with `forbidden` and never reaches the engine. The engine runs the
+  plugins in process, on `jstream-plugin-wasm`'s host behind its default `wasm-plugins`
+  feature, each on threads of its own
+  ([ADR-0075](adr/0075-wasm-plugin-host-in-the-engine.md)). A package is a directory
+  with `plugin.wasm` and an optional `manifest.json`, and a plugin that exports `on_event`
+  gets the engine's events. A grant never gives more than the manifest's `classes`,
+  `hosts` and `folders` ask for (`invalid_argument` on that grant field), an update whose
+  manifest asks for more stays disabled as `needs_grant` until a person grants it again,
+  and the installed plugins are saved in the plugin folder
+  ([ADR-0076](adr/0076-saved-wasm-plugins-and-manifest-requests.md)). The mock runs no
+  plugins: it answers `plugin.install` with
+  `unsupported`, and the other two with `not_found`, as an engine built without the
+  feature does.
 - **Studio mode** (protocol 0.30): the action `studio.set_preview { scene_id }` puts a
   scene on preview, also with no `rev` change; `studio.get` and `studio.changed` carry
   `preview_scene` beside `program_scene`.
@@ -908,7 +919,9 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   from outside JStream sits in `remote_*` fields or in an `output.start` `action_failed`
   `reason` (the whole of which is untrusted), and the tool descriptions and server
   instructions say it is data, never instructions
-  ([ADR-0059](adr/0059-mcp-annotations-and-remote-text.md)).
+  ([ADR-0059](adr/0059-mcp-annotations-and-remote-text.md)). The instructions also say
+  that names and other state text can be set by any client or plugin, and are data too
+  (ADR-0069's U1).
 - **Names** follow the tool-name pattern in [R-API-002](RULES.md#R-API-002).
 - **Snapshots** are returned as images, capped in size (default longest side 1280 px), with
   the state `rev` they show. The `video` tool's `video.snapshot` result leads with an
@@ -1194,6 +1207,11 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   `normal`, a geometry's `flip_h` and `flip_v` only when true, a disabled filter's `enabled` only when false. Schema version 2 adds a scene's
   `filters` and an item's `effects`, each omitted while empty; the migration from 1
   changes nothing, and refuses a version 1 file that holds either.
+- **Installed WASM plugins:** `plugins.json` (version 0) in the plugin folder, by default
+  `plugins` in the data directory: each plugin's package path, grant, manifest request
+  and disabled reason. `jstream-core` loads it at startup, loading each enabled plugin
+  again, and replaces it atomically after every change. A file it can't read is left as
+  it is ([ADR-0076](adr/0076-saved-wasm-plugins-and-manifest-requests.md)).
 - **App settings:** `jstream.toml` in the platform config directory.
 - **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store. On
   Linux, where no Secret Service is reachable, they are kept in a `0600` `secrets` file
@@ -1212,34 +1230,47 @@ depends_on = ["docs/adr/0066-portable-windows-distribution-v2.md"]
 
 Windows ships as a **portable zip**: unzip and run `jstream.exe`, with no installer and no
 admin ([ADR-0066](adr/0066-portable-windows-distribution-v2.md)). The folder also holds
-`jstream-daemon.exe`, `jstream-cli.exe`, the `jstream-vcam-windows` DLL, and the CEF
-runtime for browser sources ([ADR-0021](adr/0021-browser-source.md)), in its own folder,
-with the sandboxed browser helper: CEF's `bootstrap.exe` renamed
-`jstream-browser-helper.exe` and `jstream-browser-helper.dll`, signed with the same
-certificate if releases are signed ([ADR-0048](adr/0048-sandboxed-browser-helper.md)).
-From M3 it also holds `jstream-plugin-host.exe`, the out-of-process CLAP plugin host
-([ADR-0035](adr/0035-clap-plugins-out-of-process.md)). Release builds
-link the C runtime statically and need only OS components (WebView2, Media Foundation,
-Direct3D 12).
+`jstream-daemon.exe`, `jstream-cli.exe`, the `jstream-vcam-windows` DLL, and, in its own
+`browser` folder, the CEF runtime for browser sources
+([ADR-0021](adr/0021-browser-source.md)) with the sandboxed browser helper: CEF's
+`bootstrap.exe` renamed `jstream-browser-helper.exe` and `jstream-browser-helper.dll`,
+signed with the same certificate if releases are signed
+([ADR-0048](adr/0048-sandboxed-browser-helper.md)). The hosts look for the helper there
+(`CefConfig::beside_exe`). From M3 it also holds `jstream-plugin-host.exe`, the
+out-of-process CLAP plugin host ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)).
+Release builds link the C runtime statically and need only OS components (WebView2, Media
+Foundation, Direct3D 12).
 
 - **State:** in `%APPDATA%\JStream`, or in a `data` folder beside the exe when a
   `portable` marker file is present. Every host finds it through `jstream-platform`'s
   `paths` module.
-- **Building the zip:** `cargo xtask dist`, on Windows with MSVC. It builds the web UI
-  for release with trunk (or takes a built one with `--ui-dir`), builds `jstream.exe`,
-  `jstream-daemon.exe`, `jstream-cli.exe` and the virtual-camera DLL for release, and
-  fails if any of them imports a Visual C++ runtime DLL (`vcruntime`, `msvcp`). The
-  Universal CRT (`api-ms-win-crt-*`) is allowed: it is part of Windows 10 and 11, and
-  `jstream.exe` imports it even with `crt-static` (from a prebuilt static library built
-  with `/MD`, most likely WebView2's loader). It zips them in one folder,
-  `jstream-<git describe>-windows-x64`, with the UI in `ui` (where `jstream.exe` looks),
-  the licenses and a `README.txt`, into `target/dist`. `.cargo/config.toml` links the C
-  runtime statically for every MSVC build. A `RUSTFLAGS` variable replaces the config's
-  flags, so `dist` adds `crt-static` back to it. The zip is written by `dist` itself,
-  deflated, with fixed timestamps, so the same files make the same zip. The `dist` job in
-  `after-review.yml` builds it with the release UI its `dist-ui` job builds, names it
-  after the commit tested (`--revision`), and uploads it as an artifact, as is, on `main`
-  and on a PR once review passes ([ADR-0054](adr/0054-platform-ci-after-review.md)). The sandboxed browser helper and the CEF runtime are not in it yet; they join it when the hosts turn their `cef` features on.
+- **Building the zip:** `cargo xtask dist`, on Windows with MSVC, CMake and Ninja. It
+  builds the web UI for release with trunk (or takes a built one with `--ui-dir`), builds
+  `jstream.exe`, `jstream-daemon.exe`, `jstream-cli.exe` and the virtual-camera DLL for
+  release with the hosts' `cef` features on, then the browser helper's DLL with its own
+  `cef` feature in a second `cargo build`: built together, Cargo would unify
+  `jstream-browser`'s `helper` feature into the hosts and link CEF into the engine's
+  process. The helper's build downloads the pinned CEF distribution and builds its C++
+  wrapper; `dist` finds the distribution's folder from that build's JSON messages
+  (`cef-dll-sys`'s link path that holds `bootstrap.exe`). It fails if any of the
+  binaries imports a Visual C++ runtime DLL (`vcruntime`, `msvcp`), or if a host imports
+  `libcef.dll`. The Universal CRT (`api-ms-win-crt-*`) is allowed: it is part of Windows
+  10 and 11, and `jstream.exe` imports it even with `crt-static` (from a prebuilt static
+  library built with `/MD`, most likely WebView2's loader). It zips them in one folder,
+  `jstream-<git describe>-windows-x64` (or `--revision`), with the UI in `ui` (where
+  `jstream.exe` looks), the licenses and a `README.txt`, into `target/dist`. The
+  `browser` folder holds CEF's runtime files (all of its distribution's top-level files
+  but import libraries, `archive.json`, `CMakeLists.txt` and the console bootstrap), its
+  `locales`, the renamed bootstrap and DLL, CEF's `CREDITS.html` (its licences, FFmpeg's
+  LGPL text among them) and a `CEF-VERSION.txt` naming the CEF and Chromium build, from
+  `archive.json`. `--no-browser` builds the zip without browser sources (no CMake or
+  Ninja needed). `.cargo/config.toml` links the C runtime statically for every MSVC
+  build. A `RUSTFLAGS` variable replaces the config's flags, so `dist` adds `crt-static`
+  back to it. The zip is written by `dist` itself, deflated, with fixed timestamps, so
+  the same files make the same zip. The `dist` job in `after-review.yml` builds it with
+  the release UI its `dist-ui` job builds, names it after the commit tested
+  (`--revision`), and uploads it as an artifact, as is, on `main` and on a PR once
+  review passes ([ADR-0054](adr/0054-platform-ci-after-review.md)).
 - **Virtual camera:** registering the COM media source is **optional**, an explicit
   step the user chooses; nothing registers it or asks for elevation on its own
   ([ADR-0066](adr/0066-portable-windows-distribution-v2.md)). The step costs **one UAC
