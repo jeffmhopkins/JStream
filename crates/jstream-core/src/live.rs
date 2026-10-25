@@ -154,6 +154,10 @@ struct Running {
     /// density ([`Source::set_density`]); `None` for the others, which are never built
     /// again for one.
     extent: Option<FrameSize>,
+    /// The size `source.sizes` reports for it (ADR-0022 §4): its first frame's, from the
+    /// build, then each new frame's a plan takes. Its extent for a kind drawn at a
+    /// density. `None` for a capture source, whose frames reach only the render thread.
+    size: Option<FrameSize>,
 }
 
 /// One source to build.
@@ -188,6 +192,8 @@ pub(crate) struct Built {
     result: Result<Box<dyn Source>, SourceError>,
     /// What [`Source::set_density`] returned, asked on the thread after creating it.
     extent: Option<FrameSize>,
+    /// Its size, from its first frame, asked on the thread too ([`first_size`]).
+    size: Option<FrameSize>,
 }
 
 impl Default for LiveSources {
@@ -451,6 +457,18 @@ impl LiveSources {
         }
     }
 
+    /// The first loaded asset again, as a finished load of the version wanted now, for
+    /// a test that replays an install.
+    #[cfg(test)]
+    pub(crate) fn reload_asset(&self) -> Option<LoadedAsset> {
+        let (key, entry) = self.assets.iter().next()?;
+        Some(LoadedAsset {
+            key: key.clone(),
+            ticket: entry.ticket,
+            result: Ok(entry.loaded.as_ref()?.loaded.clone()),
+        })
+    }
+
     /// Rebuilds what plans read from the loaded assets.
     fn share_assets(&mut self) {
         self.loaded = Arc::new(
@@ -487,6 +505,7 @@ impl LiveSources {
                 planned: plan,
                 shown_gpu: None,
                 extent: built.extent,
+                size: built.size,
             }),
             // A kind that is described but not built yet draws what it drew before C1b:
             // a `display` source shows the pipeline's capture.
@@ -575,6 +594,12 @@ impl LiveSources {
         }
     }
 
+    /// The size `source.sizes` reports for `source_id`'s live instance, if it runs and
+    /// has made a frame.
+    pub(crate) fn size(&self, source_id: &SourceId) -> Option<FrameSize> {
+        self.entries.get(source_id)?.running.as_ref()?.size
+    }
+
     /// Starts a plan of the program mix: the [`look`](Self::look) calls until the next
     /// one are the sources it reaches.
     pub(crate) fn begin_plan(&mut self) {
@@ -619,6 +644,7 @@ impl LiveSources {
                     _ => {
                         *versions = versions.saturating_add(1);
                         let frame = Frame::from_gpu(texture.clone(), context.clone(), *versions);
+                        running.size = Some(running.extent.unwrap_or(texture.info().size));
                         running.shown_gpu = Some((texture, frame.clone()));
                         frame
                     }
@@ -659,6 +685,7 @@ impl LiveSources {
                     Some(extent) => frame.placed_at(extent),
                     None => frame,
                 };
+                running.size = Some(running.extent.unwrap_or(video.info().size));
                 running.shown = Some((video, frame.clone()));
                 frame
             }
@@ -932,11 +959,16 @@ fn run(worker: &Worker, host: &Weak<dyn LiveHost>) {
                     .as_mut()
                     .ok()
                     .and_then(|source| source.set_density(job.density));
+                let size = match result.as_mut() {
+                    Ok(source) => extent.or_else(|| first_size(source.as_mut())),
+                    Err(_) => None,
+                };
                 let built = Built {
                     source_id: job.source_id,
                     ticket: job.ticket,
                     result,
                     extent,
+                    size,
                 };
                 let alive = host.upgrade().map(|host| host.install(built)).is_some();
                 lock(&worker.queue).building -= 1;
@@ -947,6 +979,17 @@ fn run(worker: &Worker, host: &Weak<dyn LiveHost>) {
             }
         }
     }
+}
+
+/// A source's size before any plan shows it: its frame at time zero, which a plan would
+/// show first, so asking for it changes nothing a plan sees. `None` for a capture
+/// source and for one that makes no frame.
+fn first_size(source: &mut dyn Source) -> Option<FrameSize> {
+    if source.capture().is_some() {
+        return None;
+    }
+    let frame = source.frame(MediaTime::zero(Timebase::MILLIS)).ok()?;
+    Some(frame.info().size)
 }
 
 /// The density a source drawn `scale` times enlarged is drawn at: 1 up to a scale of 1,
