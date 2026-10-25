@@ -69,7 +69,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   protocol and closes on Escape, and the header carries the revision; disconnecting returns to the form with the token field empty; a refused
   upgrade shows its reason; the token never appears in the page, its storage or its
   cookies. A URL the page's policy refuses shows a reason and re-enables Connect,
-  although Chromium sends that socket an `error` event and no `close` (#305).
+  although Chromium sends that socket an `error` event and no `close` (#305). The
+  bundled IBM Plex Sans and Mono load from the page's own origin, and `fonts/OFL.txt`
+  is served beside them.
 - **Scenes and sources** (`scenes.spec.js`): the seed's scenes in order with the
   program scene's "program" badge, selected, and its item listed under the scene's
   caption; putting a scene on program, which a second client follows; F2 renaming a

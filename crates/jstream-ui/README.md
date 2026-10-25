@@ -95,7 +95,8 @@ Contents ([Design](#design) explains the choices):
   redoes ([Canvas](#canvas)).
 - **Entry point** (`main.rs`): `start()`, which mounts `App` on the page's `<body>`;
   `index.html`, `style.css` and `Trunk.toml` are the page trunk builds around it
-  ([Build](#build)).
+  ([Build](#build)), and `fonts/` holds the bundled IBM Plex files with their licence,
+  `OFL.txt` ([ADR-0077](../../docs/adr/0077-bundle-ibm-plex-fonts.md)).
 
 <a id="design"></a>
 ## Design
@@ -280,9 +281,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   panel. Names come from the prototype's catalogue, then `kind.list`, then the kind's ID.
 - **The shell** is the header bar over the workspace. A failed call shows in a
   dismissable bar. The look follows the UI prototype ([UI features](../../docs/UI-FEATURES.md)): dark only, with the
-  prototype's palette as CSS variables in `style.css`. The font stack names IBM Plex
-  first and falls back to the system's, since the page's policy loads fonts only from
-  its own origin and Plex isn't bundled.
+  prototype's palette as CSS variables in `style.css`. The fonts are IBM Plex Sans and
+  Mono, bundled in `fonts/` under the SIL OFL 1.1 and served from the page's own origin,
+  since its policy loads fonts from nowhere else
+  ([ADR-0077](../../docs/adr/0077-bundle-ibm-plex-fonts.md)). They show with
+  `font-display: swap`, so the system font stands in until they load.
 - **The workspace** follows the prototype's dock
   ([UI features › docking](../../docs/UI-FEATURES.md#docking)): eight zones nest around
   the canvas, outer columns, full-width top and bottom, sidebars, and above and below
@@ -586,7 +589,9 @@ trunk serve            # rebuilds on change and serves dist/ locally
 trunk needs the `wasm-bindgen` CLI at the version `Cargo.lock` resolves for
 `wasm-bindgen`. It uses one found on `PATH`, and otherwise downloads it; a release build
 also downloads `wasm-opt`. `dist/` holds `index.html`, the JavaScript glue, the `.wasm`
-and the stylesheet, with content hashes in their names. It is not committed. trunk's
+and the stylesheet, with content hashes in their names, and `fonts/`, copied as it is
+(`copy-dir` in `index.html`, so the fonts and `OFL.txt` keep their names). It is not
+committed. trunk's
 inline loader script carries a `{{__TRUNK NONCE__}}` placeholder (`create_nonce` in
 `Trunk.toml`), which the serving engine replaces with each response's
 Content-Security-Policy nonce.
