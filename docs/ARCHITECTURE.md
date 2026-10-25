@@ -1230,34 +1230,47 @@ depends_on = ["docs/adr/0066-portable-windows-distribution-v2.md"]
 
 Windows ships as a **portable zip**: unzip and run `jstream.exe`, with no installer and no
 admin ([ADR-0066](adr/0066-portable-windows-distribution-v2.md)). The folder also holds
-`jstream-daemon.exe`, `jstream-cli.exe`, the `jstream-vcam-windows` DLL, and the CEF
-runtime for browser sources ([ADR-0021](adr/0021-browser-source.md)), in its own folder,
-with the sandboxed browser helper: CEF's `bootstrap.exe` renamed
-`jstream-browser-helper.exe` and `jstream-browser-helper.dll`, signed with the same
-certificate if releases are signed ([ADR-0048](adr/0048-sandboxed-browser-helper.md)).
-From M3 it also holds `jstream-plugin-host.exe`, the out-of-process CLAP plugin host
-([ADR-0035](adr/0035-clap-plugins-out-of-process.md)). Release builds
-link the C runtime statically and need only OS components (WebView2, Media Foundation,
-Direct3D 12).
+`jstream-daemon.exe`, `jstream-cli.exe`, the `jstream-vcam-windows` DLL, and, in its own
+`browser` folder, the CEF runtime for browser sources
+([ADR-0021](adr/0021-browser-source.md)) with the sandboxed browser helper: CEF's
+`bootstrap.exe` renamed `jstream-browser-helper.exe` and `jstream-browser-helper.dll`,
+signed with the same certificate if releases are signed
+([ADR-0048](adr/0048-sandboxed-browser-helper.md)). The hosts look for the helper there
+(`CefConfig::beside_exe`). From M3 it also holds `jstream-plugin-host.exe`, the
+out-of-process CLAP plugin host ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)).
+Release builds link the C runtime statically and need only OS components (WebView2, Media
+Foundation, Direct3D 12).
 
 - **State:** in `%APPDATA%\JStream`, or in a `data` folder beside the exe when a
   `portable` marker file is present. Every host finds it through `jstream-platform`'s
   `paths` module.
-- **Building the zip:** `cargo xtask dist`, on Windows with MSVC. It builds the web UI
-  for release with trunk (or takes a built one with `--ui-dir`), builds `jstream.exe`,
-  `jstream-daemon.exe`, `jstream-cli.exe` and the virtual-camera DLL for release, and
-  fails if any of them imports a Visual C++ runtime DLL (`vcruntime`, `msvcp`). The
-  Universal CRT (`api-ms-win-crt-*`) is allowed: it is part of Windows 10 and 11, and
-  `jstream.exe` imports it even with `crt-static` (from a prebuilt static library built
-  with `/MD`, most likely WebView2's loader). It zips them in one folder,
-  `jstream-<git describe>-windows-x64`, with the UI in `ui` (where `jstream.exe` looks),
-  the licenses and a `README.txt`, into `target/dist`. `.cargo/config.toml` links the C
-  runtime statically for every MSVC build. A `RUSTFLAGS` variable replaces the config's
-  flags, so `dist` adds `crt-static` back to it. The zip is written by `dist` itself,
-  deflated, with fixed timestamps, so the same files make the same zip. The `dist` job in
-  `after-review.yml` builds it with the release UI its `dist-ui` job builds, names it
-  after the commit tested (`--revision`), and uploads it as an artifact, as is, on `main`
-  and on a PR once review passes ([ADR-0054](adr/0054-platform-ci-after-review.md)). The sandboxed browser helper and the CEF runtime are not in it yet; they join it when the hosts turn their `cef` features on.
+- **Building the zip:** `cargo xtask dist`, on Windows with MSVC, CMake and Ninja. It
+  builds the web UI for release with trunk (or takes a built one with `--ui-dir`), builds
+  `jstream.exe`, `jstream-daemon.exe`, `jstream-cli.exe` and the virtual-camera DLL for
+  release with the hosts' `cef` features on, then the browser helper's DLL with its own
+  `cef` feature in a second `cargo build`: built together, Cargo would unify
+  `jstream-browser`'s `helper` feature into the hosts and link CEF into the engine's
+  process. The helper's build downloads the pinned CEF distribution and builds its C++
+  wrapper; `dist` finds the distribution's folder from that build's JSON messages
+  (`cef-dll-sys`'s link path that holds `bootstrap.exe`). It fails if any of the
+  binaries imports a Visual C++ runtime DLL (`vcruntime`, `msvcp`), or if a host imports
+  `libcef.dll`. The Universal CRT (`api-ms-win-crt-*`) is allowed: it is part of Windows
+  10 and 11, and `jstream.exe` imports it even with `crt-static` (from a prebuilt static
+  library built with `/MD`, most likely WebView2's loader). It zips them in one folder,
+  `jstream-<git describe>-windows-x64` (or `--revision`), with the UI in `ui` (where
+  `jstream.exe` looks), the licenses and a `README.txt`, into `target/dist`. The
+  `browser` folder holds CEF's runtime files (all of its distribution's top-level files
+  but import libraries, `archive.json`, `CMakeLists.txt` and the console bootstrap), its
+  `locales`, the renamed bootstrap and DLL, CEF's `CREDITS.html` (its licences, FFmpeg's
+  LGPL text among them) and a `CEF-VERSION.txt` naming the CEF and Chromium build, from
+  `archive.json`. `--no-browser` builds the zip without browser sources (no CMake or
+  Ninja needed). `.cargo/config.toml` links the C runtime statically for every MSVC
+  build. A `RUSTFLAGS` variable replaces the config's flags, so `dist` adds `crt-static`
+  back to it. The zip is written by `dist` itself, deflated, with fixed timestamps, so
+  the same files make the same zip. The `dist` job in `after-review.yml` builds it with
+  the release UI its `dist-ui` job builds, names it after the commit tested
+  (`--revision`), and uploads it as an artifact, as is, on `main` and on a PR once
+  review passes ([ADR-0054](adr/0054-platform-ci-after-review.md)).
 - **Virtual camera:** registering the COM media source is **optional**, an explicit
   step the user chooses; nothing registers it or asks for elevation on its own
   ([ADR-0066](adr/0066-portable-windows-distribution-v2.md)). The step costs **one UAC

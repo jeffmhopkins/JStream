@@ -1,9 +1,11 @@
 //! `cargo xtask dist`: builds the portable Windows zip (ADR-0020). It builds the web UI
 //! (or takes a built one), builds the release binaries with the C runtime linked
-//! statically, refuses any binary that still imports a Visual C++ runtime DLL, and zips one
-//! folder that runs from wherever it is unzipped.
+//! statically and browser sources on, builds the sandboxed browser helper with CEF, refuses
+//! any binary that still imports a Visual C++ runtime DLL (or a host that loads CEF), and
+//! zips one folder that runs from wherever it is unzipped, with the helper and CEF's
+//! runtime in its `browser` folder.
 //!
-//! Docs: docs/ARCHITECTURE.md#packaging
+//! Docs: docs/ARCHITECTURE.md#packaging, docs/adr/0048-sandboxed-browser-helper.md
 
 use std::fs;
 use std::io::Write;
@@ -19,6 +21,32 @@ const PACKAGES: &[&str] = &[
     "jstream-cli",
     "jstream-vcam-windows",
 ];
+
+/// The hosts' features for browser sources: their CEF backend, which loads no CEF itself.
+const HOST_FEATURES: &str = "jstream-desktop/cef,jstream-daemon/cef";
+
+/// The browser helper's package. It is built on its own: built with the hosts, Cargo
+/// would unify `jstream-browser`'s `helper` feature into them and link CEF into the
+/// engine's process (ADR-0048).
+const HELPER_PACKAGE: &str = "jstream-browser-helper";
+
+/// The helper's DLL as Cargo names it, and the two names it ships under.
+const HELPER_BUILT: &str = "jstream_browser_helper.dll";
+const HELPER_DLL: &str = "jstream-browser-helper.dll";
+const HELPER_EXE: &str = "jstream-browser-helper.exe";
+
+/// CEF's bootstrap exe in its distribution, which ships renamed [`HELPER_EXE`].
+const BOOTSTRAP: &str = "bootstrap.exe";
+
+/// The folder in the zip that holds the helper and CEF's runtime, where the hosts look.
+const BROWSER_DIR: &str = "browser";
+
+/// The files in CEF's distribution folder that only building needs, and the console
+/// variant of the bootstrap: none of them ship.
+const CEF_BUILD_ONLY: &[&str] = &["archive.json", "CMakeLists.txt", "bootstrapc.exe"];
+
+/// What the hosts must not import: CEF runs only in the helper (ADR-0048).
+const CEF_DLL: &str = "libcef.dll";
 
 /// The files the build leaves in `target/release` that go in the zip, beside each other.
 const BINARIES: &[&str] = &[
@@ -47,21 +75,30 @@ const CRT_STATIC: &str = "-Ctarget-feature=+crt-static";
 /// redistributable ones (`msvcr100.dll`, `msvcr120.dll`).
 const CRT_DLLS: &[&str] = &["vcruntime", "msvcp", "concrt", "vccorlib"];
 
-const USAGE: &str =
-    "usage: cargo xtask dist [--ui-dir <built UI folder>] [--out <folder>] [--revision <name>]";
+const USAGE: &str = "usage: cargo xtask dist [--ui-dir <built UI folder>] [--out <folder>] \
+     [--revision <name>] [--no-browser]";
 
 /// The text file at the top of the zip.
 const README: &str = "\
 JStream, portable
 
-Run jstream.exe. Nothing is installed, and nothing needs admin rights.
+Run jstream.exe. Nothing is installed, and nothing needs admin rights. The guide to a
+first scene, going live and recording:
+https://github.com/jeffmhopkins/JStream/blob/main/docs/GETTING-STARTED.md
 
 Settings, scenes and logs go in %APPDATA%\\JStream. To keep them in this folder instead
 (for a USB stick), create an empty file named `portable` (no extension) next to
 jstream.exe: they then go in the `data` folder here.
 
 jstream-daemon.exe is the engine without a window, and jstream-cli.exe controls it.
-jstream_vcam_windows.dll is the virtual camera, registered the first time you turn it on.
+jstream_vcam_windows.dll is the virtual camera. Registering it is optional: one admin
+prompt, only when you choose to.
+
+The browser folder holds the browser helper that runs web-page sources, sandboxed, with
+the Chromium Embedded Framework it uses (CEF; its licences are in browser\\CREDITS.html,
+its version in browser\\CEF-VERSION.txt). Keep it next to jstream.exe.
+
+Windows may warn that this app is from an unknown publisher: the alpha is not signed.
 ";
 
 /// Runs `cargo xtask dist`.
@@ -69,6 +106,7 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
     let mut ui_dir = None;
     let mut out = None;
     let mut revision = None;
+    let mut browser = true;
     let mut rest = args.iter();
     while let Some(arg) = rest.next() {
         let mut value = || {
@@ -80,6 +118,7 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
             "--ui-dir" => ui_dir = Some(value()?),
             "--out" => out = Some(value()?),
             "--revision" => revision = Some(value()?.to_string_lossy().into_owned()),
+            "--no-browser" => browser = false,
             _ => bail!("unknown argument `{arg}`\n{USAGE}"),
         }
     }
@@ -100,10 +139,19 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
             ui.display()
         );
     }
-    build_binaries(root)?;
+    build_binaries(root, browser)?;
+    let cef = if browser {
+        Some(build_helper(root)?)
+    } else {
+        None
+    };
     let release = target.join("release");
     for binary in BINARIES {
         check_no_crt_imports(&release.join(binary))?;
+        check_no_cef_imports(&release.join(binary))?;
+    }
+    if cef.is_some() {
+        check_no_crt_imports(&release.join(HELPER_BUILT))?;
     }
     let name = format!(
         "jstream-{}-windows-{}",
@@ -124,6 +172,9 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
     fs::write(stage.join("README.txt"), README.replace('\n', "\r\n"))
         .context("writing README.txt")?;
     copy_dir(&ui, &stage.join(UI_DIR))?;
+    if let Some(cef) = &cef {
+        stage_browser(cef, &release.join(HELPER_BUILT), &stage.join(BROWSER_DIR))?;
+    }
     let zip = out.join(format!("{name}.zip"));
     write_zip(&zip, &name, &files_under(&stage)?)?;
     eprintln!("wrote {}", zip.display());
@@ -144,22 +195,126 @@ fn build_ui(root: &Path, dist: &Path) -> Result<PathBuf> {
     Ok(dist.to_owned())
 }
 
-/// Builds the release binaries, with the C runtime linked statically.
-fn build_binaries(root: &Path) -> Result<()> {
+/// A release `cargo build` in `root`, with the C runtime linked statically.
+fn cargo_build(root: &Path) -> Command {
     let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
     let mut command = Command::new(cargo);
     command
         .args(["build", "--release", "--locked"])
-        .args(PACKAGES.iter().flat_map(|package| ["-p", package]))
         .current_dir(root);
     if let Some(flags) = with_crt_static(std::env::var("RUSTFLAGS").ok()) {
         command.env("RUSTFLAGS", flags);
+    }
+    command
+}
+
+/// Builds the release binaries, with the hosts' browser sources on when `browser` is.
+fn build_binaries(root: &Path, browser: bool) -> Result<()> {
+    let mut command = cargo_build(root);
+    command.args(PACKAGES.iter().flat_map(|package| ["-p", package]));
+    if browser {
+        command.args(["--features", HOST_FEATURES]);
     }
     let status = command.status().context("running cargo build")?;
     if !status.success() {
         bail!("cargo build failed: {status}");
     }
     Ok(())
+}
+
+/// Builds the browser helper's DLL with CEF, which downloads CEF's distribution and builds
+/// its wrapper (CMake and Ninja on the path), and returns the distribution's folder.
+fn build_helper(root: &Path) -> Result<PathBuf> {
+    let output = cargo_build(root)
+        .args(["-p", HELPER_PACKAGE, "--features", "cef"])
+        .arg("--message-format=json-render-diagnostics")
+        .stderr(std::process::Stdio::inherit())
+        .output()
+        .context("running cargo build for the browser helper")?;
+    if !output.status.success() {
+        bail!(
+            "cargo build of the browser helper failed: {} (it needs CMake and Ninja; \
+             --no-browser builds a zip without browser sources)",
+            output.status
+        );
+    }
+    let messages = String::from_utf8_lossy(&output.stdout);
+    cef_dir(&messages, |dir| dir.join(BOOTSTRAP).is_file())
+        .context("the build named no CEF distribution folder holding bootstrap.exe")
+}
+
+/// CEF's distribution folder, from Cargo's JSON `messages`: the link search path of
+/// `cef-dll-sys`'s build script that `is_cef` accepts (its other one is the wrapper's
+/// CMake output).
+fn cef_dir(messages: &str, is_cef: impl Fn(&Path) -> bool) -> Option<PathBuf> {
+    messages
+        .lines()
+        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+        .filter(|message| message["reason"] == "build-script-executed")
+        .filter(|message| {
+            message["package_id"]
+                .as_str()
+                .is_some_and(|id| id.contains("cef-dll-sys"))
+        })
+        .flat_map(|message| match &message["linked_paths"] {
+            serde_json::Value::Array(paths) => paths.clone(),
+            _ => Vec::new(),
+        })
+        .filter_map(|path| {
+            let path = path.as_str()?;
+            Some(PathBuf::from(path.strip_prefix("native=").unwrap_or(path)))
+        })
+        .find(|dir| is_cef(dir))
+}
+
+/// Whether the file `name`, at the top of CEF's distribution folder, ships: everything
+/// but what only building needs (import libraries and [`CEF_BUILD_ONLY`]) and the
+/// bootstrap exe, which ships renamed.
+fn ships_from_cef(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    !(lower.ends_with(".lib")
+        || lower == BOOTSTRAP
+        || CEF_BUILD_ONLY
+            .iter()
+            .any(|only| only.eq_ignore_ascii_case(name)))
+}
+
+/// What `CEF-VERSION.txt` says: the CEF distribution the runtime came from, as named in
+/// its `archive.json` (CEF's and Chromium's versions), so the zip names the revisions
+/// its LGPL parts were built from (ADR-0021).
+fn cef_version_text(archive_json: &str) -> Result<String> {
+    let archive: serde_json::Value =
+        serde_json::from_str(archive_json).context("reading CEF's archive.json")?;
+    let name = archive["name"]
+        .as_str()
+        .context("CEF's archive.json names no archive")?;
+    let name = name.strip_suffix(".tar.bz2").unwrap_or(name);
+    Ok(format!(
+        "{name}\n\nThe Chromium Embedded Framework, from https://cef-builds.spotifycdn.com.\n\
+         Its sources and Chromium's: https://bitbucket.org/chromiumembedded/cef.\n"
+    ))
+}
+
+/// Lays the browser helper out in `to` as it ships: CEF's runtime files from `cef`, its
+/// `locales`, its bootstrap exe renamed [`HELPER_EXE`] beside the helper's DLL `dll`
+/// renamed [`HELPER_DLL`], and `CEF-VERSION.txt`.
+fn stage_browser(cef: &Path, dll: &Path, to: &Path) -> Result<()> {
+    fs::create_dir_all(to).with_context(|| format!("creating {}", to.display()))?;
+    for entry in fs::read_dir(cef).with_context(|| format!("reading {}", cef.display()))? {
+        let entry = entry?;
+        let name = entry.file_name();
+        if entry.file_type()?.is_file() && name.to_str().is_some_and(ships_from_cef) {
+            copy(&entry.path(), &to.join(&name))?;
+        }
+    }
+    copy_dir(&cef.join("locales"), &to.join("locales"))?;
+    copy(&cef.join(BOOTSTRAP), &to.join(HELPER_EXE))?;
+    copy(dll, &to.join(HELPER_DLL))?;
+    let archive = fs::read_to_string(cef.join("archive.json"))
+        .with_context(|| format!("reading {}", cef.join("archive.json").display()))?;
+    let text = cef_version_text(&archive)?;
+    fs::write(to.join("CEF-VERSION.txt"), text.replace('\n', "\r\n"))
+        .context("writing CEF-VERSION.txt")
 }
 
 /// The `RUSTFLAGS` to build with: `None` keeps `.cargo/config.toml`'s flags (no variable
@@ -181,6 +336,20 @@ fn check_no_crt_imports(path: &Path) -> Result<()> {
     if !crt.is_empty() {
         bail!(
             "{} imports the Visual C++ runtime ({crt:?}): it must link it statically (crt-static)",
+            path.display()
+        );
+    }
+    Ok(())
+}
+
+/// Fails when the PE image at `path` imports CEF: the hosts only start the browser helper,
+/// and CEF runs in it alone (ADR-0048).
+fn check_no_cef_imports(path: &Path) -> Result<()> {
+    let image = fs::read(path).with_context(|| format!("reading {}", path.display()))?;
+    let dlls = imported_dlls(&image).with_context(|| format!("reading {}", path.display()))?;
+    if dlls.iter().any(|dll| dll == CEF_DLL) {
+        bail!(
+            "{} imports {CEF_DLL}: CEF must run only in the browser helper (ADR-0048)",
             path.display()
         );
     }
@@ -450,8 +619,12 @@ fn zip_bytes(entries: &[(String, Vec<u8>)]) -> Result<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{CRT_STATIC, Pe, imported_dlls, is_crt, with_crt_static, zip_bytes};
+    use super::{
+        CRT_STATIC, Pe, cef_dir, cef_version_text, imported_dlls, is_crt, ships_from_cef,
+        with_crt_static, zip_bytes,
+    };
     use std::io::Read;
+    use std::path::{Path, PathBuf};
 
     fn u16_at(bytes: &[u8], at: usize) -> usize {
         usize::from(u16::from_le_bytes([bytes[at], bytes[at + 1]]))
@@ -655,5 +828,62 @@ mod tests {
         let mut image = pe(&["KERNEL32.dll"], &[]);
         image.truncate(0x200 + 4);
         assert!(imported_dlls(&image).is_err(), "a truncated import table");
+    }
+
+    #[test]
+    fn the_cef_folder_comes_from_cef_dll_sys_link_paths() {
+        let messages = [
+            r#"{"reason":"compiler-artifact","package_id":"registry+https://github.com/rust-lang/crates.io-index#cef-dll-sys@154.5.0+154.0.34"}"#,
+            "not json",
+            r#"{"reason":"build-script-executed","package_id":"path+file:///c/x#jstream-browser@0.0.0","linked_paths":["native=C:\\other"]}"#,
+            r#"{"reason":"build-script-executed","package_id":"registry+https://github.com/rust-lang/crates.io-index#cef-dll-sys@154.5.0+154.0.34","linked_paths":["native=C:\\out\\build","native=C:\\out\\cef_windows_x86_64"]}"#,
+        ]
+        .join("\n");
+        let is_cef = |dir: &Path| dir.to_string_lossy().ends_with("cef_windows_x86_64");
+        assert_eq!(
+            cef_dir(&messages, is_cef),
+            Some(PathBuf::from("C:\\out\\cef_windows_x86_64"))
+        );
+        assert_eq!(cef_dir(&messages, |_| false), None);
+        assert_eq!(cef_dir("", is_cef), None);
+    }
+
+    #[test]
+    fn only_cef_runtime_files_ship() {
+        for name in [
+            "libcef.dll",
+            "chrome_elf.dll",
+            "icudtl.dat",
+            "resources.pak",
+            "v8_context_snapshot.bin",
+            "vk_swiftshader_icd.json",
+            "CREDITS.html",
+        ] {
+            assert!(ships_from_cef(name), "{name}");
+        }
+        for name in [
+            "libcef.lib",
+            "cef_sandbox.LIB",
+            "archive.json",
+            "CMakeLists.txt",
+            "bootstrap.exe",
+            "bootstrapc.exe",
+        ] {
+            assert!(!ships_from_cef(name), "{name}");
+        }
+    }
+
+    #[test]
+    fn the_cef_version_names_the_archive() {
+        let text = cef_version_text(
+            r#"{"type":"minimal","name":"cef_binary_154.0.34+g1+chromium-154.0.7795.1_windows64_minimal.tar.bz2","sha1":"ab"}"#,
+        )
+        .unwrap_or_else(|e| panic!("{e:#}"));
+        assert!(
+            text.starts_with("cef_binary_154.0.34+g1+chromium-154.0.7795.1_windows64_minimal\n"),
+            "{text}"
+        );
+        assert!(cef_version_text("{}").is_err());
+        assert!(cef_version_text("not json").is_err());
     }
 }
