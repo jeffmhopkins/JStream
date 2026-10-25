@@ -776,6 +776,30 @@ fn encoder_infos() -> Vec<EncoderProfileInfo> {
                 ..EncoderProfile::DEFAULT
             },
         },
+        // HEVC and AV1 (0.41), for enhanced RTMP.
+        EncoderProfileInfo {
+            profile_id: EncoderProfileId::new("enc_hevc"),
+            name: "HEVC stream".into(),
+            profile: EncoderProfile {
+                video: VideoEncoding {
+                    codec: VideoCodec::Hevc,
+                    hardware: HardwarePreference::Require,
+                    ..EncoderProfile::DEFAULT.video
+                },
+                ..EncoderProfile::DEFAULT
+            },
+        },
+        EncoderProfileInfo {
+            profile_id: EncoderProfileId::new("enc_av1"),
+            name: "AV1 stream".into(),
+            profile: EncoderProfile {
+                video: VideoEncoding {
+                    codec: VideoCodec::Av1,
+                    ..EncoderProfile::DEFAULT.video
+                },
+                ..EncoderProfile::DEFAULT
+            },
+        },
     ]
 }
 

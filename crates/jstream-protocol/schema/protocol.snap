@@ -7858,11 +7858,21 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "VideoCodec": {
-      "description": "A video codec. Serialized as a snake_case string.",
+      "description": "A video codec. Serialized as a snake_case string. Streams carry HEVC and AV1 in\nenhanced RTMP; a recording takes H.264 only so far, and its start fails with another.\nA machine with no encoder for the codec, or none that fits the profile's\n`hardware`, fails `output.start`.",
       "oneOf": [
         {
           "const": "h264",
           "description": "H.264 (AVC).",
+          "type": "string"
+        },
+        {
+          "const": "hevc",
+          "description": "HEVC (H.265). Since 0.41.",
+          "type": "string"
+        },
+        {
+          "const": "av1",
+          "description": "AV1. Since 0.41.",
           "type": "string"
         }
       ]
@@ -8334,5 +8344,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.39"
+  "title": "JStream protocol 0.41"
 }

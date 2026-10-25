@@ -1520,9 +1520,11 @@ stream: a stand-in Baseline 3.0 SPS with no frame size made Windows refuse the
 recordings and YouTube drop the publish. Only the fake encoder sends a bare first
 H.264 keyframe; until the muxer has a decoder configuration, such a keyframe gets
 stand-in parameter sets in front (`with_parameter_sets`). A later one goes out as it
-is, since a stand-in SPS would replace the encoder's own, which shares its id. The protocol's `VideoCodec` names
-only H.264 so far, so a profile can't select HEVC or AV1 yet. MP4 recording takes H.264
-only: another codec fails the start with `recording … is not supported yet`.
+is, since a stand-in SPS would replace the encoder's own, which shares its id. The
+protocol's `VideoCodec` names H.264, HEVC and AV1 (the last two since 0.41), and each
+maps to the platform codec of the same name; a machine without that encoder fails the
+start when the encoder opens. MP4 recording takes H.264 only: another codec fails the
+start with `recording … is not supported yet`.
 
 **Virtual camera.** `with_backends` takes the backends' `VcamSink` out and keeps it for
 the engine's life. When the collection's output is `VirtualCam`, the start takes that

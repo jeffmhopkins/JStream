@@ -82,7 +82,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Hotkeys** (`hotkey.rs`, [ADR-0024 §5](../../docs/adr/0024-scene-structure.md)):
   `Chord`, a key chord string with one spelling per chord (`Chord::problem`, shared by
   every implementation), and `HotkeyBinding`, a chord and its action as reads report it.
-- **Encoder profiles** (`encoder.rs`): `EncoderProfile` (H.264 and AAC, with rate
+- **Encoder profiles** (`encoder.rs`): `EncoderProfile` (H.264, HEVC or AV1 and AAC, with rate
   control, keyframe interval and hardware preference), its range checks
   (`EncoderProfile::problem`, shared by every implementation), `EncoderProfileInfo`,
   and `EncoderSessionInfo`, the per-output sharing and cost `output.status` reports
@@ -179,8 +179,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.39 because of keyframe
-  scenes (`scene.create_variant`, `item.clear_override`, `SceneInfo`'s `variant_of` and
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.41 because of the
+  `VideoCodec` values `hevc` and `av1`, which an encoder profile now accepts; 0.39 added
+  keyframe scenes (`scene.create_variant`, `item.clear_override`, `SceneInfo`'s `variant_of` and
   `overrides`, the batch result's `dropped_overrides`, and placement edits whose
   `scene_id` names a keyframe scene); 0.38 added YouTube audience stats and the quota
   estimate (the `youtube.stats` event and query, `AudienceStatsInfo`, `QuotaInfo`,
@@ -649,12 +650,14 @@ never quote the key.
 Encoder profiles (0.13) are collection state as well
 ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
 `encoder.create` and `encoder.update` take a `profile_id`, a `name` and an
-`EncoderProfile`: H.264 video with `cbr` or `vbr` rate control (100..=100000 kbit/s;
+`EncoderProfile`: H.264, HEVC or AV1 (the last two since 0.41) video with `cbr` or `vbr` rate control (100..=100000 kbit/s;
 a `vbr` peak at least the average and at most 200000), a keyframe interval of 1..=10 s
 and a hardware preference (`prefer`, `require` or `avoid`, which an omitted field
 means), and AAC audio
 at 32..=320 kbit/s. Anything else, including a value a newer server sent as `unknown`,
-is refused with `invalid_argument` naming the field. `encoder.delete` is refused while
+is refused with `invalid_argument` naming the field. Whether the machine has an encoder
+for the codec is not checked there, since a profile is valid on any machine: an
+`output.start` on a machine with none fails. `encoder.delete` is refused while
 an output uses the profile. `output.set_encoder` points an output at a profile, or with
 no `profile_id` back at the engine's default (H.264 CBR 2500 kbit/s, a keyframe every
 2 s, hardware when there is one, AAC 160 kbit/s). Both apply from the output's next `output.start`.
