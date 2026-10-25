@@ -2758,11 +2758,11 @@ fn render_loop(job: RenderJob) {
 /// thread, once per program stage.
 ///
 /// Once it is done, the render thread moves the captures to the CPU path
-/// ([`RenderCaptures::leave_gpu`], which lets go of the held frames first) and puts the
-/// new compositor in place of the old one, which goes on the render thread: it is owned
-/// there and never shared, so it is not the collector's to free (R-RT-003). The context
-/// itself stays until the render loop ends, after the captures have stopped, as its
-/// platform state requires (README › GPU frames).
+/// ([`RenderCaptures::leave_gpu`], which first lets go of the frames on the context's
+/// device) and puts the new compositor in place of the old one, which goes on the render
+/// thread: it is owned there and never shared, so it is not the collector's to free
+/// (R-RT-003). The context itself stays until the render loop ends, after the captures
+/// have stopped, as its platform state requires (README › GPU frames).
 ///
 /// A lost device (#349) starts one too, at once: on the context it leaves the GPU path as
 /// above, and on the render thread's own device it opens the compositor on a new one

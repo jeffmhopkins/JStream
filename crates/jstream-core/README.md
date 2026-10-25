@@ -261,8 +261,8 @@ state machine. Contents:
   on program from the fake video devices, shared between sources, closed when it leaves
   or the output stops, and closed when unplugged with the output staying up
   (`src/tests/cpu_pipeline/captures.rs`), the format a webcam opens in, with and
-  without an MJPEG decoder, and its frames, decoded or not, read as RGBA
-  (`runtime/captures.rs`), which capture path an output takes and each
+  without an MJPEG decoder, its frames, decoded or not, read as RGBA, and a webcam
+  left running, and not opened twice, when the GPU path is left (`runtime/captures.rs`), which capture path an output takes and each
   fallback, an output compositing GPU capture frames (opaque, whatever alpha the
   texture holds), a browser page painting on
   the stage's context, composited as premultiplied red and given back the device when
@@ -2005,9 +2005,11 @@ a row on the context, a third of a second, the render thread leaves it once. A
 takes the collection lock) and opens the compositor on a device of its own, while the
 render thread keeps repeating the last frames (black under the privacy screen, which
 fails closed) and adopting snapshots. Then the render
-thread lets go of the frames it holds, has the `jstream-capture` thread drop its GPU
-backend and start every capture again on the CPU path (a start asked for before is
-stopped when it comes back), and takes the new compositor. Until the re-planned snapshot
+thread lets go of the frames it holds on the context's device, has the `jstream-capture` thread drop its GPU
+backend and start every display and window capture again on the CPU path (a start asked
+for before is stopped when it comes back), and takes the new compositor. A webcam or
+capture card is on the CPU path already, so it keeps running and keeps its frame, and
+one still starting takes the stream it asked for: most devices open only once (#734). Until the re-planned snapshot
 arrives, the pages' frames, carrying the context's key, draw nothing on it. The fallback
 is logged as a warning and counted (`OutputStats::gpu_fallbacks`). The output fails at
 once if the compositor can't open on its own device, the fallback panics, or it isn't
