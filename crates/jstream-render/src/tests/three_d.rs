@@ -821,6 +821,82 @@ fn each_crop_gets_its_own_chain() {
     );
 }
 
+/// A 3D item of an image with more texels than its extent (ADR-0073) builds its chain
+/// from its crop in texels (`Region::in_texels`), and maps its texture coordinates by
+/// the texels too (#791). The 128² image is placed as 64², cropped in those pixels, and
+/// split inside the crop into a green left and a blue right, with red past the crop. A
+/// crop read as texels, the extent and texels swapped, or a remap divided by the extent
+/// each shows red, or the green half where the blue one belongs.
+#[test]
+fn a_dense_cropped_item_samples_only_its_crop_in_texels() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    const TEXELS: u32 = 2 * SOURCE;
+    let crop = Crop {
+        left: 17,
+        top: 13,
+        right: 12,
+        bottom: 16,
+    };
+    // The crop in texels: every edge doubles.
+    let (left, top) = (2 * crop.left, 2 * crop.top);
+    let (right, bottom) = (TEXELS - 2 * crop.right, TEXELS - 2 * crop.bottom);
+    let middle = (left + right) / 2;
+    let mut rgba = Vec::with_capacity((TEXELS * TEXELS * 4) as usize);
+    for y in 0..TEXELS {
+        for x in 0..TEXELS {
+            rgba.extend(
+                if !(left..right).contains(&x) || !(top..bottom).contains(&y) {
+                    [255, 0, 0, 255]
+                } else if x < middle {
+                    [0, 200, 0, 255]
+                } else {
+                    [0, 0, 220, 255]
+                },
+            );
+        }
+    }
+    let mut image = compositor
+        .upload_rgba8(TEXELS, TEXELS, &rgba)
+        .expect("uploads");
+    image.set_extent(FrameSize::new(SOURCE, SOURCE).expect("non-zero"));
+    // Tilted a little, so it is drawn in 3D, and shown larger than its crop.
+    let item = geometry(
+        (120.0, 68.0),
+        (100.0, 100.0),
+        0.0,
+        10.0,
+        0.0,
+        0.0,
+        Some(250.0),
+    );
+    let got = draw(compositor, &[item], &image, crop);
+    let near = |x: u32, want: [u8; 3]| {
+        let pixel = got.pixel(x, 68).expect("inside");
+        let close = pixel[..3]
+            .iter()
+            .zip(want)
+            .all(|(got, want)| got.abs_diff(want) <= 2);
+        assert!(close, "at x {x}: {pixel:?}, not {want:?}");
+    };
+    // The crop's left half on the item's left, its right half on the right.
+    near(95, [0, 200, 0]);
+    near(145, [0, 0, 220]);
+    let mut worst = 0u8;
+    for y in 0..HEIGHT {
+        for x in 0..WIDTH {
+            worst = worst.max(got.pixel(x, y).expect("inside")[0]);
+        }
+    }
+    // Only the dark grey background (20) has any red.
+    assert!(
+        worst <= BACKGROUND[0] + 2,
+        "red from past the crop reaches the item: red {worst}"
+    );
+}
+
 /// "Accepted means drawable" through the frame path itself (#629 round 2 B4): a scene of
 /// the most extreme 3D items `check_drawable` accepts, on thin sources and an ordinary
 /// one, renders, as `jstream-core`'s render thread calls it, instead of failing the frame.
