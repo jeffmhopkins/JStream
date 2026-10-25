@@ -86,10 +86,11 @@ pub fn scrub_delta(px: f64, step: f64, keys: Keys) -> f64 {
 }
 
 /// A drag across the field: where it started, how far it has gone, and the value so far.
+/// `last` is the pointer's position along the drag's axis, growing towards larger values.
 #[derive(Clone, Copy, Debug)]
 struct Scrub {
     pointer: i32,
-    last_x: f64,
+    last: f64,
     started: bool,
     value: f64,
 }
@@ -106,6 +107,10 @@ pub fn NumberField(
     /// names it already).
     #[prop(optional, into)]
     named: Option<Signal<String>>,
+    /// Stacks + over the input over − with the unit below, for a narrow column, and
+    /// scrubs up and down, up for larger values.
+    #[prop(optional)]
+    vertical: bool,
     /// The unit after the number, such as `px`.
     #[prop(optional)]
     unit: &'static str,
@@ -128,7 +133,7 @@ pub fn NumberField(
     /// Takes each new value, and says whether it sent an edit; when it didn't, the field
     /// shows the committed value again.
     send: impl Fn(f64) -> bool + Copy + Send + Sync + 'static,
-) -> impl IntoView {
+) -> AnyView {
     // The value a drag shows before its release sends it.
     let dragged = RwSignal::new(None::<f64>);
     // Bumped to show the committed value again after cancelled or refused text.
@@ -209,6 +214,14 @@ pub fn NumberField(
             a == el
         })
     };
+    // The pointer along the drag's axis: right, or up in a vertical field.
+    let along = move |event: &ev::PointerEvent| {
+        if vertical {
+            -f64::from(event.client_y())
+        } else {
+            f64::from(event.client_x())
+        }
+    };
     let on_down = move |event: ev::PointerEvent| {
         if event.button() != 0 || focused() {
             return;
@@ -219,7 +232,7 @@ pub fn NumberField(
         dragged.set(None);
         scrub.set_value(Some(Scrub {
             pointer: event.pointer_id(),
-            last_x: f64::from(event.client_x()),
+            last: along(&event),
             started: false,
             value: v,
         }));
@@ -235,9 +248,9 @@ pub fn NumberField(
             dragged.set(None);
             return;
         }
-        let x = f64::from(event.client_x());
+        let x = along(&event);
         if !s.started {
-            if (x - s.last_x).abs() < SCRUB_PX {
+            if (x - s.last).abs() < SCRUB_PX {
                 return;
             }
             s.started = true;
@@ -253,8 +266,8 @@ pub fn NumberField(
         };
         // Each move adds its own travel at the modifiers held now, so pressing or
         // releasing one mid-drag never makes the value jump.
-        s.value = (s.value + scrub_delta(x - s.last_x, step, keys)).clamp(min, max);
-        s.last_x = x;
+        s.value = (s.value + scrub_delta(x - s.last, step, keys)).clamp(min, max);
+        s.last = x;
         scrub.set_value(Some(s));
         dragged.set(Some(settle(s.value, min, max, decimals)));
     };
@@ -273,34 +286,61 @@ pub fn NumberField(
     };
 
     let name = move || named.map_or_else(|| label.to_owned(), |n| n.get());
+    let field = move || {
+        view! {
+            <input
+                type="text"
+                inputmode="decimal"
+                class="mono"
+                aria-label=name
+                title="Drag to change · Shift: fine · Ctrl: coarse · or type a value"
+                node_ref=input
+                disabled=disabled
+                prop:value=text
+                on:change=on_change
+                on:keydown=on_key
+                on:pointerdown=on_down
+                on:pointermove=on_move
+                on:pointerup=on_up
+                on:pointercancel=on_cancel
+            />
+        }
+    };
+    let decrease = move || {
+        view! {
+            <button type="button" tabindex="-1" aria-label=move || format!("Decrease {}", name())
+                disabled=disabled on:click=move |_| nudge(-step)>"−"</button>
+        }
+    };
+    let increase = move || {
+        view! {
+            <button type="button" tabindex="-1" aria-label=move || format!("Increase {}", name())
+                disabled=disabled on:click=move |_| nudge(step)>"+"</button>
+        }
+    };
+    if vertical {
+        return view! {
+            <label class="number-field vertical">
+                {increase()}
+                {field()}
+                {decrease()}
+                <span class="unit">{unit}</span>
+            </label>
+        }
+        .into_any();
+    }
     view! {
         <label class="number-field">
             {named.is_none().then(|| view! { <span class="field-label">{label}</span> })}
             <span class="stepper">
-                <button type="button" tabindex="-1" aria-label=move || format!("Decrease {}", name())
-                    disabled=disabled on:click=move |_| nudge(-step)>"−"</button>
-                <input
-                    type="text"
-                    inputmode="decimal"
-                    class="mono"
-                    aria-label=name
-                    title="Drag to change · Shift: fine · Ctrl: coarse · or type a value"
-                    node_ref=input
-                    disabled=disabled
-                    prop:value=text
-                    on:change=on_change
-                    on:keydown=on_key
-                    on:pointerdown=on_down
-                    on:pointermove=on_move
-                    on:pointerup=on_up
-                    on:pointercancel=on_cancel
-                />
+                {decrease()}
+                {field()}
                 <span class="unit">{unit}</span>
-                <button type="button" tabindex="-1" aria-label=move || format!("Increase {}", name())
-                    disabled=disabled on:click=move |_| nudge(step)>"+"</button>
+                {increase()}
             </span>
         </label>
     }
+    .into_any()
 }
 
 #[cfg(test)]
