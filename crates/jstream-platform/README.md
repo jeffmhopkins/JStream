@@ -49,7 +49,8 @@ Contents:
   `wgpu::Texture`, its `VideoFrameInfo` and an `Arc<dyn FrameSync>`; `GpuFrame::stage`
   stages its fence wait and signal around the engine's next submit, and
   `FrameSync::platform` lets the platform that made a hold recognise it (`None` by
-  default). Frames compare by texture, hold and info.
+  default). `GpuContext::submit_lock` is the context's `SubmitLock`, which orders the
+  submits on its queue around that staging. Frames compare by texture, hold and info.
 - **Capture:** `Capture` (`Send + Sync`) lists displays and windows and starts a
   `CaptureStream` (`Send`). The backend's capture thread fills a single-slot
   "latest frame" mailbox, as in
@@ -166,8 +167,8 @@ Contents:
   process), and `start`s a host for a `HostRequest` (file, plugin id, the block's
   `Config` and a saved state): it creates the block initialised with that
   configuration, starts the process on it and sends `Start`. A `PluginHost` (`Send`)
-  gives the block as a `HostBlock` (an `Arc` of anything that is `AsRef<Shared>`) for
-  the mixer's CLAP filter, says whether the process has `exited`, receives control
+  gives the block as a `HostBlock` (an `Arc<EngineBlock>`: the mapping, and the miss
+  counts the engine keeps beside it) for the mixer's CLAP filter and the supervisor, says whether the process has `exited`, receives control
   messages without waiting (`try_recv`), `send`s them (false once the host is gone),
   and is ended by `kill` or by dropping it. Deciding when to restart or give up is the
   engine's job, not this trait's. The engine holds it apart from `Backends`.
@@ -231,7 +232,8 @@ Contents:
   only then beats the heartbeat, copies each input block to the output under the same
   number, answers `SaveState` and ends on `Stop` or the `stop` word. A test makes it
   `crash` (it exits) or `hang` (the heartbeat stops but it hasn't exited) through its
-  `FakeHostControl`, which also records what the host received. The crate's tests drive every trait through trait objects only,
+  `FakeHostControl`, which also records what the host received and makes it `send` any
+  message, as a broken or hostile host would. The crate's tests drive every trait through trait objects only,
   keeping the concrete fakes for test-side controls and probes, and check the
   `Send`/`Sync` bounds above.
 
@@ -327,6 +329,14 @@ The earlier proposed default (keep `wgpu` out of this crate) is dropped for this
   queue's next submit, whichever it is. That submit ends by transitioning the texture to
   `wgpu::TextureUses::PRESENT`, the D3D12 `COMMON` state the platform's other APIs
   expect, as S1 did.
+- **`SubmitLock`** (`GpuContext::submit_lock`, shared by clones) keeps another thread's
+  submit from taking what render staged. "The next submit" is the queue's, not the
+  thread's, and render is not the only thread that submits on a context's queue: the
+  browser source copies its pages' paints on it. So render holds the lock from its
+  first `stage` through its submit, and every other thread holds it around its own
+  submits on that queue (the Linux backend's capture copies and NV12 submits don't
+  take it yet, #694). Holders keep it only while recording and submitting, never
+  across a wait for the GPU. A device render opens for itself has a lock of its own.
 - **Encoders and the virtual camera** accept `VideoSurface::Gpu` from the same platform.
   The encoders reach the context through `Codecs::on_context`, a default method like
   `Capture::on_context`. They wait on the D3D11 side for the value the last write

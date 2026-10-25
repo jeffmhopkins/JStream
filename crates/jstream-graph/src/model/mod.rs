@@ -53,6 +53,11 @@
 //! - Folder and label IDs are non-empty and unique within their kind. Every scene's
 //!   folder and every folder's parent exists, and no folder sits inside itself. Every
 //!   label a source carries exists (ADR-0024 §3 and §4).
+//! - A keyframe scene's (a variant's, ADR-0024 §2) `variant_of` names an existing scene
+//!   that is not a variant. A variant has no items, no folder and the role `scene`, and
+//!   each of its overrides names an item of its parent's own and sets at least one
+//!   field, each valid as the item's own would be: a geometry placement, an opacity
+//!   in [0, 1]. The variant depends on its parent, so the cycle check counts that edge.
 //!
 //! The structs have private fields so that later additions (the full 3D transform,
 //! chains on buses and outputs) don't break callers.
@@ -67,9 +72,15 @@ use jstream_protocol::{
     TransitionPresetInfo, TransitionsInfo, VideoMix as MixSpec, VideoMixId,
     builtin_transition_kinds, initial_preset,
 };
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
 pub use jstream_protocol::MAX_CHAIN_FILTERS;
+
+/// A keyframe scene's overrides of its parent's items (ADR-0049 §1): per item, the
+/// fields it sets, each a whole value. An overridden geometry is always a
+/// [`Placement::Geometry`].
+pub type Overrides = jstream_anim::Keyframe<ItemId, Placement, Crop>;
 
 /// The scene graph of one collection, its revision, and the kinds it can create.
 ///
@@ -358,6 +369,49 @@ impl State {
         self.scenes.iter().position(|s| &s.id == id)
     }
 
+    /// The keyframe scenes of `parent`, in display order.
+    pub fn variants_of<'a>(&'a self, parent: &'a SceneId) -> impl Iterator<Item = &'a Scene> {
+        self.scenes
+            .iter()
+            .filter(move |s| s.variant_of.as_ref() == Some(parent))
+    }
+
+    /// The items `scene` draws, bottom first: its own, or for a keyframe scene its
+    /// parent's at their effective values, each overridden field taking the variant's
+    /// value and every other field the parent's current one (ADR-0049 §1).
+    pub fn shown_items<'a>(&'a self, scene: &'a Scene) -> Vec<Cow<'a, Item>> {
+        let Some(parent) = scene.variant_of.as_ref().and_then(|id| self.scene(id)) else {
+            return scene.items.iter().map(Cow::Borrowed).collect();
+        };
+        parent
+            .items
+            .iter()
+            .map(|item| match scene.overrides.get(&item.id) {
+                None => Cow::Borrowed(item),
+                Some(o) => {
+                    let props = o.apply(&item.props());
+                    Cow::Owned(Item {
+                        placement: props.geometry,
+                        crop: props.crop,
+                        visible: props.visible,
+                        // An override's opacity was checked to be in [0, 1] when it
+                        // was written; the parent's is kept if it somehow isn't.
+                        opacity: Finite32::new(props.opacity).unwrap_or(item.opacity),
+                        ..item.clone()
+                    })
+                }
+            })
+            .collect()
+    }
+
+    /// The scene a keyframe scene shows the items of, or the scene itself: the head of
+    /// its family (ADR-0049 §3).
+    pub fn family_of<'a>(&'a self, scene: &'a SceneId) -> &'a SceneId {
+        self.scene(scene)
+            .and_then(|s| s.variant_of.as_ref())
+            .unwrap_or(scene)
+    }
+
     /// The (scene, item) indexes of an item.
     pub(crate) fn item_index(&self, id: &ItemId) -> Option<(usize, usize)> {
         self.scenes
@@ -486,6 +540,9 @@ pub struct Filter {
     pub(crate) kind: String,
     pub(crate) enabled: bool,
     pub(crate) settings: Settings,
+    /// For a filter loaded while its kind was missing, the kind version the file
+    /// recorded, which a save keeps while the kind is still missing.
+    pub(crate) unknown_kind_version: Option<u32>,
 }
 
 impl Filter {
@@ -605,6 +662,10 @@ pub struct Scene {
     pub(crate) folder: Option<FolderId>,
     pub(crate) meta: SceneMeta,
     pub(crate) items: Vec<Item>,
+    /// The scene it is a keyframe scene of, if it is one.
+    pub(crate) variant_of: Option<SceneId>,
+    /// A keyframe scene's overrides; always empty for any other scene.
+    pub(crate) overrides: Overrides,
 }
 
 impl Scene {
@@ -643,9 +704,20 @@ impl Scene {
         &self.meta
     }
 
-    /// Its items in stacking order: the first is at the bottom.
+    /// Its own items in stacking order: the first is at the bottom. A keyframe scene
+    /// has none; [`State::shown_items`] gives what it draws.
     pub fn items(&self) -> &[Item] {
         &self.items
+    }
+
+    /// The scene it is a keyframe scene of (ADR-0024 §2), if it is one.
+    pub fn variant_of(&self) -> Option<&SceneId> {
+        self.variant_of.as_ref()
+    }
+
+    /// A keyframe scene's overrides of its parent's items; empty for any other scene.
+    pub fn overrides(&self) -> &Overrides {
+        &self.overrides
     }
 }
 
@@ -785,6 +857,16 @@ impl Item {
     /// Its transition settings (ADR-0029 §6).
     pub fn transition(&self) -> &ItemTransition {
         &self.transition
+    }
+
+    /// Its keyable values, as a keyframe scene's overrides apply over them.
+    pub fn props(&self) -> jstream_anim::Props<Placement, Crop> {
+        jstream_anim::Props {
+            geometry: self.placement,
+            crop: self.crop,
+            visible: self.visible,
+            opacity: self.opacity.get(),
+        }
     }
 }
 

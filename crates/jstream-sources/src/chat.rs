@@ -418,20 +418,23 @@ fn fit(
     style: &Style,
     limits: &Limits,
 ) -> Result<(FrameSize, Vec<u8>), SourceError> {
+    let drawn = |style: &Style| {
+        render(font, text, style, 1.0, limits).map(|drawn| (drawn.size, drawn.rgba))
+    };
     let Some(wrap) = style.wrap_width else {
-        return render(font, text, style, limits);
+        return drawn(style);
     };
     let unwrapped = Style {
         wrap_width: None,
         ..*style
     };
-    let first = render(font, text, &unwrapped, limits);
+    let first = drawn(&unwrapped);
     if matches!(&first, Ok(drawn) if drawn.0.width() <= wrap) {
         return first;
     }
     // Freed before the wrapped draw, so the two never count against memory together.
     drop(first);
-    render(font, text, style, limits)
+    drawn(style)
 }
 
 /// `text` as one paragraph of plain text: line breaks and other control characters

@@ -18,8 +18,8 @@ use crate::{Graph, Placement, audio};
 use jstream_protocol::{
     Action, BlendMode, BusId, Canvas, Chord, Crop, Easing, Edit, EncoderProfile, EncoderProfileId,
     FilterChain, FilterId, FilterOwner, Finite32, FolderId, INITIAL_PRESET, ItemGeometry, ItemId,
-    ItemTransform, ItemTransition, LabelId, OutputId, OutputKind, ProtocolError, Rev, SceneId,
-    SceneMeta, SceneRole, Settings, SourceAudio, SourceId, SourceKind, SourceMeta,
+    ItemOverride, ItemTransform, ItemTransition, LabelId, OutputId, OutputKind, ProtocolError, Rev,
+    SceneId, SceneMeta, SceneRole, Settings, SourceAudio, SourceId, SourceKind, SourceMeta,
     TransitionPresetId, VideoMix, VideoMixId,
 };
 use serde::{Deserialize, Serialize};
@@ -217,6 +217,12 @@ struct FileScene {
     favourite: bool,
     #[serde(default = "yes", skip_serializing_if = "is_true")]
     show_in_multiview: bool,
+    /// The scene it is a keyframe scene of (ADR-0024 §2); omitted for any other scene.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    variant_of: Option<SceneId>,
+    /// A keyframe scene's overrides, in item ID order; omitted when there are none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    overrides: Vec<ItemOverride>,
     /// Bottom first.
     items: Vec<FileItem>,
 }
@@ -424,7 +430,10 @@ impl Graph {
             .map(|filter| FileFilter {
                 id: filter.id.clone(),
                 kind: filter.kind.clone(),
-                kind_version: self.kinds.get(&filter.kind).map(|k| k.version),
+                kind_version: match self.kinds.get(&filter.kind) {
+                    Some(kind) => Some(kind.version),
+                    None => filter.unknown_kind_version,
+                },
                 enabled: filter.enabled,
                 settings: filter.settings.clone(),
             })
@@ -455,6 +464,12 @@ impl Graph {
                     color: scene.meta.color.clone(),
                     favourite: scene.meta.favourite,
                     show_in_multiview: scene.meta.show_in_multiview,
+                    variant_of: scene.variant_of.clone(),
+                    overrides: scene
+                        .overrides
+                        .iter()
+                        .map(|(item_id, o)| crate::keyframe::to_info(item_id, o))
+                        .collect(),
                     items: scene
                         .items
                         .iter()
@@ -611,12 +626,25 @@ impl Graph {
             kinds: self.kinds,
         };
         for (object, edit) in rebuild(&graph, &file)? {
-            graph
-                .apply(std::slice::from_ref(&edit), None)
-                .map_err(|error| LoadError::Invalid {
-                    object,
-                    error: Box::new(error),
-                })?;
+            let applied = match &edit {
+                Edit::FilterAdd {
+                    owner,
+                    chain,
+                    filter_id,
+                    kind,
+                    ..
+                } if !graph.kinds.contains_key(kind) => crate::filter::add_unknown_kind(
+                    &mut graph.state,
+                    &graph.kinds,
+                    &edit,
+                    file_filter_version(&file, owner, *chain, filter_id),
+                ),
+                _ => graph.apply(std::slice::from_ref(&edit), None).map(|_| ()),
+            };
+            applied.map_err(|error| LoadError::Invalid {
+                object,
+                error: Box::new(error),
+            })?;
         }
         graph.rev = file.rev;
         Ok(graph)
@@ -775,16 +803,37 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
             },
         ));
     }
-    for scene in &file.scenes {
+    // Keyframe scenes are created after every other scene, so a parent may come after
+    // its variant in the file; the reorders below then restore the file's order.
+    let (variants, parents): (Vec<&FileScene>, Vec<&FileScene>) =
+        file.scenes.iter().partition(|s| s.variant_of.is_some());
+    for scene in parents.iter().chain(&variants) {
         let object = format!("scene `{}`", scene.id);
         edits.push((
             object.clone(),
-            Edit::SceneCreate {
-                scene_id: scene.id.clone(),
-                name: scene.name.clone(),
-                role: (!scene.role.is_scene()).then_some(scene.role),
+            match &scene.variant_of {
+                Some(parent) => Edit::SceneCreateVariant {
+                    scene_id: scene.id.clone(),
+                    variant_of: parent.clone(),
+                    name: scene.name.clone(),
+                },
+                None => Edit::SceneCreate {
+                    scene_id: scene.id.clone(),
+                    name: scene.name.clone(),
+                    role: (!scene.role.is_scene()).then_some(scene.role),
+                },
             },
         ));
+        // `scene.create_variant` takes no role.
+        if scene.variant_of.is_some() && !scene.role.is_scene() {
+            edits.push((
+                object.clone(),
+                Edit::SceneSetRole {
+                    scene_id: scene.id.clone(),
+                    role: scene.role,
+                },
+            ));
+        }
         if scene.folder.is_some() {
             edits.push((
                 object.clone(),
@@ -806,6 +855,18 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
                 Edit::SceneSetMeta {
                     scene_id: scene.id.clone(),
                     meta,
+                },
+            ));
+        }
+    }
+    let created: Vec<&SceneId> = parents.iter().chain(&variants).map(|s| &s.id).collect();
+    if created.iter().zip(&file.scenes).any(|(a, b)| **a != b.id) {
+        for (index, scene) in (0u32..).zip(&file.scenes) {
+            edits.push((
+                format!("scene `{}`", scene.id),
+                Edit::SceneReorder {
+                    scene_id: scene.id.clone(),
+                    index,
                 },
             ));
         }
@@ -878,6 +939,15 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
                         transition: item.transition,
                     },
                 ));
+            }
+        }
+    }
+    // After every item, since an override names one of its parent's.
+    for scene in &file.scenes {
+        for o in &scene.overrides {
+            let object = format!("scene `{}`", scene.id);
+            for edit in override_edits(&scene.id, o) {
+                edits.push((object.clone(), edit));
             }
         }
     }
@@ -967,6 +1037,48 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
         ));
     }
     Ok(edits)
+}
+
+/// The placement edits addressed to the keyframe scene `scene_id` that write `o`.
+fn override_edits(scene_id: &SceneId, o: &ItemOverride) -> Vec<Edit> {
+    let (item_id, scene_id) = (&o.item_id, Some(scene_id.clone()));
+    let mut edits = Vec::new();
+    if let Some(geometry) = o.geometry {
+        edits.push(Edit::ItemSetGeometry {
+            item_id: item_id.clone(),
+            scene_id: scene_id.clone(),
+            geometry,
+        });
+    }
+    if let Some(transform) = o.transform {
+        edits.push(Edit::ItemSetTransform {
+            item_id: item_id.clone(),
+            scene_id: scene_id.clone(),
+            transform,
+        });
+    }
+    if let Some(crop) = o.crop {
+        edits.push(Edit::ItemSetCrop {
+            item_id: item_id.clone(),
+            scene_id: scene_id.clone(),
+            crop,
+        });
+    }
+    if let Some(visible) = o.visible {
+        edits.push(Edit::ItemSetVisible {
+            item_id: item_id.clone(),
+            scene_id: scene_id.clone(),
+            visible,
+        });
+    }
+    if let Some(opacity) = o.opacity {
+        edits.push(Edit::ItemSetOpacity {
+            item_id: item_id.clone(),
+            scene_id,
+            opacity,
+        });
+    }
+    edits
 }
 
 /// Pushes the `filter.add`s that rebuild `chains` on `owner`, named `of` in errors,
@@ -1072,6 +1184,30 @@ fn rebuild_transitions(
         ));
     }
     Ok(())
+}
+
+/// The kind version `file` recorded for `filter_id` on `chain` of `owner`.
+fn file_filter_version(
+    file: &File,
+    owner: &FilterOwner,
+    chain: FilterChain,
+    filter_id: &FilterId,
+) -> Option<u32> {
+    let chains = match owner {
+        FilterOwner::Source { source_id } => {
+            &file.sources.iter().find(|s| &s.id == source_id)?.filters
+        }
+        FilterOwner::Output { output_id } => {
+            &file.outputs.iter().find(|o| &o.id == output_id)?.filters
+        }
+        FilterOwner::Master => &file.master.filters,
+        _ => return None,
+    };
+    let filters = match chain {
+        FilterChain::Video => &chains.video,
+        FilterChain::Audio => &chains.audio,
+    };
+    filters.iter().find(|f| &f.id == filter_id)?.kind_version
 }
 
 /// Pushes the edits that give the rebuilt collection `file`'s buses and their faders,
