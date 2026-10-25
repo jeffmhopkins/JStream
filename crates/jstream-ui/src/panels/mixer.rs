@@ -507,11 +507,13 @@ pub fn meters_vertical(set: Option<bool>, in_column: bool) -> bool {
     set.unwrap_or(in_column)
 }
 
-/// [`meters_vertical`] for the mixer as it is docked now.
-fn vertical_now() -> Signal<bool> {
+/// [`meters_vertical`] for the mixer as it is docked now. A memo, so a dock change that
+/// leaves the orientation as it was (a splitter drag, a tab click) doesn't rebuild the
+/// mixer's rows.
+fn vertical_now() -> Memo<bool> {
     let set = use_context::<MixerOrientation>();
     let dock = use_context::<DockState>();
-    Signal::derive(move || {
+    Memo::new(move |_| {
         let in_column = dock.is_some_and(|dock| {
             dock.0.with(|d| {
                 d.group_of(PanelId::Mixer)
@@ -995,12 +997,18 @@ fn MasterStrip(panel: Panel, open: RwSignal<bool>) -> AnyView {
             <span
                 class="master-value mono"
                 class:over=move || true_peak_note(dbtp()).1
-                role=move || true_peak_note(dbtp()).1.then_some("status")
                 title=move || format!("True peak: {}", true_peak_note(dbtp()).0)
             >
                 {move || format_true_peak(master().true_peak).replace(" dBTP", "")}
             </span>
             <span class="master-unit">"dBTP"</span>
+            // The strip has no room for the warning, so only a screen reader hears it.
+            <span class="visually-hidden" role=move || true_peak_note(dbtp()).1.then_some("status")>
+                {move || {
+                    let (note, over) = true_peak_note(dbtp());
+                    if over { note } else { "" }
+                }}
+            </span>
             <button
                 class="fx-button"
                 disabled

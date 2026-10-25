@@ -418,8 +418,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   off, and its gain). A nested scene's row has only the routing toggles, since it has
   no fader or sends of its own. Docked in a side column the mixer shows vertical strips
   instead (`MixerOrientation`, until the flip button the dock draws in the mixer's
-  title bar, `MixerFlip`, sets an orientation for the session): a master strip with
-  the loudness filling up to the target line, the loudness and true peak, then, folded
+  title bar, `MixerFlip`, sets an orientation for the session; a memo, so a dock change
+  that keeps the orientation doesn't rebuild the rows): a master strip with the
+  loudness filling up to the target line, the loudness and true peak (its warning
+  heard by a screen reader only, for want of room), then, folded
   beside it, a strip per source with its short name, a meter filling upwards, the dB
   field stacked + over − and scrubbed up and down, and mute. Each bus gets a strip, the master first, with renaming
   and (except the master) deleting. A delete reads `delete.plan`

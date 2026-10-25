@@ -24,6 +24,7 @@ test('the master card folds its channels, whose dB fields set the gain', async (
   // Folded at first.
   const channels = mixer(page).getByRole('list', { name: 'Channels' });
   await expect(fold(page)).toHaveAttribute('aria-expanded', 'false');
+  await expect(fold(page)).toHaveAttribute('title', "Show or hide the mixer's channels");
   await expect(channels).toBeHidden();
   await fold(page).click();
   await expect(fold(page)).toHaveAttribute('aria-expanded', 'true');
@@ -46,6 +47,19 @@ test('the master card folds its channels, whose dB fields set the gain', async (
   // Folding hides them again.
   await fold(page).click();
   await expect(channels).toBeHidden();
+});
+
+test('a dock change that keeps the orientation leaves the channel rows as they are', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  await showPanel(page, 'Audio mixer');
+  await fold(page).click();
+  const routing = mixer(page).getByRole('list', { name: 'Channels' }).locator('details').first();
+  await routing.locator('summary').click();
+  await expect(routing).toHaveAttribute('open', '');
+  // A tab click in another group writes the dock but doesn't move the mixer.
+  await page.getByRole('tab', { name: 'Inspector', exact: true }).click();
+  await page.getByRole('tab', { name: 'Scenes', exact: true }).click();
+  await expect(routing).toHaveAttribute('open', '');
 });
 
 test('the master card shows the loudness against the target and warns on true peak', async ({ page, daemon }) => {
@@ -198,6 +212,7 @@ test('vertical meters fill upwards from the engine levels', async ({ page, daemo
   await flip(page).click();
   const strip = mixer(page).locator('.master-strip');
   await strip.getByRole('button', { name: 'Master' }).click();
+  await expect(strip.getByRole('status')).toHaveCount(0);
   tick({
     sources: [{ source_id: 'mic', peak: [1.0, 0.5], rms: [0.5, 0.25] }],
     buses: [{
@@ -211,6 +226,8 @@ test('vertical meters fill upwards from the engine levels', async ({ page, daemo
   await expect(strip.locator('.master-value').first()).toHaveText('−14.2');
   await expect(strip.locator('.master-value').nth(1)).toHaveText('1.6');
   await expect(strip.locator('.master-value').nth(1)).toHaveClass(/\bover\b/);
+  // The strip has no room for the warning, but a screen reader hears it.
+  await expect(strip.getByRole('status')).toHaveText('over 0 dBTP: add a true-peak limiter');
   const fill = await strip.locator('.level-fill').evaluate((el) => el.style.height);
   expect(parseFloat(fill)).toBeCloseTo(69.4, 1);
 

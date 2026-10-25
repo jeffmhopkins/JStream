@@ -802,6 +802,11 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
   border-radius: 6px;
 }
 .master-strip { flex: 0 0 84px; border: 1px solid var(--border); background: var(--menu); }
+/* Heard by a screen reader, not shown. */
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
 .mix-column { flex: 0 0 64px; box-sizing: border-box; width: 64px; border: 1px solid var(--line); background: var(--raised); }
 .mix-column.off { opacity: 0.55; }
 .mixer-panel .master-strip .master-fold { flex: none; gap: 4px; font-size: 11px; font-weight: 600; }
