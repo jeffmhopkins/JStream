@@ -78,6 +78,8 @@ enum Prop {
     Gain,
     /// A source's or bus's mute.
     Muted,
+    /// A bus's monitor.
+    Monitor,
     /// The folder a scene is filed in, or the parent of a folder.
     Folder,
     /// A scene's or source's organisation metadata (ADR-0024 §4).
@@ -427,6 +429,9 @@ impl Touched {
                 if muted.is_some() {
                     self.prop(bus, Prop::Muted);
                 }
+            }
+            Edit::BusSetMonitor { bus_id, .. } => {
+                self.prop(Object::Bus(bus_id.clone()), Prop::Monitor);
             }
             // Setting a send creates it or sets its gain: the inverse of a new one is
             // `send.remove`, which names it as created or deleted.

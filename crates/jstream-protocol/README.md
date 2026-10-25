@@ -50,7 +50,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `output.set_target`, `output.set_encoder`, `output.set_video_mix`, `output.delete`,
   `encoder.create`, `encoder.update`, `encoder.delete`, `video_mix.create`,
   `video_mix.update`, `video_mix.delete`, `source.set_audio`, `bus.create`,
-  `bus.rename`, `bus.set_fader`, `bus.delete`, `send.set`, `send.remove`, `hotkey.set`,
+  `bus.rename`, `bus.set_fader`, `bus.set_monitor`, `bus.delete`, `send.set`,
+  `send.remove`, `hotkey.set`,
   `hotkey.clear`, `transition.create`, `transition.update`, `transition.delete`,
   `transition.set_default`, `scene.set_transitions`, `item.set_transition`,
   `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
@@ -93,8 +94,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   implementation), and `VideoMixInfo`.
 - **Audio** (`audio.rs`, [ADR-0028](../../docs/adr/0028-audio-model-v2.md)):
   `SourceAudio` and `AudioFollow`, a source's audio settings; `BusInfo` and `SendInfo`,
-  the buses and the send matrix as reads report them; the fader range and its shared
-  check (`gain_db_problem`); the bus limit (`MAX_BUSES`), which the graph, the mock and
+  the buses and the send matrix as reads report them; `BusMonitor` and `MonitorTap`, a
+  bus's monitor, with its shared check (`BusMonitor::problem`, 0.42); the fader range and
+  its shared check (`gain_db_problem`); the bus limit (`MAX_BUSES`), which the graph, the mock and
   the UI use and the engine's mixer is held to; and `SourceMeter`, `BusMeter` and `Loudness`, the readings
   a `meters.tick` carries.
 - **Organisation** (`organise.rs`,
@@ -179,8 +181,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.39 because of keyframe
-  scenes (`scene.create_variant`, `item.clear_override`, `SceneInfo`'s `variant_of` and
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.42 because of bus monitors
+  (`bus.set_monitor`, `BusInfo`'s `monitor`, `BusMonitor` and `MonitorTap`); 0.39 added
+  keyframe scenes (`scene.create_variant`, `item.clear_override`, `SceneInfo`'s `variant_of` and
   `overrides`, the batch result's `dropped_overrides`, and placement edits whose
   `scene_id` names a keyframe scene); 0.38 added YouTube audience stats and the quota
   estimate (the `youtube.stats` event and query, `AudienceStatsInfo`, `QuotaInfo`,
@@ -463,6 +466,21 @@ Deleting a bus removes the sends into it, and deleting a source removes its send
 the inverses put them back. Since 0.24 a setting can refer to a bus (a `bus`
 reference, which the `waveform` and `spectrum` kinds' `audio` uses to draw it), and
 `bus.delete` is refused while one does, as for a scene or source. Every gain is in dB from −100 to +24; silence is `muted`.
+
+**Monitors** (0.42, ADR-0028's D22): any bus, the master's included, may have a monitor,
+an output device the engine plays the bus on while the program mixer runs, so the
+operator hears it. `bus.set_monitor { bus_id, monitor? }` sets one, and with `monitor`
+omitted or null takes it away; `BusInfo` reports it as `monitor`, omitted for none.
+A `BusMonitor` is `{ device, tap }`: `device` names the output device as the platform
+does, empty (the default) for the system's default output, and at most 512 bytes with
+no control characters; `tap` is `pre_filters` (the bus's sum before its filters,
+through its fader and mute: "before FX") or `post_filters` (after them, the default:
+"after FX"). Neither tap goes through the master stage's chain. Whether the device is
+connected is never checked by the edit: a monitor is collection state, valid on any
+machine, and one whose device is missing stays silent. A tap a newer server sent parses
+as `unknown`, which `bus.set_monitor` refuses with `invalid_argument` on
+`monitor.tap`. The engine stores and reports monitors but doesn't open their devices
+yet: playing them is the rest of ROADMAP item D9.
 
 Buses never feed buses (ADR-0028), so a send always runs from a source to a bus, and
 an audio routing cycle can't be expressed. Filter chains (a source's from 0.22, the
@@ -955,8 +973,9 @@ default master send) for whatever audio differs from the kind's defaults, then a
 `filter.add` with the filter's place, switch and settings) or the previous value,
 undoing `item.set_source` is `item.set_source` back, and undoing
 `source.set_settings` is a patch of the old values. Undoing `bus.delete` is
-`bus.create`, `bus.set_fader` unless the fader was at its default, and a `send.set` for
-each send the bus had; `source.set_audio`, `bus.set_fader` and `send.set` are each
+`bus.create`, `bus.set_fader` unless the fader was at its default, `bus.set_monitor` if
+it had a monitor, and a `send.set` for each send the bus had; `source.set_audio`,
+`bus.set_fader`, `bus.set_monitor` and `send.set` are each
 undone by the same edit with the old values, and a new send by `send.remove`. Deleting a source that items still
 place or a setting refers to, a scene that a `scene` source shows or a setting refers
 to, or a bus a setting refers to, is rejected, so no edit removes more than the object
@@ -995,7 +1014,8 @@ exactly. A new edit that can't state its inverse in edits needs new edits first.
   creates or deletes, also reordered the scenes or also set the canvas size, or made its edits
   no longer apply. An item's transform and its geometry are one property, its
   placement, and which source it places (`item.set_source`) is another. Each audio
-  field a `source.set_audio` or `bus.set_fader` sets is its own property, and a send is
+  field a `source.set_audio` or `bus.set_fader` sets is its own property, as is a bus's
+  monitor, and a send is
   an object of its own, which uses its source and its bus. An
   edit touches the objects it creates, deletes or edits and the ones it places or
   names, such as an item's source. What the step touches is taken both from when it was recorded and from
@@ -1308,8 +1328,8 @@ after 1.0:
   counts as a minor bump is part of open question 8. 0.13 adds the `EntityKind` value
   `encoder`, which only an error answering an encoder edit names, so a client older
   than 0.13, which sends none, never reads it. 0.19 adds `bus` the same way: only an error answering a bus or send edit
-  (`bus.create`, `bus.rename`, `bus.set_fader`, `bus.delete`, `send.set`, `send.remove`)
-  names it. An older client's undo of its own `source.delete` restores the source's
+  (`bus.create`, `bus.rename`, `bus.set_fader`, `bus.delete`, `send.set`, `send.remove`,
+  and since 0.42 `bus.set_monitor`) names it. An older client's undo of its own `source.delete` restores the source's
   sends, but if one's bus has since been deleted by another client, the undo fails with
   `undo_conflict`, which names no entity. 0.21 adds `device` the same way: only an error
   answering `device.revoke` names it, and 0.22 adds `filter` on the same terms for the

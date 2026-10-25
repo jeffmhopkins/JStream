@@ -129,6 +129,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("bus.create", Class(E)),
     ("bus.rename", Class(E)),
     ("bus.set_fader", Class(E)),
+    ("bus.set_monitor", Class(E)),
     ("bus.delete", Class(E)),
     ("send.set", Class(E)),
     ("send.remove", Class(E)),

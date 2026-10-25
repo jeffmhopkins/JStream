@@ -332,7 +332,7 @@ does more than the prototype (buses, sends, routing); that stays ([Beyond](#beyo
 | MX-02 | Channels fold under the master | Channels hidden under the master card by default. | ⬜ | |
 | MX-03 | Channel strips | Name, level bar, dB number field. | 🟡 | Built with meters, a tapered fader, mute and routing; restyle around them. |
 | MX-04 | Vertical meters | Vertical strips in side columns; a title-bar toggle flips orientation. | ⬜ | The dock's title bar is built; the toggle comes with the mixer's restyle. |
-| MX-05 | Monitoring | "Hear: after FX" / "before FX". | 🔒 | Decision register D22; no monitor device in the protocol. |
+| MX-05 | Monitoring | "Hear: after FX" / "before FX". | 🔒 | Decision register D22; the protocol has a bus's monitor since 0.42 (`bus.set_monitor`), and the engine doesn't play it yet. |
 | MX-06 | Privacy mute | The mic reads "muted (privacy)" while privacy is on. | 🔒 | E2b (#317). |
 | MX-07 | Real levels | Meters show the engine's levels. | 🟡 | Built (`meters.tick`); the prototype's numbers are simulated. Counted 🟡 until MX-03's restyle. |
 

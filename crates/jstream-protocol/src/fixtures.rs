@@ -23,7 +23,10 @@ use crate::{
     YoutubeAuth,
 };
 use crate::{AudienceStatsInfo, QuotaInfo, StatsPolling};
-use crate::{AudioFollow, BusId, BusInfo, BusMeter, Loudness, SendInfo, SourceAudio, SourceMeter};
+use crate::{
+    AudioFollow, BusId, BusInfo, BusMeter, BusMonitor, Loudness, MonitorTap, SendInfo, SourceAudio,
+    SourceMeter,
+};
 use crate::{CaptureTargetInfo, CaptureTargetKind, PixelSize};
 use crate::{Chord, DeviceId, DeviceInfo, HotkeyBinding};
 use crate::{DroppedOverride, ItemOverride, OverrideField};
@@ -460,6 +463,17 @@ pub(crate) fn edits() -> Vec<Edit> {
             gain_db: Some(db(-3.0)),
             muted: Some(false),
         },
+        Edit::BusSetMonitor {
+            bus_id: BusId::new("bus_vod"),
+            monitor: Some(BusMonitor {
+                device: String::new(),
+                tap: MonitorTap::PreFilters,
+            }),
+        },
+        Edit::BusSetMonitor {
+            bus_id: BusId::master(),
+            monitor: None,
+        },
         Edit::SendSet {
             source_id: SourceId::new("src_mic"),
             bus_id: BusId::new("bus_vod"),
@@ -684,12 +698,17 @@ fn bus_infos() -> Vec<BusInfo> {
             name: "VOD track".into(),
             gain_db: db(0.0),
             muted: false,
+            monitor: Some(BusMonitor {
+                device: "{0.0.0.00000000}.{headphones}".into(),
+                tap: MonitorTap::PostFilters,
+            }),
         },
         BusInfo {
             bus_id: BusId::master(),
             name: "Master".into(),
             gain_db: db(-3.0),
             muted: false,
+            monitor: None,
         },
     ]
 }

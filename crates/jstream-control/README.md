@@ -165,7 +165,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     `source.delete`; `source.set_audio` on a source with no audio, with nothing to set,
     or setting a `scene` source's fader or mute; the bus ID, name and 16-bus limit,
     deleting the master or a bus a source's settings refer to (a `bus` reference, as
-    a `waveform` drawing it holds, #362), an empty `bus.set_fader`, sends from a `scene` source or a
+    a `waveform` drawing it holds, #362), an empty `bus.set_fader`, a monitor
+    `BusMonitor::problem` refuses (on `monitor.<field>`, after the bus), sends from a `scene` source or a
     source with no audio, removing a missing send, and gains outside −100 to +24 dB;
   - hotkeys: `hotkey.set`'s chord spelling, an already-bound chord, an action
     `Action::bind_problem` refuses and a missing named scene, output or preset (only `cut`

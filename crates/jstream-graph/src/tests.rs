@@ -1494,6 +1494,21 @@ mod property {
                 bus_id: bus(rng),
                 name: pool(rng, "name "),
             },
+            33 if rng.below(3) == 0 => Edit::BusSetMonitor {
+                bus_id: bus(rng),
+                monitor: maybe(rng).then(|| jstream_protocol::BusMonitor {
+                    device: if maybe(rng) {
+                        String::new()
+                    } else {
+                        pool(rng, "dev")
+                    },
+                    tap: match rng.below(5) {
+                        0 => jstream_protocol::MonitorTap::Unknown,
+                        1 | 2 => jstream_protocol::MonitorTap::PreFilters,
+                        _ => jstream_protocol::MonitorTap::PostFilters,
+                    },
+                }),
+            },
             33 => Edit::BusSetFader {
                 bus_id: bus(rng),
                 gain_db: maybe(rng).then(|| gain(rng)),
@@ -1829,6 +1844,7 @@ mod property {
             "bus.create",
             "bus.rename",
             "bus.set_fader",
+            "bus.set_monitor",
             "bus.delete",
             "send.set",
             "send.remove",
@@ -4138,6 +4154,96 @@ fn deleting_a_bus_takes_its_sends_and_undoes_exactly() {
             "edits.0.bus_id".to_owned(),
             "the master bus can't be deleted".to_owned()
         )
+    );
+}
+
+/// A bus's monitor (0.42) is set, changed and taken away, each undone exactly; a
+/// deleted bus's inverse gives its monitor back; `BusMonitor::problem` refuses a bad
+/// one on `monitor.<field>`.
+#[test]
+fn a_bus_monitor_is_set_undone_and_restored_with_its_bus() {
+    let mut graph = fixture();
+    let vod = BusId::new("vod");
+    let monitor = |device: &str, tap| jstream_protocol::BusMonitor {
+        device: device.into(),
+        tap,
+    };
+    apply_ok(
+        &mut graph,
+        vec![Edit::BusCreate {
+            bus_id: vod.clone(),
+            name: "VOD".into(),
+        }],
+    );
+    assert_eq!(graph.state().bus(&vod).and_then(|b| b.monitor()), None);
+    let pre = monitor("headphones", jstream_protocol::MonitorTap::PreFilters);
+    let applied = apply_ok(
+        &mut graph,
+        vec![Edit::BusSetMonitor {
+            bus_id: vod.clone(),
+            monitor: Some(pre.clone()),
+        }],
+    );
+    assert_eq!(
+        applied.inverse.edits,
+        vec![Edit::BusSetMonitor {
+            bus_id: vod.clone(),
+            monitor: None,
+        }]
+    );
+    assert_eq!(
+        graph.state().bus(&vod).map(|b| b.to_info().monitor),
+        Some(Some(pre.clone()))
+    );
+    let master = monitor("", jstream_protocol::MonitorTap::PostFilters);
+    apply_ok(
+        &mut graph,
+        vec![Edit::BusSetMonitor {
+            bus_id: BusId::master(),
+            monitor: Some(master.clone()),
+        }],
+    );
+    let applied = apply_ok(
+        &mut graph,
+        vec![Edit::BusDelete {
+            bus_id: vod.clone(),
+        }],
+    );
+    assert!(applied.inverse.edits.contains(&Edit::BusSetMonitor {
+        bus_id: vod.clone(),
+        monitor: Some(pre),
+    }));
+    let applied = apply_ok(
+        &mut graph,
+        vec![Edit::BusSetMonitor {
+            bus_id: BusId::master(),
+            monitor: None,
+        }],
+    );
+    assert_eq!(
+        applied.inverse.edits,
+        vec![Edit::BusSetMonitor {
+            bus_id: BusId::master(),
+            monitor: Some(master),
+        }]
+    );
+    let refused = |device: &str, tap| {
+        invalid_reason(apply_err(
+            &mut graph.clone(),
+            vec![Edit::BusSetMonitor {
+                bus_id: BusId::master(),
+                monitor: Some(monitor(device, tap)),
+            }],
+        ))
+        .0
+    };
+    assert_eq!(
+        refused("", jstream_protocol::MonitorTap::Unknown),
+        "edits.0.monitor.tap"
+    );
+    assert_eq!(
+        refused("a\tb", jstream_protocol::MonitorTap::PreFilters),
+        "edits.0.monitor.device"
     );
 }
 

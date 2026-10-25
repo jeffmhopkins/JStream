@@ -685,6 +685,22 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "An audio bus in the collection (ADR-0028). [`BusId::master`] names the master\nbus, which every collection has.",
             "type": "string"
           },
+          "BusMonitor": {
+            "description": "A bus's monitor (ADR-0028, D22): an output device the engine plays the bus on while\nthe program mixer runs, for the operator to hear. Collection state, set by\n`bus.set_monitor`. A monitor hears the bus through its fader and mute and never\nthrough the master's filters, so it is not what an output carries.",
+            "properties": {
+              "device": {
+                "default": "",
+                "description": "The output device, as the platform names it; empty (the default) for the\nsystem's default output, which the monitor follows when it changes. A device\nthat isn't connected leaves the monitor silent; the edit is not refused. At most\n512 bytes.",
+                "type": "string"
+              },
+              "tap": {
+                "$ref": "#/$defs/MonitorTap",
+                "default": "post_filters",
+                "description": "Where on the bus the monitor listens. Omitted means `post_filters`."
+              }
+            },
+            "type": "object"
+          },
           "Chord": {
             "description": "A key chord: zero or more modifiers then one key, joined by `+`, such as `Ctrl+KeyA`,\n`Ctrl+Shift+Digit1`, `F1` or `Pause`.\n\n- The modifiers are `Ctrl`, `Alt`, `Shift` and `Meta` (the Windows or Command key),\n  each at most once, in that order. A chord has exactly one spelling, so two chords\n  are the same keys exactly when their strings are equal.\n- The key is a W3C UI Events `KeyboardEvent.code` value from [`Chord::KEYS`]: the\n  physical key, whatever the keyboard layout, as browsers and the desktop host's\n  global-shortcut API both report it. Modifier keys themselves are not keys here.\n\nOn the wire it is a plain string. The protocol layer doesn't check it: the engine\nrejects one that isn't valid with `invalid_argument`, giving [`Chord::problem`]'s\nreason.",
             "type": "string"
@@ -2609,7 +2625,36 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a bus and every send into it. The master bus can't be deleted\n(`invalid_argument`), nor (since 0.24) a bus a source's settings refer to: that\n`invalid_argument` lists the `blockers`, and `delete.plan` clears them. Inverse: `bus.create` with its name, `bus.set_fader` if\nits fader or mute were not the defaults, then `send.set` for each send it had.",
+                "description": "Gives a bus a monitor, the master's included, or (with `monitor` omitted or null)\ntakes its monitor away (since 0.42). A monitor `BusMonitor::problem` refuses is\n`invalid_argument` on `monitor.<field>`; a device that isn't connected is not\nrefused. Inverse: `bus.set_monitor` with the previous monitor, or none.",
+                "properties": {
+                  "bus_id": {
+                    "$ref": "#/$defs/BusId",
+                    "description": "The bus to change."
+                  },
+                  "monitor": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BusMonitor"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The monitor, or none."
+                  },
+                  "type": {
+                    "const": "bus.set_monitor",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "bus_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Deletes a bus and every send into it. The master bus can't be deleted\n(`invalid_argument`), nor (since 0.24) a bus a source's settings refer to: that\n`invalid_argument` lists the `blockers`, and `delete.plan` clears them. Inverse: `bus.create` with its name, `bus.set_fader` if\nits fader or mute were not the defaults, `bus.set_monitor` if it had a monitor\n(since 0.42), then `send.set` for each send it had.",
                 "properties": {
                   "bus_id": {
                     "$ref": "#/$defs/BusId",
@@ -3072,6 +3117,21 @@ source: crates/jstream-mcp/src/tests.rs
               "height"
             ],
             "type": "object"
+          },
+          "MonitorTap": {
+            "description": "Where a bus's monitor listens (ADR-0028, D22). Serialized as a snake_case string.",
+            "oneOf": [
+              {
+                "const": "pre_filters",
+                "description": "The bus's sum before its filters, through its fader and mute: \"before FX\".",
+                "type": "string"
+              },
+              {
+                "const": "post_filters",
+                "description": "The bus after its filters, fader and mute: \"after FX\", what the bus feeds.",
+                "type": "string"
+              }
+            ]
           },
           "OutputId": {
             "description": "An output (RTMP(S), recording, virtual camera).",
@@ -3613,12 +3673,28 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Runs one `bus` operation: set `op.type` to one of `bus.create` (edit), `bus.rename` (edit), `bus.set_fader` (edit), `bus.delete` (edit), `bus.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `bus` operation: set `op.type` to one of `bus.create` (edit), `bus.rename` (edit), `bus.set_fader` (edit), `bus.set_monitor` (edit), `bus.delete` (edit), `bus.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "BusId": {
             "description": "An audio bus in the collection (ADR-0028). [`BusId::master`] names the master\nbus, which every collection has.",
             "type": "string"
+          },
+          "BusMonitor": {
+            "description": "A bus's monitor (ADR-0028, D22): an output device the engine plays the bus on while\nthe program mixer runs, for the operator to hear. Collection state, set by\n`bus.set_monitor`. A monitor hears the bus through its fader and mute and never\nthrough the master's filters, so it is not what an output carries.",
+            "properties": {
+              "device": {
+                "default": "",
+                "description": "The output device, as the platform names it; empty (the default) for the\nsystem's default output, which the monitor follows when it changes. A device\nthat isn't connected leaves the monitor silent; the edit is not refused. At most\n512 bytes.",
+                "type": "string"
+              },
+              "tap": {
+                "$ref": "#/$defs/MonitorTap",
+                "default": "post_filters",
+                "description": "Where on the bus the monitor listens. Omitted means `post_filters`."
+              }
+            },
+            "type": "object"
           },
           "Finite32": {
             "description": "A finite `f32`. On the wire it is a plain JSON number, which must narrow to a finite\n`f32` (magnitude up to about `3.4028235e38`); anything else fails to deserialize.",
@@ -3628,6 +3704,21 @@ source: crates/jstream-mcp/src/tests.rs
           "IdempotencyKey": {
             "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
             "type": "string"
+          },
+          "MonitorTap": {
+            "description": "Where a bus's monitor listens (ADR-0028, D22). Serialized as a snake_case string.",
+            "oneOf": [
+              {
+                "const": "pre_filters",
+                "description": "The bus's sum before its filters, through its fader and mute: \"before FX\".",
+                "type": "string"
+              },
+              {
+                "const": "post_filters",
+                "description": "The bus after its filters, fader and mute: \"after FX\", what the bus feeds.",
+                "type": "string"
+              }
+            ]
           },
           "Rev": {
             "description": "The collection state revision.\n\nEvery applied batch increments it by exactly one. Queries report the revision they\nread, and a batch may name the revision it was computed against (`expected_rev`).",
@@ -3746,7 +3837,36 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a bus and every send into it. The master bus can't be deleted\n(`invalid_argument`), nor (since 0.24) a bus a source's settings refer to: that\n`invalid_argument` lists the `blockers`, and `delete.plan` clears them. Inverse: `bus.create` with its name, `bus.set_fader` if\nits fader or mute were not the defaults, then `send.set` for each send it had.",
+                "description": "Gives a bus a monitor, the master's included, or (with `monitor` omitted or null)\ntakes its monitor away (since 0.42). A monitor `BusMonitor::problem` refuses is\n`invalid_argument` on `monitor.<field>`; a device that isn't connected is not\nrefused. Inverse: `bus.set_monitor` with the previous monitor, or none.",
+                "properties": {
+                  "bus_id": {
+                    "$ref": "#/$defs/BusId",
+                    "description": "The bus to change."
+                  },
+                  "monitor": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BusMonitor"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The monitor, or none."
+                  },
+                  "type": {
+                    "const": "bus.set_monitor",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "bus_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Deletes a bus and every send into it. The master bus can't be deleted\n(`invalid_argument`), nor (since 0.24) a bus a source's settings refer to: that\n`invalid_argument` lists the `blockers`, and `delete.plan` clears them. Inverse: `bus.create` with its name, `bus.set_fader` if\nits fader or mute were not the defaults, `bus.set_monitor` if it had a monitor\n(since 0.42), then `send.set` for each send it had.",
                 "properties": {
                   "bus_id": {
                     "$ref": "#/$defs/BusId",
@@ -5690,6 +5810,22 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "An audio bus in the collection (ADR-0028). [`BusId::master`] names the master\nbus, which every collection has.",
             "type": "string"
           },
+          "BusMonitor": {
+            "description": "A bus's monitor (ADR-0028, D22): an output device the engine plays the bus on while\nthe program mixer runs, for the operator to hear. Collection state, set by\n`bus.set_monitor`. A monitor hears the bus through its fader and mute and never\nthrough the master's filters, so it is not what an output carries.",
+            "properties": {
+              "device": {
+                "default": "",
+                "description": "The output device, as the platform names it; empty (the default) for the\nsystem's default output, which the monitor follows when it changes. A device\nthat isn't connected leaves the monitor silent; the edit is not refused. At most\n512 bytes.",
+                "type": "string"
+              },
+              "tap": {
+                "$ref": "#/$defs/MonitorTap",
+                "default": "post_filters",
+                "description": "Where on the bus the monitor listens. Omitted means `post_filters`."
+              }
+            },
+            "type": "object"
+          },
           "Chord": {
             "description": "A key chord: zero or more modifiers then one key, joined by `+`, such as `Ctrl+KeyA`,\n`Ctrl+Shift+Digit1`, `F1` or `Pause`.\n\n- The modifiers are `Ctrl`, `Alt`, `Shift` and `Meta` (the Windows or Command key),\n  each at most once, in that order. A chord has exactly one spelling, so two chords\n  are the same keys exactly when their strings are equal.\n- The key is a W3C UI Events `KeyboardEvent.code` value from [`Chord::KEYS`]: the\n  physical key, whatever the keyboard layout, as browsers and the desktop host's\n  global-shortcut API both report it. Modifier keys themselves are not keys here.\n\nOn the wire it is a plain string. The protocol layer doesn't check it: the engine\nrejects one that isn't valid with `invalid_argument`, giving [`Chord::problem`]'s\nreason.",
             "type": "string"
@@ -7614,7 +7750,36 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a bus and every send into it. The master bus can't be deleted\n(`invalid_argument`), nor (since 0.24) a bus a source's settings refer to: that\n`invalid_argument` lists the `blockers`, and `delete.plan` clears them. Inverse: `bus.create` with its name, `bus.set_fader` if\nits fader or mute were not the defaults, then `send.set` for each send it had.",
+                "description": "Gives a bus a monitor, the master's included, or (with `monitor` omitted or null)\ntakes its monitor away (since 0.42). A monitor `BusMonitor::problem` refuses is\n`invalid_argument` on `monitor.<field>`; a device that isn't connected is not\nrefused. Inverse: `bus.set_monitor` with the previous monitor, or none.",
+                "properties": {
+                  "bus_id": {
+                    "$ref": "#/$defs/BusId",
+                    "description": "The bus to change."
+                  },
+                  "monitor": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BusMonitor"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The monitor, or none."
+                  },
+                  "type": {
+                    "const": "bus.set_monitor",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "bus_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Deletes a bus and every send into it. The master bus can't be deleted\n(`invalid_argument`), nor (since 0.24) a bus a source's settings refer to: that\n`invalid_argument` lists the `blockers`, and `delete.plan` clears them. Inverse: `bus.create` with its name, `bus.set_fader` if\nits fader or mute were not the defaults, `bus.set_monitor` if it had a monitor\n(since 0.42), then `send.set` for each send it had.",
                 "properties": {
                   "bus_id": {
                     "$ref": "#/$defs/BusId",
@@ -8077,6 +8242,21 @@ source: crates/jstream-mcp/src/tests.rs
               "height"
             ],
             "type": "object"
+          },
+          "MonitorTap": {
+            "description": "Where a bus's monitor listens (ADR-0028, D22). Serialized as a snake_case string.",
+            "oneOf": [
+              {
+                "const": "pre_filters",
+                "description": "The bus's sum before its filters, through its fader and mute: \"before FX\".",
+                "type": "string"
+              },
+              {
+                "const": "post_filters",
+                "description": "The bus after its filters, fader and mute: \"after FX\", what the bus feeds.",
+                "type": "string"
+              }
+            ]
           },
           "OutputId": {
             "description": "An output (RTMP(S), recording, virtual camera).",
@@ -10376,6 +10556,22 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "An audio bus in the collection (ADR-0028). [`BusId::master`] names the master\nbus, which every collection has.",
             "type": "string"
           },
+          "BusMonitor": {
+            "description": "A bus's monitor (ADR-0028, D22): an output device the engine plays the bus on while\nthe program mixer runs, for the operator to hear. Collection state, set by\n`bus.set_monitor`. A monitor hears the bus through its fader and mute and never\nthrough the master's filters, so it is not what an output carries.",
+            "properties": {
+              "device": {
+                "default": "",
+                "description": "The output device, as the platform names it; empty (the default) for the\nsystem's default output, which the monitor follows when it changes. A device\nthat isn't connected leaves the monitor silent; the edit is not refused. At most\n512 bytes.",
+                "type": "string"
+              },
+              "tap": {
+                "$ref": "#/$defs/MonitorTap",
+                "default": "post_filters",
+                "description": "Where on the bus the monitor listens. Omitted means `post_filters`."
+              }
+            },
+            "type": "object"
+          },
           "Chord": {
             "description": "A key chord: zero or more modifiers then one key, joined by `+`, such as `Ctrl+KeyA`,\n`Ctrl+Shift+Digit1`, `F1` or `Pause`.\n\n- The modifiers are `Ctrl`, `Alt`, `Shift` and `Meta` (the Windows or Command key),\n  each at most once, in that order. A chord has exactly one spelling, so two chords\n  are the same keys exactly when their strings are equal.\n- The key is a W3C UI Events `KeyboardEvent.code` value from [`Chord::KEYS`]: the\n  physical key, whatever the keyboard layout, as browsers and the desktop host's\n  global-shortcut API both report it. Modifier keys themselves are not keys here.\n\nOn the wire it is a plain string. The protocol layer doesn't check it: the engine\nrejects one that isn't valid with `invalid_argument`, giving [`Chord::problem`]'s\nreason.",
             "type": "string"
@@ -12300,7 +12496,36 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a bus and every send into it. The master bus can't be deleted\n(`invalid_argument`), nor (since 0.24) a bus a source's settings refer to: that\n`invalid_argument` lists the `blockers`, and `delete.plan` clears them. Inverse: `bus.create` with its name, `bus.set_fader` if\nits fader or mute were not the defaults, then `send.set` for each send it had.",
+                "description": "Gives a bus a monitor, the master's included, or (with `monitor` omitted or null)\ntakes its monitor away (since 0.42). A monitor `BusMonitor::problem` refuses is\n`invalid_argument` on `monitor.<field>`; a device that isn't connected is not\nrefused. Inverse: `bus.set_monitor` with the previous monitor, or none.",
+                "properties": {
+                  "bus_id": {
+                    "$ref": "#/$defs/BusId",
+                    "description": "The bus to change."
+                  },
+                  "monitor": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BusMonitor"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The monitor, or none."
+                  },
+                  "type": {
+                    "const": "bus.set_monitor",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "bus_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Deletes a bus and every send into it. The master bus can't be deleted\n(`invalid_argument`), nor (since 0.24) a bus a source's settings refer to: that\n`invalid_argument` lists the `blockers`, and `delete.plan` clears them. Inverse: `bus.create` with its name, `bus.set_fader` if\nits fader or mute were not the defaults, `bus.set_monitor` if it had a monitor\n(since 0.42), then `send.set` for each send it had.",
                 "properties": {
                   "bus_id": {
                     "$ref": "#/$defs/BusId",
@@ -12759,6 +12984,21 @@ source: crates/jstream-mcp/src/tests.rs
               "height"
             ],
             "type": "object"
+          },
+          "MonitorTap": {
+            "description": "Where a bus's monitor listens (ADR-0028, D22). Serialized as a snake_case string.",
+            "oneOf": [
+              {
+                "const": "pre_filters",
+                "description": "The bus's sum before its filters, through its fader and mute: \"before FX\".",
+                "type": "string"
+              },
+              {
+                "const": "post_filters",
+                "description": "The bus after its filters, fader and mute: \"after FX\", what the bus feeds.",
+                "type": "string"
+              }
+            ]
           },
           "OutputId": {
             "description": "An output (RTMP(S), recording, virtual camera).",
