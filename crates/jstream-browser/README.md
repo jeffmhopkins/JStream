@@ -103,7 +103,8 @@ page closes it.
 browser helper process ([ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md)),
 never in the engine's. This side builds no CEF; `dox` compile-checks it with the rest.
 - `CefBackend::new` takes a `CefConfig` (the helper exe, the cache root and an optional
-  log file; `CefConfig::beside_exe` puts the helper next to the running exe and the
+  log file; `CefConfig::beside_exe` finds the helper in the `browser` folder beside the
+  running exe, as the portable zip lays it out, else next to the exe itself, and puts the
   cache under the host's state folder) and the media clock. The helper starts on the
   first `open`: `jstream-browser-helper.exe --jstream-pipe=<name>`, after the backend has
   created the two named pipes (`cef/pipe.rs`): one each way, each a single instance that
@@ -193,12 +194,11 @@ loads one image from outside its folder), and the shutdown time. It runs on Wind
 depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0046-browser-crate-and-helper.md", "docs/adr/0048-sandboxed-browser-helper.md"]
 -->
 
-What ADR-0021 asks for that this crate doesn't do yet. The first blocks any host from
-shipping the `cef` feature.
+What ADR-0021 asks for that this crate doesn't do yet.
 
-- **Packaging and updates.** The CEF runtime and the helper (the renamed bootstrap exe
-  and its DLL) aren't in the portable zip yet, with CEF's licence notices, and nothing
-  checks the pinned CEF against CEF stable.
+- **Updates.** Nothing checks the pinned CEF against CEF stable. (The portable zip ships
+  the helper and CEF's runtime, with `CREDITS.html` and the CEF version:
+  [ARCH › Packaging](../../docs/ARCHITECTURE.md#packaging).)
 - **Measurements.** Spike S4 measured CEF in the engine's process; the sandboxed
   helper's frames take a second copy and a pipe round trip, which haven't been measured.
 - **Hosts.** The desktop app and the daemon each create a backend with their `cef`

@@ -5,6 +5,8 @@
 
 mod audio;
 mod audio_routing;
+#[cfg(feature = "wasm-plugins")]
+mod automation;
 mod collection;
 mod gpu_capture;
 mod history;
@@ -521,12 +523,11 @@ fn scanned_clap_plugins_are_audio_filter_kinds() {
     assert_eq!(filter.settings.get("1"), Some(&serde_json::json!(1.0)));
 }
 
-/// The engine takes scene filters (ADR-0065), which run on the scene's composite. The
-/// graph holds item effects too, but nothing renders them yet, so the engine refuses a
-/// filter edit on an item, on `owner`, once the graph's own checks pass; a batch the
-/// graph would refuse gets the graph's answer.
+/// The engine takes scene filters and item effects (ADR-0065), which run on the scene's
+/// composite and the item's box, reports them, and refuses a missing owner as the graph
+/// does.
 #[test]
-fn scene_filters_are_taken_and_item_effects_refused_until_rendered() {
+fn scene_filters_and_item_effects_are_taken() {
     use jstream_protocol::{FilterChain, FilterId, FilterOwner, ItemId, SceneId};
     let engine = Engine::new();
     let control = connected(&engine);
@@ -577,21 +578,22 @@ fn scene_filters_are_taken_and_item_effects_refused_until_rendered() {
     let item = FilterOwner::Item {
         item_id: ItemId::new("i"),
     };
-    let error = batch(&control, Batch::single(sharpen(item))).expect_err("refused");
-    assert!(
-        matches!(
-            error.protocol(),
-            Some(ProtocolError::InvalidArgument { field, reason, .. })
-                if field == "edits.0.owner" && reason.contains("not rendered yet")
-        ),
-        "{error:?}"
-    );
-    assert_eq!(engine.rev(), rev, "nothing applied");
+    let effect = batch(&control, Batch::single(sharpen(item))).expect("an item effect");
+    assert!(effect > rev);
     let scene = FilterOwner::Scene {
         scene_id: SceneId::new("s"),
     };
-    let taken = batch(&control, Batch::single(sharpen(scene))).expect("a scene filter");
-    assert!(taken > rev);
+    let filter = batch(&control, Batch::single(sharpen(scene))).expect("a scene filter");
+    assert!(filter > effect);
+    let Ok(QueryResult::StateGet { scenes, .. }) = query(&control, Query::StateGet) else {
+        panic!("state.get");
+    };
+    let s = scenes
+        .iter()
+        .find(|scene| scene.scene_id == SceneId::new("s"))
+        .expect("s");
+    assert_eq!(s.filters.video.len(), 1);
+    assert_eq!(s.items[0].effects.len(), 1);
     let ghost = FilterOwner::Item {
         item_id: ItemId::new("ghost"),
     };
@@ -1631,16 +1633,17 @@ fn the_engine_answers_like_the_mock() {
                 gesture_id: GestureId::new("g9"),
             },
         },
-        // Neither hosts plugins yet (ADR-0069): both answer `unsupported`.
+        // No plugin is installed (ADR-0069): both answer `not_found`. `plugin.install`
+        // isn't sent: the engine loads the package, which the mock can't
+        // (`tests/automation.rs`).
         Call::Action {
             action: Action::PluginEnable {
                 plugin_id: jstream_protocol::PluginId::new("plg_1"),
             },
         },
         Call::Action {
-            action: Action::PluginInstall {
+            action: Action::PluginGrant {
                 plugin_id: jstream_protocol::PluginId::new("plg_1"),
-                path: "/plugins/one".into(),
                 grant: jstream_protocol::PluginGrant::default(),
             },
         },
@@ -2956,6 +2959,7 @@ fn deleting_a_source_drops_its_frame() {
 
 mod cpu_pipeline {
     mod captures;
+    mod hardware_sessions;
 
     use super::{
         batch, block_on, code, connected, drain, edits, output_call, output_state, output_steps,

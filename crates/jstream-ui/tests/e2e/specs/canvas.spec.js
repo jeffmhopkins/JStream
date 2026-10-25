@@ -120,8 +120,6 @@ test('a drag is one undoable edit', async ({ page, daemon }) => {
   // The page measures its stage in whole pixels, so allow half a screen pixel.
   const halfPixel = 0.5 / from.scale;
   await expectCorners(page, shifted(before, by.x / from.scale, by.y / from.scale), halfPixel);
-  // The box already stands there from the live values, so the commit's revision may
-  // arrive a moment later.
   await expect.poll(() => rev(page)).toBe(startRev + 1);
   const moved = await corners(page);
 
@@ -198,7 +196,7 @@ test('arrow keys nudge the selected box, and Ctrl+Z undoes a nudge', async ({ pa
   await expectCorners(page, shifted(before, 1, 10));
   await page.keyboard.press('Control+z');
   await expectCorners(page, shifted(before, 1, 0));
-  expect(await rev(page)).toBe(startRev + 3);
+  await expect.poll(() => rev(page)).toBe(startRev + 3);
 });
 
 test('another client sees a move', async ({ page, context, daemon }) => {

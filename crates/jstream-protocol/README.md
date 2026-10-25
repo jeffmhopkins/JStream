@@ -183,7 +183,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.43 because of scene filters
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.44 because of the
+  `hardware_session_limit` error (`output.start` refused a new hardware video session
+  while other outputs held hardware sessions, ADR-0027 §3); 0.43 added scene filters
   and item effects ([ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md):
   `FilterOwner`'s `scene` and `item`, `SceneInfo.filters`, `ItemInfo.effects` and
   `KindDescriptor.max_outset_px`); 0.42 added bus monitors (`bus.set_monitor`,
@@ -626,9 +628,8 @@ or an item's audio chain is `invalid_argument` on `edits.N.chain`, and a keyfram
 as the owner on `edits.N.owner`, since it shows its parent's filters. References in
 them are edges of the scene, or of the item's scene: a blocker names them as
 `filters.<filter_id>.<param>` of the scene or `effects.<filter_id>.<param>` of the item.
-The engine runs a scene's filters on its composite. It checks an edit on an item as
-the graph does, and then refuses it with `invalid_argument` on `edits.N.owner` until it
-renders item effects, so `effects` stays empty for now.
+The engine runs a scene's filters on its composite and an item's effects over its box,
+once per frame each.
 
 Every float on the wire (`Vec2`, `ItemTransform`, `ItemGeometry`, an opacity) is a `Finite32`:
 an `f32` that is never NaN or infinite. Computed geometry results use plain `f32`. serde
@@ -1305,9 +1306,14 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   them, no plugin is granted them and no hotkey binds them. `PluginGrant` is
   `{classes, hosts, folders}`, each omitted while empty: hosts as `scheme://host:port`
   (`http`, `https`, `ws`, `wss`), folders as absolute paths on the engine's machine. A
-  grant `problem` refuses is `invalid_argument` on `grant.hosts.N` or `grant.folders.N`.
-  An unknown plugin is `not_found` with entity `plugin`; an engine that hosts no plugins
-  answers `unsupported`, as the engine and the mock do today.
+  grant `problem` refuses is `invalid_argument` on `grant.hosts.N` or `grant.folders.N`,
+  and so is a grant that gives more than the package's manifest asks for, on
+  `grant.classes.N`, `grant.hosts.N` or `grant.folders.0` (R-SEC-003). A
+  `plugin.grant` acknowledges what the manifest asks for now, so a plugin disabled as
+  `needs_grant` can be re-enabled after it. An unknown plugin is `not_found` with entity
+  `plugin`; an engine that can't run plugins
+  answers `plugin.install` with `unsupported`, as the mock and an engine built without
+  its `wasm-plugins` feature do.
 - **`plugin.state_changed {plugin_id, state, reason?, remote_name?}`** reports a plugin
   `enabled` or `disabled`. The engine disables a plugin that runs past a limit or traps
   (`reason`: `cpu_limit`, `memory_limit`, `trap`), or whose update asks for more than
@@ -1336,6 +1342,7 @@ people and agents. Clients match on `code`, never on `message`.
 | `action_failed` | An accepted action could not be carried out | `reason` |
 | `unsupported` | A valid call this implementation doesn't serve (the pairing calls without a server in front, 0.21; the `plugin.*` calls from an engine that hosts no plugins, 0.35) | `call` |
 | `forbidden` | A plugin's call is outside its grant, or is never granted to a plugin; it never reaches the engine (0.35) | `call`, `reason` |
+| `hardware_session_limit` | `output.start` couldn't open a hardware video encoder while other outputs held hardware sessions, so the hardware session limit is taken to be reached; there is no fallback to software (0.44, [ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md) §3) | `outputs` (the holders, sorted), `reason` (the encoder's refusal) |
 | `internal` | An engine bug or unexpected condition; may be retried | `reason` |
 
 An error that isn't tied to a request (a failed handshake, or a message too broken to

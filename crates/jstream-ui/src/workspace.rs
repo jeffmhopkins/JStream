@@ -9,6 +9,7 @@
 use crate::canvas::Canvas;
 use crate::dock::{Dock, PanelId, Target, Zone};
 use crate::pairing::Pairing;
+use crate::panels::mixer::MixerFlip;
 use crate::panels::{Filters, Inspector, Mixer, Outputs, Scenes, Sources, StudioMode, Transform};
 use leptos::html;
 use leptos::prelude::*;
@@ -392,6 +393,7 @@ fn GroupView(ui: Ui, zone: Zone, id: u32, zone_ref: NodeRef<html::Section>) -> i
                 data-group=id.to_string()
             >
                 <div class="tabs-row">{tab_strip}</div>
+                {move || (active() == Some(PanelId::Mixer)).then(|| view! { <MixerFlip /> })}
                 {move || (!multi()).then(|| {
                     active().map(|panel| view! { <CloseButton ui=ui panel=panel small=false /> })
                 })}

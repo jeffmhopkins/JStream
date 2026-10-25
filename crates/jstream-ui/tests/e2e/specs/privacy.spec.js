@@ -83,3 +83,18 @@ test('a client that connects while privacy is on shows it at once', async ({ pag
   await expect(privacyButton(late)).toHaveText('Privacy on');
   await expect(notice(late)).toHaveText('Privacy screen on · output blurred · mic muted');
 });
+
+test('the vertical mixer marks the muted mic too', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  await showPanel(page, 'Audio mixer');
+  const mixer = page.locator('.mixer-panel');
+  await page.getByRole('button', { name: /^Meters: / }).click();
+  await mixer.locator('.master-strip').getByRole('button', { name: 'Master' }).click();
+  const columns = mixer.getByRole('list', { name: 'Channels' }).locator('.mix-column');
+  await expect(columns.locator('.column-name')).toHaveText(['Desktop audio', 'Mic']);
+  await expect(columns.locator('.column-note')).toHaveCount(0);
+
+  await privacyButton(page).click();
+  await expect(columns.nth(1).locator('.column-note')).toHaveText('muted (privacy)');
+  await expect(columns.nth(0).locator('.column-note')).toHaveCount(0);
+});

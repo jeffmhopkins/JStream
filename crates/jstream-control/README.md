@@ -217,8 +217,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `unsupported`, as the in-process engine answers them: only a server in front of a
   session serves them
   ([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md));
-- the plugin actions (`plugin.install`, `plugin.grant`, `plugin.enable`) answered with
-  `unsupported`, as the engine answers them: neither hosts plugins yet;
+- `plugin.install` answered with `unsupported`, since the mock can't run a plugin, and
+  `plugin.grant` and `plugin.enable` with `not_found` (entity `plugin`), as the engine
+  answers them for a plugin that isn't installed: none ever is in the mock;
 - the stream-key actions with the engine's checks and errors. `output.set_key` answers
   `not_found` for an output not in the collection, then `invalid_argument` (field
   `key`) for an empty or over-long key, or one with whitespace, control or non-ASCII
