@@ -9,7 +9,7 @@ publish.workspace = true
 
 [package.metadata.jstream]
 layer = 3
-summary = "wasmtime host for automation plugins (calls the API through `Control`): fuel, wall-time and memory limits, no WASI, and a per-plugin capability list of the calls a plugin may make, empty by default"
+summary = "wasmtime host for automation plugins (calls the API through `Control`): fuel, wall-time and memory limits, no WASI, and a per-plugin capability list of the calls a plugin may make, empty by default, or every call for a `Control` that checks them itself"
 unsafe_allowed = false
 
 [lints]

@@ -968,9 +968,9 @@ needs = ["build", "hardware"]
 id = "WA1"
 milestone = "M3"
 title = "WASM automation plugins"
-status = "planned"
-prs = [486, 623, 642, 722, 725]
-note = "WASM host #486 landed with wave/m3-2 (#663); its wall-time deadlines #623, the cap of 50 commands a second #722, the 1,000-event queue #725 and the wire half #642 (protocol 0.35) landed with wave/m3-3 (#786); the engine side to build"
+status = "review"
+prs = [486, 623, 642, 722, 725, 839, 843]
+note = "WASM host #486 landed with wave/m3-2 (#663); its wall-time deadlines #623, the cap of 50 commands a second #722, the 1,000-event queue #725 and the wire half #642 (protocol 0.35) landed with wave/m3-3 (#786); the engine side part 1, installing, granting, events, forbidden and disabling (#839, ADR-0075), landed in wave/m3-5; part 2, saving installed plugins, grants held to the manifest's classes and hosts, needs_grant, memory_limit and the MCP state-text line (#843, ADR-0076), is in review into wave/m3-5; the UI's grant flow and a query listing the plugins follow, and a private data folder waits for its own design with the file imports it needs"
 needs = ["build"]
 
 [[item]]
@@ -987,8 +987,8 @@ id = "LNX1"
 milestone = "M3"
 title = "Linux codec path and platform crate"
 status = "review"
-prs = [481, 490, 509, 510, 572, 598, 606, 652, 593, 612, 603, 617, 610, 685, 689, 634, 694, 830]
-note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); these landed with wave/m3-2 (#663); with wave/m3-3 (#786): ALSA audio input and output (#572); portal restore tokens per source (#598); DMA-BUF capture frames imported into Vulkan (#606); VA-API H.264 encode from the Vulkan device's NV12 encode targets (#652); PipeWire audio input, output and loopback (#593); with wave/m3-4 (#827): PipeWire processing on the real-time data loop (#612); V4L2 webcams and capture cards (#603); multi-planar V4L2 capture (#617); the pointer as PipeWire cursor metadata or left out, platform only (#610), on the CPU and DMA-BUF paths; the source's show_cursor setting (protocol 0.36, #682) has the OS draw the pointer when it's on and leave it out when it's off (WGC leaves it out too, with #682, and ScreenCaptureKit with #685), and the engine doesn't draw the pointer; webcams paired with their microphones and the Linux backend set choosing PipeWire or ALSA (#689); stream keys and OAuth tokens in the Secret Service, else a 0600 file, ADR-0071, not yet used by an app (#634); capture copies and NV12 submits ordered on the context's queue (#694); in wave/m3-5: VA-API HEVC encode (#830), still to run on Intel or AMD hardware, and its hardening (#835) in review; the rest of the codec path to build"
+prs = [481, 490, 509, 510, 572, 598, 606, 652, 593, 612, 603, 617, 610, 685, 689, 634, 694, 830, 835]
+note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); these landed with wave/m3-2 (#663); with wave/m3-3 (#786): ALSA audio input and output (#572); portal restore tokens per source (#598); DMA-BUF capture frames imported into Vulkan (#606); VA-API H.264 encode from the Vulkan device's NV12 encode targets (#652); PipeWire audio input, output and loopback (#593); with wave/m3-4 (#827): PipeWire processing on the real-time data loop (#612); V4L2 webcams and capture cards (#603); multi-planar V4L2 capture (#617); the pointer as PipeWire cursor metadata or left out, platform only (#610), on the CPU and DMA-BUF paths; the source's show_cursor setting (protocol 0.36, #682) has the OS draw the pointer when it's on and leave it out when it's off (WGC leaves it out too, with #682, and ScreenCaptureKit with #685), and the engine doesn't draw the pointer; webcams paired with their microphones and the Linux backend set choosing PipeWire or ALSA (#689); stream keys and OAuth tokens in the Secret Service, else a 0600 file, ADR-0071, not yet used by an app (#634); capture copies and NV12 submits ordered on the context's queue (#694); in wave/m3-5: VA-API HEVC encode (#830) and its hardening (#835), still to run on Intel or AMD hardware; the rest of the codec path to build"
 needs = ["wave", "build"]
 
 [[item]]
@@ -1031,7 +1031,7 @@ needs = ["build"]
 id = "CL2"
 milestone = "M3"
 title = "A too_large error for oversized plugin state"
-status = "planned"
-prs = []
-note = "ROADMAP M3 and #102: a maintainer-tier ADR superseding ADR-0037's state clause adds a stable too_large error, so a batch carrying two 2 MiB CLAP states fails cleanly instead of closing the connection"
-needs = ["maintainer", "build"]
+status = "review"
+prs = [794]
+note = "ROADMAP M3 and #102: ADR-0074 (#794, accepted by the maintainer, maintainer tier) amends ADR-0037's state clause with a stable too_large error, so a batch carrying two 2 MiB CLAP states fails cleanly instead of closing the connection; the build, a protocol minor, follows"
+needs = ["build"]

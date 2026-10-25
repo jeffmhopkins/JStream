@@ -2876,14 +2876,17 @@ dependencies = [
  "jstream-platform",
  "jstream-platform-windows",
  "jstream-plugin-proto",
+ "jstream-plugin-wasm",
  "jstream-protocol",
  "jstream-render",
  "jstream-sources",
  "jstream-youtube",
  "png 0.18.1",
+ "serde",
  "serde_json",
  "thiserror 2.0.21",
  "tracing",
+ "wat",
  "zune-jpeg",
 ]
 
