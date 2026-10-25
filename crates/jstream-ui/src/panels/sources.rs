@@ -230,6 +230,10 @@ pub fn Sources() -> impl IntoView {
     // row goes after it in the scene's order.
     let drop = move |moved: String, target: String, side: Side| {
         let Some(scene_id) = scene() else { return };
+        // A row dropped on itself, or into its own nested scene, is no move.
+        if moved == target {
+            return;
+        }
         // Into a nested scene, or beside one of its items: an `item.move` there.
         let into = studio.collection.with_untracked(|c| {
             let c = c.as_ref()?;

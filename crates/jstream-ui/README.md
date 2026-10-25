@@ -203,8 +203,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `item.move`, keeping their IDs and boxes since the group shares the canvas. In the
   sources list, one item's menu ends with deleting its source everywhere. A nested
   scene and an audio-only source get the prototype's shorter menus; the first can be
-  opened, and a group ungrouped (its items moved back where it was, and the group
-  scene and its sources deleted when nothing else places them). The scene and object lists fill their dock group, so the space under
+  opened, and a group ungrouped: its items move back where it was, each given the box
+  it draws at when the group isn't at its default placement (ADR-0024 §1), and the group
+  scene and its sources are deleted. Ungroup shows disabled, with the reason, while
+  another item places the group or its placement can't become its items' own boxes. The scene and object lists fill their dock group, so the space under
   their rows opens the panel's menu. `dialog.rs` is the modal frame: Escape and the
   backdrop cancel, and Enter presses the button marked `data-primary`. The Add source
   dialog (`panels/add_source.rs`, opened through `AddSourceDialog` context) lists the

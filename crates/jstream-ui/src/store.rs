@@ -110,7 +110,7 @@ impl Collection {
         }
     }
 
-    /// Whether any scene, source, item or output uses this ID. The engine rejects a
+    /// Whether any scene, folder, source, item or output uses this ID. The engine rejects a
     /// creating edit whose ID exists, so new IDs are checked against all of them.
     pub fn id_taken(&self, id: &str) -> bool {
         self.scenes

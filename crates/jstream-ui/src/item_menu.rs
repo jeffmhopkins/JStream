@@ -17,8 +17,8 @@ use crate::panels::source_properties::{self, PropertiesDialog};
 use crate::store::{Collection, Studio};
 use crate::workspace::DockState;
 use jstream_control::protocol::{
-    Canvas, Crop, Edit, Finite32, ItemGeometry, ItemId, ItemInfo, SceneId, SceneRole, Settings,
-    SourceId, SourceKind,
+    Canvas, Crop, Edit, Finite32, FitMode, ItemGeometry, ItemId, ItemInfo, SceneId, SceneRole,
+    Settings, Size, SourceId, SourceKind, Vec2,
 };
 use leptos::prelude::*;
 use std::rc::Rc;
@@ -313,17 +313,165 @@ pub fn group_edits(
     edits
 }
 
+/// Why a group can't be ungrouped from the menu.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Kept {
+    /// Another item places the group too, and would lose its items.
+    PlacedElsewhere,
+    /// The group's placement can't be carried onto its items as their own boxes: it is
+    /// cropped, faded, blended, filtered, mirrored or turned in 3D, or it stretches an
+    /// item that is turned or has no box.
+    Look,
+}
+
+impl Kept {
+    /// The menu's short reason.
+    pub fn reason(self) -> &'static str {
+        match self {
+            Kept::PlacedElsewhere => "placed elsewhere",
+            Kept::Look => "keeps its look",
+        }
+    }
+}
+
+/// How a group's placement maps a box in the group to one in its parent (ADR-0024 §1):
+/// scaled about the canvas centre by `scale`, turned by `turn_deg` and centred on
+/// `center`.
+#[derive(Clone, Copy, Debug)]
+struct Carry {
+    canvas: (f32, f32),
+    center: (f32, f32),
+    scale: (f32, f32),
+    turn_deg: f32,
+}
+
+impl Carry {
+    /// The map for `group`'s placement, `None` when it is the default, which leaves
+    /// every box as it is.
+    fn of(group: &ItemInfo, canvas: Canvas) -> Result<Option<Carry>, Kept> {
+        if group.crop != Crop::NONE
+            || group.opacity != Finite32::ONE
+            || group.blend != Default::default()
+            || !group.effects.is_empty()
+        {
+            return Err(Kept::Look);
+        }
+        let Some(g) = group.geometry else {
+            // The 0.3 form: the identity draws the group's canvas over the parent's.
+            return if group.transform == jstream_control::protocol::ItemTransform::IDENTITY {
+                Ok(None)
+            } else {
+                Err(Kept::Look)
+            };
+        };
+        if ItemGeometry::covering_canvas(canvas.width, canvas.height).ok() == Some(g) {
+            return Ok(None);
+        }
+        if !g.is_neutral_3d() || g.flip_h || g.flip_v {
+            return Err(Kept::Look);
+        }
+        let (w, h) = (canvas.width as f32, canvas.height as f32);
+        let (sx, sy) = (g.size.width.get() / w, g.size.height.get() / h);
+        let uniform = (sx - sy).abs() <= 1e-4 * sx.max(sy);
+        let scale = match g.fit_mode {
+            FitMode::Stretch => (sx, sy),
+            // The group's canvas keeps its shape, centred in the box.
+            FitMode::Fit => (sx.min(sy), sx.min(sy)),
+            // Fill crops a box of another shape, and a mode this client doesn't know may.
+            _ if uniform => (sx, sy),
+            _ => return Err(Kept::Look),
+        };
+        Ok(Some(Carry {
+            canvas: (w, h),
+            center: (g.center.x.get(), g.center.y.get()),
+            scale,
+            turn_deg: g.rotation_deg.get(),
+        }))
+    }
+
+    /// `child`'s box in the parent.
+    fn apply(self, child: &ItemInfo) -> Result<ItemGeometry, Kept> {
+        let c = child.geometry.ok_or(Kept::Look)?;
+        if !c.is_neutral_3d() {
+            return Err(Kept::Look);
+        }
+        let (sx, sy) = self.scale;
+        let own = c.rotation_deg.get().rem_euclid(180.0);
+        // A stretch keeps a box a box only when the box isn't turned against it.
+        let (bw, bh) = if (sx - sy).abs() <= 1e-4 * sx.max(sy) || own == 0.0 {
+            (sx, sy)
+        } else if own == 90.0 {
+            (sy, sx)
+        } else {
+            return Err(Kept::Look);
+        };
+        let x = (c.center.x.get() - self.canvas.0 * 0.5) * sx;
+        let y = (c.center.y.get() - self.canvas.1 * 0.5) * sy;
+        // Clockwise with y down.
+        let (sin, cos) = self.turn_deg.to_radians().sin_cos();
+        let center = Vec2::new(
+            self.center.0 + x * cos - y * sin,
+            self.center.1 + x * sin + y * cos,
+        )
+        .ok_or(Kept::Look)?;
+        let size = Size::try_new(c.size.width.get() * bw, c.size.height.get() * bh)
+            .map_err(|_| Kept::Look)?;
+        let turned = (c.rotation_deg.get() + self.turn_deg + 180.0).rem_euclid(360.0) - 180.0;
+        let rotation_deg = Finite32::new(turned).ok_or(Kept::Look)?;
+        Ok(ItemGeometry {
+            center,
+            size,
+            rotation_deg,
+            ..c
+        })
+    }
+}
+
 /// The batch that ungroups the nested scene `item_id` places: its items move into the
-/// item's scene where it was, in their order, and the item goes. A group scene that
-/// nothing else places goes too, with its unplaced `scene` sources. `None` when the item
-/// doesn't place a scene.
-pub fn ungroup_edits(collection: &Collection, item_id: &ItemId) -> Option<Vec<Edit>> {
+/// item's scene where it was, in their order, each keeping where it draws (ADR-0024 §1),
+/// and the item goes. A group scene that nothing else places goes too, with its unplaced
+/// `scene` sources. `None` when the item doesn't place a scene; [`Kept`] when another
+/// item places it too, or its placement can't be carried onto its items.
+pub fn ungroup_edits(collection: &Collection, item_id: &ItemId) -> Option<Result<Vec<Edit>, Kept>> {
     let (parent, item) = collection.item(item_id)?;
     let SourceKind::Scene { scene_id: group } = &collection.source(&item.source_id)?.kind else {
         return None;
     };
     let nested = collection.scene(group)?;
     let at = parent.items.iter().position(|i| i.item_id == *item_id)?;
+    let shows_group =
+        |kind: &SourceKind| matches!(kind, SourceKind::Scene { scene_id } if scene_id == group);
+    let sources: Vec<&SourceId> = collection
+        .sources
+        .iter()
+        .filter(|s| shows_group(&s.kind))
+        .map(|s| &s.source_id)
+        .collect();
+    let placed_elsewhere = collection
+        .scenes
+        .iter()
+        .flat_map(|s| &s.items)
+        .any(|i| i.item_id != *item_id && sources.contains(&&i.source_id));
+    if placed_elsewhere {
+        return Some(Err(Kept::PlacedElsewhere));
+    }
+    let carry = match Carry::of(item, collection.canvas) {
+        Ok(carry) => carry,
+        Err(kept) => return Some(Err(kept)),
+    };
+    let mut boxes = Vec::new();
+    if let Some(carry) = carry {
+        for child in &nested.items {
+            match carry.apply(child) {
+                Ok(geometry) => boxes.push(Edit::ItemSetGeometry {
+                    item_id: child.item_id.clone(),
+                    scene_id: Some(parent.scene_id.clone()),
+                    geometry,
+                }),
+                Err(kept) => return Some(Err(kept)),
+            }
+        }
+    }
     let mut edits: Vec<Edit> = nested
         .items
         .iter()
@@ -334,25 +482,11 @@ pub fn ungroup_edits(collection: &Collection, item_id: &ItemId) -> Option<Vec<Ed
             index: u32::try_from(at + k).unwrap_or(u32::MAX),
         })
         .collect();
+    edits.extend(boxes);
     edits.push(Edit::ItemRemove {
         item_id: item_id.clone(),
     });
-    let shows_group =
-        |kind: &SourceKind| matches!(kind, SourceKind::Scene { scene_id } if scene_id == group);
-    let placed = |source_id: &SourceId| {
-        collection
-            .scenes
-            .iter()
-            .flat_map(|s| &s.items)
-            .any(|i| i.source_id == *source_id && i.item_id != *item_id)
-    };
-    let sources: Vec<&SourceId> = collection
-        .sources
-        .iter()
-        .filter(|s| shows_group(&s.kind))
-        .map(|s| &s.source_id)
-        .collect();
-    if nested.role == SceneRole::Group && !sources.iter().any(|s| placed(s)) {
+    if nested.role == SceneRole::Group {
         edits.extend(sources.into_iter().map(|source_id| Edit::SourceDelete {
             source_id: source_id.clone(),
         }));
@@ -360,7 +494,7 @@ pub fn ungroup_edits(collection: &Collection, item_id: &ItemId) -> Option<Vec<Ed
             scene_id: group.clone(),
         });
     }
-    Some(edits)
+    Some(Ok(edits))
 }
 
 /// What the menu needs to know about the selection.
@@ -544,7 +678,7 @@ impl Context {
             .studio
             .collection
             .with_untracked(|c| c.as_ref().and_then(|c| ungroup_edits(c, item_id)));
-        if let Some(edits) = edits {
+        if let Some(Ok(edits)) = edits {
             self.send(edits);
         }
     }
@@ -653,7 +787,7 @@ fn sharing_entries(cx: Context, facts: &Facts) -> Vec<Entry> {
             }
             let Some(s) = cx.session.get() else { return };
             let copy = SourceId::new(cx.studio.fresh_id(&s, "source"));
-            cx.send(to_clone(&item, &source, &name, copy));
+            cx.send(to_clone(&item, &source, &format!("{name} copy"), copy));
         })
         .checked(clone)
     };
@@ -706,14 +840,18 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
         let into = nested.clone();
         let open = nested.clone();
         let studio = cx.studio;
-        let group = cx.studio.collection.with_untracked(|c| {
-            c.as_ref()
-                .and_then(|c| c.scene(nested))
-                .is_some_and(|s| s.role == SceneRole::Group)
-        });
-        let ungroup = group.then(|| {
+        let ungroup = cx.studio.collection.with_untracked(|c| {
+            let c = c.as_ref()?;
+            if c.scene(nested)?.role != SceneRole::Group {
+                return None;
+            }
+            let kept = ungroup_edits(c, &primary)?.err();
             let id = primary.clone();
-            Entry::item("Ungroup", move || cx.ungroup(&id))
+            let entry = Entry::item("Ungroup", move || cx.ungroup(&id));
+            Some(match kept {
+                Some(kept) => entry.disabled_if(true).hint(kept.reason()),
+                None => entry,
+            })
         });
         let mut list = vec![properties, filters, pop_out, Entry::Sep];
         list.extend(audio);
@@ -1113,7 +1251,9 @@ mod tests {
             ],
             vec![placing("x", "logo"), placing("y", "copy")],
         );
-        let edits = ungroup_edits(&c, &ItemId::new("g1")).expect("a nested scene");
+        let edits = ungroup_edits(&c, &ItemId::new("g1"))
+            .expect("a nested scene")
+            .expect("at its default placement");
         assert_eq!(
             ids_of(&edits),
             [
@@ -1124,14 +1264,102 @@ mod tests {
                 "delete scene grp",
             ]
         );
-        // Placed elsewhere too, the group stays.
+        // Placed elsewhere too, ungrouping one placement would empty the other (N1).
         let twice = grouped(
             vec![placing("g1", "grp_src"), placing("g2", "grp_src")],
             vec![placing("x", "logo")],
         );
-        let edits = ungroup_edits(&twice, &ItemId::new("g1")).expect("a nested scene");
-        assert_eq!(ids_of(&edits), ["move x main 0", "remove g1"]);
+        assert_eq!(
+            ungroup_edits(&twice, &ItemId::new("g1")),
+            Some(Err(Kept::PlacedElsewhere))
+        );
         assert!(ungroup_edits(&c, &ItemId::new("a")).is_none());
+    }
+
+    fn boxed(id: &str, source: &str, x: f32, y: f32, w: f32, h: f32, turn: f32) -> ItemInfo {
+        let mut item = placing(id, source);
+        item.placement = jstream_control::protocol::PlacementForm::Geometry;
+        item.geometry = Some(ItemGeometry {
+            rotation_deg: Finite32::new(turn).expect("finite"),
+            ..ItemGeometry::try_new(
+                Vec2::new(x, y).expect("finite"),
+                Size::try_new(w, h).expect("positive"),
+            )
+            .expect("a box")
+        });
+        item
+    }
+
+    fn boxes(edits: &[Edit]) -> Vec<(String, [f32; 5])> {
+        edits
+            .iter()
+            .filter_map(|e| match e {
+                Edit::ItemSetGeometry {
+                    item_id, geometry, ..
+                } => Some((
+                    item_id.to_string(),
+                    [
+                        geometry.center.x.get(),
+                        geometry.center.y.get(),
+                        geometry.size.width.get(),
+                        geometry.size.height.get(),
+                        geometry.rotation_deg.get(),
+                    ],
+                )),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// B1 on #871: a moved, scaled or turned group's items keep where they draw.
+    #[test]
+    fn ungrouping_a_moved_group_carries_its_placement_onto_its_items() {
+        let kids = || {
+            vec![
+                boxed("x", "logo", 960.0, 540.0, 200.0, 100.0, 0.0),
+                boxed("y", "copy", 1060.0, 640.0, 100.0, 100.0, 30.0),
+            ]
+        };
+        let at = |group: ItemInfo| {
+            let c = grouped(vec![group], kids());
+            ungroup_edits(&c, &ItemId::new("g1")).expect("a nested scene")
+        };
+        // Half size in the top-left quarter.
+        let half = at(boxed("g1", "grp_src", 480.0, 270.0, 960.0, 540.0, 0.0)).expect("carried");
+        assert_eq!(
+            ids_of(&half)[..2],
+            ["move x main 0".to_owned(), "move y main 1".to_owned()]
+        );
+        assert_eq!(
+            boxes(&half),
+            [
+                ("x".to_owned(), [480.0, 270.0, 100.0, 50.0, 0.0]),
+                ("y".to_owned(), [530.0, 320.0, 50.0, 50.0, 30.0]),
+            ]
+        );
+        // Turned a quarter clockwise about the canvas centre.
+        let turned =
+            at(boxed("g1", "grp_src", 960.0, 540.0, 1920.0, 1080.0, 90.0)).expect("carried");
+        let b = boxes(&turned);
+        assert_eq!(b[0].1, [960.0, 540.0, 200.0, 100.0, 90.0]);
+        let y = b[1].1;
+        assert!(
+            (y[0] - 860.0).abs() < 1e-3 && (y[1] - 640.0).abs() < 1e-3,
+            "{y:?}"
+        );
+        assert_eq!(y[4], 120.0);
+        // At its default placement nothing is rewritten.
+        let plain = at(boxed("g1", "grp_src", 960.0, 540.0, 1920.0, 1080.0, 0.0)).expect("plain");
+        assert!(boxes(&plain).is_empty());
+        // A faded group, or a stretch of a turned item, can't be carried.
+        let mut faded = boxed("g1", "grp_src", 480.0, 270.0, 960.0, 540.0, 0.0);
+        faded.opacity = Finite32::new(0.5).expect("finite");
+        assert_eq!(at(faded), Err(Kept::Look));
+        let mut wide = boxed("g1", "grp_src", 960.0, 540.0, 1920.0, 540.0, 0.0);
+        if let Some(g) = &mut wide.geometry {
+            g.fit_mode = FitMode::Stretch;
+        }
+        assert_eq!(at(wide), Err(Kept::Look));
     }
 
     #[test]

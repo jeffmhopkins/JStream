@@ -626,10 +626,26 @@ pub fn Canvas() -> impl IntoView {
                     cx.duplicate_selected(&scene, &items, event.shift_key());
                 }
             }
-            "Delete" => match (item_cx, chosen_here()) {
-                (Some(cx), Some((_, items))) if !items.is_empty() => cx.remove(&items),
-                _ => return,
-            },
+            "Delete" => {
+                let Some((cx, (scene, items))) = item_cx.zip(chosen_here()) else {
+                    return;
+                };
+                // Only the shown scene's items: the selection can outlive one, after an
+                // undo or another client's delete, and one missing ID fails the batch.
+                let items: Vec<ItemId> = studio.collection.with_untracked(|c| {
+                    let Some(shown) = c.as_ref().and_then(|c| c.scene(&scene)) else {
+                        return Vec::new();
+                    };
+                    items
+                        .into_iter()
+                        .filter(|id| shown.items.iter().any(|i| i.item_id == *id))
+                        .collect()
+                });
+                if items.is_empty() {
+                    return;
+                }
+                cx.remove(&items);
+            }
             "z" | "Z" if command && event.shift_key() => step(HistoryOp::Redo),
             "z" | "Z" if command => step(HistoryOp::Undo),
             "y" | "Y" if command => step(HistoryOp::Redo),
