@@ -228,22 +228,18 @@ impl Selection {
 
 /// What a click on `scene_id` in the scene list sends: in studio mode a
 /// `studio.set_preview`, else a `scene.switch` that lets the engine choose the preset.
-/// `None` when the scene is already where the click would put it.
-pub fn scene_click(
-    studio_mode: bool,
-    program: Option<&SceneId>,
-    preview: Option<&SceneId>,
-    scene_id: &SceneId,
-) -> Option<Action> {
+/// It is sent even for a scene the page thinks is there already: the engine treats
+/// both as no-ops then, and the page's copy may be stale.
+pub fn scene_click(studio_mode: bool, scene_id: &SceneId) -> Action {
     if studio_mode {
-        (preview != Some(scene_id)).then(|| Action::StudioSetPreview {
+        Action::StudioSetPreview {
             scene_id: scene_id.clone(),
-        })
+        }
     } else {
-        (program != Some(scene_id)).then(|| Action::SceneSwitch {
+        Action::SceneSwitch {
             scene_id: scene_id.clone(),
             preset_id: None,
-        })
+        }
     }
 }
 
@@ -327,6 +323,9 @@ pub struct Studio {
     pub keys_changed: RwSignal<u64>,
     /// Whether a `state.get` is in flight, and whether another is due after it.
     refresh: StoredValue<(bool, bool)>,
+    /// Bumped by each `studio.changed`, so a `studio.get` answer that an event
+    /// overtook is dropped.
+    studio_seq: StoredValue<u64>,
     /// The counter [`fresh_id`] continues from.
     next_id: StoredValue<u64>,
 }
@@ -345,6 +344,7 @@ impl Studio {
             problem: RwSignal::new(None),
             keys_changed: RwSignal::new(0),
             refresh: StoredValue::new((false, false)),
+            studio_seq: StoredValue::new(0),
             next_id: StoredValue::new(0),
         }
     }
@@ -366,14 +366,7 @@ impl Studio {
         let studio = *self;
         let first = session.clone();
         spawn_local(async move {
-            if let Ok(QueryResult::StudioGet {
-                program_scene,
-                preview_scene,
-            }) = query(&first, Query::StudioGet).await
-            {
-                studio.program.set(program_scene);
-                studio.preview.set(preview_scene);
-            }
+            studio.read_studio(&first).await;
             // The state is read after the program scene, so the first selection is the
             // scene on program.
             studio.refresh(&first);
@@ -382,6 +375,39 @@ impl Studio {
         spawn_local(async move {
             studio.take_kinds(list_kinds(&kinds).await);
         });
+    }
+
+    /// Reads the program and preview scenes with `studio.get`, unless a
+    /// `studio.changed` arrives while it is in flight: that event is newer.
+    async fn read_studio(&self, session: &Session) {
+        let asked = self.studio_seq.get_value();
+        if let Ok(QueryResult::StudioGet {
+            program_scene,
+            preview_scene,
+        }) = query(session, Query::StudioGet).await
+        {
+            self.take_studio(asked, program_scene, preview_scene);
+        }
+    }
+
+    /// Keeps a `studio.get` answer asked for at `asked` (the [`Studio::studio_seq`] then),
+    /// unless a `studio.changed` came in since. Returns whether it was kept.
+    fn take_studio(&self, asked: u64, program: Option<SceneId>, preview: Option<SceneId>) -> bool {
+        if self.studio_seq.get_value() != asked {
+            return false;
+        }
+        self.program.set(program);
+        self.preview.set(preview);
+        self.reconcile();
+        true
+    }
+
+    /// Follows a `studio.changed`.
+    fn studio_changed(&self, program: Option<SceneId>, preview: Option<SceneId>) {
+        self.studio_seq.update_value(|seq| *seq += 1);
+        self.program.set(program);
+        self.preview.set(preview);
+        self.reconcile();
     }
 
     /// Keeps the kinds `kind.list` answered. A failed `kind.list` shows its error in the
@@ -406,16 +432,18 @@ impl Studio {
                     self.refresh(session);
                 }
             }
-            Event::EventsDropped { .. } => self.refresh(session),
+            // A dropped `studio.changed` is recovered too.
+            Event::EventsDropped { .. } => {
+                self.refresh(session);
+                let studio = *self;
+                let session = session.clone();
+                spawn_local(async move { studio.read_studio(&session).await });
+            }
             Event::StudioChanged {
                 program_scene,
                 preview_scene,
                 ..
-            } => {
-                self.program.set(program_scene.clone());
-                self.preview.set(preview_scene.clone());
-                self.reconcile();
-            }
+            } => self.studio_changed(program_scene.clone(), preview_scene.clone()),
             _ => {}
         }
     }
@@ -470,14 +498,8 @@ impl Studio {
 
     /// What a click on a scene in the list does besides selecting it: in studio mode it
     /// goes on preview, else on program (with the transition the engine resolves).
-    /// `None` when it is there already.
-    pub fn click_action(&self, scene_id: &SceneId) -> Option<Action> {
-        scene_click(
-            self.studio_mode.get_untracked(),
-            self.program.get_untracked().as_ref(),
-            self.preview.get_untracked().as_ref(),
-            scene_id,
-        )
+    pub fn click_action(&self, scene_id: &SceneId) -> Action {
+        scene_click(self.studio_mode.get_untracked(), scene_id)
     }
 
     /// Selects a scene, and no item.
@@ -918,32 +940,39 @@ mod tests {
         assert_eq!(fresh_id("scene", "c1", &mut next, taken), "scene-c1-3");
     }
 
-    /// Outside studio mode a click puts the scene on program; in it, on preview; and
-    /// nothing is sent for a scene already there.
+    /// Outside studio mode a click puts the scene on program; in it, on preview.
     #[test]
     fn a_click_on_a_scene_switches_or_previews_it() {
         use jstream_control::protocol::Action;
-        let (a, b) = (SceneId::new("a"), SceneId::new("b"));
+        let b = SceneId::new("b");
         assert_eq!(
-            scene_click(false, Some(&a), None, &b),
-            Some(Action::SceneSwitch {
+            scene_click(false, &b),
+            Action::SceneSwitch {
                 scene_id: b.clone(),
                 preset_id: None
-            })
+            }
         );
-        assert_eq!(scene_click(false, Some(&b), None, &b), None);
         assert_eq!(
-            scene_click(true, Some(&a), None, &b),
-            Some(Action::StudioSetPreview {
-                scene_id: b.clone()
-            })
+            scene_click(true, &b),
+            Action::StudioSetPreview { scene_id: b }
         );
-        assert_eq!(scene_click(true, Some(&a), Some(&b), &b), None);
-        // On program already, it still goes on preview in studio mode.
-        assert_eq!(
-            scene_click(true, Some(&a), Some(&b), &a),
-            Some(Action::StudioSetPreview { scene_id: a })
-        );
+    }
+
+    /// A `studio.get` answer that a `studio.changed` overtook is stale, and dropped;
+    /// one that nothing overtook is kept.
+    #[test]
+    fn a_studio_get_answer_overtaken_by_an_event_is_dropped() {
+        let (main, intro) = (SceneId::new("main"), SceneId::new("intro"));
+        let studio = Studio::new();
+        let asked = studio.studio_seq.get_value();
+        studio.studio_changed(Some(main.clone()), Some(intro.clone()));
+        assert!(!studio.take_studio(asked, Some(main.clone()), Some(main.clone())));
+        assert_eq!(studio.preview.get_untracked(), Some(intro.clone()));
+
+        let asked = studio.studio_seq.get_value();
+        assert!(studio.take_studio(asked, Some(intro.clone()), Some(main.clone())));
+        assert_eq!(studio.program.get_untracked(), Some(intro));
+        assert_eq!(studio.preview.get_untracked(), Some(main));
     }
 
     #[test]

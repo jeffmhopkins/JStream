@@ -67,8 +67,8 @@ impl SceneDraft {
 
 /// The edits that turn `before` into `draft` for `scene_id`, in one batch: a rename
 /// (a blank name is ignored), the overrides, then the hotkey (the old chord cleared
-/// before the new one is bound). Refused when the new chord already runs something
-/// else, which `hotkey.set` would refuse too.
+/// before the new one is bound, keeping the preset the old binding named). Refused when
+/// the new chord is bound already, which `hotkey.set` would refuse too.
 pub fn scene_edits(
     collection: &Collection,
     scene_id: &SceneId,
@@ -94,13 +94,32 @@ pub fn scene_edits(
     }
     if draft.hotkey != before.hotkey {
         if let Some(chord) = &draft.hotkey
-            && collection.hotkeys.iter().any(|b| &b.chord == chord)
+            && let Some(taken) = collection.hotkeys.iter().find(|b| &b.chord == chord)
         {
+            let runs = match taken.action() {
+                Some(Action::SceneSwitch { scene_id: id, .. }) if &id == scene_id => {
+                    "already switches to this scene".to_owned()
+                }
+                Some(Action::SceneSwitch { scene_id: id, .. }) => format!(
+                    "already switches to “{}”",
+                    collection
+                        .scene(&id)
+                        .map_or_else(|| id.to_string(), |s| s.name.clone())
+                ),
+                _ => "already runs something else".to_owned(),
+            };
             return Err(format!(
-                "{} already runs something else. Clear that hotkey first.",
+                "{} {runs}. Clear that hotkey first.",
                 chord_label(chord)
             ));
         }
+        // A rebind keeps the preset the old binding switched with.
+        let preset_id = collection
+            .scene_hotkey(scene_id)
+            .and_then(|b| match b.action() {
+                Some(Action::SceneSwitch { preset_id, .. }) => preset_id,
+                _ => None,
+            });
         if let Some(chord) = before.hotkey.clone() {
             edits.push(Edit::HotkeyClear { chord });
         }
@@ -109,7 +128,7 @@ pub fn scene_edits(
                 chord,
                 action: Action::SceneSwitch {
                     scene_id: scene_id.clone(),
-                    preset_id: None,
+                    preset_id,
                 },
             });
         }
@@ -439,7 +458,32 @@ mod tests {
                 chord: Chord::new("F1")
             }])
         );
-        assert!(scene_edits(&c, &a, &before, &draft("A", Some("F2"))).is_err());
+        assert_eq!(
+            scene_edits(&c, &a, &before, &draft("A", Some("F2"))),
+            Err("F2 already switches to “b”. Clear that hotkey first.".into())
+        );
+    }
+
+    /// Rebinding a scene's hotkey keeps the preset its old binding switched with.
+    #[test]
+    fn a_rebind_keeps_the_binding_s_preset() {
+        let fade = Action::SceneSwitch {
+            scene_id: SceneId::new("a"),
+            preset_id: Some(TransitionPresetId::new("fade")),
+        };
+        let c = Collection {
+            hotkeys: vec![HotkeyBinding::new(Chord::new("F1"), &fade)],
+            ..Collection::default()
+        };
+        let a = SceneId::new("a");
+        let edits = scene_edits(&c, &a, &draft("A", Some("F1")), &draft("A", Some("F3")));
+        assert_eq!(
+            edits.map(|e| e.into_iter().last()),
+            Ok(Some(Edit::HotkeySet {
+                chord: Chord::new("F3"),
+                action: fade,
+            }))
+        );
     }
 
     #[test]

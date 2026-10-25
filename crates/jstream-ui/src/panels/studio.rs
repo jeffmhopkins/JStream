@@ -285,15 +285,6 @@ pub fn overrides_edit(
     }
 }
 
-/// Why a preset can't be deleted now, or `None` when it can.
-pub fn delete_blocker(
-    preset: &TransitionPresetInfo,
-    transitions: &TransitionsInfo,
-) -> Option<&'static str> {
-    (preset.preset_id == transitions.default)
-        .then_some("It is the default. Make another preset the default first.")
-}
-
 /// An unused preset ID made from `name`: lower case, with runs of anything but letters
 /// and digits turned into one `-`, and `-2`, `-3`… added when it is taken.
 pub fn next_preset_id<'a>(
@@ -363,21 +354,6 @@ pub fn kind_name(kinds: &[KindDescriptor], kind_id: &str) -> String {
         .iter()
         .find(|kind| kind.kind_id == kind_id)
         .map_or_else(|| kind_id.to_owned(), |kind| kind.name.clone())
-}
-
-/// What a preset does, in a line: its kind, and for every kind but a cut, its duration
-/// and easing.
-pub fn describe_preset(preset: &TransitionPresetInfo, kinds: &[KindDescriptor]) -> String {
-    let kind = kind_name(kinds, &preset.kind);
-    if preset.kind == CUT {
-        kind
-    } else {
-        format!(
-            "{kind}, {} ms, {}",
-            preset.duration_ms,
-            easing_label(preset.easing).to_lowercase()
-        )
-    }
 }
 
 /// Every parameter of `kind` at its default.
@@ -468,18 +444,6 @@ fn parse_name(typed: &str) -> Result<String, String> {
         "" => Err("Give the preset a name.".into()),
         name => Ok(name.to_owned()),
     }
-}
-
-/// The `transition.create` edit for a new preset.
-pub fn create_edit(preset_id: TransitionPresetId, draft: &Draft) -> Result<Edit, String> {
-    Ok(Edit::TransitionCreate {
-        preset_id,
-        name: parse_name(&draft.name)?,
-        kind: draft.kind.clone(),
-        duration_ms: parse_duration(&draft.duration)?,
-        easing: draft.easing,
-        settings: draft.settings.clone(),
-    })
 }
 
 /// The `transition.update` edit that turns `before` into `draft`, naming only what
@@ -1685,11 +1649,10 @@ fn OverrideRow(panel: Panel, scene: SceneRow) -> impl IntoView {
 #[cfg(test)]
 mod tests {
     use super::{
-        Draft, Reason, SceneRow, Snapshot, create_edit, cut_preset, default_settings,
-        delete_blocker, describe_preset, expected_label, expected_preset, initial_pick, load,
-        new_preset_edit, next_preset_id, override_counts, override_lines, override_note,
-        param_value, parse_duration, parse_easing, picker_label, preset_hint, swap_action,
-        switch_action, switch_blocker, transition_kinds, update_edit,
+        Draft, Reason, SceneRow, Snapshot, cut_preset, default_settings, expected_label,
+        expected_preset, initial_pick, load, new_preset_edit, next_preset_id, override_counts,
+        override_lines, override_note, param_value, parse_duration, parse_easing, picker_label,
+        preset_hint, swap_action, switch_action, switch_blocker, transition_kinds, update_edit,
     };
     use jstream_control::protocol::{
         Action, Easing, Edit, FADE, Hello, MOVE, PROTOCOL_VERSION, Rev, SceneId, Settings,
@@ -1894,14 +1857,6 @@ mod tests {
     }
 
     #[test]
-    fn the_default_preset_can_t_be_deleted() {
-        let snapshot = studio();
-        let cut = &snapshot.transitions.presets[0];
-        assert!(delete_blocker(cut, &snapshot.transitions).is_some());
-        assert_eq!(delete_blocker(&fade("in"), &snapshot.transitions), None);
-    }
-
-    #[test]
     fn preset_ids_come_from_the_name_and_stay_unique() {
         let taken = [
             TransitionPresetId::new("slow-fade"),
@@ -1918,33 +1873,7 @@ mod tests {
         let draft = Draft::new(&kinds);
         assert_eq!(draft.kind, FADE);
         assert_eq!(draft.settings.get("stagger_ms"), Some(&json!(0)));
-        assert!(
-            create_edit(TransitionPresetId::new("x"), &draft).is_err(),
-            "no name"
-        );
-
-        let mut draft = draft;
-        draft.name = " Quick ".into();
-        draft.duration = "250".into();
-        let created = create_edit(TransitionPresetId::new("quick"), &draft).expect("valid");
-        let Edit::TransitionCreate {
-            name,
-            kind,
-            duration_ms,
-            settings,
-            ..
-        } = created
-        else {
-            panic!("not a create: {created:?}");
-        };
-        assert_eq!(
-            (name.as_str(), kind.as_str(), duration_ms),
-            ("Quick", FADE, 250)
-        );
-        assert_eq!(settings.get("unmatched"), Some(&json!("fade")));
-
-        draft.duration = "60001".into();
-        assert!(create_edit(TransitionPresetId::new("quick"), &draft).is_err());
+        assert_eq!(draft.settings.get("unmatched"), Some(&json!("fade")));
         assert!(parse_duration("abc").is_err());
         assert_eq!(parse_duration(" 0 "), Ok(0));
     }
@@ -2014,13 +1943,7 @@ mod tests {
     }
 
     #[test]
-    fn presets_and_easings_read_as_text() {
-        let kinds = builtin_transition_kinds();
-        assert_eq!(describe_preset(&initial_preset(), &kinds), "Cut");
-        assert_eq!(
-            describe_preset(&fade("f"), &kinds),
-            "Fade, 500 ms, ease out"
-        );
+    fn easings_read_as_text() {
         assert_eq!(parse_easing("spring"), Some(Easing::Spring));
         assert_eq!(parse_easing("bounce"), None);
     }

@@ -160,8 +160,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   scenes in display order and leaves out groups (ADR-0024) and marks the program scene
   "program". A click selects a scene and puts it on program (`scene.switch`, naming no
   preset, so the engine resolves the transition); in studio mode it goes on preview
-  instead (`studio.set_preview`), and a hover button puts it on program. Nothing is
-  sent for a scene already there. Studio mode is the page's own, since the engine has
+  instead (`studio.set_preview`), and a hover button puts it on program. The click is
+  sent even for a scene already there, which the engine ignores, so a stale copy of
+  program or preview never drops one; and outside studio mode the double click that
+  opens a scene's Properties puts it on program first, as in OBS. Studio mode is the page's own, since the engine has
   no such switch: the header's button turns it on and off, and the browser keeps it
   (`jstream.studio-mode`). The
   sources list shows the selected scene's items with the top of the stack first, each
@@ -287,8 +289,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   protocol's order, then the key's `code`; Backspace or Delete clears it, and Tab,
   Escape and Enter keep their dialog meaning). OK sends what changed as one batch:
   `scene.rename`, `scene.set_transitions`, and `hotkey.clear` of the old chord before
-  `hotkey.set` of the new one, bound to a `scene.switch` naming no preset. A chord bound
-  to anything else is refused before sending. The scene's hotkey is the first binding
+  `hotkey.set` of the new one, bound to a `scene.switch` with the preset the old binding
+  named (none for a first hotkey). A chord bound already is refused before sending, with
+  what it runs. The scene's hotkey is the first binding
   whose action switches to it. Defaults clears the overrides and the hotkey. The engine
   has no scene background colour, multiview or scene-wide "include its audio", so the
   dialog leaves them out, and scene filters wait on the Filters panel's scene chain.

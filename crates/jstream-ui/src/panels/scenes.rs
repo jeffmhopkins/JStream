@@ -172,8 +172,8 @@ pub fn Scenes() -> impl IntoView {
             let id = scene_id.clone();
             move |_| {
                 studio.select_scene(id.clone());
-                if let (Some(s), Some(action)) = (session.get(), studio.click_action(&id)) {
-                    studio.act(&s, action);
+                if let Some(s) = session.get() {
+                    studio.act(&s, studio.click_action(&id));
                 }
             }
         };
