@@ -302,8 +302,16 @@ non-finite samples turned to silence.
   plugin). Until grants exist a plugin is
   granted nothing; a host that granted output commands would let a plugin retarget an
   output (it can't take the old key along: #343 removes it on a new server).
-- WGSL (#349): validation doesn't bound run time; a hanging shader resets the GPU, and
-  device loss isn't handled.
+- WGSL (#349): validation doesn't bound run time, so a hanging shader can reset the GPU.
+  The engine survives the lost device (#604): the render thread opens the compositor on a
+  new device, the output repeats its last frame meanwhile and stays up (a session on the
+  context's GPU encode path fails at once instead), the third loss
+  within 60 s fails the output, and each loss is logged and counted in the output's stats
+  ([ARCH › GPU pipeline](../ARCHITECTURE.md#gpu-pipeline)). The static load limits are
+  enforced (`jstream-effects`' shader contract, plus #538's 16 KiB value cap). Not built
+  yet, all waiting for packs to be drawn in the engine (X1): the engine event for a loss,
+  blaming a loss on the pack effect that was drawing and quarantining it, and the GPU-time
+  guard against long loops.
 
 <a id="mcp"></a>
 ## MCP agents
@@ -458,7 +466,7 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 | #345 | Files | `absolute` asset paths accept UNC and device paths | Medium |
 | #347 | Browser | Permissions Chromium grants without a prompt; public names resolving locally (`*.nip.io`, DNS rebinding) and requests the handler doesn't see | Medium |
 | #348 | WASM | ADR-0069's capability checks on a plugin's calls, installing and granting plugins, disabling a failing plugin and untrusted-output handling are decided but not built; the protocol's command classes, `PluginGrant` and `forbidden` error are (#642), and so are the host's CPU and memory limits, command cap and event queue | Medium |
-| #349 | WGSL | No GPU-hang or device-lost handling | Medium |
+| #349 | WGSL | A hanging shader can still reset the GPU: the engine survives a lost device (#604), but the loss event, blaming and quarantining the pack, and a GPU-time guard wait for packs to be drawn (X1) | Medium |
 | #351 | CLAP | Shared section naming, and validation of what the host sends back | Medium |
 | #353 | Secrets | Crash reports miss a YouTube-bound key and the access token | Low |
 | #355 | Files | A recording can replace a file created just before its rename | Low |
