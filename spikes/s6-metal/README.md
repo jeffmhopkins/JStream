@@ -163,8 +163,9 @@ Then, in this order:
 1. **`event` passes,** and either `completion` fails or `event`'s `latency_ms.p95` is at
    most 2 ms worse than `completion`'s: the macOS backend uses shared events, staged with
    `add_wait_event` and `add_signal_event`, the counterpart of S1's shared fence.
-   ARCH › GPU pipeline records it, with `event`'s `latency_ms.p95`. (If `event` passes but
-   is more than 2 ms worse than a passing `completion`, go to rule 3.)
+   ARCH › GPU pipeline records it, with `event`'s `latency_ms.p95`. If `event` passes but
+   is more than 2 ms worse than a passing `completion`, the backend uses command-buffer
+   completion instead, with CPU waits, at the latency and `tick_work_ms` measured.
 2. **`event` fails but `event-strict` passes:** shared events, with
    `enable_strict_event_sync` on the engine's queue.
 3. **Neither event mode passes but `completion` does:** command-buffer completion, with
