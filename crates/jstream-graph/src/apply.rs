@@ -332,6 +332,24 @@ fn move_item(
             ),
         ));
     }
+    // Its effects go with it (ADR-0065 §3), and their references become edges of the
+    // new scene.
+    if to_scene != from_scene
+        && let Some((field, cycle)) = crate::filter::effects_cycle(
+            state,
+            &state.scenes[from_scene].items[from_index],
+            scene_id,
+        )
+    {
+        return Err(invalid(
+            at,
+            "scene_id",
+            format!(
+                "moving item `{item_id}` into scene `{scene_id}` would create a cycle \
+                 through its `{field}`: {cycle}"
+            ),
+        ));
+    }
     let item = state.scenes[from_scene].items.remove(from_index);
     state.scenes[to_scene].items.insert(to_index, item);
     let mut inverse = vec![Edit::ItemMove {
@@ -401,6 +419,7 @@ fn apply_edit(
                 items: Vec::new(),
                 variant_of: None,
                 overrides: crate::model::Overrides::new(),
+                filters: Chains::default(),
             });
             Ok(vec![Edit::SceneDelete {
                 scene_id: scene_id.clone(),
@@ -481,6 +500,7 @@ fn apply_edit(
                     meta: scene.meta.clone(),
                 });
             }
+            inverse.extend(crate::filter::restore_scene(&scene));
             // Re-adding bottom to top puts each item back at its own index.
             for (ii, item) in scene.items.iter().enumerate() {
                 inverse.extend(restore_item(&scene.id, item, ii, ii)?);
@@ -547,7 +567,7 @@ fn apply_edit(
                 visible: true,
                 opacity,
                 blend,
-                effects: Vec::new(),
+                effects: Chains::default(),
                 transition: ItemTransition::default(),
             });
             Ok(vec![Edit::ItemRemove {
@@ -1172,6 +1192,8 @@ fn restore_item(
             transition: item.transition,
         });
     }
+    // Its effects belong to the placement (ADR-0065 §3), in order after `item.add`.
+    edits.extend(crate::filter::restore_effects(item));
     Ok(edits)
 }
 

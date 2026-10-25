@@ -171,6 +171,7 @@ mod tests {
             version: 1,
             video,
             audio: true,
+            max_outset_px: None,
             params: vec![],
         }
     }

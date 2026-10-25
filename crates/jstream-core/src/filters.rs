@@ -572,6 +572,7 @@ fn filter(id: &str, name: &str, params: Vec<ParamDescriptor>) -> KindDescriptor 
         version: 1,
         video: false,
         audio: true,
+        max_outset_px: None,
         params,
     }
 }

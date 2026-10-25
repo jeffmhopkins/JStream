@@ -37,8 +37,9 @@ mod version;
 mod youtube;
 
 pub use audio::{
-    AudioFollow, BusInfo, BusMeter, Loudness, MAX_BUSES, MAX_GAIN_DB, MIN_GAIN_DB, SendInfo,
-    SourceAudio, SourceMeter, gain_db_problem,
+    AudioFollow, BusInfo, BusMeter, BusMonitor, Loudness, MAX_BUSES, MAX_GAIN_DB,
+    MAX_MONITOR_DEVICE_LEN, MIN_GAIN_DB, MonitorTap, SendInfo, SourceAudio, SourceMeter,
+    gain_db_problem,
 };
 pub use command::{
     Action, Batch, BlendMode, Command, CommandClass, Crop, Edit, ItemTransform, SceneRole,

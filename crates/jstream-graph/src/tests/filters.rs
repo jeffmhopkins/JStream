@@ -4,11 +4,11 @@
 
 use super::{
     add, apply_err, apply_ok, blocker, blockers, builtin, fixture, graph, invalid_reason, kinds,
-    plan, scene_ref, settings, tone,
+    plan, scene_create, scene_ref, settings, tone,
 };
 use crate::Graph;
 use jstream_protocol::{
-    DeleteTarget, Edit, EntityKind, FilterChain, FilterId, FilterOwner, KindCategory,
+    DeleteTarget, Edit, EntityKind, FilterChain, FilterId, FilterOwner, ItemId, KindCategory,
     KindDescriptor, OutputId, OutputKind, ParamDescriptor, ParamType, ProtocolError, QueryResult,
     RecordContainer, SceneId, Settings, SourceId, SourceKind,
 };
@@ -562,6 +562,7 @@ fn master_and_output_chains_are_validated() {
         version: 1,
         video: false,
         audio: true,
+        max_outset_px: None,
         params: vec![ParamDescriptor {
             id: "key".into(),
             ty: ParamType::Source { media: None },
@@ -698,4 +699,318 @@ fn a_filter_of_a_missing_kind_loads_and_saves_as_it_was() {
         .expect("a missing kind on the master loads");
     let saved: Value = serde_json::from_str(&loaded.to_collection_json()).expect("valid JSON");
     assert_eq!(saved["master"], master["master"]);
+
+    // A scene's filter and an item's effect of a missing kind keep their kind version
+    // (ADR-0065), and a keyframe scene still has none of its own, whatever the kind.
+    let mut g = fixture();
+    apply_ok(
+        &mut g,
+        vec![
+            add("a", "i", "cam"),
+            owned_tint(scene_owner("a"), "t", None),
+            owned_tint(item_owner("i"), "e", None),
+            Edit::SceneCreateVariant {
+                scene_id: SceneId::new("k"),
+                variant_of: SceneId::new("a"),
+                name: "K".into(),
+            },
+        ],
+    );
+    let mut file: Value = serde_json::from_str(&g.to_collection_json()).expect("valid JSON");
+    let scenes = file["scenes"].as_array_mut().expect("scenes are saved");
+    let a = scenes
+        .iter_mut()
+        .find(|s| s["id"] == "a")
+        .expect("a is saved");
+    a["filters"]["video"][0]["kind"] = json!("effect/x");
+    a["filters"]["video"][0]["kind_version"] = json!(3);
+    a["items"][0]["effects"][0]["kind"] = json!("effect/y");
+    a["items"][0]["effects"][0]["kind_version"] = json!(4);
+    let json = file.to_string();
+    let loaded = Graph::new()
+        .with_kinds(kinds())
+        .with_collection_json(&json)
+        .expect("missing kinds on a scene and an item load");
+    let saved: Value = serde_json::from_str(&loaded.to_collection_json()).expect("valid JSON");
+    let reloaded: Value = serde_json::from_str(&json).expect("valid JSON");
+    assert_eq!(saved["scenes"], reloaded["scenes"], "kind versions kept");
+
+    let mut keyframe = reloaded.clone();
+    keyframe["scenes"]
+        .as_array_mut()
+        .and_then(|s| s.iter_mut().find(|s| s["id"] == "k"))
+        .expect("k is saved")["filters"] = json!({"video": [
+        {"id": "own", "kind": "effect/x", "kind_version": 1, "settings": {}}
+    ]});
+    let refused = Graph::new()
+        .with_kinds(kinds())
+        .with_collection_json(&keyframe.to_string());
+    assert!(
+        matches!(&refused, Err(crate::LoadError::Invalid { error, .. })
+            if error.to_string().contains("keyframe scene")),
+        "a keyframe scene's own filter is refused: {refused:?}"
+    );
+}
+
+fn scene_owner(scene: &str) -> FilterOwner {
+    FilterOwner::Scene {
+        scene_id: SceneId::new(scene),
+    }
+}
+
+fn item_owner(item: &str) -> FilterOwner {
+    FilterOwner::Item {
+        item_id: ItemId::new(item),
+    }
+}
+
+/// A `tint` on `owner`'s video chain, masked by scene `mask` if given.
+fn owned_tint(owner: FilterOwner, id: &str, mask: Option<&str>) -> Edit {
+    let edit = owned(owner, FilterChain::Video, id, "tint");
+    match mask {
+        Some(scene) => with(edit, &[("mask", scene_ref(scene))], None),
+        None => edit,
+    }
+}
+
+fn move_item(item: &str, scene: &str) -> Edit {
+    Edit::ItemMove {
+        item_id: ItemId::new(item),
+        scene_id: SceneId::new(scene),
+        index: 0,
+    }
+}
+
+/// A scene's filters and an item's effects (ADR-0065): video chains that apply, report
+/// and undo like a source's, refuse an audio chain, an audio kind and a keyframe scene,
+/// and keep filter IDs per owner.
+#[test]
+fn scene_filters_and_item_effects_apply_report_and_undo() {
+    let mut g = fixture();
+    apply_ok(&mut g, vec![add("a", "i", "cam")]);
+    undoes_exactly(
+        &mut g,
+        vec![
+            owned_tint(scene_owner("a"), "t", None),
+            owned_tint(item_owner("i"), "t", None),
+            owned_tint(item_owner("i"), "u", None),
+            Edit::FilterReorder {
+                owner: item_owner("i"),
+                filter_id: FilterId::new("u"),
+                index: 0,
+            },
+            Edit::FilterSetEnabled {
+                owner: scene_owner("a"),
+                filter_id: FilterId::new("t"),
+                enabled: false,
+            },
+        ],
+    );
+    let info = g.state().scene(&SceneId::new("a")).map(|s| s.to_info());
+    assert_eq!(
+        info.as_ref().map(|i| (
+            i.filters.video.len(),
+            i.filters.audio.len(),
+            i.filters.video[0].enabled
+        )),
+        Some((1, 0, false))
+    );
+    let effects: Vec<String> = info
+        .iter()
+        .flat_map(|i| &i.items[0].effects)
+        .map(|f| f.filter_id.to_string())
+        .collect();
+    assert_eq!(effects, ["u", "t"]);
+
+    let field_of = |g: &mut Graph, edit: Edit| invalid_reason(apply_err(g, vec![edit]));
+    let (field, reason) = field_of(&mut g, owned_gain(scene_owner("a"), "g"));
+    assert_eq!(field, "edits.0.chain");
+    assert!(reason.contains("no audio chain"), "{reason}");
+    let (field, _) = field_of(&mut g, owned_gain(item_owner("i"), "g"));
+    assert_eq!(field, "edits.0.chain");
+    let (field, _) = field_of(
+        &mut g,
+        owned(item_owner("i"), FilterChain::Video, "v", "gain"),
+    );
+    assert_eq!(field, "edits.0.kind");
+    assert!(matches!(
+        apply_err(&mut g, vec![owned_tint(item_owner("ghost"), "t", None)]),
+        ProtocolError::NotFound {
+            entity: EntityKind::Item,
+            ..
+        }
+    ));
+    assert!(matches!(
+        apply_err(&mut g, vec![owned_tint(scene_owner("a"), "t", None)]),
+        ProtocolError::AlreadyExists {
+            entity: EntityKind::Filter,
+            ..
+        }
+    ));
+
+    // A keyframe scene shows its parent's filters and has none of its own, for every
+    // filter edit.
+    apply_ok(
+        &mut g,
+        vec![Edit::SceneCreateVariant {
+            scene_id: SceneId::new("a_wide"),
+            variant_of: SceneId::new("a"),
+            name: "A, wide".into(),
+        }],
+    );
+    for edit in [
+        owned_tint(scene_owner("a_wide"), "t", None),
+        Edit::FilterRemove {
+            owner: scene_owner("a_wide"),
+            filter_id: FilterId::new("t"),
+        },
+    ] {
+        let (field, reason) = field_of(&mut g, edit);
+        assert_eq!(field, "edits.0.owner");
+        assert!(reason.contains("keyframe scene of `a`"), "{reason}");
+    }
+}
+
+/// An item's effects belong to the placement: `item.remove` and `scene.delete` put them
+/// back, and `item.move` and `item.set_source` keep them.
+#[test]
+fn removing_and_moving_an_item_keeps_its_effects() {
+    // `undoes_exactly` leaves its edits applied, so each case starts afresh.
+    let setup = || {
+        let mut g = fixture();
+        apply_ok(
+            &mut g,
+            vec![
+                scene_create("d"),
+                add("d", "i", "cam"),
+                add("d", "j", "mic"),
+                owned_tint(scene_owner("d"), "s", Some("c")),
+                owned_tint(item_owner("i"), "e", Some("c")),
+            ],
+        );
+        g
+    };
+    undoes_exactly(
+        &mut setup(),
+        vec![Edit::ItemRemove {
+            item_id: ItemId::new("i"),
+        }],
+    );
+    undoes_exactly(
+        &mut setup(),
+        vec![Edit::SceneDelete {
+            scene_id: SceneId::new("d"),
+        }],
+    );
+    undoes_exactly(
+        &mut setup(),
+        vec![
+            move_item("i", "b"),
+            Edit::ItemSetSource {
+                item_id: ItemId::new("i"),
+                source_id: SourceId::new("mic"),
+            },
+        ],
+    );
+    let mut g = setup();
+    apply_ok(&mut g, vec![move_item("i", "b")]);
+    let effects: Vec<String> = g
+        .state()
+        .scenes()
+        .iter()
+        .flat_map(|s| s.items())
+        .filter(|i| i.id().as_str() == "i")
+        .flat_map(|i| i.effects())
+        .map(|f| f.id().to_string())
+        .collect();
+    assert_eq!(effects, ["e"]);
+    // Its mask is now an edge of `b`, so moving it into `c`, the scene it masks with,
+    // is a cycle.
+    let (field, reason) = invalid_reason(apply_err(&mut g, vec![move_item("i", "c")]));
+    assert_eq!(field, "edits.0.scene_id");
+    assert!(reason.contains("`effects.e.mask`"), "{reason}");
+}
+
+/// References in a scene's filters and an item's effects are edges of the scene: they
+/// run the cycle check, block a delete with `filters.<id>.<param>` and
+/// `effects.<id>.<param>`, and `delete.plan` clears them.
+#[test]
+fn references_in_scene_filters_and_effects_are_edges_of_the_scene() {
+    let mut g = fixture();
+    apply_ok(&mut g, vec![add("a", "i", "cam"), add("b", "k", "mic")]);
+    // A scene masked with itself, and an item masked with its own scene, are cycles.
+    let (field, reason) = invalid_reason(apply_err(
+        &mut g,
+        vec![owned_tint(scene_owner("a"), "s", Some("a"))],
+    ));
+    assert_eq!(field, "edits.0.settings.mask");
+    assert!(reason.ends_with("scene `a` -> scene `a`"), "{reason}");
+    let (field, _) = invalid_reason(apply_err(
+        &mut g,
+        vec![owned_tint(item_owner("i"), "e", Some("a"))],
+    ));
+    assert_eq!(field, "edits.0.settings.mask");
+
+    apply_ok(
+        &mut g,
+        vec![
+            owned_tint(scene_owner("a"), "s", Some("c")),
+            owned_tint(item_owner("k"), "e", Some("c")),
+        ],
+    );
+    // `a` and `b` now depend on `c`, so `c` can't place either.
+    let (field, _) = invalid_reason(apply_err(&mut g, vec![add("c", "ic", "sa")]));
+    assert_eq!(field, "edits.0.source_id");
+    let (field, _) = invalid_reason(apply_err(
+        &mut g,
+        vec![Edit::FilterSetSettings {
+            owner: item_owner("k"),
+            filter_id: FilterId::new("e"),
+            patch: settings(&[("mask", scene_ref("b"))]),
+        }],
+    ));
+    assert_eq!(field, "edits.0.patch.mask");
+
+    let target = || SceneId::new("c");
+    let error = apply_err(&mut g, vec![Edit::SceneDelete { scene_id: target() }]);
+    assert_eq!(
+        blockers(error),
+        vec![
+            blocker(EntityKind::Source, "sc", "kind.scene_id"),
+            blocker(EntityKind::Scene, "a", "filters.s.mask"),
+            blocker(EntityKind::Item, "k", "effects.e.mask"),
+        ]
+    );
+    let edits = plan(&g, DeleteTarget::Scene { scene_id: target() });
+    let clear = |owner: FilterOwner, id: &str| Edit::FilterSetSettings {
+        owner,
+        filter_id: FilterId::new(id),
+        patch: settings(&[("mask", Value::Null)]),
+    };
+    assert!(edits.contains(&clear(scene_owner("a"), "s")), "{edits:?}");
+    assert!(edits.contains(&clear(item_owner("k"), "e")), "{edits:?}");
+    let before = g.state().clone();
+    let applied = apply_ok(&mut g, edits);
+    assert!(g.state().scene(&target()).is_none());
+    apply_ok(&mut g, applied.inverse.edits);
+    assert_eq!(g.state(), &before);
+
+    // An item the plan removes anyway needs no clearing: `isc` places `sc`, which the
+    // plan deletes with `c`, and its own effect masks with `c`.
+    apply_ok(
+        &mut g,
+        vec![
+            add("a", "isc", "sc"),
+            owned_tint(item_owner("isc"), "e", Some("c")),
+        ],
+    );
+    let edits = plan(&g, DeleteTarget::Scene { scene_id: target() });
+    assert!(
+        edits.contains(&Edit::ItemRemove {
+            item_id: ItemId::new("isc")
+        }),
+        "{edits:?}"
+    );
+    assert!(!edits.contains(&clear(item_owner("isc"), "e")), "{edits:?}");
+    apply_ok(&mut g, edits);
 }

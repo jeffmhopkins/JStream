@@ -5,17 +5,18 @@
 
 use super::{Collection, already_exists, check_id, check_name, invalid, not_found};
 use jstream_protocol::{
-    AudioFollow, BusId, BusInfo, Edit, EntityKind, Finite32, MAX_BUSES, ProtocolError, Reference,
-    SendInfo, SourceAudio, SourceId, SourceKind, gain_db_problem,
+    AudioFollow, BusId, BusInfo, BusMonitor, Edit, EntityKind, Finite32, MAX_BUSES, ProtocolError,
+    Reference, SendInfo, SourceAudio, SourceId, SourceKind, gain_db_problem,
 };
 use std::collections::BTreeMap;
 
-/// One bus: its name, fader and mute.
+/// One bus: its name, fader, mute and monitor.
 #[derive(Clone)]
 pub(super) struct Bus {
     name: String,
     gain_db: Finite32,
     muted: bool,
+    monitor: Option<BusMonitor>,
 }
 
 impl Bus {
@@ -24,6 +25,7 @@ impl Bus {
             name,
             gain_db: Finite32::ZERO,
             muted: false,
+            monitor: None,
         }
     }
 
@@ -156,6 +158,7 @@ impl Collection {
                 gain_db,
                 muted,
             } => self.set_fader(bus_id, *gain_db, *muted, at),
+            Edit::BusSetMonitor { bus_id, monitor } => self.set_monitor(bus_id, monitor, at),
             Edit::BusDelete { bus_id } => self.delete_bus(bus_id, at),
             Edit::SendSet {
                 source_id,
@@ -332,6 +335,12 @@ impl Collection {
                 muted: bus.muted.then_some(true),
             });
         }
+        if let Some(monitor) = bus.monitor {
+            inverse.push(Edit::BusSetMonitor {
+                bus_id: id.clone(),
+                monitor: Some(monitor),
+            });
+        }
         self.sends.retain(|(bus_id, source_id), gain| {
             if bus_id == id {
                 inverse.push(Edit::SendSet {
@@ -384,6 +393,28 @@ impl Collection {
         Ok(vec![inverse])
     }
 
+    /// Gives a bus a monitor, or takes it away: the bus first, then the monitor's
+    /// problem, as `jstream-graph` checks them. A device is never looked up.
+    fn set_monitor(
+        &mut self,
+        id: &BusId,
+        monitor: &Option<BusMonitor>,
+        at: usize,
+    ) -> Result<Vec<Edit>, ProtocolError> {
+        let bus = self
+            .buses
+            .get_mut(id)
+            .ok_or_else(|| not_found(EntityKind::Bus, id.as_str()))?;
+        if let Some((field, reason)) = monitor.as_ref().and_then(BusMonitor::problem) {
+            return Err(invalid(at, &format!("monitor.{field}"), reason));
+        }
+        let old = std::mem::replace(&mut bus.monitor, monitor.clone());
+        Ok(vec![Edit::BusSetMonitor {
+            bus_id: id.clone(),
+            monitor: old,
+        }])
+    }
+
     /// The order `jstream-graph` checks a send in: the source, the bus, then whether the
     /// source has a channel.
     fn check_send(
@@ -423,6 +454,7 @@ impl Collection {
                 name: bus.name.clone(),
                 gain_db: bus.gain_db,
                 muted: bus.muted,
+                monitor: bus.monitor.clone(),
             })
             .collect()
     }

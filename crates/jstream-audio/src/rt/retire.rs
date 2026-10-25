@@ -27,6 +27,7 @@ use super::bus::{BusShared, MAX_BUSES};
 use super::chain::{Chain, Kernel};
 use super::cmd::{COMMAND_CAP, MAX_INPUTS, MasterKernels};
 use super::input::InputShared;
+use super::monitor::MonitorShared;
 use super::ring::FrameRing;
 use super::tap::{MAX_OUTPUT_TAPS, Tap};
 use crate::error::AudioError;
@@ -34,11 +35,12 @@ use crate::error::AudioError;
 /// Objects that can wait to be freed. Every input sends at most two of each kind (one
 /// from the mixer, one from the producer), every bus one (from the mixer), every input
 /// and bus its chain (a bus also its master chain), every input its monitor block, every output tap itself, every
-/// removed filter itself (a master filter one copy per bus), and the mixer applies at
+/// monitor (one per bus, as `jstream-core` opens them) its ring and counters from each
+/// of its two ends, every removed filter itself (a master filter one copy per bus), and the mixer applies at
 /// most a command queue's worth of changes per block, so a few blocks' worth fits with
 /// room to spare.
 const QUEUE_CAP: usize =
-    7 * MAX_INPUTS + 6 * MAX_BUSES + 2 * MAX_OUTPUT_TAPS + (4 + MAX_BUSES) * COMMAND_CAP;
+    7 * MAX_INPUTS + 10 * MAX_BUSES + 2 * MAX_OUTPUT_TAPS + (4 + MAX_BUSES) * COMMAND_CAP;
 
 /// How long the collector sleeps between drains. Freeing late costs only memory.
 const POLL: Duration = Duration::from_millis(10);
@@ -52,6 +54,7 @@ enum Retired {
     Kernel(Box<Kernel>),
     Kernels(MasterKernels),
     Tap(Tap),
+    Monitor(Arc<MonitorShared>),
 }
 
 /// Hands shared objects to one mixer's collector thread. Cloned into each holder.
@@ -127,6 +130,11 @@ impl Retirer {
         self.hand_off(Retired::Tap(tap));
     }
 
+    /// A monitor's counters.
+    pub(crate) fn monitor(&self, shared: Arc<MonitorShared>) {
+        self.hand_off(Retired::Monitor(shared));
+    }
+
     fn hand_off(&self, item: Retired) {
         match self.tx.try_send(item) {
             Ok(()) => {}
@@ -157,6 +165,7 @@ fn collect(rx: &Receiver<Retired>) {
                 Ok(Retired::Kernel(kernel)) => drop(kernel),
                 Ok(Retired::Kernels(kernels)) => drop(kernels),
                 Ok(Retired::Tap(tap)) => drop(tap),
+                Ok(Retired::Monitor(shared)) => drop(shared),
                 Err(TryRecvError::Empty) => break,
                 Err(TryRecvError::Disconnected) => return,
             }

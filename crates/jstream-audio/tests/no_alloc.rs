@@ -11,7 +11,10 @@
 //! the input, bus, master and output-tap filter chains) and a read of each output tap's
 //! block and of each input's own block (a drawn source's scope, #459), then a keyed
 //! compressor and the meters on each mixed block, as the mixer thread will run them
-//! (ADR-0028; sidechain keys and meters aren't in the mixer yet).
+//! (ADR-0028; sidechain keys and meters aren't in the mixer yet). Two bus monitors take
+//! each block, one before the master's filters and one after, and their devices' audio
+//! threads (`AudioOutputHandler::render`, on the socket each player is plugged into)
+//! play a tick's worth each tick.
 //! Control-plane work (adding and removing inputs, buses, output taps, sends and
 //! filters, filter edits, gain and mute changes) runs between ticks, outside the scope,
 //! as it does on the control thread.
@@ -26,8 +29,11 @@
 //! latency, so the compensation delays move), master filters added to every bus's copy,
 //! edited and removed, output taps added (one with its own chain, on a bus that is
 //! later removed) and removed, and a CLAP filter whose host keeps up, then goes missing
-//! and comes back (its blocks bypassed and crossfaded), then is removed. The test
-//! asserts afterwards that each path actually ran.
+//! and comes back (its blocks bypassed and crossfaded), then is removed, and the privacy
+//! screen going on and off over the microphone (through the engine's count of its
+//! changes, `Mixer::with_privacy_signal`, which each poll and the microphone's packets
+//! read). The test asserts afterwards that each path actually
+//! ran.
 //!
 //! Dropping an input's producer frees its resampler state, so a producer is dropped
 //! outside the checked scope: that is stream teardown, not steady state.
@@ -36,13 +42,16 @@ use assert_no_alloc::{AllocDisabler, assert_no_alloc, reset_violation_count, vio
 use jstream_audio::filter::{AudioFilter, Compressor, CompressorParams, GateParams, LimiterParams};
 use jstream_audio::meter::{LoudnessMeter, TruePeakMeter};
 use jstream_audio::{
-    FilterParams, FilterSpec, HostMemory, InputControl, InputProducer, Mixer, MixerConfig,
-    OutputTapId,
+    BusId, FilterParams, FilterSpec, HostMemory, InputControl, InputProducer, Mixer, MixerConfig,
+    Monitor, MonitorControl, MonitorFeed, MonitorSocket, MonitorTap, OutputTapId, monitor_socket,
 };
 use jstream_media::{AudioFormat, ChannelLayout, MediaTime, SampleFormat, Timebase};
-use jstream_platform::{AudioInputHandler, AudioPacket, AudioPacketFlags};
+use jstream_platform::{
+    AudioInputHandler, AudioOutputHandler, AudioPacket, AudioPacketFlags, AudioRenderBuffer,
+};
 use jstream_plugin_proto::{Config, DEFAULT_DEPTH, EngineBlock, Shared, first_useful};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 #[global_allocator]
 static ALLOC: AllocDisabler = AllocDisabler;
@@ -308,6 +317,21 @@ struct Sim {
     input_blocks: u64,
     /// The mixer thread does not run until this tick (a stall).
     mixer_stalled_until: u64,
+    /// The engine's count of privacy screen changes (odd while it is on), which the
+    /// mixer reads at each poll and the microphone's packets at each push, and the
+    /// blocks mixed while it was on.
+    privacy: Arc<AtomicU64>,
+    private_blocks: u64,
+    /// Bus monitors (ADR-0028, D22): each one's feed and counters, the socket its
+    /// device stream plays (its player plugged in), its tap, and its device's buffer
+    /// for one tick, which the socket fills every tick.
+    monitors: Vec<(
+        MonitorFeed,
+        MonitorControl,
+        MonitorSocket,
+        MonitorTap,
+        Vec<f32>,
+    )>,
 }
 
 impl Sim {
@@ -320,13 +344,14 @@ impl Sim {
             return;
         }
         let now = clock(T0 + (tick + 1) as f64 * TICK_S);
-        while self
-            .mixer
-            .poll(now, &mut self.out)
-            .expect("right length")
-            .is_some()
-        {
+        while let Some(mixed) = self.mixer.poll(now, &mut self.out).expect("right length") {
+            self.private_blocks += self.privacy.load(Ordering::Relaxed) % 2;
             self.chain.process(&mut self.out);
+            for (feed, _, _, tap, _) in &mut self.monitors {
+                if let Some(block) = self.mixer.monitor_block(BusId::MASTER, *tap) {
+                    feed.push(mixed.frame, block);
+                }
+            }
             for &tap in &self.taps {
                 if let Some((_, block)) = self.mixer.output_block(tap) {
                     std::hint::black_box(block);
@@ -340,6 +365,14 @@ impl Sim {
                 }
             }
         }
+        // Each monitor device's audio thread, once a tick.
+        for (_, _, socket, _, buf) in &mut self.monitors {
+            socket.render(&mut AudioRenderBuffer {
+                samples: buf,
+                device_position: tick,
+                time: None,
+            });
+        }
     }
 }
 
@@ -349,7 +382,9 @@ mod rt {
 
     #[test]
     fn callback_does_not_allocate() {
-        let mut mixer = Mixer::new(MixerConfig::default()).expect("valid config");
+        let privacy = Arc::new(AtomicU64::new(0));
+        let mut mixer = Mixer::with_privacy_signal(MixerConfig::default(), Arc::clone(&privacy))
+            .expect("valid config");
         let fmt = |rate, layout| {
             AudioFormat::new(rate, layout, SampleFormat::F32Interleaved).expect("valid format")
         };
@@ -400,7 +435,29 @@ mod rt {
             tap_blocks: 0,
             input_blocks: 0,
             mixer_stalled_until: 0,
+            privacy,
+            private_blocks: 0,
+            monitors: Vec::new(),
         };
+        // The privacy screen mutes the microphone (ADR-0027 §4).
+        sim.devices[0].control.set_privacy_muted(true);
+        // Monitors on the master, before and after its filters, on a 44.1 kHz mono
+        // device and a 48 kHz 5.1 one.
+        for (rate, layout, tap) in [
+            (44_100, ChannelLayout::Mono, MonitorTap::PreFilters),
+            (48_000, ChannelLayout::Surround51, MonitorTap::PostFilters),
+        ] {
+            let format = fmt(rate, layout);
+            let Monitor {
+                feed,
+                player,
+                control,
+            } = sim.mixer.control().add_monitor(format).expect("supported");
+            let (socket, plug) = monitor_socket();
+            assert!(plug.plug(player));
+            let buf = vec![0.0; rate as usize / 100 * format.channels()];
+            sim.monitors.push((feed, control, socket, tap, buf));
+        }
         let control = sim.mixer.control();
         let bus = sim.mixer.bus();
         let limiter = |lookahead_ms| FilterSpec::Limiter {
@@ -603,6 +660,10 @@ mod rt {
                 sim.devices[0]
                     .control
                     .set_activity_gain(if tick % 400 == 0 { 0.0 } else { 1.0 });
+                // The privacy screen goes on and off.
+                if (tick % 300 == 100) != (sim.privacy.load(Ordering::Relaxed) % 2 == 1) {
+                    sim.privacy.fetch_add(1, Ordering::Release);
+                }
                 bus.set_gain_db(db / 2.0);
                 for d in &sim.devices {
                     let _ = (d.control.take_meter(), d.control.stats());
@@ -656,6 +717,7 @@ mod rt {
             "{added:?}"
         );
         assert!(removed.packets > 0, "{removed:?}");
+        assert!(sim.private_blocks > 0, "no block under the privacy screen");
         assert!(bus.skipped_frames > 0, "{bus:?}");
         let host = host.expect("added");
         let misses = host
@@ -681,6 +743,10 @@ mod rt {
         assert!(sim.input_blocks > 4 * 1_300, "{}", sim.input_blocks);
         // 45 s of 1024-frame blocks at 48 kHz, minus the stall's.
         assert!(bus.blocks > 2_000, "{bus:?}");
+        for (_, control, _, _, _) in &sim.monitors {
+            let stats = control.stats();
+            assert!(stats.blocks > 2_000 && stats.renders > 4_000, "{stats:?}");
+        }
     }
 }
 

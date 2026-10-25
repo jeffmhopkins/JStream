@@ -28,7 +28,9 @@ impl Graph {
     /// - `item.remove` for each item that places a deleted source;
     /// - one `source.set_settings` per remaining source whose settings refer to a deleted
     ///   object, setting each such parameter to `null`;
-    /// - one `filter.set_settings` per remaining filter whose settings do, likewise;
+    /// - one `filter.set_settings` per remaining source filter whose settings do,
+    ///   likewise, then one per remaining scene filter and item effect (ADR-0065 §3), in
+    ///   scene order;
     /// - `source.delete` for each `scene` source that shows a deleted scene;
     /// - `video_mix.update` for each video mix that shows a deleted scene, keeping its
     ///   name, resolution and rate and showing the program instead;
@@ -129,8 +131,24 @@ impl Graph {
         let mut repoints: Vec<VideoMixId> = Vec::new();
         let mut clears: BTreeMap<SourceId, Settings> = BTreeMap::new();
         let mut filter_clears: BTreeMap<(SourceId, FilterId), Settings> = BTreeMap::new();
+        // A scene filter's or an item effect's reference (ADR-0065 §3), cleared after the
+        // item removes, in blocker order.
+        let mut owner_clears: Vec<(FilterOwner, FilterId, String)> = Vec::new();
         for node in &deleted {
             for blocker in deps::blockers(state, node) {
+                let owned = match blocker.entity {
+                    EntityKind::Scene => blocker.field.strip_prefix("filters."),
+                    EntityKind::Item => blocker.field.strip_prefix("effects."),
+                    _ => None,
+                };
+                if let Some((filter, param)) = owned.and_then(|rest| rest.rsplit_once('.')) {
+                    owner_clears.push((
+                        owner_of(&blocker),
+                        FilterId::new(filter),
+                        param.to_owned(),
+                    ));
+                    continue;
+                }
                 if blocker.entity == EntityKind::Item {
                     removes.push(ItemId::new(blocker.id));
                     continue;
@@ -185,6 +203,50 @@ impl Graph {
                     patch,
                 }),
         );
+        // A scene the batch deletes, or an item it removes, needs no clearing; nor does
+        // an item in a scene it deletes.
+        let gone_scenes: Vec<&SceneId> = deleted
+            .iter()
+            .filter_map(|node| match node {
+                Node::Scene(id) => Some(id),
+                _ => None,
+            })
+            .collect();
+        let mut patches: Vec<(FilterOwner, FilterId, Settings)> = Vec::new();
+        for (owner, filter_id, param) in owner_clears {
+            let gone = match &owner {
+                FilterOwner::Scene { scene_id } => gone_scenes.contains(&scene_id),
+                FilterOwner::Item { item_id } => edits.iter().any(
+                    |e| matches!(e, Edit::ItemRemove { item_id: removed } if removed == item_id),
+                ) || state
+                    .item_index(item_id)
+                    .is_some_and(|(si, _)| gone_scenes.contains(&&state.scenes()[si].id)),
+                _ => false,
+            };
+            if gone {
+                continue;
+            }
+            match patches
+                .iter_mut()
+                .find(|(o, f, _)| *o == owner && *f == filter_id)
+            {
+                Some((_, _, patch)) => {
+                    patch.insert(param, Value::Null);
+                }
+                None => {
+                    let mut patch = Settings::new();
+                    patch.insert(param, Value::Null);
+                    patches.push((owner, filter_id, patch));
+                }
+            }
+        }
+        edits.extend(patches.into_iter().map(|(owner, filter_id, patch)| {
+            Edit::FilterSetSettings {
+                owner,
+                filter_id,
+                patch,
+            }
+        }));
         edits.extend(
             shown_by
                 .into_iter()
@@ -233,6 +295,18 @@ fn not_found(entity: EntityKind, id: &str) -> ProtocolError {
     ProtocolError::NotFound {
         entity,
         id: id.to_owned(),
+    }
+}
+
+/// The filter owner a scene-filter or item-effect blocker names.
+fn owner_of(blocker: &jstream_protocol::Blocker) -> FilterOwner {
+    match blocker.entity {
+        EntityKind::Scene => FilterOwner::Scene {
+            scene_id: SceneId::new(&blocker.id),
+        },
+        _ => FilterOwner::Item {
+            item_id: ItemId::new(&blocker.id),
+        },
     }
 }
 
