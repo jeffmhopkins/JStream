@@ -386,6 +386,8 @@ pub(crate) fn add_unknown_kind(
             reason: "invariant: a load adds filters with `filter.add`, last".into(),
         });
     };
+    // As `filter.*` does: a keyframe scene shows its parent's filters (ADR-0065 §1).
+    check_not_variant(state, owner, 0)?;
     let filters = chains(state, owner)?;
     check_id(filter_id.as_str(), 0, "filter_id")?;
     if filters.find(filter_id).is_some() {

@@ -699,6 +699,57 @@ fn a_filter_of_a_missing_kind_loads_and_saves_as_it_was() {
         .expect("a missing kind on the master loads");
     let saved: Value = serde_json::from_str(&loaded.to_collection_json()).expect("valid JSON");
     assert_eq!(saved["master"], master["master"]);
+
+    // A scene's filter and an item's effect of a missing kind keep their kind version
+    // (ADR-0065), and a keyframe scene still has none of its own, whatever the kind.
+    let mut g = fixture();
+    apply_ok(
+        &mut g,
+        vec![
+            add("a", "i", "cam"),
+            owned_tint(scene_owner("a"), "t", None),
+            owned_tint(item_owner("i"), "e", None),
+            Edit::SceneCreateVariant {
+                scene_id: SceneId::new("k"),
+                variant_of: SceneId::new("a"),
+                name: "K".into(),
+            },
+        ],
+    );
+    let mut file: Value = serde_json::from_str(&g.to_collection_json()).expect("valid JSON");
+    let scenes = file["scenes"].as_array_mut().expect("scenes are saved");
+    let a = scenes
+        .iter_mut()
+        .find(|s| s["id"] == "a")
+        .expect("a is saved");
+    a["filters"]["video"][0]["kind"] = json!("effect/x");
+    a["filters"]["video"][0]["kind_version"] = json!(3);
+    a["items"][0]["effects"][0]["kind"] = json!("effect/y");
+    a["items"][0]["effects"][0]["kind_version"] = json!(4);
+    let json = file.to_string();
+    let loaded = Graph::new()
+        .with_kinds(kinds())
+        .with_collection_json(&json)
+        .expect("missing kinds on a scene and an item load");
+    let saved: Value = serde_json::from_str(&loaded.to_collection_json()).expect("valid JSON");
+    let reloaded: Value = serde_json::from_str(&json).expect("valid JSON");
+    assert_eq!(saved["scenes"], reloaded["scenes"], "kind versions kept");
+
+    let mut keyframe = reloaded.clone();
+    keyframe["scenes"]
+        .as_array_mut()
+        .and_then(|s| s.iter_mut().find(|s| s["id"] == "k"))
+        .expect("k is saved")["filters"] = json!({"video": [
+        {"id": "own", "kind": "effect/x", "kind_version": 1, "settings": {}}
+    ]});
+    let refused = Graph::new()
+        .with_kinds(kinds())
+        .with_collection_json(&keyframe.to_string());
+    assert!(
+        matches!(&refused, Err(crate::LoadError::Invalid { error, .. })
+            if error.to_string().contains("keyframe scene")),
+        "a keyframe scene's own filter is refused: {refused:?}"
+    );
 }
 
 fn scene_owner(scene: &str) -> FilterOwner {

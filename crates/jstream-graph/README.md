@@ -429,9 +429,10 @@ the engine's; this crate does no I/O.
   settings unchecked and its `kind_version` kept for the next save, so a build without
   the kind destroys nothing
   ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md) › Versioning a
-  kind); its source, output or the master must still have that chain, and a reference
-  in its settings must name something that exists and close no cycle (a master or
-  output filter holds none). Then `rev` is set
+  kind); its source, output, scene, item or the master must still have that chain (a
+  keyframe scene has none of its own, as for `filter.add`), and a reference in its
+  settings must name something that exists and close no cycle (a master or output
+  filter holds none). Then `rev` is set
   to the file's, so revisions keep increasing across restarts. A source, filter or preset whose
   `kind_version` differs from its kind's descriptor is refused
   (`LoadError::KindVersion`) until kinds ship settings migrations.

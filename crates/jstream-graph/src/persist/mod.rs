@@ -1254,6 +1254,20 @@ fn file_filter_version(
             &file.outputs.iter().find(|o| &o.id == output_id)?.filters
         }
         FilterOwner::Master => &file.master.filters,
+        FilterOwner::Scene { scene_id } => &file.scenes.iter().find(|s| &s.id == scene_id)?.filters,
+        // An item's effects are one video chain (ADR-0065 §1).
+        FilterOwner::Item { item_id } => {
+            let effects = &file
+                .scenes
+                .iter()
+                .flat_map(|s| &s.items)
+                .find(|i| &i.id == item_id)?
+                .effects;
+            return match chain {
+                FilterChain::Video => effects.iter().find(|f| &f.id == filter_id)?.kind_version,
+                FilterChain::Audio => None,
+            };
+        }
         _ => return None,
     };
     let filters = match chain {
