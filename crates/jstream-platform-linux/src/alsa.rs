@@ -754,6 +754,19 @@ mod backend {
         }
     }
 
+    impl crate::PairedAudio for AlsaAudio {
+        /// The listed input PCMs on a card (`CARD=<id>`), its `sysdefault` first.
+        fn card_inputs(&self) -> Result<crate::CardInputs, PlatformError> {
+            let devices = self.devices()?;
+            Ok(crate::pairing::alsa_card_inputs(
+                devices
+                    .iter()
+                    .filter(|d| d.direction == AudioDirection::Input)
+                    .map(|d| d.id.as_str()),
+            ))
+        }
+    }
+
     /// A running stream: its thread, stopped and joined on drop.
     struct AlsaStream {
         format: AudioFormat,
