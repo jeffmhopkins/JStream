@@ -1925,6 +1925,8 @@ mod tests {
             transition: jstream_control::protocol::ItemTransition::default(),
         };
         let scene = |id: &str, items: Vec<ItemInfo>| SceneInfo {
+            overrides: Vec::new(),
+            variant_of: None,
             scene_id: id.into(),
             name: id.to_uppercase(),
             role: SceneRole::Scene,

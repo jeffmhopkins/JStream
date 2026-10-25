@@ -36,6 +36,20 @@ pub struct OutputRow {
     /// Whether the engine's credential store holds a stream key for it. The key itself
     /// never reaches the UI.
     pub key_set: bool,
+    /// Whether the engine says publishing sends the stream key unencrypted
+    /// (`output.status`'s `cleartext`, from 0.37).
+    pub cleartext: bool,
+}
+
+/// What `output.status` reports that the panel shows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Status {
+    /// Whether it runs.
+    pub state: OutputState,
+    /// Whether a stream key is set.
+    pub key_set: bool,
+    /// Whether publishing sends the stream key unencrypted.
+    pub cleartext: bool,
 }
 
 /// The outputs and encoder profiles at one revision, with each output's status.
@@ -63,11 +77,16 @@ pub async fn load(control: &dyn Control) -> Result<Snapshot, String> {
     };
     let mut rows = Vec::with_capacity(outputs.len());
     for info in outputs {
-        let (state, key_set) = status(control, &info.output_id).await?;
+        let Status {
+            state,
+            key_set,
+            cleartext,
+        } = status(control, &info.output_id).await?;
         rows.push(OutputRow {
             info,
             state,
             key_set,
+            cleartext,
         });
     }
     Ok(Snapshot {
@@ -77,16 +96,23 @@ pub async fn load(control: &dyn Control) -> Result<Snapshot, String> {
     })
 }
 
-/// One output's runtime state and whether its stream key is set (`output.status`).
-pub async fn status(
-    control: &dyn Control,
-    output_id: &OutputId,
-) -> Result<(OutputState, bool), String> {
+/// One output's runtime state, whether its stream key is set, and whether publishing
+/// sends that key unencrypted (`output.status`).
+pub async fn status(control: &dyn Control, output_id: &OutputId) -> Result<Status, String> {
     let query_status = Query::OutputStatus {
         output_id: output_id.clone(),
     };
     match query(control, query_status).await? {
-        QueryResult::OutputStatus { state, key_set, .. } => Ok((state, key_set)),
+        QueryResult::OutputStatus {
+            state,
+            key_set,
+            cleartext,
+            ..
+        } => Ok(Status {
+            state,
+            key_set,
+            cleartext,
+        }),
         other => Err(unexpected("output.status", other.name())),
     }
 }
@@ -357,35 +383,15 @@ pub fn describe_kind(kind: &OutputKind) -> String {
     }
 }
 
-/// The warning an output's card shows when its server URL is plain `rtmp://` to
-/// another machine: the stream key would cross the network unencrypted (#353).
-/// `rtmps://`, and `rtmp://` to `localhost` or a loopback address (a local relay), get
-/// none.
+/// The warning an output's card shows when the engine says its server is plain
+/// `rtmp://` to another machine (`output.status`'s `cleartext`): the stream key would
+/// cross the network unencrypted (#353). The rule is the engine's
+/// (`OutputKind::sends_key_in_cleartext`), so `rtmps://` and a loopback relay get none.
 pub const CLEARTEXT_WARNING: &str = "This server is plain rtmp://, so the stream key is sent unencrypted. Use rtmps:// if the service offers it.";
 
 /// [`CLEARTEXT_WARNING`] for an output that needs it, else `None`.
-pub fn cleartext_warning(kind: &OutputKind) -> Option<&'static str> {
-    let OutputKind::Rtmp {
-        target: RtmpTarget::Generic { url },
-    } = kind
-    else {
-        return None;
-    };
-    let (scheme, rest) = url.split_once("://")?;
-    if !scheme.eq_ignore_ascii_case("rtmp") {
-        return None;
-    }
-    let authority = rest.split('/').next().unwrap_or_default();
-    let host = match authority.strip_prefix('[') {
-        // `[v6]` or `[v6]:port`.
-        Some(bracketed) => bracketed.split(']').next().unwrap_or_default(),
-        None => authority.split(':').next().unwrap_or_default(),
-    };
-    let loopback = host.eq_ignore_ascii_case("localhost")
-        || host
-            .parse::<std::net::IpAddr>()
-            .is_ok_and(|ip| ip.to_canonical().is_loopback());
-    (!loopback).then_some(CLEARTEXT_WARNING)
+pub fn cleartext_warning(row: &OutputRow) -> Option<&'static str> {
+    row.cleartext.then_some(CLEARTEXT_WARNING)
 }
 
 /// An output state, for its badge.
@@ -579,11 +585,16 @@ impl Panel {
     /// reports.
     fn refresh_status(self, output_id: OutputId) {
         self.run(move |session| async move {
-            let (state, key_set) = status(&*session.control, &output_id).await?;
+            let Status {
+                state,
+                key_set,
+                cleartext,
+            } = status(&*session.control, &output_id).await?;
             self.rows.try_update(|rows| {
                 if let Some(row) = rows.get_mut(&output_id) {
                     row.state = state;
                     row.key_set = key_set;
+                    row.cleartext = cleartext;
                 }
             });
             if let Some(keys_changed) = self.keys_changed {
@@ -841,7 +852,7 @@ fn OutputCard(panel: Panel, output_id: OutputId) -> impl IntoView {
                 {move || row.with(|row| row.as_ref().map(|row| describe_kind(&row.info.kind)))}
             </p>
             {move || {
-                row.with(|row| row.as_ref().and_then(|row| cleartext_warning(&row.info.kind)))
+                row.with(|row| row.as_ref().and_then(cleartext_warning))
                     .map(|warning| view! { <p class="warning" role="note">{warning}</p> })
             }}
             <Show when=move || editing.get()>
@@ -1068,6 +1079,7 @@ mod tests {
             },
             state,
             key_set,
+            cleartext: true,
         }
     }
 
@@ -1119,8 +1131,9 @@ mod tests {
             engine.stream_key(&id).map(|key| key.expose().to_owned()),
             Some("abcd-1234".into())
         );
-        let (_, key_set) = now(status(&control, &id)).expect("status");
-        assert!(key_set);
+        let status = now(status(&control, &id)).expect("status");
+        assert!(status.key_set);
+        assert!(status.cleartext, "plain rtmp:// to another machine");
 
         let loaded = now(load(&control)).expect("load");
         assert_eq!(go_live_targets(&loaded.outputs), vec![id.clone()]);
@@ -1317,6 +1330,7 @@ mod tests {
             },
             state: OutputState::Stopped,
             key_set: false,
+            cleartext: false,
         };
         let parse = |value| Vcam::from_host(value);
         assert_eq!(parse(Some("registered")), Vcam::Registered);
@@ -1396,33 +1410,33 @@ mod tests {
         assert_eq!(explain_start_failure(&stream, reason.clone()), reason);
     }
 
-    /// Plain `rtmp://` to another machine warns that the key goes unencrypted;
-    /// `rtmps://`, loopback and other kinds don't (#353).
+    /// The card warns when the engine reports `cleartext`, whatever the URL says: the
+    /// rule is the engine's (#353, #562). Through the mock, plain `rtmp://` to another
+    /// machine is flagged and `rtmps://` and a loopback relay aren't.
     #[test]
-    fn plain_rtmp_to_another_machine_warns_about_the_key() {
-        let rtmp = |url: &str| OutputKind::Rtmp {
-            target: RtmpTarget::Generic { url: url.into() },
+    fn the_engine_s_cleartext_flag_decides_the_warning() {
+        let mut row = rtmp("a", OutputState::Stopped, true);
+        assert_eq!(cleartext_warning(&row), Some(CLEARTEXT_WARNING));
+        row.cleartext = false;
+        assert_eq!(cleartext_warning(&row), None);
+
+        let engine = MockEngine::new();
+        let control = engine.connect();
+        let hello = jstream_control::protocol::Hello {
+            protocol: jstream_control::protocol::PROTOCOL_VERSION,
+            client_name: "test".into(),
         };
-        for url in [
-            "rtmp://live.example.com/app",
-            "RTMP://192.168.1.20:1935/live",
-            "rtmp://[2001:db8::1]:1935/live",
+        now(control.hello(hello)).expect("hello");
+        for (id, url, warns) in [
+            ("remote", "rtmp://live.example.com/app", true),
+            ("tls", "rtmps://live.example.com/app", false),
+            ("relay", "rtmp://127.0.0.1:1936/live", false),
         ] {
-            assert_eq!(
-                cleartext_warning(&rtmp(url)),
-                Some(CLEARTEXT_WARNING),
-                "{url}"
-            );
+            let create = create_edit(OutputId::new(id), NewKind::Rtmp, url);
+            now(super::edit(&control, create)).expect("create");
+            let status = now(status(&control, &OutputId::new(id))).expect("status");
+            assert_eq!(status.cleartext, warns, "{url}");
         }
-        for url in [
-            "rtmps://live.example.com/app",
-            "rtmp://localhost/live",
-            "rtmp://127.0.0.1:1936/live",
-            "rtmp://[::1]/live",
-        ] {
-            assert_eq!(cleartext_warning(&rtmp(url)), None, "{url}");
-        }
-        assert_eq!(cleartext_warning(&OutputKind::VirtualCam), None);
     }
 
     #[test]

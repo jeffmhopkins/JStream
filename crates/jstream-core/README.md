@@ -59,7 +59,11 @@ state machine. Contents:
   a `youtube` target reads the broadcast's bound stream and connects to its `rtmps://`
   ingest with its key, which goes only to the connection; while it runs, a thread reads
   the stream's health every `HEALTH_INTERVAL` and emits `youtube.health_changed` when
-  it changes. A refresh token Google refuses signs the engine out.
+  it changes, and the broadcast's audience every `STATS_INTERVAL` and emits
+  `youtube.stats` when it changes. Every Live API call is charged to an estimate of
+  the day's quota (`DAILY_QUOTA` by default), which `youtube.stats` reports and which
+  slows and then stops the audience reads as it runs low. A refresh token Google
+  refuses signs the engine out.
 - **Audit log** (`audit.rs`): one `AuditEntry` per executed batch, undo, redo and action
   (but `live.set` and `live.cancel`), and one per gesture that ends without a commit, sent to
   the `AuditSink` the host injects with `with_audit` (none by default). `AuditMemory`
@@ -143,7 +147,9 @@ state machine. Contents:
   thread draws them, and the program mix as the preview thread and `video.snapshot`
   draw it (`plan`, `compose`, each with the live values), and `video.snapshot`, the program mix
   read back as a PNG on the engine's own snapshot thread, which owns the snapshot
-  compositor.
+  compositor. A keyframe scene draws its parent's items at their effective values
+  (`State::shown_items`), so it follows every edit to the parent; so does what the
+  scene reaches for audio (`activity.rs`).
 - **Studio** (`studio.rs`): which scene is on program and which on preview, and the
   transition running onto program, runtime state under the collection lock that
   `scene.switch` and `studio.set_preview` set and `studio.get` reads
@@ -197,7 +203,9 @@ state machine. Contents:
 - **History** (`history.rs`): per-client undo and redo
   ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): each client's undo and redo
   stacks, built from the inverse batches `Graph::apply` returns, and the log of what
-  each recent change touched, which `undo_conflict` is checked against.
+  each recent change touched, which `undo_conflict` is checked against. A batch with an
+  empty inverse changed nothing (only `item.clear_override`s of absent fields), so it
+  is logged but is no step, and the redo stack is kept.
 - **Gestures** (`gesture.rs`): live values
   ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): every client's open
   gestures, which one holds each parameter, the `live.changed` events each owes, and
@@ -343,11 +351,16 @@ state machine. Contents:
   scene's rules (in `tests.rs`, the differential script and `studio.rs`), a snapshot
   that follows program, transitions and preview (`src/tests/transitions.rs`: preset
   resolution, a fade that ends on the clock, a switch mid-transition, and a GPU
-  snapshot mid-fade), YouTube on `jstream-youtube`'s `FakeTransport` and fixtures
+  snapshot mid-fade), keyframe scenes (`src/tests/keyframes.rs`: a variant drawing its
+  parent's items with its overrides and following the parent, a `move` between a parent
+  and its variant pairing by item where pairing by source would cross, and the
+  overrides a batch drops reported and restored by undo, with a no-op clear that is no
+  undo step, and a live value on a keyframe scene refused; `transition.rs` pairs a source placed twice by item), YouTube on `jstream-youtube`'s `FakeTransport` and fixtures
   (`src/tests/youtube.rs`: sign-in through a real loopback redirect, sign-out, the
-  broadcast actions and lists, quota and refused tokens, and a `youtube` output
+  broadcast actions and lists, quota and refused tokens, a `youtube` output
   publishing to its broadcast's ingest on the CPU stand-in, with the key and tokens in
-  no event or response), and an MCP agent (`jstream-mcp`, a dev-dependency) driving the
+  no event or response, its audience in `youtube.stats`, and the quota estimate slowing
+  and stopping the audience reads and starting again on a new day), and an MCP agent (`jstream-mcp`, a dev-dependency) driving the
   engine in-process. The audio routing (`audio.rs` and
   `src/tests/audio_routing.rs`): a mixer's buses, faders, mutes and sends following
   batches and undo, `meters.tick` while a mixer is attached and none after,
@@ -489,7 +502,8 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   edits in order on a working copy, the first failure aborting with `not_found`,
   `already_exists` or `invalid_argument` (`edits.<n>.<field>`) and nothing applied; on
   success `rev` goes up by exactly one, and the batch result lists the hotkey bindings
-  the batch's deletes removed (`removed_hotkeys`). The engine adds the per-client **idempotency
+  the batch's deletes removed (`removed_hotkeys`) and the keyframe overrides it dropped
+  (`dropped_overrides`, ADR-0040 §1). The engine adds the per-client **idempotency
   keys** ([R-API-004](../../docs/RULES.md#R-API-004)): a batch whose key this client
   already used is not applied again and gets the `rev` it produced, even after `rev`
   moved on (the key check comes first) and without an event. Only applied batches
@@ -502,8 +516,9 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
 - **Queries** that read the collection, and the kind queries, go to `Graph::query`,
   `output.list` and the `outputs` of `state.get` included; the graph holds the built-in
   kinds the engine gave it (`kinds.rs`), and the CLAP filter kinds a scan added. `output.status` reads the outputs' runtime state
-  (`not_found` for an unknown one) and fills `key_set` from the key store after the
-  collection lock is released (`internal` if the store fails). `video.snapshot` is answered here, not by
+  (`not_found` for an unknown one), `cleartext` from its kind
+  (`OutputKind::sends_key_in_cleartext`), and fills `key_set` from the key store after
+  the collection lock is released (`internal` if the store fails). `video.snapshot` is answered here, not by
   the graph.
 - **Actions**: `output.start` and `output.stop` (see *Outputs* below),
   `output.set_key` and `output.clear_key` (see *Stream keys* below), `scene.switch`
@@ -594,8 +609,10 @@ Live values ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)) live in
 `gesture.rs`'s table, under the collection lock, and reach the render thread through
 the render parameter channel, never through the collection:
 - **`live.set`** checks the message's shape (1 to 256 values, each a live-adjustable
-  setter, room for a new gesture among the client's 16), then applies the values to a
-  copy of the graph exactly as a batch would, naming a failure `values.<n>.<field>`.
+  setter, room for a new gesture among the client's 16), refuses a value whose
+  `scene_id` names a keyframe scene (`values.<n>.scene_id`: the parameters are per
+  item, so it would move the parent's item wherever it is drawn; #702 builds them),
+  then applies the values to a copy of the graph exactly as a batch would, naming a failure `values.<n>.<field>`.
   The copy is thrown away: `rev`, the undo history, the collection file and every
   collection read stay as they were. The values go into the gesture, each taking its
   parameter (an item's placement, set by `item.set_transform` or `item.set_geometry`,
@@ -682,7 +699,10 @@ Pairing and its inputs: each visible item that has a frame (or places a nested s
 or a `display` or `window` source showing its capture) becomes a `Visual` at its stored opacity, its
 placement converted to a geometry (a legacy placement through `ItemGeometry::from_legacy`
 at its frame size; a reflection is not kept mid-transition). `move` pairs by source as
-the protocol says; for it, a nested scene's items are flattened into its parent only
+the protocol says, except between two members of one family (a scene and its keyframe
+scenes, `State::family_of`, decided when the switch starts): those show the same items,
+so it pairs each item with itself (`Running::by_item`, ADR-0049 §3), which stays exact
+when a source is placed twice or an item is hidden on one side. For `move`, a nested scene's items are flattened into its parent only
 when its item covers the canvas exactly (an identity placement, no crop, not rotated)
 and is opaque, so a scene shown at another size or faded moves as one image
 (ADR-0052 §2). Stagger delays only
@@ -1392,6 +1412,15 @@ token found there at setup signs the engine in.
   Google refuses (`SignInRequired`) drops the client and the stored token and emits
   `signed_out`. `jstream-youtube` errors become `action_failed`, prefixed "YouTube's
   API quota is used up" for quota reasons (ADR-0041 §5, kept by ADR-0058); none carries a token.
+- **Quota** (ADR-0041 §5). Each call is charged to the day's estimate before it is
+  sent, at YouTube's published unit costs: 1 for a read (a list, the ingest's two
+  reads, a health or audience read) and 50 for a write (`create_broadcast`,
+  `transition_broadcast`, `bind_broadcast`, which is 101 when it creates the stream
+  first). The day is assumed to have `DAILY_QUOTA` (10,000) units, or what
+  `YoutubeSetup::with_daily_quota` says. The estimate starts again at midnight
+  Pacific Time, which the engine takes as UTC−8 all year, so in daylight time its day
+  starts an hour after YouTube's. A call YouTube refuses for quota marks the day
+  exhausted.
 - An output whose target is `youtube { broadcast_id }` needs a signed-in client, which
   `output.start` checks before `starting` (`action_failed` otherwise, no event). In
   the start's open step, outside the locks, the engine reads the broadcast's bound
@@ -1402,9 +1431,18 @@ token found there at setup signs the engine in.
 - Once such an output is `active`, its own `jstream-youtube-health` thread reads the
   stream's health every `HEALTH_INTERVAL` (15 s, one quota unit each) and emits
   `youtube.health_changed` on the first reading and whenever the status, rating or
-  issues change. While signed out it skips its reads. It ends when the output stops,
-  fails or the engine goes away.
+  issues change. The same thread reads the broadcast's audience (`videos.list`, one
+  unit) every `STATS_INTERVAL` (60 s), every `STATS_SLOWDOWN` (5) intervals while
+  less than a fifth of the day's quota is left, and not at all below a tenth (or with a
+  daily quota of 0), and
+  emits `youtube.stats` on the first reading and whenever the viewers, likes or views
+  change; the last reading is what the `youtube.stats` query lists. While signed out,
+  or once the day is exhausted, it skips both reads, so the actions keep what quota is
+  left. It ends when the output stops, fails or the engine goes away, and its
+  reading goes with it.
   Issue text is cut to 512 characters with control characters replaced.
+  The engine does not poll chat yet, so ADR-0041 §3's chat rate and §5's slowing of
+  chat polling after stats come with that.
 
 **Placeholder.** With no backends, the actions only move a state machine, as
 `jstream-control`'s mock does. The protocol defines an action's response as "accepted"
@@ -1643,9 +1681,9 @@ polls the audio sources' inputs into 48 kHz stereo blocks. Encode
 sessions turn those into H.264 and AAC. The output thread writes FLV tags to the
 publish target. Drops on a full encoder queue are counted in `output_stats`. The
 test records tags in memory. `connect_rtmp` is the live publisher. When its URL is
-plain `rtmp://` to another machine (`RtmpUrl::sends_key_in_cleartext`), it logs a
-warning naming the host, never the path, since the key then crosses the network
-unencrypted (#353). `RtmpPublish`
+plain `rtmp://` to another machine (`jstream_protocol::rtmp_url_sends_key_in_cleartext`,
+the rule `output.status` reports as `cleartext`), it logs a warning naming the host,
+never the path, since the key then crosses the network unencrypted (#353). `RtmpPublish`
 wraps `jstream-outputs`' `ReconnectingPublisher` with its default `ReconnectPolicy`
 (backoff from 1 s up to 30 s, giving up after a 5-minute outage). It opens the first
 session itself, on the caller's thread, so a refused first connect is still its
@@ -1745,7 +1783,10 @@ engine's other changes are single inserts or assignments, so the data stays
 consistent. Nothing is logged while a lock is held. The YouTube side has two more
 mutexes, the sign-in state and then the `LiveClient`, taken in that order, after the
 start lock and never under the collection lock; the client's is held across its
-blocking Live API calls, so a start waiting on it holds only the start lock.
+blocking Live API calls, so a start waiting on it holds only the start lock. The
+running outputs' polls and then their audience readings have a mutex each, taken in
+that order, and the quota estimate's is a leaf, taken under the client's to charge a
+call and never while taking another.
 
 ### Logging
 

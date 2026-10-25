@@ -585,7 +585,7 @@ fn outputs_golden() {
         run_on(&engine, &["--json", "--mock", "output", "status", "out_1"]),
         ok(concat!(
             r#"{"id":"req_1","result":{"kind":"query","result":"#,
-            r#"{"type":"output.status","output_id":"out_1","state":"active","key_set":false,"encoder_sessions":0,"hardware_sessions":0}}}"#,
+            r#"{"type":"output.status","output_id":"out_1","state":"active","key_set":false,"encoder_sessions":0,"hardware_sessions":0,"cleartext":false}}}"#,
             "\n"
         ))
     );
@@ -691,7 +691,9 @@ fn stream_keys_golden() {
     assert_eq!(key().as_deref(), Some("abcd-1234"));
     assert_eq!(
         run_on(&engine, &["--mock", "output", "status", "yt"]),
-        ok("yt: stopped, stream key set\n")
+        ok(
+            "yt: stopped, stream key set; warning: plain rtmp://, the stream key is sent unencrypted\n"
+        )
     );
 
     let dir = std::env::temp_dir().join(format!("jstream-cli-key-{}", std::process::id()));
@@ -784,7 +786,7 @@ fn stream_keys_golden() {
         run_on(&engine, &["--json", "--mock", "output", "status", "yt"]),
         ok(concat!(
             r#"{"id":"req_1","result":{"kind":"query","result":"#,
-            r#"{"type":"output.status","output_id":"yt","state":"stopped","key_set":false,"encoder_sessions":0,"hardware_sessions":0}}}"#,
+            r#"{"type":"output.status","output_id":"yt","state":"stopped","key_set":false,"encoder_sessions":0,"hardware_sessions":0,"cleartext":true}}}"#,
             "\n"
         ))
     );

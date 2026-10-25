@@ -39,8 +39,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `MAX_LIVE_VALUES` (256), and `is_live_adjustable`, which says which setters `live.set`
   takes (`item.set_transform`, `item.set_geometry`, `item.set_crop`), so every
   implementation agrees.
-- **Commands** (`command.rs`): `Edit` (`scene.create`, `scene.rename`, `scene.delete`,
-  `scene.reorder`, `scene.set_role`, `item.add`, `item.remove`, `item.reorder`,
+- **Commands** (`command.rs`): `Edit` (`scene.create`, `scene.create_variant`,
+  `scene.rename`, `scene.delete`,
+  `scene.reorder`, `scene.set_role`, `item.clear_override`, `item.add`, `item.remove`, `item.reorder`,
   `item.move`, `item.set_geometry`, `item.set_transform` (deprecated), `item.set_crop`,
   `item.set_visible`, `item.set_source`, `item.set_opacity`, `item.set_blend`,
   `canvas.set_size`, `source.create`, `source.rename`, `source.set_settings`,
@@ -112,10 +113,17 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   the item's `placement` form and its `geometry`, `SceneInfo` a scene's transition
   overrides, `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
   returns the program mix as a PNG. `youtube.status`, `youtube.list_broadcasts` and
-  `youtube.list_streams` read the YouTube account.
+  `youtube.list_streams` read the YouTube account, and `youtube.stats` the running
+  `youtube` outputs' audience and the day's quota estimate.
+- **Keyframe scenes** (`keyframe.rs`, [ADR-0024](../../docs/adr/0024-scene-structure.md)
+  §2, [ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)):
+  `ItemOverride`, what a keyframe scene overrides for one item as `SceneInfo.overrides`
+  reports it, `OverrideField`, the field `item.clear_override` removes, and
+  `DroppedOverride`, an override a batch dropped.
 - **YouTube** (`youtube.rs`, [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)):
   `YoutubeAuth`, `BroadcastInfo`, `StreamInfo` and the enums they carry, mirroring the
-  Live API with an `other` value for anything newer.
+  Live API with an `other` value for anything newer, and `AudienceStatsInfo`,
+  `QuotaInfo` and `StatsPolling` (0.38).
 - **Transitions** (`transition.rs`, [ADR-0029](../../docs/adr/0029-transitions.md),
   [ADR-0037](../../docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md)): the
   built-in transition kinds (`cut`, `fade`, `move`) and their descriptors, `Easing` with
@@ -136,7 +144,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   (program, preview and the transition a switch started), `privacy.changed`,
   `events.dropped`,
   `stats.tick`, `meters.tick`, `youtube.status_changed`, `youtube.health_changed`,
-  `live.changed`, `live.ended` and `plugin.state_changed`.
+  `youtube.stats`, `live.changed`, `live.ended` and `plugin.state_changed`.
 - **Plugins** (`plugin.rs`, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)): `PluginClass` (`read`,
   `edit`, `live`, `outputs`), `PLUGIN_SCOPES`, the table that places every command in
   one class or under "never", with `plugin_scope` and `plugin_classes` (a call's
@@ -171,7 +179,13 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.36 because of
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.39 because of keyframe
+  scenes (`scene.create_variant`, `item.clear_override`, `SceneInfo`'s `variant_of` and
+  `overrides`, the batch result's `dropped_overrides`, and placement edits whose
+  `scene_id` names a keyframe scene); 0.38 added YouTube audience stats and the quota
+  estimate (the `youtube.stats` event and query, `AudienceStatsInfo`, `QuotaInfo`,
+  `StatsPolling`); 0.37 added
+  `output.status`'s `cleartext` (#562); 0.36 added
   the `show_cursor` setting of the `display` and `window` kinds (whether the pointer
   shows in the capture; on by default, which is what those kinds did before); 0.35
   added WASM plugins ([Plugins](#design): `plugin.install`, `plugin.grant`, `plugin.enable`,
@@ -280,8 +294,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":36},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":36},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":37},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":37},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -385,11 +399,45 @@ the item's own scene, where the move is a reorder. Grouping is a client-built ba
 each selected item into the group, bottom first.
 
 The placement edits (`item.set_geometry`, `item.set_transform`, `item.set_crop`,
-`item.set_visible`, `item.set_opacity`) take an
-optional `scene_id`, fixed now so that keyframe scenes can arrive additively (ADR-0024
-§2). Absent, or the item's own scene, changes the item. Until keyframe scenes exist,
-any other existing scene is `invalid_argument` on `edits.N.scene_id`, and a missing one
-`not_found`. An inverse keeps the addressing of the edit it undoes.
+`item.set_visible`, `item.set_opacity`) take an optional `scene_id` (ADR-0024 §2).
+Absent, or the item's own scene, changes the item. A keyframe scene of the item's
+scene writes that field of its override instead. Any other existing scene is
+`invalid_argument` on `edits.N.scene_id`, and a missing one is `not_found`. An inverse
+keeps the addressing of the edit it undoes.
+
+**Keyframe scenes** (0.39, [ADR-0024](../../docs/adr/0024-scene-structure.md) §2,
+[ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)):
+- `scene.create_variant { scene_id, variant_of, name }` makes a keyframe scene (a
+  **variant**) of `variant_of`, appended to the scene list. `variant_of` must exist and
+  not be a variant itself (`invalid_argument` on `variant_of`: make the keyframe on its
+  parent). Its inverse is `scene.delete`. `SceneInfo.variant_of` names the parent
+  (omitted for any other scene).
+- A variant has no items of its own. It shows its parent's items, at the parent's
+  current values except for the fields it overrides: `geometry` (whole, as one
+  `item.set_geometry` or `item.set_transform` writes it, reported as `geometry` or, for
+  the 0.3 form, `transform`), `crop`, `visible` and `opacity`. `SceneInfo.overrides`
+  lists them in item ID order, as `ItemOverride`s with at least one field set (omitted
+  when there are none). An override names one of the parent's own items. Overriding a
+  child of a group the parent places is `invalid_argument` until it is built (#702).
+- Writing a field that was absent is undone by
+  `item.clear_override { scene_id, item_id, field }`, and writing one that was present by
+  the same edit with the old value. `item.clear_override` of a present field is undone by
+  writing the old value. Of an absent field it is allowed, changes nothing and has an
+  empty inverse, so "Reset keyframe" is a batch of clears sent without reading first
+  (ADR-0049 §2). A batch that changed nothing is no undo step.
+- Everything else follows the parent, so the edits that add or order a scene's own
+  things refuse a variant with `invalid_argument` on `scene_id`: `item.add`, `item.move`
+  into it, and `scene.set_folder` (a variant is listed under its parent, never in a
+  folder). `item.set_transform`, `scene.set_role`, renames, transitions and metadata
+  work as on any scene.
+- **Dropped overrides** (ADR-0040 §1): `item.remove` of a parent's item, and `item.move`
+  of it to another scene, drop its override in every variant in the same edit. The
+  batch result lists each as a `DroppedOverride {scene_id, item_id, ...fields}`
+  (`dropped_overrides`, omitted when there are none), and the inverse restores them
+  after the item is back.
+- A variant depends on its parent: `scene.delete` of a parent is refused while it has
+  variants (blockers with field `variant_of`), and `delete.plan` of a parent deletes its
+  variants, and the `scene` sources that show them, before it.
 
 ### Audio
 
@@ -749,7 +797,8 @@ Edits are only sent inside a `Batch`; a single edit is a batch of one.
   original result, even if `rev` has moved on since.
 - Results: a successful batch answers `{"kind":"batch","rev":N}`, the revision it
   produced, with `removed_hotkeys` when its deletes removed hotkey bindings (0.25;
-  omitted when there are none). Queries that read collection state report the `rev` they read.
+  omitted when there are none) and `dropped_overrides` when it dropped keyframe
+  overrides (0.39; omitted when there are none). Queries that read collection state report the `rev` they read.
 
 ### Queries
 
@@ -792,8 +841,12 @@ Queries read and never change `rev`. Those that read the collection state carry 
   never be shared; `encoder_sessions` and
   `hardware_sessions` count the video sessions open across every output, since
   hardware encoders cap them per GPU vendor and driver and the engine doesn't guess
-  the cap (0.13; missing, they parse as absent and 0). None of it is collection state,
-  so it carries no `rev`.
+  the cap (0.13; missing, they parse as absent and 0). `cleartext` says whether
+  publishing sends the stream key across the network unencrypted: a generic RTMP
+  target whose URL is plain `rtmp://` to a host other than `localhost` or a loopback
+  address (`OutputKind::sends_key_in_cleartext`; 0.37, missing it parses as `false`).
+  The engine still publishes; a client shows it as a warning. None of it is
+  collection state, so it carries no `rev`.
 - `kind.list` and `kind.describe {kind_id}`: the kinds the engine describes, above.
   Not collection state, so no `rev`.
 - `studio.get`: the scene on program (`program_scene`) and on preview
@@ -889,7 +942,9 @@ item's form) plus whichever of `item.reorder`, `item.set_crop`, `item.set_visibl
 and `item.set_transition` the removed item needs, and undoing `scene.delete` is
 `scene.create` with the scene's `role` (omitted for `scene`), `scene.reorder` unless it
 was last, `scene.set_transitions` if it had an override, and each item's restore,
-bottom to top. Undoing `transition.delete` is `transition.create`, then a
+bottom to top. A variant's `scene.delete` is undone by `scene.create_variant`, its role
+if it isn't `scene`, the same restores and the placement edits that write its
+overrides back. Undoing `transition.delete` is `transition.create`, then a
 `scene.set_transitions` for each override it cleared, and a `hotkey.set` for each
 binding it removed. `item.move` and `scene.set_role` are each undone by the same
 edit with the old scene and index, or the old role. Undoing
@@ -906,7 +961,8 @@ undone by the same edit with the old values, and a new send by `send.remove`. De
 place or a setting refers to, a scene that a `scene` source shows or a setting refers
 to, or a bus a setting refers to, is rejected, so no edit removes more than the object
 it names (a bus's sends are part of it), apart from the scene overrides a deleted preset
-clears and the hotkey bindings a delete removes, which its inverse restores. `jstream-graph`'s property
+clears, the hotkey bindings a delete removes and the keyframe overrides an item's
+removal or move drops, which its inverse restores. `jstream-graph`'s property
 test checks that applying a random batch and then its inverse restores the state
 exactly. A new edit that can't state its inverse in edits needs new edits first.
 
@@ -976,7 +1032,9 @@ named by a `gesture_id` it chooses, and sends its values as it goes:
   real-time paths exist. Values are checked as a batch's edits are, named
   `values.<n>.<field>`. Any other edit (`values.<n>.type`), an empty list, more than 256
   values, or a 17th open gesture of the client is `invalid_argument`, and nothing in the
-  message is applied. The engine never refuses a `live.set` for arriving fast; a client
+  message is applied. So is a value whose `scene_id` names a keyframe scene
+  (`values.<n>.scene_id`, since 0.39): live values are per item, and on keyframe
+  scenes they come with #702; a batch writes the override. The engine never refuses a `live.set` for arriving fast; a client
   keeps one per gesture in flight and sends its newest values when the answer comes.
 - **Commit:** the client sends one ordinary batch with the final values and
   `ends_gesture`. It is one `rev`, one undo step whose inverse restores the values from
@@ -1074,7 +1132,9 @@ After `welcome`, the server pushes every event to every client.
   audio above the absolute gate. Each tick is a full reading, so a client that misses
   one loses nothing; nothing numbers them.
 - `youtube.status_changed {auth}` and `youtube.health_changed {output_id, broadcast_id,
-  stream_id, status, health, issues}` (0.23) are described under [YouTube](#design).
+  stream_id, status, health, issues}` (0.23), and `youtube.stats {output_id,
+  broadcast_id, concurrent_viewers?, likes?, views?}` (0.38), are described under
+  [YouTube](#design).
 - `plugin.state_changed {plugin_id, state, reason?, remote_name?}` (0.35) is described
   under [Plugins](#design).
 
@@ -1108,13 +1168,27 @@ YouTube is for people, not agents (ADR-0058 §3):
 - An output with the `youtube {broadcast_id}` target publishes to the `rtmps://`
   ingest of its broadcast's bound stream. While it runs, the engine polls the stream's
   health and sends `youtube.health_changed` when it changes.
+- While it runs, the engine also reads the broadcast's audience about once a minute
+  (ADR-0041 §3) and sends `youtube.stats {output_id, broadcast_id,
+  concurrent_viewers?, likes?, views?}` when a reading differs from the last. A count
+  YouTube doesn't report (hidden by the owner, no viewers now, or the broadcast ended)
+  is omitted. The chat rate ADR-0041 §3 also names comes with the engine's chat
+  polling, as a later optional field.
+- `youtube.stats` (the query, 0.38) returns `outputs`, the last reading of each running
+  `youtube` output that has one, by output ID, and `quota {used, daily, exhausted?,
+  stats}`: the engine's count of the day's API units, the units it assumes a day has,
+  whether YouTube has refused a call for quota since the day began, and how audience
+  stats are polled (`normal`, `slowed` once less than a fifth of the day is left, or
+  `stopped` below a tenth or once exhausted) (ADR-0041 §5). It never calls YouTube.
+  The count is an estimate at YouTube's published costs and starts again at midnight
+  Pacific Time; YouTube's own count, shared with anything else on the same Google
+  project, can differ.
 - A Live API failure is `action_failed`, queries included, and a used-up quota says so
   in its reason (ADR-0041 §5, kept by ADR-0058).
 
 Values mirrored from YouTube (`life_cycle`, `privacy`, `status`, `health`, `severity`)
 have an `other` value, so a value YouTube adds later still parses. Text from YouTube is
-untrusted and shown as plain text. Chat, the featured message and audience stats come
-later.
+untrusted and shown as plain text. Chat and the featured message come later.
 
 ### Plugins
 
