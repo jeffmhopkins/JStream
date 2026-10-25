@@ -1979,7 +1979,7 @@ a row on the context, a third of a second, the render thread leaves it once. A
 takes the collection lock) and opens the compositor on a device of its own, while the
 render thread keeps repeating the last frames (black under the privacy screen, which
 fails closed) and adopting snapshots. Then the render
-thread lets go of the frames it holds, has the `jstream-capture` thread drop its GPU
+thread lets go of the frames it holds on the context's device, has the `jstream-capture` thread drop its GPU
 backend and start every display and window capture again on the CPU path (a start asked
 for before is stopped when it comes back), and takes the new compositor. A webcam or
 capture card is on the CPU path already, so it keeps running and keeps its frame, and
