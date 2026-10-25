@@ -89,6 +89,11 @@ pub fn engine(
     );
     #[cfg(not(any(windows, target_os = "macos")))]
     let engine = Arc::new(engine);
+    if let Some(dir) = &options.plugin_dir {
+        // Last, once the engine is built: a saved plugin keeps a handle to the engine as
+        // it is now, so it sees the loaded collection and acts through the backends.
+        engine.open_plugin_dir(dir);
+    }
     #[cfg(windows)]
     scan_clap_plugins(&engine);
     Ok(engine)

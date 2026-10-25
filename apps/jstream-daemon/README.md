@@ -38,7 +38,7 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   creates the file with a new random token, and names the device file beside it
   ([Design](#design)).
 - **Serving** (`serve.rs`): builds the engine (with the audit log, the `--collection`
-  file and the placeholder outputs; on Windows a live one, through `live.rs`, that scans
+  file, the plugin folder and the placeholder outputs; on Windows a live one, through `live.rs`, that scans
   the CLAP plugins, and with the `cef` feature also opens browser sources, and on
   macOS a live one on the macOS backends built so far, [Design](#design)), installs the signal handlers that stop it, then binds the server
   with MCP on and, with `--ui-dir`, the web UI's files.
@@ -115,6 +115,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | `--token-file <path>` | The control token file. Default: the `JSTREAM_TOKEN_FILE` environment variable, which `jstream-cli` reads too. One of them is required. |
 | `--port <port>` | The port on `127.0.0.1`. Default `0`: the OS picks a free one, and the URL line says which. |
 | `--collection <path>` | Loads the collection from this JSON file and saves every change to it, so the next run starts where this one stopped. Created, holding the empty collection, if it doesn't exist. Default: none, the collection starts empty and is lost on exit. |
+| `--plugin-dir <dir>` | Where installed WASM plugins and their grants are saved (`plugins.json`) and loaded from at startup, created if missing ([ADR-0076](../../docs/adr/0076-saved-wasm-plugins-and-manifest-requests.md)). A file there that can't be read, or that a newer version wrote, is logged at `error` and left as it is, and plugins aren't loaded or saved that run. Default: `plugins` in the platform data directory; without a data directory, plugins aren't saved. |
 | `--ui-dir <dir>` | Serves the web UI's built files (`trunk build`'s `dist`) from this directory at `http://127.0.0.1:<port>/`. The browser asks for a user name and password: the password is the token (see **Web UI** below). A path that isn't a directory fails with exit code 1, before the token or collection file is written. Default: no UI. |
 | `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. On Windows and macOS it has no target, so starting it fails: create outputs with `output.create` instead. |
 | `--log-dir <dir>` | Where the log files, crash reports and the audit log go, created (with its parents) if missing. Default: `logs` in the platform data directory (see **Log files** below). |
@@ -242,6 +243,15 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   later is logged at `error` and retried with the next change; the call still
   succeeds. Undo history is not saved. Nothing stops two daemons from using the same
   file: each saves over the other's changes, so give each its own.
+- **Plugin folder.** Installed WASM plugins are saved in `plugins.json` in
+  `--plugin-dir`, by default `plugins` in the platform data directory, and each that was
+  enabled is loaded again at startup, once the engine is built. A plugin that no longer
+  loads stays disabled, and the log says why. Unlike the collection file, a plugins file
+  the engine can't read doesn't stop the start: it is logged and left as it is. As with
+  the collection file, nothing stops two daemons from using the same folder, which the
+  default makes likely: both run the saved plugins and each saves over the other's
+  changes, so give each its own `--plugin-dir`. No command removes an installed plugin
+  yet.
 - **Audit log.** Every batch, undo, redo and action, by any client, is one JSON line
   in `audit.jsonl` in the log directory: the time, the client's ID and `hello` name
   (`device:<name>` for a paired device),
@@ -389,6 +399,13 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   moves, rather than in a directory of its own. Its entries are written as they come;
   on a graceful stop the writer finishes the queue when the engine is dropped. Without `--collection` nothing is saved, as before
   ([Open questions](#open-questions), 6).
+- **Plugin folder** (`main.rs`, `serve.rs`). `main` fills in `--plugin-dir`'s default
+  from `jstream_platform::paths::data_dir`, so `serve::engine` saves plugins only where
+  `Options` says; the daemon's tests, which build engines from default `Options`, save
+  none. `serve::engine` calls `Engine::open_plugin_dir` last, after the backends, the
+  credential stores and the browser, because a saved plugin keeps a handle to the engine
+  as it is then and must act through its media host; it does the rest
+  ([jstream-core › Design](../../crates/jstream-core/README.md#design), *WASM plugins*).
 - **Browser sources** (`serve.rs`, feature `cef`, Windows only). Built with
   `--features cef`, the daemon gives the engine `jstream-browser`'s CEF backend
   (`Engine::with_browser`), so `browser` sources open their pages
@@ -524,7 +541,8 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   deleted before each new one.
 - **Argument parsing is hand-rolled**, for the reasons `jstream-cli` gives
   ([jstream-cli › Design](../jstream-cli/README.md#design)): a handful of options
-  (`--token-file`, `--port`, `--output`, `--collection`, `--ui-dir`, `--log-dir`,
+  (`--token-file`, `--port`, `--output`, `--collection`, `--plugin-dir`, `--ui-dir`,
+  `--log-dir`,
   `--log-level`, `--youtube-client`, `--register-vcam`, `--unregister-vcam`) don't pay for a
   parser crate.
 - **Dependencies.** `jstream-core` and `jstream-server` (what a host links),
