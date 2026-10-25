@@ -10,6 +10,9 @@
 //! pw-cli create-node adapter '{ factory.name=support.null-audio-sink
 //!     node.name=jstream-test-sink-51 media.class=Audio/Sink object.linger=1
 //!     audio.position=[FL FR FC LFE RL RR] }'
+//! pw-cli create-node adapter '{ factory.name=support.null-audio-sink
+//!     node.name=jstream-test-card-source media.class=Audio/Source/Virtual
+//!     object.linger=1 api.alsa.pcm.card=7 }'
 //! cargo test -p jstream-platform-linux --features hw-tests -- --ignored audio_tests
 //! ```
 
@@ -334,6 +337,27 @@ fn a_surround_sink_is_planned_in_its_own_layout() {
         .input_format(&AudioInputTarget::OutputLoopback(sink))
         .expect("the 5.1 test sink (see the module doc)");
     assert_eq!(format.channels(), 6);
+}
+
+/// An input's ALSA card comes from its node's info, for pairing webcams: the test
+/// source that says it is on card 7 is listed there, and no input is on card 99.
+#[test]
+#[ignore = "needs a PipeWire daemon (see the module doc)"]
+fn inputs_are_listed_by_their_sound_card() {
+    use crate::{PairedAudio, SoundCard};
+
+    let (_one, audio) = audio();
+    let inputs = audio.card_inputs().expect("card inputs");
+    let card = |index| SoundCard {
+        index,
+        id: "unused".into(),
+    };
+    assert_eq!(
+        inputs.input_for(&[card(7)]),
+        Some(DeviceId::new("jstream-test-card-source")),
+        "the card-7 test source (see the module doc)"
+    );
+    assert_eq!(inputs.input_for(&[card(99)]), None);
 }
 
 /// Panics on its first packet.
