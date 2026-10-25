@@ -2,7 +2,8 @@
 //! output holds a hardware video session, a new session opens with `require`, and a
 //! refusal is `hardware_session_limit` naming the holders, never a silent fallback to
 //! software. `avoid` still opens software, and with no hardware session open `prefer`
-//! falls back as before.
+//! falls back as before. A codec the machine lists no hardware encoder for isn't held
+//! to `require`, so its failure stays `action_failed`.
 
 use super::super::{batch, block_on, edits, output_call};
 use super::{TempDir, encoder_status, fakes, streaming_and_recording};
@@ -17,7 +18,7 @@ use jstream_platform::{
 };
 use jstream_protocol::{
     Edit, EncoderProfile, EncoderProfileId, HardwarePreference as ProfileHardware, OutputId,
-    OutputState, ProtocolError, RateControl,
+    OutputState, ProtocolError, RateControl, VideoCodec,
 };
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -180,6 +181,16 @@ impl Drop for Both {
 /// [`Both`] on `codecs`, with `hq`'s `hardware` as given, recording in a temp directory
 /// called `name`.
 fn start_both(name: &str, codecs: LimitedHardware, hardware: ProfileHardware) -> Both {
+    start_both_on(name, codecs, hardware, VideoCodec::H264)
+}
+
+/// [`start_both`] with `hq` encoding `codec`.
+fn start_both_on(
+    name: &str,
+    codecs: LimitedHardware,
+    hardware: ProfileHardware,
+    codec: VideoCodec,
+) -> Both {
     let dir = TempDir::new(name);
     let path = dir.join("show.mp4");
     let mut fakes = fakes();
@@ -189,6 +200,7 @@ fn start_both(name: &str, codecs: LimitedHardware, hardware: ProfileHardware) ->
     let mut profile = EncoderProfile::DEFAULT;
     profile.video.rate_control = RateControl::Cbr { kbps: 6000 };
     profile.video.hardware = hardware;
+    profile.video.codec = codec;
     batch(
         &control,
         edits(vec![
@@ -310,4 +322,30 @@ fn prefer_falls_back_when_no_hardware_session_is_open() {
         *asked.lock().expect("asked"),
         vec![HardwarePreference::Prefer, HardwarePreference::Prefer]
     );
+}
+
+/// A held hardware H.264 session is no session limit for a codec the machine lists no
+/// hardware encoder for (#814's HEVC here): `prefer` isn't held to `require`, and the
+/// failure is `action_failed` with what the machine lacks, not `hardware_session_limit`.
+#[test]
+fn a_codec_without_hardware_is_no_session_limit() {
+    let codecs = LimitedHardware::new(2);
+    let asked = Arc::clone(&codecs.asked);
+    let both = start_both_on("hw-hevc", codecs, ProfileHardware::Prefer, VideoCodec::Hevc);
+    match both
+        .rec
+        .clone()
+        .expect_err("the fakes have no HEVC encoder")
+    {
+        Some(ProtocolError::ActionFailed { reason }) => {
+            assert!(reason.contains("no HEVC encoder"), "{reason}");
+        }
+        other => panic!("not action_failed: {other:?}"),
+    }
+    assert_eq!(
+        *asked.lock().expect("asked"),
+        vec![HardwarePreference::Prefer, HardwarePreference::Prefer],
+        "the HEVC open keeps its own preference"
+    );
+    assert_eq!(both.status("yt"), (OutputState::Active, Some(true), 1, 1));
 }

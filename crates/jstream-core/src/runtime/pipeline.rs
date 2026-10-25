@@ -548,11 +548,19 @@ impl From<StartError> for ProtocolError {
 
 /// `profile` as a new video session opens it while `held` hold hardware sessions: a
 /// hardware preference becomes `require`, so a full hardware session limit fails the
-/// start instead of falling back to software (ADR-0027 §3). `avoid` stays software.
-/// Whether it was changed comes back with it.
-fn while_hardware_held(profile: &EncoderProfile, held: &[OutputId]) -> (EncoderProfile, bool) {
+/// start instead of falling back to software (ADR-0027 §3). `avoid` stays software, and
+/// so does a codec the machine has no hardware encoder for (`hardware_listed` false):
+/// no session limit can refuse that one, so `prefer` falls back and a failure stays
+/// `action_failed`. Whether it was changed comes back with it.
+fn while_hardware_held(
+    profile: &EncoderProfile,
+    held: &[OutputId],
+    hardware_listed: bool,
+) -> (EncoderProfile, bool) {
     let mut opened = *profile;
-    let limited = !held.is_empty() && !matches!(profile.video.hardware, ProfileHardware::Avoid);
+    let limited = !held.is_empty()
+        && hardware_listed
+        && !matches!(profile.video.hardware, ProfileHardware::Avoid);
     if limited {
         opened.video.hardware = ProfileHardware::Require;
     }
@@ -661,9 +669,10 @@ impl Program {
             // session's tap, so a fallback can't land between the open and the attach.
             let mut claim = self.context.as_ref().and_then(|_| self.gpu_gate.claim());
             let context = claim.as_ref().and(self.context.as_deref());
-            let (profile, limited) = while_hardware_held(&key.2, hardware_held);
             // A settings error is no refusal: only the encoder's open is classified below.
-            video_config(&feed, &profile)?;
+            let config = video_config(&feed, &key.2)?;
+            let listed = hardware_listed(self.codecs.as_ref(), config.codec);
+            let (profile, limited) = while_hardware_held(&key.2, hardware_held, listed);
             let video =
                 open_video(self.codecs.as_ref(), context, &feed, &profile).map_err(|reason| {
                     if limited {
@@ -2041,6 +2050,16 @@ fn video_open_failure(
         }
         Ok(()) => opening,
     }
+}
+
+/// Whether `codecs` lists a hardware encoder for `codec`, or can't list its encoders:
+/// only then can a held hardware session be what refuses a new one.
+fn hardware_listed(codecs: &dyn Codecs, codec: Codec) -> bool {
+    codecs.list().map_or(true, |list| {
+        list.iter().any(|info| {
+            info.role == CodecRole::VideoEncoder && info.codec == codec && info.hardware
+        })
+    })
 }
 
 /// Why `codecs` can't encode `config`'s codec with its hardware preference, from the

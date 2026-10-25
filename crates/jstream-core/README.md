@@ -323,7 +323,8 @@ state machine. Contents:
   profiles, and on a half-rate video mix held to its rate without being starved), a
   second hardware session refused as `hardware_session_limit` naming the holder, under
   `prefer` or `require`, with `avoid` opening software beside it and `prefer` still
-  falling back when no hardware session is open
+  falling back when no hardware session is open, and an HEVC start the machine lists no
+  hardware encoder for kept at `prefer` and failing as `action_failed`
   (`src/tests/cpu_pipeline/hardware_sessions.rs`), a
   virtual camera publishing the program as BGRA at the canvas size (fitted into a canvas of another size, started again after a stop, running beside
   a stream, refused without a camera in the backends or while another output uses
@@ -1548,7 +1549,11 @@ guess a hardware cap. Instead, while any running output holds a hardware video
 session, a new video session opens with `require` in place of `prefer` (`avoid` stays
 software), so a refusal can't fall back to software. That refusal fails the start with
 `hardware_session_limit`, naming the outputs that hold hardware sessions and keeping the
-encoder's message (0.44, `StartError`; ADR-0027 §3, #443). An output that joins an
+encoder's message (0.44, `StartError`; ADR-0027 §3, #443). This holds only for a codec
+the platform lists a hardware encoder for, or when it can't list them: a held session
+can't be what refuses a codec the machine has no hardware encoder for (HEVC or AV1 on
+many GPUs), so that session opens with its own preference, `prefer` falls back, and a
+failure stays `action_failed` with what the machine lacks. An output that joins an
 open session opens nothing, so it is never refused. With no hardware session open,
 `prefer` still falls back to software when hardware refuses (ADR-0031). A hardware
 encoder that takes the session and then refuses its first frame no longer falls back

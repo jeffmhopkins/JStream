@@ -758,7 +758,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   sessions in use. A profile's settings and the output's video mix at start
   count, so an output started after `encoder.update` gets a session of its own, and
   outputs on different mixes never share one. While any output holds a hardware
-  session, a new one opens with `require`, and when the encoder refuses it
+  session, a new one for a codec the machine lists a hardware encoder for opens with
+  `require`, and when the encoder refuses it
   `output.start` fails with `hardware_session_limit` (0.44) naming the outputs that hold
   hardware sessions, with no fallback to a software encoder
   ([ADR-0027](adr/0027-program-master-and-output-chains.md)).
