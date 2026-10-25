@@ -838,9 +838,9 @@ id = "C9"
 milestone = "M2"
 title = "Media file source"
 status = "hardware"
-prs = [245, 322]
-note = "the media file run passed on main (#382) except an MP3's loop seam, a 56 ms gap at each wrap (#445): a fix to build, then a rerun"
-needs = ["build", "hardware"]
+prs = [245, 322, 875]
+note = "the media file run passed on main (#382) except an MP3's loop seam, a 56 ms gap at each wrap (#445): #875 cuts it from the LAME tag; a rerun checks it, and the ~12 ms dropout 0.42 s into each pass"
+needs = ["hardware"]
 
 [[item]]
 id = "W1"

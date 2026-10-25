@@ -60,7 +60,7 @@ in, and **What's left** lists each unfinished item with the steps it still needs
 111 of 130 items are merged; 11 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 30 items, by next step: 🔨 build 21, 🧪 Windows run 8, 👤 maintainer 1</summary>
+<summary><b>What's left</b>: 30 items, by next step: 🔨 build 20, 🧪 Windows run 9, 👤 maintainer 1</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
@@ -81,7 +81,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | U4p | Live preview on canvas | M2 | 🧪 Windows run | the canvas's H.264 preview path on Windows (#380) | #302 |
 | T1 | Studio mode and transitions | M2 | 🧪 Windows run | #260 landed with wave/m1-3 (#754); the transition node's per-tick cost is still to measure on S1 hardware (#357, ADR-0029) | #260 |
 | E2b | Privacy screen and encoder sharing key | M2 | 🔨 build | on/off privacy covering every output, the encoder owner key and cost reporting (#317) landed with wave/m1-3 (#754); the look setting, the slate and muted sources to build | #317 |
-| C9 | Media file source | M2 | 🔨 build, then 🧪 Windows run | the media file run passed on main (#382) except an MP3's loop seam, a 56 ms gap at each wrap (#445): a fix to build, then a rerun | #245, #322 |
+| C9 | Media file source | M2 | 🧪 Windows run | the media file run passed on main (#382) except an MP3's loop seam, a 56 ms gap at each wrap (#445): #875 cuts it from the LAME tag; a rerun checks it, and the ~12 ms dropout 0.42 s into each pass | #245, #322, #875 |
 | K1 | Keyframe scenes, folders, organisation metadata and hotkeys | M2 | 🔨 build | hotkeys #319 landed with wave/m1-2 (#545); organisation metadata #323 landed with wave/m1-3 (#754); keyframe scenes part 1, in the protocol, graph and engine (#720, protocol 0.39), landed with wave/m1-4 (#810); a group's children and the UI follow (#702) | #319, #720 |
 | U6 | Desktop UI as a 1:1 match of the UI prototype | M2 | 🔨 build, then 👤 maintainer | #748; docs/UI-FEATURES.md tracks it row by row. Theme and header (#495), docking (#496), the canvas (#615, #637), the Inspector (#659) and the Transform panel (#664) landed with wave/m1-3 (#754); menus, dialogs and live drag (#766, #747), the Scenes and Scene objects panels (#770), the Filters panel and its dialogs (#785, #788) and the mixer master card (#792) landed with wave/m1-4 (#810); vertical mixer strips (#809) are in review into wave/m1-5; the rest of the mixer and the keyboard batch are still to build. Rows that wait on the engine follow B12, C2b, V4, D9, E2b, K1, X1 and Y4, and on two gaps with no item yet: previews of any scene or source (decision register D36) and the audit log over the protocol (D38); the bundled IBM Plex fonts are a licensing call for the maintainer (WS-02) | #495, #496, #615, #637, #659, #664, #766, #770, #785, #788, #792, #809 |
 | B12 | Source sizes as runtime state (source.sizes) | M2 | 🔨 build | ADR-0022 decision 4, accepted and not built: the source.sizes query and source.size_changed event, a protocol bump; it unblocks crop by dragging (CV-08), size in % (IN-03) and native-size placement |  |
@@ -250,7 +250,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | E2b | Privacy screen and encoder sharing key | ⏳ planned: on/off privacy covering every output, the encoder owner key and cost reporting (#317) landed with wave/m1-3 (#754); the look setting, the slate and muted sources to build | #317 |
 | D8 | Master and output audio chains | ✅ merged | #249, #303 |
 | D8p | Audio chain protocol fields | ✅ merged | #303 |
-| C9 | Media file source | 🧪 merged, Windows run pending: the media file run passed on main (#382) except an MP3's loop seam, a 56 ms gap at each wrap (#445): a fix to build, then a rerun | #245, #322 |
+| C9 | Media file source | 🧪 merged, Windows run pending: the media file run passed on main (#382) except an MP3's loop seam, a 56 ms gap at each wrap (#445): #875 cuts it from the LAME tag; a rerun checks it, and the ~12 ms dropout 0.42 s into each pass | #245, #322, #875 |
 | W1 | Audio waveform and spectrum sources | ✅ merged | #315, #460, #463, #466 |
 | B11 | Folders and labels | ✅ merged: #323 landed with wave/m1-3 (#754) | #323 |
 | K1 | Keyframe scenes, folders, organisation metadata and hotkeys | ⏳ planned: hotkeys #319 landed with wave/m1-2 (#545); organisation metadata #323 landed with wave/m1-3 (#754); keyframe scenes part 1, in the protocol, graph and engine (#720, protocol 0.39), landed with wave/m1-4 (#810); a group's children and the UI follow (#702) | #319, #720 |
