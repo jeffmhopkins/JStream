@@ -1019,7 +1019,7 @@ fn MasterStrip(panel: Panel, open: RwSignal<bool>) -> AnyView {
             <button
                 class="ghost-button"
                 disabled
-                title="What your headphones hear: the engine has no monitor output yet (decision D22)"
+                title="What your headphones hear: not built yet (MX-05)"
             >
                 "Hear post"
             </button>
