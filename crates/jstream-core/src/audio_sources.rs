@@ -39,6 +39,11 @@
 //! collection made earlier is not silent. A page's audio, and a webcam's, don't count
 //! as an audio source here: they play alongside the defaults.
 //!
+//! Each input on an audio input device (a microphone: the default one, an
+//! `audio_input` source's, a webcam's paired input) is marked, before its stream
+//! starts, as one the privacy screen mutes (ADR-0027 §4's default set); its audio
+//! thread and the mixer thread silence it while the screen is on.
+//!
 //! Each source's open input (an audio source's, a page's or a media file's) is also
 //! listed in [`Routed`], where the engine's audio routing (`crate::audio`) finds it to
 //! set its fader, mute and sends. A source's input opens muted, so it is heard only once
@@ -53,15 +58,16 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use jstream_audio::{InputControl, MixerControl};
 use jstream_platform::{
     AudioInputTarget, AudioIo, AudioProcess, AudioStream, DeviceId, MediaClock, PlatformError,
-    VideoDeviceInfo, VideoDevices,
+    PluginHosts, VideoDeviceInfo, VideoDevices,
 };
 use jstream_protocol::{SourceId, SourceKind};
 use jstream_sources::{AudioTarget, SourceAudio, webcam_device};
@@ -70,6 +76,8 @@ use crate::drops::{AudioInputDrops, DropLedger, DropSourceId, lock_ledger};
 use crate::filters::{Chain, Chained, chain_of};
 use crate::live::LiveAudio;
 use crate::lock;
+use crate::plugins::filter::ClapCatalog;
+use crate::plugins::supervisor::SupervisorPolicy;
 
 /// How often the thread retries unavailable sources, reopens failed streams and checks
 /// that recorded applications still run.
@@ -140,6 +148,8 @@ struct WantedState {
     /// Each source's audio filter chain, as the mixer runs it. Sources without filters
     /// have no entry.
     chains: BTreeMap<SourceId, Vec<Chained>>,
+    /// What runs the CLAP filters, once a scan has found plugins.
+    clap: Option<Arc<ClapCatalog>>,
     /// How each source fares while the program stage runs.
     status: BTreeMap<SourceId, AudioStatus>,
 }
@@ -257,6 +267,29 @@ impl AudioSources {
         }
     }
 
+    /// Has the program stage's thread run CLAP filters with `hosts` (ADR-0035), adding
+    /// `plugins` (each kind's plugin file and CLAP id) to those earlier scans found,
+    /// and wakes it, so a CLAP filter waiting for its kind starts.
+    pub(crate) fn add_clap_plugins(
+        &mut self,
+        hosts: Arc<dyn PluginHosts>,
+        plugins: impl IntoIterator<Item = (String, (PathBuf, String))>,
+    ) {
+        let mut wanted = lock(&self.wanted.state);
+        let mut all = wanted
+            .clap
+            .as_ref()
+            .map(|catalog| catalog.plugins.clone())
+            .unwrap_or_default();
+        all.extend(plugins);
+        wanted.clap = Some(Arc::new(ClapCatalog {
+            hosts,
+            plugins: all,
+            policy: SupervisorPolicy::default(),
+        }));
+        self.wanted.changed.notify_all();
+    }
+
     /// The wanted set, for the program stage.
     pub(crate) fn wanted(&self) -> Arc<Wanted> {
         Arc::clone(&self.wanted)
@@ -350,6 +383,7 @@ struct Wants {
     live: BTreeMap<SourceId, LiveAudio>,
     /// Each source's audio filter chain.
     chains: BTreeMap<SourceId, Vec<Chained>>,
+    clap: Option<Arc<ClapCatalog>>,
 }
 
 impl Wants {
@@ -363,6 +397,7 @@ impl Wants {
                 .map(|(id, live)| (id.clone(), live.clone()))
                 .collect(),
             chains: state.chains.clone(),
+            clap: state.clap.clone(),
         }
     }
 
@@ -370,6 +405,16 @@ impl Wants {
     fn names(&self, id: &SourceId) -> bool {
         self.targets.get(id).is_some_and(|target| target.on) || self.live.contains_key(id)
     }
+}
+
+/// Whether the privacy screen mutes what `target` records: an audio input device (a
+/// microphone, the default one or a chosen one, or a webcam's paired input), not
+/// desktop or application audio (ADR-0027 §4's default muted set).
+fn is_microphone(target: &AudioInputTarget) -> bool {
+    matches!(
+        target,
+        AudioInputTarget::DefaultInput | AudioInputTarget::Input(_)
+    )
 }
 
 /// The inputs to record: one per audio source, per running source's own audio and per
@@ -617,6 +662,7 @@ impl Open {
     /// those whose application exited, opens every input that isn't recording, and
     /// brings each source input's filters in line with its chain.
     fn reconcile(&mut self, wants: &Wants) -> Pass {
+        let now = Instant::now();
         let mut notes = Vec::new();
         self.removing.retain(|control| !control.remove());
         let wanted = wanted_inputs(wants);
@@ -685,7 +731,8 @@ impl Open {
             }
             if let (Key::Source(id), Some(live)) = (&key, input.live.as_mut()) {
                 let chain = wants.chains.get(id).map_or(&[][..], Vec::as_slice);
-                for reason in live.chain.apply(&live.control, chain) {
+                let clap = wants.clap.as_deref();
+                for reason in live.chain.apply(&live.control, chain, clap, now) {
                     notes.push(Note::Refused(key.clone(), reason));
                 }
             }
@@ -767,9 +814,11 @@ impl Open {
             .audio
             .input_format(&target)
             .map_err(|err| err.to_string())?;
+        // A microphone is marked before the mixer can install it: the privacy screen
+        // mutes it from its first block.
         let (producer, control) = self
             .mixer
-            .add_input(format)
+            .add_input_with(format, is_microphone(&target))
             .map_err(|err| format!("mixer input: {err}"))?;
         if matches!(key, Key::Source(_)) {
             control.set_muted(true);

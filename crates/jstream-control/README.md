@@ -285,6 +285,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `internal`;
 - `capture.targets`, answered with one made-up 1920×1080 primary display whose ID is
   `MOCK_DISPLAY`;
+- `source.sizes`, answered with every source and no size, since the mock makes no
+  frames, so it never sends `source.size_changed`;
 - the privacy screen ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)):
   `privacy.set` (no `rev`), `privacy.get`, and `privacy.changed` for a change, which a
   stream opened while it is on gets first;
