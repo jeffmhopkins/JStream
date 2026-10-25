@@ -82,6 +82,38 @@ fn plugin_dir(name: &str) -> PathBuf {
     dir
 }
 
+/// An engine with the plugin folder `dir` open.
+fn opened(dir: &Path) -> Engine {
+    let engine = Engine::new();
+    engine.open_plugin_dir(dir);
+    engine
+}
+
+/// A module whose `on_event` makes each of `calls` in order, ignoring their results.
+fn calling_each_on_event(calls: &[Call]) -> String {
+    let mut data = String::new();
+    let mut body = String::new();
+    for (i, call) in calls.iter().enumerate() {
+        let call = serde_json::to_string(call).expect("a call encodes");
+        let at = 1024 + i * 4096;
+        data.push_str(&format!(
+            r#"(data (i32.const {at}) "{}")"#,
+            call.replace('"', "\\\"")
+        ));
+        body.push_str(&format!(
+            "(drop (call $call (i32.const {at}) (i32.const {})))",
+            call.len()
+        ));
+    }
+    format!(
+        r#"(module
+            (import "jstream" "call" (func $call (param i32 i32) (result i32)))
+            (memory (export "memory") 2)
+            {data}
+            (func (export "{EVENT_ENTRY}") {body}))"#
+    )
+}
+
 /// The plugin folder's saved plugins, as JSON.
 fn saved(dir: &Path) -> serde_json::Value {
     let bytes = fs::read(dir.join(PLUGINS_FILE)).expect("the plugins file");
@@ -616,7 +648,7 @@ fn installed_plugins_are_saved_and_loaded_again() {
     );
     let traps = package("saved_traps", TRAPS, None);
     {
-        let engine = Engine::new().with_plugin_dir(&dir);
+        let engine = opened(&dir);
         let person = connected(&engine);
         let mut events = person.events();
         call(
@@ -646,7 +678,7 @@ fn installed_plugins_are_saved_and_loaded_again() {
     assert_eq!(plugins[1]["disabled"], "trap");
 
     // The next run loads the enabled one with its grant, and keeps the other disabled.
-    let engine = Engine::new().with_plugin_dir(&dir);
+    let engine = opened(&dir);
     let person = connected(&engine);
     call(&person, create_scene("again")).expect("the person's edit applies");
     eventually("the restored plugin's scene", || {
@@ -655,6 +687,10 @@ fn installed_plugins_are_saved_and_loaded_again() {
     let mut events = person.events();
     assert_eq!(call(&person, enable("plg_t")), Ok(CallResult::action()));
     assert_eq!(next_state(&mut events).1, PluginState::Enabled);
+    assert!(
+        saved(&dir)["plugins"][1].get("disabled").is_none(),
+        "a person's enable is saved"
+    );
     assert_eq!(
         call(
             &person,
@@ -676,7 +712,7 @@ fn an_update_that_asks_for_more_needs_a_grant() {
         None,
     );
     {
-        let engine = Engine::new().with_plugin_dir(&dir);
+        let engine = opened(&dir);
         let person = connected(&engine);
         call(
             &person,
@@ -686,7 +722,7 @@ fn an_update_that_asks_for_more_needs_a_grant() {
     }
     // The update asks for `edit`, which nobody granted.
     fs::write(package_dir.join(MANIFEST_FILE), ASKS_EDIT).expect("manifest written");
-    let engine = Engine::new().with_plugin_dir(&dir);
+    let engine = opened(&dir);
     let person = connected(&engine);
     assert_eq!(saved(&dir)["plugins"][0]["disabled"], "needs_grant");
     match call(&person, enable("plg_u")) {
@@ -711,7 +747,7 @@ fn an_update_that_asks_for_less_narrows_its_grant() {
     let dir = plugin_dir("narrows");
     let package_dir = package("narrows", IDLE, Some(ASKS_EDIT));
     {
-        let engine = Engine::new().with_plugin_dir(&dir);
+        let engine = opened(&dir);
         let person = connected(&engine);
         call(
             &person,
@@ -720,7 +756,7 @@ fn an_update_that_asks_for_less_narrows_its_grant() {
         .expect("installs");
     }
     fs::write(package_dir.join(MANIFEST_FILE), "{}").expect("manifest written");
-    let _engine = Engine::new().with_plugin_dir(&dir);
+    let _engine = opened(&dir);
     let plugin = &saved(&dir)["plugins"][0];
     assert!(plugin.get("disabled").is_none(), "{plugin}");
     assert!(plugin["grant"].get("classes").is_none(), "{plugin}");
@@ -732,7 +768,7 @@ fn a_plugins_file_it_cant_read_is_left_alone() {
     fs::create_dir_all(&dir).expect("plugin dir");
     let newer = r#"{"version": 1, "plugins": []}"#;
     fs::write(dir.join(PLUGINS_FILE), newer).expect("file written");
-    let engine = Engine::new().with_plugin_dir(&dir);
+    let engine = opened(&dir);
     let person = connected(&engine);
     let idle = package("unreadable_idle", IDLE, None);
     call(&person, install("p", &idle, PluginGrant::default())).expect("installs");
@@ -741,4 +777,119 @@ fn a_plugins_file_it_cant_read_is_left_alone() {
         newer,
         "nothing is saved over a file this version doesn't read"
     );
+}
+
+#[test]
+fn a_saved_plugin_that_no_longer_loads_stays_disabled_as_trap() {
+    let dir = plugin_dir("no_longer_loads");
+    let package_dir = package("no_longer_loads", IDLE, None);
+    {
+        let engine = opened(&dir);
+        let person = connected(&engine);
+        call(
+            &person,
+            install("plg_b", &package_dir, PluginGrant::default()),
+        )
+        .expect("installs");
+    }
+    fs::write(package_dir.join(MODULE_FILE), b"not a module").expect("module written");
+    let engine = opened(&dir);
+    assert_eq!(saved(&dir)["plugins"][0]["disabled"], "trap");
+    let person = connected(&engine);
+    assert!(matches!(
+        call(&person, enable("plg_b")),
+        Err(ProtocolError::ActionFailed { .. })
+    ));
+}
+
+#[test]
+fn a_saved_grant_a_person_couldnt_give_needs_a_new_grant() {
+    let dir = plugin_dir("bad_saved_grant");
+    let package_dir = package(
+        "bad_saved_grant",
+        IDLE,
+        Some(r#"{"classes": ["edit"], "folders": true}"#),
+    );
+    {
+        let engine = opened(&dir);
+        let person = connected(&engine);
+        call(
+            &person,
+            install("plg_g", &package_dir, grant(&[PluginClass::Edit])),
+        )
+        .expect("installs");
+    }
+    let mut file = saved(&dir);
+    file["plugins"][0]["grant"]["folders"] = serde_json::json!(["relative/folder"]);
+    fs::write(dir.join(PLUGINS_FILE), file.to_string()).expect("file written");
+    let _engine = opened(&dir);
+    let plugin = &saved(&dir)["plugins"][0];
+    assert_eq!(plugin["disabled"], "needs_grant", "{plugin}");
+    assert!(plugin["grant"].get("folders").is_none(), "{plugin}");
+}
+
+/// A saved plugin acts on the engine as built, with its backends: the daemon opens the
+/// plugin folder last (#843 review B1). Without a publish target its `output.start`
+/// fails as a person's does, and the output stays stopped.
+#[test]
+fn a_saved_plugin_acts_through_the_engines_backends() {
+    use jstream_media::Timebase;
+    use jstream_platform::fake::{self, FakeClock};
+    use jstream_protocol::{OutputId, OutputState};
+
+    let dir = plugin_dir("backends");
+    let package_dir = package(
+        "backends",
+        &calling_each_on_event(&[
+            super::output_call("out_1", true),
+            create_scene("after_start"),
+        ]),
+        Some(r#"{"classes": ["edit", "outputs"]}"#),
+    );
+    {
+        let engine = opened(&dir);
+        let person = connected(&engine);
+        call(
+            &person,
+            install(
+                "plg_o",
+                &package_dir,
+                grant(&[PluginClass::Edit, PluginClass::Outputs]),
+            ),
+        )
+        .expect("installs");
+    }
+    let clock = FakeClock::new(Timebase::MICROS);
+    let engine = Engine::new()
+        .with_output(OutputId::new("out_1"))
+        .with_backends(fake::backends(&clock).expect("fake backends"));
+    engine.open_plugin_dir(&dir);
+    let person = connected(&engine);
+    call(&person, create_scene("trigger")).expect("the person's edit applies");
+    eventually("the plugin's scene after its start", || {
+        scenes(&person).contains(&SceneId::new("after_start"))
+    });
+    match call(
+        &person,
+        Call::Query {
+            query: Query::OutputStatus {
+                output_id: OutputId::new("out_1"),
+            },
+        },
+    ) {
+        Ok(CallResult::Query {
+            result: QueryResult::OutputStatus { state, .. },
+        }) => assert_eq!(state, OutputState::Stopped),
+        other => panic!("output.status: {other:?}"),
+    }
+}
+
+#[test]
+fn a_second_plugin_folder_is_ignored() {
+    let first = plugin_dir("first_folder");
+    let second = plugin_dir("second_folder");
+    let engine = opened(&first);
+    engine.open_plugin_dir(&second);
+    assert!(first.join(PLUGINS_FILE).exists());
+    assert!(!second.join(PLUGINS_FILE).exists());
 }

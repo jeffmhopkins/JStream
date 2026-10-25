@@ -38,7 +38,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Wake, Waker};
@@ -71,6 +71,8 @@ pub(crate) struct Registry {
     /// Where the installed plugins are saved, once the host names a folder. Held while a
     /// save reads the plugins and writes the file, so saves land in the order they read.
     file: Mutex<Option<PathBuf>>,
+    /// Whether the host has opened a plugin folder: only the first is used.
+    opened: AtomicBool,
     /// For tests: how long [`start`] waits between a plugin's load and marking its entry
     /// `Running`, to widen the window in which events queue for it (#839 review B1). Per
     /// engine, so other tests' installs don't wait too.
@@ -433,6 +435,11 @@ fn disabled(
 /// version reads is logged and left as it is, and nothing is loaded or saved this run,
 /// so a newer version's file isn't overwritten.
 pub(crate) fn open_dir(engine: &Engine, dir: PathBuf) {
+    let registry = engine.automation();
+    if registry.opened.swap(true, Ordering::SeqCst) {
+        tracing::warn!(dir = %dir.display(), "a plugin folder is already open: this one is ignored");
+        return;
+    }
     if let Err(error) = std::fs::create_dir_all(&dir) {
         tracing::error!(dir = %dir.display(), %error, "can't create the plugin folder: plugins won't be saved");
         return;
@@ -456,7 +463,6 @@ pub(crate) fn open_dir(engine: &Engine, dir: PathBuf) {
             return;
         }
     };
-    let registry = engine.automation();
     *lock(&registry.file) = Some(path);
     let mut enabled = Vec::new();
     {
@@ -466,7 +472,20 @@ pub(crate) fn open_dir(engine: &Engine, dir: PathBuf) {
                 tracing::warn!(plugin_id = %plugin.plugin_id, "a plugin is saved twice: the first is kept");
                 continue;
             }
-            let state = match plugin.disabled {
+            // A grant the person couldn't have given (an edited file) isn't used: the
+            // plugin waits for a new grant.
+            let (grant, granted, disabled) = match check_grant(&plugin.grant) {
+                Ok(()) => (plugin.grant, plugin.granted, plugin.disabled),
+                Err(error) => {
+                    tracing::warn!(plugin_id = %plugin.plugin_id, %error, "a saved plugin's grant isn't valid: it needs a new grant");
+                    (
+                        PluginGrant::default(),
+                        Request::default(),
+                        Some(PluginDisabledReason::NeedsGrant),
+                    )
+                }
+            };
+            let state = match disabled {
                 None => {
                     enabled.push(plugin.plugin_id.clone());
                     Run::Starting
@@ -479,10 +498,10 @@ pub(crate) fn open_dir(engine: &Engine, dir: PathBuf) {
                 plugin.plugin_id,
                 Entry {
                     package: plugin.package,
-                    grant: Arc::new(Mutex::new(plugin.grant)),
+                    grant: Arc::new(Mutex::new(grant)),
                     name: plugin.name,
                     request: plugin.request,
-                    granted: plugin.granted,
+                    granted,
                     state,
                 },
             );

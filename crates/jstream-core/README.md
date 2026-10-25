@@ -33,9 +33,9 @@ state machine. Contents:
   `Engine::new()`, `with_output(id)`, `with_backends`, `with_publish`,
   `with_publish_opener`, `with_key_store`, `with_youtube`, `with_audit`,
   `with_history_limit`, `with_browser` (the browser engine `browser` sources and their
-  `youtube_chat` preset open pages in), `with_collection_file` and `with_plugin_dir`
-  (where installed WASM plugins are saved, ADR-0076); `scan_clap_plugins`
-  adds the CLAP filter kinds;
+  `youtube_chat` preset open pages in) and `with_collection_file`; `open_plugin_dir`
+  (where installed WASM plugins are saved, ADR-0076), called once the engine is built;
+  `scan_clap_plugins` adds the CLAP filter kinds;
   `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
   frame of a source; `output_stats` reads a running output's pipeline counters
   (`output_stats_of` names the output); `output_kind` reads a
@@ -139,7 +139,7 @@ state machine. Contents:
   `plugin.install` loads a package's module on `jstream-plugin-wasm`'s host,
   `plugin.grant` replaces what it may do, never past what its manifest asks for, and
   `plugin.enable` loads it again after the engine disabled it. With a plugin folder
-  (`with_plugin_dir`), the installed plugins and their grants are saved in its
+  (`open_plugin_dir`), the installed plugins and their grants are saved in its
   `plugins.json` and loaded again at the next start. See *WASM plugins* under Design.
 - **Live sources** (`live.rs`): a running `jstream-sources` source for every source
   in the collection, built when it is created, rebuilt when its settings change and
@@ -1865,11 +1865,16 @@ The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in proc
   acknowledges what it asks for now, and the plugin can be enabled after it. One that
   asks for less has its grant narrowed to match. A running plugin keeps the module it
   loaded.
-- **Saving.** `with_plugin_dir(dir)` creates `dir` if missing and reads its
+- **Saving.** `open_plugin_dir(dir)` creates `dir` if missing and reads its
   `plugins.json` (`PLUGINS_FILE`, version 0): each plugin's ID, package, grant, name,
-  request, what it asked for when last granted, and its disabled reason, if any. Each
-  saved as enabled is loaded as `plugin.enable` loads it, and one that no longer loads
-  stays disabled as `trap` (or `needs_grant`), with the cause in the log. From then on
+  request, what it asked for when last granted, and its disabled reason, if any. The
+  host calls it once the engine is built, after `with_backends`: a plugin it loads keeps
+  a handle to the engine as it is then, and one opened earlier would act on an engine
+  without its media host. A second call is logged and ignored. A saved grant is checked
+  as `plugin.grant` checks one, and a plugin whose grant fails it (an edited file) loses
+  the grant and waits as `needs_grant`. Each saved as enabled is loaded as
+  `plugin.enable` loads it, and one that no longer loads stays disabled as `trap` (or
+  `needs_grant`), with the cause in the log. From then on
   the file is replaced atomically (`collection::write_atomically`, user-only) after every
   install, failed install, grant, enable and disable; a failed save is logged at
   `error`, and the next change saves again. A file that can't be read, or of a version
@@ -1877,7 +1882,8 @@ The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in proc
   that run. Without a plugin folder, the installed plugins last for the run.
 - **Not yet:** a private data folder per plugin, deferred until the file imports a plugin
   would need to use it are designed (ADR-0076); a query that lists the installed plugins;
-  and the UI's grant flow.
+  a way to remove one (no `plugin.uninstall` yet, so an unwanted plugin stays saved,
+  disabled, until `plugins.json` is edited); and the UI's grant flow.
 
 ### Locking
 

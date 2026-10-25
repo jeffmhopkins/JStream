@@ -38,7 +38,8 @@ reaching one without a grant would be file access nobody granted.
 
 <a id="decision"></a>
 ## Decision
-- **Saving.** The host names a plugin folder (`Engine::with_plugin_dir`). The daemon uses
+- **Saving.** The host names a plugin folder (`Engine::open_plugin_dir`), once the engine
+  is built, so a saved plugin acts on the engine with its backends. The daemon uses
   `plugins` in the platform data folder unless `--plugin-dir` names another. In it,
   `plugins.json` holds every installed plugin:
   - its ID, package path and grant;
@@ -68,8 +69,9 @@ reaching one without a grant would be file access nobody granted.
   - **Asks for less:** the grant is narrowed to the request, so it never gives more than
     the manifest declares.
 - **`memory_limit`.** Growing memory or the table past its cap is a trap the plugin can't
-  catch, and is reported as `memory_limit`. So is a module whose memory starts above the
-  cap, at load. A growth past the module's own declared maximum, below the cap, still
+  catch, and is reported as `memory_limit`. A module whose memory starts above the cap
+  fails its load (`Error::MemoryLimit` in the host; in the engine, `action_failed` from
+  `plugin.install` or `plugin.enable`, or `trap` for a saved plugin). A growth past the module's own declared maximum, below the cap, still
   answers −1, as WASM says, since that limit is the plugin's own.
 - **The private data folder is deferred.** It will be designed together with the file
   imports that would let a plugin use it. Adding those imports is a change to the
@@ -91,3 +93,6 @@ reaching one without a grant would be file access nobody granted.
   is ADR-0069's decision taking effect.
 - No query lists the installed plugins yet, so a client learns their states only from
   `plugin.state_changed`. That comes with the UI's grant flow, which is later WA1 work.
+- Nothing removes an installed plugin yet: with no `plugin.uninstall`, an unwanted one
+  stays in `plugins.json`, disabled, where before a restart cleared it. Removal is later
+  WA1 work too.

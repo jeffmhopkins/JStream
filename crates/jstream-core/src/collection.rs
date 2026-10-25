@@ -149,7 +149,7 @@ pub(crate) fn write_atomically(path: &Path, bytes: &[u8]) -> io::Result<()> {
             tracing::warn!(
                 path = %path.display(),
                 error = %err,
-                "collection saved, but its directory was not flushed to disk"
+                "file saved, but its directory was not flushed to disk"
             );
         }
     }

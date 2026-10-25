@@ -259,6 +259,10 @@ mod tests {
         assert_eq!(error("--ui-dir"), "`--ui-dir` needs a value");
         assert_eq!(error("--ui-dir a --ui-dir b"), "`--ui-dir` given twice");
         assert_eq!(
+            error("--plugin-dir a --plugin-dir b"),
+            "`--plugin-dir` given twice"
+        );
+        assert_eq!(
             error("--youtube-client"),
             "`--youtube-client` needs a value"
         );

@@ -245,9 +245,13 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   file: each saves over the other's changes, so give each its own.
 - **Plugin folder.** Installed WASM plugins are saved in `plugins.json` in
   `--plugin-dir`, by default `plugins` in the platform data directory, and each that was
-  enabled is loaded again at startup, after the collection. A plugin that no longer loads
-  stays disabled, and the log says why. Unlike the collection file, a plugins file the
-  engine can't read doesn't stop the start: it is logged and left as it is.
+  enabled is loaded again at startup, once the engine is built. A plugin that no longer
+  loads stays disabled, and the log says why. Unlike the collection file, a plugins file
+  the engine can't read doesn't stop the start: it is logged and left as it is. As with
+  the collection file, nothing stops two daemons from using the same folder, which the
+  default makes likely: both run the saved plugins and each saves over the other's
+  changes, so give each its own `--plugin-dir`. No command removes an installed plugin
+  yet.
 - **Audit log.** Every batch, undo, redo and action, by any client, is one JSON line
   in `audit.jsonl` in the log directory: the time, the client's ID and `hello` name
   (`device:<name>` for a paired device),
@@ -398,7 +402,9 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
 - **Plugin folder** (`main.rs`, `serve.rs`). `main` fills in `--plugin-dir`'s default
   from `jstream_platform::paths::data_dir`, so `serve::engine` saves plugins only where
   `Options` says; the daemon's tests, which build engines from default `Options`, save
-  none. `Engine::with_plugin_dir` does the rest
+  none. `serve::engine` calls `Engine::open_plugin_dir` last, after the backends, the
+  credential stores and the browser, because a saved plugin keeps a handle to the engine
+  as it is then and must act through its media host; it does the rest
   ([jstream-core › Design](../../crates/jstream-core/README.md#design), *WASM plugins*).
 - **Browser sources** (`serve.rs`, feature `cef`, Windows only). Built with
   `--features cef`, the daemon gives the engine `jstream-browser`'s CEF backend
