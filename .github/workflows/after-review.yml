@@ -167,7 +167,8 @@ jobs:
 
   # The portable Windows zip (ADR-0020). `dist-ui` builds the web UI for release, with
   # trunk and the wasm-bindgen CLI pinned and checked as in ci.yml's `wasm`, plus binaryen
-  # (the `wasm-opt` a release build runs); `dist` runs `cargo xtask dist` with it on Windows.
+  # (the `wasm-opt` a release build runs); `dist` runs `cargo xtask dist` with it on Windows,
+  # browser helper and CEF runtime included (ARCH › Packaging).
   # The zip is uploaded as is (`archive: false`), so the download is the zip a user
   # unzips. Not required (R-GIT-003).
   dist-ui:
@@ -252,6 +253,17 @@ jobs:
           path: ui-dist
       # Named after the commit tested: a dispatched run's branch tip, or a pull_request
       # run's head rather than the merge commit it checks out.
+      # The browser helper's build (cef-dll-sys) downloads the pinned CEF and builds its
+      # C++ wrapper with CMake and Ninja. The image has CMake; when it has no Ninja on the
+      # path, Visual Studio's own copy (its CMake tools) goes there. Nothing is downloaded.
+      - name: Put Ninja on the path
+        shell: pwsh
+        run: |
+          if (Get-Command ninja -ErrorAction SilentlyContinue) { exit 0 }
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+          $ninja = Join-Path $vs 'Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja'
+          if (-not (Test-Path (Join-Path $ninja 'ninja.exe'))) { throw "no ninja.exe under $vs" }
+          Add-Content -Path $env:GITHUB_PATH -Value $ninja
       - shell: bash
         env:
           SHA: ${{ github.event.pull_request.head.sha || github.sha }}
