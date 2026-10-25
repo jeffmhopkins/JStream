@@ -1858,6 +1858,31 @@ mod tests {
         assert_eq!(note("file:src/a.rs"), by_hand);
         assert_eq!(note("file:src/b.rs"), by_hand);
         assert!(work.diags("is stale").is_empty());
+        commit_all(&work, "work: renoted");
+
+        // A second merge (#841 r1 N5): main changes a.rs again, and the branch's a1 edit
+        // conflicts with it once more. `--merge` keeps the branch's text with this merge's
+        // addendum, the note the branch kept from the first merge, and main's new note.
+        work.write("src/a.rs", "a1 work again\n\n\n\n\na5 main\n");
+        let again = "the branch's second a1 edit, which the text still describes";
+        verify(&work.0, "S#a", "agent:work", again).expect("S verifies on work");
+        commit_all(&work, "work: a1 again");
+        let own = note("file:src/a.rs");
+        assert_eq!(own, kept(again));
+        origin.write("src/a.rs", "a1\n\n\n\n\na5 main 2\n");
+        let main2 = "[#2] main's second a5 edit";
+        verify(&origin.0, "S#a", "agent:main", main2).expect("S verifies on main");
+        commit_all(&origin, "main: a5 again (#2)");
+        let m = merge::merge_main(&work.0, "main").expect("merges again");
+        assert_eq!(m.stale, vec!["S#a".to_owned()], "{m:?}");
+        let second = "main's second a5 edit (#2) is outside it too";
+        verify_merge(&work.0, "S#a", "agent:work", second).expect("S verifies");
+        let k = ledger::KEPT_MARK;
+        assert_eq!(
+            note("file:src/a.rs"),
+            format!("{again}{}{second}{k}{main}{k}{main2}", ledger::MERGE_MARK)
+        );
+        assert!(work.diags("is stale").is_empty());
     }
 
     /// `docs::ledger::keep_notes`: the new text, then the kept notes, each once (#840).

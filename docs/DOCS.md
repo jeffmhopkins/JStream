@@ -489,14 +489,6 @@ holds**. The note says what was checked and why it still holds, e.g.:
   `docs verify --merge "<what the merge changed>"` keeps the earlier note on each entry
   this PR changes and adds the text. On an input whose hash equals the merged side's
   entry, it keeps that entry as it is, which `merge-main` has already given main's note.
-- **The merged side's notes are kept** (#840). After the branch's own merge, every verify
-  (`--note`, `--merge` or `--renote`) that rewrites an entry the merged side (main or the
-  wave) re-verified since the branch left it ends the new note with that side's note, word
-  for word, after ` | kept from the merged side: `. The notes the branch's earlier note
-  kept that way are carried too, and none is added twice, even if the new text already
-  holds it. Write only this PR's text; never copy the merged side's notes by hand. Before
-  the branch's first merge, a verify still replaces main's note on an input the PR
-  changes.
   `merge-main` prints the merged commits behind each
   stale input to write it from ([Hash-bound verification](#verification)), and under each
   stale section the PRs (`(#N)` in their subjects) those commits came from. A wave's
@@ -514,6 +506,14 @@ holds**. The note says what was checked and why it still holds, e.g.:
   still per section: one stock text across every stale section, such as "rechecked after merging
   main", fails review. A section this PR also changed after the merge takes `--note`, and
   `--merge` refuses it.
+- **The merged side's notes are kept** (#840). After the branch's own merge, every verify
+  (`--note`, `--merge` or `--renote`) that rewrites an entry the merged side (main or the
+  wave) re-verified since the branch left it ends the new note with that side's note, word
+  for word, after ` | kept from the merged side: `. The notes the branch's earlier note
+  kept that way are carried too, and none is added twice, even if the new text already
+  holds it. Write only this PR's text; never copy the merged side's notes by hand. Before
+  the branch's first merge, a verify still replaces main's note on an input the PR
+  changes.
 - A verify that only drops removed inputs, or finds no input changed, records no `by` or
   `note`: it rewrites no entry, so the ledger diff shows only the dropped entries. To
   improve the note on a fresh section, use `docs verify --renote`, never a hand edit. Say in
