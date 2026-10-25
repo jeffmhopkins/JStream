@@ -22,9 +22,11 @@ use crate::{
     IssueSeverity, RateControl, StreamHealth, StreamInfo, StreamStatus, VideoCodec, VideoEncoding,
     YoutubeAuth,
 };
+use crate::{AudienceStatsInfo, QuotaInfo, StatsPolling};
 use crate::{AudioFollow, BusId, BusInfo, BusMeter, Loudness, SendInfo, SourceAudio, SourceMeter};
 use crate::{CaptureTargetInfo, CaptureTargetKind, PixelSize};
 use crate::{Chord, DeviceId, DeviceInfo, HotkeyBinding};
+use crate::{DroppedOverride, ItemOverride, OverrideField};
 use crate::{
     Easing, Glide, ItemEasing, ItemTransition, TransitionEffect, TransitionPresetId,
     TransitionPresetInfo, TransitionStarted, TransitionsInfo,
@@ -487,7 +489,56 @@ pub(crate) fn edits() -> Vec<Edit> {
         blend,
     }));
     edits.extend(filter_edits());
+    edits.extend(keyframe_edits());
     edits
+}
+
+/// A keyframe scene's edits (protocol 0.39): creating one, writing an override through
+/// a placement edit's `scene_id`, and clearing it.
+fn keyframe_edits() -> Vec<Edit> {
+    let mut edits = vec![
+        Edit::SceneCreateVariant {
+            scene_id: SceneId::new("scn_1_wide"),
+            variant_of: SceneId::new("scn_1"),
+            name: "Main, wide".into(),
+        },
+        Edit::ItemSetOpacity {
+            item_id: ItemId::new("itm_2"),
+            scene_id: Some(SceneId::new("scn_1_wide")),
+            opacity: Finite32::new(0.5).expect("finite"),
+        },
+        Edit::ItemClearOverride {
+            scene_id: SceneId::new("scn_1_wide"),
+            item_id: ItemId::new("itm_2"),
+            field: OverrideField::Opacity,
+        },
+    ];
+    // Every field, as "reset keyframe" clears them.
+    edits.extend(
+        [
+            OverrideField::Geometry,
+            OverrideField::Crop,
+            OverrideField::Visible,
+        ]
+        .map(|field| Edit::ItemClearOverride {
+            scene_id: SceneId::new("scn_1_wide"),
+            item_id: ItemId::new("itm_2"),
+            field,
+        }),
+    );
+    edits
+}
+
+/// What the keyframe scene `scn_1_wide` overrides.
+fn item_overrides() -> Vec<ItemOverride> {
+    vec![ItemOverride {
+        transform: None,
+        item_id: ItemId::new("itm_2"),
+        geometry: Some(corner_box()),
+        crop: None,
+        visible: Some(false),
+        opacity: Some(Finite32::new(0.5).expect("finite")),
+    }]
 }
 
 /// The filter edits (ADR-0026), on both chains of a source, and on the master stage's
@@ -958,7 +1009,19 @@ pub(crate) fn queries() -> Vec<Query> {
             },
         },
         Query::DeviceList,
+        Query::YoutubeStats,
     ]
+}
+
+/// A live broadcast's audience, every count reported.
+fn audience_stats() -> AudienceStatsInfo {
+    AudienceStatsInfo {
+        output_id: OutputId::new("out_live"),
+        broadcast_id: "dQw4w9WgXcQ".into(),
+        concurrent_viewers: Some(1520),
+        likes: Some(3400),
+        views: Some(98_765),
+    }
 }
 
 /// A broadcast in every lifecycle state and privacy, the first with every field.
@@ -1302,6 +1365,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             }),
             encoder_sessions: 2,
             hardware_sessions: 1,
+            cleartext: false,
         },
         QueryResult::OutputStatus {
             output_id: OutputId::new("out_rec"),
@@ -1315,6 +1379,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             }),
             encoder_sessions: 2,
             hardware_sessions: 1,
+            cleartext: false,
         },
         QueryResult::SourceList {
             rev: Rev(12),
@@ -1331,6 +1396,8 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             sources: source_infos(),
             scenes: vec![
                 SceneInfo {
+                    overrides: Vec::new(),
+                    variant_of: None,
                     scene_id: SceneId::new("scn_1"),
                     name: "Main".into(),
                     role: SceneRole::Scene,
@@ -1341,6 +1408,20 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     meta: scene_meta(),
                 },
                 SceneInfo {
+                    overrides: item_overrides(),
+                    variant_of: Some(SceneId::new("scn_1")),
+                    scene_id: SceneId::new("scn_1_wide"),
+                    name: "Main, wide".into(),
+                    role: SceneRole::Scene,
+                    transition_in: None,
+                    transition_out: None,
+                    items: vec![],
+                    folder: None,
+                    meta: Default::default(),
+                },
+                SceneInfo {
+                    overrides: Vec::new(),
+                    variant_of: None,
                     scene_id: SceneId::new("scn_intro"),
                     name: "Intro".into(),
                     role: SceneRole::Group,
@@ -1478,6 +1559,33 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
         QueryResult::YoutubeListBroadcasts {
             broadcasts: broadcasts(),
             next_page_token: Some("CAEQAA".into()),
+        },
+        QueryResult::YoutubeStats {
+            outputs: vec![audience_stats()],
+            quota: QuotaInfo {
+                used: 1234,
+                daily: 10_000,
+                exhausted: false,
+                stats: StatsPolling::Normal,
+            },
+        },
+        QueryResult::YoutubeStats {
+            outputs: Vec::new(),
+            quota: QuotaInfo {
+                used: 10_000,
+                daily: 10_000,
+                exhausted: true,
+                stats: StatsPolling::Stopped,
+            },
+        },
+        QueryResult::YoutubeStats {
+            outputs: Vec::new(),
+            quota: QuotaInfo {
+                used: 8500,
+                daily: 10_000,
+                exhausted: false,
+                stats: StatsPolling::Slowed,
+            },
         },
         QueryResult::YoutubeListStreams {
             streams: [
@@ -1682,6 +1790,18 @@ pub(crate) fn events() -> Vec<Event> {
         })
         .collect(),
     });
+    events.push(Event::YoutubeStats {
+        stats: audience_stats(),
+    });
+    events.push(Event::YoutubeStats {
+        stats: AudienceStatsInfo {
+            output_id: OutputId::new("out_live"),
+            broadcast_id: "dQw4w9WgXcQ".into(),
+            concurrent_viewers: None,
+            likes: None,
+            views: None,
+        },
+    });
     events.push(Event::MetersTick {
         sources: vec![SourceMeter {
             source_id: SourceId::new("src_mic"),
@@ -1872,6 +1992,7 @@ pub(crate) fn server_messages() -> Vec<ServerMessage> {
         ServerMessage::Response(Response {
             id: RequestId::new("r0"),
             result: CallResult::Batch {
+                dropped_overrides: Vec::new(),
                 rev: Rev(13),
                 removed_hotkeys: vec![],
             },
@@ -1879,6 +2000,13 @@ pub(crate) fn server_messages() -> Vec<ServerMessage> {
         ServerMessage::Response(Response {
             id: RequestId::new("r1"),
             result: CallResult::Batch {
+                dropped_overrides: item_overrides()
+                    .into_iter()
+                    .map(|dropped| DroppedOverride {
+                        scene_id: SceneId::new("scn_1_wide"),
+                        dropped,
+                    })
+                    .collect(),
                 rev: Rev(14),
                 removed_hotkeys: hotkey_bindings(),
             },

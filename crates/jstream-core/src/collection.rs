@@ -11,7 +11,7 @@
 
 use jstream_graph::{Graph, LoadError};
 use jstream_protocol::Rev;
-use std::fs::{self, OpenOptions};
+use std::fs;
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 
@@ -118,8 +118,9 @@ impl CollectionFile {
 /// existing file on Windows too), and on Unix flushes the directory so the rename
 /// itself survives a power cut. A failure up to the rename removes the temporary file,
 /// leaves `path` as it was and is returned. Once the rename is done the file holds the
-/// new collection, so a failed directory flush is only logged at `warn`. On Unix a new
-/// file is `0600`, like the daemon's other files.
+/// new collection, so a failed directory flush is only logged at `warn`. The new file is
+/// user-only, like the daemon's other files: mode `0600` on Unix, a protected DACL for
+/// SYSTEM and the user on Windows, which the rename keeps.
 ///
 /// The temporary name carries the process ID, so two processes saving one path don't
 /// share it. Within a process, the engine's saves to one file are serialized by its
@@ -155,15 +156,45 @@ fn write_atomically(path: &Path, bytes: &[u8]) -> io::Result<()> {
     Ok(())
 }
 
+/// Writes `bytes` to a new user-only file at `path`, replacing a temporary file a
+/// save that crashed left there (one of a process with this ID, which the name carries).
+/// The replacement is created anew, so it never keeps the old file's ACL.
 fn write_new(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    let mut options = OpenOptions::new();
-    options.write(true).create(true).truncate(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt as _;
-        options.mode(0o600);
-    }
-    let mut file = options.open(path)?;
+    let mut file = match crate::private_file::create_new(path) {
+        Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
+            fs::remove_file(path)?;
+            crate::private_file::create_new(path)?
+        }
+        opened => opened?,
+    };
     file.write_all(bytes)?;
     file.sync_all()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::write_atomically;
+
+    #[test]
+    fn a_stale_temporary_file_is_replaced() {
+        let dir = std::env::temp_dir().join(format!(
+            "jstream-core-collection-tmp-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let path = dir.join("c.json");
+        let tmp = dir.join(format!(".c.json.{}.tmp", std::process::id()));
+        std::fs::write(&tmp, b"left by a crashed save").expect("stale tmp");
+        write_atomically(&path, b"{}").expect("saved");
+        assert_eq!(std::fs::read(&path).expect("read"), b"{}");
+        assert!(!tmp.exists());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            let mode = std::fs::metadata(&path).expect("meta").permissions().mode();
+            assert_eq!(mode & 0o777, 0o600);
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

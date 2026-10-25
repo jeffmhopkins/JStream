@@ -314,6 +314,12 @@ impl Scene {
             transition_out: self.transition_out.clone(),
             folder: self.folder.clone(),
             meta: self.meta.clone(),
+            variant_of: self.variant_of.clone(),
+            overrides: self
+                .overrides
+                .iter()
+                .map(|(item_id, o)| crate::keyframe::to_info(item_id, o))
+                .collect(),
             items: self.items.iter().map(Item::to_info).collect(),
         }
     }

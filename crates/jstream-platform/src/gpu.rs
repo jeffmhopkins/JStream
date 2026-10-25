@@ -7,7 +7,7 @@
 
 use std::any::Any;
 use std::fmt;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use jstream_media::{FrameSize, VideoFrameInfo};
 
@@ -37,6 +37,7 @@ pub struct GpuContext {
     adapter: wgpu::Adapter,
     id: AdapterId,
     key: ContextKey,
+    submit: SubmitLock,
 }
 
 /// Which [`GpuContext`] something was made on: equal only for the same context.
@@ -61,6 +62,48 @@ impl fmt::Debug for ContextKey {
     }
 }
 
+/// Orders the submits on a queue that [`FrameSync::stage`] is used on.
+///
+/// A staged wait and signal attach to the queue's **next** submit, whichever thread
+/// makes it. So the thread that stages holds this lock from its first `stage` through
+/// its submit, and every other thread that submits on the same queue holds it around
+/// its submit. Then no other submit can come between them and take what was staged.
+/// Clones share one lock; a context's is [`GpuContext::submit_lock`].
+///
+/// A guard is held only while recording and submitting, never across a wait for the
+/// GPU.
+#[derive(Clone, Default)]
+pub struct SubmitLock(Arc<Mutex<()>>);
+
+impl SubmitLock {
+    /// A lock of its own, for a queue nothing else shares.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Holds the lock until the guard drops. It guards no data, so a lock poisoned by
+    /// a panicking holder is taken as it is.
+    pub fn lock(&self) -> MutexGuard<'_, ()> {
+        self.0.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// The lock if it is free now, without waiting; `None` while another holder has
+    /// it.
+    pub fn try_lock(&self) -> Option<MutexGuard<'_, ()>> {
+        match self.0.try_lock() {
+            Ok(guard) => Some(guard),
+            Err(std::sync::TryLockError::Poisoned(poisoned)) => Some(poisoned.into_inner()),
+            Err(std::sync::TryLockError::WouldBlock) => None,
+        }
+    }
+}
+
+impl fmt::Debug for SubmitLock {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "SubmitLock({:p})", Arc::as_ptr(&self.0))
+    }
+}
+
 impl GpuContext {
     /// Bundles a device the platform opened. `platform` is the platform's own state for
     /// this device, which only that platform reads back ([`platform`](Self::platform)).
@@ -78,7 +121,15 @@ impl GpuContext {
             adapter,
             id,
             key: ContextKey(Arc::new(())),
+            submit: SubmitLock::new(),
         }
+    }
+
+    /// The lock that orders submits on this context's queue ([`SubmitLock`]): taken by
+    /// render from staging through its submit, and by any other thread around its own
+    /// submit. Code that keeps a clone of the queue keeps a clone of this too.
+    pub fn submit_lock(&self) -> &SubmitLock {
+        &self.submit
     }
 
     /// The adapter.
@@ -172,7 +223,9 @@ pub trait FrameSync: Send + Sync + fmt::Debug {
     ///
     /// Stage right before a submit that will happen. The staged wait and signal attach to
     /// the queue's next submit, whichever it is, so a submit that is skipped or fails
-    /// validation moves them to the one after.
+    /// validation moves them to the one after. Whichever thread makes that submit takes
+    /// them, so on a context's queue the caller holds the context's [`SubmitLock`] from
+    /// the first stage through the submit.
     ///
     /// That submit must end by transitioning the texture to `wgpu::TextureUses::PRESENT`
     /// (`CommandEncoder::transition_resources`): on D3D12 that is the `COMMON` state the

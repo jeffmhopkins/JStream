@@ -10,7 +10,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError, Weak};
 
-use jstream_media::VideoFrameInfo;
+use jstream_media::{FrameSize, VideoFrameInfo};
 use jstream_platform::{FrameSync, GpuFrame};
 
 use crate::color::srgb_channel_to_linear;
@@ -94,6 +94,8 @@ pub struct Image {
     bind_group: wgpu::BindGroup,
     width: u32,
     height: u32,
+    /// The size it is placed at ([`Self::extent`]).
+    extent: (u32, u32),
     alpha: Alpha,
     owner: Owner,
     sync: Option<Arc<dyn FrameSync>>,
@@ -125,6 +127,21 @@ impl Image {
     /// Height in pixels.
     pub fn height(&self) -> u32 {
         self.height
+    }
+
+    /// The size the compositor places it at, in source pixels: what an item's crop and a
+    /// legacy transform's scale count in, and whose aspect ratio a fit mode keeps. The
+    /// texture is sampled across it. It is the image's own size unless
+    /// [`Self::set_extent`] gave another.
+    pub fn extent(&self) -> (u32, u32) {
+        self.extent
+    }
+
+    /// Places the image as if it were `extent`, for an image drawn with more pixels than
+    /// the size it stands for: a source drawn sharp for an item that shows it enlarged
+    /// (ADR-0073, docs/adr/0073-sources-drawn-at-their-shown-size.md).
+    pub fn set_extent(&mut self, extent: FrameSize) {
+        self.extent = (extent.width(), extent.height());
     }
 
     /// The sampled texture. For an uploaded or rendered image it is `Rgba16Float` holding
@@ -241,6 +258,7 @@ impl std::fmt::Debug for Image {
         f.debug_struct("Image")
             .field("width", &self.width)
             .field("height", &self.height)
+            .field("extent", &self.extent)
             .field("format", &self.texture.format())
             .field("alpha", &self.alpha)
             .field("synced", &self.sync.is_some())
@@ -519,6 +537,7 @@ fn finish(
         bind_group,
         width,
         height,
+        extent: (width, height),
         alpha,
         owner: maker.owner.clone(),
         last_frame: None,

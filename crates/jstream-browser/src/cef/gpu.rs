@@ -9,7 +9,7 @@ use std::time::Duration;
 use jstream_media::{
     ColorInfo, ColorRange, ColorSpace, FrameSize, MediaTime, PixelFormat, VideoFrameInfo,
 };
-use jstream_platform::{FrameSync, GpuContext, GpuFrame, PlatformError, wgpu};
+use jstream_platform::{FrameSync, GpuContext, GpuFrame, PlatformError, SubmitLock, wgpu};
 use wgpu::hal::api::Dx12;
 use windows::Win32::Foundation::{CloseHandle, DUPLICATE_SAME_ACCESS, DuplicateHandle, HANDLE};
 use windows::Win32::Graphics::Direct3D12::{ID3D12Device, ID3D12Resource};
@@ -49,6 +49,9 @@ pub(crate) struct Device {
     d3d12: ID3D12Device,
     device: wgpu::Device,
     queue: wgpu::Queue,
+    /// The context's submit lock: render stages frames on this queue from its own
+    /// thread, so the copies here are submitted with it held.
+    submit: SubmitLock,
     generation: u64,
 }
 
@@ -69,7 +72,12 @@ impl DeviceSlot {
             if d3d12.is_none() {
                 tracing::warn!("the GPU device is not D3D12; browser pages can't deliver frames");
             }
-            Some((d3d12?, gpu.device().clone(), gpu.queue().clone()))
+            Some((
+                d3d12?,
+                gpu.device().clone(),
+                gpu.queue().clone(),
+                gpu.submit_lock().clone(),
+            ))
         });
         let mut slot = self.0.lock().unwrap_or_else(PoisonError::into_inner);
         slot.generation += 1;
@@ -83,10 +91,11 @@ impl DeviceSlot {
                 "the engine's GPU adapter has no LUID; browser pages can't deliver frames"
             );
         }
-        slot.device = device.map(|(d3d12, device, queue)| Device {
+        slot.device = device.map(|(d3d12, device, queue, submit)| Device {
             d3d12,
             device,
             queue,
+            submit,
             generation,
         });
         slot.luid
@@ -271,7 +280,12 @@ fn copy(
             state: wgpu::TextureUses::PRESENT,
         }),
     );
-    let submitted = device.queue.submit([encoder.finish()]);
+    // Under the context's submit lock, so this submit can't take a wait or signal that
+    // render staged for its own (FrameSync::stage); released before the wait below.
+    let submitted = {
+        let _submitting = device.submit.lock();
+        device.queue.submit([encoder.finish()])
+    };
     device
         .device
         .poll(wgpu::PollType::Wait {

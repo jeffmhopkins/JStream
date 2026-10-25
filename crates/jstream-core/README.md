@@ -59,7 +59,11 @@ state machine. Contents:
   a `youtube` target reads the broadcast's bound stream and connects to its `rtmps://`
   ingest with its key, which goes only to the connection; while it runs, a thread reads
   the stream's health every `HEALTH_INTERVAL` and emits `youtube.health_changed` when
-  it changes. A refresh token Google refuses signs the engine out.
+  it changes, and the broadcast's audience every `STATS_INTERVAL` and emits
+  `youtube.stats` when it changes. Every Live API call is charged to an estimate of
+  the day's quota (`DAILY_QUOTA` by default), which `youtube.stats` reports and which
+  slows and then stops the audience reads as it runs low. A refresh token Google
+  refuses signs the engine out.
 - **Audit log** (`audit.rs`): one `AuditEntry` per executed batch, undo, redo and action
   (but `live.set` and `live.cancel`), and one per gesture that ends without a commit, sent to
   the `AuditSink` the host injects with `with_audit` (none by default). `AuditMemory`
@@ -70,7 +74,12 @@ state machine. Contents:
   change (see *Collection file* in [Design](#design)).
 - **Kinds** (`kinds.rs`): the built-in kinds the graph validates settings
   against and `kind.list` reports ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)):
-  the source kinds of `jstream-sources`' built-in registry and the audio filter kinds.
+  the source kinds of `jstream-sources`' built-in registry, the audio filter kinds and
+  `jstream-render`'s video filter kinds. Its test snapshots them all (`schema/kinds.snap`, an `insta` snapshot, as
+  `jstream-sources` and `jstream-render` do for theirs), so a change to an audio
+  filter's settings is reviewed like an API diff (ADR-0025, #635). The CLAP kinds a scan
+  adds aren't in it. `INSTA_UPDATE=always cargo test -p jstream-core --lib kinds`
+  rewrites it.
 - **Audio filters** (`filters.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
   the `audio_filter` kinds `gain`, `noise_gate`, `compressor`, `limiter` and `delay`,
   one per `jstream-audio` kernel, the mapping from a filter's settings to the kernel's
@@ -138,7 +147,9 @@ state machine. Contents:
   thread draws them, and the program mix as the preview thread and `video.snapshot`
   draw it (`plan`, `compose`, each with the live values), and `video.snapshot`, the program mix
   read back as a PNG on the engine's own snapshot thread, which owns the snapshot
-  compositor.
+  compositor. A keyframe scene draws its parent's items at their effective values
+  (`State::shown_items`), so it follows every edit to the parent; so does what the
+  scene reaches for audio (`activity.rs`).
 - **Studio** (`studio.rs`): which scene is on program and which on preview, and the
   transition running onto program, runtime state under the collection lock that
   `scene.switch` and `studio.set_preview` set and `studio.get` reads
@@ -192,7 +203,9 @@ state machine. Contents:
 - **History** (`history.rs`): per-client undo and redo
   ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): each client's undo and redo
   stacks, built from the inverse batches `Graph::apply` returns, and the log of what
-  each recent change touched, which `undo_conflict` is checked against.
+  each recent change touched, which `undo_conflict` is checked against. A batch with an
+  empty inverse changed nothing (only `item.clear_override`s of absent fields), so it
+  is logged but is no step, and the redo stack is kept.
 - **Gestures** (`gesture.rs`): live values
   ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): every client's open
   gestures, which one holds each parameter, the `live.changed` events each owes, and
@@ -317,7 +330,11 @@ state machine. Contents:
   stream-key actions against `jstream-platform`'s `MemoryKeyStore` (with `secrets_are_redacted`,
   which captures the engine's traces and audit entries), the audit entries of a run of
   batches and actions (`batches_and_actions_are_audited`) and `AuditFile`'s lines and
-  rotation (`audit.rs`), and of undo and redo (`undo_and_redo_are_audited`), the
+  rotation (`audit.rs`), the user-only files (`private_file.rs`: a new file never
+  replaces one, appending to an existing one, a directory refused, mode `0600` on Unix,
+  and on Windows a DACL that passes `check_private_file`), replacing the stale temporary
+  file a crashed save left (`collection.rs`), and the audit entries of undo and redo
+  (`undo_and_redo_are_audited`), the
   preview streams (`src/tests/preview.rs`: no subscription without a binary channel,
   JPEG without an encoder following the mix's changes and the canvas size, H.264 from
   the platform fakes starting at a keyframe and JPEG beside it for a client that asks,
@@ -334,11 +351,16 @@ state machine. Contents:
   scene's rules (in `tests.rs`, the differential script and `studio.rs`), a snapshot
   that follows program, transitions and preview (`src/tests/transitions.rs`: preset
   resolution, a fade that ends on the clock, a switch mid-transition, and a GPU
-  snapshot mid-fade), YouTube on `jstream-youtube`'s `FakeTransport` and fixtures
+  snapshot mid-fade), keyframe scenes (`src/tests/keyframes.rs`: a variant drawing its
+  parent's items with its overrides and following the parent, a `move` between a parent
+  and its variant pairing by item where pairing by source would cross, and the
+  overrides a batch drops reported and restored by undo, with a no-op clear that is no
+  undo step, and a live value on a keyframe scene refused; `transition.rs` pairs a source placed twice by item), YouTube on `jstream-youtube`'s `FakeTransport` and fixtures
   (`src/tests/youtube.rs`: sign-in through a real loopback redirect, sign-out, the
-  broadcast actions and lists, quota and refused tokens, and a `youtube` output
+  broadcast actions and lists, quota and refused tokens, a `youtube` output
   publishing to its broadcast's ingest on the CPU stand-in, with the key and tokens in
-  no event or response), and an MCP agent (`jstream-mcp`, a dev-dependency) driving the
+  no event or response, its audience in `youtube.stats`, and the quota estimate slowing
+  and stopping the audience reads and starting again on a new day), and an MCP agent (`jstream-mcp`, a dev-dependency) driving the
   engine in-process. The audio routing (`audio.rs` and
   `src/tests/audio_routing.rs`): a mixer's buses, faders, mutes and sends following
   batches and undo, `meters.tick` while a mixer is attached and none after,
@@ -435,17 +457,19 @@ settings, and the CLAP kinds' parameter defaults), `png`
 [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), `thiserror`
 (`SourceFrameError`), `futures-core` (the `Stream` trait of event streams),
 `arc-swap` (the published render snapshot and the mixer thread's list of bus and
-source scopes)
-and `tracing` (see *Logging*). No async runtime: `output.start` blocks the call until
+source scopes), `tracing` (see *Logging*) and, on Windows only,
+`jstream-platform-windows` (`create_private_file` and `check_private_file` for the audit
+log and the collection file, `src/private_file.rs`; the GPU capture hardware test,
+`src/tests/windows_gpu.rs`, compiled only with this crate's `hw-tests` feature, uses it
+too). No async runtime: `output.start` blocks the call until
 the pipeline is up or has failed, and `video.snapshot` runs on a plain thread. Dev-dependencies: `jstream-control`'s `mock`
 feature and `jstream-protocol`'s `fixtures` feature (the differential and parity
 tests), `jstream-platform`'s `fake` feature (the pipeline test and
 `tests/scenarios.rs`, and the CLAP fake hosts), `jstream-youtube`'s `fake` feature
 (`src/tests/youtube.rs`), `jstream-browser`'s `fake` feature (the browser pages in
 `src/tests/audio.rs`), `zune-jpeg` (decoding the preview's JPEG pictures in tests),
-`jstream-mcp` (`tests/mcp.rs`) and, on Windows,
-`jstream-platform-windows` (the GPU capture hardware test, `src/tests/windows_gpu.rs`,
-compiled only with this crate's `hw-tests` feature); the tests also use `serde_json`
+`insta` (the built-in kinds' snapshot, `schema/kinds.snap`) and `jstream-mcp`
+(`tests/mcp.rs`); the tests also use `serde_json`
 for settings values and saved collection files. All of them
 are in lower layers
 ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)), and none of the clients depends on this
@@ -478,7 +502,8 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   edits in order on a working copy, the first failure aborting with `not_found`,
   `already_exists` or `invalid_argument` (`edits.<n>.<field>`) and nothing applied; on
   success `rev` goes up by exactly one, and the batch result lists the hotkey bindings
-  the batch's deletes removed (`removed_hotkeys`). The engine adds the per-client **idempotency
+  the batch's deletes removed (`removed_hotkeys`) and the keyframe overrides it dropped
+  (`dropped_overrides`, ADR-0040 §1). The engine adds the per-client **idempotency
   keys** ([R-API-004](../../docs/RULES.md#R-API-004)): a batch whose key this client
   already used is not applied again and gets the `rev` it produced, even after `rev`
   moved on (the key check comes first) and without an event. Only applied batches
@@ -491,8 +516,9 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
 - **Queries** that read the collection, and the kind queries, go to `Graph::query`,
   `output.list` and the `outputs` of `state.get` included; the graph holds the built-in
   kinds the engine gave it (`kinds.rs`), and the CLAP filter kinds a scan added. `output.status` reads the outputs' runtime state
-  (`not_found` for an unknown one) and fills `key_set` from the key store after the
-  collection lock is released (`internal` if the store fails). `video.snapshot` is answered here, not by
+  (`not_found` for an unknown one), `cleartext` from its kind
+  (`OutputKind::sends_key_in_cleartext`), and fills `key_set` from the key store after
+  the collection lock is released (`internal` if the store fails). `video.snapshot` is answered here, not by
   the graph.
 - **Actions**: `output.start` and `output.stop` (see *Outputs* below),
   `output.set_key` and `output.clear_key` (see *Stream keys* below), `scene.switch`
@@ -583,8 +609,10 @@ Live values ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)) live in
 `gesture.rs`'s table, under the collection lock, and reach the render thread through
 the render parameter channel, never through the collection:
 - **`live.set`** checks the message's shape (1 to 256 values, each a live-adjustable
-  setter, room for a new gesture among the client's 16), then applies the values to a
-  copy of the graph exactly as a batch would, naming a failure `values.<n>.<field>`.
+  setter, room for a new gesture among the client's 16), refuses a value whose
+  `scene_id` names a keyframe scene (`values.<n>.scene_id`: the parameters are per
+  item, so it would move the parent's item wherever it is drawn; #702 builds them),
+  then applies the values to a copy of the graph exactly as a batch would, naming a failure `values.<n>.<field>`.
   The copy is thrown away: `rev`, the undo history, the collection file and every
   collection read stay as they were. The values go into the gesture, each taking its
   parameter (an item's placement, set by `item.set_transform` or `item.set_geometry`,
@@ -671,7 +699,10 @@ Pairing and its inputs: each visible item that has a frame (or places a nested s
 or a `display` or `window` source showing its capture) becomes a `Visual` at its stored opacity, its
 placement converted to a geometry (a legacy placement through `ItemGeometry::from_legacy`
 at its frame size; a reflection is not kept mid-transition). `move` pairs by source as
-the protocol says; for it, a nested scene's items are flattened into its parent only
+the protocol says, except between two members of one family (a scene and its keyframe
+scenes, `State::family_of`, decided when the switch starts): those show the same items,
+so it pairs each item with itself (`Running::by_item`, ADR-0049 §3), which stays exact
+when a source is placed twice or an item is hidden on one side. For `move`, a nested scene's items are flattened into its parent only
 when its item covers the canvas exactly (an identity placement, no crop, not rotated)
 and is opaque, so a scene shown at another size or faded moves as one image
 (ADR-0052 §2). Stagger delays only
@@ -802,7 +833,10 @@ settings change and kept while the shot keeps it, so a stateful kind sees its fr
 in order. `compose` runs every chain once per frame of the cache, after the uploads and
 captures, however many mixes the tick draws (`ResourceCache::frame`), each filter into
 a layer of the cache (`GpuKey::Chain`, the last into `GpuKey::Filtered`) through
-`Compositor::apply_filter_into`, so a steady chain allocates no output texture.
+`Compositor::apply_filter_into`, so a steady chain allocates no output texture, and
+each multi-pass filter's `VideoFilter` keeps its scratch layers while the size holds,
+and each filter's draws keep their uniform buffers (their bind groups are made per
+draw).
 `claim_layers` keeps those layers for a mix that isn't due. A filter no shot runs any
 more is retired into the cache (`ResourceCache::retire_filter`) and dropped with the
 images it reclaims, on that thread's collector. A chain whose filter fails (its layer
@@ -910,6 +944,23 @@ equal to the last one keeps its version, so the shot doesn't change. Without a
 context the page shows its stand-in, transparent. `LiveSources::audio` lists every
 running source's own audio (`Source::audio`, heard whether or not it is shown) for
 *Audio sources*.
+
+A source the program mix shows enlarged is drawn at a density, when its kind can be
+(`Source::set_density`, the `text` kind,
+[ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)). After each plan
+`Shot::scales` measures how much each frame its passes draw is enlarged: canvas pixels
+per pixel of the frame's extent, from the placements the collection holds (not a
+gesture's live values, so a drag is measured once it commits), the most of any item, in
+the program's passes and the video mixes'. A source a video chain runs over counts as 1,
+since its filters' settings are in its pixels. `LiveSources::densities` turns each scale
+into the next quarter step of a doubling at or above it (1, 1.19, 1.41, … up to 8) and,
+when that differs from the source's density, queues a build at it: the thread creates the
+source and sets its density there, and `install` keeps the extent it returned. The
+source's frames then reach the plan as `Frame`s placed at that extent, and `compose`
+gives their upload that extent (`ResourceCache::set_extent`), as the chains give their
+layers their input's. A source with a build in flight is not asked for another; the plan
+that installs it measures again. A source drawn only in a transition's tracks, or not at
+all, keeps its density.
 
 **Audio sources.** `audio_sources::AudioSources` holds, under the collection lock, the
 `jstream_sources::AudioTarget` of every audio-only source, and each running source's own
@@ -1361,6 +1412,15 @@ token found there at setup signs the engine in.
   Google refuses (`SignInRequired`) drops the client and the stored token and emits
   `signed_out`. `jstream-youtube` errors become `action_failed`, prefixed "YouTube's
   API quota is used up" for quota reasons (ADR-0041 §5, kept by ADR-0058); none carries a token.
+- **Quota** (ADR-0041 §5). Each call is charged to the day's estimate before it is
+  sent, at YouTube's published unit costs: 1 for a read (a list, the ingest's two
+  reads, a health or audience read) and 50 for a write (`create_broadcast`,
+  `transition_broadcast`, `bind_broadcast`, which is 101 when it creates the stream
+  first). The day is assumed to have `DAILY_QUOTA` (10,000) units, or what
+  `YoutubeSetup::with_daily_quota` says. The estimate starts again at midnight
+  Pacific Time, which the engine takes as UTC−8 all year, so in daylight time its day
+  starts an hour after YouTube's. A call YouTube refuses for quota marks the day
+  exhausted.
 - An output whose target is `youtube { broadcast_id }` needs a signed-in client, which
   `output.start` checks before `starting` (`action_failed` otherwise, no event). In
   the start's open step, outside the locks, the engine reads the broadcast's bound
@@ -1371,9 +1431,18 @@ token found there at setup signs the engine in.
 - Once such an output is `active`, its own `jstream-youtube-health` thread reads the
   stream's health every `HEALTH_INTERVAL` (15 s, one quota unit each) and emits
   `youtube.health_changed` on the first reading and whenever the status, rating or
-  issues change. While signed out it skips its reads. It ends when the output stops,
-  fails or the engine goes away.
+  issues change. The same thread reads the broadcast's audience (`videos.list`, one
+  unit) every `STATS_INTERVAL` (60 s), every `STATS_SLOWDOWN` (5) intervals while
+  less than a fifth of the day's quota is left, and not at all below a tenth (or with a
+  daily quota of 0), and
+  emits `youtube.stats` on the first reading and whenever the viewers, likes or views
+  change; the last reading is what the `youtube.stats` query lists. While signed out,
+  or once the day is exhausted, it skips both reads, so the actions keep what quota is
+  left. It ends when the output stops, fails or the engine goes away, and its
+  reading goes with it.
   Issue text is cut to 512 characters with control characters replaced.
+  The engine does not poll chat yet, so ADR-0041 §3's chat rate and §5's slowing of
+  chat polling after stats come with that.
 
 **Placeholder.** With no backends, the actions only move a state machine, as
 `jstream-control`'s mock does. The protocol defines an action's response as "accepted"
@@ -1495,7 +1564,10 @@ pointers between messages, so it does not keep the engine alive: dropping
 the last engine handle and its sessions joins the pipeline. `output_stats` is then
 empty. `failed` counts as idle, and a later start needs a new one-shot target or an opener. That
 start waits until a failed program stage has finished joining, so the new devices do
-not overlap the old teardown; it never joins a program stage that has failed. The same holds when a
+not overlap the old teardown; it never joins a program stage that has failed. A stage that
+has not failed is not waited on, even while a failed output's teardown still holds it: an
+output's own failure (a publish error, say) leaves the stage up until that output's
+pipeline lets go of it last, and a start in that window shares it. The same holds when a
 start fails after `launch` returned threads (a failure reported before `active`, or
 the watcher not starting): `failed` is emitted, and the next start waits until that
 pipeline has joined. A stop's join that takes the program stage down also holds off
@@ -1609,9 +1681,9 @@ polls the audio sources' inputs into 48 kHz stereo blocks. Encode
 sessions turn those into H.264 and AAC. The output thread writes FLV tags to the
 publish target. Drops on a full encoder queue are counted in `output_stats`. The
 test records tags in memory. `connect_rtmp` is the live publisher. When its URL is
-plain `rtmp://` to another machine (`RtmpUrl::sends_key_in_cleartext`), it logs a
-warning naming the host, never the path, since the key then crosses the network
-unencrypted (#353). `RtmpPublish`
+plain `rtmp://` to another machine (`jstream_protocol::rtmp_url_sends_key_in_cleartext`,
+the rule `output.status` reports as `cleartext`), it logs a warning naming the host,
+never the path, since the key then crosses the network unencrypted (#353). `RtmpPublish`
 wraps `jstream-outputs`' `ReconnectingPublisher` with its default `ReconnectPolicy`
 (backoff from 1 s up to 30 s, giving up after a 5-minute outage). It opens the first
 session itself, on the caller's thread, so a refused first connect is still its
@@ -1711,7 +1783,10 @@ engine's other changes are single inserts or assignments, so the data stays
 consistent. Nothing is logged while a lock is held. The YouTube side has two more
 mutexes, the sign-in state and then the `LiveClient`, taken in that order, after the
 start lock and never under the collection lock; the client's is held across its
-blocking Live API calls, so a start waiting on it holds only the start lock.
+blocking Live API calls, so a start waiting on it holds only the start lock. The
+running outputs' polls and then their audience readings have a mutex each, taken in
+that order, and the quota estimate's is a leaf, taken under the client's to charge a
+call and never while taking another.
 
 ### Logging
 
@@ -1768,7 +1843,11 @@ called after the call completes, with no engine lock held. A sink must not block
 writer thread, and when that is full counts what it drops; the next line written is
 `{"time":…,"dropped":n}`. The writer appends one JSON line per entry to `audit.jsonl`
 in the directory the host names (the data directory,
-[ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)), with mode `0600` on Unix.
+[ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)), creating it user-only:
+mode `0600` on Unix, a protected DACL for SYSTEM and the user on Windows
+(`jstream_platform_windows::create_private_file`, #547). On Windows an existing
+`audit.jsonl` whose owner or DACL lets other users in is refused with `PermissionDenied`,
+so opening the `AuditFile` fails and names why.
 When a line would take it past 8 MiB (or the limit given to `with_limit`) it is
 renamed to `audit.1.jsonl`, replacing the previous one, so the log stays under about
 twice the limit. A write error is logged at `warn` and loses the entry; it never fails
@@ -1797,7 +1876,10 @@ serialize the graph, and writes with only the file's mutex held: saves happen on
 time, never under the collection lock, and one whose `rev` the file already has (or
 passed, because a later change saved first) writes nothing. The write is atomic: a
 temporary `.<name>.<pid>.tmp` beside the file, flushed to disk, renamed over it, and on
-Unix the directory flushed too; on Unix it is mode `0600`. A failed save is logged at
+Unix the directory flushed too. The temporary file is user-only (mode `0600` on Unix, a
+protected DACL for SYSTEM and the user on Windows, which the rename keeps), so a file
+that only inherited its folder's ACL is replaced by a private one at the first save; it
+is not checked on load. A failed save is logged at
 `error` with the path and `rev`, removes the temporary file, and leaves the call's
 result as it is: the change stays applied and the next change saves again. Undo
 history, idempotency keys and the program and preview scenes are not saved (see *Program scene*).
@@ -1822,8 +1904,7 @@ history, idempotency keys and the program and preview scenes are not saved (see 
   updating a source in place for a change to a `live` setting instead of rebuilding
   it.
 - Blend modes other than `normal` in the compositor.
-- The rest of the video chain runtime (V0): effect-pack kinds in a chain (bypassed),
-  and pooling a multi-pass filter's scratch layers.
+- The rest of the video chain runtime (V0): effect-pack kinds in a chain (bypassed).
 - Activity gains that fade with a transition (audio follows a switch at once, so
   every weight is 0 or 1), and meters for every bus's true peak and loudness.
 - The audio and outputs snapshots, the mixer's parameter channel and its part in the
@@ -1859,7 +1940,7 @@ capture whose mailbox is empty repeats its last frame.
 
 **Encode path** (ARCH › GPU pipeline, steps 4 to 6). A video session opens on the
 platform's context when there is one and the render thread hasn't left it (`VideoSession::open_on`,
-`Program::session_context`): it takes GPU frames when
+`Program::encoders`, through `GpuGate`): it takes GPU frames when
 the codecs can encode the context's encode targets (`Codecs::on_context`), and CPU
 frames otherwise, which is logged. The render thread learns which with the session's
 input. For each mix with a session on the GPU path it allocates a ring of
@@ -1934,7 +2015,17 @@ context's device is lost, the outputs fail at once, since nothing can draw into 
 targets. Once the render thread has left the context (a fallback, or a lost context
 device), it says so to the program stage, which from then on opens each new video
 session without the context: on the CPU path, taking the readback like any other, so a
-recording started after a fallback encodes and fails nothing (#699).
+recording started after a fallback encodes and fails nothing (#699). A session that
+opens on the GPU path claims the context first, and holds the claim until the render
+thread has its tap. A fallback for composite errors that falls due meanwhile waits for
+the tap, which then rules it out as above: the session no longer arrives with no encode
+targets, and the errors run on to the 31st, as with any session on the GPU path. The
+two sides meet at one gate (`GpuGate`): the fallback shuts it and then looks for
+claims, and a session claims it and then looks whether it is shut, so one always sees
+the other (#733). A lost context device shuts it whatever the claims, so a claimed
+session whose tap arrives after the loss fails the stage, as one already attached does.
+The claim is taken before the encoder opens, so it also holds a fallback off while an
+encoder that ends up on the CPU path is opening.
 
 The render loop drops the held frames, the compositor and the capture streams before
 the context, at a fallback and at the end, so the platform's state goes first as

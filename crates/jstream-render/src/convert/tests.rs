@@ -3,16 +3,15 @@
 
 use std::io::Write;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use jstream_media::{
     ColorInfo, ColorRange, ColorSpace, FrameSize, MediaTime, PixelFormat, Timebase, VideoFrameInfo,
 };
-use jstream_platform::{FrameSync, GpuFrame, PlatformError};
+use jstream_platform::{FrameSync, GpuFrame};
 
 use super::reference::rgba8_to_nv12;
 use super::{Nv12Converter, Nv12Target};
-use crate::tests::open;
+use crate::tests::{LockSync, open};
 use crate::{Color, Crop, Item, LegacyTransform, Placement, RenderError, Scene};
 
 const LIMITED: ColorInfo = ColorInfo {
@@ -287,9 +286,10 @@ fn bad_sizes_formats_and_spaces_are_refused() {
     ));
 }
 
-/// The encode tick's step: the frame's sync is staged once, the planes hold the
-/// conversion, and the frame's texture is handed back in the same submit. A plane
-/// texture stands in for the platform's NV12 encode target, which lavapipe cannot draw.
+/// The encode tick's step: the frame's sync is staged once, with the compositor's
+/// submit lock held (free again after the submit), the planes hold the conversion, and
+/// the frame's texture is handed back in the same submit. A plane texture stands in for
+/// the platform's NV12 encode target, which lavapipe cannot draw.
 #[test]
 fn submit_stages_the_frame_and_converts_into_it() {
     let Some(opened) = open() else {
@@ -304,7 +304,10 @@ fn submit_stages_the_frame_and_converts_into_it() {
     let pass = converter
         .bind(&texture, &planes.target(), FULL)
         .expect("bind");
-    let stages = Arc::new(AtomicUsize::new(0));
+    let sync = Arc::new(LockSync {
+        lock: c.submit_lock().clone(),
+        held: std::sync::Mutex::new(Vec::new()),
+    });
     let info = VideoFrameInfo {
         size: size(w, h),
         format: PixelFormat::Nv12,
@@ -314,26 +317,23 @@ fn submit_stages_the_frame_and_converts_into_it() {
     let frame = GpuFrame::new(
         planes.y().clone(),
         info,
-        Arc::new(Stages(Arc::clone(&stages))),
+        Arc::clone(&sync) as Arc<dyn FrameSync>,
     );
-    converter.submit(c.queue(), &pass, &frame).expect("submit");
-    assert_eq!(stages.load(Ordering::SeqCst), 1);
+    converter.submit(c, &pass, &frame).expect("submit");
+    assert_eq!(
+        *sync.held.lock().unwrap(),
+        [true],
+        "staged once, with the submit lock held"
+    );
+    assert!(
+        c.submit_lock().try_lock().is_some(),
+        "submit lets the lock go after its submit"
+    );
     assert_within_one(
         &planes.read(c.device(), c.queue()).expect("read"),
         &rgba8_to_nv12(&rgba, w as usize, h as usize, ColorRange::Full),
         w as usize,
     );
-}
-
-/// Counts its stages.
-#[derive(Debug)]
-struct Stages(Arc<AtomicUsize>);
-
-impl FrameSync for Stages {
-    fn stage(&self, _queue: &wgpu::Queue) -> Result<(), PlatformError> {
-        self.0.fetch_add(1, Ordering::SeqCst);
-        Ok(())
-    }
 }
 
 /// The native path: an `NV12` texture's plane views as render targets, when the
