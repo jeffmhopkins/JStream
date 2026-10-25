@@ -189,7 +189,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   renames it, resets it to its parent (`item.clear_override` for each field it
   overrides), makes another keyframe of the parent (`scene.create_variant`) and deletes
   it: a plain `scene.delete`, since it holds no items, or the delete plan after a
-  confirmation when a scene source or a video mix shows it. A right-click on an item, on the canvas or its row, selects it
+  confirmation when anything refers to it. A right-click on an item, on the canvas or its row, selects it
   unless it was selected and opens `item_menu.rs`'s menu for the selection: Properties
   (the Properties dialog), the Audio check (`source.set_audio`), layer order
   (`item.reorder`s that keep the selected items' order), Center, Fit and Stretch to

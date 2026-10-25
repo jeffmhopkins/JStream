@@ -195,9 +195,9 @@ pub fn Scenes() -> impl IntoView {
             studio.apply(&s, edits);
         }
     };
-    // A keyframe holds no items, so it goes at once unless something shows it, which
-    // the plan clears after a confirmation as a scene's delete does. Its parent is
-    // selected if it was.
+    // A keyframe holds no items, so it goes at once unless something refers to it,
+    // which the plan clears after a confirmation as a scene's delete does. Going at
+    // once, its parent is selected if it was.
     let delete_keyframe = move |scene_id: SceneId, parent: SceneId, name: String| {
         let Some(s) = session.get() else { return };
         spawn_local(async move {
