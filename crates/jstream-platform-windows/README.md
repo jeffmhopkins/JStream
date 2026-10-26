@@ -329,9 +329,16 @@ The code is ported from spikes S1 to S3. This first cut has:
     encoder's priming and padding, which a looping file heard as a 25-40 ms hole at
     each wrap (#445), so `decode/gapless.rs` cuts them: the priming is
     `MF_SD_AUDIO_ENCODER_DELAY` when the source reports it, else 1024 frames for AAC
-    (FFmpeg's, whose edit list Media Foundation doesn't apply), else none; the padding
-    is `MF_SD_AUDIO_ENCODER_PADDING`, for which the last block is held back until the
-    end of the stream shows it is the last; and nothing past `MF_PD_DURATION` is kept.
+    (FFmpeg's, whose edit list Media Foundation doesn't apply), else none; the padding is
+    `MF_SD_AUDIO_ENCODER_PADDING`, for which the last block is held back until the end
+    of the stream shows it is the last. For an MP3 whose source reports neither (the
+    reported values are logged), both come from its LAME tag instead (`decode/lame.rs`):
+    the priming is the encoder's plus the decoder's 529 frames, plus the Info frame,
+    which the decoder most likely decodes as silence, and the padding is the encoder's
+    less 529. Either way, nothing past `MF_PD_DURATION` is kept. For an MP3 cut from its LAME tag, a whole
+    pass from the start counts its frames: when the count says the Info frame wasn't
+    decoded after all, the passes after it cut one frame less (both choices are logged,
+    for the hardware rerun).
     Times then count from the content's first frame. A seek forgets a held block. A
     format change mid-stream is `Unsupported`, since the engine's mixer input was made
     for the first.
@@ -558,7 +565,8 @@ fallbacks, strides, short buffers reported against the buffer lock, audio pairin
 container; the NV12 and I420 copies and YUY2 to NV12 are `jstream-platform`'s, tested there)
 and the media-file helpers (RGB32 rows to RGBA and BGRA, top-down and bottom-up,
 cropping to an aperture, short buffers, packed sizes and rates, 100 ns times, the
-verbatim path prefix, and the gapless cut of audio priming and padding) run on every platform. The QPC clock test, the start-race test (a destroyed message-only
+verbatim path prefix, the gapless cut of audio priming and padding, and reading an
+MP3's LAME tag) run on every platform. The QPC clock test, the start-race test (a destroyed message-only
 window maps to `NotFound`), the credential limits check, the credential round trip (a
 uniquely named credential written, replaced, read and deleted in the real store, a
 non-UTF-8 one refused on read, deleted again on failure), the same through

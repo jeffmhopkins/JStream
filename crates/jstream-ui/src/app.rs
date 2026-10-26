@@ -5,6 +5,7 @@
 //! Docs: crates/jstream-ui/README.md#design
 
 use crate::header::Header;
+use crate::hotkeys::Hotkeys;
 use crate::menu::{ContextMenu, Menus};
 use crate::panels::AddSource;
 use crate::panels::add_source::AddSourceDialog;
@@ -267,6 +268,7 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
             })}
             <Workspace />
             <Toast />
+            <Hotkeys />
             <AddSource />
             <SourceProperties />
             <AddFilter />

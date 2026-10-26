@@ -1,7 +1,8 @@
 //! What the Scenes and Scene objects panels share (spec-panels.md 1 and 2): the search
 //! box and the favourites and labels filter over their rows, the rows' favourite star, and
-//! reordering rows by dragging them. The filters' matching and a drop's new position are
-//! plain functions, tested natively.
+//! reordering rows by dragging them, before or after another row or into a container
+//! row such as a folder. The filters' matching and a drop's new position are plain
+//! functions, tested natively.
 //!
 //! Docs: docs/UI-FEATURES.md#scenes, docs/UI-FEATURES.md#objects
 
@@ -11,6 +12,11 @@ use crate::store::Studio;
 use jstream_control::protocol::LabelId;
 use leptos::prelude::*;
 use leptos::wasm_bindgen::JsCast;
+
+/// A row's left padding for its depth in the tree: 18 px a level (spec-panels.md S10).
+pub fn indent(depth: usize) -> String {
+    format!("{}px", 6 + depth * 18)
+}
 
 /// The search text, the favourites-only switch and the labels over one panel's rows.
 #[derive(Clone, Copy)]
@@ -257,12 +263,24 @@ pub enum Side {
     Before,
     /// Below it.
     After,
+    /// Inside it: only a row that holds others, such as a folder, takes this.
+    Into,
 }
 
-/// The side of a row a pointer `y` pixels into a row `height` pixels high drops on: its
-/// top half before it, its bottom half after (S19, for rows that hold nothing).
-pub fn side(y: f64, height: f64) -> Side {
-    if y < height / 2.0 {
+/// The side of a row a pointer `y` pixels into a row `height` pixels high drops on
+/// (S19): a row that holds nothing splits at half its height, before or after; a
+/// `container` row takes before over its top quarter, after over its bottom quarter,
+/// and into between.
+pub fn side(y: f64, height: f64, container: bool) -> Side {
+    if container {
+        if y < height / 4.0 {
+            Side::Before
+        } else if y > height * 0.75 {
+            Side::After
+        } else {
+            Side::Into
+        }
+    } else if y < height / 2.0 {
         Side::Before
     } else {
         Side::After
@@ -270,7 +288,8 @@ pub fn side(y: f64, height: f64) -> Side {
 }
 
 /// Where `moved` goes, counted in `order` as it will be, when it is dropped on the
-/// `side` of `target`; `None` when it stays where it is or either isn't in `order`.
+/// `side` of `target`; `None` when it stays where it is, either isn't in `order`, or
+/// it goes into `target` rather than beside it.
 /// `order` is the whole list the engine counts in, so a filtered or partial view still
 /// gives the engine's index; the reorder edits take that index after removing the moved
 /// entry.
@@ -284,6 +303,7 @@ pub fn dropped_at<T: PartialEq>(order: &[T], moved: &T, target: &T, side: Side) 
     let to = match side {
         Side::Before => at,
         Side::After => at + 1,
+        Side::Into => return None,
     };
     (to != from).then(|| u32::try_from(to).unwrap_or(u32::MAX))
 }
@@ -299,8 +319,9 @@ struct Press {
 }
 
 /// Reordering a list's rows by dragging them (S19), with pointer events rather than
-/// HTML drag and drop, as the dock's tabs do. Each row carries its ID in `data-tree-id`;
-/// the list's pointer handlers come from `on_down`, `on_move` and `on_up`.
+/// HTML drag and drop, as the dock's tabs do. Each row carries its ID in `data-tree-id`,
+/// and a row that holds others also `data-tree-container`; the list's pointer handlers
+/// come from `on_down`, `on_move` and `on_up`.
 #[derive(Clone, Copy)]
 pub struct Reorder {
     press: StoredValue<Option<Press>>,
@@ -390,7 +411,7 @@ impl Default for Reorder {
 }
 
 /// The row under the pointer, by its `data-tree-id`, and the side of it the pointer is
-/// on.
+/// on, with into for a `data-tree-container` row.
 fn row_under(event: &leptos::ev::PointerEvent) -> Option<(String, Side)> {
     let (x, y) = (event.client_x(), event.client_y());
     let row = leptos::prelude::document()
@@ -399,7 +420,11 @@ fn row_under(event: &leptos::ev::PointerEvent) -> Option<(String, Side)> {
         .ok()??;
     let id = row.get_attribute("data-tree-id")?;
     let rect = row.get_bounding_client_rect();
-    Some((id, side(f64::from(y) - rect.top(), rect.height())))
+    let container = row.has_attribute("data-tree-container");
+    Some((
+        id,
+        side(f64::from(y) - rect.top(), rect.height(), container),
+    ))
 }
 
 #[cfg(test)]
@@ -427,10 +452,14 @@ mod tests {
     }
 
     #[test]
-    fn a_row_splits_at_half_its_height() {
-        assert_eq!(side(0.0, 30.0), Side::Before);
-        assert_eq!(side(14.9, 30.0), Side::Before);
-        assert_eq!(side(15.0, 30.0), Side::After);
+    fn a_row_splits_at_half_its_height_and_a_container_in_quarters() {
+        assert_eq!(side(0.0, 30.0, false), Side::Before);
+        assert_eq!(side(14.9, 30.0, false), Side::Before);
+        assert_eq!(side(15.0, 30.0, false), Side::After);
+        assert_eq!(side(7.4, 30.0, true), Side::Before);
+        assert_eq!(side(7.5, 30.0, true), Side::Into);
+        assert_eq!(side(22.5, 30.0, true), Side::Into);
+        assert_eq!(side(22.6, 30.0, true), Side::After);
     }
 
     #[test]
@@ -446,6 +475,8 @@ mod tests {
         assert_eq!(dropped_at(&order, &"b", &"a", Side::After), None);
         assert_eq!(dropped_at(&order, &"b", &"c", Side::Before), None);
         assert_eq!(dropped_at(&order, &"b", &"b", Side::After), None);
+        // Into a row is no position in the list.
+        assert_eq!(dropped_at(&order, &"a", &"c", Side::Into), None);
         // Unknown rows.
         assert_eq!(dropped_at(&order, &"x", &"a", Side::After), None);
         assert_eq!(dropped_at(&order, &"a", &"x", Side::After), None);
