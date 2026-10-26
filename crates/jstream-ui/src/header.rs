@@ -3,7 +3,8 @@
 //! the privacy screen's button (which the Pause key also toggles, anywhere in the
 //! window), Record, and Go Live / End stream. The View and Layout menus change the
 //! workspace's dock
-//! (`workspace.rs`). It keeps its own copy of the outputs, like the outputs panel does, and reports
+//! (`workspace.rs`), and the View menu opens the program and multiview projectors
+//! (`projector.rs`). It keeps its own copy of the outputs, like the outputs panel does, and reports
 //! a failed call in the shell's problem bar.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#header, docs/UI-FEATURES.md#docking
@@ -16,6 +17,7 @@ use crate::panels::outputs::{
     OutputRow, Vcam, go_live_targets, is_running, live_outputs, load, start_blocker,
     start_or_stop_all,
 };
+use crate::projector::{self, Request, Target};
 use crate::store::Studio;
 use crate::workspace::DockState;
 use futures_util::StreamExt;
@@ -117,7 +119,7 @@ fn shrank(now: DropCounts, before: DropCounts) -> bool {
 const STUDIO_MODE_KEY: &str = "jstream.studio-mode";
 
 /// Whether the browser kept studio mode on. Storage can be off; it is then off.
-fn kept_studio_mode() -> bool {
+pub(crate) fn kept_studio_mode() -> bool {
     window()
         .local_storage()
         .ok()
@@ -369,6 +371,28 @@ pub fn Header(
                                         <span class="mark" class:add=move || !shown()>
                                             {move || if shown() { "shown" } else { "add" }}
                                         </span>
+                                    </button>
+                                }
+                            }).collect_view()}
+                            <div class="menu-sep"></div>
+                            <p class="menu-head">"PROJECTORS"</p>
+                            {[
+                                ("Program in a window", Target::Program, false),
+                                ("Program full screen", Target::Program, true),
+                                ("Multiview in a window", Target::Multiview, false),
+                                ("Multiview full screen", Target::Multiview, true),
+                            ].into_iter().map(|(label, target, full)| {
+                                let request = Request { target, full };
+                                view! {
+                                    <button
+                                        class="menuitem"
+                                        role="menuitem"
+                                        on:click=move |_| {
+                                            open.set(None);
+                                            projector::open_and_report(studio, &request);
+                                        }
+                                    >
+                                        {label}
                                     </button>
                                 }
                             }).collect_view()}

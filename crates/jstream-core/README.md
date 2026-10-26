@@ -186,7 +186,7 @@ state machine. Contents:
   `scene.switch` and `studio.set_preview` set and `studio.get` reads
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)).
 - **Preview** (`preview/`): `preview.subscribe` and `preview.unsubscribe`, the program
-  mix as small pictures sent to the session that asked as binary frames
+  mix or one scene as small pictures sent to the session that asked as binary frames
   (`Control::binary`), in H.264 on a software `jstream-encode` session when the
   platform has an encoder and in JPEG otherwise (`preview/jpeg.rs`, a baseline
   encoder of its own), drawn on the engine's `jstream-preview` thread with its own
@@ -391,8 +391,10 @@ state machine. Contents:
   JPEG without an encoder following the mix's changes and the canvas size, H.264 from
   the platform fakes starting at a keyframe and JPEG beside it for a client that asks,
   the subscription checks and limit, unsubscribe and the session's end, and a reader
-  that stops reading holding a bounded queue and resuming in order, and a live value
-  sent at once with the same `rev`), the
+  that stops reading holding a bounded queue and resuming in order, a live value
+  sent at once with the same `rev`, and a scene's stream: a scene off program shown and
+  followed, then no longer planned once closed, a scene the collection doesn't have
+  refused, a deleted scene's stream ended, and nothing captured for it), the
   collection file (`src/tests/collection.rs`: created when missing, batches, an undo
   and a redo each saved, a saved collection loaded by a new engine with its `rev` and
   outputs, a `waveform` drawing another source saved and loaded with the source it
@@ -1325,8 +1327,23 @@ control-plane work, not the render thread.
 sends the program mix, as `video.snapshot` draws it, to the session that asked. The
 session first opens its binary channel with `Control::binary` (the server does this
 after `hello`; MCP never does, so its subscriptions fail with `action_failed`), a queue
-of 8 frames that reopening ends. A session holds at most 4 streams, by the channel
+of 8 frames that reopening ends. A session holds at most 16 streams, by the channel
 number the client chose, and they end with `preview.unsubscribe` or the session.
+
+A stream with a `scene_id` shows that scene instead (0.45), whether or not it is on
+program: what the UI's projector windows and multiview draw. `publish_render`, after it
+has planned and published the program mix, plans each scene a live stream shows
+(`PreviewHub::scenes`) into a shot of its own (`snapshot::plan_scene`: the scene as the
+program scene, with no transition, no video mix and no capture) and keeps them, each
+replaced only when what it draws changed (`RenderSnapshot::following`), for the preview
+thread alone: the render thread never sees them, so a scene stream costs an output
+nothing. It looks its sources up with `LiveSources::look_quiet`, which doesn't count as
+reaching them, so a scene stream never makes a source shown again or heard (ADR-0028),
+and the plans' next frame changes join the program's wake. `preview.subscribe` and a
+`preview.unsubscribe` of a scene stream re-plan at once; until its scene is planned the
+stream waits. A scene the collection doesn't have is `not_found`, and when a scene with
+streams is deleted the re-plan ends them with the end frame "the scene was deleted"
+(`PreviewHub::end_scene`).
 
 The codec is picked when the client subscribes: the first of its `codecs` the engine
 can encode, H.264 when `codecs.list()` names an H.264 encoder (only with backends) and
@@ -1353,8 +1370,8 @@ which the hub then forces (`KeyframeGate`).
 The display capture belongs to the program stage, so a preview draws a `display`
 source as nothing, as `video.snapshot` does. A `scene.switch` republishes the render
 snapshot, so the preview shows the transition onto the new program scene, then the
-scene, with the same `rev` (the switch changes none). Not yet: mixes other than program, and the
-post-master stage, which come with the video mixes and the master chain.
+scene, with the same `rev` (the switch changes none). Not yet: video mixes other than
+program, sources on their own, and the post-master stage, which come with the video mixes and the master chain.
 
 ### Events
 

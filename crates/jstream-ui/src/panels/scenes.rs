@@ -757,7 +757,7 @@ pub fn Scenes() -> impl IntoView {
                         .hint("Double-click")
                         .disabled_if(scene_dialog.is_none()),
                         Entry::unavailable("Edit filters…"),
-                        Entry::submenu("Pop out", Vec::new()),
+                        crate::projector::pop_out(studio, Some(id.clone())),
                         Entry::Sep,
                         Entry::item("New scene", move || new_scene(scene_folder.clone())),
                         Entry::item("New keyframe", move || new_keyframe(keyframe_id.clone())),

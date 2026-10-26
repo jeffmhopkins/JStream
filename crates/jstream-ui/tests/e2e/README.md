@@ -268,6 +268,14 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   client that connects while it is on showing it at once; and the vertical mixer's
   Mic strip reading "muted (privacy)" under its short name while Desktop audio's
   doesn't.
+- **Projectors** (`projectors.spec.js`): the View menu's Program in a window opens a
+  page of its own at `?projector=program`, titled for it, with one picture and the
+  toast on the workspace, and Escape closes it; Intro's row's Pop out submenu offers the
+  scene in a window or full screen and opens `?projector=scene:intro`; Program full
+  screen opens `&full=1` and, in a browser, says to double-click it; the multiview shows
+  program captioned with Main, no preview outside studio mode, and Intro and Main below
+  it, Main framed as on program. The mock engine sends no preview streams, so no test
+  checks a picture: the engine's tests check the frames.
 
 <a id="running"></a>
 ## Running them
