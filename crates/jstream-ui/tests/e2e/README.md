@@ -191,7 +191,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   the Backdrop keeps its own two; another scene selected showing its own chain; a scene
   row's Edit filters… showing that scene's chain from behind the Transform tab while
   the item stays selected, selecting a scene going back to its chain, and the canvas
-  margin's Edit scene filters… showing the shown scene's; and the scene Properties
+  margin's Edit scene filters… showing the shown scene's in place of the selected item's; and the scene Properties
   dialog listing the scene's chain, adding to it at once, which Cancel keeps.
 - **Program and output chains** (`output-chains.spec.js`): the Outputs panel's Program
   output row ("master", "FX 0"), a recording's row under it with its state and FX
