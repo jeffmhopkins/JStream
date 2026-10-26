@@ -304,7 +304,7 @@ the batch **touched**.
   same through `SceneMeta::problem`. `source.set_meta` replaces a source's labels (each
   must exist and appear once; stored ordered by ID) and favourite flag, and
   `source.duplicate` copies both to the copy; `scene.set_meta` checks and stores a
-  scene's labels the same way ([ADR-0078](../../docs/adr/0078-scenes-carry-labels.md)).
+  scene's labels the same way ([ADR-0079](../../docs/adr/0079-scenes-carry-labels.md)).
   `folder.delete` is refused while a scene (`folder`) or folder (`parent`) sits in the
   folder, and `label.delete` while a source, then a scene (`labels`), carries the label,
   listing them as `blockers`; their `delete.plan` moves what the folder holds up to its

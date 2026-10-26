@@ -263,7 +263,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
     applies to every placement of that group in the variant's tree, including two
     placements in the same parent. To vary one copy, duplicate the group.
 - **Folders and organisation are collection state:** folders, labels (which sources and
-  scenes carry, [ADR-0078](adr/0078-scenes-carry-labels.md)), favourites, scene
+  scenes carry, [ADR-0079](adr/0079-scenes-carry-labels.md)), favourites, scene
   icons, colours and `show_in_multiview`, and hotkey bindings are edited by undoable edits
   and saved with the collection, so every client and agent sees the same thing
   ([R-ARCH-001](RULES.md#R-ARCH-001); JStream is single-user, so a favourite is not per
@@ -685,7 +685,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `label.update`, `label.reorder`, `label.delete`, `scene.set_meta` and
   `source.set_meta` edit labels and organisation metadata
   ([ADR-0024](adr/0024-scene-structure.md), protocol 0.31; a scene's labels, protocol
-  0.45, [ADR-0078](adr/0078-scenes-carry-labels.md)).
+  0.45, [ADR-0079](adr/0079-scenes-carry-labels.md)).
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));

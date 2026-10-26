@@ -213,7 +213,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   button whose popover, under the row, puts labels on the source or takes them off
   (`source.set_meta`). A scene's row has the chips of its own labels and the same tag
   button (`scene.set_meta`; scenes carry labels,
-  [ADR-0078](../../docs/adr/0078-scenes-carry-labels.md)). A nested scene's row has a caret that shows
+  [ADR-0079](../../docs/adr/0079-scenes-carry-labels.md)). A nested scene's row has a caret that shows
   its items under it, nested ones too; a click on one of them selects it in its own
   scene, which the list then shows, since the engine draws a nested scene as one item.
   Each panel has a search box and a filter for

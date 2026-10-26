@@ -222,7 +222,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   Inspector's chips and the Inspector's tag button, the filter's labels with their
   count, and the item menu's Labels submenu, checked with the label's colour as its
   swatch, taking it off; deleting a label taking it off the Backdrop in one edit; and
-  on a scene ([ADR-0078](../../../../docs/adr/0078-scenes-carry-labels.md)): the manager
+  on a scene ([ADR-0079](../../../../docs/adr/0079-scenes-carry-labels.md)): the manager
   opened from the Scenes panel's filter, in that panel, the scene row's tag popover
   opening under the row and filling its box with the label's colour, the row's and the
   Inspector's chips and tag button, the Scenes panel's labels filter, and a delete

@@ -1,6 +1,6 @@
 //! The Scenes panel (spec-panels.md 1): the collection's scenes in display order, under
 //! a search box and a favourites and labels filter, each row with its icon, a "program"
-//! badge on the scene on program, the chips of its labels (ADR-0078), the tag button
+//! badge on the scene on program, the chips of its labels (ADR-0079), the tag button
 //! whose popover opens under the row, and a favourite star. The label manager opens
 //! over the rows when "Edit labels…" is chosen here (`labels.rs`). Clicking a scene shows it in Scene
 //! objects and the canvas and puts it on program (`scene.switch`), or, in studio mode,

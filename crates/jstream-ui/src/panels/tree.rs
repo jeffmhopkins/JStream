@@ -90,7 +90,7 @@ pub fn matches(search: &str, name: &str) -> bool {
 /// The search box and the filter button over a panel's rows (S2 to S4). With
 /// `labels`, the filter lists the collection's labels and offers "Edit labels…", which
 /// opens the label manager in that panel. Scenes and sources both carry labels
-/// (ADR-0078), so both trees pass it.
+/// (ADR-0079), so both trees pass it.
 #[component]
 pub fn SearchBar(
     /// What the rows are, for the placeholder: "scenes" or "objects".
