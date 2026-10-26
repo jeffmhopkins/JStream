@@ -1,7 +1,8 @@
 //! The UI's copy of the engine's state, shared by every panel: the collection as
-//! `state.get` last reported it, the program scene, what is selected, the sources'
-//! sizes (`source.sizes` and `source.size_changed`) and the kind descriptors read so
-//! far. The app keeps it current from the session's events; panels
+//! `state.get` last reported it (a keyframe scene with its parent's items, its
+//! overrides applied), the program scene, what is selected, the sources' sizes
+//! (`source.sizes` and `source.size_changed`) and the kind descriptors read so far. The
+//! app keeps it current from the session's events; panels
 //! read it reactively and change the engine only through calls, never by editing it.
 //!
 //! Docs: crates/jstream-ui/README.md#design
@@ -9,9 +10,10 @@
 use crate::session::Session;
 use jstream_control::ControlError;
 use jstream_control::protocol::{
-    Batch, BusInfo, Call, CallResult, Canvas, DeleteTarget, Edit, Event, FolderId, FolderInfo,
-    ItemId, ItemInfo, KindDescriptor, KindSummary, OutputInfo, Query, QueryResult, Rev, SceneId,
-    SceneInfo, SceneRole, SourceId, SourceInfo, SourceKind, SourceSize,
+    Action, Batch, BusInfo, Call, CallResult, Canvas, Chord, DeleteTarget, Edit, Event, FolderId,
+    FolderInfo, HotkeyBinding, ItemId, ItemInfo, ItemOverride, KindDescriptor, KindSummary,
+    OutputInfo, OverrideField, PlacementForm, Query, QueryResult, Rev, SceneId, SceneInfo,
+    SceneRole, SourceId, SourceInfo, SourceKind, SourceSize,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -26,13 +28,17 @@ pub struct Collection {
     pub canvas: Canvas,
     /// Every source, ordered by ID.
     pub sources: Vec<SourceInfo>,
-    /// Every scene with its items, in display order.
+    /// Every scene with its items, in display order. A keyframe scene's `items` are its
+    /// parent's, each with the keyframe's overrides applied: what it shows, so every
+    /// panel reads it as it reads any scene ([`shown_items`]).
     pub scenes: Vec<SceneInfo>,
     /// Every output, ordered by ID.
     pub outputs: Vec<OutputInfo>,
     /// Every audio bus, ordered by ID, the master among them: what a `bus` parameter
     /// picks from.
     pub buses: Vec<BusInfo>,
+    /// Every hotkey binding, ordered by chord (ADR-0024 §5).
+    pub hotkeys: Vec<HotkeyBinding>,
     /// The scene list's folders, in folder order (ADR-0024 §3, ADR-0064).
     pub folders: Vec<FolderInfo>,
 }
@@ -48,17 +54,36 @@ impl Collection {
                 scenes,
                 outputs,
                 buses,
+                hotkeys,
                 folders,
                 ..
-            } => Some(Collection {
-                rev,
-                canvas,
-                sources,
-                scenes,
-                outputs,
-                buses,
-                folders,
-            }),
+            } => {
+                let mut scenes = scenes;
+                let shown: Vec<Option<Vec<ItemInfo>>> = scenes
+                    .iter()
+                    .map(|scene| {
+                        let parent = scenes
+                            .iter()
+                            .find(|p| Some(&p.scene_id) == scene.variant_of.as_ref())?;
+                        Some(shown_items(&parent.items, &scene.overrides))
+                    })
+                    .collect();
+                for (scene, items) in scenes.iter_mut().zip(shown) {
+                    if let Some(items) = items {
+                        scene.items = items;
+                    }
+                }
+                Some(Collection {
+                    rev,
+                    canvas,
+                    sources,
+                    scenes,
+                    outputs,
+                    buses,
+                    hotkeys,
+                    folders,
+                })
+            }
             _ => None,
         }
     }
@@ -73,15 +98,84 @@ impl Collection {
         self.sources.iter().find(|s| &s.source_id == source_id)
     }
 
-    /// The item with this ID, with the scene it is in.
+    /// The item with this ID, with the scene it is in: its own scene, never a keyframe
+    /// scene that shows it.
     pub fn item(&self, item_id: &ItemId) -> Option<(&SceneInfo, &ItemInfo)> {
-        self.scenes.iter().find_map(|scene| {
-            scene
-                .items
-                .iter()
-                .find(|i| &i.item_id == item_id)
-                .map(|item| (scene, item))
-        })
+        self.scenes
+            .iter()
+            .filter(|scene| scene.variant_of.is_none())
+            .find_map(|scene| {
+                scene
+                    .items
+                    .iter()
+                    .find(|i| &i.item_id == item_id)
+                    .map(|item| (scene, item))
+            })
+    }
+
+    /// The item as `scene_id` shows it, with that scene: in a keyframe scene, the
+    /// parent's item with the keyframe's overrides. Else, as [`Collection::item`] finds
+    /// it.
+    pub fn item_in(
+        &self,
+        scene_id: Option<&SceneId>,
+        item_id: &ItemId,
+    ) -> Option<(&SceneInfo, &ItemInfo)> {
+        scene_id
+            .and_then(|id| self.scene(id))
+            .and_then(|scene| {
+                scene
+                    .items
+                    .iter()
+                    .find(|i| &i.item_id == item_id)
+                    .map(|item| (scene, item))
+            })
+            .or_else(|| self.item(item_id))
+    }
+
+    /// The scene `scene_id` is a keyframe scene of, if it is one.
+    pub fn parent_of(&self, scene_id: &SceneId) -> Option<&SceneInfo> {
+        self.scene(scene_id)?
+            .variant_of
+            .as_ref()
+            .and_then(|parent| self.scene(parent))
+    }
+
+    /// Whether `scene_id` names a keyframe scene, where only its items' geometry, crop,
+    /// visibility and opacity can change (ADR-0049).
+    pub fn is_keyframe(&self, scene_id: &SceneId) -> bool {
+        self.scene(scene_id)
+            .is_some_and(|scene| scene.variant_of.is_some())
+    }
+
+    /// The keyframe scenes of `scene_id`, in display order.
+    pub fn keyframes_of<'a>(
+        &'a self,
+        scene_id: &'a SceneId,
+    ) -> impl Iterator<Item = &'a SceneInfo> + 'a {
+        self.scenes
+            .iter()
+            .filter(move |s| s.variant_of.as_ref() == Some(scene_id))
+    }
+
+    /// The chords bound to putting `scene_id` on program (`scene.switch`), in chord
+    /// order.
+    pub fn scene_chords(&self, scene_id: &SceneId) -> Vec<Chord> {
+        self.hotkeys
+            .iter()
+            .filter(|binding| {
+                matches!(binding.action(), Some(Action::SceneSwitch { scene_id: bound, .. }) if &bound == scene_id)
+            })
+            .map(|binding| binding.chord.clone())
+            .collect()
+    }
+
+    /// The action bound to `chord`, if any, and this version knows it.
+    pub fn hotkey(&self, chord: &Chord) -> Option<Action> {
+        self.hotkeys
+            .iter()
+            .find(|binding| &binding.chord == chord)
+            .and_then(HotkeyBinding::action)
     }
 
     /// The scenes the scene list shows, in display order: groups are left out
@@ -221,9 +315,12 @@ impl Selection {
                     .next()
                     .map(|s| s.scene_id.clone())
             });
+        // A keyframe scene shows its parent's items, so they are its items here.
         let in_scene = |item_id: &&ItemId| {
-            let found = collection.item(item_id).map(|(s, _)| &s.scene_id);
-            found.is_some() && found == scene.as_ref()
+            scene
+                .as_ref()
+                .and_then(|id| collection.scene(id))
+                .is_some_and(|s| s.items.iter().any(|i| &i.item_id == *item_id))
         };
         let kept: Vec<ItemId> = self.items().filter(in_scene).cloned().collect();
         Selection {
@@ -232,6 +329,66 @@ impl Selection {
         }
         .with_items(kept)
     }
+}
+
+/// The items a keyframe scene shows: its parent's, in their order, each with the fields
+/// the keyframe overrides replaced (ADR-0049 §2). An overridden geometry in the 0.3 form
+/// stays in that form, which the canvas can't draw.
+pub fn shown_items(parent: &[ItemInfo], overrides: &[ItemOverride]) -> Vec<ItemInfo> {
+    parent
+        .iter()
+        .map(|item| {
+            let mut item = item.clone();
+            let Some(o) = overrides.iter().find(|o| o.item_id == item.item_id) else {
+                return item;
+            };
+            if let Some(geometry) = o.geometry {
+                item.placement = PlacementForm::Geometry;
+                item.geometry = Some(geometry);
+            } else if let Some(transform) = o.transform {
+                item.placement = PlacementForm::Legacy;
+                item.transform = transform;
+                item.geometry = None;
+            }
+            if let Some(crop) = o.crop {
+                item.crop = crop;
+            }
+            if let Some(visible) = o.visible {
+                item.visible = visible;
+            }
+            if let Some(opacity) = o.opacity {
+                item.opacity = opacity;
+            }
+            item
+        })
+        .collect()
+}
+
+/// The `item.clear_override`s that reset keyframe scene `scene` to its parent: one
+/// per field it overrides, so every item follows the parent again.
+pub fn reset_edits(scene: &SceneInfo) -> Vec<Edit> {
+    scene
+        .overrides
+        .iter()
+        .flat_map(|o| {
+            [
+                (
+                    o.geometry.is_some() || o.transform.is_some(),
+                    OverrideField::Geometry,
+                ),
+                (o.crop.is_some(), OverrideField::Crop),
+                (o.visible.is_some(), OverrideField::Visible),
+                (o.opacity.is_some(), OverrideField::Opacity),
+            ]
+            .into_iter()
+            .filter(|(set, _)| *set)
+            .map(|(_, field)| Edit::ItemClearOverride {
+                scene_id: scene.scene_id.clone(),
+                item_id: o.item_id.clone(),
+                field,
+            })
+        })
+        .collect()
 }
 
 /// A short account of what a `delete.plan` does beyond deleting its target, for the
@@ -645,11 +802,14 @@ fn unexpected(what: &str) -> ControlError {
 
 #[cfg(test)]
 mod tests {
-    use super::{Collection, Selection, Studio, fresh_id, list_kinds, plan_summary, sizes_of};
+    use super::{
+        Collection, Selection, Studio, apply, fresh_id, list_kinds, plan_summary, query,
+        reset_edits, sizes_of,
+    };
     use crate::session::Session;
     use jstream_control::protocol::{
-        Batch, Call, CallResult, Edit, Hello, ItemId, Query, QueryResult, Response, SceneId,
-        SceneRole, Settings, SourceId, SourceKind, SourceSize, Welcome,
+        Batch, Call, CallResult, Edit, Hello, ItemId, OverrideField, Query, QueryResult, Response,
+        SceneId, SceneRole, Settings, SourceId, SourceKind, SourceSize, Welcome,
     };
     use jstream_control::{BoxFuture, Control, ControlError, EventStream, MockEngine};
     use leptos::prelude::*;
@@ -857,6 +1017,79 @@ mod tests {
                 also: Vec::new(),
             },
             "the next selected item in the scene becomes the primary one"
+        );
+    }
+
+    /// A keyframe scene shows its parent's items at its overrides; an item is still
+    /// found in its own scene, and a selection in the keyframe keeps it.
+    #[test]
+    fn keyframe_scenes_show_their_parents_items() {
+        let engine = MockEngine::new();
+        let session = now(Session::open(Rc::new(engine.connect())))
+            .unwrap_or_else(|e| panic!("hello failed: {e}"));
+        let edits = vec![
+            Edit::SceneCreate {
+                scene_id: "a".into(),
+                name: "Main".into(),
+                role: None,
+            },
+            Edit::SourceCreate {
+                source_id: "red".into(),
+                name: "Red".into(),
+                kind: SourceKind::Builtin {
+                    kind: "color".into(),
+                },
+                settings: Settings::new(),
+                duplicated_from: None,
+            },
+            Edit::ItemAdd {
+                scene_id: "a".into(),
+                item_id: "i1".into(),
+                source_id: "red".into(),
+                transform: None,
+                geometry: None,
+                opacity: None,
+                blend: None,
+            },
+            Edit::SceneCreateVariant {
+                scene_id: "k".into(),
+                variant_of: "a".into(),
+                name: "Keyframe 1".into(),
+            },
+            Edit::ItemSetVisible {
+                item_id: "i1".into(),
+                scene_id: Some("k".into()),
+                visible: false,
+            },
+        ];
+        now(apply(&session, edits, None)).unwrap_or_else(|e| panic!("batch failed: {e}"));
+        let c = now(query(&session, Query::StateGet))
+            .ok()
+            .and_then(Collection::from_result)
+            .unwrap_or_else(|| panic!("no state"));
+        let (a, k) = (SceneId::new("a"), SceneId::new("k"));
+        let i1 = ItemId::new("i1");
+        assert!(c.is_keyframe(&k) && !c.is_keyframe(&a));
+        assert_eq!(c.parent_of(&k).map(|p| p.name.as_str()), Some("Main"));
+        assert_eq!(c.keyframes_of(&a).count(), 1);
+        let (home, item) = c.item(&i1).unwrap_or_else(|| panic!("no i1"));
+        assert_eq!((home.scene_id.as_str(), item.visible), ("a", true));
+        let (shown, item) = c.item_in(Some(&k), &i1).unwrap_or_else(|| panic!("no i1"));
+        assert_eq!((shown.scene_id.as_str(), item.visible), ("k", false));
+        let selected = Selection {
+            scene: Some(k.clone()),
+            item: Some(i1.clone()),
+            also: Vec::new(),
+        };
+        assert_eq!(selected.reconcile(&c, None), selected);
+        let keyframe = c.scene(&k).unwrap_or_else(|| panic!("no k"));
+        assert_eq!(
+            reset_edits(keyframe),
+            vec![Edit::ItemClearOverride {
+                scene_id: k.clone(),
+                item_id: i1,
+                field: OverrideField::Visible,
+            }]
         );
     }
 
