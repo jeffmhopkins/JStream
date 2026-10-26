@@ -151,8 +151,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   header's menus act as a menu bar: a click opens File, pointing at Edit and View opens
   each in its place, a click on the open menu's button closes it, after which pointing
   opens nothing, and a press outside closes one; from the keyboard Down opens a menu at
-  its first item, Up and Down wrap through it, Right and Left move along the bar
-  (wrapping), and Escape closes it back to its button.
+  its first item and Up on a button at its last, Up and Down wrap through it, Right and
+  Left move along the bar (wrapping), Escape closes it back to its button, and
+  Ctrl+Right on a button is left alone.
 - **Groups** (`groups.spec.js`): Group selection on two items makes "Group 1", left
   out of the Scenes panel, whose caret shows the two items indented; a click on one
   opens the group's scene with it selected; Ungroup puts them back, which a second

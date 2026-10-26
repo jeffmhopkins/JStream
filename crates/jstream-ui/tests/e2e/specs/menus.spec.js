@@ -341,6 +341,8 @@ test('the header menus behave like a menu bar', async ({ page, daemon }) => {
   await expect(dropdown('Edit').getByRole('menuitem', { name: /^Redo/ })).toBeFocused();
   await page.keyboard.press('ArrowDown');
   await expect(dropdown('Edit').getByRole('menuitem', { name: /^Undo/ })).toBeFocused();
+  await page.keyboard.press('ArrowUp');
+  await expect(dropdown('Edit').getByRole('menuitem', { name: /^Redo/ })).toBeFocused();
   await page.keyboard.press('ArrowRight');
   await expect(dropdown('View')).toBeVisible();
   await expect(dropdown('View').getByRole('menuitemcheckbox').first()).toBeFocused();
@@ -351,5 +353,12 @@ test('the header menus behave like a menu bar', async ({ page, daemon }) => {
   await expect(dropdown('Layout')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(dropdown('Layout')).toHaveCount(0);
+  await expect(button('Layout')).toBeFocused();
+  // Up on a focused button opens its menu at the last item; a modified arrow is left to
+  // the hotkeys.
+  await page.keyboard.press('ArrowUp');
+  await expect(dropdown('Layout').getByRole('menuitem', { name: 'Reset to default' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Control+ArrowRight');
   await expect(button('Layout')).toBeFocused();
 });

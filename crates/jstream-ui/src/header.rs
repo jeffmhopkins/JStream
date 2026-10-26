@@ -351,8 +351,12 @@ pub fn Header(
         open.set(Some(menu));
         focus_item(menu, first);
     };
+    // A key with Ctrl, Alt or Meta is left to the hotkeys: only plain keys drive the bar.
+    let modified =
+        |event: &leptos::ev::KeyboardEvent| event.ctrl_key() || event.alt_key() || event.meta_key();
     let button_keys = move |menu: Menu| {
         move |event: leptos::ev::KeyboardEvent| match event.key().as_str() {
+            _ if modified(&event) => {}
             "ArrowDown" | "Enter" | " " => {
                 event.prevent_default();
                 open_at(menu, true);
@@ -375,6 +379,9 @@ pub fn Header(
     };
     let dropdown_keys = move |menu: Menu| {
         move |event: leptos::ev::KeyboardEvent| {
+            if modified(&event) {
+                return;
+            }
             let (delta, to) = match event.key().as_str() {
                 "ArrowDown" => (1, None),
                 "ArrowUp" => (-1, None),
