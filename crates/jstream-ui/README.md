@@ -515,8 +515,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   has the master's short-term loudness on a bar from −60 to +6 LUFS with a marker at
   the −14 LUFS target (70% along, where the prototype draws it), the three loudness
   readings in its tooltip, its true peak with "safe" or a warning over 0 dBTP, and a
-  button that resets the integrated loudness (`audio.reset_loudness`). Its monitor
-  button shows disabled, as the monitor control isn't built yet (MX-05); its "FX N"
+  button that resets the integrated loudness (`audio.reset_loudness`). Its Hear
+  button is the master's monitor (`bus.set_monitor`, D22): it reads "Hear: off" while
+  the master has none, a click turns one on at the default output after FX, and later
+  clicks switch it between after and before FX on the same device. Its "FX N"
   counts the master chain's filters, from `Studio`'s collection, and shows that chain
   in the Filters panel. Each source gets a row, ordered by name: its meter, fader, a dB field
   (the shared `NumberField`), mute and, folded under "Routing", whether its audio is
@@ -529,8 +531,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   loudness filling up to the target line, the loudness and true peak (its warning
   heard by a screen reader only, for want of room) and the same "FX N", then, folded
   beside it, a strip per source with its short name, a meter filling upwards, the dB
-  field stacked + over − and scrubbed up and down, and mute. Each bus gets a strip, the master first, with renaming
-  and (except the master) deleting. A delete reads `delete.plan`
+  field stacked + over − and scrubbed up and down, and mute. Each bus gets a strip, the master first, with, under More, its
+  monitor (off, after FX or before FX, and the output device it plays on, empty for the
+  default output, trimmed and checked as the engine checks it; the menu shows the
+  bus's monitor, so a refused pick goes back, and a tap from a newer engine shows as
+  "Another tap"), renaming and (except
+  the master) deleting. A delete reads `delete.plan`
   first, as a scene's or source's does: the strip asks, saying how many `waveform` or
   `spectrum` settings drawing the bus the plan clears, and sends the plan's edits
   expecting the plan's revision. New buses take the first

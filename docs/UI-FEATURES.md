@@ -65,12 +65,12 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Inspector](#inspector) | 10 | 9 | 0 | 1 | 0 | 0 |
 | [Transform panel](#transform) | 4 | 4 | 0 | 0 | 0 | 0 |
 | [Filters](#filters) | 8 | 5 | 1 | 0 | 2 | 0 |
-| [Mixer](#mixer) | 7 | 6 | 0 | 1 | 0 | 0 |
+| [Mixer](#mixer) | 7 | 7 | 0 | 0 | 0 | 0 |
 | [Outputs](#outputs) | 4 | 3 | 0 | 0 | 1 | 0 |
 | [Transitions](#transitions) | 6 | 3 | 2 | 1 | 0 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
 | [Keyboard](#keyboard) | 7 | 6 | 0 | 1 | 0 | 0 |
-| **Total** | **130** | **99** | **11** | **7** | **13** | **0** |
+| **Total** | **130** | **100** | **11** | **6** | **13** | **0** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -329,11 +329,11 @@ does more than the prototype (buses, sends, routing); that stays ([Beyond](#beyo
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| MX-01 | Master card | "Master · program output", N channels, Loudness bar against a target marker with "−14.2 LUFS", True peak with "safe" or a warning, "FX N". | ✅ | `mixer.rs`: the short-term loudness on a bar from −60 to +6 LUFS, the marker at the −14 LUFS target (70%), momentary, short-term and integrated in the tooltip, the true peak's note in green or red, and a Reset button for the integrated loudness. "Hear" shows disabled until [MX-05](#mixer); "FX N", on the card and on the vertical master strip, counts the master chain's filters and shows it in the Filters panel ([FL-07](#filters)). |
+| MX-01 | Master card | "Master · program output", N channels, Loudness bar against a target marker with "−14.2 LUFS", True peak with "safe" or a warning, "FX N". | ✅ | `mixer.rs`: the short-term loudness on a bar from −60 to +6 LUFS, the marker at the −14 LUFS target (70%), momentary, short-term and integrated in the tooltip, the true peak's note in green or red, and a Reset button for the integrated loudness. "Hear" is [MX-05](#mixer)'s; "FX N", on the card and on the vertical master strip, counts the master chain's filters and shows it in the Filters panel ([FL-07](#filters)). |
 | MX-02 | Channels fold under the master | Channels hidden under the master card by default. | ✅ | The master card's button folds them (not remembered across reloads). The buses, which the prototype doesn't have, fold under their own Buses header below. |
 | MX-03 | Channel strips | Name, level bar, dB number field. | ✅ | Each row: name, the stereo meter as the level bar, the console-taper fader ([Beyond](#beyond)), the dB field (`NumberField`, −100 to +24, step 0.5), mute and Routing. |
 | MX-04 | Vertical meters | Vertical strips in side columns; a title-bar toggle flips orientation. | ✅ | `mixer.rs`: docked in a side column the meters turn vertical until the button in the mixer's title bar flips them, for the session. The master strip folds the channel strips beside it; each strip has its short name (the full one as a tooltip), a stereo meter filling upwards, the dB field stacked + over −, scrubbed up and down, and mute. Routing stays in the horizontal rows. |
-| MX-05 | Monitoring | "Hear: after FX" / "before FX". | ⬜ | Decision register D22: a bus's monitor (`bus.set_monitor`, protocol 0.42), which the engine plays on its device while an output runs. |
+| MX-05 | Monitoring | "Hear: after FX" / "before FX". | ✅ | Decision register D22: a bus's monitor (`bus.set_monitor`, protocol 0.42), which the engine plays on its device while the mixer runs. `mixer.rs`: the master card's Hear button (the vertical strip's "Hear post" / "Hear pre") turns the master's monitor on at the default output after FX, then switches it between after and before FX on the same device; it reads "Hear: off" while the master has none, where the prototype always hears something. Each bus strip's More picks its monitor (off, after FX or before FX) and names its output device, empty for the default output ([Beyond](#beyond)). |
 | MX-06 | Privacy mute | The mic reads "muted (privacy)" while privacy is on. | ✅ | Every channel the engine's privacy screen mutes: the `audio_input` and `webcam` sources (the input devices, ADR-0027 §4's default set), not desktop or application audio. A horizontal row appends " · muted (privacy)" to the name; a vertical strip shows "muted (privacy)" under its short name. Its own mute is unchanged. |
 | MX-07 | Real levels | Meters show the engine's levels. | ✅ | `meters.tick`, with RMS, peak and peak hold; the prototype's numbers are simulated. |
 
@@ -430,7 +430,7 @@ not remove them; they move into the prototype's look.
   key, per-output start and stop, encoder profiles, virtual camera registration hints,
   and the pipeline's health line.
 - Mixer: buses, sends, "heard always or when on program", mute, the console-taper fader,
-  peak hold and loudness reset.
+  peak hold, loudness reset, and a monitor on any bus, with its output device.
 - Settings forms generated from kind descriptors, with groups, advanced settings,
   conditional fields and reset to default.
 
