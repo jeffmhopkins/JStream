@@ -195,13 +195,18 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   not the master's; and the master's filter in the Filter settings dialog, whose Remove
   deletes it.
 - **Mixer** (`mixer.spec.js`, on the Audio mixer tab): the master card counting the
-  seed's two channels, its Hear button disabled, its "FX 0" showing the program
+  seed's two channels, its Hear button enabled, its "FX 0" showing the program
   output's chain in the Filters panel, and its button (with its tooltip) unfolding the
   channel rows by name and folding them again; a typed gain in the Mic's dB field and
   its + stepper each as one edit, with the fader following; with `meterTicks`, the
   short-term loudness and its tooltip, the bar's fill against the target, and the true
   peak "safe" with nothing announced, then the warning over 0 dBTP, announced; and the Buses section folded under its
-  count, the master first, adding a bus. A tab click elsewhere in the dock leaving a
+  count, the master first, adding a bus. The Hear button reading "Hear: off", then
+  turning the master's monitor on after FX and switching it before FX, one edit each;
+  the master's strip under More showing that monitor, naming its device (the tooltip
+  follows), switching the tap with the device kept and turning it off, the field going;
+  a new bus's own monitor leaving the master's off; and the vertical strip's "Hear
+  off" turning it on as "Hear post". A tab click elsewhere in the dock leaving a
   channel's open Routing open (the rows aren't rebuilt). The title bar's flip button turning the meters
   vertical: the master strip, its "FX 0" enabled, and its channels folded beside it by short name, the
   Mic's stacked field scrubbed upwards and stepped down as one edit each, and its mute;

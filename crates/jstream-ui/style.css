@@ -868,6 +868,7 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
   color: #c9ced6;
   font-size: 12px;
 }
+.mixer-panel .ghost-button.hear:not(.on) { color: var(--dim); }
 .mixer-panel .fx-button {
   padding: 3px 10px;
   border: 1px solid var(--accent);
