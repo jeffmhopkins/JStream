@@ -2,8 +2,8 @@
 //! stack first, under the `In “<scene>”, top to bottom` caption and the search box and
 //! favourites and labels filter. Each row shows its source's type icon and name (in
 //! italics when the source is placed in other scenes too), the chips of its labels, a
-//! visibility eye, the labels popover and a favourite star. The label manager opens over
-//! the rows (`labels.rs`).
+//! visibility eye, the tag button and a favourite star; the labels popover opens under
+//! the row. The label manager opens over the rows (`labels.rs`).
 //! A click selects an item (Shift adds or takes it out), a double click opens its
 //! Properties dialog, F2 renames its source in place and Del removes it from the scene;
 //! rows are reordered by dragging them (`item.reorder`). A nested scene's row has a caret
@@ -21,13 +21,16 @@
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#objects
 
 use crate::app::SessionContext;
+use crate::dock::PanelId;
 use crate::icons::Icon;
 use crate::item_menu;
 use crate::menu::{Entry, Menus};
 use crate::panels::add_source::{AddSourceDialog, type_label};
 use crate::panels::confirm::{Confirm, Pending};
 use crate::panels::inspector::is_shared;
-use crate::panels::labels::{LabelChips, LabelEditor, LabelManager, LabelPicker, carried};
+use crate::panels::labels::{
+    LabelChips, LabelEditor, LabelManager, LabelPopover, TagButton, TagPopover, Tagged, carried,
+};
 use crate::panels::scenes::RenameField;
 use crate::panels::tree::{Filter, Reorder, SearchBar, Side, Star, dropped_at, indent};
 use crate::store::{Collection, Studio, apply, plan_delete, plan_summary};
@@ -540,7 +543,9 @@ pub fn Sources() -> impl IntoView {
         let eye_label = format!("Show or hide {name}");
         let star_name = name.clone();
         let picker_name = name.clone();
-        let picker_source = source_id.clone();
+        let popover = TagPopover::new();
+        let popover_target = Tagged::Source(source_id.clone());
+        let popover_indent = indent(depth);
         let container = nests.is_some();
         let caret = nests.map(|_| {
             let id = item_id.clone();
@@ -612,9 +617,14 @@ pub fn Sources() -> impl IntoView {
                 >
                     <Icon name=if visible { "eye" } else { "eye-off" } size=14 />
                 </button>
-                <LabelPicker source_id=picker_source name=picker_name />
+                <TagButton popover=popover name=picker_name />
                 <Star name=star_name on=Signal::stored(favourite) toggle=toggle_favourite />
             </li>
+            {move || popover.open.get().then(|| view! {
+                <li class="tree-pop-row">
+                    <LabelPopover popover=popover target=popover_target.clone() indent=popover_indent.clone() />
+                </li>
+            })}
         }
     };
 
@@ -663,8 +673,8 @@ pub fn Sources() -> impl IntoView {
     view! {
         <section class="panel sources-panel tree-panel" on:contextmenu=on_context>
             <h2>"Sources"</h2>
-            <SearchBar what="objects" filter=filter labels=true />
-            {move || manager.is_some_and(|m| m.shown.get()).then(|| view! { <LabelEditor /> })}
+            <SearchBar what="objects" filter=filter labels=PanelId::Objects />
+            {move || manager.is_some_and(|m| m.shown_in(PanelId::Objects)).then(|| view! { <LabelEditor /> })}
             <Confirm pending=pending confirm=confirm_delete />
             <Show
                 when=move || scene().is_some()

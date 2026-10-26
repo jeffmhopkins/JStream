@@ -671,11 +671,12 @@ pub enum Edit {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         folder_id: Option<FolderId>,
     },
-    /// Replaces a scene's organisation metadata: its icon, colour, favourite flag and
-    /// whether a multiview shows it. Every field left out takes its default. An icon
-    /// that is empty or longer than 64 bytes, or a colour that isn't
-    /// `#rrggbb`, is `invalid_argument`. Inverse: `scene.set_meta` with the previous
-    /// metadata.
+    /// Replaces a scene's organisation metadata: the labels it carries, its icon, colour,
+    /// favourite flag and whether a multiview shows it. Every field left out takes its
+    /// default, so `labels` omitted removes them all. An icon that is empty or longer
+    /// than 64 bytes, a colour that isn't `#rrggbb`, or a label listed twice is
+    /// `invalid_argument`, and a label that doesn't exist `not_found`; the engine stores
+    /// labels ordered by ID. Inverse: `scene.set_meta` with the previous metadata.
     #[serde(rename = "scene.set_meta")]
     SceneSetMeta {
         /// The scene to change.
@@ -724,8 +725,8 @@ pub enum Edit {
         /// number of labels, else `invalid_argument`.
         index: u32,
     },
-    /// Deletes a label. Rejected with `invalid_argument` while a source carries it,
-    /// listing them as `blockers`: take it off those sources first, or send the batch
+    /// Deletes a label. Rejected with `invalid_argument` while a source or scene carries
+    /// it, listing them as `blockers`: take it off those first, or send the batch
     /// `delete.plan` returns. Inverse: `label.create` with its name, colour and icon,
     /// then `label.reorder` to its old position (unless it was last).
     #[serde(rename = "label.delete")]

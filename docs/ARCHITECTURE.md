@@ -178,7 +178,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 │                  Filter { filter_id, kind, enabled, settings }   unique within its source; at most 8 per chain
 │                  SourceAudio { enabled, follow: Always | WhenShown, gain_db, muted }
 ├── scenes         Scene { id, name, role: scene | group, variant_of?, overrides, folder?, background?,
-│                          icon, color, favourite, show_in_multiview, transition_in?, transition_out?,
+│                          labels, icon, color, favourite, show_in_multiview, transition_in?, transition_out?,
 │                          filters { video[] }, items[] }   flat display order
 │                  SceneItem { id, source_id, geometry: ItemGeometry, crop, visible, opacity, blend,
 │                              effects[] (video filters), transition }
@@ -262,7 +262,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
     ID and a group is one shared scene, so a variant's override on a group's child
     applies to every placement of that group in the variant's tree, including two
     placements in the same parent. To vary one copy, duplicate the group.
-- **Folders and organisation are collection state:** folders, labels, favourites, scene
+- **Folders and organisation are collection state:** folders, labels (which sources and
+  scenes carry, [ADR-0078](adr/0078-scenes-carry-labels.md)), favourites, scene
   icons, colours and `show_in_multiview`, and hotkey bindings are edited by undoable edits
   and saved with the collection, so every client and agent sees the same thing
   ([R-ARCH-001](RULES.md#R-ARCH-001); JStream is single-user, so a favourite is not per
@@ -270,8 +271,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   display order, and a variant sits under its parent, never in a folder. A folder sits in
   at most one other (`parent`, [ADR-0064](adr/0064-nested-scene-folders.md)), never inside itself, and
   the folders in one parent show in folder order. A folder that holds anything, or a
-  label a source carries, can't be deleted; `delete.plan` moves what the folder holds up
-  to its parent, or takes the label off its sources. Labels and
+  label a source or scene carries, can't be deleted; `delete.plan` moves what the folder
+  holds up to its parent, or takes the label off its sources and scenes. Labels and
   favourites on a source belong to the source, so every placement shares them. A hotkey
   binds only an action, never an edit; which client listens for the keys is a client
   decision. Deleting the scene, source, output or transition preset a binding's action
@@ -683,7 +684,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `folder.delete` and `scene.set_folder` organise the scene list, and `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `scene.set_meta` and
   `source.set_meta` edit labels and organisation metadata
-  ([ADR-0024](adr/0024-scene-structure.md), protocol 0.31).
+  ([ADR-0024](adr/0024-scene-structure.md), protocol 0.31; a scene's labels, protocol
+  0.45, [ADR-0078](adr/0078-scenes-carry-labels.md)).
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
@@ -901,7 +903,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 728 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 731 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking
