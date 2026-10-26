@@ -27,15 +27,16 @@ use windows::Win32::Media::MediaFoundation::{
     MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING, MF_SOURCE_READER_FIRST_AUDIO_STREAM,
     MF_SOURCE_READER_FIRST_VIDEO_STREAM, MF_SOURCE_READER_MEDIASOURCE,
     MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED, MF_SOURCE_READERF_ENDOFSTREAM,
-    MF_SOURCE_READERF_ERROR, MFAudioFormat_AAC, MFAudioFormat_Float, MFCreateAttributes,
-    MFCreateMediaType, MFCreateSourceReaderFromURL, MFMediaType_Audio, MFMediaType_Video,
-    MFVideoArea, MFVideoFormat_RGB32,
+    MF_SOURCE_READERF_ERROR, MFAudioFormat_AAC, MFAudioFormat_Float, MFAudioFormat_MP3,
+    MFCreateAttributes, MFCreateMediaType, MFCreateSourceReaderFromURL, MFMediaType_Audio,
+    MFMediaType_Video, MFVideoArea, MFVideoFormat_RGB32,
 };
 use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
 use windows::core::{GUID, HRESULT, HSTRING, Interface};
 
 use super::convert::{self, Area};
 use super::gapless::{AAC_PRIMING, Block, Gapless, frames_at};
+use super::lame::{self, Mp3Gapless};
 use crate::com::{Com, OsResult, os_error};
 use crate::video_device::source::MfStarted;
 
@@ -102,7 +103,13 @@ impl MediaDecoders for MfMediaDecoders {
             audio: audio.map(|format| MediaAudioInfo { format }),
             duration: duration(&reader),
         };
-        let gapless = audio.map(|format| gapless(&reader, format, info.duration));
+        let (gapless, mp3) = match audio {
+            Some(format) => {
+                let (gapless, mp3) = gapless(&reader, path, format, info.duration);
+                (Some(gapless), mp3)
+            }
+            None => (None, None),
+        };
         Ok(Box::new(MfMediaDecoder {
             reader,
             info,
@@ -110,6 +117,7 @@ impl MediaDecoders for MfMediaDecoders {
             format: config.video_format,
             at_end: false,
             gapless,
+            mp3,
             audio_ended: false,
             _mf: mf,
         }))
@@ -339,31 +347,114 @@ fn audio_format(reader: &IMFSourceReader) -> Result<Option<AudioFormat>, Platfor
 }
 
 /// What to cut from the audio stream: the priming and padding the source reports
-/// (`MF_SD_AUDIO_ENCODER_DELAY` and `_PADDING`, from an MP3's LAME header or an MP4's
-/// `iTunSMPB`), else for AAC the usual 1024 frames of priming, and whatever runs past
-/// the file's duration (`MF_PD_DURATION`, which an MP4's edit list sets to the content's
-/// length). The reader applies none of these itself (#445).
-fn gapless(reader: &IMFSourceReader, format: AudioFormat, duration: Option<MediaTime>) -> Gapless {
+/// (`MF_SD_AUDIO_ENCODER_DELAY` and `_PADDING`, from an MP4's `iTunSMPB`); for an MP3
+/// whose source reports neither, what its LAME tag says ([`lame`](super::lame)); else for
+/// AAC the usual 1024 frames of priming, and whatever runs past the file's duration (`MF_PD_DURATION`, which an
+/// MP4's edit list sets to the content's length). The reader applies none of these itself
+/// (#445). For an MP3 cut from its LAME tag, also what the next passes check.
+fn gapless(
+    reader: &IMFSourceReader,
+    path: &Path,
+    format: AudioFormat,
+    duration: Option<MediaTime>,
+) -> (Gapless, Option<Mp3Pass>) {
     let attribute = |key: &GUID| {
         // SAFETY: plain COM call on a live reader; the PROPVARIANT is cleared by its Drop.
         let value = unsafe { reader.GetPresentationAttribute(AUDIO, key) }.ok()?;
         u32::try_from(&value).ok()
     };
     // SAFETY: plain COM calls on a live reader and the type it returns.
-    let aac = unsafe {
+    let subtype = unsafe {
         reader
             .GetNativeMediaType(AUDIO, 0)
             .and_then(|t| t.GetGUID(&MF_MT_SUBTYPE))
     }
-    .is_ok_and(|subtype| subtype == MFAudioFormat_AAC);
-    let delay = attribute(&MF_SD_AUDIO_ENCODER_DELAY)
-        .or(aac.then_some(AAC_PRIMING))
-        .unwrap_or(0);
-    let padding = attribute(&MF_SD_AUDIO_ENCODER_PADDING).unwrap_or(0);
+    .ok();
+    let aac = subtype == Some(MFAudioFormat_AAC);
+    let reported = (
+        attribute(&MF_SD_AUDIO_ENCODER_DELAY),
+        attribute(&MF_SD_AUDIO_ENCODER_PADDING),
+    );
+    // Logged so a rerun shows which branch below ran (#445).
+    tracing::info!(
+        ?subtype,
+        delay = ?reported.0,
+        padding = ?reported.1,
+        "the audio stream's reported priming and padding"
+    );
+    let mp3 = (subtype == Some(MFAudioFormat_MP3) && reported == (None, None))
+        .then(|| read_lame(path))
+        .flatten();
     let end = duration
         .and_then(|d| d.rescale(format.timebase(), Rounding::Nearest).ok())
         .map(MediaTime::ticks);
-    Gapless::new(format.channels(), delay, padding, end)
+    if let Some(info) = mp3 {
+        // The header frame decoded as silence until a whole pass shows otherwise.
+        let pass = Mp3Pass::new(info);
+        tracing::info!(
+            ?info,
+            delay = info.delay(true),
+            padding = info.padding(),
+            "an MP3's gapless cut, from its LAME tag"
+        );
+        let gapless = Gapless::new(format.channels(), info.delay(true), info.padding(), end);
+        return (gapless, Some(pass));
+    }
+    let delay = reported.0.or(aac.then_some(AAC_PRIMING)).unwrap_or(0);
+    let padding = reported.1.unwrap_or(0);
+    (Gapless::new(format.channels(), delay, padding, end), None)
+}
+
+/// The LAME tag in the first bytes of the MP3 at `path`, when it has one.
+fn read_lame(path: &Path) -> Option<Mp3Gapless> {
+    use std::io::Read as _;
+    let mut head = Vec::new();
+    std::fs::File::open(path)
+        .and_then(|file| file.take(LAME_HEAD).read_to_end(&mut head))
+        .ok()?;
+    lame::read(&head)
+}
+
+/// How much of an MP3 [`read_lame`] reads: an ID3 tag with cover art can be large, and
+/// the LAME tag sits in the first frame after it.
+const LAME_HEAD: u64 = 1 << 20;
+
+/// An MP3 cut from its LAME tag, and what one whole pass from the start counted: whether
+/// the decoder decoded the header frame shows only once a pass ends.
+#[derive(Debug)]
+struct Mp3Pass {
+    info: Mp3Gapless,
+    /// What the cut assumes about the header frame.
+    header_decoded: bool,
+    /// Frames decoded since the start of the file, or `None` after a seek elsewhere.
+    decoded: Option<u64>,
+}
+
+impl Mp3Pass {
+    fn new(info: Mp3Gapless) -> Self {
+        Self {
+            info,
+            header_decoded: true,
+            decoded: Some(0),
+        }
+    }
+
+    /// The pass ended: when what it decoded contradicts the cut's guess about the header
+    /// frame, the delay the next passes cut instead.
+    fn ended(&mut self) -> Option<u32> {
+        let decoded = self.decoded?;
+        let seen = self.info.header_was_decoded(decoded)?;
+        if seen == self.header_decoded {
+            return None;
+        }
+        tracing::info!(
+            decoded,
+            header_decoded = seen,
+            "an MP3's pass counted otherwise: its next passes cut differently"
+        );
+        self.header_decoded = seen;
+        Some(self.info.delay(seen))
+    }
 }
 
 /// How long the file plays, when the container says.
@@ -388,6 +479,8 @@ struct MfMediaDecoder {
     at_end: bool,
     /// Cuts the audio to its content; `None` with no audio.
     gapless: Option<Gapless>,
+    /// An MP3 cut from its LAME tag, counting its passes.
+    mp3: Option<Mp3Pass>,
     /// The audio stream ended, and its last block was handed on: it reads as ended
     /// until the next seek.
     audio_ended: bool,
@@ -493,6 +586,10 @@ impl MediaDecoder for MfMediaDecoder {
             })?;
             if let Some(sample) = sample {
                 let block = samples(&sample, audio.format, timestamp)?;
+                if let Some(decoded) = self.mp3.as_mut().and_then(|mp3| mp3.decoded.as_mut()) {
+                    let frames = block.samples.len() / audio.format.channels().max(1);
+                    *decoded += u64::try_from(frames).unwrap_or(0);
+                }
                 // Priming, or the block held back to see whether it is the last.
                 match gapless.push(block) {
                     Some(block) => return buffer(audio.format, block).map(Some),
@@ -501,10 +598,12 @@ impl MediaDecoder for MfMediaDecoder {
             }
             if flags & MF_SOURCE_READERF_ENDOFSTREAM.0.cast_unsigned() != 0 {
                 self.audio_ended = true;
-                return gapless
-                    .finish()
-                    .map(|block| buffer(audio.format, block))
-                    .transpose();
+                let next_delay = self.mp3.as_mut().and_then(Mp3Pass::ended);
+                let last = gapless.finish();
+                if let Some(delay) = next_delay {
+                    gapless.set_delay(delay);
+                }
+                return last.map(|block| buffer(audio.format, block)).transpose();
             }
             // No sample and no end: a gap in the stream. Read on.
         }
@@ -519,6 +618,10 @@ impl MediaDecoder for MfMediaDecoder {
         let position = PROPVARIANT::from(hns);
         if let Some(gapless) = &mut self.gapless {
             gapless.reset();
+        }
+        if let Some(mp3) = &mut self.mp3 {
+            // Only a pass from the very start counts the whole file.
+            mp3.decoded = (hns == 0).then_some(0);
         }
         self.audio_ended = false;
         // SAFETY: plain COM call; GUID_NULL is 100 ns units, and `position` is a VT_I8

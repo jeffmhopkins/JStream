@@ -633,6 +633,7 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
   color: var(--muted);
 }
 .canvas-tool[aria-pressed="true"] { background: var(--selected); color: #b5ceff; }
+.canvas-tool.crop-tool[aria-pressed="true"] { background: #4a3510; color: #f5c77e; }
 .canvas-tool svg {
   width: 17px;
   height: 17px;
