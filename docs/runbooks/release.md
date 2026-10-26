@@ -41,13 +41,20 @@ depends_on = ["docs/ARCHITECTURE.md#packaging", "docs/adr/0066-portable-windows-
    the release ships.
 2. **Check the version.** The workspace version at that commit is the one to release; if
    it is already released, bump it first ([The version](#version)).
-3. **Tag it.** `git tag -a v<version> <commit> -m "JStream <version>"`, then
-   `git push origin v<version>`. Only the maintainer, or an agent the maintainer asked,
-   pushes a release tag.
-4. **The workflow** (`.github/workflows/release.yml`) runs on the tag:
+3. **Tag it**, one of two ways. Only the maintainer, or an agent the maintainer asked,
+   releases.
+   - From a clone: `git tag -a v<version> <commit> -m "JStream <version>"`, then
+     `git push origin v<version>`.
+   - Without git, to release `main`'s head: on GitHub, **Actions** › **release** ›
+     **Run workflow**, branch `main`, **Run workflow** (an agent can start the same run
+     through the API). The run takes the tag `v<version>` from `main`'s version and
+     `publish` creates it on the commit it built, then the release. Steps 1 and 2 then
+     apply to `main`'s head when the run starts.
+4. **The workflow** (`.github/workflows/release.yml`) runs on the tag, or on the run:
    - `ui` fails unless the tag is `v` and the workspace version (every shipped app must
      have it) and the tagged commit is on `main`, then builds the web UI for release with
-     the same pinned tools as `after-review`'s `dist-ui`;
+     the same pinned tools as `after-review`'s `dist-ui`. A run started by hand must be on
+     `main`, and stops if the version's tag already exists or the check can't tell;
    - `zip` runs `cargo xtask dist --revision v<version>` on `windows-latest` from a clean
      build, so the zip is `jstream-v<version>-windows-x64.zip`, browser helper and CEF
      runtime included, and writes its SHA-256 and the release notes: the getting-started
@@ -56,7 +63,8 @@ depends_on = ["docs/ARCHITECTURE.md#packaging", "docs/adr/0066-portable-windows-
    - `publish`, the only job allowed to write to the repository, creates the GitHub
      release for the tag with the zip and its `.sha256`, those notes and GitHub's
      generated list of merged PRs. A version with a pre-release part is marked as a
-     pre-release.
+     pre-release. On a run started by hand it first creates the tag, and fails if the tag
+     appeared since `ui` checked, so a release never lands on another commit's tag.
 5. **Check the release page**: the zip downloads, its checksum matches, and it starts on
    a clean Windows machine.
 

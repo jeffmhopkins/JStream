@@ -2,7 +2,9 @@
 # release (docs/runbooks/release.md). The tag is `v` and the workspace version the shipped
 # apps take (Cargo.toml's [workspace.package]); a version with a pre-release part
 # (`0.1.0-alpha.1`) makes a pre-release. Builds are unsigned until a certificate exists
-# (ADR-0066). Nothing else starts it.
+# (ADR-0066). A pushed tag starts it, or the maintainer runs it on main from the Actions
+# tab (workflow_dispatch): then the tag is `v` and main's version, and `publish` creates it
+# on that commit before the release. Nothing else starts it.
 # Editing this file is a governance change (R-GOV-001).
 
 # Third-party actions are pinned to full commit SHAs, with the release in a trailing comment.
@@ -13,6 +15,7 @@ name: release
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -34,6 +37,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
     env:
       TRUNK_VERSION: 0.21.14
       TRUNK_SHA256: f2b4680cd239693a646a2795e4633c625328d7b2a044fbe749fa3a2fe9e7036b
@@ -48,10 +52,16 @@ jobs:
       - run: rustup toolchain install
       - name: Check that the tagged commit is on main
         run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "::error::run the release on main, not $GITHUB_REF_NAME (docs/runbooks/release.md)"
+            exit 1
+          fi
           if ! git merge-base --is-ancestor HEAD origin/main; then
             echo "::error::$GITHUB_REF_NAME is not on main: tag a commit of main (docs/runbooks/release.md)"
             exit 1
           fi
+      # A dispatched run has no tag yet: it takes `v` and the version, and stops if that
+      # tag already exists, since a tag is never moved.
       - name: Check the tag against the shipped apps' version
         id: version
         env:
@@ -63,11 +73,22 @@ jobs:
             echo "::error::the shipped apps have different versions: $versions"
             exit 1
           fi
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            TAG="v$versions"
+            # ls-remote exits 2 when the ref is absent; anything else (found, or an error) stops.
+            status=0
+            git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null || status=$?
+            if [ "$status" -ne 2 ]; then
+              echo "::error::$TAG already exists, or the check failed (exit $status): bump the version to release main again (docs/runbooks/release.md)"
+              exit 1
+            fi
+          fi
           if [ "$TAG" != "v$versions" ]; then
             echo "::error::tag $TAG doesn't match the workspace version $versions: tag v$versions instead"
             exit 1
           fi
           echo "version=$versions" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
       - name: Install trunk, the wasm-bindgen CLI and wasm-opt
         run: |
           set -euo pipefail
@@ -124,14 +145,14 @@ jobs:
           Add-Content -Path $env:GITHUB_PATH -Value $ninja
       - shell: bash
         env:
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ needs.ui.outputs.tag }}
         run: cargo xtask dist --ui-dir ui-dist --out dist --revision "$TAG"
       # The release's text: what the build is, the unsigned warning, the CEF build it
       # ships (ADR-0021 asks each release to name it) and the zip's SHA-256.
       - name: Write the checksum and the release notes
         shell: bash
         env:
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ needs.ui.outputs.tag }}
           VERSION: ${{ needs.ui.outputs.version }}
           REPO: ${{ github.repository }}
         run: |
@@ -173,12 +194,18 @@ jobs:
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ needs.ui.outputs.tag }}
           VERSION: ${{ needs.ui.outputs.version }}
         run: |
           set -euo pipefail
           prerelease=()
           if [[ "$VERSION" == *-* ]]; then prerelease=(--prerelease); fi
+          # A dispatched run creates its tag on the commit it built. Creating the ref fails
+          # (422) if the tag appeared since `ui` checked, so the release never lands on a tag
+          # of another commit; then both paths need the tag to exist.
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA" > /dev/null
+          fi
           gh release create "$TAG" release/*.zip release/*.sha256 \
             --repo "$GITHUB_REPOSITORY" --verify-tag "${prerelease[@]}" \
             --title "JStream $VERSION" --notes-file release/notes.md --generate-notes
