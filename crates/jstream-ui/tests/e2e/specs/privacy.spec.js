@@ -82,6 +82,21 @@ test('Pause toggles privacy from anywhere, and every client shows it', async ({ 
   await expect(field).toBeFocused();
 });
 
+test('Set key in the Inspector leaves Pause to the privacy screen', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  await page.locator('.scenes-panel li.row').filter({ hasText: 'Intro' }).locator('.row-main').click();
+  const row = page.locator('.panel-inspector .hotkey-row');
+  await row.getByRole('button', { name: 'Set key' }).click();
+  await expect(row.locator('.set-key')).toHaveText('Press a key…');
+  await page.keyboard.press('Pause');
+  await expect(privacyButton(page)).toHaveText('Privacy on');
+  // Pause isn't bound: the capture still waits, and takes the next key.
+  await expect(row.locator('kbd')).toHaveCount(0);
+  await expect(row.locator('.set-key')).toHaveText('Press a key…');
+  await page.keyboard.press('F1');
+  await expect(row.locator('kbd')).toHaveText(['F1']);
+});
+
 test('a client that connects while privacy is on shows it at once', async ({ page, context, daemon }) => {
   await connect(page, daemon);
   await privacyButton(page).click();

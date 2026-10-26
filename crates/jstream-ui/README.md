@@ -272,7 +272,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Properties, the source's settings form. A scene shows its object count, the scenes
   that use it as a source, its Hotkey row (the chords bound to its `scene.switch`, an ×
   that unbinds one, and Set key, which binds the next chord pressed and takes it from
-  whatever it ran), and its Transition in and out (`scene.set_transitions`, with
+  whatever it ran; Pause, the privacy key, is never bound and still toggles privacy), and its Transition in and out (`scene.set_transitions`, with
   the presets read by `state.get` whenever the collection changes). The panel is built
   once per selected item or scene and each field follows the collection, so an edit
   doesn't rebuild it or take the focus. The fields show committed values: a canvas drag

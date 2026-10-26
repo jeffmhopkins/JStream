@@ -216,7 +216,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   frame blurred under its notice and the Mic's row reading "muted (privacy)" while
   Desktop audio's doesn't, then off again; Pause toggling it with focus in a gain
   field, and a second client following each change and turning it off with Pause, and
-  then on again from a scene's rename field, which keeps its other keys; a
+  then on again from a scene's rename field, which keeps its other keys; Pause
+  toggling it while the Inspector's Set key waits, which leaves Pause unbound and
+  binds the next key; a
   client that connects while it is on showing it at once; and the vertical mixer's
   Mic strip reading "muted (privacy)" under its short name while Desktop audio's
   doesn't.
