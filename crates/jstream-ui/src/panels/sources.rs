@@ -12,6 +12,10 @@
 //! `delete.plan`, and one on the panel's empty space opens the panel's menu, whose Add
 //! source opens the Add source dialog (`add_source.rs`).
 //!
+//! A keyframe scene lists its parent's items as it shows them (ADR-0049): the eye
+//! writes the keyframe's override, and what would change the parent's items (Del,
+//! dragging, Add source) is off, as the caption says.
+//!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#objects
 
 use crate::app::SessionContext;
@@ -166,6 +170,14 @@ pub fn Sources() -> impl IntoView {
     let expanded = RwSignal::new(HashSet::<ItemId>::new());
 
     let scene = move || studio.selection.with(|s| s.scene.clone());
+    // The selected scene's parent's name, when it is a keyframe scene.
+    let keyframe_of = Memo::new(move |_| {
+        let scene_id = scene()?;
+        studio
+            .collection
+            .with(|c| c.as_ref()?.parent_of(&scene_id).map(|p| p.name.clone()))
+    });
+    let in_keyframe = move || keyframe_of.with(Option::is_some);
     let scene_name = move || {
         let scene_id = scene()?;
         studio
@@ -364,14 +376,15 @@ pub fn Sources() -> impl IntoView {
             }
         };
         // F2 renames the source, Del removes the item from the scene, and Ctrl+D and
-        // Ctrl+Shift+D duplicate it as a reference or a clone, as the menu's hints say.
+        // Ctrl+Shift+D duplicate it as a reference or a clone, as the menu's hints say. In a
+        // keyframe, Del and the duplicates do nothing, and run no hotkey either.
         let on_key = {
             let item = item_id.clone();
             let scene_id = row_scene.clone();
             move |event: leptos::ev::KeyboardEvent| match event.key().as_str() {
                 "d" | "D" if event.ctrl_key() || event.meta_key() => {
                     event.prevent_default();
-                    if let Some(cx) = item_cx {
+                    if let Some(cx) = item_cx.filter(|_| !in_keyframe()) {
                         cx.duplicate_selected(
                             &scene_id,
                             std::slice::from_ref(&item),
@@ -385,9 +398,11 @@ pub fn Sources() -> impl IntoView {
                 }
                 "Delete" => {
                     event.prevent_default();
-                    send(Edit::ItemRemove {
-                        item_id: item.clone(),
-                    });
+                    if !in_keyframe() {
+                        send(Edit::ItemRemove {
+                            item_id: item.clone(),
+                        });
+                    }
                 }
                 _ => {}
             }
@@ -395,9 +410,15 @@ pub fn Sources() -> impl IntoView {
         let toggle = {
             let item = item_id.clone();
             move |_: leptos::ev::MouseEvent| {
+                // A nested scene's item belongs to that scene, which a keyframe doesn't
+                // override.
+                if inside && in_keyframe() {
+                    return;
+                }
+                // Addressed to the selected scene: in a keyframe, its override.
                 send(Edit::ItemSetVisible {
                     item_id: item.clone(),
-                    scene_id: None,
+                    scene_id: if inside { None } else { scene() },
                     visible: !visible,
                 });
             }
@@ -472,7 +493,11 @@ pub fn Sources() -> impl IntoView {
         let press = {
             let key = key.clone();
             move |event: leptos::ev::PointerEvent| {
-                if !inside && !filter.active() && renaming.with_untracked(Option::is_none) {
+                if !inside
+                    && !in_keyframe()
+                    && !filter.active()
+                    && renaming.with_untracked(Option::is_none)
+                {
                     reorder.down(&key, &event);
                 }
             }
@@ -573,11 +598,12 @@ pub fn Sources() -> impl IntoView {
             let items: Vec<ItemId> = all_rows().into_iter().rev().map(|r| r.item_id).collect();
             studio.select_items(items);
         };
+        let fixed = adder.is_none() || in_keyframe();
         menus.open(
             &event,
             vec![
-                Entry::item("Add source…", open(false)).disabled_if(adder.is_none()),
-                Entry::item("Add scene as source…", open(true)).disabled_if(adder.is_none()),
+                Entry::item("Add source…", open(false)).disabled_if(fixed),
+                Entry::item("Add scene as source…", open(true)).disabled_if(fixed),
                 {
                     Entry::item("New group", move || {
                         if let Some(cx) = item_cx {
@@ -587,7 +613,7 @@ pub fn Sources() -> impl IntoView {
                             cx.group(&group_into, &items);
                         }
                     })
-                    .disabled_if(item_cx.is_none())
+                    .disabled_if(item_cx.is_none() || in_keyframe())
                 },
                 Entry::Sep,
                 Entry::item("Select all", select_all).hint("Ctrl+A"),
@@ -608,6 +634,11 @@ pub fn Sources() -> impl IntoView {
                 <p class="tree-caption">
                     "In “" {scene_name} "”, top to bottom"
                 </p>
+                {move || keyframe_of.get().map(|parent| view! {
+                    <p class="tree-caption keyframe-note">
+                        "Keyframe of “" {parent} "”: its objects. Add, remove and restack them there."
+                    </p>
+                })}
                 <ul
                     class="rows tree-rows"
                     class:reordering=move || reorder.dragged.with(Option::is_some)

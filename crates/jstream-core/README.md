@@ -609,7 +609,12 @@ which the mock answers with a made-up display. It does send the folder, label an
 metadata edits ([ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4): each
 refusal, the in-use deletes, the reads, undo and redo, and a filed scene's and a
 labelled source's delete, which the test checks applies, undone with their metadata;
-`history.rs` checks the engine's undo of them further. The mock stays the reference
+`history.rs` checks the engine's undo of them further. It sends the keyframe edits
+([ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)) too: overrides
+written and cleared, each refusal, a `live.set` on a keyframe scene, the refused parent
+delete, and a keyframe scene with a role deleted and undone. It leaves out an
+`item.remove` that drops an override, since the mock leaves the batch result's
+`dropped_overrides` empty. The mock stays the reference
 clients were developed against, and `jstream-graph` the only implementation of the edit rules
 here.
 

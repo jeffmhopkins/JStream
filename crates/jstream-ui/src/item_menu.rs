@@ -3,7 +3,11 @@
 //! layer order, Center, Fit and Stretch to canvas, Reset rotation, Clear crop, Crop
 //! (crop mode), the two duplicates and Remove from scene, and for a placement of a shared
 //! or copied source the switch between a reference and a clone (decision register D3,
-//! ADR-0023). Each choice sends one batch, so one undo step.
+//! ADR-0023). Each choice sends one batch, so one undo step. In a keyframe scene only
+//! geometry, crop, visibility and opacity change (ADR-0049), so what would change the
+//! parent's items (layer order, the duplicates, Remove, the reference or clone switch,
+//! Group selection, New group, Ungroup, Add source) is disabled, and the placement
+//! choices write the keyframe's overrides.
 //!
 //! Docs: docs/UI-FEATURES.md#menus
 
@@ -561,6 +565,8 @@ struct Facts {
     picture: bool,
     /// Whether the primary item's source plays its audio, if it has any.
     audio: Option<bool>,
+    /// Whether the scene is a keyframe scene, which shows its parent's items.
+    keyframe: bool,
     /// Whether the primary item is a reference or a clone.
     sharing: Sharing,
 }
@@ -594,6 +600,7 @@ impl Facts {
             kind: source.kind.clone(),
             picture,
             audio: source.audio.as_ref().map(|a| a.enabled),
+            keyframe: scene.variant_of.is_some(),
             sharing: Sharing::of(collection, primary),
         })
     }
@@ -811,6 +818,8 @@ impl Context {
 fn sharing_entries(cx: Context, facts: &Facts) -> Vec<Entry> {
     let item = facts.items[0].clone();
     let source = facts.source_id.clone();
+    // Switching changes the parent's item, which a keyframe doesn't own.
+    let keyframe = facts.keyframe;
     let (head, clone) = match &facts.sharing {
         Sharing::Own => return Vec::new(),
         Sharing::Clone { name, .. } => (format!("Duplicate of {name}"), true),
@@ -828,6 +837,7 @@ fn sharing_entries(cx: Context, facts: &Facts) -> Vec<Entry> {
             }
         })
         .checked(!clone)
+        .disabled_if(keyframe)
     };
     let independent = {
         let name = facts.name.clone();
@@ -840,6 +850,7 @@ fn sharing_entries(cx: Context, facts: &Facts) -> Vec<Entry> {
             cx.send(to_clone(&item, &source, &format!("{name} copy"), copy));
         })
         .checked(clone)
+        .disabled_if(keyframe)
     };
     vec![Entry::Head(head), reference, independent, Entry::Sep]
 }
@@ -856,6 +867,7 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
     };
     let facts = Rc::new(facts);
     let many = facts.items.len() > 1;
+    let keyframe = facts.keyframe;
     let primary = facts.items[0].clone();
 
     let properties = {
@@ -882,7 +894,9 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
     });
     let remove = {
         let ids = facts.items.clone();
-        Entry::item("Remove from scene", move || cx.remove(&ids)).hint("Del")
+        Entry::item("Remove from scene", move || cx.remove(&ids))
+            .hint("Del")
+            .disabled_if(keyframe)
     };
 
     // A nested scene (5.2.8).
@@ -900,7 +914,7 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
             let entry = Entry::item("Ungroup", move || cx.ungroup(&id));
             Some(match kept {
                 Some(kept) => entry.disabled_if(true).hint(kept.reason()),
-                None => entry,
+                None => entry.disabled_if(keyframe),
             })
         });
         let mut list = vec![properties, filters, pop_out, Entry::Sep];
@@ -934,7 +948,7 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
             Entry::Head(format!("{} items selected", facts.items.len())),
             {
                 let (scene, ids) = (scene_id.clone(), facts.items.clone());
-                Entry::item("Group selection", move || cx.group(&scene, &ids))
+                Entry::item("Group selection", move || cx.group(&scene, &ids)).disabled_if(keyframe)
             },
             Entry::Sep,
         ]);
@@ -955,6 +969,7 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
                     .collect(),
             );
         })
+        .disabled_if(keyframe)
     };
     let scene = scene_id.clone();
     let arrange = |label: &str, how: fn(&Facts) -> Vec<(ItemId, ItemGeometry)>| {
@@ -1006,7 +1021,8 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
     let duplicate = |label: &str, clone: bool| {
         let facts = Rc::clone(&facts);
         let scene = scene_id.clone();
-        Entry::item(label, move || cx.duplicate(scene.clone(), &facts, clone)).disabled_if(many)
+        Entry::item(label, move || cx.duplicate(scene.clone(), &facts, clone))
+            .disabled_if(many || keyframe)
     };
     list.extend([
         layer("Bring to front", Layer::Front),
@@ -1035,8 +1051,8 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
             list.extend([
                 Entry::Sep,
                 Entry::item("Add source…", move || cx.add_source(scene.clone()))
-                    .disabled_if(cx.adder.is_none()),
-                Entry::item("New group", move || cx.group(&into, &ids)),
+                    .disabled_if(cx.adder.is_none() || keyframe),
+                Entry::item("New group", move || cx.group(&into, &ids)).disabled_if(keyframe),
             ]);
         }
     }
