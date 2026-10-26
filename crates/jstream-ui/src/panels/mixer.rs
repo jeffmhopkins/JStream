@@ -875,8 +875,9 @@ pub fn Mixer() -> impl IntoView {
 }
 
 /// The master card (spec-panels.md M3): the fold button over the channels with their
-/// count, the monitor and program FX buttons that aren't built yet, the short-term
-/// loudness against the target, and the true peak.
+/// count, the monitor button that isn't built yet, the program output's FX button, which
+/// shows the master chain in the Filters panel (FL-07), the short-term loudness against
+/// the target, and the true peak.
 #[component]
 fn MasterCard(panel: Panel, open: RwSignal<bool>) -> AnyView {
     let count = move || {
@@ -934,13 +935,7 @@ fn MasterCard(panel: Panel, open: RwSignal<bool>) -> AnyView {
                 >
                     "Hear: after FX"
                 </button>
-                <button
-                    class="fx-button"
-                    disabled
-                    title="Filters on the program output: the master chain isn't built yet (FL-07)"
-                >
-                    "FX 0"
-                </button>
+                <MasterFx />
             </div>
             <div class="master-row">
                 <span class="master-label">"Loudness"</span>
@@ -964,9 +959,44 @@ fn MasterCard(panel: Panel, open: RwSignal<bool>) -> AnyView {
     .into_any()
 }
 
+/// The program output's "FX N" button on the master card and strip (spec-panels.md M3,
+/// M5): it counts the master chain's filters, from `Studio`'s collection, and shows that
+/// chain in the Filters panel (FL-07).
+#[component]
+fn MasterFx() -> impl IntoView {
+    let fx = use_context::<crate::panels::filters::FilterDialogs>();
+    let dock = use_context::<crate::workspace::DockState>();
+    let studio = use_context::<crate::store::Studio>();
+    let label = move || {
+        let chains = studio
+            .and_then(|s| s.collection.with(|c| c.as_ref().map(|c| c.master.clone())))
+            .unwrap_or_default();
+        crate::panels::outputs::fx_label(&chains)
+    };
+    let show = move |_| {
+        if let Some(fx) = fx {
+            fx.pick(jstream_control::protocol::FilterOwner::Master);
+            if let Some(dock) = dock {
+                dock.0.update(|d| d.show(crate::dock::PanelId::Filters));
+            }
+        }
+    };
+    view! {
+        <button
+            class="fx-button"
+            disabled=fx.is_none()
+            title="Filters on the program output"
+            on:click=show
+        >
+            {label}
+        </button>
+    }
+}
+
 /// The master strip of the vertical mixer (spec-panels.md M5): the fold button with the
 /// channel count, the short-term loudness filling up to the target line, the loudness
-/// and true peak, and the FX and monitor buttons that aren't built yet.
+/// and true peak, the program output's FX button, and the monitor button that isn't
+/// built yet.
 #[component]
 fn MasterStrip(panel: Panel, open: RwSignal<bool>) -> AnyView {
     let count = move || {
@@ -1020,13 +1050,7 @@ fn MasterStrip(panel: Panel, open: RwSignal<bool>) -> AnyView {
                     if over { note } else { "" }
                 }}
             </span>
-            <button
-                class="fx-button"
-                disabled
-                title="Filters on the program output: the master chain isn't built yet (FL-07)"
-            >
-                "FX 0"
-            </button>
+            <MasterFx />
             <button
                 class="ghost-button"
                 disabled

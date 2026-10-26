@@ -53,8 +53,9 @@ Contents ([Design](#design) explains the choices):
   and `engine_url_for_page`, the engine URL the connect form offers.
 - **Store** (`store.rs`): `Studio`, the state the scene, sources and properties panels
   share: the collection as `state.get` last reported it (`Collection`, with its buses
-  for the bus picker, its hotkey bindings and its scene folders; a keyframe scene's items
-  are its parent's with its overrides applied, `shown_items`), the program
+  for the bus picker, its hotkey bindings, its scene folders and the master stage's
+  chains, and `chains` to read any owner's; a keyframe scene's items are its parent's
+  with its overrides applied, `shown_items`), the program
   scene, whether the privacy screen is on (from `privacy.get` and `privacy.changed`,
   which the header, the canvas and the mixer show), the `Selection`, each source's size
   (`Sizes`, from `source.sizes` and `source.size_changed`; `Collection::source_size`
@@ -84,11 +85,13 @@ Contents ([Design](#design) explains the choices):
   `SourceProperties` and the `PropertiesDialog` context that opens it), the Filters
   panel and its dialogs (`filters.rs`: `Filters`, `Chains`, which the Properties dialog
   shows too, `AddFilter`, `FilterSettings` and the `FilterDialogs` context that opens
-  them, with the catalogue, the row summaries, the choice of in place or dialog and
-  Cancel's restore patch tested natively), the number
+  them and holds the chain an FX button picked, with the catalogue, the row summaries,
+  the choice of in place or dialog, each owner's chains, name and note, and Cancel's
+  restore patch tested natively), the number
   field the panels share (`number.rs`) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
-  (creating, editing and deleting streams, recordings and the virtual camera, their
-  stream keys, start and stop, and the pipeline's health), and the calls and
+  (the program output and each output with its FX button, creating, editing and
+  deleting streams, recordings and the virtual camera, their stream keys, start and
+  stop, and the pipeline's health), and the calls and
   logic behind it and the header's Go Live, tested natively against `MockEngine`; and `mixer.rs`: `Mixer`, the
   audio mixer (the master card with its loudness and true peak, the channels folded
   under it with their meters, faders, dB fields, mutes and routing, the same as
@@ -342,6 +345,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `fresh_id`; the new filter opens in place, or in the settings dialog when it has more
   than three settings or isn't described yet. Edit filters… in the item menus selects the item and shows the
   panel. Names come from the prototype's catalogue, then `kind.list`, then the kind's ID.
+  An FX button (the Outputs panel's rows, the Mixer's master card or strip) picks the program
+  output's chain (owner `master`) or an output's (ADR-0027) instead, and shows the
+  panel; the same rows and dialogs edit it with that owner. Only their audio chains
+  show, since the engine refuses their video chains so far, and the virtual camera,
+  which has no sound, has none. Selecting another item, or Edit filters…, goes back to
+  the selected item's source.
 - **The shell** is the header bar over the workspace. A failed call shows in a
   dismissable bar. The look follows the UI prototype ([UI features](../../docs/UI-FEATURES.md)): dark only, with the
   prototype's palette as CSS variables in `style.css`. The font stack names IBM Plex
@@ -389,7 +398,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `events.dropped`; `output.state_changed` updates one output's state in place. It
   creates RTMP(S), recording and virtual camera outputs (IDs `output-N`, the first free one), changes
   an RTMP server URL (`output.set_target`) and the encoder profile, deletes a stopped
-  output, and starts and stops each. The header's "Go Live" starts every stopped or
+  output, and starts and stops each. Above the cards, the program output's row
+  ("master") and a row per output with its state each have an "FX N" button counting
+  that chain's filters, which shows the chain in the Filters panel (below the rows,
+  the prototype's footnote). The header's "Go Live" starts every stopped or
   failed RTMP output whose stream key is set, and "End stream", which replaces it while
   any runs, stops the running ones; recordings start from their own buttons or the
   header's Record. Both try every output, even after one fails, and report
@@ -473,8 +485,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the −14 LUFS target (70% along, where the prototype draws it), the three loudness
   readings in its tooltip, its true peak with "safe" or a warning over 0 dBTP, and a
   button that resets the integrated loudness (`audio.reset_loudness`). Its monitor
-  and FX buttons show disabled: the monitor control isn't built yet (MX-05), and the
-  engine has no master chain yet. Each source gets a row, ordered by name: its meter, fader, a dB field
+  button shows disabled, as the monitor control isn't built yet (MX-05); its "FX N"
+  counts the master chain's filters, from `Studio`'s collection, and shows that chain
+  in the Filters panel. Each source gets a row, ordered by name: its meter, fader, a dB field
   (the shared `NumberField`), mute and, folded under "Routing", whether its audio is
   on, when it is heard (`always` or `when_shown`) and its send into each bus (on or
   off, and its gain). A nested scene's row has only the routing toggles, since it has
@@ -483,7 +496,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   title bar, `MixerFlip`, sets an orientation for the session; a memo, so a dock change
   that keeps the orientation doesn't rebuild the rows): a master strip with the
   loudness filling up to the target line, the loudness and true peak (its warning
-  heard by a screen reader only, for want of room), then, folded
+  heard by a screen reader only, for want of room) and the same "FX N", then, folded
   beside it, a strip per source with its short name, a meter filling upwards, the dB
   field stacked + over − and scrubbed up and down, and mute. Each bus gets a strip, the master first, with renaming
   and (except the master) deleting. A delete reads `delete.plan`
