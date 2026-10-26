@@ -939,6 +939,7 @@ pub(crate) fn actions() -> Vec<Action> {
             max_height: None,
             fps: Some(30),
             codecs: vec![PreviewCodec::H264, PreviewCodec::Jpeg],
+            scene_id: None,
         },
         Action::PreviewUnsubscribe { channel: 1 },
         Action::SceneSwitch {
@@ -976,6 +977,14 @@ pub(crate) fn actions() -> Vec<Action> {
             plugin_id: PluginId::new("plg_1"),
         },
         Action::PrivacySet { on: true },
+        Action::PreviewSubscribe {
+            channel: 2,
+            max_width: None,
+            max_height: None,
+            fps: None,
+            codecs: Vec::new(),
+            scene_id: Some(SceneId::new("scn_2")),
+        },
     ]
 }
 

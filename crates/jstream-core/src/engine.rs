@@ -20,12 +20,12 @@ use crate::live::{Built, LiveHost, LiveSources, LoadedAsset};
 use crate::lock;
 use crate::outputs::Outputs;
 use crate::plugins::kinds::{self as clap_kinds, ClapScan};
-use crate::preview::{Opening, PreviewHub, PreviewSource, SessionPreviews};
+use crate::preview::{Current, Opening, PreviewHub, PreviewSource, SessionPreviews};
 use crate::privacy::Privacy;
 use crate::runtime::{
     Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, MixKey, OpenPublish,
-    OutputEncode, OutputStats, Pending, PipelineEvent, Release, RenderHub, Running, SizeChange,
-    StartError, VcamOut, launch, launch_program, launch_vcam, parts_from,
+    OutputEncode, OutputStats, Pending, PipelineEvent, Release, RenderHub, RenderSnapshot, Running,
+    SizeChange, StartError, VcamOut, launch, launch_program, launch_vcam, parts_from,
 };
 use crate::session::InProcessControl;
 use crate::snapshot::{
@@ -36,7 +36,7 @@ use crate::transition;
 use crate::youtube::{NO_YOUTUBE_CLIENT, Youtube, YoutubeSetup};
 use jstream_audio::OutputTapId;
 use jstream_graph::Graph;
-use jstream_media::{FrameSize, MediaTime};
+use jstream_media::FrameSize;
 use jstream_platform::{
     Backends, CaptureTarget, CaptureTargetInfo, GpuContext, PluginHosts, Secret, StreamKeyStore,
 };
@@ -1129,9 +1129,21 @@ impl Engine {
                 max_height,
                 fps,
                 codecs,
+                scene_id,
             } => {
                 let settings = PreviewSettings::resolve(max_width, max_height, fps, &codecs)?;
-                let rev = lock(&self.shared.state).graph.rev();
+                let rev = {
+                    let state = lock(&self.shared.state);
+                    if let Some(scene_id) = &scene_id
+                        && state.graph.state().scene(scene_id).is_none()
+                    {
+                        return Err(ProtocolError::NotFound {
+                            entity: EntityKind::Scene,
+                            id: scene_id.as_str().to_owned(),
+                        });
+                    }
+                    state.graph.rev()
+                };
                 let codecs = self.media.as_ref().and_then(|host| {
                     lock(&host.backends)
                         .as_ref()
@@ -1143,12 +1155,23 @@ impl Engine {
                     Arc::downgrade(&shared),
                     channel,
                     settings,
-                    Opening { codecs, rev },
+                    Opening {
+                        codecs,
+                        rev,
+                        scene: scene_id.clone(),
+                    },
                 )?;
+                if scene_id.is_some() {
+                    // Plans the scene, which the stream waits for.
+                    self.shared.replan_and_sync();
+                }
                 Ok(CallResult::Action { result: None })
             }
             Action::PreviewUnsubscribe { channel } => {
-                previews.unsubscribe(channel);
+                if previews.unsubscribe(channel) {
+                    // Stops planning the scene, unless another stream shows it.
+                    self.shared.replan_and_sync();
+                }
                 Ok(CallResult::Action { result: None })
             }
             other => Err(not_implemented(other.name())),
@@ -1864,6 +1887,16 @@ impl Engine {
         Arc::clone(&lock(&self.shared.state).render)
     }
 
+    /// The scenes planned for preview streams, for tests.
+    #[cfg(test)]
+    pub(crate) fn previewed_scenes(&self) -> Vec<SceneId> {
+        lock(&self.shared.state)
+            .scene_shots
+            .keys()
+            .cloned()
+            .collect()
+    }
+
     /// How the program stage fares with audio source `source_id`, for tests.
     #[cfg(test)]
     pub(crate) fn audio_status(
@@ -2434,6 +2467,9 @@ struct State {
     /// every change to the graph or a stored frame (it only becomes a new generation when
     /// what it draws changed).
     render: Arc<RenderHub>,
+    /// What each scene with an open preview stream draws, planned with the program mix
+    /// and replaced only when what it draws changed: read by the preview thread alone.
+    scene_shots: Arc<BTreeMap<SceneId, Arc<RenderSnapshot>>>,
     /// How many `stats.tick` events this engine has emitted. The next one uses this plus one.
     stats_seq: u64,
     /// Every client's open live-value gestures (ADR-0032), and the committed values the
@@ -3062,6 +3098,8 @@ impl State {
             audio,
             render,
             studio,
+            scene_shots,
+            shared,
             ..
         } = self;
         let now = live.now();
@@ -3086,7 +3124,42 @@ impl State {
             studio.finish();
         }
         render.publish(planning.shot);
-        live.wake_at(planning.wake);
+        // Each previewed scene, after the program mix's plan has ended, so it reaches
+        // no source: a preview never makes a source shown or heard (ADR-0028).
+        let mut wake = planning.wake;
+        let mut shots = BTreeMap::new();
+        let previews = shared.upgrade();
+        for scene_id in previews.iter().flat_map(|shared| shared.previews.scenes()) {
+            if graph.state().scene(&scene_id).is_none() {
+                if let Some(shared) = &previews {
+                    shared
+                        .previews
+                        .end_scene(&scene_id, graph.rev(), "the scene was deleted");
+                }
+                continue;
+            }
+            let scene = snapshot::plan_scene(
+                graph,
+                &scene_id,
+                &mut |id| match frames.get(id) {
+                    Some(frame) => Some(Look::Frame(frame.clone(), None)),
+                    None => live.look_quiet(id, now, frame_versions),
+                },
+                &assets,
+            );
+            wake = snapshot::earliest(wake, scene.wake);
+            let shot = RenderSnapshot::following(scene_shots.get(&scene_id), scene.shot);
+            shots.insert(scene_id, shot);
+        }
+        let same = shots.len() == scene_shots.len()
+            && shots
+                .iter()
+                .zip(scene_shots.iter())
+                .all(|((a, x), (b, y))| a == b && Arc::ptr_eq(x, y));
+        if !same {
+            *scene_shots = Arc::new(shots);
+        }
+        live.wake_at(wake);
         planning.end_ms
     }
 
@@ -3246,21 +3319,15 @@ impl State {
 }
 
 impl PreviewSource for Shared {
-    fn current(
-        &self,
-    ) -> (
-        Arc<crate::runtime::RenderSnapshot>,
-        Arc<crate::snapshot::LiveParams>,
-        Rev,
-        MediaTime,
-    ) {
+    fn current(&self) -> Current {
         let state = lock(&self.state);
-        (
-            state.render.load(),
-            state.render.load_live(),
-            state.graph.rev(),
-            state.live.now(),
-        )
+        Current {
+            program: state.render.load(),
+            scenes: Arc::clone(&state.scene_shots),
+            live: state.render.load_live(),
+            rev: state.graph.rev(),
+            at: state.live.now(),
+        }
     }
 }
 

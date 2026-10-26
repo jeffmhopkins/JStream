@@ -183,7 +183,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.44 because of the
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.45 because of
+  `preview.subscribe`'s `scene_id`, a preview stream of any scene, and its 16 streams a
+  session ([Binary streams](#design)); 0.44 added the
   `hardware_session_limit` error (`output.start` refused a new hardware video session
   while other outputs held hardware sessions, ADR-0027 §3); 0.43 added scene filters
   and item effects ([ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md):
@@ -1521,20 +1523,29 @@ the JSON text messages of the same connection (0.20,
 `meters.tick` event; a binary meter stream would be another kind of the same frame.
 
 - **Opening and closing.** `preview.subscribe {channel, max_width?, max_height?, fps?,
-  codecs?}` is an action: it opens a stream of the program mix for the calling
-  session only, tagged with the `channel` number the client chose (a `u32`, not an ID:
-  it only tells the session's streams apart in the frame header). The picture is the
-  canvas scaled down to fit `max_width` × `max_height` (default 640 × 360, at most
-  1920 × 1080) with even sides, so it follows `canvas.set_size`. A picture is sent when
-  what the program mix draws changes, at most `fps` times a second (default 15, at
-  most 30), and at least every 2 s as a keyframe. `codecs` lists what the client can
-  decode, most preferred first (default `["h264", "jpeg"]`); the engine uses the first
-  it can encode, and may fall back to a later one if an encoder fails to open, so each
-  frame names its codec. A session has at most 4 streams. `preview.unsubscribe
-  {channel}` closes one (and succeeds for a channel that isn't open); so does the
-  session's end. The stream shows the mix before any master stage, which is the
-  default ARCH asks for; a post-master option comes with that stage. Over MCP, which
-  has no binary channel, `preview.subscribe` fails with `action_failed`.
+  codecs?, scene_id?}` is an action: it opens a stream of the program mix, or of the
+  scene `scene_id` (0.45), for the calling session only, tagged with the `channel`
+  number the client chose (a `u32`, not an ID: it only tells the session's streams
+  apart in the frame header). The picture is the canvas scaled down to fit
+  `max_width` × `max_height` (default 640 × 360, at most 1920 × 1080) with even sides,
+  so it follows `canvas.set_size`. A picture is sent when what the stream shows
+  changes, at most `fps` times a second (default 15, at most 30), and at least every
+  2 s as a keyframe. `codecs` lists what the client can decode, most preferred first
+  (default `["h264", "jpeg"]`); the engine uses the first it can encode, and may fall
+  back to a later one if an encoder fails to open, so each frame names its codec. A
+  session has at most 16 streams (4 before 0.45), enough for a multiview.
+  `preview.unsubscribe {channel}` closes one (and succeeds for a channel that isn't
+  open); so does the session's end. The stream shows the mix before any master stage,
+  which is the default ARCH asks for; a post-master option comes with that stage. Over
+  MCP, which has no binary channel, `preview.subscribe` fails with `action_failed`.
+- **Scene streams.** A `scene_id` stream shows that scene alone, as program would show
+  it with no transition running, whether or not it is on program: what the UI's
+  pop-out and projector windows and its multiview show. It never makes a source shown
+  or heard ([ADR-0028](../../docs/adr/0028-audio-model-v2.md)), and the program stage
+  never draws it, so it costs an output nothing; like every preview it draws a
+  `display` or `window` source as nothing. A scene the collection doesn't have fails
+  with `not_found`; a scene deleted while its stream is open ends the stream with an
+  end frame.
 - **The frame.** A fixed 32-byte little-endian header, then the payload:
 
   | Offset | Size | Field |

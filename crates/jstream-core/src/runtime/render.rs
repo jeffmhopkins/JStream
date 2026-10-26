@@ -57,6 +57,19 @@ impl RenderSnapshot {
     pub(crate) fn shot(&self) -> &Shot {
         &self.shot
     }
+
+    /// A snapshot of `shot` that no render thread reads (a scene's preview stream):
+    /// `previous` itself when it draws the same, so a reader comparing pointers sees no
+    /// change, else the next generation after it.
+    pub(crate) fn following(previous: Option<&Arc<Self>>, shot: Shot) -> Arc<Self> {
+        match previous {
+            Some(previous) if previous.shot == shot => Arc::clone(previous),
+            _ => Arc::new(Self {
+                generation: previous.map_or(1, |previous| previous.generation + 1),
+                shot,
+            }),
+        }
+    }
 }
 
 /// The render subsystem's snapshot and its one reader slot. The engine keeps one, shared

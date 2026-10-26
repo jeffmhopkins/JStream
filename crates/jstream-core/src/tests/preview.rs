@@ -1,7 +1,8 @@
 //! Preview streams (U1, ADR-0045): `preview.subscribe` sends the program mix to the
 //! session that asked, as binary frames on its channel, in H.264 when the platform has
 //! an encoder and JPEG otherwise; a reader that falls behind loses frames up to a
-//! keyframe, and the streams end with `preview.unsubscribe` or the session.
+//! keyframe, and the streams end with `preview.unsubscribe` or the session. A stream may
+//! show one scene instead, planned for it alone, and ends when the scene is deleted.
 
 use super::{add, batch, block_on, code, connected, create, edits, live, moved, webcam};
 use crate::preview::{BINARY_BUFFER, KEYFRAME_EVERY};
@@ -9,7 +10,8 @@ use crate::{Engine, InProcessControl};
 use jstream_control::{BinaryStream, Control, ControlError};
 use jstream_platform::fake::{self, FakeClock};
 use jstream_protocol::{
-    Action, Batch, BinaryFrame, Call, Edit, PreviewCodec, ProtocolError, Rev, SourceId, WireError,
+    Action, Batch, BinaryFrame, Call, Edit, PreviewCodec, ProtocolError, Rev, SceneId, SourceId,
+    SourceKind, WireError,
 };
 use std::sync::Arc;
 use std::task::{Context, Poll, Wake, Waker};
@@ -83,6 +85,21 @@ fn subscribe(channel: u32, fps: Option<u32>, codecs: Vec<PreviewCodec>) -> Call 
             max_height: None,
             fps,
             codecs,
+            scene_id: None,
+        },
+    }
+}
+
+/// [`subscribe`] to the scene `scene` at 30 fps.
+fn subscribe_scene(channel: u32, scene: &str) -> Call {
+    Call::Action {
+        action: Action::PreviewSubscribe {
+            channel,
+            max_width: None,
+            max_height: None,
+            fps: Some(30),
+            codecs: Vec::new(),
+            scene_id: Some(SceneId::new(scene)),
         },
     }
 }
@@ -199,13 +216,13 @@ fn subscriptions_are_checked() {
     let h264_only = act(&control, subscribe(1, None, vec![PreviewCodec::H264])).expect_err("codec");
     assert_eq!(code(&h264_only), Some("action_failed"));
 
-    for channel in 0..4 {
+    for channel in 0..16 {
         act(&control, subscribe(channel, Some(1), Vec::new())).expect("subscribed");
     }
     let again = act(&control, subscribe(0, None, Vec::new())).expect_err("in use");
     assert_eq!(field(again), "channel");
-    let fifth = act(&control, subscribe(9, None, Vec::new())).expect_err("too many");
-    assert_eq!(field(fifth), "channel");
+    let seventeenth = act(&control, subscribe(99, None, Vec::new())).expect_err("too many");
+    assert_eq!(field(seventeenth), "channel");
 
     // Closing one frees its channel and its place; closing one not open succeeds.
     let close = |channel| Call::Action {
@@ -317,4 +334,106 @@ fn a_live_value_is_sent_without_waiting_for_a_keyframe() {
         after < KEYFRAME_EVERY,
         "drawn only for a keyframe: {after:?}"
     );
+}
+
+/// A stream of a scene that is not on program shows it, planned for the stream alone:
+/// it follows what that scene draws, the engine stops planning it once the stream
+/// closes, and a scene the collection doesn't have is refused.
+#[test]
+fn a_scene_stream_shows_a_scene_off_program() {
+    let engine = Engine::new().with_cpu_compositor();
+    let control = connected(&engine);
+    let mut frames = control.binary();
+    let missing = act(&control, subscribe_scene(1, "nowhere")).expect_err("no such scene");
+    assert_eq!(code(&missing), Some("not_found"));
+
+    // "main" is on program; "scn" places the webcam and is not.
+    batch(&control, edits(vec![create("main")])).expect("program scene");
+    let rev = placed_webcam(&control);
+    act(&control, subscribe_scene(2, "scn")).expect("subscribed");
+    assert_eq!(engine.previewed_scenes(), vec![SceneId::new("scn")]);
+    let first = frame_at(&mut frames, rev);
+    assert_eq!(first.header.channel, 2);
+    assert_eq!((first.header.width, first.header.height), (640, 360));
+
+    // A new frame of a source only that scene shows is a new picture, with no new rev.
+    let first_pts = first.header.pts_us;
+    engine
+        .set_source_frame(&SourceId::new("webcam"), 2, 2, &[255; 16])
+        .expect("frame");
+    let changed = frame(&mut frames);
+    assert!(changed.header.pts_us > first_pts);
+    assert!(
+        Duration::from_micros(u64::try_from(changed.header.pts_us - first_pts).expect("later"))
+            < KEYFRAME_EVERY,
+        "drawn only for a keyframe"
+    );
+
+    act(
+        &control,
+        Call::Action {
+            action: Action::PreviewUnsubscribe { channel: 2 },
+        },
+    )
+    .expect("unsubscribed");
+    assert!(engine.previewed_scenes().is_empty());
+}
+
+/// Deleting a scene ends its streams with an end frame that says why.
+#[test]
+fn deleting_the_scene_ends_its_stream() {
+    let engine = Engine::new().with_cpu_compositor();
+    let control = connected(&engine);
+    let mut frames = control.binary();
+    batch(&control, edits(vec![create("main"), create("other")])).expect("scenes");
+    act(&control, subscribe_scene(4, "other")).expect("subscribed");
+    frame(&mut frames);
+    batch(
+        &control,
+        Batch::single(Edit::SceneDelete {
+            scene_id: SceneId::new("other"),
+        }),
+    )
+    .expect("deleted");
+    let deadline = Instant::now() + WAIT;
+    let end = loop {
+        let frame = frame(&mut frames);
+        if frame.header.end {
+            break frame;
+        }
+        assert!(Instant::now() < deadline, "no end frame");
+    };
+    assert_eq!(end.header.channel, 4);
+    assert_eq!(&*end.payload, b"the scene was deleted");
+    assert!(engine.previewed_scenes().is_empty());
+}
+
+/// A scene's stream costs the program stage nothing: a display only that scene shows
+/// is not captured, since a preview draws a capture as nothing.
+#[test]
+fn a_scene_stream_captures_nothing() {
+    let engine = Engine::new().with_cpu_compositor();
+    let hub = engine.render_hub();
+    let control = connected(&engine);
+    let _frames = control.binary();
+    let display = Edit::SourceCreate {
+        source_id: SourceId::new("screen"),
+        name: "Screen".into(),
+        kind: SourceKind::Builtin {
+            kind: "display".into(),
+        },
+        settings: Default::default(),
+        duplicated_from: None,
+    };
+    let scenes = vec![
+        create("main"),
+        create("b"),
+        display,
+        add("b", "shown", "screen"),
+    ];
+    batch(&control, edits(scenes)).expect("scenes");
+    assert!(engine.settle_sources(), "the display source was built");
+    act(&control, subscribe_scene(1, "b")).expect("subscribed");
+    assert_eq!(engine.previewed_scenes(), vec![SceneId::new("b")]);
+    assert!(hub.load().shot().captures().is_empty());
 }
