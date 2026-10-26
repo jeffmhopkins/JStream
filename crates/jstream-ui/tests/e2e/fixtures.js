@@ -206,3 +206,38 @@ export async function recordCalls(page) {
   };
   return { sent: (type) => find(requests, type, []) };
 }
+
+/** Makes the engine report `sizes`, `{ source_id: [width, height] }`, which the mock
+ * engine can't, since it makes no frames: the page's WebSocket goes through a route that
+ * answers `source.sizes` with them and passes every other message on. The returned
+ * function sends `source.size_changed` for a source, with `[width, height]` or `null`
+ * for no size. Call it before `connect`. */
+export async function sourceSizes(page, sizes) {
+  const answer = (id, result) => JSON.stringify({ type: 'response', id, result: { kind: 'query', result } });
+  const size = ([width, height]) => ({ width, height });
+  let socket = null;
+  await page.routeWebSocket(/.*/, (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => {
+      let parsed = null;
+      try {
+        parsed = typeof message === 'string' ? JSON.parse(message) : null;
+      } catch {
+        // Not JSON: pass it on.
+      }
+      if (parsed?.call?.kind === 'query' && parsed.call.query?.type === 'source.sizes') {
+        const sources = Object.entries(sizes).map(([source_id, wh]) => ({ source_id, size: size(wh) }));
+        ws.send(answer(parsed.id, { type: 'source.sizes', sources }));
+      } else {
+        server.send(message);
+      }
+    });
+    server.onMessage((message) => ws.send(message));
+    socket = ws;
+  });
+  return (source_id, wh) => {
+    if (!socket) throw new Error('the page has no socket yet');
+    const event = { type: 'source.size_changed', source_id, ...(wh ? { size: size(wh) } : {}) };
+    socket.send(JSON.stringify({ type: 'event', event }));
+  };
+}

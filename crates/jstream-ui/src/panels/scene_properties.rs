@@ -10,6 +10,7 @@
 
 use crate::app::SessionContext;
 use crate::dialog::Modal;
+use crate::hotkeys;
 use crate::icons::Icon;
 use crate::panels::inspector::transition_options;
 use crate::store::{Collection, Studio, apply};
@@ -110,7 +111,7 @@ pub fn scene_edits(
             };
             return Err(format!(
                 "{} {runs}. Clear that hotkey first.",
-                chord_label(chord)
+                hotkeys::label(chord)
             ));
         }
         // A rebind keeps the preset the old binding switched with.
@@ -134,40 +135,6 @@ pub fn scene_edits(
         }
     }
     Ok(edits)
-}
-
-/// The chord a key press makes: its modifiers in the protocol's order, then the key's
-/// `code`. `None` for a modifier key alone, or a key the protocol has no code for.
-pub fn chord_from(ctrl: bool, alt: bool, shift: bool, meta: bool, code: &str) -> Option<Chord> {
-    if !Chord::KEYS.contains(&code) {
-        return None;
-    }
-    let mut parts: Vec<&str> = [
-        (ctrl, "Ctrl"),
-        (alt, "Alt"),
-        (shift, "Shift"),
-        (meta, "Meta"),
-    ]
-    .into_iter()
-    .filter_map(|(on, name)| on.then_some(name))
-    .collect();
-    parts.push(code);
-    Some(Chord::new(parts.join("+")))
-}
-
-/// A chord as people read it: `Ctrl+KeyA` as "Ctrl+A", `Digit1` as "1".
-pub fn chord_label(chord: &Chord) -> String {
-    chord
-        .as_str()
-        .split('+')
-        .map(|part| {
-            part.strip_prefix("Key")
-                .or_else(|| part.strip_prefix("Digit"))
-                .filter(|rest| !rest.is_empty())
-                .unwrap_or(part)
-        })
-        .collect::<Vec<_>>()
-        .join("+")
 }
 
 /// The dialog, drawn while it is open. A scene that goes away closes it.
@@ -265,7 +232,7 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
         }
     };
     let hotkey_text =
-        move || draft.with(|d| d.hotkey.as_ref().map(chord_label).unwrap_or_default());
+        move || draft.with(|d| d.hotkey.as_ref().map(hotkeys::label).unwrap_or_default());
     let on_hotkey = move |event: leptos::ev::KeyboardEvent| {
         let code = event.code();
         let plain = !(event.ctrl_key() || event.alt_key() || event.shift_key() || event.meta_key());
@@ -279,13 +246,7 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
             draft.update(|d| d.hotkey = None);
             return;
         }
-        if let Some(chord) = chord_from(
-            event.ctrl_key(),
-            event.alt_key(),
-            event.shift_key(),
-            event.meta_key(),
-            &code,
-        ) {
+        if let Some(chord) = hotkeys::of_event(&event) {
             draft.update(|d| d.hotkey = Some(chord));
         }
     };
@@ -484,23 +445,5 @@ mod tests {
                 action: fade,
             }))
         );
-    }
-
-    #[test]
-    fn key_presses_make_chords() {
-        let chord = |ctrl, alt, shift, code| {
-            chord_from(ctrl, alt, shift, false, code).map(|c| c.as_str().to_owned())
-        };
-        assert_eq!(chord(false, false, false, "F1").as_deref(), Some("F1"));
-        assert_eq!(
-            chord(true, false, true, "Digit1").as_deref(),
-            Some("Ctrl+Shift+Digit1")
-        );
-        assert_eq!(chord(true, false, false, "ControlLeft"), None);
-        let made = chord_from(true, true, true, true, "KeyA").expect("a chord");
-        assert_eq!(made.problem(), None);
-        assert_eq!(chord_label(&made), "Ctrl+Alt+Shift+Meta+A");
-        assert_eq!(chord_label(&Chord::new("Digit1")), "1");
-        assert_eq!(chord_label(&Chord::new("F1")), "F1");
     }
 }

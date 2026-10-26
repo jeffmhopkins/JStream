@@ -52,18 +52,27 @@ Contents ([Design](#design) explains the choices):
   and `engine_url_for_page`, the engine URL the connect form offers.
 - **Store** (`store.rs`): `Studio`, the state the scene, sources and properties panels
   share: the collection as `state.get` last reported it (`Collection`, with its buses
-  for the bus picker, its transition presets and its hotkeys), the program and preview
+  for the bus picker, its transition presets, its hotkey bindings, its scene folders and
+  the master stage's chains, and `chains` to read any owner's; a keyframe scene's items
+  are its parent's with its overrides applied, `shown_items`), the program and preview
   scenes, whether studio mode is on (and `scene_click`, what a click on a scene sends
-  in either mode), the `Selection`, the source kinds and the kind descriptors read so far, and the
-  last failed call, and `keys_changed`, which the outputs panel bumps when a stream key
+  in either mode), the `Selection`, each source's size (`Sizes`, from `source.sizes` and
+  `source.size_changed`; `Collection::source_size` adds a nested scene's, the canvas),
+  whether the canvas is in crop mode (which a switch of scene leaves), the source kinds
+  and the kind descriptors read so far, and the last failed call, and `keys_changed`, which the outputs panel bumps when a stream key
   is set or cleared. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
-  `plan_summary` and `fresh_id`.
+  `plan_summary`, `reset_edits` (a keyframe's Reset) and `fresh_id`.
+- **Hotkeys** (`hotkeys.rs`): `Hotkeys`, which runs the collection's hotkey bindings
+  while the page has the focus and no dialog or menu is open, and the chord of a key
+  press, its label and the edits that bind a chord to a scene, tested natively.
 - **Menus, dialogs and icons**: `menu.rs` (`ContextMenu`, the right-click menu, and
   `Menus`, the context that opens it with a list of `Entry`s), `item_menu.rs` (the
   selected items' entries, which the canvas and the sources list share, with the
-  layer moves and canvas arrangements they send, tested natively), `dialog.rs` (`Modal`,
+  layer moves, canvas arrangements, reference ↔ clone switches, grouping and
+  ungrouping they send, tested natively), `dialog.rs` (`Modal`,
   the modal dialog frame) and `icons.rs` (`Icon`, the prototype's stroke icons).
-- **Panels** (`panels/`): the scene list (`scenes.rs`), the sources list
+- **Panels** (`panels/`): the scene list (`scenes.rs`, with its folders: the rows each
+  level shows and the edits a drop sends are tested natively), the sources list
   (`sources.rs`), what those two share (`tree.rs`: the search box, the favourites
   filter, the star and drag reordering, with the matching and the drop's index tested
   natively), the Inspector (`inspector.rs`: the selected item's box, crop,
@@ -78,11 +87,13 @@ Contents ([Design](#design) explains the choices):
   natively), the Filters
   panel and its dialogs (`filters.rs`: `Filters`, `Chains`, which the Properties dialog
   shows too, `AddFilter`, `FilterSettings` and the `FilterDialogs` context that opens
-  them, with the catalogue, the row summaries, the choice of in place or dialog and
-  Cancel's restore patch tested natively), the number
+  them and holds the chain an FX button picked, with the catalogue, the row summaries,
+  the choice of in place or dialog, each owner's chains, name and note, and Cancel's
+  restore patch tested natively), the number
   field the panels share (`number.rs`) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
-  (creating, editing and deleting streams, recordings and the virtual camera, their
-  stream keys, start and stop, and the pipeline's health), and the calls and
+  (the program output and each output with its FX button, creating, editing and
+  deleting streams, recordings and the virtual camera, their stream keys, start and
+  stop, and the pipeline's health), and the calls and
   logic behind it and the header's Go Live, tested natively against `MockEngine`; and `mixer.rs`: `Mixer`, the
   audio mixer (the master card with its loudness and true peak, the channels folded
   under it with their meters, faders, dB fields, mutes and routing, the same as
@@ -140,7 +151,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **Events and the shared state.** One task reads the session's event stream. It keeps
   the header's revision current and hands each event to `Studio`, which re-reads
   the state with `state.get` after a `state.changed` newer than its copy (or after
-  `events.dropped`), and follows `studio.changed` for the program and preview scenes. Reads coalesce:
+  `events.dropped`), and follows `studio.changed` for the program and preview scenes. It
+  reads the sources' sizes with `source.sizes` after its first read and after
+  `events.dropped`, and follows `source.size_changed` between them. Reads coalesce:
   while one `state.get` is in flight, any number of further changes cost one more read.
   Panels never edit the copy: they send edits and the copy follows from the
   `state.changed` that comes back, so every client's change shows the same way. When
@@ -158,25 +171,40 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   canvas edits the same scene and selects the same items, so a click on a box selects
   its row and opens its properties, and every selected item's row is highlighted.
 - **Scenes and sources.** The Scenes and Scene objects panels are the prototype's
-  trees (spec-panels.md 1 and 2), without folders and groups yet. The scene list shows
-  scenes in display order and leaves out groups (ADR-0024) and marks the program scene
+  trees (spec-panels.md 1 and 2). The scene list shows each
+  folder level's folders in folder order, then its scenes in display order (ADR-0064),
+  indented by depth, with a caret that folds a folder, and leaves out groups (ADR-0024). It marks the program scene
   "program". A click selects a scene and puts it on program (`scene.switch`, naming no
   preset, so the engine resolves the transition); in studio mode it goes on preview
   instead (`studio.set_preview`), and a hover button puts it on program. The click is
   sent even for a scene already there, which the engine ignores, so a stale copy of
   program or preview never drops one; and outside studio mode the double click that
-  opens a scene's Properties puts it on program first, as in OBS. Studio mode is the page's own, since the engine has
-  no such switch: the header's button turns it on and off, and the browser keeps it
-  (`jstream.studio-mode`). The
+  opens a scene's Properties puts it on program first, as in OBS. Studio mode is the
+  page's own, since the engine has no such switch: the header's button turns it on and
+  off, and the browser keeps it (`jstream.studio-mode`). A
+  scene's keyframe scenes (ADR-0024 §2) nest under it, one level in, with the diamond,
+  folded away by its caret, and stay there: they aren't dragged. A keyframe scene has no items of its
+  own; it shows its parent's at its overrides, so selecting one lists and draws those,
+  and its eye, the canvas, the Inspector's placement fields and the item menu's
+  placement choices send placement edits addressed to it, which write its overrides
+  (ADR-0049). What would change the parent's items (Del, dragging rows, Add source,
+  New group, layer order, the duplicates, Remove, the blend mode, the reference or clone
+  switch) is off there. The
   sources list shows the selected scene's items with the top of the stack first, each
   with its source's type icon, in italics when the source is placed in another scene
-  too, and an eye that shows or hides it. Each panel has a search box and a filter for
+  too, and an eye that shows or hides it. A nested scene's row has a caret that shows
+  its items under it, nested ones too; a click on one of them selects it in its own
+  scene, which the list then shows, since the engine draws a nested scene as one item.
+  Each panel has a search box and a filter for
   favourites (the star, `scene.set_meta` or `source.set_meta`), applied in the page;
-  rows drag before or after each other (`scene.reorder`, `item.reorder`, counted in the
-  whole list so a hidden row doesn't shift the index) with pointer events, but not
-  while a filter is on. F2 renames a row in place and Del deletes a scene (through its
-  plan) or removes an item; a double click on a scene or an item opens its Properties
-  dialog. New scenes, sources and items get IDs from `fresh_id`, which includes
+  rows drag before or after each other (`scene.reorder`, `folder.reorder`,
+  `item.reorder`, counted in the whole list so a hidden row doesn't shift the index) with
+  pointer events, but not while a filter is on, and a drop on a folder row's middle half
+  moves the row into it (`scene.set_folder`, `folder.set_parent`); one on a nested
+  scene's row, or beside one of its items, moves the item into that scene (`item.move`).
+  A search keeps the folders and nested scenes that hold a match, open. F2 renames a row in place and Del deletes a scene or a folder (through its
+  plan, or at once for an empty folder) or removes an item; a double click on a scene or
+  an item opens its Properties dialog (on a keyframe it renames it). New scenes, sources and items get IDs from `fresh_id`, which includes
   the session's client ID so two UIs on one engine don't pick the same one. Sources
   are added through the Add source dialog (below). Deleting a scene, or a source
   everywhere, reads `delete.plan` first,
@@ -190,22 +218,42 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the focus with the arrows, Home and End, and closes on a choice, a press outside,
   Escape or Tab. The canvas opens the empty canvas or margin menu, the scene and
   sources lists their panels' menus, and a scene row its scene's (Show in preview,
-  Rename, Transition in and out, Properties…, New scene and Delete scene work; the rest
-  waits on folders, keyframes and scene filters). The Transition in and out submenus,
+  Rename, Transition in and out, Properties…, New scene, New keyframe, New folder and
+  Delete scene work, as do a folder's own menu's; the rest waits on scene filters). The
+  Transition in and out submenus,
   on a scene row and on the canvas margin for the scene it shows
   (`studio::override_submenu`), start with "Default (<the default preset>)", checked
   with no override, then list each preset with its kind and duration, checked on the
   scene's override, and end with "Manage presets…", which shows the Transitions panel;
-  a choice sends `scene.set_transitions` with the other direction kept. A right-click on an item, on the canvas or its row, selects it
+  a choice sends `scene.set_transitions` with the other direction kept. A keyframe row's menu switches to it,
+  renames it, resets it to its parent (`item.clear_override` for each field it
+  overrides), makes another keyframe of the parent (`scene.create_variant`) and deletes
+  it: a plain `scene.delete`, since it holds no items, or the delete plan after a
+  confirmation when anything refers to it. A right-click on an item, on the canvas or its row, selects it
   unless it was selected and opens `item_menu.rs`'s menu for the selection: Properties
   (the Properties dialog), the Audio check (`source.set_audio`), layer order
   (`item.reorder`s that keep the selected items' order), Center, Fit and Stretch to
-  canvas and Reset rotation (`item.set_geometry`), Clear crop, Duplicate as reference
+  canvas and Reset rotation (`item.set_geometry`), Clear crop (`item.set_crop`, with
+  each item's uncropped extent as its box while its source's size is known), Crop
+  (crop mode, for one item), Duplicate as reference
   (`item.add` of the same source, 40 pixels down and right, just above the original)
-  or as clone (`source.duplicate` first), and Remove from scene, each one batch; in
-  the sources list, one item's menu ends with deleting its source everywhere. A
-  nested scene and an audio-only source get the prototype's shorter menus; the first
-  can be opened. The scene and object lists fill their dock group, so the space under
+  or as clone (`source.duplicate` first), also Ctrl+D and Ctrl+Shift+D, and Remove
+  from scene, each one batch. For one item of a source placed more than once, or a
+  copy whose original exists, it switches between a reference and an independent clone
+  (decision register D3): `source.duplicate` and `item.set_source` to the copy, or
+  `item.set_source` back to the original and `source.delete` of a copy nothing else
+  places, so the item keeps its ID. Group selection, and New group in the sources list,
+  groups the selection (decision register D4): a `group` scene named "Group N", placed
+  over the whole canvas where the topmost item was, and the items moved into it with
+  `item.move`, keeping their IDs and boxes since the group shares the canvas. In the
+  sources list, one item's menu ends with deleting its source everywhere. A nested
+  scene and an audio-only source get the prototype's shorter menus; the first can be
+  opened, and a group ungrouped: its items move back where it was, each given the box
+  it draws at when the group isn't at its default placement (ADR-0024 §1), and the group
+  scene and its sources are deleted; a hidden group's items are hidden with it. Ungroup
+  shows disabled, with the reason, while another item places the group, the group scene
+  has filters, or the group's look can't become its items' own (`Kept` in
+  `item_menu.rs`). The scene and object lists fill their dock group, so the space under
   their rows opens the panel's menu. `dialog.rs` is the modal frame: Escape and the
   backdrop cancel, and Enter presses the button marked `data-primary`. The Add source
   dialog (`panels/add_source.rs`, opened through `AddSourceDialog` context) lists the
@@ -215,7 +263,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `item.add` as one batch, with a box of the prototype's native size for the type,
   centred and scaled down to fit the canvas (ADR-0022's `fit` keeps the picture's
   aspect within it). An existing source is placed again 40 pixels right of and below
-  its first placement. A scene is nested through a `scene` source, reusing one that
+  its first placement, or, placed nowhere, at its own size when the engine reports one
+  (`source.sizes`), scaled down to fit. A scene is nested through a `scene` source, reusing one that
   already shows it. The new item is selected; a new source's Properties dialog opens
   once the engine has accepted the batch, waiting for the collection to list the
   source, and a placement of an existing one shows in the Inspector. A `kind.list`
@@ -226,16 +275,18 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   its name, kind, "+N" for the other selected items and a favourite star
   (`source.set_meta` or `scene.set_meta`). An item's name is in italics when its source
   is placed in another scene too. Its sections fold: Parameters (X and Y of the
-  unrotated box's top-left corner, W, H and Rotation, sent as `item.set_geometry`; the
-  W/H link, on by default, keeps the aspect ratio when either side changes), Crop
+  unrotated box's top-left corner, W, H, W % and H % of the source's own size (blank
+  while the engine knows none) and Rotation, sent as `item.set_geometry`; the W/H link,
+  on by default, keeps the aspect ratio when either side changes), Crop
   (`item.set_crop`, in source pixels), Blending (the nine modes, of which the engine
   draws only Normal so the others are disabled, and Opacity, `item.set_opacity`) and
   Scene switches (folded: the item's delay, easing, glide and appear and disappear
   effects, each change one `item.set_transition` with the whole settings, "customised"
   while they differ from the defaults) and Properties, the source's settings form. A
-  scene shows its object count, the scenes that use it as a source, and its
-  Transition in and out (`scene.set_transitions`, with the
-  presets from the shared collection). The panel is built
+  scene shows its object count, the scenes that use it as a source, its Hotkey row (the
+  chords bound to its `scene.switch`, an × that unbinds one, and Set key, which binds
+  the next chord pressed and takes it from whatever it ran), and its Transition in and
+  out (`scene.set_transitions`, with the presets from the shared collection). The panel is built
   once per selected item or scene and each field follows the collection, so an edit
   doesn't rebuild it or take the focus. The fields show committed values: a canvas drag
   shows in them once it is dropped.
@@ -256,7 +307,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   evens the gaps in centre order, keeping the first and last; Center moves the
   selection as a block; Fit and Stretch also stand the item upright; Match width and
   height take the primary item's. `plan` works out the new boxes, and each press sends
-  the changed ones as one batch of `item.set_geometry` (Clear crop: `item.set_crop`),
+  the changed ones as one batch of `item.set_geometry` (Clear crop: `item.set_crop`, and the
+  uncropped box while the source's size is known, `canvas::crop::clear`),
   so it is one undo step. Items still in the legacy form are left alone, and Match does
   nothing while the primary item is one.
 - **The properties form** is generated from the kind's descriptor (`kind.describe`,
@@ -316,6 +368,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `fresh_id`; the new filter opens in place, or in the settings dialog when it has more
   than three settings or isn't described yet. Edit filters… in the item menus selects the item and shows the
   panel. Names come from the prototype's catalogue, then `kind.list`, then the kind's ID.
+  An FX button (the Outputs panel's rows, the Mixer's master card or strip) picks the program
+  output's chain (owner `master`) or an output's (ADR-0027) instead, and shows the
+  panel; the same rows and dialogs edit it with that owner. Only their audio chains
+  show, since the engine refuses their video chains so far, and the virtual camera,
+  which has no sound, has none. Selecting another item, or Edit filters…, goes back to
+  the selected item's source.
 - **The shell** is the header bar over the workspace. A failed call shows in a
   dismissable bar. The look follows the UI prototype ([UI features](../../docs/UI-FEATURES.md)): dark only, with the
   prototype's palette as CSS variables in `style.css`. The font stack names IBM Plex
@@ -363,7 +421,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `events.dropped`; `output.state_changed` updates one output's state in place. It
   creates RTMP(S), recording and virtual camera outputs (IDs `output-N`, the first free one), changes
   an RTMP server URL (`output.set_target`) and the encoder profile, deletes a stopped
-  output, and starts and stops each. The header's "Go Live" starts every stopped or
+  output, and starts and stops each. Above the cards, the program output's row
+  ("master") and a row per output with its state each have an "FX N" button counting
+  that chain's filters, which shows the chain in the Filters panel (below the rows,
+  the prototype's footnote). The header's "Go Live" starts every stopped or
   failed RTMP output whose stream key is set, and "End stream", which replaces it while
   any runs, stops the running ones; recordings start from their own buttons or the
   header's Record. Both try every output, even after one fails, and report
@@ -456,8 +517,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the −14 LUFS target (70% along, where the prototype draws it), the three loudness
   readings in its tooltip, its true peak with "safe" or a warning over 0 dBTP, and a
   button that resets the integrated loudness (`audio.reset_loudness`). Its monitor
-  and FX buttons show disabled: the monitor control isn't built yet (MX-05), and the
-  engine has no master chain yet. Each source gets a row, ordered by name: its meter, fader, a dB field
+  button shows disabled, as the monitor control isn't built yet (MX-05); its "FX N"
+  counts the master chain's filters, from `Studio`'s collection, and shows that chain
+  in the Filters panel. Each source gets a row, ordered by name: its meter, fader, a dB field
   (the shared `NumberField`), mute and, folded under "Routing", whether its audio is
   on, when it is heard (`always` or `when_shown`) and its send into each bus (on or
   off, and its gain). A nested scene's row has only the routing toggles, since it has
@@ -466,7 +528,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   title bar, `MixerFlip`, sets an orientation for the session; a memo, so a dock change
   that keeps the orientation doesn't rebuild the rows): a master strip with the
   loudness filling up to the target line, the loudness and true peak (its warning
-  heard by a screen reader only, for want of room), then, folded
+  heard by a screen reader only, for want of room) and the same "FX N", then, folded
   beside it, a strip per source with its short name, a meter filling upwards, the dB
   field stacked + over − and scrubbed up and down, and mute. Each bus gets a strip, the master first, with renaming
   and (except the master) deleting. A delete reads `delete.plan`
@@ -524,7 +586,8 @@ depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0032-live-
 
 The canvas edits the boxes of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)
 in canvas pixels. `transform.rs` maps the page to the canvas, hit-tests boxes and
-handles, and turns a drag into a new geometry; `group.rs` does the same for several
+handles, and turns a drag into a new geometry; `crop.rs` turns a crop handle's drag
+into a new box and crop, from the source's size; `group.rs` does the same for several
 selected items and the box select; `snap.rs` snaps; `model.rs` lays out the scene and
 sends the edits; `preview.rs` chooses the preview stream and decides what to do with
 each H.264 frame and when each JPEG decodes. These are pure and tested natively,
@@ -532,14 +595,18 @@ each H.264 frame and when each JPEG decodes. These are pure and tested natively,
 browser, and `mod.rs` is the component.
 
 - **What it shows.** The selected scene ([Design › Selection](#design)), laid out with
-  `Layout::of` from the shared collection, so it follows every state change the app
+  `Layout::sized` from the shared collection and the sources' sizes, so it follows every state change the app
   reads. The frame is the largest 16:9 box in the canvas area, with the scene's name
   and the canvas size captioned bottom left. Boxes are outlined with
   `jstream-protocol`'s placement formula, so the overlay matches what the compositor
   draws. An item still stored as a 0.3 legacy placement is not drawn: its box depends
-  on the source's runtime size, which the UI doesn't read yet (ADR-0022's
-  `source.sizes`, protocol 0.40), and a note top left counts such items. Hidden items are drawn
-  dashed, and the box under the pointer gets a light outline.
+  on the source's runtime size, which the canvas doesn't evaluate a legacy transform
+  against yet (ADR-0022 decision 5), and a note top left counts such items. Hidden items are drawn
+  dashed, and the box under the pointer gets a light outline. A keyframe scene shows its
+  parent's items at its overrides under a banner, "◆ Keyframe of “<parent>”: only
+  placement and visibility can change", and its edits are addressed to it, so they
+  write its overrides (ADR-0049). Its drags send no live values, which the engine
+  doesn't take on a keyframe scene yet (#702): the drop commits as usual.
 - **The preview.** Under the boxes is the program mix, live, while the selected
   scene is the one on program; on another scene the background says the preview
   shows the program scene. The canvas opens the
@@ -577,7 +644,9 @@ browser, and `mod.rs` is the component.
   within 3°, else to 0.1°; Ctrl moves it in 45° steps. Shift drags at half speed for
   every gesture, following the pointer's movement so pressing it mid-drag doesn't
   jump. Arrow keys nudge the selected boxes by 1 pixel (Shift: 10). Escape cancels a
-  drag, or clears the selection.
+  drag, or clears the selection. Del removes the selected items, and Ctrl+D and
+  Ctrl+Shift+D duplicate the selected one as the item menu does, except in a keyframe
+  scene, whose items are its parent's.
 - **Several selected.** Each selected box keeps its 2 px outline without handles, and
   a dashed box 4 screen pixels outside their bounds gets the handles, a knob 42 pixels
   above it, and a readout 12 pixels below (`N items · W × H`, the size while scaling,
@@ -586,9 +655,21 @@ browser, and `mod.rs` is the component.
   aspect unless Ctrl is held, down to 20 pixels; the knob turns every box about the
   bounds' centre, in 45° steps with Ctrl. A move of several boxes snaps their bounds
   the way one box snaps, unless one of them is rotated.
-- **Crop** on the canvas (Alt on a handle, the crop tool) needs each source's size to
-  turn a dragged edge into source pixels, which the UI doesn't read yet (ADR-0022's
-  `source.sizes`, protocol 0.40), so the canvas doesn't crop.
+- **Crop.** In crop mode (the Crop tool or C; V, the Move tool, Escape or a switch of
+  scene leaves it) every resize handle of the one selected box crops, and outside it
+  Alt on a handle does. The crop is in source pixels, so it needs the source's size
+  (`source.sizes`, ADR-0022 decision 4). The handles sit on the item's picture: the
+  part of the box the source fills, which `jstream-protocol`'s `content` gives for its
+  fit mode, clipped to the box. A drag moves that edge of the picture, which keeps its
+  scale, and stops at the uncropped extent, leaving at least 10 pixels; the box becomes
+  the picture's rectangle and the crop is rounded to whole source pixels (a `fill`
+  box's clipped margins count as crop). A flipped box crops the source's side it
+  shows. In crop mode the outline, the handles (12 px, filled) and the readout are
+  amber, and the uncropped extent is drawn as a dashed amber ghost, as it is whenever
+  the selected item is cropped. While a crop drag goes on the readout says
+  `crop l / r / t / b`; at rest it adds ` · cropped` for a cropped item, or, in crop
+  mode with no size known, ` · no source size yet`, and then there are no crop handles:
+  the box's handles resize as usual, with Alt too.
 - **Snapping.** A moved upright box's edges and centre snap, within 6 screen pixels,
   to the canvas's edges and centre lines and to the other boxes' edges and centres,
   using each box's axis-aligned bounds; the lines it lands on are drawn as guides. An
@@ -599,7 +680,7 @@ browser, and `mod.rs` is the component.
   menu, and on an item the selected items' menu ([Design](#design)).
 - **Undoable edits.** A drag changes no stored state until it ends: the overlay draws
   the gesture locally, and on release one batch with an `item.set_geometry` per item it
-  changed commits it, so each gesture (and each nudge) is one undo step. Meanwhile the
+  changed (and an `item.set_crop` for a crop) commits it, so each gesture (and each nudge) is one undo step. Meanwhile the
   drag opens a gesture (`live.rs`) whose `live.set` carries the same edits as live
   values ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), so the output and
   the preview follow the drag without changing `rev`. The calls go one at a time, the

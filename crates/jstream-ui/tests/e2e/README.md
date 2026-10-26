@@ -47,10 +47,12 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   on; given `refuse`, it also holds back the requests that function names and refuses
   them, as `invalid_argument`, when the test calls the `release()` it returns.
   `meterTicks` routes it too, passing everything on, and returns a function that
-  sends the page a `meters.tick`, which the mock engine never sends. `recordCalls`
-  routes it too, passing everything on, and its `sent(type)` lists every edit or
-  action of that type the page has sent, for the transition edits the mock engine
-  refuses.
+  sends the page a `meters.tick`, which the mock engine never sends.
+  `sourceSizes` routes it to answer `source.sizes` with the sizes a test gives, since
+  the mock makes no frames and reports none, and returns a function that sends the
+  page a `source.size_changed`. `recordCalls` routes it too, passing everything on, and
+  its `sent(type)` lists every edit or action of that type the page has sent, for the
+  transition edits the mock engine refuses.
 - **Console errors fail a test.** Every console error and uncaught exception on a
   test's pages fails it, unless the test allows that message. A Content-Security-Policy
   violation is a console error, so a style or script the policy refuses fails too.
@@ -86,6 +88,12 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   name, not the scene) and Del removing one; selecting an item opens its properties. The mock engine lists no kinds and makes
   no delete plans, so new-kind sources, the properties form's fields and deletes are
   tested natively.
+- **Scene folders** (`folders.spec.js`): New folder from the panel's and a folder's menu,
+  named in place; drags into a folder's middle, out beside a top-level row and before a
+  folder, which a second client follows; folding by the caret at two depths; a search
+  keeping the open, unfoldable folders of a match; a folder refusing to go inside its
+  own child; F2 renaming a folder, and Del deleting an empty one without asking. Deleting
+  a folder that holds anything needs `delete.plan`, so it is tested natively.
 - **Outputs** (`outputs.spec.js`, on the Outputs panel and the header): adding a stream and a recording; a stream can't start
   or go live until its key is set; the key field empties on save and the key never
   appears in the page; go live and end stream; the header's Record starts and stops a
@@ -113,6 +121,14 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   canvas takes one out and Shift-click on its row in the sources list adds it back; a
   double click opens the item's Properties dialog with it selected, and a double click
   on the canvas tools over an item leaves the selection alone.
+- **Crop** (`crop.spec.js`): the Crop tool, C, V, Escape, the item menu's Crop and a
+  switch of scene enter and leave crop mode, whose readout says there is no source size
+  while the engine reports none, and then a handle drag resizes as usual; with `sourceSizes` giving the Backdrop's source a size,
+  a crop-mode drag on the right handle crops that side as one edit, with the Inspector's
+  Right field, the ` · cropped` readout and the crop ghost, which Ctrl+Z undoes; Alt on
+  the left handle crops outside crop mode, and Clear crop gives the whole picture back;
+  W % and H % read the size against the source's, set it, follow `source.size_changed`
+  and go disabled without a size.
 - **Menus and Add source** (`menus.spec.js`): the canvas's right-click menu on the
   frame (its items, Paste disabled, turning snapping off and Select all) and on the
   margin, which Escape closes; the arrow keys move through a menu, skipping a disabled
@@ -124,8 +140,16 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   restacks in one edit and Stretch to canvas fills the canvas; on the canvas the menu
   ends with Select all, Duplicate as clone adds "Backdrop copy" selected, two selected
   items get a counted head with the duplicates disabled, and Remove from scene removes
-  both; a nested scene's menu opens it; a scene row's Rename renames, and the Scenes
-  panel's New scene adds one with its name field focused.
+  both; a placement of a shared source switches to an independent clone and back to a
+  reference in one edit each, its menu's head and checks following, and the original,
+  placed once, has no switch; Ctrl+D and Ctrl+Shift+D duplicate on the canvas and in a
+  row, and Del removes there; a nested scene's menu opens it; a scene row's Rename
+  renames, and the Scenes panel's New scene adds one with its name field focused.
+- **Groups** (`groups.spec.js`): Group selection on two items makes "Group 1", left
+  out of the Scenes panel, whose caret shows the two items indented; a click on one
+  opens the group's scene with it selected; Ungroup puts them back, which a second
+  client follows; the panel's New group groups the selected item, and a row dragged
+  onto the group's row goes into it.
 - **Properties dialog** (`properties.spec.js`): opened from an item's menu, it shows
   the type's title, the source's name, its two filters and an enabled Add filter
   button; Cancel and Escape drop
@@ -158,15 +182,27 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   edit and updates the summary. With one setting refused late: a refusal that arrives
   after its row was closed, and one after the Filter settings dialog was cancelled,
   each in the problem bar.
+- **Program and output chains** (`output-chains.spec.js`): the Outputs panel's Program
+  output row ("master", "FX 0"), a recording's row under it with its state and FX
+  button, and the footnote; the program's FX showing the master chain in the Filters
+  panel from behind the Transform tab, with its note, its one audio chain and the note
+  on video, the output's FX its own chain, and selecting an item going back to its
+  source's. With Gain and Sharpen described: Add filter on the master offering only
+  Gain, with its foot, as one edit that the program's FX and the Mixer's count; the new
+  filter opening in place, a setting there as one more edit; the output's chain adding
+  its own Gain, counted on its FX button alone, whose eye and × edit the output's chain,
+  not the master's; and the master's filter in the Filter settings dialog, whose Remove
+  deletes it.
 - **Mixer** (`mixer.spec.js`, on the Audio mixer tab): the master card counting the
-  seed's two channels, its Hear and FX buttons disabled, and its button (with its
-  tooltip) unfolding the channel rows by name and folding them again; a typed gain in the Mic's dB field and
+  seed's two channels, its Hear button disabled, its "FX 0" showing the program
+  output's chain in the Filters panel, and its button (with its tooltip) unfolding the
+  channel rows by name and folding them again; a typed gain in the Mic's dB field and
   its + stepper each as one edit, with the fader following; with `meterTicks`, the
   short-term loudness and its tooltip, the bar's fill against the target, and the true
   peak "safe" with nothing announced, then the warning over 0 dBTP, announced; and the Buses section folded under its
   count, the master first, adding a bus. A tab click elsewhere in the dock leaving a
   channel's open Routing open (the rows aren't rebuilt). The title bar's flip button turning the meters
-  vertical: the master strip and its channels folded beside it by short name, the
+  vertical: the master strip, its "FX 0" enabled, and its channels folded beside it by short name, the
   Mic's stacked field scrubbed upwards and stepped down as one edit each, and its mute;
   docked in the Right sidebar the strips start vertical, 64px wide, and the button
   flips them back; and, with `meterTicks`, the vertical meters filling upwards and the
@@ -176,6 +212,15 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   Ctrl+Z undoes, and Reset rotation and Clear crop sending nothing when nothing
   changes; with two items, Selection on, Distribute off, and Match width and height
   giving both the primary item's size.
+- **Keyframes and hotkeys** (`keyframes.spec.js`): New keyframe on Main's row nests
+  "Keyframe 1" under it with the diamond, selected, under the canvas banner, and Main's
+  caret folds it away and back; in the keyframe, the eye and the X field write its
+  overrides while Main's own item stays as it was, the blend mode is locked, and the
+  item menu's Remove from scene and layer order are disabled; Reset to “Main” clears
+  the overrides, after which the canvas's Ctrl+D and Del change nothing there; Switch
+  to it puts it on program, and Delete keyframe removes it and selects Main. The Inspector's Hotkey row binds F1 to Intro (which a second client
+  sees), F1 on the canvas then puts Intro on program on both clients, binding F1 to
+  Main takes it from Intro, Escape cancels a capture and × unbinds.
 - **Studio mode** (`studio.spec.js`, on the Transitions tab): in studio mode a scene
   picked for preview goes to program with Transition, and the old program scene comes
   back on preview; Transition and Cut are off while preview is the program scene; the

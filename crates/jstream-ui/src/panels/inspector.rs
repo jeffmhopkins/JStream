@@ -1,6 +1,7 @@
 //! The Inspector: what is selected, and how it is placed. For a selected item, a header
 //! (name, kind, how many more are selected, favourite) over foldable sections: its box
-//! (X, Y, W, H and rotation, with a W/H link), its crop, its blending (mode and
+//! (X, Y, W, H, the size as a % of its source's and rotation, with a W/H link), its
+//! crop, its blending (mode and
 //! opacity) and its source's settings ([`Properties`]). With no item selected, the
 //! selected scene's header over its object count, the scenes that use it as a source,
 //! and its transition overrides. Every field sends its edit when it changes, so the
@@ -12,9 +13,10 @@ use super::Properties;
 use super::number::NumberField;
 use super::studio;
 use crate::app::SessionContext;
+use crate::hotkeys;
 use crate::store::{Collection, Studio};
 use jstream_control::protocol::{
-    BlendMode, Crop, Edit, Finite32, Glide, ItemEasing, ItemGeometry, ItemId, ItemInfo,
+    BlendMode, Chord, Crop, Edit, Finite32, Glide, ItemEasing, ItemGeometry, ItemId, ItemInfo,
     ItemTransition, MAX_DELAY_MS, PlacementForm, SceneId, SourceKind, TransitionEffect,
     TransitionPresetId, TransitionsInfo,
 };
@@ -43,6 +45,37 @@ pub const MAX_SIZE: f32 = 10_000.0;
 pub const MIN_SIZE: f32 = 1.0;
 /// The largest crop of one side the fields accept, in source pixels.
 pub const MAX_CROP: f32 = 4_000.0;
+/// The smallest size, in % of the source's, the W % and H % fields accept.
+pub const MIN_PERCENT: f32 = 0.1;
+/// The largest size, in % of the source's, the W % and H % fields accept.
+pub const MAX_PERCENT: f32 = 10_000.0;
+
+/// The box's width (`across`) or height as a % of its source's own size.
+pub fn percent(geometry: &ItemGeometry, source: (u32, u32), across: bool) -> Option<f32> {
+    let (side, own) = if across {
+        (geometry.size.width.get(), source.0)
+    } else {
+        (geometry.size.height.get(), source.1)
+    };
+    (own > 0).then(|| side / own as f32 * 100.0)
+}
+
+/// The box with its width (`across`) or height set to `value` % of its source's size
+/// (kept to 0.1–10000 %), as the W or H field would set it, `linked` or not.
+pub fn with_percent(
+    geometry: &ItemGeometry,
+    source: (u32, u32),
+    across: bool,
+    value: f32,
+    linked: bool,
+) -> Option<ItemGeometry> {
+    let value = value.clamp(MIN_PERCENT, MAX_PERCENT) / 100.0;
+    if across {
+        with_param(geometry, Param::W, value * source.0 as f32, linked)
+    } else {
+        with_param(geometry, Param::H, value * source.1 as f32, linked)
+    }
+}
 
 /// The box's top-left corner, as the X and Y fields show it: the corner of the
 /// unrotated box, as the canvas's size readout uses.
@@ -176,7 +209,8 @@ fn to_f32(value: f64) -> f32 {
     value
 }
 
-/// The scenes that show `scene_id` as a source, by name, in display order.
+/// The scenes that show `scene_id` as a source, by name, in display order: a keyframe
+/// scene shows its parent's items, so it is left out.
 pub fn used_in(collection: &Collection, scene_id: &SceneId) -> Vec<String> {
     let shows_it = |item: &ItemInfo| {
         matches!(
@@ -187,17 +221,20 @@ pub fn used_in(collection: &Collection, scene_id: &SceneId) -> Vec<String> {
     collection
         .scenes
         .iter()
+        .filter(|scene| scene.variant_of.is_none())
         .filter(|scene| scene.items.iter().any(shows_it))
         .map(|scene| scene.name.clone())
         .collect()
 }
 
 /// Whether the item's source is placed in more than one scene, so the item is one of
-/// several references to it and its name reads in italics.
+/// several references to it and its name reads in italics. A keyframe scene shows its
+/// parent's items and places none of its own, so it doesn't count.
 pub fn is_shared(collection: &Collection, item: &ItemInfo) -> bool {
     collection
         .scenes
         .iter()
+        .filter(|scene| scene.variant_of.is_none())
         .filter(|scene| scene.items.iter().any(|i| i.source_id == item.source_id))
         .count()
         > 1
@@ -356,7 +393,11 @@ fn shown(collection: Option<&Collection>, selection: &crate::store::Selection) -
     let Some(collection) = collection else {
         return Shown::Nothing;
     };
-    if let Some((scene, item)) = selection.item.as_ref().and_then(|id| collection.item(id)) {
+    if let Some((scene, item)) = selection
+        .item
+        .as_ref()
+        .and_then(|id| collection.item_in(selection.scene.as_ref(), id))
+    {
         return Shown::Item(scene.scene_id.clone(), item.item_id.clone());
     }
     selection
@@ -549,15 +590,27 @@ fn ItemHeader(item: ItemId) -> impl IntoView {
 fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoView {
     let studio = expect_context::<Studio>();
     let session = expect_context::<SessionContext>();
-    // The item as the collection has it now.
+    // The item as the collection has it now, as the scene shows it: in a keyframe
+    // scene, with its overrides.
     let current = {
         let item = item.clone();
+        let scene = scene.clone();
         Memo::new(move |_| {
             studio.collection.with(|c| {
                 c.as_ref()
-                    .and_then(|c| c.item(&item))
+                    .and_then(|c| c.item_in(Some(&scene), &item))
                     .map(|(_, i)| i.clone())
             })
+        })
+    };
+    // The keyframe scene's parent, when the scene is one: there only placement,
+    // visibility and opacity can change (ADR-0049).
+    let keyframe_of = {
+        let scene = scene.clone();
+        Memo::new(move |_| {
+            studio
+                .collection
+                .with(|c| c.as_ref()?.parent_of(&scene).map(|p| p.name.clone()))
         })
     };
     let geometry = Memo::new(move |_| {
@@ -567,12 +620,54 @@ fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoV
                 .and_then(|i| i.geometry)
         })
     });
+    // The source's own size, while the engine knows it.
+    let source_size = Memo::new(move |_| {
+        let source_id = current.with(|i| i.as_ref().map(|i| i.source_id.clone()))?;
+        studio.collection.with(|c| {
+            studio
+                .sizes
+                .with(|sizes| c.as_ref()?.source_size(sizes, &source_id))
+        })
+    });
     let send = move |edit: Edit| {
         if let Some(s) = session.get() {
             studio.apply(&s, vec![edit]);
         }
     };
     let ids = StoredValue::new((item, scene));
+
+    // W % or H %: the size as a % of the source's own, blank while that isn't known.
+    let percent_field = move |across: bool| {
+        let value = Signal::derive(move || {
+            let size = source_size.get()?;
+            percent(&geometry.get()?, size, across).map(f64::from)
+        });
+        let commit = move |v: f64| {
+            let (Some(g), Some(size)) = (geometry.get_untracked(), source_size.get_untracked())
+            else {
+                return false;
+            };
+            let Some(placed) = with_percent(&g, size, across, to_f32(v), linked.get_untracked())
+            else {
+                return false;
+            };
+            if placed == g {
+                return false;
+            }
+            let (item_id, scene) = ids.get_value();
+            send(Edit::ItemSetGeometry {
+                item_id,
+                scene_id: Some(scene),
+                geometry: placed,
+            });
+            true
+        };
+        let label = if across { "W %" } else { "H %" };
+        view! {
+            <NumberField label unit="%" value step=1.0 decimals=1 min=f64::from(MIN_PERCENT)
+                max=f64::from(MAX_PERCENT) send=commit />
+        }
+    };
 
     let field = move |param: Param| {
         let value =
@@ -771,6 +866,8 @@ fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoV
                 {field(Param::Y)}
                 {field(Param::W)}
                 {field(Param::H)}
+                {percent_field(true)}
+                {percent_field(false)}
                 {field(Param::Rotation)}
             </div>
         </Fold>
@@ -783,10 +880,17 @@ fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoV
             </div>
         </Fold>
         <Fold title="Blending" open=true hint=blend_hint>
+            {move || keyframe_of.get().map(|parent| view! {
+                <p class="note keyframe-note">
+                    "Keyframe of “" {parent} "”: the blend mode, filters and properties follow \
+                     it. Only placement, visibility and opacity change here."
+                </p>
+            })}
             <div class="field-grid">
                 <label class="select-field">
                     <span class="field-label">"Mode"</span>
                     <select
+                        disabled=move || keyframe_of.with(Option::is_some)
                         prop:value=move || blend.get().map_or("Normal", blend_name)
                         on:change=move |event| send_blend(event_target_value(&event))
                     >
@@ -940,21 +1044,118 @@ fn SceneSections(scene: SceneId) -> impl IntoView {
         }
     };
 
+    // A keyframe scene's parent, for its kind tag.
+    let keyframe_of = Memo::new(move |_| {
+        studio.collection.with(|c| {
+            c.as_ref()?
+                .parent_of(&id.get_value())
+                .map(|p| p.name.clone())
+        })
+    });
+    let kind = move || {
+        keyframe_of.get().map_or_else(
+            || "Scene".to_owned(),
+            |parent| format!("Keyframe of “{parent}”"),
+        )
+    };
+
     view! {
         <div class="inspector-head">
             <span class="source-title" title=name>{name}</span>
-            <span class="kind-tag">"Scene"</span>
+            <span class="kind-tag" class:keyframe=move || keyframe_of.with(Option::is_some)>{kind}</span>
             {favourite_button(favourite, toggle)}
         </div>
         <Fold title="Scene" open=true>
             <div class="key-value"><span class="key">"Objects"</span><span>{objects}</span></div>
             <div class="key-value"><span class="key">"Used as a source in"</span><span>{used}</span></div>
+            <HotkeyRow scene=id.get_value() />
         </Fold>
         <Fold title="Transitions" open=true hint=hint>
             {select(true, "Transition in")}
             {select(false, "Transition out")}
             <p class="note">"If both scenes override, the next scene's “in” wins."</p>
         </Fold>
+    }
+}
+
+/// A scene's Hotkey row: the chords that put it on program, each with a button that
+/// unbinds it, and "Set key", which binds the next chord pressed (Escape cancels).
+#[component]
+fn HotkeyRow(scene: SceneId) -> impl IntoView {
+    let studio = expect_context::<Studio>();
+    let session = expect_context::<SessionContext>();
+    let id = StoredValue::new(scene);
+    let chords = Memo::new(move |_| {
+        studio.collection.with(|c| {
+            c.as_ref()
+                .map(|c| c.scene_chords(&id.get_value()))
+                .unwrap_or_default()
+        })
+    });
+    let capturing = RwSignal::new(false);
+    let send = move |edits: Vec<Edit>| {
+        if let (Some(s), false) = (session.get(), edits.is_empty()) {
+            studio.apply(&s, edits);
+        }
+    };
+    let on_key = move |event: leptos::ev::KeyboardEvent| {
+        if !capturing.get_untracked() {
+            return;
+        }
+        // The key is the capture's: no hotkey runs, and Tab doesn't move the focus.
+        event.stop_propagation();
+        event.prevent_default();
+        if event.key() == "Escape" {
+            capturing.set(false);
+            return;
+        }
+        let Some(chord) = hotkeys::of_event(&event) else {
+            return;
+        };
+        capturing.set(false);
+        let edits = studio.collection.with_untracked(|c| {
+            c.as_ref()
+                .map(|c| hotkeys::bind_edits(c, &id.get_value(), &chord))
+                .unwrap_or_default()
+        });
+        send(edits);
+    };
+    let chip = move |chord: Chord| {
+        let shown = hotkeys::label(&chord);
+        let title = format!("Unbind {shown}");
+        view! {
+            <span class="hotkey-chip">
+                <kbd>{shown}</kbd>
+                <button
+                    type="button"
+                    class="icon-button"
+                    title=title.clone()
+                    aria-label=title
+                    on:click=move |_| send(vec![Edit::HotkeyClear { chord: chord.clone() }])
+                >
+                    "×"
+                </button>
+            </span>
+        }
+    };
+    view! {
+        <div class="key-value hotkey-row">
+            <span class="key">"Hotkey"</span>
+            <span class="hotkeys">
+                {move || chords.with(Vec::is_empty).then_some(view! { <span class="none">"none"</span> })}
+                <For each=move || chords.get() key=|c| c.clone() children=chip />
+                <button
+                    type="button"
+                    class="set-key"
+                    class:capturing=move || capturing.get()
+                    on:click=move |_| capturing.update(|c| *c = !*c)
+                    on:keydown=on_key
+                    on:blur=move |_| capturing.set(false)
+                >
+                    {move || if capturing.get() { "Press a key…" } else { "Set key" }}
+                </button>
+            </span>
+        </div>
     }
 }
 
@@ -979,6 +1180,30 @@ mod tests {
         assert_eq!(param_value(&g, Param::W), 460.0);
         assert_eq!(param_value(&g, Param::H), 410.0);
         assert_eq!(param_value(&g, Param::Rotation), 0.0);
+    }
+
+    #[test]
+    fn the_size_reads_and_sets_as_a_percent_of_the_sources() {
+        let g = geometry(480.0, 270.0, 960.0, 540.0);
+        assert_eq!(percent(&g, (1920, 1080), true), Some(50.0));
+        assert_eq!(percent(&g, (1920, 1080), false), Some(50.0));
+        assert_eq!(percent(&g, (0, 1080), true), None);
+        // 25 % across, linked: the height follows; the top-left corner stays.
+        let quarter = with_percent(&g, (1920, 1080), true, 25.0, true).expect("a box");
+        assert_eq!(
+            (quarter.size.width.get(), quarter.size.height.get()),
+            (480.0, 270.0)
+        );
+        assert_eq!(top_left(&quarter), (0.0, 0.0));
+        // Unlinked, H % changes the height alone.
+        let tall = with_percent(&g, (1920, 1080), false, 100.0, false).expect("a box");
+        assert_eq!(
+            (tall.size.width.get(), tall.size.height.get()),
+            (960.0, 1080.0)
+        );
+        // Kept to 0.1 %.
+        let tiny = with_percent(&g, (1920, 1080), true, 0.0, false).expect("a box");
+        assert!((tiny.size.width.get() - 1.92).abs() < 1e-4);
     }
 
     #[test]
