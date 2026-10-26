@@ -1,6 +1,7 @@
 //! Filters (spec-panels.md 5, spec-workspace.md 6.2.6 to 6.4): the selected item's
 //! source's video and audio chains (ADR-0026) in the Filters panel and the Properties
-//! dialog, and the Add filter and Filter settings dialogs over them. A row turns its
+//! dialog, the program output's and each output's chains (ADR-0027) in the Filters panel
+//! once an FX button picks them, and the Add filter and Filter settings dialogs over them. A row turns its
 //! filter on or off, shows a summary of its settings, opens its settings, drags to
 //! another place in its chain and removes it. A filter with three settings or fewer
 //! opens in place under its row; one with more opens the Filter settings dialog, whose
@@ -21,9 +22,9 @@ use crate::panels::properties::{Form, draft_patch, value_of};
 use crate::panels::tree::{Reorder, Side, dropped_at};
 use crate::store::{Collection, Studio, apply};
 use jstream_control::protocol::{
-    Edit, FilterChain, FilterId, FilterInfo, FilterOwner, KindCategory, KindDescriptor,
-    KindSummary, MAX_CHAIN_FILTERS, ParamType, Reference, SceneId, Settings, SourceId, SourceInfo,
-    SourceKind,
+    Edit, FilterChain, FilterId, FilterInfo, FilterOwner, ItemId, KindCategory, KindDescriptor,
+    KindSummary, MAX_CHAIN_FILTERS, OutputKind, ParamType, Reference, SceneId, Settings, SourceId,
+    SourceInfo, SourceKind,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -497,46 +498,147 @@ fn source_icon(source: &SourceInfo) -> &'static str {
     }
 }
 
-/// A filter of a source, by its ID.
+/// Whether an output carries sound, and so has an audio chain: a stream and a recording
+/// do, the virtual camera doesn't.
+pub fn output_has_audio(kind: &OutputKind) -> bool {
+    matches!(kind, OutputKind::Rtmp { .. } | OutputKind::Record { .. })
+}
+
+/// The chains `owner` shows, as (video, audio). A source's follow its kind
+/// ([`chains_of`]); a scene has a video chain. The program output and an output show their
+/// audio chain only, since the engine refuses their video chains so far, and an output
+/// without sound (the virtual camera) has none.
+pub fn owner_chains(collection: &Collection, owner: &FilterOwner) -> (bool, bool) {
+    match owner {
+        FilterOwner::Source { source_id } => collection
+            .source(source_id)
+            .map_or((false, false), chains_of),
+        FilterOwner::Master => (false, true),
+        FilterOwner::Output { output_id } => (
+            false,
+            collection
+                .output(output_id)
+                .is_some_and(|o| output_has_audio(&o.kind)),
+        ),
+        FilterOwner::Scene { .. } => (true, false),
+        _ => (false, false),
+    }
+}
+
+/// What the panel and the dialogs call `owner`: a source's or a scene's name, "Program
+/// output" for the master stage, and an output's ID, as the Outputs panel shows it.
+pub fn owner_name(collection: &Collection, owner: &FilterOwner) -> String {
+    match owner {
+        FilterOwner::Source { source_id } => collection.source_name(source_id),
+        FilterOwner::Master => "Program output".into(),
+        FilterOwner::Output { output_id } => output_id.to_string(),
+        FilterOwner::Scene { scene_id } => collection
+            .scene(scene_id)
+            .map_or_else(|| scene_id.to_string(), |s| s.name.clone()),
+        _ => String::new(),
+    }
+}
+
+/// The note under the panel's title (F2): where `owner`'s chains apply.
+pub fn owner_note(collection: &Collection, owner: &FilterOwner) -> &'static str {
+    match owner {
+        FilterOwner::Master => "Master chain: applies to everything leaving JStream.",
+        FilterOwner::Output { .. } if owner_chains(collection, owner).1 => {
+            "Only this output, after the program filters."
+        }
+        FilterOwner::Output { .. } => "Only this output, after the program filters. No sound.",
+        FilterOwner::Scene { .. } => "Scene filters apply to the whole scene, top to bottom.",
+        _ => "Applies everywhere this source appears, top to bottom.",
+    }
+}
+
+/// The Add filter dialog's foot: where a filter added to `owner` applies.
+fn owner_foot(owner: &FilterOwner) -> &'static str {
+    match owner {
+        FilterOwner::Master => "Applies to everything leaving JStream.",
+        FilterOwner::Output { .. } => "Applies to this output only, after the program filters.",
+        FilterOwner::Scene { .. } => "Applies to the whole scene.",
+        _ => "Applies everywhere this source appears.",
+    }
+}
+
+/// The panel header's icon for `owner`.
+fn owner_icon(collection: &Collection, owner: &FilterOwner) -> &'static str {
+    match owner {
+        FilterOwner::Source { source_id } => {
+            collection.source(source_id).map_or("image", source_icon)
+        }
+        FilterOwner::Master | FilterOwner::Output { .. } => "out",
+        _ => "layers",
+    }
+}
+
+/// The source a filter's settings form leaves out of its source choices: the owner's
+/// own, and none (an ID no source has) for any other owner.
+fn own_source(owner: &FilterOwner) -> SourceId {
+    owner
+        .source_id()
+        .cloned()
+        .unwrap_or_else(|| SourceId::new(""))
+}
+
+/// A filter of an owner, by its ID.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Target {
-    /// The source.
-    pub source_id: SourceId,
+    /// The chain's owner.
+    pub owner: FilterOwner,
     /// The filter.
     pub filter_id: FilterId,
 }
 
-/// The filter dialogs' state as context: the source the Add filter dialog adds to,
-/// the filter the Filter settings dialog edits, and a filter just added, which its row
-/// opens in place.
+/// The filter dialogs' state as context: the owner the Add filter dialog adds to, the
+/// filter the Filter settings dialog edits, a filter just added, which its row opens in
+/// place, and the owner an FX button picked for the Filters panel.
 #[derive(Clone, Copy)]
 pub struct FilterDialogs {
-    add: RwSignal<Option<SourceId>>,
+    add: RwSignal<Option<FilterOwner>>,
     edit: RwSignal<Option<Target>>,
     fresh: RwSignal<Option<FilterId>>,
+    picked: RwSignal<Option<FilterOwner>>,
 }
 
 impl FilterDialogs {
-    /// Both dialogs closed.
+    /// Both dialogs closed, and nothing picked.
     pub fn new() -> FilterDialogs {
         FilterDialogs {
             add: RwSignal::new(None),
             edit: RwSignal::new(None),
             fresh: RwSignal::new(None),
+            picked: RwSignal::new(None),
         }
     }
 
-    /// Opens the Add filter dialog for `source_id`.
-    pub fn add(&self, source_id: SourceId) {
-        self.add.set(Some(source_id));
+    /// Opens the Add filter dialog for `owner`'s chains.
+    pub fn add(&self, owner: FilterOwner) {
+        self.add.set(Some(owner));
     }
 
     /// Opens the Filter settings dialog on a filter.
-    pub fn edit(&self, source_id: SourceId, filter_id: FilterId) {
-        self.edit.set(Some(Target {
-            source_id,
-            filter_id,
-        }));
+    pub fn edit(&self, owner: FilterOwner, filter_id: FilterId) {
+        self.edit.set(Some(Target { owner, filter_id }));
+    }
+
+    /// Has the Filters panel show `owner`'s chains (the program output's or an
+    /// output's, from its FX button) until another item is selected or [`unpick`] runs.
+    ///
+    /// [`unpick`]: FilterDialogs::unpick
+    pub fn pick(&self, owner: FilterOwner) {
+        self.picked.set(Some(owner));
+    }
+
+    /// Has the Filters panel show the selected item's source's chains again.
+    pub fn unpick(&self) {
+        self.picked.set(None);
+    }
+
+    /// The owner an FX button picked, read reactively.
+    pub fn picked(&self) -> Option<FilterOwner> {
+        self.picked.get()
     }
 }
 
@@ -546,15 +648,14 @@ impl Default for FilterDialogs {
     }
 }
 
-/// A source's filter, and the chain it is on, read reactively.
+/// An owner's filter, and the chain it is on, read reactively.
 fn filter_of(studio: Studio, target: &Target) -> Option<(FilterChain, FilterInfo)> {
     studio.collection.with(|c| {
-        let source = c.as_ref()?.source(&target.source_id)?;
+        let chains = c.as_ref()?.chains(&target.owner)?;
         [FilterChain::Video, FilterChain::Audio]
             .into_iter()
             .find_map(|chain| {
-                source
-                    .filters
+                chains
                     .chain(chain)
                     .iter()
                     .find(|f| f.filter_id == target.filter_id)
@@ -588,27 +689,51 @@ fn describe_all(
     }
 }
 
-/// The Filters panel (spec-panels.md 5): the selected item's source's chains. Scenes,
-/// the program output and outputs own chains too in the prototype; scene filters wait on
-/// the engine (FL-06), and the program's and outputs' on their panels (FL-07).
+/// The Filters panel (spec-panels.md 5): the chains of the program output or an output
+/// an FX button picked (FL-07), else the selected item's source's. A scene's chain waits
+/// on its editor (FL-06).
 #[component]
 pub fn Filters() -> impl IntoView {
     let studio = expect_context::<Studio>();
     let dialogs = expect_context::<FilterDialogs>();
-    let source = Memo::new(move |_| {
-        let item = studio.selection.with(|s| s.item.clone());
+    let item = Memo::new(move |_| studio.selection.with(|s| s.item.clone()));
+    // Selecting another item shows its source's chains again.
+    Effect::new(move |before: Option<Option<ItemId>>| {
+        let now = item.get();
+        if before.is_some_and(|before| before != now) {
+            dialogs.unpick();
+        }
+        now
+    });
+    // The owner shown, with its header: icon, name and note.
+    let shown = Memo::new(move |_| {
+        let picked = dialogs.picked();
+        let item = item.get();
         studio.collection.with(|c| {
             let c = c.as_ref()?;
-            let (_, item) = c.item(item.as_ref()?)?;
-            c.source(&item.source_id).cloned()
+            let owner = match picked.filter(|p| c.chains(p).is_some()) {
+                Some(owner) => owner,
+                None => {
+                    let (_, item) = c.item(item.as_ref()?)?;
+                    c.source(&item.source_id)?;
+                    FilterOwner::Source {
+                        source_id: item.source_id.clone(),
+                    }
+                }
+            };
+            let head = (
+                owner_icon(c, &owner),
+                owner_name(c, &owner),
+                owner_note(c, &owner),
+            );
+            Some((owner_chains(c, &owner), head, owner))
         })
     });
-    let shown = Memo::new(move |_| {
-        source.with(|s| s.as_ref().map(|s| (s.source_id.clone(), chains_of(s))))
-    });
+    let chains =
+        Memo::new(move |_| shown.with(|s| s.as_ref().map(|(chains, _, o)| (o.clone(), *chains))));
     view! {
         <section class="panel filters-panel">
-            {move || match source.get() {
+            {move || match shown.with(|s| s.as_ref().map(|(_, head, _)| head.clone())) {
                 None => view! {
                     <div class="filters-head">
                         <Icon name="layers" size=18 />
@@ -619,26 +744,32 @@ pub fn Filters() -> impl IntoView {
                     <p class="placeholder">"Select a source to see its filters."</p>
                 }
                 .into_any(),
-                Some(s) => view! {
+                Some((icon, name, note)) => view! {
                     <div class="filters-head">
-                        <Icon name=source_icon(&s) size=18 />
+                        <Icon name=icon size=18 />
                         <div class="filters-titles">
-                            <span class="filters-title">{s.name.clone()}</span>
-                            <span class="filters-note">"Applies everywhere this source appears, top to bottom."</span>
+                            <span class="filters-title">{name}</span>
+                            <span class="filters-note">{note}</span>
                         </div>
                     </div>
                 }
                 .into_any(),
             }}
             {move || {
-                shown.get().map(|(source_id, (video, audio))| {
+                chains.get().map(|(owner, (video, audio))| {
+                    let stage = matches!(owner, FilterOwner::Master | FilterOwner::Output { .. });
                     let add = {
-                        let source_id = source_id.clone();
-                        move |_| dialogs.add(source_id.clone())
+                        let owner = owner.clone();
+                        move |_| dialogs.add(owner.clone())
                     };
                     view! {
-                        <Chains source_id=source_id video=video audio=audio in_place=true />
-                        <button type="button" class="filters-add" on:click=add>"+ Add filter…"</button>
+                        <Chains owner=owner video=video audio=audio in_place=true />
+                        {stage.then(|| view! {
+                            <p class="filters-later">"Video filters on outputs aren’t available yet."</p>
+                        })}
+                        {(video || audio).then(|| view! {
+                            <button type="button" class="filters-add" on:click=add>"+ Add filter…"</button>
+                        })}
                     }
                 })
             }}
@@ -646,13 +777,13 @@ pub fn Filters() -> impl IntoView {
     }
 }
 
-/// A source's chains: a section per chain with its count and rows, each change sent at
+/// An owner's chains: a section per chain with its count and rows, each change sent at
 /// once. With `in_place` (the Filters panel) a filter with few settings opens under its
 /// row and a click opens the settings; in the Properties dialog a double-click does.
 #[component]
 pub fn Chains(
-    /// The source.
-    source_id: SourceId,
+    /// The chains' owner.
+    owner: FilterOwner,
     /// Whether it has a video chain.
     video: bool,
     /// Whether it has an audio chain.
@@ -665,12 +796,12 @@ pub fn Chains(
     let session = expect_context::<SessionContext>();
     let dialogs = expect_context::<FilterDialogs>();
     let chains = {
-        let source_id = source_id.clone();
+        let owner = owner.clone();
         Memo::new(move |_| {
             studio.collection.with(|c| {
                 c.as_ref()
-                    .and_then(|c| c.source(&source_id))
-                    .map(|s| s.filters.clone())
+                    .and_then(|c| c.chains(&owner))
+                    .cloned()
                     .unwrap_or_default()
             })
         })
@@ -702,9 +833,6 @@ pub fn Chains(
         });
     }
     let reorder = Reorder::new();
-    let owner = FilterOwner::Source {
-        source_id: source_id.clone(),
-    };
     let drop = {
         let owner = owner.clone();
         move |moved: String, target: String, side: Side| {
@@ -741,7 +869,7 @@ pub fn Chains(
                 format!("{n} filters")
             }
         };
-        let source_id = source_id.clone();
+        let owner = owner.clone();
         let drop = drop.clone();
         view! {
             <div class="filter-chain" data-chain=which.as_str()>
@@ -769,10 +897,10 @@ pub fn Chains(
                             each=move || list.get()
                             key=|f| (f.filter_id.clone(), f.enabled, f.kind.clone())
                             children={
-                                let source_id = source_id.clone();
+                                let owner = owner.clone();
                                 move |f: FilterInfo| view! {
                                     <Row
-                                        source_id=source_id.clone()
+                                        owner=owner.clone()
                                         filter=f
                                         in_place=in_place
                                         expanded=expanded
@@ -797,7 +925,7 @@ pub fn Chains(
 /// One filter's row (F5), and its settings under it while open in place (F8).
 #[component]
 fn Row(
-    source_id: SourceId,
+    owner: FilterOwner,
     filter: FilterInfo,
     in_place: bool,
     expanded: RwSignal<Option<FilterId>>,
@@ -809,13 +937,10 @@ fn Row(
     let name = studio
         .kinds
         .with_untracked(|k| filter_name(k.as_deref().unwrap_or_default(), &filter.kind));
-    let owner = FilterOwner::Source {
-        source_id: source_id.clone(),
-    };
     let filter_id = filter.filter_id.clone();
     let enabled = filter.enabled;
     let target = Target {
-        source_id: source_id.clone(),
+        owner: owner.clone(),
         filter_id: filter_id.clone(),
     };
     let descriptor = {
@@ -873,7 +998,7 @@ fn Row(
     };
     let open_dialog = {
         let target = target.clone();
-        move || dialogs.edit(target.source_id.clone(), target.filter_id.clone())
+        move || dialogs.edit(target.owner.clone(), target.filter_id.clone())
     };
     let is_open = {
         let filter_id = filter_id.clone();
@@ -956,7 +1081,6 @@ fn Row(
         let is_open = is_open.clone();
         let owner = owner.clone();
         let filter_id = filter_id.clone();
-        let source_id = source_id.clone();
         move || {
             if !is_open() {
                 return None;
@@ -965,7 +1089,6 @@ fn Row(
             Some(view! {
                 <Editor
                     kind=kind
-                    source_id=source_id.clone()
                     owner=owner.clone()
                     filter_id=filter_id.clone()
                     settings=settings
@@ -1024,7 +1147,6 @@ fn Row(
 #[component]
 fn Editor(
     kind: KindDescriptor,
-    source_id: SourceId,
     owner: FilterOwner,
     filter_id: FilterId,
     settings: Signal<Settings>,
@@ -1032,6 +1154,7 @@ fn Editor(
     let session = expect_context::<SessionContext>();
     let studio = expect_context::<Studio>();
     let errors = RwSignal::new(HashMap::<String, String>::new());
+    let source_id = own_source(&owner);
     let owner = StoredValue::new(owner);
     let filter_id = StoredValue::new(filter_id);
     let commit = move |_: SourceId, param: String, value: Value| {
@@ -1109,9 +1232,7 @@ fn SettingsBody(target: Target, close: impl Fn() + Copy + Send + Sync + 'static)
         request_animation_frame(close);
         return ().into_any();
     };
-    let owner = FilterOwner::Source {
-        source_id: target.source_id.clone(),
-    };
+    let owner = target.owner.clone();
     // What the dialog opened on: Cancel puts it back.
     let opened = StoredValue::new((filter.settings.clone(), filter.enabled));
     // What the dialog has sent, so Cancel and Defaults cover an edit still on its way
@@ -1145,14 +1266,14 @@ fn SettingsBody(target: Target, close: impl Fn() + Copy + Send + Sync + 'static)
         .kinds
         .with_untracked(|k| filter_name(k.as_deref().unwrap_or_default(), &kind_id));
     let hint = filter_type(&kind_id, chain, None).hint;
-    let source_name = studio.collection.with_untracked(|c| {
+    let owner_name = studio.collection.with_untracked(|c| {
         c.as_ref()
-            .map(|c| c.source_name(&target.source_id))
+            .map(|c| owner_name(c, &target.owner))
             .unwrap_or_default()
     });
     let (icon, sub) = match chain {
-        FilterChain::Video => ("monitor", format!("Video filter on “{source_name}”")),
-        FilterChain::Audio => ("speaker", format!("Audio filter on “{source_name}”")),
+        FilterChain::Video => ("monitor", format!("Video filter on “{owner_name}”")),
+        FilterChain::Audio => ("speaker", format!("Audio filter on “{owner_name}”")),
     };
 
     let send = move |edits: Vec<Edit>, then: Option<Box<dyn FnOnce()>>| {
@@ -1273,7 +1394,7 @@ fn SettingsBody(target: Target, close: impl Fn() + Copy + Send + Sync + 'static)
         );
     };
     let form = {
-        let source_id = target.source_id.clone();
+        let source_id = own_source(&target.owner);
         move || {
             match descriptor.get() {
             None if problem.with(Option::is_some) => ().into_any(),
@@ -1338,13 +1459,13 @@ pub fn AddFilter() -> impl IntoView {
     let studio = expect_context::<Studio>();
     let close = move || dialogs.add.set(None);
     move || {
-        dialogs.add.get().and_then(|source_id| {
-            let source = studio
+        dialogs.add.get().and_then(|owner| {
+            let present = studio
                 .collection
-                .with_untracked(|c| c.as_ref().and_then(|c| c.source(&source_id)).cloned());
-            match source {
-                Some(source) => Some(view! { <AddBody source=source close=close /> }),
-                None => {
+                .with_untracked(|c| c.as_ref().and_then(|c| c.chains(&owner)).is_some());
+            match present {
+                true => Some(view! { <AddBody owner=owner close=close /> }),
+                false => {
                     request_animation_frame(close);
                     None
                 }
@@ -1354,12 +1475,17 @@ pub fn AddFilter() -> impl IntoView {
 }
 
 #[component]
-fn AddBody(source: SourceInfo, close: impl Fn() + Copy + Send + Sync + 'static) -> impl IntoView {
+fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) -> impl IntoView {
     let studio = expect_context::<Studio>();
     let session = expect_context::<SessionContext>();
     let dialogs = expect_context::<FilterDialogs>();
-    let (video, audio) = chains_of(&source);
-    let source_id = source.source_id.clone();
+    let (video, audio, name) = studio.collection.with_untracked(|c| {
+        c.as_ref().map_or((false, false, String::new()), |c| {
+            let (video, audio) = owner_chains(c, &owner);
+            (video, audio, owner_name(c, &owner))
+        })
+    });
+    let source_id = own_source(&owner);
     let types = Memo::new(move |_| {
         studio
             .kinds
@@ -1407,13 +1533,19 @@ fn AddBody(source: SourceInfo, close: impl Fn() + Copy + Send + Sync + 'static) 
                 .map(|p| p.id.clone())
         })
     });
-    let owner_id = StoredValue::new(source_id.clone());
-    // Whether the source's `chain` holds all the filters it can.
+    let foot = owner_foot(&owner);
+    let none = if owner.source_id().is_some() {
+        "The engine lists no filters for this source."
+    } else {
+        "The engine lists no filters for this output."
+    };
+    let owner = StoredValue::new(owner);
+    // Whether the owner's `chain` holds all the filters it can.
     let full = move |chain: FilterChain| {
         studio.collection.with(|c| {
             c.as_ref()
-                .and_then(|c| c.source(&owner_id.get_value()))
-                .is_some_and(|s| s.filters.chain(chain).len() >= MAX_CHAIN_FILTERS)
+                .and_then(|c| owner.with_value(|o| c.chains(o).cloned()))
+                .is_some_and(|f| f.chain(chain).len() >= MAX_CHAIN_FILTERS)
         })
     };
     let blocked = {
@@ -1423,7 +1555,6 @@ fn AddBody(source: SourceInfo, close: impl Fn() + Copy + Send + Sync + 'static) 
         }
     };
     let add = {
-        let source_id = source_id.clone();
         StoredValue::new(move |t: FilterType| {
             let Some(s) = session.get() else {
                 return;
@@ -1439,9 +1570,7 @@ fn AddBody(source: SourceInfo, close: impl Fn() + Copy + Send + Sync + 'static) 
             let many =
                 descriptor.with_untracked(|d| d.as_ref().is_none_or(|d| opens(d) == Opens::Dialog));
             let edit = Edit::FilterAdd {
-                owner: FilterOwner::Source {
-                    source_id: source_id.clone(),
-                },
+                owner: owner.get_value(),
                 chain: t.chain,
                 filter_id: filter_id.clone(),
                 kind: t.kind,
@@ -1449,13 +1578,12 @@ fn AddBody(source: SourceInfo, close: impl Fn() + Copy + Send + Sync + 'static) 
                 enabled: None,
                 index: None,
             };
-            let source_id = source_id.clone();
             spawn_local(async move {
                 match apply(&s, vec![edit], None).await {
                     Ok(_) => {
                         close();
                         if many {
-                            dialogs.edit(source_id, filter_id);
+                            dialogs.edit(owner.get_value(), filter_id);
                         } else {
                             dialogs.fresh.set(Some(filter_id));
                         }
@@ -1480,7 +1608,7 @@ fn AddBody(source: SourceInfo, close: impl Fn() + Copy + Send + Sync + 'static) 
         let list = shown.get();
         if list.is_empty() {
             let text = if types.with(Vec::is_empty) {
-                "The engine lists no filters for this source."
+                none
             } else {
                 "No filters match."
             };
@@ -1621,7 +1749,7 @@ fn AddBody(source: SourceInfo, close: impl Fn() + Copy + Send + Sync + 'static) 
             <div class="modal-header">
                 <div class="modal-titles">
                     <h2 class="modal-title">"Add filter"</h2>
-                    <span class="modal-sub">{format!("For “{}”", source.name)}</span>
+                    <span class="modal-sub">{format!("For “{name}”")}</span>
                 </div>
                 <button type="button" class="modal-close" aria-label="Close" on:click=move |_| close()>
                     "×"
@@ -1638,7 +1766,7 @@ fn AddBody(source: SourceInfo, close: impl Fn() + Copy + Send + Sync + 'static) 
                 <div class="add-detail">
                     {detail}
                     {move || problem.get().map(|e| view! { <p class="problem">{e}</p> })}
-                    <p class="add-note add-filter-foot">"Applies everywhere this source appears."</p>
+                    <p class="add-note add-filter-foot">{foot}</p>
                 </div>
             </div>
             <div class="modal-footer">
@@ -1957,6 +2085,57 @@ mod tests {
         .map(|(_, name)| name)
         .collect();
         assert_eq!(choices, ["SHAPE"]);
+    }
+
+    #[test]
+    fn the_program_output_and_outputs_show_their_audio_chain_only() {
+        use jstream_control::protocol::{OutputId, OutputInfo, RecordContainer};
+        let output = |id: &str, kind: OutputKind| OutputInfo {
+            output_id: id.into(),
+            kind,
+            encoder_profile: None,
+            filters: Default::default(),
+            video_mix: None,
+        };
+        let collection = Collection {
+            outputs: vec![
+                output(
+                    "rec",
+                    OutputKind::Record {
+                        path: "/tmp/a.mp4".into(),
+                        container: RecordContainer::Mp4,
+                    },
+                ),
+                output("cam", OutputKind::VirtualCam),
+            ],
+            ..Collection::default()
+        };
+        let out = |id: &str| FilterOwner::Output {
+            output_id: OutputId::new(id),
+        };
+        let master = FilterOwner::Master;
+        assert_eq!(owner_chains(&collection, &master), (false, true));
+        assert_eq!(owner_name(&collection, &master), "Program output");
+        assert_eq!(
+            owner_note(&collection, &master),
+            "Master chain: applies to everything leaving JStream."
+        );
+        assert_eq!(owner_chains(&collection, &out("rec")), (false, true));
+        assert_eq!(owner_name(&collection, &out("rec")), "rec");
+        assert_eq!(
+            owner_note(&collection, &out("rec")),
+            "Only this output, after the program filters."
+        );
+        // The virtual camera has no sound, so no chain the engine takes.
+        assert_eq!(owner_chains(&collection, &out("cam")), (false, false));
+        assert_eq!(
+            owner_note(&collection, &out("cam")),
+            "Only this output, after the program filters. No sound."
+        );
+        assert_eq!(owner_chains(&collection, &out("gone")), (false, false));
+        assert!(collection.chains(&out("gone")).is_none());
+        assert!(collection.chains(&master).is_some());
+        assert_eq!(own_source(&master), SourceId::new(""));
     }
 
     #[test]

@@ -1,5 +1,7 @@
 //! The UI's copy of the engine's state, shared by every panel: the collection as
-//! `state.get` last reported it, the program scene, what is selected, and the kind
+//! `state.get` last reported it (a keyframe scene with its parent's items, its
+//! overrides applied), the program scene, whether the privacy screen is on, what is
+//! selected, the sources' sizes (`source.sizes` and `source.size_changed`) and the kind
 //! descriptors read so far. The app keeps it current from the session's events; panels
 //! read it reactively and change the engine only through calls, never by editing it.
 //!
@@ -8,9 +10,11 @@
 use crate::session::Session;
 use jstream_control::ControlError;
 use jstream_control::protocol::{
-    Batch, BusInfo, Call, CallResult, Canvas, DeleteTarget, Edit, Event, ItemId, ItemInfo,
-    KindDescriptor, KindSummary, OutputInfo, Query, QueryResult, Rev, SceneId, SceneInfo,
-    SceneRole, SourceId, SourceInfo, SourceKind,
+    Action, Batch, BusInfo, Call, CallResult, Canvas, Chord, DeleteTarget, Edit, Event,
+    FilterChains, FilterOwner, FolderId, FolderInfo, HotkeyBinding, ItemId, ItemInfo, ItemOverride,
+    KindDescriptor, KindSummary, LabelInfo, OutputId, OutputInfo, OverrideField, PlacementForm,
+    Query, QueryResult, Rev, SceneId, SceneInfo, SceneRole, SourceId, SourceInfo, SourceKind,
+    SourceSize, TransitionPresetId, TransitionPresetInfo, TransitionsInfo,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -25,13 +29,25 @@ pub struct Collection {
     pub canvas: Canvas,
     /// Every source, ordered by ID.
     pub sources: Vec<SourceInfo>,
-    /// Every scene with its items, in display order.
+    /// Every scene with its items, in display order. A keyframe scene's `items` are its
+    /// parent's, each with the keyframe's overrides applied: what it shows, so every
+    /// panel reads it as it reads any scene ([`shown_items`]).
     pub scenes: Vec<SceneInfo>,
     /// Every output, ordered by ID.
     pub outputs: Vec<OutputInfo>,
     /// Every audio bus, ordered by ID, the master among them: what a `bus` parameter
     /// picks from.
     pub buses: Vec<BusInfo>,
+    /// The labels sources can carry, in label order (ADR-0024 §4).
+    pub labels: Vec<LabelInfo>,
+    /// The master stage's chains, which apply to everything leaving JStream (ADR-0027).
+    pub master: FilterChains,
+    /// Every hotkey binding, ordered by chord (ADR-0024 §5).
+    pub hotkeys: Vec<HotkeyBinding>,
+    /// The scene list's folders, in folder order (ADR-0024 §3, ADR-0064).
+    pub folders: Vec<FolderInfo>,
+    /// The transition presets and which one is the default.
+    pub transitions: TransitionsInfo,
 }
 
 impl Collection {
@@ -45,15 +61,42 @@ impl Collection {
                 scenes,
                 outputs,
                 buses,
+                labels,
+                master,
+                hotkeys,
+                folders,
+                transitions,
                 ..
-            } => Some(Collection {
-                rev,
-                canvas,
-                sources,
-                scenes,
-                outputs,
-                buses,
-            }),
+            } => {
+                let mut scenes = scenes;
+                let shown: Vec<Option<Vec<ItemInfo>>> = scenes
+                    .iter()
+                    .map(|scene| {
+                        let parent = scenes
+                            .iter()
+                            .find(|p| Some(&p.scene_id) == scene.variant_of.as_ref())?;
+                        Some(shown_items(&parent.items, &scene.overrides))
+                    })
+                    .collect();
+                for (scene, items) in scenes.iter_mut().zip(shown) {
+                    if let Some(items) = items {
+                        scene.items = items;
+                    }
+                }
+                Some(Collection {
+                    rev,
+                    canvas,
+                    sources,
+                    scenes,
+                    outputs,
+                    buses,
+                    labels,
+                    master: master.filters,
+                    hotkeys,
+                    folders,
+                    transitions: *transitions,
+                })
+            }
             _ => None,
         }
     }
@@ -68,21 +111,127 @@ impl Collection {
         self.sources.iter().find(|s| &s.source_id == source_id)
     }
 
-    /// The item with this ID, with the scene it is in.
+    /// The output with this ID.
+    pub fn output(&self, output_id: &OutputId) -> Option<&OutputInfo> {
+        self.outputs.iter().find(|o| &o.output_id == output_id)
+    }
+
+    /// The chains `owner` has, or `None` if it doesn't exist or reports none (an item).
+    pub fn chains(&self, owner: &FilterOwner) -> Option<&FilterChains> {
+        match owner {
+            FilterOwner::Source { source_id } => self.source(source_id).map(|s| &s.filters),
+            FilterOwner::Master => Some(&self.master),
+            FilterOwner::Output { output_id } => self.output(output_id).map(|o| &o.filters),
+            FilterOwner::Scene { scene_id } => self.scene(scene_id).map(|s| &s.filters),
+            _ => None,
+        }
+    }
+
+    /// The item with this ID, with the scene it is in: its own scene, never a keyframe
+    /// scene that shows it.
     pub fn item(&self, item_id: &ItemId) -> Option<(&SceneInfo, &ItemInfo)> {
-        self.scenes.iter().find_map(|scene| {
-            scene
-                .items
-                .iter()
-                .find(|i| &i.item_id == item_id)
-                .map(|item| (scene, item))
-        })
+        self.scenes
+            .iter()
+            .filter(|scene| scene.variant_of.is_none())
+            .find_map(|scene| {
+                scene
+                    .items
+                    .iter()
+                    .find(|i| &i.item_id == item_id)
+                    .map(|item| (scene, item))
+            })
+    }
+
+    /// The item as `scene_id` shows it, with that scene: in a keyframe scene, the
+    /// parent's item with the keyframe's overrides. Else, as [`Collection::item`] finds
+    /// it.
+    pub fn item_in(
+        &self,
+        scene_id: Option<&SceneId>,
+        item_id: &ItemId,
+    ) -> Option<(&SceneInfo, &ItemInfo)> {
+        scene_id
+            .and_then(|id| self.scene(id))
+            .and_then(|scene| {
+                scene
+                    .items
+                    .iter()
+                    .find(|i| &i.item_id == item_id)
+                    .map(|item| (scene, item))
+            })
+            .or_else(|| self.item(item_id))
+    }
+
+    /// The scene `scene_id` is a keyframe scene of, if it is one.
+    pub fn parent_of(&self, scene_id: &SceneId) -> Option<&SceneInfo> {
+        self.scene(scene_id)?
+            .variant_of
+            .as_ref()
+            .and_then(|parent| self.scene(parent))
+    }
+
+    /// Whether `scene_id` names a keyframe scene, where only its items' geometry, crop,
+    /// visibility and opacity can change (ADR-0049).
+    pub fn is_keyframe(&self, scene_id: &SceneId) -> bool {
+        self.scene(scene_id)
+            .is_some_and(|scene| scene.variant_of.is_some())
+    }
+
+    /// The keyframe scenes of `scene_id`, in display order.
+    pub fn keyframes_of<'a>(
+        &'a self,
+        scene_id: &'a SceneId,
+    ) -> impl Iterator<Item = &'a SceneInfo> + 'a {
+        self.scenes
+            .iter()
+            .filter(move |s| s.variant_of.as_ref() == Some(scene_id))
+    }
+
+    /// The chords bound to putting `scene_id` on program (`scene.switch`), in chord
+    /// order.
+    pub fn scene_chords(&self, scene_id: &SceneId) -> Vec<Chord> {
+        self.hotkeys
+            .iter()
+            .filter(|binding| {
+                matches!(binding.action(), Some(Action::SceneSwitch { scene_id: bound, .. }) if &bound == scene_id)
+            })
+            .map(|binding| binding.chord.clone())
+            .collect()
+    }
+
+    /// The action bound to `chord`, if any, and this version knows it.
+    pub fn hotkey(&self, chord: &Chord) -> Option<Action> {
+        self.hotkeys
+            .iter()
+            .find(|binding| &binding.chord == chord)
+            .and_then(HotkeyBinding::action)
     }
 
     /// The scenes the scene list shows, in display order: groups are left out
     /// (ADR-0024), since they are shown under the items that place them.
     pub fn listed_scenes(&self) -> impl Iterator<Item = &SceneInfo> {
         self.scenes.iter().filter(|s| s.role == SceneRole::Scene)
+    }
+
+    /// The transition preset with this ID.
+    pub fn preset(&self, preset_id: &TransitionPresetId) -> Option<&TransitionPresetInfo> {
+        self.transitions
+            .presets
+            .iter()
+            .find(|p| &p.preset_id == preset_id)
+    }
+
+    /// A preset's display name, falling back to its ID.
+    pub fn preset_name(&self, preset_id: &TransitionPresetId) -> String {
+        self.preset(preset_id)
+            .map_or_else(|| preset_id.to_string(), |p| p.name.clone())
+    }
+
+    /// The chord bound to switching to this scene (`scene.switch` naming it), if any.
+    pub fn scene_hotkey(&self, scene_id: &SceneId) -> Option<&HotkeyBinding> {
+        self.hotkeys.iter().find(|binding| {
+            matches!(binding.action(), Some(Action::SceneSwitch { scene_id: id, .. }) if &id == scene_id)
+        })
     }
 
     /// A source's display name, falling back to its ID.
@@ -106,7 +255,18 @@ impl Collection {
         }
     }
 
-    /// Whether any scene, source, item or output uses this ID. The engine rejects a
+    /// A source's own size in pixels, `(width, height)`: the one `source.sizes` last
+    /// reported in `sizes`, else the canvas for a nested scene, whose own size it is
+    /// (ADR-0022). `None` while the engine knows no size for it: a source that hasn't
+    /// drawn a frame yet, or has no picture.
+    pub fn source_size(&self, sizes: &Sizes, source_id: &SourceId) -> Option<(u32, u32)> {
+        sizes.get(source_id).copied().or_else(|| {
+            matches!(self.source(source_id)?.kind, SourceKind::Scene { .. })
+                .then_some((self.canvas.width, self.canvas.height))
+        })
+    }
+
+    /// Whether any scene, folder, source, item or output uses this ID. The engine rejects a
     /// creating edit whose ID exists, so new IDs are checked against all of them.
     pub fn id_taken(&self, id: &str) -> bool {
         self.scenes
@@ -114,7 +274,30 @@ impl Collection {
             .any(|s| s.scene_id.as_str() == id || s.items.iter().any(|i| i.item_id.as_str() == id))
             || self.sources.iter().any(|s| s.source_id.as_str() == id)
             || self.outputs.iter().any(|o| o.output_id.as_str() == id)
+            || self.labels.iter().any(|l| l.label_id.as_str() == id)
+            || self.folders.iter().any(|f| f.folder_id.as_str() == id)
     }
+
+    /// The folder with this ID.
+    pub fn folder(&self, folder_id: &FolderId) -> Option<&FolderInfo> {
+        self.folders.iter().find(|f| &f.folder_id == folder_id)
+    }
+}
+
+/// Each source's current size in pixels, `(width, height)`, as `source.sizes` and
+/// `source.size_changed` report them: runtime state, so no revision goes with it. A
+/// source the engine knows no size for is absent.
+pub type Sizes = HashMap<SourceId, (u32, u32)>;
+
+/// The sizes a `source.sizes` result reports.
+pub fn sizes_of(sources: Vec<SourceSize>) -> Sizes {
+    sources
+        .into_iter()
+        .filter_map(|s| {
+            let size = s.size?;
+            Some((s.source_id, (size.width, size.height)))
+        })
+        .collect()
 }
 
 /// What is selected: a scene being edited, and items in it.
@@ -183,9 +366,12 @@ impl Selection {
                     .next()
                     .map(|s| s.scene_id.clone())
             });
+        // A keyframe scene shows its parent's items, so they are its items here.
         let in_scene = |item_id: &&ItemId| {
-            let found = collection.item(item_id).map(|(s, _)| &s.scene_id);
-            found.is_some() && found == scene.as_ref()
+            scene
+                .as_ref()
+                .and_then(|id| collection.scene(id))
+                .is_some_and(|s| s.items.iter().any(|i| &i.item_id == *item_id))
         };
         let kept: Vec<ItemId> = self.items().filter(in_scene).cloned().collect();
         Selection {
@@ -196,16 +382,96 @@ impl Selection {
     }
 }
 
+/// What a click on `scene_id` in the scene list sends: in studio mode a
+/// `studio.set_preview`, else a `scene.switch` that lets the engine choose the preset.
+/// It is sent even for a scene the page thinks is there already: the engine treats
+/// both as no-ops then, and the page's copy may be stale.
+pub fn scene_click(studio_mode: bool, scene_id: &SceneId) -> Action {
+    if studio_mode {
+        Action::StudioSetPreview {
+            scene_id: scene_id.clone(),
+        }
+    } else {
+        Action::SceneSwitch {
+            scene_id: scene_id.clone(),
+            preset_id: None,
+        }
+    }
+}
+
+/// The items a keyframe scene shows: its parent's, in their order, each with the fields
+/// the keyframe overrides replaced (ADR-0049 §2). An overridden geometry in the 0.3 form
+/// stays in that form, which the canvas can't draw.
+pub fn shown_items(parent: &[ItemInfo], overrides: &[ItemOverride]) -> Vec<ItemInfo> {
+    parent
+        .iter()
+        .map(|item| {
+            let mut item = item.clone();
+            let Some(o) = overrides.iter().find(|o| o.item_id == item.item_id) else {
+                return item;
+            };
+            if let Some(geometry) = o.geometry {
+                item.placement = PlacementForm::Geometry;
+                item.geometry = Some(geometry);
+            } else if let Some(transform) = o.transform {
+                item.placement = PlacementForm::Legacy;
+                item.transform = transform;
+                item.geometry = None;
+            }
+            if let Some(crop) = o.crop {
+                item.crop = crop;
+            }
+            if let Some(visible) = o.visible {
+                item.visible = visible;
+            }
+            if let Some(opacity) = o.opacity {
+                item.opacity = opacity;
+            }
+            item
+        })
+        .collect()
+}
+
+/// The `item.clear_override`s that reset keyframe scene `scene` to its parent: one
+/// per field it overrides, so every item follows the parent again.
+pub fn reset_edits(scene: &SceneInfo) -> Vec<Edit> {
+    scene
+        .overrides
+        .iter()
+        .flat_map(|o| {
+            [
+                (
+                    o.geometry.is_some() || o.transform.is_some(),
+                    OverrideField::Geometry,
+                ),
+                (o.crop.is_some(), OverrideField::Crop),
+                (o.visible.is_some(), OverrideField::Visible),
+                (o.opacity.is_some(), OverrideField::Opacity),
+            ]
+            .into_iter()
+            .filter(|(set, _)| *set)
+            .map(|(_, field)| Edit::ItemClearOverride {
+                scene_id: scene.scene_id.clone(),
+                item_id: o.item_id.clone(),
+                field,
+            })
+        })
+        .collect()
+}
+
 /// A short account of what a `delete.plan` does beyond deleting its target, for the
 /// confirmation: `None` when it deletes the target alone.
 pub fn plan_summary(edits: &[Edit]) -> Option<String> {
     let (mut items, mut sources, mut references) = (0_usize, 0_usize, 0_usize);
+    let (mut scenes, mut folders) = (0_usize, 0_usize);
     // The last edit is the delete of the target itself.
     for edit in edits.iter().take(edits.len().saturating_sub(1)) {
         match edit {
             Edit::ItemRemove { .. } => items += 1,
             Edit::SourceDelete { .. } | Edit::SceneDelete { .. } => sources += 1,
             Edit::SourceSetSettings { patch, .. } => references += patch.0.len(),
+            Edit::SceneSetFolder { .. } => scenes += 1,
+            Edit::FolderSetParent { .. } => folders += 1,
             _ => {}
         }
     }
@@ -224,6 +490,14 @@ pub fn plan_summary(edits: &[Edit]) -> Option<String> {
             "settings that refer to it",
         )
         .map(|p| format!("clears {p}")),
+        [
+            count(scenes, "scene", "scenes"),
+            count(folders, "folder", "folders"),
+        ]
+        .into_iter()
+        .flatten()
+        .reduce(|a, b| format!("{a} and {b}"))
+        .map(|p| format!("moves {p} up a level")),
     ]
     .into_iter()
     .flatten()
@@ -249,6 +523,37 @@ pub fn fresh_id(
     }
 }
 
+/// Orders the privacy screen's reports: each `privacy.changed`, and each `privacy.get`
+/// answer, which only counts when no `privacy.changed` arrived after it was asked. A
+/// stale answer could otherwise show the outputs covered while they are not.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PrivacyReports {
+    /// Bumped by every `privacy.changed` and every new session.
+    changes: u64,
+}
+
+impl PrivacyReports {
+    /// What a `privacy.get` sent now hands back with its answer.
+    pub fn ticket(&self) -> u64 {
+        self.changes
+    }
+
+    /// Takes a `privacy.changed`.
+    pub fn changed(&mut self) {
+        self.changes += 1;
+    }
+
+    /// Forgets the session: an answer to a read it sent no longer counts.
+    pub fn reset(&mut self) {
+        self.changes += 1;
+    }
+
+    /// Whether the answer to the read that got `ticket` is still the newest report.
+    pub fn answered(&self, ticket: u64) -> bool {
+        ticket == self.changes
+    }
+}
+
 /// The shared state, provided as Leptos context by the app. Copyable: every field is a
 /// handle.
 #[derive(Clone, Copy)]
@@ -257,21 +562,46 @@ pub struct Studio {
     pub collection: RwSignal<Option<Collection>>,
     /// The scene on program.
     pub program: RwSignal<Option<SceneId>>,
+    /// The scene on preview.
+    pub preview: RwSignal<Option<SceneId>>,
+    /// Whether studio mode is on: clicking a scene puts it on preview, and the
+    /// Transitions panel shows preview and program. The engine has no such switch, so
+    /// this is the page's, kept in the browser's storage.
+    pub studio_mode: RwSignal<bool>,
+    /// Whether the privacy screen is on (ADR-0027 §4), as `privacy.get` and then each
+    /// `privacy.changed` reported it.
+    pub privacy: RwSignal<bool>,
+    /// What orders those reports ([`PrivacyReports`]).
+    privacy_reports: StoredValue<PrivacyReports>,
     /// What is selected.
     pub selection: RwSignal<Selection>,
+    /// Each source's size, as the engine last reported it.
+    pub sizes: RwSignal<Sizes>,
+    /// Whether the canvas is in crop mode, where every handle crops (CV-08). The canvas
+    /// and the item menu toggle it.
+    pub crop_mode: RwSignal<bool>,
     /// The source kinds `kind.list` reported, once it answered.
     pub kinds: RwSignal<Option<Vec<KindSummary>>>,
     /// The kind descriptors read so far, by kind ID.
     pub descriptors: RwSignal<HashMap<String, KindDescriptor>>,
     /// The last call that failed, for the problem bar.
     pub problem: RwSignal<Option<String>>,
+    /// The confirmation the toast shows, numbered so a repeat of the same text restarts
+    /// its timer (spec-workspace.md 6.7).
+    pub toast: RwSignal<Option<(u64, String)>>,
     /// Bumped when an output's stream key was set or cleared, which no event reports, so
     /// the header re-reads the outputs Go Live may start.
     pub keys_changed: RwSignal<u64>,
     /// Whether a `state.get` is in flight, and whether another is due after it.
     refresh: StoredValue<(bool, bool)>,
+    /// Bumped by each `studio.changed`, so a `studio.get` answer that an event
+    /// overtook is dropped.
+    studio_seq: StoredValue<u64>,
     /// The counter [`fresh_id`] continues from.
     next_id: StoredValue<u64>,
+    /// The number the next toast takes. It only grows, so a timer left from an earlier
+    /// toast never matches a later one.
+    next_toast: StoredValue<u64>,
 }
 
 impl Studio {
@@ -280,13 +610,22 @@ impl Studio {
         Studio {
             collection: RwSignal::new(None),
             program: RwSignal::new(None),
+            preview: RwSignal::new(None),
+            studio_mode: RwSignal::new(false),
+            privacy: RwSignal::new(false),
+            privacy_reports: StoredValue::new(PrivacyReports::default()),
             selection: RwSignal::new(Selection::default()),
+            sizes: RwSignal::new(Sizes::new()),
+            crop_mode: RwSignal::new(false),
             kinds: RwSignal::new(None),
             descriptors: RwSignal::new(HashMap::new()),
             problem: RwSignal::new(None),
+            toast: RwSignal::new(None),
             keys_changed: RwSignal::new(0),
             refresh: StoredValue::new((false, false)),
+            studio_seq: StoredValue::new(0),
             next_id: StoredValue::new(0),
+            next_toast: StoredValue::new(0),
         }
     }
 
@@ -294,31 +633,69 @@ impl Studio {
     pub fn reset(&self) {
         self.collection.set(None);
         self.program.set(None);
+        self.preview.set(None);
+        self.privacy_reports.update_value(PrivacyReports::reset);
+        self.privacy.set(false);
         self.selection.set(Selection::default());
+        self.sizes.set(Sizes::new());
+        self.crop_mode.set(false);
         self.kinds.set(None);
         self.descriptors.set(HashMap::new());
         self.problem.set(None);
+        self.toast.set(None);
         self.refresh.set_value((false, false));
     }
 
-    /// Reads everything a new session needs: the state, the program scene and the kinds.
+    /// Reads everything a new session needs: the state, the program scene, the privacy
+    /// screen and the kinds.
     pub fn load(&self, session: &Session) {
         let studio = *self;
+        studio.read_privacy(session);
         let first = session.clone();
         spawn_local(async move {
-            if let Ok(QueryResult::StudioGet { program_scene, .. }) =
-                query(&first, Query::StudioGet).await
-            {
-                studio.program.set(program_scene);
-            }
+            studio.read_studio(&first).await;
             // The state is read after the program scene, so the first selection is the
             // scene on program.
             studio.refresh(&first);
+            studio.read_sizes(&first).await;
         });
         let kinds = session.clone();
         spawn_local(async move {
             studio.take_kinds(list_kinds(&kinds).await);
         });
+    }
+
+    /// Reads the program and preview scenes with `studio.get`, unless a
+    /// `studio.changed` arrives while it is in flight: that event is newer.
+    async fn read_studio(&self, session: &Session) {
+        let asked = self.studio_seq.get_value();
+        if let Ok(QueryResult::StudioGet {
+            program_scene,
+            preview_scene,
+        }) = query(session, Query::StudioGet).await
+        {
+            self.take_studio(asked, program_scene, preview_scene);
+        }
+    }
+
+    /// Keeps a `studio.get` answer asked for at `asked` (the [`Studio::studio_seq`] then),
+    /// unless a `studio.changed` came in since. Returns whether it was kept.
+    fn take_studio(&self, asked: u64, program: Option<SceneId>, preview: Option<SceneId>) -> bool {
+        if self.studio_seq.get_value() != asked {
+            return false;
+        }
+        self.program.set(program);
+        self.preview.set(preview);
+        self.reconcile();
+        true
+    }
+
+    /// Follows a `studio.changed`.
+    fn studio_changed(&self, program: Option<SceneId>, preview: Option<SceneId>) {
+        self.studio_seq.update_value(|seq| *seq += 1);
+        self.program.set(program);
+        self.preview.set(preview);
+        self.reconcile();
     }
 
     /// Keeps the kinds `kind.list` answered. A failed `kind.list` shows its error in the
@@ -343,12 +720,72 @@ impl Studio {
                     self.refresh(session);
                 }
             }
-            Event::EventsDropped { .. } => self.refresh(session),
-            Event::StudioChanged { program_scene, .. } => {
-                self.program.set(program_scene.clone());
-                self.reconcile();
+            // A dropped `studio.changed` is recovered too.
+            Event::EventsDropped { .. } => {
+                // A dropped `privacy.changed` would leave the indicator wrong.
+                self.refresh(session);
+                self.read_privacy(session);
+                let studio = *self;
+                let session = session.clone();
+                spawn_local(async move {
+                    studio.read_studio(&session).await;
+                    studio.read_sizes(&session).await;
+                });
             }
+            Event::PrivacyChanged { on, .. } => {
+                self.privacy_reports.update_value(PrivacyReports::changed);
+                self.privacy.set(*on);
+            }
+            Event::SourceSizeChanged { source_id, size } => self.sizes.update(|sizes| match size {
+                Some(size) => _ = sizes.insert(source_id.clone(), (size.width, size.height)),
+                None => _ = sizes.remove(source_id),
+            }),
+            Event::StudioChanged {
+                program_scene,
+                preview_scene,
+                ..
+            } => self.studio_changed(program_scene.clone(), preview_scene.clone()),
             _ => {}
+        }
+    }
+
+    /// Reads whether the privacy screen is on with `privacy.get`. The answer is dropped
+    /// when a `privacy.changed` arrived after the read was sent, since the server may
+    /// deliver another client's event ahead of an answer computed before it.
+    fn read_privacy(&self, session: &Session) {
+        let studio = *self;
+        let session = session.clone();
+        let ticket = self.privacy_reports.with_value(PrivacyReports::ticket);
+        spawn_local(async move {
+            match query(&session, Query::PrivacyGet).await {
+                Ok(QueryResult::PrivacyGet { on }) => {
+                    let fresh = studio
+                        .privacy_reports
+                        .try_with_value(|r| r.answered(ticket));
+                    if fresh == Some(true) {
+                        studio.privacy.try_set(on);
+                    }
+                }
+                Ok(other) => studio.report(&unexpected(other.name())),
+                Err(error) => studio.report(&error),
+            }
+        });
+    }
+
+    /// Turns the privacy screen on or off, reporting a failure in the problem bar. The
+    /// indicator follows the `privacy.changed` the engine sends, not the request.
+    pub fn set_privacy(&self, session: &Session, on: bool) {
+        self.act(session, Action::PrivacySet { on });
+    }
+
+    /// Reads every source's size with `source.sizes`; `source.size_changed` keeps them
+    /// current after it. A failure shows in the problem bar and leaves no size known, so
+    /// the canvas can't crop by dragging until a size arrives.
+    async fn read_sizes(&self, session: &Session) {
+        match query(session, Query::SourceSizes).await {
+            Ok(QueryResult::SourceSizes { sources }) => self.sizes.set(sizes_of(sources)),
+            Ok(other) => self.report(&unexpected(other.name())),
+            Err(error) => self.report(&error),
         }
     }
 
@@ -396,16 +833,34 @@ impl Studio {
         if let Some(next) = next
             && self.selection.with_untracked(|s| *s != next)
         {
+            self.leave_crop_mode_for(next.scene.as_ref());
             self.selection.set(next);
         }
     }
 
+    /// What a click on a scene in the list does besides selecting it: in studio mode it
+    /// goes on preview, else on program (with the transition the engine resolves).
+    pub fn click_action(&self, scene_id: &SceneId) -> Action {
+        scene_click(self.studio_mode.get_untracked(), scene_id)
+    }
+
     /// Selects a scene, and no item.
     pub fn select_scene(&self, scene_id: SceneId) {
+        self.leave_crop_mode_for(Some(&scene_id));
         self.selection.set(Selection {
             scene: Some(scene_id),
             ..Selection::default()
         });
+    }
+
+    /// Leaves crop mode when the canvas is about to show another scene than `next`, as
+    /// a scene switch does in the prototype.
+    fn leave_crop_mode_for(&self, next: Option<&SceneId>) {
+        if self.selection.with_untracked(|s| s.scene.as_ref() != next)
+            && self.crop_mode.get_untracked()
+        {
+            self.crop_mode.set(false);
+        }
     }
 
     /// Selects one item of the selected scene alone, or none.
@@ -457,8 +912,28 @@ impl Studio {
         });
     }
 
+    /// Shows `text` in the toast, in place of the one shown.
+    pub fn notify(&self, text: impl Into<String>) {
+        let n = self.next_toast.get_value();
+        self.next_toast.set_value(n + 1);
+        self.toast.set(Some((n, text.into())));
+    }
+
+    /// Sends `edits` as one batch, as [`Studio::apply`] does, and once it is applied shows
+    /// `note` in the toast.
+    pub fn apply_noting(&self, session: &Session, edits: Vec<Edit>, note: String) {
+        let studio = *self;
+        let session = session.clone();
+        spawn_local(async move {
+            match apply(&session, edits, None).await {
+                Ok(_) => studio.notify(note),
+                Err(error) => studio.report(&error),
+            }
+        });
+    }
+
     /// Runs an action, reporting a failure in the problem bar.
-    pub fn act(&self, session: &Session, action: jstream_control::protocol::Action) {
+    pub fn act(&self, session: &Session, action: Action) {
         let studio = *self;
         let session = session.clone();
         spawn_local(async move {
@@ -554,11 +1029,14 @@ fn unexpected(what: &str) -> ControlError {
 
 #[cfg(test)]
 mod tests {
-    use super::{Collection, Selection, Studio, fresh_id, list_kinds, plan_summary};
+    use super::{
+        Collection, PrivacyReports, Selection, Studio, apply, fresh_id, list_kinds, plan_summary,
+        query, reset_edits, scene_click, sizes_of,
+    };
     use crate::session::Session;
     use jstream_control::protocol::{
-        Batch, Call, CallResult, Edit, Hello, ItemId, Query, QueryResult, Response, SceneId,
-        SceneRole, Settings, SourceId, SourceKind, Welcome,
+        Batch, Call, CallResult, Edit, Hello, ItemId, OverrideField, Query, QueryResult, Response,
+        SceneId, SceneRole, Settings, SourceId, SourceKind, SourceSize, Welcome,
     };
     use jstream_control::{BoxFuture, Control, ControlError, EventStream, MockEngine};
     use leptos::prelude::*;
@@ -691,6 +1169,35 @@ mod tests {
     }
 
     #[test]
+    fn source_sizes_come_from_the_engine_or_the_canvas_for_a_scene() {
+        let c = collection();
+        let sizes = sizes_of(vec![
+            SourceSize {
+                source_id: SourceId::new("red"),
+                size: Some(jstream_control::protocol::PixelSize {
+                    width: 640,
+                    height: 360,
+                }),
+            },
+            SourceSize {
+                source_id: SourceId::new("dark"),
+                size: None,
+            },
+        ]);
+        assert_eq!(sizes.len(), 1, "a source with no size is left out");
+        assert_eq!(
+            c.source_size(&sizes, &SourceId::new("red")),
+            Some((640, 360))
+        );
+        assert_eq!(c.source_size(&sizes, &SourceId::new("dark")), None);
+        assert_eq!(
+            c.source_size(&sizes, &SourceId::new("nest")),
+            Some((c.canvas.width, c.canvas.height)),
+            "a nested scene is the canvas's size"
+        );
+    }
+
+    #[test]
     fn the_selection_follows_the_state() {
         let c = collection();
         let b = SceneId::new("b");
@@ -740,6 +1247,79 @@ mod tests {
         );
     }
 
+    /// A keyframe scene shows its parent's items at its overrides; an item is still
+    /// found in its own scene, and a selection in the keyframe keeps it.
+    #[test]
+    fn keyframe_scenes_show_their_parents_items() {
+        let engine = MockEngine::new();
+        let session = now(Session::open(Rc::new(engine.connect())))
+            .unwrap_or_else(|e| panic!("hello failed: {e}"));
+        let edits = vec![
+            Edit::SceneCreate {
+                scene_id: "a".into(),
+                name: "Main".into(),
+                role: None,
+            },
+            Edit::SourceCreate {
+                source_id: "red".into(),
+                name: "Red".into(),
+                kind: SourceKind::Builtin {
+                    kind: "color".into(),
+                },
+                settings: Settings::new(),
+                duplicated_from: None,
+            },
+            Edit::ItemAdd {
+                scene_id: "a".into(),
+                item_id: "i1".into(),
+                source_id: "red".into(),
+                transform: None,
+                geometry: None,
+                opacity: None,
+                blend: None,
+            },
+            Edit::SceneCreateVariant {
+                scene_id: "k".into(),
+                variant_of: "a".into(),
+                name: "Keyframe 1".into(),
+            },
+            Edit::ItemSetVisible {
+                item_id: "i1".into(),
+                scene_id: Some("k".into()),
+                visible: false,
+            },
+        ];
+        now(apply(&session, edits, None)).unwrap_or_else(|e| panic!("batch failed: {e}"));
+        let c = now(query(&session, Query::StateGet))
+            .ok()
+            .and_then(Collection::from_result)
+            .unwrap_or_else(|| panic!("no state"));
+        let (a, k) = (SceneId::new("a"), SceneId::new("k"));
+        let i1 = ItemId::new("i1");
+        assert!(c.is_keyframe(&k) && !c.is_keyframe(&a));
+        assert_eq!(c.parent_of(&k).map(|p| p.name.as_str()), Some("Main"));
+        assert_eq!(c.keyframes_of(&a).count(), 1);
+        let (home, item) = c.item(&i1).unwrap_or_else(|| panic!("no i1"));
+        assert_eq!((home.scene_id.as_str(), item.visible), ("a", true));
+        let (shown, item) = c.item_in(Some(&k), &i1).unwrap_or_else(|| panic!("no i1"));
+        assert_eq!((shown.scene_id.as_str(), item.visible), ("k", false));
+        let selected = Selection {
+            scene: Some(k.clone()),
+            item: Some(i1.clone()),
+            also: Vec::new(),
+        };
+        assert_eq!(selected.reconcile(&c, None), selected);
+        let keyframe = c.scene(&k).unwrap_or_else(|| panic!("no k"));
+        assert_eq!(
+            reset_edits(keyframe),
+            vec![Edit::ItemClearOverride {
+                scene_id: k.clone(),
+                item_id: i1,
+                field: OverrideField::Visible,
+            }]
+        );
+    }
+
     #[test]
     fn items_are_added_and_removed() {
         let one = Selection::default().with_items([ItemId::new("i1")]);
@@ -778,6 +1358,28 @@ mod tests {
         assert_eq!(
             plan_summary(&edits).as_deref(),
             Some("This also removes 2 items, clears 1 setting that refers to it.")
+        );
+        // A folder's plan moves what it holds up to its parent.
+        let edits = vec![
+            Edit::SceneSetFolder {
+                scene_id: "a".into(),
+                folder_id: None,
+            },
+            Edit::SceneSetFolder {
+                scene_id: "b".into(),
+                folder_id: None,
+            },
+            Edit::FolderSetParent {
+                folder_id: "inner".into(),
+                parent: None,
+            },
+            Edit::FolderDelete {
+                folder_id: "outer".into(),
+            },
+        ];
+        assert_eq!(
+            plan_summary(&edits).as_deref(),
+            Some("This also moves 2 scenes and 1 folder up a level.")
         );
     }
 
@@ -830,11 +1432,89 @@ mod tests {
         );
     }
 
+    /// The server may deliver another client's `privacy.changed` ahead of the answer to
+    /// a `privacy.get` it computed before that change: the answer must not undo it.
+    #[test]
+    fn a_privacy_answer_older_than_a_change_is_dropped() {
+        let mut reports = PrivacyReports::default();
+        // privacy.get sent while the screen is on; another client turns it off and its
+        // privacy.changed arrives first; then the stale answer (on).
+        let ticket = reports.ticket();
+        reports.changed();
+        assert!(!reports.answered(ticket), "the stale answer is dropped");
+
+        // With nothing in between, the answer stands.
+        let ticket = reports.ticket();
+        assert!(reports.answered(ticket));
+
+        // A read from a session that has since ended no longer counts.
+        let ticket = reports.ticket();
+        reports.reset();
+        assert!(!reports.answered(ticket));
+    }
+
     #[test]
     fn fresh_ids_skip_taken_ones() {
         let mut next = 0;
         let taken = |id: &str| id == "scene-c1-1";
         assert_eq!(fresh_id("scene", "c1", &mut next, taken), "scene-c1-2");
         assert_eq!(fresh_id("scene", "c1", &mut next, taken), "scene-c1-3");
+    }
+
+    /// Outside studio mode a click puts the scene on program; in it, on preview.
+    #[test]
+    fn a_click_on_a_scene_switches_or_previews_it() {
+        use jstream_control::protocol::Action;
+        let b = SceneId::new("b");
+        assert_eq!(
+            scene_click(false, &b),
+            Action::SceneSwitch {
+                scene_id: b.clone(),
+                preset_id: None
+            }
+        );
+        assert_eq!(
+            scene_click(true, &b),
+            Action::StudioSetPreview { scene_id: b }
+        );
+    }
+
+    /// A `studio.get` answer that a `studio.changed` overtook is stale, and dropped;
+    /// one that nothing overtook is kept.
+    #[test]
+    fn a_studio_get_answer_overtaken_by_an_event_is_dropped() {
+        let (main, intro) = (SceneId::new("main"), SceneId::new("intro"));
+        let studio = Studio::new();
+        let asked = studio.studio_seq.get_value();
+        studio.studio_changed(Some(main.clone()), Some(intro.clone()));
+        assert!(!studio.take_studio(asked, Some(main.clone()), Some(main.clone())));
+        assert_eq!(studio.preview.get_untracked(), Some(intro.clone()));
+
+        let asked = studio.studio_seq.get_value();
+        assert!(studio.take_studio(asked, Some(intro.clone()), Some(main.clone())));
+        assert_eq!(studio.program.get_untracked(), Some(intro));
+        assert_eq!(studio.preview.get_untracked(), Some(main));
+    }
+
+    #[test]
+    fn a_scene_s_hotkey_is_the_binding_that_switches_to_it() {
+        use jstream_control::protocol::{Action, Chord, HotkeyBinding};
+        let switch = |id: &str| Action::SceneSwitch {
+            scene_id: SceneId::new(id),
+            preset_id: None,
+        };
+        let c = Collection {
+            hotkeys: vec![
+                HotkeyBinding::new(Chord::new("F1"), &switch("a")),
+                HotkeyBinding::new(Chord::new("F2"), &switch("b")),
+            ],
+            ..Collection::default()
+        };
+        let chord = |id: &str| {
+            c.scene_hotkey(&SceneId::new(id))
+                .map(|b| b.chord.as_str().to_owned())
+        };
+        assert_eq!(chord("b").as_deref(), Some("F2"));
+        assert_eq!(chord("c"), None);
     }
 }

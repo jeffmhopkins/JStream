@@ -174,3 +174,70 @@ export async function meterTicks(page) {
     socket.send(JSON.stringify({ type: 'event', event: { type: 'meters.tick', ...tick } }));
   };
 }
+
+/** Records what the page sends: its WebSocket goes through a route that passes every
+ * message on, and the returned `sent(type)` lists every object of that `type` (an edit
+ * such as `scene.set_transitions`, or an action) in the requests so far, wherever it sits
+ * in the request. For edits the mock engine can't apply, which it refuses after the
+ * request has shown what the page sent. Call it before `connect`. */
+export async function recordCalls(page) {
+  const requests = [];
+  await page.routeWebSocket(/.*/, (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => {
+      if (typeof message === 'string') {
+        try {
+          requests.push(JSON.parse(message));
+        } catch {
+          // Not JSON: nothing to record.
+        }
+      }
+      server.send(message);
+    });
+    server.onMessage((message) => ws.send(message));
+  });
+  const find = (value, type, out) => {
+    if (Array.isArray(value)) value.forEach((v) => find(v, type, out));
+    else if (value && typeof value === 'object') {
+      if (value.type === type) out.push(value);
+      Object.values(value).forEach((v) => find(v, type, out));
+    }
+    return out;
+  };
+  return { sent: (type) => find(requests, type, []) };
+}
+
+/** Makes the engine report `sizes`, `{ source_id: [width, height] }`, which the mock
+ * engine can't, since it makes no frames: the page's WebSocket goes through a route that
+ * answers `source.sizes` with them and passes every other message on. The returned
+ * function sends `source.size_changed` for a source, with `[width, height]` or `null`
+ * for no size. Call it before `connect`. */
+export async function sourceSizes(page, sizes) {
+  const answer = (id, result) => JSON.stringify({ type: 'response', id, result: { kind: 'query', result } });
+  const size = ([width, height]) => ({ width, height });
+  let socket = null;
+  await page.routeWebSocket(/.*/, (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => {
+      let parsed = null;
+      try {
+        parsed = typeof message === 'string' ? JSON.parse(message) : null;
+      } catch {
+        // Not JSON: pass it on.
+      }
+      if (parsed?.call?.kind === 'query' && parsed.call.query?.type === 'source.sizes') {
+        const sources = Object.entries(sizes).map(([source_id, wh]) => ({ source_id, size: size(wh) }));
+        ws.send(answer(parsed.id, { type: 'source.sizes', sources }));
+      } else {
+        server.send(message);
+      }
+    });
+    server.onMessage((message) => ws.send(message));
+    socket = ws;
+  });
+  return (source_id, wh) => {
+    if (!socket) throw new Error('the page has no socket yet');
+    const event = { type: 'source.size_changed', source_id, ...(wh ? { size: size(wh) } : {}) };
+    socket.send(JSON.stringify({ type: 'event', event }));
+  };
+}

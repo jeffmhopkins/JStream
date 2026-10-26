@@ -1,6 +1,6 @@
 //! The right-click menu: one menu at a time, opened at the pointer by whatever was
-//! right-clicked (the canvas, a panel's empty space), with a check column, shortcut
-//! hints, heads, separators and Windows-style submenus that open on hover. Choosing an
+//! right-clicked (the canvas, a panel's empty space), with a check column, a colour
+//! swatch column, shortcut hints, heads, separators and Windows-style submenus that open on hover. Choosing an
 //! item, any press outside, Escape or Tab closes it; the arrow keys, Home and End move
 //! through it. Placement and keyboard steps are pure functions, tested natively.
 //!
@@ -32,6 +32,7 @@ pub struct Item {
     label: String,
     hint: Option<String>,
     checked: Option<bool>,
+    swatch: Option<String>,
     disabled: bool,
     run: Option<Run>,
     sub: Vec<Entry>,
@@ -44,6 +45,7 @@ impl Entry {
             label: label.into(),
             hint: None,
             checked: None,
+            swatch: None,
             disabled: false,
             run: Some(Rc::new(run)),
             sub: Vec::new(),
@@ -56,6 +58,7 @@ impl Entry {
             label: label.into(),
             hint: None,
             checked: None,
+            swatch: None,
             disabled: true,
             run: None,
             sub: Vec::new(),
@@ -68,6 +71,7 @@ impl Entry {
             label: label.into(),
             hint: None,
             checked: None,
+            swatch: None,
             disabled: entries.is_empty(),
             run: None,
             sub: entries,
@@ -88,6 +92,15 @@ impl Entry {
     pub fn checked(mut self, on: bool) -> Entry {
         if let Entry::Item(item) = &mut self {
             item.checked = Some(on);
+        }
+        self
+    }
+
+    /// The same item with a colour in its swatch column, such as a label's.
+    #[must_use]
+    pub fn swatch(mut self, color: impl Into<String>) -> Entry {
+        if let Entry::Item(item) = &mut self {
+            item.swatch = Some(color.into());
         }
         self
     }
@@ -322,6 +335,7 @@ pub fn ContextMenu() -> impl IntoView {
             label,
             hint,
             checked,
+            swatch,
             disabled,
             run,
             sub: children,
@@ -416,6 +430,7 @@ pub fn ContextMenu() -> impl IntoView {
                 <span class="ctx-check" aria-hidden="true">
                     {(checked == Some(true)).then_some("✓")}
                 </span>
+                <span class="ctx-swatch" aria-hidden="true" style:background-color=swatch></span>
                 <span class="ctx-label">{label}</span>
                 {hint.map(|hint| view! { <span class="hint">{hint}</span> })}
                 {has_sub.then(|| view! { <span class="ctx-arrow" aria-hidden="true">"▸"</span> })}

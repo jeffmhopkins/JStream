@@ -14,7 +14,7 @@ use crate::panels::add_source::type_label;
 use crate::panels::filters::{Chains, FilterDialogs, chains_of};
 use crate::panels::properties::{Form, draft_patch};
 use crate::store::{Studio, apply};
-use jstream_control::protocol::{Edit, Settings, SourceId, SourceKind};
+use jstream_control::protocol::{Edit, FilterOwner, Settings, SourceId, SourceKind};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use serde_json::Value;
@@ -253,15 +253,20 @@ fn FilterSide(source_id: SourceId, video: bool, audio: bool) -> impl IntoView {
     let dialogs = expect_context::<FilterDialogs>();
     let add = {
         let source_id = source_id.clone();
-        move |_| dialogs.add(source_id.clone())
+        move |_| {
+            dialogs.add(FilterOwner::Source {
+                source_id: source_id.clone(),
+            })
+        }
     };
+    let owner = FilterOwner::Source { source_id };
     view! {
         <div class="props-side">
             <div class="props-side-head">
                 <span class="props-side-title">"Filters"</span>
                 <span class="props-side-note">"everywhere this source appears"</span>
             </div>
-            <Chains source_id=source_id video=video audio=audio />
+            <Chains owner=owner video=video audio=audio />
             <p class="props-side-foot">"Changes apply right away. Fine-tune settings in the Filters panel."</p>
             <button type="button" class="primary props-add-filter" on:click=add>"+ Add filter…"</button>
         </div>

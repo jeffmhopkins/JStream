@@ -74,3 +74,20 @@ test('the token never reaches the page or its storage', async ({ page, daemon })
   expect(stored).not.toContain(daemon.token);
   expect(await page.evaluate(() => document.cookie)).not.toContain(daemon.token);
 });
+
+test('the bundled Plex fonts load from the page, with their licence beside them', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  await page.evaluate(() => document.fonts.ready);
+  const loaded = await page.evaluate(async () => {
+    const faces = [
+      '400 13px "IBM Plex Sans"', '600 13px "IBM Plex Sans"', '700 13px "IBM Plex Sans"',
+      '400 12px "IBM Plex Mono"', '600 12px "IBM Plex Mono"',
+    ];
+    const found = await Promise.all(faces.map((f) => document.fonts.load(f)));
+    return found.map((list) => list.length);
+  });
+  expect(loaded).toEqual([1, 1, 1, 1, 1]);
+  const licence = await page.request.get(new URL('fonts/OFL.txt', daemon.url).href);
+  expect(licence.ok()).toBe(true);
+  expect(await licence.text()).toContain('SIL OPEN FONT LICENSE Version 1.1');
+});

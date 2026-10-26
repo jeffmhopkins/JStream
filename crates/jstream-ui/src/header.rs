@@ -1,6 +1,8 @@
 //! The header bar along the top of the shell (docs/UI-FEATURES.md#header): the brand,
-//! the File, Edit, View and Layout menus, the dropped-frames readout, Record, and Go
-//! Live / End stream. The View and Layout menus change the workspace's dock
+//! the File, Edit, View and Layout menus, the dropped-frames readout, Studio mode,
+//! the privacy screen's button (which the Pause key also toggles, anywhere in the
+//! window), Record, and Go Live / End stream. The View and Layout menus change the
+//! workspace's dock
 //! (`workspace.rs`). It keeps its own copy of the outputs, like the outputs panel does, and reports
 //! a failed call in the shell's problem bar.
 //!
@@ -9,6 +11,7 @@
 use crate::app::{SessionContext, SessionInfo};
 use crate::canvas::model::{history, is_history_empty};
 use crate::dock::PanelId;
+use crate::icons::Icon;
 use crate::panels::outputs::{
     OutputRow, Vcam, go_live_targets, is_running, live_outputs, load, start_blocker,
     start_or_stop_all,
@@ -110,6 +113,26 @@ fn shrank(now: DropCounts, before: DropCounts) -> bool {
         || now.output_packets < before.output_packets
 }
 
+/// Where the browser keeps whether studio mode is on.
+const STUDIO_MODE_KEY: &str = "jstream.studio-mode";
+
+/// Whether the browser kept studio mode on. Storage can be off; it is then off.
+fn kept_studio_mode() -> bool {
+    window()
+        .local_storage()
+        .ok()
+        .flatten()
+        .and_then(|storage| storage.get_item(STUDIO_MODE_KEY).ok().flatten())
+        .is_some_and(|value| value == "on")
+}
+
+/// Keeps studio mode in the browser's storage, when it has storage.
+fn keep_studio_mode(on: bool) {
+    if let Ok(Some(storage)) = window().local_storage() {
+        let _ = storage.set_item(STUDIO_MODE_KEY, if on { "on" } else { "off" });
+    }
+}
+
 /// A top menu of the header.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Menu {
@@ -135,6 +158,7 @@ pub fn Header(
     let loads = StoredValue::new(0_u64);
     let disconnect = StoredValue::new_local(disconnect);
     let dock = use_context::<DockState>().map(|d| d.0);
+    studio.studio_mode.set(kept_studio_mode());
 
     let reload = move || {
         let Some(session) = session.get() else {
@@ -242,6 +266,20 @@ pub fn Header(
         }
     });
     on_cleanup(move || escape.remove());
+    // The privacy screen goes the other way from what the engine last said it is.
+    let toggle_privacy = move || {
+        if let Some(session) = session.get() {
+            studio.set_privacy(&session, !studio.privacy.get_untracked());
+        }
+    };
+    let pause = window_event_listener(leptos::ev::keydown, move |event| {
+        if event.key() == "Pause" && !event.repeat() {
+            event.prevent_default();
+            toggle_privacy();
+        }
+    });
+    on_cleanup(move || pause.remove());
+    let private = move || studio.privacy.get();
     let toggle =
         move |menu: Menu| open.update(|open| *open = (*open != Some(menu)).then_some(menu));
     let menu_button = move |menu: Menu, label: &'static str| {
@@ -404,6 +442,34 @@ pub fn Header(
             <span class="readout" title="Video frames dropped since this page connected">
                 {move || dropped.with(|d| d.frames()).map(|n| format!("{n} dropped"))}
             </span>
+            <button
+                class="header-button studio-mode"
+                class:on=move || studio.studio_mode.get()
+                aria-pressed=move || studio.studio_mode.get().to_string()
+                title=move || if studio.studio_mode.get() {
+                    "Studio mode is on: a clicked scene goes on preview. Click to turn it off."
+                } else {
+                    "Turn studio mode on: set up a scene on preview, then take it to program."
+                }
+                on:click=move |_| {
+                    let on = !studio.studio_mode.get_untracked();
+                    studio.studio_mode.set(on);
+                    keep_studio_mode(on);
+                }
+            >
+                "Studio mode"
+            </button>
+            <button
+                class="header-button privacy"
+                class:on=private
+                aria-label="Privacy screen"
+                aria-pressed=move || if private() { "true" } else { "false" }
+                title="Privacy screen: blur the whole output and mute the mic (Pause)"
+                on:click=move |_| toggle_privacy()
+            >
+                <Icon name="eye-off" size=14 />
+                {move || if private() { "Privacy on" } else { "Privacy" }}
+            </button>
             <button
                 class="header-button"
                 class:on=move || matches!(record(), RecordButton::Stop(_))
