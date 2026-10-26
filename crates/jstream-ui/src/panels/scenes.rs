@@ -1095,7 +1095,10 @@ pub fn RenameField(value: String, done: impl Fn(String) + Clone + 'static) -> im
             on:blur=move |_| on_blur()
             on:keydown=move |event| {
                 // The keys are the field's: the row's own F2 and Del must not see them.
-                event.stop_propagation();
+                // Pause is the window's privacy key, so it goes on.
+                if event.key() != "Pause" {
+                    event.stop_propagation();
+                }
                 match event.key().as_str() {
                     "Enter" => commit(),
                     "Escape" => finish(value.clone()),

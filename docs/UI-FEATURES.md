@@ -55,9 +55,9 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | Area | Rows | ✅ | 🟡 | ⬜ | 🔒 | ⏸ |
 |---|---|---|---|---|---|---|
 | [Theme and shared controls](#theme) | 8 | 7 | 0 | 0 | 0 | 1 |
-| [Header bar](#header) | 9 | 6 | 1 | 1 | 1 | 0 |
+| [Header bar](#header) | 9 | 7 | 1 | 0 | 1 | 0 |
 | [Docking and layouts](#docking) | 10 | 8 | 2 | 0 | 0 | 0 |
-| [Canvas](#canvas) | 18 | 15 | 1 | 1 | 1 | 0 |
+| [Canvas](#canvas) | 18 | 16 | 1 | 0 | 1 | 0 |
 | [Context menus](#menus) | 8 | 4 | 4 | 0 | 0 | 0 |
 | [Dialogs and windows](#dialogs) | 8 | 5 | 1 | 0 | 2 | 0 |
 | [Scenes panel](#scenes) | 10 | 10 | 0 | 0 | 0 | 0 |
@@ -65,12 +65,12 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Inspector](#inspector) | 10 | 10 | 0 | 0 | 0 | 0 |
 | [Transform panel](#transform) | 4 | 4 | 0 | 0 | 0 | 0 |
 | [Filters](#filters) | 8 | 5 | 1 | 0 | 2 | 0 |
-| [Mixer](#mixer) | 7 | 5 | 0 | 2 | 0 | 0 |
+| [Mixer](#mixer) | 7 | 6 | 0 | 1 | 0 | 0 |
 | [Outputs](#outputs) | 4 | 3 | 0 | 0 | 1 | 0 |
 | [Transitions](#transitions) | 6 | 6 | 0 | 0 | 0 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
-| [Keyboard](#keyboard) | 7 | 5 | 0 | 2 | 0 | 0 |
-| **Total** | **130** | **101** | **10** | **6** | **12** | **1** |
+| [Keyboard](#keyboard) | 7 | 6 | 0 | 1 | 0 | 0 |
+| **Total** | **130** | **105** | **10** | **2** | **12** | **1** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -91,8 +91,8 @@ Spec: [workspace › theme](../design/ui-prototype/spec-workspace.md#theme-fonts
 | WS-03 | Scrollbars, focus and selection | Thin 10px scrollbars (`#3A3F48` thumb), 2px accent focus ring, `#2B4A7A` text selection. | ✅ | |
 | WS-04 | Icons | 24×24 stroke icons (1.8 stroke, round caps) for source types, scene kinds, labels and tools, in place of text glyphs. | ✅ | The prototype's icons are in `icons.rs`, with a close and a reset icon added; the Add source, Properties and filter dialogs, the canvas tools, the Scenes and Scene objects rows, the Filters panel, the labels (chips, tag buttons, the manager's icon picker), the Inspector's header, the output cards and the settings' reset use them. The dialogs' close buttons keep the prototype's ×. |
 | WS-05 | Number field | Stepper with − and +, typed entry (Enter commits, Escape cancels, `−` and `,` accepted), arrow keys (Shift fine, Ctrl coarse), and pointer scrubbing (3px per step, Shift ×0.1, Ctrl ×4). | ✅ | `NumberField` (`panels/number.rs`), used by the Inspector and the mixer's channel rows (named by the row, with no label above) and strips (stacked, scrubbed up and down); the filters and dialogs take it as they are rebuilt. A drag shows its value as it goes and is sent once on release, so it is one undo step, where the prototype writes every step. |
-| WS-06 | Foldable section headers | Caret plus uppercase title; folded sections show a hint ("cropped", "in use"); fold state remembered per title. | ✅ | `Fold` in `inspector.rs`: caret, uppercase title and folded hint ("cropped", "in use", the transitions hint). `Folds` remembers each title's state across items and reloads, in the browser's storage (`jstream.folds`); 3D starts folded, as Scene switches will (IN-10). The mixer's Buses section uses it too. |
-| WS-07 | Hover-revealed row buttons | Row tools fade in on hover or focus, and stay shown while their state is on. | ✅ | The Scenes and Scene objects rows (`tree.rs`): the buttons fade in over 120 ms on hover or focus, and a hidden item's eye, a favourite's star and an open tag button stay shown; the filter rows' × (`filters.rs`); and the Transitions panel's preset rows, whose Edit, Make default and Delete fade in the same way. An output card's Start, Stop, Edit and Delete are its main controls, not row tools, so they always show. |
+| WS-06 | Foldable section headers | Caret plus uppercase title; folded sections show a hint ("cropped", "in use"); fold state remembered per title. | ✅ | `Fold` in `inspector.rs`: caret, uppercase title and folded hint ("cropped", "in use", the transitions hint). `Folds` remembers each title's state across items and reloads, in the browser's storage (`jstream.folds`); 3D and Scene switches (IN-10) start folded. The mixer's Buses section uses it too. |
+| WS-07 | Hover-revealed row buttons | Row tools fade in on hover or focus, and stay shown while their state is on. | ✅ | The Scenes and Scene objects rows (`tree.rs`): the buttons fade in over 120 ms on hover or focus, and a hidden item's eye, a favourite's star and an open tag button stay shown; the filter rows' × (`filters.rs`). The Transitions panel's preset editor always shows its Make default and Delete. An output card's Start, Stop, Edit and Delete are its main controls, not row tools, so they always show. |
 | WS-08 | Toasts | One toast at a time, bottom centre, hides after 4.5 s. | ✅ | `Toast` in `app.rs` (`Studio::notify`, `apply_noting`): "Added a reference…" after placing an existing source again or Duplicate as reference, "Added a clone…" after Duplicate as clone. Failed calls stay in the sticky problem bar. |
 
 <a id="header"></a>
@@ -109,7 +109,7 @@ Spec: [workspace › header bar](../design/ui-prototype/spec-workspace.md#header
 | HD-02 | View menu | Lists all 11 panels with "shown" or "add"; clicking hides a shown panel or adds a hidden one to its home zone. | ✅ | All eleven, in the prototype's order. Live chat, Stream stats and Agent activity wait on the engine ([live panels](#live-panels)), so for now they say what they wait on. |
 | HD-03 | Layout menu | "Layout: <name>", saved layouts with "current", "Save current layout as new", "Reset to default". | ✅ | |
 | HD-04 | Stats readout | Mono "60 fps · 0 dropped · CPU 3%". | 🟡 | "N dropped" built from `stats.tick` (frames dropped since the page connected). fps and CPU need engine stats (decision register D39). |
-| HD-05 | Privacy button | "Privacy" / "Privacy on" (red); blurs every output and mutes the mic; Pause toggles it. | ⬜ | `privacy.set` and `privacy.get` (E2b, ADR-0027 §4): the engine blurs every output and mutes the microphones; the button is to build. |
+| HD-05 | Privacy button | "Privacy" / "Privacy on" (red); blurs every output and mutes the mic; Pause toggles it. | ✅ | Sends `privacy.set`; the button follows `privacy.get` and `privacy.changed`, so it shows another client's change too. The engine does the blurring and muting (E2b, ADR-0027 §4). |
 | HD-06 | Studio mode button | Turns studio mode (preview and program) on and off. | ✅ | A page setting, since the engine has no studio-mode switch: off at first, kept by the browser, and pressed (blue) while on. On, a click on a scene puts it on preview ([SC-10](#scenes)) and the Transitions panel shows preview and program ([TR-06](#transitions)); off, a click puts it on program and the panel shows only the presets. |
 | HD-07 | Record button | Starts and stops recording. | ✅ | Starts every stopped or failed recording output; "Stop recording" while any runs; disabled with none. |
 | HD-08 | Broadcast picker | Shows the YouTube broadcast Go Live uses; menu lists broadcasts and "+ Create new stream…". | 🔒 | YouTube sign-in needs the OAuth client (A6b, Y4, [ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)). |
@@ -168,7 +168,7 @@ Spec: [workspace › canvas structure](../design/ui-prototype/spec-workspace.md#
 | CV-14 | Right-click | Opens the canvas context menu ([menus](#menus)). | ✅ | On an item, the selected items' menu, after selecting the item alone unless it was selected; on the frame and the margin, theirs ([CM-02](#menus)). |
 | CV-15 | Opacity, blend and 3D drawn | Items draw with their opacity, blend mode and 3D tilt. | 🔒 | The picture comes from the engine; it accepts only the `normal` blend, and 3D it can draw from protocol 0.34 (X1). |
 | CV-16 | Keyframe banner | "◆ Keyframe of “<parent>”: only placement and visibility can change" while editing a keyframe. | ✅ | A keyframe scene shows its parent's items at its overrides, under the banner, and its edits are placement edits addressed to it (K1). Its drags commit without live values, which the engine refuses on a keyframe scene until #702. |
-| CV-17 | Privacy overlay | Blurred frame with "Privacy screen on · output blurred · mic muted". | ⬜ | Privacy is runtime state (`privacy.get`, `privacy.changed`), so the canvas can draw the overlay while it is on. |
+| CV-17 | Privacy overlay | Blurred frame with "Privacy screen on · output blurred · mic muted". | ✅ | The canvas frame takes the prototype's `blur(14px) brightness(0.6)` under the notice while the engine reports privacy on. |
 | CV-18 | Half speed | Shift halves pointer speed for any drag but the marquee. | ✅ | The slow pointer follows the real one's movement, so pressing Shift mid-drag doesn't jump. |
 
 <a id="menus"></a>
@@ -273,9 +273,9 @@ in the Inspector until the Inspector's own rows say otherwise.
 | IN-05 | 3D | Tilt, Turn, Depth, Perspective, folded by default. | ✅ | Folded by default, with the "in use" hint; each field is one `item.set_geometry` ([ADR-0050](adr/0050-3d-transforms-rendering.md)). Perspective shows the prototype's 1200 px while the item has none, and the first change that puts the item in 3D sets it, since without one the engine draws 3D orthographically, where Depth has no effect. |
 | IN-06 | Crop | Left, Right, Top, Bottom in px. | ✅ | `item.set_crop`, in source pixels. The canvas crops by dragging too (CV-08). |
 | IN-07 | Blending | Mode (9 modes) and Opacity %. | ✅ | Opacity is `item.set_opacity`. The select lists all nine modes; the engine accepts only `normal`, so the others are disabled until it draws them. |
-| IN-08 | Scene section | Objects count, "Used as a source in", hotkey. | ✅ | The Hotkey row lists the chords bound to the scene's `scene.switch`, each with × to unbind (`hotkey.clear`); Set key binds the next chord pressed (`hotkey.set`, after a `hotkey.clear` when it ran something else), and Escape cancels. A keyframe's header says “Keyframe of “<parent>””, and its item's blend mode is locked, with the prototype's note. |
+| IN-08 | Scene section | Objects count, "Used as a source in", hotkey. | ✅ | The Hotkey row lists the chords bound to the scene's `scene.switch`, each with × to unbind (`hotkey.clear`); Set key binds the next chord pressed but Pause, the privacy key ([KB-06](#keyboard)) (`hotkey.set`, after a `hotkey.clear` when it ran something else), and Escape cancels. A keyframe's header says “Keyframe of “<parent>””, and its item's blend mode is locked, with the prototype's note. |
 | IN-09 | Scene transitions | Transition in and out selects, with the "next scene's in wins" note. | ✅ | `scene.set_transitions`, with "Default (<name>)" for none and the folded hint. The presets come from the shared collection. |
-| IN-10 | Scene switches per item | Delay, easing, glide, appear and disappear effects. | ✅ | The "Scene switches" section, folded, with "customised" while any value differs from the default: Delay (0–3000 ms, step 10), Easing (Inherit, Ease in-out, Ease out, Linear, Spring), Glide to other scenes (Auto, Never), Appear and Disappear (Inherit, Fade, Scale, Slide, None). Each change sends `item.set_transition` with the whole settings. Hiding it in a keyframe waits on the keyframe rows ([SC-07](#scenes)). |
+| IN-10 | Scene switches per item | Delay, easing, glide, appear and disappear effects. | ✅ | The "Scene switches" section, folded, with "customised" while any value differs from the default: Delay (0–3000 ms, step 10), Easing (Inherit, Ease in-out, Ease out, Linear, Spring), Glide to other scenes (Auto, Never), Appear and Disappear (Inherit, Fade, Scale, Slide, None). Each change sends `item.set_transition` with the whole settings. A keyframe ([SC-07](#scenes)) doesn't show it, since a keyframe changes only placement, visibility and opacity. |
 
 <a id="transform"></a>
 ## Transform panel
@@ -334,7 +334,7 @@ does more than the prototype (buses, sends, routing); that stays ([Beyond](#beyo
 | MX-03 | Channel strips | Name, level bar, dB number field. | ✅ | Each row: name, the stereo meter as the level bar, the console-taper fader ([Beyond](#beyond)), the dB field (`NumberField`, −100 to +24, step 0.5), mute and Routing. |
 | MX-04 | Vertical meters | Vertical strips in side columns; a title-bar toggle flips orientation. | ✅ | `mixer.rs`: docked in a side column the meters turn vertical until the button in the mixer's title bar flips them, for the session. The master strip folds the channel strips beside it; each strip has its short name (the full one as a tooltip), a stereo meter filling upwards, the dB field stacked + over −, scrubbed up and down, and mute. Routing stays in the horizontal rows. |
 | MX-05 | Monitoring | "Hear: after FX" / "before FX". | ⬜ | Decision register D22: a bus's monitor (`bus.set_monitor`, protocol 0.42), which the engine plays on its device while an output runs. |
-| MX-06 | Privacy mute | The mic reads "muted (privacy)" while privacy is on. | ⬜ | `privacy.get` and `privacy.changed` say when privacy is on, and the engine then mutes the microphones (E2b, #804). |
+| MX-06 | Privacy mute | The mic reads "muted (privacy)" while privacy is on. | ✅ | Every channel the engine's privacy screen mutes: the `audio_input` and `webcam` sources (the input devices, ADR-0027 §4's default set), not desktop or application audio. A horizontal row appends " · muted (privacy)" to the name; a vertical strip shows "muted (privacy)" under its short name. Its own mute is unchanged. |
 | MX-07 | Real levels | Meters show the engine's levels. | ✅ | `meters.tick`, with RMS, peak and peak hold; the prototype's numbers are simulated. |
 
 <a id="outputs"></a>
@@ -408,8 +408,8 @@ handlers; the real UI makes them work.
 | KB-03 | Undo and redo | Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y. | ✅ | The prototype has none; kept. |
 | KB-04 | Edit keys | Ctrl+D duplicate as reference, Ctrl+Shift+D as clone, Del remove, F2 rename. | ✅ | F2 renames and Del removes in the Scenes and Scene objects rows (Del deletes a scene or a folder there, through its plan). Ctrl+D and Ctrl+Shift+D duplicate the item as a reference or a clone on the canvas and in its row, and Del on the canvas removes the selection; in a keyframe scene ([SC-07](#scenes)) the duplicates and Del do nothing, as they would change its parent's items. |
 | KB-05 | Copy and paste | Ctrl+C, Ctrl+V. | ⬜ | Decision register D43. |
-| KB-06 | Privacy key | Pause toggles privacy. | ⬜ | `privacy.set` (E2b); the key comes with HD-05. |
-| KB-07 | Scene hotkeys | F1–F5 switch to the scene bound to them. | ✅ | Every binding in the collection (K1) runs its action while the page has the focus and no dialog or menu is open (`hotkeys.rs`), unless a field or a focused row took the key: F2 on a scene row still renames, and Del on a keyframe's object row does nothing. The prototype's F1–F5 are bindings like any other, set from the Inspector ([IN-08](#inspector)). |
+| KB-06 | Privacy key | Pause toggles privacy. | ✅ | Anywhere in the window, a rename field and the Inspector's Set key included, as the button does. So Pause is never bound: Set key ignores it, and a Pause binding another client made doesn't run in this UI. |
+| KB-07 | Scene hotkeys | F1–F5 switch to the scene bound to them. | ✅ | Every binding in the collection (K1) but one of Pause, the privacy key ([KB-06](#keyboard)), runs its action while the page has the focus and no dialog or menu is open (`hotkeys.rs`), unless a field or a focused row took the key: F2 on a scene row still renames, and Del on a keyframe's object row does nothing. The prototype's F1–F5 are bindings like any other, set from the Inspector ([IN-08](#inspector)). |
 
 <a id="beyond"></a>
 ## Beyond the prototype

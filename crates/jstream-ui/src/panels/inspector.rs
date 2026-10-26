@@ -1109,16 +1109,20 @@ fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoV
                     min=0.0 max=100.0 send=send_opacity />
             </div>
         </Fold>
-        <Fold title="Scene switches" open=false hint=switch_hint>
-            <div class="field-grid">
-                <NumberField label="Delay" unit="ms" value=delay step=10.0 decimals=0 min=0.0
-                    max=f64::from(SWITCH_DELAY_MAX) send=send_delay />
-                {switch_select(SwitchField::Easing, "Easing", option_pairs(&ITEM_EASINGS))}
-                {switch_select(SwitchField::Glide, "Glide to other scenes", option_pairs(&GLIDES))}
-                {switch_select(SwitchField::Appear, "Appear", option_pairs(&EFFECTS))}
-                {switch_select(SwitchField::Disappear, "Disappear", option_pairs(&EFFECTS))}
-            </div>
-        </Fold>
+        // A keyframe changes only placement, visibility and opacity (ADR-0049), so its
+        // items' switches are the parent's and aren't shown here.
+        <Show when=move || keyframe_of.with(Option::is_none)>
+            <Fold title="Scene switches" open=false hint=switch_hint>
+                <div class="field-grid">
+                    <NumberField label="Delay" unit="ms" value=delay step=10.0 decimals=0 min=0.0
+                        max=f64::from(SWITCH_DELAY_MAX) send=send_delay />
+                    {switch_select(SwitchField::Easing, "Easing", option_pairs(&ITEM_EASINGS))}
+                    {switch_select(SwitchField::Glide, "Glide to other scenes", option_pairs(&GLIDES))}
+                    {switch_select(SwitchField::Appear, "Appear", option_pairs(&EFFECTS))}
+                    {switch_select(SwitchField::Disappear, "Disappear", option_pairs(&EFFECTS))}
+                </div>
+            </Fold>
+        </Show>
     }
 }
 
@@ -1308,7 +1312,9 @@ fn HotkeyRow(scene: SceneId) -> impl IntoView {
         }
     };
     let on_key = move |event: leptos::ev::KeyboardEvent| {
-        if !capturing.get_untracked() {
+        // Pause is the window's privacy key, so it is never bound and still toggles
+        // privacy while a capture waits.
+        if !capturing.get_untracked() || event.key() == "Pause" {
             return;
         }
         // The key is the capture's: no hotkey runs, and Tab doesn't move the focus.
