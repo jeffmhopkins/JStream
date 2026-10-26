@@ -2,14 +2,14 @@
 id = "ADR-0077"
 title = "Bundle the IBM Plex fonts with the web UI under the SIL OFL 1.1"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0077: Bundle the IBM Plex fonts with the web UI under the SIL OFL 1.1
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 <a id="context"></a>
@@ -25,8 +25,7 @@ The Plex fonts are © IBM Corp., with the Reserved Font Name "Plex", under the S
 Font License 1.1. JStream's own code is MIT OR Apache-2.0. Shipping a third-party asset
 under a different licence is a licensing decision, so this ADR is maintainer tier
 ([ADR-0043](0043-narrow-maintainer-tier.md), [R-GOV-005](../RULES.md#R-GOV-005)). The
-maintainer has said the licensing is OK. This ADR records the decision, and it still
-needs the maintainer's `/accept`.
+maintainer accepted it.
 
 **This is not legal advice.** An agent wrote it from the licence text that ships in IBM's
 packages, and nobody qualified to give a legal opinion has reviewed it.
