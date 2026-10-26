@@ -1325,7 +1325,7 @@ pub enum Action {
     /// screen: the engine refuses this with `unsupported` and covers nothing.
     #[serde(rename = "privacy.set")]
     PrivacySet {
-        /// Whether the privacy screen covers the outputs.
+        /// Ignored: JStream has no privacy screen.
         on: bool,
     },
 }

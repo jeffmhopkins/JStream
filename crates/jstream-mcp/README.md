@@ -30,7 +30,8 @@ Contents (a first cut; [Design](#design) explains the choices):
   serves. A `video.snapshot` result leads with an image content block, the only place
   its PNG appears.
 - **Tools** (`tools.rs`): the tool table, generated from `jstream_protocol::json_schema()`,
-  less the people-only `youtube.*` and `plugin.*` ops (`PEOPLE_ONLY`), each with its MCP annotations
+  less the people-only `youtube.*` and `plugin.*` ops (`PEOPLE_ONLY`) and the deprecated
+  `privacy.*` ops (`DEPRECATED`), each with its MCP annotations
   (`OPEN_WORLD` names the group tools that reach outside JStream, `output` and `source`;
   `batch`, which carries their edits, is open-world too), and the decoding of tool
   arguments into protocol calls, which refuses an output edit with a `youtube` target.

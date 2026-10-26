@@ -478,7 +478,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "description": "**Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy\nscreen: the engine refuses this with `unsupported` and covers nothing.",
           "properties": {
             "on": {
-              "description": "Whether the privacy screen covers the outputs.",
+              "description": "Ignored: JStream has no privacy screen.",
               "type": "boolean"
             },
             "type": {
@@ -6836,7 +6836,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "description": "The result of the deprecated `privacy.get` (ADR-0080): always `on: false`.",
           "properties": {
             "on": {
-              "description": "Whether the privacy screen covers the outputs.",
+              "description": "Always false: JStream has no privacy screen.",
               "type": "boolean"
             },
             "type": {
@@ -8468,7 +8468,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "The call is valid, but whoever answered it doesn't serve it: `pairing.start`,\n`device.list` and `device.revoke` sent to an engine with no server in front, or\na `plugin.*` action sent to an engine that hosts no plugins yet.\nRetrying won't help.",
+          "description": "The call is valid, but whoever answered it doesn't serve it: `pairing.start`,\n`device.list` and `device.revoke` sent to an engine with no server in front,\na `plugin.*` action sent to an engine that hosts no plugins yet, or the deprecated\n`privacy.set` (ADR-0080).\nRetrying won't help.",
           "properties": {
             "call": {
               "description": "The call's name (`pairing.start`).",

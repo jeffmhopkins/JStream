@@ -525,7 +525,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "description": "**Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy\nscreen: the engine refuses this with `unsupported` and covers nothing.",
                 "properties": {
                   "on": {
-                    "description": "Whether the privacy screen covers the outputs.",
+                    "description": "Ignored: JStream has no privacy screen.",
                     "type": "boolean"
                   },
                   "type": {
@@ -5757,7 +5757,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "description": "**Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy\nscreen: the engine refuses this with `unsupported` and covers nothing.",
                 "properties": {
                   "on": {
-                    "description": "Whether the privacy screen covers the outputs.",
+                    "description": "Ignored: JStream has no privacy screen.",
                     "type": "boolean"
                   },
                   "type": {
@@ -10556,7 +10556,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "description": "**Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy\nscreen: the engine refuses this with `unsupported` and covers nothing.",
                 "properties": {
                   "on": {
-                    "description": "Whether the privacy screen covers the outputs.",
+                    "description": "Ignored: JStream has no privacy screen.",
                     "type": "boolean"
                   },
                   "type": {

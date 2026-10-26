@@ -107,8 +107,9 @@ pub enum ProtocolError {
         reason: String,
     },
     /// The call is valid, but whoever answered it doesn't serve it: `pairing.start`,
-    /// `device.list` and `device.revoke` sent to an engine with no server in front, or
-    /// a `plugin.*` action sent to an engine that hosts no plugins yet.
+    /// `device.list` and `device.revoke` sent to an engine with no server in front,
+    /// a `plugin.*` action sent to an engine that hosts no plugins yet, or the deprecated
+    /// `privacy.set` (ADR-0080).
     /// Retrying won't help.
     #[error("`{call}` is not served here")]
     Unsupported {

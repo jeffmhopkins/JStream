@@ -411,7 +411,7 @@ pub enum QueryResult {
     /// The result of the deprecated `privacy.get` (ADR-0080): always `on: false`.
     #[serde(rename = "privacy.get")]
     PrivacyGet {
-        /// Whether the privacy screen covers the outputs.
+        /// Always false: JStream has no privacy screen.
         on: bool,
     },
     /// The result of `encoder.list`.
