@@ -52,7 +52,7 @@ Contents ([Design](#design) explains the choices):
   and `engine_url_for_page`, the engine URL the connect form offers.
 - **Store** (`store.rs`): `Studio`, the state the scene, sources and properties panels
   share: the collection as `state.get` last reported it (`Collection`, with its buses
-  for the bus picker), the program
+  for the bus picker and its scene folders), the program
   scene, the `Selection`, each source's size (`Sizes`, from `source.sizes` and
   `source.size_changed`; `Collection::source_size` adds a nested scene's, the canvas),
   whether the canvas is in crop mode (which a switch of scene leaves), the source kinds
@@ -62,9 +62,11 @@ Contents ([Design](#design) explains the choices):
 - **Menus, dialogs and icons**: `menu.rs` (`ContextMenu`, the right-click menu, and
   `Menus`, the context that opens it with a list of `Entry`s), `item_menu.rs` (the
   selected items' entries, which the canvas and the sources list share, with the
-  layer moves and canvas arrangements they send, tested natively), `dialog.rs` (`Modal`,
+  layer moves, canvas arrangements, reference ↔ clone switches, grouping and
+  ungrouping they send, tested natively), `dialog.rs` (`Modal`,
   the modal dialog frame) and `icons.rs` (`Icon`, the prototype's stroke icons).
-- **Panels** (`panels/`): the scene list (`scenes.rs`), the sources list
+- **Panels** (`panels/`): the scene list (`scenes.rs`, with its folders: the rows each
+  level shows and the edits a drop sends are tested natively), the sources list
   (`sources.rs`), what those two share (`tree.rs`: the search box, the favourites
   filter, the star and drag reordering, with the matching and the drop's index tested
   natively), the Inspector (`inspector.rs`: the selected item's box, crop,
@@ -155,17 +157,24 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   canvas edits the same scene and selects the same items, so a click on a box selects
   its row and opens its properties, and every selected item's row is highlighted.
 - **Scenes and sources.** The Scenes and Scene objects panels are the prototype's
-  trees (spec-panels.md 1 and 2), without folders and groups yet. The scene list shows
-  scenes in display order and leaves out groups (ADR-0024), marks the program scene
+  trees (spec-panels.md 1 and 2). The scene list shows each
+  folder level's folders in folder order, then its scenes in display order (ADR-0064),
+  indented by depth, with a caret that folds a folder, and leaves out groups (ADR-0024). It marks the program scene
   "program", and puts a scene on program with `scene.switch` from a hover button. The
   sources list shows the selected scene's items with the top of the stack first, each
   with its source's type icon, in italics when the source is placed in another scene
-  too, and an eye that shows or hides it. Each panel has a search box and a filter for
+  too, and an eye that shows or hides it. A nested scene's row has a caret that shows
+  its items under it, nested ones too; a click on one of them selects it in its own
+  scene, which the list then shows, since the engine draws a nested scene as one item.
+  Each panel has a search box and a filter for
   favourites (the star, `scene.set_meta` or `source.set_meta`), applied in the page;
-  rows drag before or after each other (`scene.reorder`, `item.reorder`, counted in the
-  whole list so a hidden row doesn't shift the index) with pointer events, but not
-  while a filter is on. F2 renames a row in place and Del deletes a scene (through its
-  plan) or removes an item; a double click on an item opens its Properties dialog. New scenes, sources and items get IDs from `fresh_id`, which includes
+  rows drag before or after each other (`scene.reorder`, `folder.reorder`,
+  `item.reorder`, counted in the whole list so a hidden row doesn't shift the index) with
+  pointer events, but not while a filter is on, and a drop on a folder row's middle half
+  moves the row into it (`scene.set_folder`, `folder.set_parent`); one on a nested
+  scene's row, or beside one of its items, moves the item into that scene (`item.move`).
+  A search keeps the folders and nested scenes that hold a match, open. F2 renames a row in place and Del deletes a scene or a folder (through its
+  plan, or at once for an empty folder) or removes an item; a double click on an item opens its Properties dialog. New scenes, sources and items get IDs from `fresh_id`, which includes
   the session's client ID so two UIs on one engine don't pick the same one. Sources
   are added through the Add source dialog (below). Deleting a scene, or a source
   everywhere, reads `delete.plan` first,
@@ -179,7 +188,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the focus with the arrows, Home and End, and closes on a choice, a press outside,
   Escape or Tab. The canvas opens the empty canvas or margin menu, the scene and
   sources lists their panels' menus, and a scene row its scene's (Show in preview,
-  Rename, New scene and Delete scene work; the rest waits on folders, keyframes,
+  Rename, New scene, New folder and Delete scene work, as do a folder's own menu's; the
+  rest waits on keyframes,
   transitions and the scene Properties dialog). A right-click on an item, on the canvas or its row, selects it
   unless it was selected and opens `item_menu.rs`'s menu for the selection: Properties
   (the Properties dialog), the Audio check (`source.set_audio`), layer order
@@ -188,10 +198,23 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   each item's uncropped extent as its box while its source's size is known), Crop
   (crop mode, for one item), Duplicate as reference
   (`item.add` of the same source, 40 pixels down and right, just above the original)
-  or as clone (`source.duplicate` first), and Remove from scene, each one batch; in
-  the sources list, one item's menu ends with deleting its source everywhere. A
-  nested scene and an audio-only source get the prototype's shorter menus; the first
-  can be opened. The scene and object lists fill their dock group, so the space under
+  or as clone (`source.duplicate` first), also Ctrl+D and Ctrl+Shift+D, and Remove
+  from scene, each one batch. For one item of a source placed more than once, or a
+  copy whose original exists, it switches between a reference and an independent clone
+  (decision register D3): `source.duplicate` and `item.set_source` to the copy, or
+  `item.set_source` back to the original and `source.delete` of a copy nothing else
+  places, so the item keeps its ID. Group selection, and New group in the sources list,
+  groups the selection (decision register D4): a `group` scene named "Group N", placed
+  over the whole canvas where the topmost item was, and the items moved into it with
+  `item.move`, keeping their IDs and boxes since the group shares the canvas. In the
+  sources list, one item's menu ends with deleting its source everywhere. A nested
+  scene and an audio-only source get the prototype's shorter menus; the first can be
+  opened, and a group ungrouped: its items move back where it was, each given the box
+  it draws at when the group isn't at its default placement (ADR-0024 §1), and the group
+  scene and its sources are deleted; a hidden group's items are hidden with it. Ungroup
+  shows disabled, with the reason, while another item places the group, the group scene
+  has filters, or the group's look can't become its items' own (`Kept` in
+  `item_menu.rs`). The scene and object lists fill their dock group, so the space under
   their rows opens the panel's menu. `dialog.rs` is the modal frame: Escape and the
   backdrop cancel, and Enter presses the button marked `data-primary`. The Add source
   dialog (`panels/add_source.rs`, opened through `AddSourceDialog` context) lists the
@@ -540,7 +563,8 @@ browser, and `mod.rs` is the component.
   within 3°, else to 0.1°; Ctrl moves it in 45° steps. Shift drags at half speed for
   every gesture, following the pointer's movement so pressing it mid-drag doesn't
   jump. Arrow keys nudge the selected boxes by 1 pixel (Shift: 10). Escape cancels a
-  drag, or clears the selection.
+  drag, or clears the selection. Del removes the selected items, and Ctrl+D and
+  Ctrl+Shift+D duplicate the selected one as the item menu does.
 - **Several selected.** Each selected box keeps its 2 px outline without handles, and
   a dashed box 4 screen pixels outside their bounds gets the handles, a knob 42 pixels
   above it, and a readout 12 pixels below (`N items · W × H`, the size while scaling,
