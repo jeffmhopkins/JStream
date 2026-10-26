@@ -1404,6 +1404,5 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 /* A menu line's colour swatch column (spec-workspace.md 5.1.2): transparent unless set. */
 .ctx-swatch { flex: 0 0 8px; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; }
 .ctx-swatch + .ctx-label { margin-left: 6px; }
-/* Row tools that fade in on hover or focus (WS-07), for rows outside the trees. */
 .output-head .output-icon { display: inline-flex; margin-right: 6px; color: var(--muted); vertical-align: middle; }
 .field .reset { display: inline-flex; align-items: center; justify-content: center; }

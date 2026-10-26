@@ -97,6 +97,20 @@ test('Set key in the Inspector leaves Pause to the privacy screen', async ({ pag
   await expect(row.locator('kbd')).toHaveText(['F1']);
 });
 
+test('the scene Properties hotkey field leaves Pause to the privacy screen', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  await page.locator('.scenes-panel li.row').filter({ hasText: 'Intro' }).locator('.row-main').dblclick();
+  const dialog = page.getByRole('dialog', { name: 'Scene properties' });
+  const hotkey = dialog.getByLabel('Hotkey');
+  await hotkey.click();
+  await page.keyboard.press('Pause');
+  await expect(privacyButton(page)).toHaveText('Privacy on');
+  // Pause isn't taken: the field stays empty and still takes the next key.
+  await expect(hotkey).toHaveValue('');
+  await page.keyboard.press('F4');
+  await expect(hotkey).toHaveValue('F4');
+});
+
 test('a client that connects while privacy is on shows it at once', async ({ page, context, daemon }) => {
   await connect(page, daemon);
   await privacyButton(page).click();

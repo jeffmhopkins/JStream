@@ -376,8 +376,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   scene row, the row menu's Properties…, the canvas margin's Scene properties… and a
   nested scene's item. It edits a draft of the name, Transition in and out and the
   hotkey: the hotkey field takes the next key press as a chord (the modifiers in the
-  protocol's order, then the key's `code`; Backspace or Delete clears it, and Tab,
-  Escape and Enter keep their dialog meaning). OK sends what changed as one batch:
+  protocol's order, then the key's `code`; Backspace or Delete clears it, Tab,
+  Escape and Enter keep their dialog meaning, and Pause, the privacy key, is never
+  taken). OK sends what changed as one batch:
   `scene.rename`, `scene.set_transitions`, and `hotkey.clear` of the old chord before
   `hotkey.set` of the new one, bound to a `scene.switch` with the preset the old binding
   named (none for a first hotkey). A chord bound already is refused before sending, with
