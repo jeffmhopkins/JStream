@@ -1,8 +1,8 @@
 //! The UI's copy of the engine's state, shared by every panel: the collection as
 //! `state.get` last reported it (a keyframe scene with its parent's items, its
-//! overrides applied), the program scene, what is selected, the sources' sizes
-//! (`source.sizes` and `source.size_changed`) and the kind descriptors read so far. The
-//! app keeps it current from the session's events; panels
+//! overrides applied), the program scene, whether the privacy screen is on, what is
+//! selected, the sources' sizes (`source.sizes` and `source.size_changed`) and the kind
+//! descriptors read so far. The app keeps it current from the session's events; panels
 //! read it reactively and change the engine only through calls, never by editing it.
 //!
 //! Docs: crates/jstream-ui/README.md#design
@@ -10,10 +10,11 @@
 use crate::session::Session;
 use jstream_control::ControlError;
 use jstream_control::protocol::{
-    Action, Batch, BusInfo, Call, CallResult, Canvas, Chord, DeleteTarget, Edit, Event, FolderId,
-    FolderInfo, HotkeyBinding, ItemId, ItemInfo, ItemOverride, KindDescriptor, KindSummary,
-    OutputInfo, OverrideField, PlacementForm, Query, QueryResult, Rev, SceneId, SceneInfo,
-    SceneRole, SourceId, SourceInfo, SourceKind, SourceSize,
+    Action, Batch, BusInfo, Call, CallResult, Canvas, Chord, DeleteTarget, Edit, Event,
+    FilterChains, FilterOwner, FolderId, FolderInfo, HotkeyBinding, ItemId, ItemInfo, ItemOverride,
+    KindDescriptor, KindSummary, LabelInfo, OutputId, OutputInfo, OverrideField, PlacementForm,
+    Query, QueryResult, Rev, SceneId, SceneInfo, SceneRole, SourceId, SourceInfo, SourceKind,
+    SourceSize,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -37,6 +38,10 @@ pub struct Collection {
     /// Every audio bus, ordered by ID, the master among them: what a `bus` parameter
     /// picks from.
     pub buses: Vec<BusInfo>,
+    /// The labels sources can carry, in label order (ADR-0024 §4).
+    pub labels: Vec<LabelInfo>,
+    /// The master stage's chains, which apply to everything leaving JStream (ADR-0027).
+    pub master: FilterChains,
     /// Every hotkey binding, ordered by chord (ADR-0024 §5).
     pub hotkeys: Vec<HotkeyBinding>,
     /// The scene list's folders, in folder order (ADR-0024 §3, ADR-0064).
@@ -54,6 +59,8 @@ impl Collection {
                 scenes,
                 outputs,
                 buses,
+                labels,
+                master,
                 hotkeys,
                 folders,
                 ..
@@ -80,6 +87,8 @@ impl Collection {
                     scenes,
                     outputs,
                     buses,
+                    labels,
+                    master: master.filters,
                     hotkeys,
                     folders,
                 })
@@ -96,6 +105,22 @@ impl Collection {
     /// The source with this ID.
     pub fn source(&self, source_id: &SourceId) -> Option<&SourceInfo> {
         self.sources.iter().find(|s| &s.source_id == source_id)
+    }
+
+    /// The output with this ID.
+    pub fn output(&self, output_id: &OutputId) -> Option<&OutputInfo> {
+        self.outputs.iter().find(|o| &o.output_id == output_id)
+    }
+
+    /// The chains `owner` has, or `None` if it doesn't exist or reports none (an item).
+    pub fn chains(&self, owner: &FilterOwner) -> Option<&FilterChains> {
+        match owner {
+            FilterOwner::Source { source_id } => self.source(source_id).map(|s| &s.filters),
+            FilterOwner::Master => Some(&self.master),
+            FilterOwner::Output { output_id } => self.output(output_id).map(|o| &o.filters),
+            FilterOwner::Scene { scene_id } => self.scene(scene_id).map(|s| &s.filters),
+            _ => None,
+        }
     }
 
     /// The item with this ID, with the scene it is in: its own scene, never a keyframe
@@ -224,6 +249,7 @@ impl Collection {
             .any(|s| s.scene_id.as_str() == id || s.items.iter().any(|i| i.item_id.as_str() == id))
             || self.sources.iter().any(|s| s.source_id.as_str() == id)
             || self.outputs.iter().any(|o| o.output_id.as_str() == id)
+            || self.labels.iter().any(|l| l.label_id.as_str() == id)
             || self.folders.iter().any(|f| f.folder_id.as_str() == id)
     }
 
@@ -455,6 +481,37 @@ pub fn fresh_id(
     }
 }
 
+/// Orders the privacy screen's reports: each `privacy.changed`, and each `privacy.get`
+/// answer, which only counts when no `privacy.changed` arrived after it was asked. A
+/// stale answer could otherwise show the outputs covered while they are not.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PrivacyReports {
+    /// Bumped by every `privacy.changed` and every new session.
+    changes: u64,
+}
+
+impl PrivacyReports {
+    /// What a `privacy.get` sent now hands back with its answer.
+    pub fn ticket(&self) -> u64 {
+        self.changes
+    }
+
+    /// Takes a `privacy.changed`.
+    pub fn changed(&mut self) {
+        self.changes += 1;
+    }
+
+    /// Forgets the session: an answer to a read it sent no longer counts.
+    pub fn reset(&mut self) {
+        self.changes += 1;
+    }
+
+    /// Whether the answer to the read that got `ticket` is still the newest report.
+    pub fn answered(&self, ticket: u64) -> bool {
+        ticket == self.changes
+    }
+}
+
 /// The shared state, provided as Leptos context by the app. Copyable: every field is a
 /// handle.
 #[derive(Clone, Copy)]
@@ -463,6 +520,11 @@ pub struct Studio {
     pub collection: RwSignal<Option<Collection>>,
     /// The scene on program.
     pub program: RwSignal<Option<SceneId>>,
+    /// Whether the privacy screen is on (ADR-0027 §4), as `privacy.get` and then each
+    /// `privacy.changed` reported it.
+    pub privacy: RwSignal<bool>,
+    /// What orders those reports ([`PrivacyReports`]).
+    privacy_reports: StoredValue<PrivacyReports>,
     /// What is selected.
     pub selection: RwSignal<Selection>,
     /// Each source's size, as the engine last reported it.
@@ -476,6 +538,9 @@ pub struct Studio {
     pub descriptors: RwSignal<HashMap<String, KindDescriptor>>,
     /// The last call that failed, for the problem bar.
     pub problem: RwSignal<Option<String>>,
+    /// The confirmation the toast shows, numbered so a repeat of the same text restarts
+    /// its timer (spec-workspace.md 6.7).
+    pub toast: RwSignal<Option<(u64, String)>>,
     /// Bumped when an output's stream key was set or cleared, which no event reports, so
     /// the header re-reads the outputs Go Live may start.
     pub keys_changed: RwSignal<u64>,
@@ -483,6 +548,9 @@ pub struct Studio {
     refresh: StoredValue<(bool, bool)>,
     /// The counter [`fresh_id`] continues from.
     next_id: StoredValue<u64>,
+    /// The number the next toast takes. It only grows, so a timer left from an earlier
+    /// toast never matches a later one.
+    next_toast: StoredValue<u64>,
 }
 
 impl Studio {
@@ -491,15 +559,19 @@ impl Studio {
         Studio {
             collection: RwSignal::new(None),
             program: RwSignal::new(None),
+            privacy: RwSignal::new(false),
+            privacy_reports: StoredValue::new(PrivacyReports::default()),
             selection: RwSignal::new(Selection::default()),
             sizes: RwSignal::new(Sizes::new()),
             crop_mode: RwSignal::new(false),
             kinds: RwSignal::new(None),
             descriptors: RwSignal::new(HashMap::new()),
             problem: RwSignal::new(None),
+            toast: RwSignal::new(None),
             keys_changed: RwSignal::new(0),
             refresh: StoredValue::new((false, false)),
             next_id: StoredValue::new(0),
+            next_toast: StoredValue::new(0),
         }
     }
 
@@ -507,18 +579,23 @@ impl Studio {
     pub fn reset(&self) {
         self.collection.set(None);
         self.program.set(None);
+        self.privacy_reports.update_value(PrivacyReports::reset);
+        self.privacy.set(false);
         self.selection.set(Selection::default());
         self.sizes.set(Sizes::new());
         self.crop_mode.set(false);
         self.kinds.set(None);
         self.descriptors.set(HashMap::new());
         self.problem.set(None);
+        self.toast.set(None);
         self.refresh.set_value((false, false));
     }
 
-    /// Reads everything a new session needs: the state, the program scene and the kinds.
+    /// Reads everything a new session needs: the state, the program scene, the privacy
+    /// screen and the kinds.
     pub fn load(&self, session: &Session) {
         let studio = *self;
+        studio.read_privacy(session);
         let first = session.clone();
         spawn_local(async move {
             if let Ok(QueryResult::StudioGet { program_scene, .. }) =
@@ -560,10 +637,16 @@ impl Studio {
                 }
             }
             Event::EventsDropped { .. } => {
+                // A dropped `privacy.changed` would leave the indicator wrong.
                 self.refresh(session);
+                self.read_privacy(session);
                 let studio = *self;
                 let session = session.clone();
                 spawn_local(async move { studio.read_sizes(&session).await });
+            }
+            Event::PrivacyChanged { on, .. } => {
+                self.privacy_reports.update_value(PrivacyReports::changed);
+                self.privacy.set(*on);
             }
             Event::SourceSizeChanged { source_id, size } => self.sizes.update(|sizes| match size {
                 Some(size) => _ = sizes.insert(source_id.clone(), (size.width, size.height)),
@@ -575,6 +658,35 @@ impl Studio {
             }
             _ => {}
         }
+    }
+
+    /// Reads whether the privacy screen is on with `privacy.get`. The answer is dropped
+    /// when a `privacy.changed` arrived after the read was sent, since the server may
+    /// deliver another client's event ahead of an answer computed before it.
+    fn read_privacy(&self, session: &Session) {
+        let studio = *self;
+        let session = session.clone();
+        let ticket = self.privacy_reports.with_value(PrivacyReports::ticket);
+        spawn_local(async move {
+            match query(&session, Query::PrivacyGet).await {
+                Ok(QueryResult::PrivacyGet { on }) => {
+                    let fresh = studio
+                        .privacy_reports
+                        .try_with_value(|r| r.answered(ticket));
+                    if fresh == Some(true) {
+                        studio.privacy.try_set(on);
+                    }
+                }
+                Ok(other) => studio.report(&unexpected(other.name())),
+                Err(error) => studio.report(&error),
+            }
+        });
+    }
+
+    /// Turns the privacy screen on or off, reporting a failure in the problem bar. The
+    /// indicator follows the `privacy.changed` the engine sends, not the request.
+    pub fn set_privacy(&self, session: &Session, on: bool) {
+        self.act(session, Action::PrivacySet { on });
     }
 
     /// Reads every source's size with `source.sizes`; `source.size_changed` keeps them
@@ -705,8 +817,28 @@ impl Studio {
         });
     }
 
+    /// Shows `text` in the toast, in place of the one shown.
+    pub fn notify(&self, text: impl Into<String>) {
+        let n = self.next_toast.get_value();
+        self.next_toast.set_value(n + 1);
+        self.toast.set(Some((n, text.into())));
+    }
+
+    /// Sends `edits` as one batch, as [`Studio::apply`] does, and once it is applied shows
+    /// `note` in the toast.
+    pub fn apply_noting(&self, session: &Session, edits: Vec<Edit>, note: String) {
+        let studio = *self;
+        let session = session.clone();
+        spawn_local(async move {
+            match apply(&session, edits, None).await {
+                Ok(_) => studio.notify(note),
+                Err(error) => studio.report(&error),
+            }
+        });
+    }
+
     /// Runs an action, reporting a failure in the problem bar.
-    pub fn act(&self, session: &Session, action: jstream_control::protocol::Action) {
+    pub fn act(&self, session: &Session, action: Action) {
         let studio = *self;
         let session = session.clone();
         spawn_local(async move {
@@ -803,8 +935,8 @@ fn unexpected(what: &str) -> ControlError {
 #[cfg(test)]
 mod tests {
     use super::{
-        Collection, Selection, Studio, apply, fresh_id, list_kinds, plan_summary, query,
-        reset_edits, sizes_of,
+        Collection, PrivacyReports, Selection, Studio, apply, fresh_id, list_kinds, plan_summary,
+        query, reset_edits, sizes_of,
     };
     use crate::session::Session;
     use jstream_control::protocol::{
@@ -1203,6 +1335,27 @@ mod tests {
             problem.contains("the engine closed the connection"),
             "{problem:?}"
         );
+    }
+
+    /// The server may deliver another client's `privacy.changed` ahead of the answer to
+    /// a `privacy.get` it computed before that change: the answer must not undo it.
+    #[test]
+    fn a_privacy_answer_older_than_a_change_is_dropped() {
+        let mut reports = PrivacyReports::default();
+        // privacy.get sent while the screen is on; another client turns it off and its
+        // privacy.changed arrives first; then the stale answer (on).
+        let ticket = reports.ticket();
+        reports.changed();
+        assert!(!reports.answered(ticket), "the stale answer is dropped");
+
+        // With nothing in between, the answer stands.
+        let ticket = reports.ticket();
+        assert!(reports.answered(ticket));
+
+        // A read from a session that has since ended no longer counts.
+        let ticket = reports.ticket();
+        reports.reset();
+        assert!(!reports.answered(ticket));
     }
 
     #[test]

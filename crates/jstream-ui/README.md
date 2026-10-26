@@ -31,7 +31,8 @@ Contents ([Design](#design) explains the choices):
 - **Header** (`header.rs`): `Header`, the bar along the top: the brand, the File menu
   (the connection's details and Disconnect), the Edit menu (Undo, Redo), the View menu
   (show or hide each panel) and the Layout menu (saved layouts), the frames dropped
-  since the page connected, Record, and Go Live / End stream. `RecordButton` and
+  since the page connected, the Privacy button (which the Pause key also toggles,
+  anywhere in the window), Record, and Go Live / End stream. `RecordButton` and
   `Dropped` are its logic, tested natively.
 - **Dock** (`dock.rs`): `Dock`, the model of which panel sits where: eight `Zone`s
   around the canvas, each holding `Group`s of tabbed `PanelId`s, the zones' sizes, and
@@ -52,44 +53,55 @@ Contents ([Design](#design) explains the choices):
   and `engine_url_for_page`, the engine URL the connect form offers.
 - **Store** (`store.rs`): `Studio`, the state the scene, sources and properties panels
   share: the collection as `state.get` last reported it (`Collection`, with its buses
-  for the bus picker, its hotkey bindings and its scene folders; a keyframe scene's items
-  are its parent's with its overrides applied, `shown_items`), the program
-  scene, the `Selection`, each source's size (`Sizes`, from `source.sizes` and
-  `source.size_changed`; `Collection::source_size` adds a nested scene's, the canvas),
-  whether the canvas is in crop mode (which a switch of scene leaves), the source kinds
-  and the kind descriptors read so far, and the last failed call, and `keys_changed`, which the outputs panel bumps when a stream key
+  for the bus picker, its hotkey bindings, its scene folders and the master stage's
+  chains, and `chains` to read any owner's; a keyframe scene's items are its parent's
+  with its overrides applied, `shown_items`), the program
+  scene, whether the privacy screen is on (from `privacy.get` and `privacy.changed`,
+  which the header, the canvas and the mixer show), the `Selection`, each source's size
+  (`Sizes`, from `source.sizes` and `source.size_changed`; `Collection::source_size`
+  adds a nested scene's, the canvas), whether the canvas is in crop mode (which a switch
+  of scene leaves), the source kinds
+  and the kind descriptors read so far, the last failed call, the toast's confirmation
+  (`notify`, `apply_noting`), and `keys_changed`, which the outputs panel bumps when a stream key
   is set or cleared. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
   `plan_summary`, `reset_edits` (a keyframe's Reset) and `fresh_id`.
 - **Hotkeys** (`hotkeys.rs`): `Hotkeys`, which runs the collection's hotkey bindings
   while the page has the focus and no dialog or menu is open, and the chord of a key
   press, its label and the edits that bind a chord to a scene, tested natively.
 - **Menus, dialogs and icons**: `menu.rs` (`ContextMenu`, the right-click menu, and
-  `Menus`, the context that opens it with a list of `Entry`s), `item_menu.rs` (the
+  `Menus`, the context that opens it with a list of `Entry`s, each with an optional
+  check, colour swatch, hint or submenu), `item_menu.rs` (the
   selected items' entries, which the canvas and the sources list share, with the
   layer moves, canvas arrangements, reference ↔ clone switches, grouping and
   ungrouping they send, tested natively), `dialog.rs` (`Modal`,
   the modal dialog frame) and `icons.rs` (`Icon`, the prototype's stroke icons).
 - **Panels** (`panels/`): the scene list (`scenes.rs`, with its folders: the rows each
   level shows and the edits a drop sends are tested natively), the sources list
-  (`sources.rs`), what those two share (`tree.rs`: the search box, the favourites
-  filter, the star and drag reordering, with the matching and the drop's index tested
-  natively), the Inspector (`inspector.rs`: the selected item's box, crop,
-  blending and settings, or the selected scene's objects, uses and transitions), the
+  (`sources.rs`), what those two share (`tree.rs`: the search box, the favourites and
+  labels filter, the star and drag reordering, with the matching and the drop's index
+  tested natively), labels (`labels.rs`: the chips, the tag popover, the label manager
+  and the `LabelManager` context that opens it, with the edits they send tested
+  natively), the Inspector (`inspector.rs`: the selected item's box, 3D, crop,
+  blending and settings, or the selected scene's objects, uses and transitions, in
+  sections whose folds `Folds` remembers by title), the
   properties form inside it (`properties.rs`), the Add source dialog (`add_source.rs`:
   `AddSource` and the `AddSourceDialog` context that opens it, with its type list and
   the edits it sends, tested natively), the Properties dialog (`source_properties.rs`:
   `SourceProperties` and the `PropertiesDialog` context that opens it), the Filters
   panel and its dialogs (`filters.rs`: `Filters`, `Chains`, which the Properties dialog
   shows too, `AddFilter`, `FilterSettings` and the `FilterDialogs` context that opens
-  them, with the catalogue, the row summaries, the choice of in place or dialog and
-  Cancel's restore patch tested natively), the number
+  them and holds the chain an FX button picked, with the catalogue, the row summaries,
+  the choice of in place or dialog, each owner's chains, name and note, and Cancel's
+  restore patch tested natively), the number
   field the panels share (`number.rs`) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
-  (creating, editing and deleting streams, recordings and the virtual camera, their
-  stream keys, start and stop, and the pipeline's health), and the calls and
+  (the program output and each output with its FX button, creating, editing and
+  deleting streams, recordings and the virtual camera, their stream keys, start and
+  stop, and the pipeline's health), and the calls and
   logic behind it and the header's Go Live, tested natively against `MockEngine`; and `mixer.rs`: `Mixer`, the
   audio mixer (the master card with its loudness and true peak, the channels folded
   under it with their meters, faders, dB fields, mutes and routing, the same as
-  vertical strips, and the buses),
+  vertical strips, each microphone marked while the privacy screen mutes it, and the
+  buses),
   also tested natively against `MockEngine`; and `studio.rs`:
   `StudioMode`, the Transitions panel (preview, program, Transition and Cut, the
   transition presets and each scene's overrides; [Design](#design)); and
@@ -142,7 +154,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **Events and the shared state.** One task reads the session's event stream. It keeps
   the header's revision current and hands each event to `Studio`, which re-reads
   the state with `state.get` after a `state.changed` newer than its copy (or after
-  `events.dropped`), and follows `studio.changed` for the program scene. It reads the
+  `events.dropped`), and follows `studio.changed` for the program scene and
+  `privacy.changed` for the privacy screen (read with `privacy.get` when the session
+  opens and again after `events.dropped`). The server may deliver another client's
+  `privacy.changed` ahead of the answer to a `privacy.get` computed before it, so an
+  answer is dropped when a `privacy.changed` arrived after it was asked
+  (`PrivacyReports`); otherwise a stale answer could show the outputs covered while
+  they are not. The
+  privacy screen is runtime state with no `rev`; the header's button and the Pause key
+  send `privacy.set` and show the state only once the engine reports it. It reads the
   sources' sizes with `source.sizes` after its first read and after `events.dropped`,
   and follows `source.size_changed` between them. Reads coalesce:
   while one `state.get` is in flight, any number of further changes cost one more read.
@@ -176,11 +196,18 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   switch) is off there. The
   sources list shows the selected scene's items with the top of the stack first, each
   with its source's type icon, in italics when the source is placed in another scene
-  too, and an eye that shows or hides it. A nested scene's row has a caret that shows
+  too, the chips of its source's labels, an eye that shows or hides it, and a tag
+  button whose popover puts labels on the source or takes them off
+  (`source.set_meta`). A nested scene's row has a caret that shows
   its items under it, nested ones too; a click on one of them selects it in its own
   scene, which the list then shows, since the engine draws a nested scene as one item.
   Each panel has a search box and a filter for
-  favourites (the star, `scene.set_meta` or `source.set_meta`), applied in the page;
+  favourites (the star, `scene.set_meta` or `source.set_meta`), applied in the page; the
+  sources list's filter also keeps the rows carrying any checked label, and its "Edit
+  labels…" opens the label manager over the rows, which renames, recolours, gives icons
+  to, adds (`label.create`) and deletes labels; a delete takes the label off every
+  source that carries it in the same batch. Scenes carry no labels (ADR-0024 §4), so the
+  scene list has no labels filter;
   rows drag before or after each other (`scene.reorder`, `folder.reorder`,
   `item.reorder`, counted in the whole list so a hidden row doesn't shift the index) with
   pointer events, but not while a filter is on, and a drop on a folder row's middle half
@@ -196,7 +223,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   user saw. Removing an item from its scene is a plain `item.remove`.
 - **Right-click menus and dialogs.** `menu.rs` draws the one right-click menu, which
   the shell provides as `Menus` context: a component opens a list of entries (items
-  with a check, a shortcut hint or a submenu, heads and separators) at the pointer, and
+  with a check, a colour swatch, a shortcut hint or a submenu, heads and separators)
+  at the pointer, and
   the menu keeps itself on screen, opens submenus on hover or the right arrow, moves
   the focus with the arrows, Home and End, and closes on a choice, a press outside,
   Escape or Tab. The canvas opens the empty canvas or margin menu, the scene and
@@ -209,14 +237,16 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   it: a plain `scene.delete`, since it holds no items, or the delete plan after a
   confirmation when anything refers to it. A right-click on an item, on the canvas or its row, selects it
   unless it was selected and opens `item_menu.rs`'s menu for the selection: Properties
-  (the Properties dialog), the Audio check (`source.set_audio`), layer order
+  (the Properties dialog), for one item a Labels submenu (each label checked while the
+  source carries it, with its colour as the swatch, then Edit labels…), the Audio check
+  (`source.set_audio`), layer order
   (`item.reorder`s that keep the selected items' order), Center, Fit and Stretch to
   canvas and Reset rotation (`item.set_geometry`), Clear crop (`item.set_crop`, with
   each item's uncropped extent as its box while its source's size is known), Crop
   (crop mode, for one item), Duplicate as reference
   (`item.add` of the same source, 40 pixels down and right, just above the original)
-  or as clone (`source.duplicate` first), also Ctrl+D and Ctrl+Shift+D, and Remove
-  from scene, each one batch. For one item of a source placed more than once, or a
+  or as clone (`source.duplicate` first), also Ctrl+D and Ctrl+Shift+D, each confirmed by a
+  toast, and Remove from scene, each one batch. For one item of a source placed more than once, or a
   copy whose original exists, it switches between a reference and an independent clone
   (decision register D3): `source.duplicate` and `item.set_source` to the copy, or
   `item.set_source` back to the original and `source.delete` of a copy nothing else
@@ -250,18 +280,25 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   call's does.
 - **The Inspector** ([UI features › inspector](../../docs/UI-FEATURES.md#inspector))
   shows the primary selected item, or with none the selected scene, under a header with
-  its name, kind, "+N" for the other selected items and a favourite star
+  its type icon (the scene's icon for a scene), name, kind, "+N" for the other selected
+  items, the item's source's label chips and tag button, and a favourite star
   (`source.set_meta` or `scene.set_meta`). An item's name is in italics when its source
-  is placed in another scene too. Its sections fold: Parameters (X and Y of the
+  is placed in another scene too. Its sections fold, and each stays as it was last left,
+  by title, across items and reloads (`Folds`, kept in the browser's storage as
+  `jstream.folds`): Parameters (X and Y of the
   unrotated box's top-left corner, W, H, W % and H % of the source's own size (blank
   while the engine knows none) and Rotation, sent as `item.set_geometry`; the W/H link,
-  on by default, keeps the aspect ratio when either side changes), Crop
+  on by default, keeps the aspect ratio when either side changes), 3D (folded
+  at first: Tilt, Turn, Depth and Perspective, also `item.set_geometry`; Perspective
+  shows the prototype's 1200 px while the item has none, and the first change that puts
+  the item in 3D sets it, since without one the engine draws 3D orthographically, where
+  Depth has no effect), Crop
   (`item.set_crop`, in source pixels), Blending (the nine modes, of which the engine
   draws only Normal so the others are disabled, and Opacity, `item.set_opacity`) and
   Properties, the source's settings form. A scene shows its object count, the scenes
   that use it as a source, its Hotkey row (the chords bound to its `scene.switch`, an ×
   that unbinds one, and Set key, which binds the next chord pressed and takes it from
-  whatever it ran), and its Transition in and out (`scene.set_transitions`, with
+  whatever it ran; Pause, the privacy key, is never bound and still toggles privacy), and its Transition in and out (`scene.set_transitions`, with
   the presets read by `state.get` whenever the collection changes). The panel is built
   once per selected item or scene and each field follows the collection, so an edit
   doesn't rebuild it or take the focus. The fields show committed values: a canvas drag
@@ -331,8 +368,17 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `fresh_id`; the new filter opens in place, or in the settings dialog when it has more
   than three settings or isn't described yet. Edit filters… in the item menus selects the item and shows the
   panel. Names come from the prototype's catalogue, then `kind.list`, then the kind's ID.
+  An FX button (the Outputs panel's rows, the Mixer's master card or strip) picks the program
+  output's chain (owner `master`) or an output's (ADR-0027) instead, and shows the
+  panel; the same rows and dialogs edit it with that owner. Only their audio chains
+  show, since the engine refuses their video chains so far, and the virtual camera,
+  which has no sound, has none. Selecting another item, or Edit filters…, goes back to
+  the selected item's source.
 - **The shell** is the header bar over the workspace. A failed call shows in a
-  dismissable bar. The look follows the UI prototype ([UI features](../../docs/UI-FEATURES.md)): dark only, with the
+  dismissable bar. A confirmation, such as "Added a reference…" after a placement of
+  an existing source or a duplicate, shows in the toast (`Studio::notify`, or
+  `apply_noting` once a batch is applied): one at a time, bottom centre, gone after
+  4.5 s, a new one replacing it. The look follows the UI prototype ([UI features](../../docs/UI-FEATURES.md)): dark only, with the
   prototype's palette as CSS variables in `style.css`. The fonts are IBM Plex Sans and
   Mono, bundled in `fonts/` under the SIL OFL 1.1 and served from the page's own origin,
   since its policy loads fonts from nowhere else
@@ -342,10 +388,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   ([UI features › docking](../../docs/UI-FEATURES.md#docking)): eight zones nest around
   the canvas, outer columns, full-width top and bottom, sidebars, and above and below
   the canvas. A zone stacks groups (columns top to bottom, rows side by side); a group
-  shows one panel with its title, or tabs. Panels are the eight the UI has: Scenes,
+  shows one panel with its title, or tabs. Panels are the prototype's eleven: Scenes,
   Scene objects (`Sources`), the Inspector (`Inspector`, with `Pairing` under it), the
-  Transform, Filters, Audio mixer, Outputs and Transitions (`StudioMode`); `panel_view` maps
-  each to its component, and a new panel adds a `PanelId` and a line there. The
+  Transform, Filters, Live chat, Stream stats, Audio mixer, Outputs, Agent activity and
+  Transitions (`StudioMode`); `panel_view` maps each to its component, and a new panel
+  adds a `PanelId` and a line there. Live chat, Stream stats and Agent activity wait on
+  the engine (YouTube sign-in, an agent audit log), so they say what they wait on and
+  none is in a built-in layout. The
   panels' own `h2` headings are hidden, since the tab is the title. Narrow windows
   stack the zones, without splitters.
   - Each group keeps every tab's panel mounted and hides the inactive ones, so a tab
@@ -380,7 +429,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `events.dropped`; `output.state_changed` updates one output's state in place. It
   creates RTMP(S), recording and virtual camera outputs (IDs `output-N`, the first free one), changes
   an RTMP server URL (`output.set_target`) and the encoder profile, deletes a stopped
-  output, and starts and stops each. The header's "Go Live" starts every stopped or
+  output, and starts and stops each. Above the cards, the program output's row
+  ("master") and a row per output with its state each have an "FX N" button counting
+  that chain's filters, which shows the chain in the Filters panel (below the rows,
+  the prototype's footnote). The header's "Go Live" starts every stopped or
   failed RTMP output whose stream key is set, and "End stream", which replaces it while
   any runs, stops the running ones; recordings start from their own buttons or the
   header's Record. Both try every output, even after one fails, and report
@@ -464,8 +516,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the −14 LUFS target (70% along, where the prototype draws it), the three loudness
   readings in its tooltip, its true peak with "safe" or a warning over 0 dBTP, and a
   button that resets the integrated loudness (`audio.reset_loudness`). Its monitor
-  and FX buttons show disabled: the monitor control isn't built yet (MX-05), and the
-  engine has no master chain yet. Each source gets a row, ordered by name: its meter, fader, a dB field
+  button shows disabled, as the monitor control isn't built yet (MX-05); its "FX N"
+  counts the master chain's filters, from `Studio`'s collection, and shows that chain
+  in the Filters panel. Each source gets a row, ordered by name: its meter, fader, a dB field
   (the shared `NumberField`), mute and, folded under "Routing", whether its audio is
   on, when it is heard (`always` or `when_shown`) and its send into each bus (on or
   off, and its gain). A nested scene's row has only the routing toggles, since it has
@@ -474,7 +527,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   title bar, `MixerFlip`, sets an orientation for the session; a memo, so a dock change
   that keeps the orientation doesn't rebuild the rows): a master strip with the
   loudness filling up to the target line, the loudness and true peak (its warning
-  heard by a screen reader only, for want of room), then, folded
+  heard by a screen reader only, for want of room) and the same "FX N", then, folded
   beside it, a strip per source with its short name, a meter filling upwards, the dB
   field stacked + over − and scrubbed up and down, and mute. Each bus gets a strip, the master first, with renaming
   and (except the master) deleting. A delete reads `delete.plan`
@@ -568,6 +621,10 @@ browser, and `mod.rs` is the component.
   why. WebCodecs is reached through `js_sys::Reflect`, because `web-sys` has it only
   behind the `web_sys_unstable_apis` build flag. A drag's live values (below) reach
   the output as it moves, so the preview follows the drag.
+- **The privacy screen.** While the engine reports it on, the frame (the preview and
+  the boxes) is blurred and dimmed, as the prototype does, under a centred notice,
+  "Privacy screen on · output blurred · mic muted". The engine covers the outputs
+  itself; the blur only makes the state hard to miss while editing.
 - **Selecting and dragging.** A press selects the topmost box under the pointer and
   drags it, or, on a box already selected, drags every selected box. Shift-click adds
   a box to the selection (and drags them all) or takes a selected one out. A press on

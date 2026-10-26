@@ -19,7 +19,9 @@ test('the master card folds its channels, whose dB fields set the gain', async (
   const card = mixer(page).getByRole('group', { name: 'Master' });
   await expect(card.locator('.master-count')).toHaveText('2 channels');
   await expect(card.getByRole('button', { name: 'Hear: after FX' })).toBeDisabled();
-  await expect(card.getByRole('button', { name: 'FX 0' })).toBeDisabled();
+  // FX shows the program output's chain, the master chain, in the Filters panel.
+  await card.getByRole('button', { name: 'FX 0' }).click();
+  await expect(page.locator('.filters-panel .filters-title')).toHaveText('Program output');
 
   // Folded at first.
   const channels = mixer(page).getByRole('list', { name: 'Channels' });
@@ -130,7 +132,7 @@ test('the title bar flips the meters to vertical strips, whose gain scrubs up an
   const strip = mixer(page).locator('.master-strip');
   await expect(strip.locator('.master-count')).toHaveText('2 channels');
   await expect(strip.locator('.level-column')).toHaveAttribute('title', 'Loudness · white line = target');
-  await expect(strip.getByRole('button', { name: 'FX 0' })).toBeDisabled();
+  await expect(strip.getByRole('button', { name: 'FX 0' })).toBeEnabled();
   await expect(strip.getByRole('button', { name: 'Hear post' })).toBeDisabled();
 
   // The channels fold beside the master; each shows its short name, the full one as a tooltip.

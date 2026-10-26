@@ -199,6 +199,7 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
 .connection dd { margin: 0; overflow-wrap: anywhere; font-family: "IBM Plex Mono", ui-monospace, monospace; }
 .header-button { padding: 8px 14px; background: var(--menu); border-color: var(--border); }
 .header-button.on { background: var(--danger-dark); border-color: #e5484d; }
+.header-button.privacy { display: flex; align-items: center; gap: 6px; padding: 8px 12px; }
 .go-live { padding: 8px 18px; border: none; background: var(--danger); color: #fff; font-weight: 600; }
 .go-live:hover:not(:disabled) { background: #d6383f; }
 .go-live.live, .go-live.live:hover:not(:disabled) { background: var(--danger-dark); }
@@ -370,6 +371,31 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
   border: 1px solid var(--problem);
   border-radius: 8px;
   color: var(--problem);
+}
+
+/* A confirmation (spec-workspace.md 6.7): bottom centre, over the panels, until it hides. */
+/* The toast's live region stays in the page, out of the flow, over the panels' popovers
+   and menus but under modal dialogs. */
+.toast-region {
+  position: fixed;
+  z-index: 150;
+  width: 0;
+  height: 0;
+}
+
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 150;
+  max-width: 520px;
+  padding: 10px 14px;
+  background: var(--menu);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 13px;
 }
 
 /* Panels. */
@@ -642,6 +668,25 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .stage { position: relative; touch-action: none; user-select: none; outline-offset: 2px; }
 /* The preview picture under the overlay; its box is set from the canvas's fit. */
 .stage-screen { position: absolute; pointer-events: none; }
+/* The privacy screen (§3.21): the frame blurred and dimmed, and a notice over it. */
+.stage.private { filter: blur(14px) brightness(0.6); }
+/* Always there, over the whole view, so the notice appears inside a live region. */
+.privacy-live { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
+.privacy-notice {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 6;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: rgba(122, 30, 35, 0.92);
+  border: 1px solid #e5484d;
+  color: #fff;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+}
 .stage-overlay {
   position: absolute;
   inset: 0;
@@ -753,6 +798,31 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .outputs .health { margin: 0; color: var(--muted); font-size: 0.85rem; }
 .outputs .health.dropping { color: var(--problem); }
 .outputs .problem { margin: 0; }
+/* The program output and each output under it, with their FX buttons (spec-panels.md U1). */
+.output-chains { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.output-chain {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 6px 0 18px;
+  border-radius: 5px;
+}
+.output-chain.program { padding-left: 4px; font-weight: 600; background: var(--menu); }
+.output-chain-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.output-chain-status { color: var(--muted); font-size: 12px; font-weight: 400; }
+.outputs .fx-button {
+  min-width: 44px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: none;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 400;
+}
+.outputs .fx-button.on { border-color: var(--accent); background: var(--selected); }
+.outputs .output-foot { margin: 0; color: var(--dim); font-size: 11px; }
 .output-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
 .output {
   display: grid;
@@ -939,6 +1009,8 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
   gap: 0.5rem;
 }
 .strip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.privacy-muted { color: #ff8a8f; }
+.column-note { font-size: 10px; text-align: center; }
 .strip.master .strip-name { font-weight: 600; }
 .strip button.gain { padding: 0.1rem 0.2rem; border: none; background: none; font-variant-numeric: tabular-nums; font-size: 0.8rem; color: var(--muted); text-align: right; }
 .strip form.inline { display: flex; gap: 0.3rem; }
@@ -1164,6 +1236,7 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .filters-titles { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .filters-title { font-size: 14px; font-weight: 600; color: var(--text); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .filters-note { font-size: 11px; color: var(--muted); }
+.filters-later { margin: 0; font-size: 11px; color: var(--dim); }
 .filters-add { align-self: flex-start; padding: 6px 12px; background: var(--menu); border: 1px solid var(--border); border-radius: 6px; color: var(--text); }
 .filter-chains { display: flex; flex-direction: column; gap: 12px; }
 .filter-chain-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; color: #c9ced6; }
@@ -1263,3 +1336,66 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
   font-size: 12px;
   text-align: left;
 }
+
+/* Labels (spec-panels.md S4, S7, S20, I1): chips, the tag popover and the label manager. */
+.label-icon { display: inline-flex; align-items: center; }
+.label-chip {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 4px;
+}
+.label-chip .icon { stroke-width: 2; }
+.label-picker { position: relative; display: flex; }
+.inspector-head .tag-button, .tree-row .tag-button {
+  flex: 0 0 24px; width: 24px; height: 24px; padding: 0; display: flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 4px; background: none; color: var(--muted);
+}
+.inspector-head .tag-button:hover:not(:disabled) { background: var(--hover); }
+.label-pop {
+  position: absolute; z-index: 3; top: 26px; right: 0; width: 200px; padding: 6px;
+  display: flex; flex-direction: column; gap: 2px;
+  background: var(--raised); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+.label-pop .tree-check { padding: 5px 6px; }
+.label-pop .link, .label-manager .link, .tree-pop-foot .link:not(.muted) {
+  align-self: flex-start; padding: 4px 6px; border: 0; background: none; color: var(--link); font-size: 12px;
+}
+.label-none { margin: 4px 6px; color: var(--dim); font-size: 12px; }
+.tree-box.label-box.on { border-color: var(--accent); background: var(--accent); }
+.tree-pop-head { padding: 6px 8px 2px; color: var(--dim); font-size: 11px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; }
+.label-manager {
+  display: flex; flex-direction: column; gap: 8px; padding: 10px;
+  background: var(--raised); border: 1px solid var(--border); border-radius: 6px;
+}
+.label-manager-head { display: flex; justify-content: space-between; align-items: center; }
+.label-manager .section-title { font-size: 11px; font-weight: 600; letter-spacing: 0.8px; color: var(--muted); text-transform: uppercase; }
+.label-edit { display: flex; flex-direction: column; gap: 6px; padding: 6px; background: var(--panel); border-radius: 5px; }
+.label-edit-head { display: flex; align-items: center; gap: 6px; }
+.label-edit-head input { flex: 1 1 auto; min-width: 0; height: 28px; padding: 0 8px; }
+.label-icon-button {
+  flex: 0 0 28px; width: 28px; height: 28px; padding: 0; display: flex; align-items: center; justify-content: center;
+  background: var(--app); border: 1px solid; border-radius: 5px;
+}
+.label-delete {
+  flex: 0 0 24px; width: 24px; height: 24px; padding: 0; display: flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 4px; background: none; color: var(--dim);
+}
+.swatches { display: flex; gap: 5px; flex-wrap: wrap; }
+.swatch { width: 18px; height: 18px; padding: 0; border-radius: 50%; border: 2px solid transparent; }
+.swatch.on { border-color: var(--text); }
+.icon-group { display: flex; flex-direction: column; gap: 4px; padding-top: 4px; }
+.icon-group-title { font-size: 11px; color: var(--dim); }
+.icon-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.icon-pick {
+  height: 30px; padding: 0; display: flex; align-items: center; justify-content: center;
+  background: var(--app); border: 1px solid var(--border); border-radius: 5px; color: #c9ced6;
+}
+.new-label { padding-left: 0; }
+.inspector-head .head-icon { display: flex; color: var(--muted); }
+/* A menu line's colour swatch column (spec-workspace.md 5.1.2): transparent unless set. */
+.ctx-swatch { flex: 0 0 8px; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; }
+.ctx-swatch + .ctx-label { margin-left: 6px; }
+/* Row tools that fade in on hover or focus (WS-07), for rows outside the trees. */
+.row-hover-tools { opacity: 0; transition: opacity 120ms; }
+.preset:hover .row-hover-tools, .preset:focus-within .row-hover-tools { opacity: 1; }
+.output-head .output-icon { display: inline-flex; margin-right: 6px; color: var(--muted); vertical-align: middle; }
+.field .reset { display: inline-flex; align-items: center; justify-content: center; }

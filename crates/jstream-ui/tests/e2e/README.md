@@ -27,9 +27,10 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   as its first line. It seeds a small studio: scenes `Intro` and `Main` (on program),
   one colour source `Backdrop` placed in `Main` as a 640×360 box at the centre of the
   1920×1080 canvas, with two video filters (`sharpen`, then `blur` turned off), two
-  audio inputs no scene shows (`Mic · ES-9 Line` at −3 dB and `Desktop audio` at
-  −8.5 dB; the mock is told `audio_input` produces audio, so they get mixer
-  channels), and the encoder profile `High quality`. It has no outputs. It stops
+  audio sources no scene shows (`Mic · ES-9 Line`, an `audio_input`, at −3 dB and
+  `Desktop audio`, a `desktop_audio`, at −8.5 dB; the mock is told both kinds produce
+  audio, so they get mixer channels, and only the mic is one the privacy screen
+  mutes), and the encoder profile `High quality`. It has no outputs. It stops
   when its standard input closes. It is a crate of its own because `jstream-ui` (layer
   3) may not depend on `jstream-server` (layer 4), not even for tests
   ([R-ARCH-002](../../../../docs/RULES.md#R-ARCH-002)). Nothing ships it.
@@ -180,19 +181,43 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   edit and updates the summary. With one setting refused late: a refusal that arrives
   after its row was closed, and one after the Filter settings dialog was cancelled,
   each in the problem bar.
+- **Program and output chains** (`output-chains.spec.js`): the Outputs panel's Program
+  output row ("master", "FX 0"), a recording's row under it with its state and FX
+  button, and the footnote; the program's FX showing the master chain in the Filters
+  panel from behind the Transform tab, with its note, its one audio chain and the note
+  on video, the output's FX its own chain, and selecting an item going back to its
+  source's. With Gain and Sharpen described: Add filter on the master offering only
+  Gain, with its foot, as one edit that the program's FX and the Mixer's count; the new
+  filter opening in place, a setting there as one more edit; the output's chain adding
+  its own Gain, counted on its FX button alone, whose eye and × edit the output's chain,
+  not the master's; and the master's filter in the Filter settings dialog, whose Remove
+  deletes it.
 - **Mixer** (`mixer.spec.js`, on the Audio mixer tab): the master card counting the
-  seed's two channels, its Hear and FX buttons disabled, and its button (with its
-  tooltip) unfolding the channel rows by name and folding them again; a typed gain in the Mic's dB field and
+  seed's two channels, its Hear button disabled, its "FX 0" showing the program
+  output's chain in the Filters panel, and its button (with its tooltip) unfolding the
+  channel rows by name and folding them again; a typed gain in the Mic's dB field and
   its + stepper each as one edit, with the fader following; with `meterTicks`, the
   short-term loudness and its tooltip, the bar's fill against the target, and the true
   peak "safe" with nothing announced, then the warning over 0 dBTP, announced; and the Buses section folded under its
   count, the master first, adding a bus. A tab click elsewhere in the dock leaving a
   channel's open Routing open (the rows aren't rebuilt). The title bar's flip button turning the meters
-  vertical: the master strip and its channels folded beside it by short name, the
+  vertical: the master strip, its "FX 0" enabled, and its channels folded beside it by short name, the
   Mic's stacked field scrubbed upwards and stepped down as one edit each, and its mute;
   docked in the Right sidebar the strips start vertical, 64px wide, and the button
   flips them back; and, with `meterTicks`, the vertical meters filling upwards and the
   master strip's loudness and true-peak warning, announced only once over 0 dBTP.
+- **Labels** (`labels.spec.js`): the label manager, opened from the Scene objects
+  panel's filter, adding a label (its icon picker open on the tag), renaming it,
+  choosing an icon and a colour, a second label taking the next swatch, and Done; a
+  row's tag popover putting a label on the Backdrop and staying open, the row's and the
+  Inspector's chips and the Inspector's tag button, the filter's labels with their
+  count, and the item menu's Labels submenu, checked with the label's colour as its
+  swatch, taking it off; deleting a label taking it off the Backdrop in one edit.
+- **Polish** (`polish.spec.js`): Duplicate as clone's toast, which hides by itself; a
+  folded Crop section staying folded after another scene is selected and after a
+  reload; the Inspector's type icon and its 3D section, folded at first, with
+  Perspective at 1200 and a Tilt sent as one edit and then "in use"; and the View
+  menu's eleven panels, adding Live chat, which says it waits on YouTube sign-in.
 - **Transform** (`transform.spec.js`, on the Transform tab): the summary and the disabled buttons with
   nothing selected; with one item, Selection off and Canvas on, Stretch as one edit
   Ctrl+Z undoes, and Reset rotation and Clear crop sending nothing when nothing
@@ -212,6 +237,17 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   preview; Transition and Cut are off while preview is the program scene; a value the
   preset form refused keeps the preset from being added. The mock engine refuses
   preset edits, so the edits the preset form sends are tested natively.
+- **Privacy screen** (`privacy.spec.js`, on the header, the canvas and the Audio
+  mixer tab): the Privacy button turning it on, with "Privacy on" pressed, the canvas
+  frame blurred under its notice and the Mic's row reading "muted (privacy)" while
+  Desktop audio's doesn't, then off again; Pause toggling it with focus in a gain
+  field, and a second client following each change and turning it off with Pause, and
+  then on again from a scene's rename field, which keeps its other keys; Pause
+  toggling it while the Inspector's Set key waits, which leaves Pause unbound and
+  binds the next key; a
+  client that connects while it is on showing it at once; and the vertical mixer's
+  Mic strip reading "muted (privacy)" under its short name while Desktop audio's
+  doesn't.
 
 <a id="running"></a>
 ## Running them

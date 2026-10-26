@@ -3,6 +3,7 @@
 //! with its meter, fader, dB field, mute and routing, and, folded under Buses, a strip
 //! per bus with its meter, fader and mute. Levels come from `meters.tick`. Docked in a
 //! side column, or flipped from its title bar, the channels are vertical strips instead.
+//! While the privacy screen is on, the microphones it mutes say so.
 //!
 //! A fader shows the value under the pointer while it is dragged and sends one edit when
 //! it is let go (or on each key press), so a drag is one undo step. Hearing the fader
@@ -18,7 +19,7 @@ use crate::dock::PanelId;
 use crate::panels::confirm::{Confirm, Pending};
 use crate::panels::inspector::Fold;
 use crate::panels::number::NumberField;
-use crate::store::plan_summary;
+use crate::store::{Studio, plan_summary};
 use crate::workspace::DockState;
 use futures_util::StreamExt;
 use jstream_control::protocol::{
@@ -44,6 +45,15 @@ pub struct Channel {
     pub audio: SourceAudio,
     /// Whether it is a nested scene, which has no fader, mute or sends of its own.
     pub is_scene: bool,
+    /// Whether the privacy screen mutes it: a microphone ([`privacy_mutes`]).
+    pub privacy_mutes: bool,
+}
+
+/// Whether the privacy screen mutes a source of this kind: the engine's default set is
+/// the audio input devices, an `audio_input` source's and a webcam's paired input, and
+/// not desktop or application audio (ADR-0027 §4).
+pub fn privacy_mutes(kind: &SourceKind) -> bool {
+    matches!(kind, SourceKind::Builtin { kind } if kind == "audio_input" || kind == "webcam")
 }
 
 /// The mixer's part of the collection at one revision.
@@ -138,6 +148,7 @@ pub async fn load(control: &dyn Control) -> Result<Snapshot, String> {
             let audio = source.audio?;
             Some(Channel {
                 is_scene: matches!(source.kind, SourceKind::Scene { .. }),
+                privacy_mutes: privacy_mutes(&source.kind),
                 source_id: source.source_id,
                 name: source.name,
                 audio,
@@ -864,8 +875,9 @@ pub fn Mixer() -> impl IntoView {
 }
 
 /// The master card (spec-panels.md M3): the fold button over the channels with their
-/// count, the monitor and program FX buttons that aren't built yet, the short-term
-/// loudness against the target, and the true peak.
+/// count, the monitor button that isn't built yet, the program output's FX button, which
+/// shows the master chain in the Filters panel (FL-07), the short-term loudness against
+/// the target, and the true peak.
 #[component]
 fn MasterCard(panel: Panel, open: RwSignal<bool>) -> AnyView {
     let count = move || {
@@ -923,13 +935,7 @@ fn MasterCard(panel: Panel, open: RwSignal<bool>) -> AnyView {
                 >
                     "Hear: after FX"
                 </button>
-                <button
-                    class="fx-button"
-                    disabled
-                    title="Filters on the program output: the master chain isn't built yet (FL-07)"
-                >
-                    "FX 0"
-                </button>
+                <MasterFx />
             </div>
             <div class="master-row">
                 <span class="master-label">"Loudness"</span>
@@ -953,9 +959,44 @@ fn MasterCard(panel: Panel, open: RwSignal<bool>) -> AnyView {
     .into_any()
 }
 
+/// The program output's "FX N" button on the master card and strip (spec-panels.md M3,
+/// M5): it counts the master chain's filters, from `Studio`'s collection, and shows that
+/// chain in the Filters panel (FL-07).
+#[component]
+fn MasterFx() -> impl IntoView {
+    let fx = use_context::<crate::panels::filters::FilterDialogs>();
+    let dock = use_context::<crate::workspace::DockState>();
+    let studio = use_context::<crate::store::Studio>();
+    let label = move || {
+        let chains = studio
+            .and_then(|s| s.collection.with(|c| c.as_ref().map(|c| c.master.clone())))
+            .unwrap_or_default();
+        crate::panels::outputs::fx_label(&chains)
+    };
+    let show = move |_| {
+        if let Some(fx) = fx {
+            fx.pick(jstream_control::protocol::FilterOwner::Master);
+            if let Some(dock) = dock {
+                dock.0.update(|d| d.show(crate::dock::PanelId::Filters));
+            }
+        }
+    };
+    view! {
+        <button
+            class="fx-button"
+            disabled=fx.is_none()
+            title="Filters on the program output"
+            on:click=show
+        >
+            {label}
+        </button>
+    }
+}
+
 /// The master strip of the vertical mixer (spec-panels.md M5): the fold button with the
 /// channel count, the short-term loudness filling up to the target line, the loudness
-/// and true peak, and the FX and monitor buttons that aren't built yet.
+/// and true peak, the program output's FX button, and the monitor button that isn't
+/// built yet.
 #[component]
 fn MasterStrip(panel: Panel, open: RwSignal<bool>) -> AnyView {
     let count = move || {
@@ -1009,13 +1050,7 @@ fn MasterStrip(panel: Panel, open: RwSignal<bool>) -> AnyView {
                     if over { note } else { "" }
                 }}
             </span>
-            <button
-                class="fx-button"
-                disabled
-                title="Filters on the program output: the master chain isn't built yet (FL-07)"
-            >
-                "FX 0"
-            </button>
+            <MasterFx />
             <button
                 class="ghost-button"
                 disabled
@@ -1236,6 +1271,11 @@ fn ChannelStrip(panel: Panel, source_id: SourceId) -> AnyView {
     let name = move || channel.with(|c| c.as_ref().map(|c| c.name.clone()).unwrap_or_default());
     let audio = move || channel.with(|c| c.as_ref().map(|c| c.audio));
     let is_scene = move || channel.with(|c| c.as_ref().is_some_and(|c| c.is_scene));
+    let privacy = use_context::<Studio>().map(|studio| studio.privacy);
+    let privacy_muted = move || {
+        privacy.is_some_and(|on| on.get())
+            && channel.with(|c| c.as_ref().is_some_and(|c| c.privacy_mutes))
+    };
     let enabled = move || audio().is_some_and(|a| a.enabled);
     let muted = move || audio().is_some_and(|a| a.muted);
     let reading = move || id.with_value(|id| panel.meters.with(|m| m.sources.get(id).copied()));
@@ -1263,7 +1303,12 @@ fn ChannelStrip(panel: Panel, source_id: SourceId) -> AnyView {
 
     view! {
         <li class="mix-row" class:off=move || !enabled()>
-            <span class="strip-name" title=move || id.with_value(ToString::to_string)>{name}</span>
+            <span class="strip-name" title=move || id.with_value(ToString::to_string)>
+                {name}
+                {move || privacy_muted().then(|| view! {
+                    <span class="privacy-muted">" · muted (privacy)"</span>
+                })}
+            </span>
             <Show
                 when=move || !is_scene()
                 fallback=|| view! { <span class="hint">"Nested scene: follows its own sources"</span> }
@@ -1312,8 +1357,9 @@ fn ChannelStrip(panel: Panel, source_id: SourceId) -> AnyView {
     .into_any()
 }
 
-/// One audio source's strip in the vertical mixer (spec-panels.md M5): its short name, a
-/// meter filling upwards, its gain stacked + over − and scrubbed up and down, and mute.
+/// One audio source's strip in the vertical mixer (spec-panels.md M5): its short name
+/// (marked while the privacy screen mutes it), a meter filling upwards, its gain stacked +
+/// over − and scrubbed up and down, and mute.
 /// Its routing is in the horizontal mixer.
 #[component]
 fn ChannelColumn(panel: Panel, source_id: SourceId) -> AnyView {
@@ -1329,6 +1375,11 @@ fn ChannelColumn(panel: Panel, source_id: SourceId) -> AnyView {
     let name = move || channel.with(|c| c.as_ref().map(|c| c.name.clone()).unwrap_or_default());
     let audio = move || channel.with(|c| c.as_ref().map(|c| c.audio));
     let is_scene = move || channel.with(|c| c.as_ref().is_some_and(|c| c.is_scene));
+    let privacy = use_context::<Studio>().map(|studio| studio.privacy);
+    let privacy_muted = move || {
+        privacy.is_some_and(|on| on.get())
+            && channel.with(|c| c.as_ref().is_some_and(|c| c.privacy_mutes))
+    };
     let enabled = move || audio().is_some_and(|a| a.enabled);
     let muted = move || audio().is_some_and(|a| a.muted);
     let reading = move || id.with_value(|id| panel.meters.with(|m| m.sources.get(id).copied()));
@@ -1343,6 +1394,11 @@ fn ChannelColumn(panel: Panel, source_id: SourceId) -> AnyView {
     view! {
         <li class="mix-column" class:off=move || !enabled()>
             <span class="column-name" title=name>{move || short_name(&name()).to_owned()}</span>
+            {move || privacy_muted().then(|| view! {
+                <span class="privacy-muted column-note" title="Muted by the privacy screen">
+                    "muted (privacy)"
+                </span>
+            })}
             <Show
                 when=move || !is_scene()
                 fallback=|| view! { <span class="hint" title="Nested scene: follows its own sources">"Nested"</span> }
@@ -1651,7 +1707,7 @@ mod tests {
         FADER_STEPS, HOLD_TICKS, Hold, LOUDNESS_TARGET_LUFS, MeterBank, apply_plan, channel_count,
         checked_gain, db_to_position, edit, format_gain, format_lufs, format_true_peak, load,
         loudness_fraction, meter_fraction, meters_vertical, next_bus_id, plan_bus_delete,
-        position_to_db, short_name, true_peak_dbtp, true_peak_note,
+        position_to_db, privacy_mutes, short_name, true_peak_dbtp, true_peak_note,
     };
     use jstream_control::protocol::{
         AudioFollow, Batch, BusId, BusMeter, Call, CallResult, DeleteTarget, Edit, Finite32, Hello,
@@ -1741,6 +1797,8 @@ mod tests {
         assert!(nested.is_scene);
         let channel = loaded.channel(&mic).expect("mic");
         assert!(!channel.is_scene);
+        assert!(channel.privacy_mutes, "a microphone");
+        assert!(!nested.privacy_mutes);
         assert_eq!(channel.audio.follow, AudioFollow::Always);
         assert_eq!(loaded.buses.len(), 1);
         assert!(loaded.buses[0].bus_id.is_master());
@@ -1954,6 +2012,20 @@ mod tests {
             ))
         );
         assert!(now(load(&control)).expect("load").bus(&vod).is_none());
+    }
+
+    #[test]
+    fn the_privacy_screen_mutes_the_microphones() {
+        let builtin = |kind: &str| SourceKind::Builtin { kind: kind.into() };
+        assert!(privacy_mutes(&builtin("audio_input")));
+        assert!(privacy_mutes(&builtin("webcam")), "its paired input");
+        assert!(!privacy_mutes(&builtin("desktop_audio")));
+        assert!(!privacy_mutes(&builtin("app_audio")));
+        assert!(!privacy_mutes(&builtin("browser")));
+        let nested = SourceKind::Scene {
+            scene_id: SceneId::new("s"),
+        };
+        assert!(!privacy_mutes(&nested));
     }
 
     #[test]

@@ -174,18 +174,27 @@ pub enum PanelId {
     Transform,
     /// The selected item's source's filter chains.
     Filters,
+    /// A YouTube broadcast's live chat.
+    Chat,
+    /// A YouTube broadcast's stream stats.
+    Stats,
+    /// What agents changed.
+    Agent,
 }
 
 impl PanelId {
     /// Every panel, in the View menu's order.
-    pub const ALL: [PanelId; 8] = [
+    pub const ALL: [PanelId; 11] = [
         PanelId::Scenes,
         PanelId::Objects,
         PanelId::Inspector,
         PanelId::Transform,
         PanelId::Filters,
+        PanelId::Chat,
+        PanelId::Stats,
         PanelId::Mixer,
         PanelId::Outputs,
+        PanelId::Agent,
         PanelId::Transitions,
     ];
 
@@ -200,6 +209,9 @@ impl PanelId {
             PanelId::Transitions => "Transitions",
             PanelId::Transform => "Transform",
             PanelId::Filters => "Filters",
+            PanelId::Chat => "Live chat",
+            PanelId::Stats => "Stream stats",
+            PanelId::Agent => "Agent activity",
         }
     }
 
@@ -214,6 +226,9 @@ impl PanelId {
             PanelId::Transitions => "transitions",
             PanelId::Transform => "transform",
             PanelId::Filters => "filters",
+            PanelId::Chat => "chat",
+            PanelId::Stats => "ytstats",
+            PanelId::Agent => "agent",
         }
     }
 
@@ -221,7 +236,12 @@ impl PanelId {
     pub fn home(self) -> Zone {
         match self {
             PanelId::Scenes | PanelId::Objects => Zone::Left,
-            PanelId::Inspector | PanelId::Transform | PanelId::Filters => Zone::Right,
+            PanelId::Inspector
+            | PanelId::Transform
+            | PanelId::Filters
+            | PanelId::Chat
+            | PanelId::Stats
+            | PanelId::Agent => Zone::Right,
             PanelId::Mixer | PanelId::Outputs | PanelId::Transitions => Zone::Bottom,
         }
     }
@@ -1015,7 +1035,7 @@ mod tests {
         assert_eq!(Dock::from_json("not json"), None);
         assert_eq!(Dock::from_json(r#"{"version":2}"#), None);
         let text = r#"{"version":1,"current":"Mine",
-            "arrangement":{"zones":{"left":[{"tabs":["scenes","chat"],"active":"chat"},
+            "arrangement":{"zones":{"left":[{"tabs":["scenes","multiview"],"active":"multiview"},
                 {"tabs":["scenes","mixer"],"weight":-3}],"nowhere":[{"tabs":["objects"]}]},
                 "sizes":{"left":9999,"right":"wide"}},
             "saved":[{"name":"Editing","arrangement":{"zones":{},"sizes":{}}}]}"#;

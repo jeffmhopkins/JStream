@@ -16,7 +16,9 @@ use crate::canvas::snap::Bounds;
 use crate::canvas::transform::{nudge, with_box};
 use crate::dock::PanelId;
 use crate::menu::Entry;
-use crate::panels::add_source::{AddSourceDialog, has_picture};
+use crate::panels::add_source::{AddSourceDialog, REFERENCE_ADDED, has_picture};
+use crate::panels::filters::FilterDialogs;
+use crate::panels::labels::{self, LabelManager};
 use crate::panels::source_properties::{self, PropertiesDialog};
 use crate::store::{Collection, Studio};
 use crate::workspace::DockState;
@@ -625,6 +627,8 @@ pub struct Context {
     adder: Option<AddSourceDialog>,
     props: Option<PropertiesDialog>,
     dock: Option<DockState>,
+    labels: Option<LabelManager>,
+    filters: Option<FilterDialogs>,
 }
 
 impl Context {
@@ -636,6 +640,8 @@ impl Context {
             adder: use_context(),
             props: use_context(),
             dock: use_context(),
+            labels: use_context(),
+            filters: use_context(),
         })
     }
 
@@ -646,6 +652,16 @@ impl Context {
         }
         if let Some(s) = self.session.get() {
             self.studio.apply(&s, edits);
+        }
+    }
+
+    /// Sends `edits` as one batch, and once it is applied shows `note` in the toast.
+    fn send_noting(self, edits: Vec<Edit>, note: String) {
+        if edits.is_empty() {
+            return;
+        }
+        if let Some(s) = self.session.get() {
+            self.studio.apply_noting(&s, edits, note);
         }
     }
 
@@ -674,6 +690,9 @@ impl Context {
     /// chains.
     pub fn filters(self, item_id: ItemId) {
         self.studio.select_item(Some(item_id));
+        if let Some(filters) = self.filters {
+            filters.unpick();
+        }
         if let Some(dock) = self.dock {
             dock.0.update(|d| d.show(PanelId::Filters));
         }
@@ -802,13 +821,56 @@ impl Context {
                 index: u32::try_from(above).unwrap_or(u32::MAX),
             });
         }
-        self.studio.apply(&s, edits);
+        let note = if clone {
+            "Added a clone. Changes to it don't affect the original."
+        } else {
+            REFERENCE_ADDED
+        };
+        self.studio.apply_noting(&s, edits, note.into());
         self.studio.select_item(Some(new_item));
     }
 }
 
+/// The Labels submenu of one source: a line per label, checked while the source carries
+/// it and with the label's colour in the swatch column, then "Edit labels…".
+fn labels_entry(cx: Context, source_id: &SourceId) -> Entry {
+    let lines = cx.studio.collection.with_untracked(|c| {
+        let c = c.as_ref()?;
+        let carried = c
+            .source(source_id)
+            .map(|s| s.meta.labels.clone())
+            .unwrap_or_default();
+        Some(
+            c.labels
+                .iter()
+                .map(|label| {
+                    let (source, id) = (source_id.clone(), label.label_id.clone());
+                    Entry::item(label.name.clone(), move || {
+                        let edit = cx.studio.collection.with_untracked(|c| {
+                            c.as_ref()
+                                .and_then(|c| labels::toggle_edit(c, &source, &id))
+                        });
+                        cx.send(edit.into_iter().collect());
+                    })
+                    .checked(carried.contains(&label.label_id))
+                    .swatch(label.color.clone())
+                })
+                .collect::<Vec<_>>(),
+        )
+    });
+    let mut lines = lines.unwrap_or_default();
+    if let Some(manager) = cx.labels {
+        if !lines.is_empty() {
+            lines.push(Entry::Sep);
+        }
+        lines.push(Entry::item("Edit labels…", move || manager.open()));
+    }
+    Entry::submenu("Labels", lines)
+}
+
 /// The reference ↔ clone block for the one selected item (spec-workspace.md 5.2.10): a
 /// head, then "Reference to original" and "Independent clone", the current one checked.
+/// Each switch is confirmed by the prototype's toast (spec-workspace.md 6.7.2).
 fn sharing_entries(cx: Context, facts: &Facts) -> Vec<Entry> {
     let item = facts.items[0].clone();
     let source = facts.source_id.clone();
@@ -824,10 +886,15 @@ fn sharing_entries(cx: Context, facts: &Facts) -> Vec<Entry> {
         let (item, source) = (item.clone(), source.clone());
         Entry::item("Reference to original", move || {
             if let Sharing::Clone {
-                original, alone, ..
+                original,
+                alone,
+                name,
             } = &sharing
             {
-                cx.send(to_reference(&item, &source, original, *alone));
+                cx.send_noting(
+                    to_reference(&item, &source, original, *alone),
+                    format!("{name} reference restored. Local changes were discarded."),
+                );
             }
         })
         .checked(!clone)
@@ -841,7 +908,10 @@ fn sharing_entries(cx: Context, facts: &Facts) -> Vec<Entry> {
             }
             let Some(s) = cx.session.get() else { return };
             let copy = SourceId::new(cx.studio.fresh_id(&s, "source"));
-            cx.send(to_clone(&item, &source, &format!("{name} copy"), copy));
+            cx.send_noting(
+                to_clone(&item, &source, &format!("{name} copy"), copy),
+                format!("{name} is now a clone. Changes stay with it."),
+            );
         })
         .checked(clone)
         .disabled_if(keyframe)
@@ -873,6 +943,7 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
         Entry::item("Edit filters…", move || cx.filters(id.clone()))
     };
     let pop_out = Entry::submenu("Pop out", Vec::new());
+    let labels = labels_entry(cx, &facts.source_id);
     let audio = facts.audio.map(|on| {
         let source_id = facts.source_id.clone();
         Entry::item("Audio", move || {
@@ -911,7 +982,7 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
                 None => entry.disabled_if(keyframe),
             })
         });
-        let mut list = vec![properties, filters, pop_out, Entry::Sep];
+        let mut list = vec![properties, filters, labels, pop_out, Entry::Sep];
         list.extend(audio);
         list.extend([
             Entry::item("Add source…", move || cx.add_source(into.clone()))
@@ -927,7 +998,7 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
     }
     // A source with no picture (5.2.9).
     if !many && !facts.picture {
-        let mut list = vec![properties, filters, Entry::Sep];
+        let mut list = vec![properties, filters, labels, Entry::Sep];
         if let Some(audio) = audio {
             list.extend([audio, Entry::Sep]);
         }
@@ -950,7 +1021,7 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
         if let Some(audio) = audio {
             list.extend([audio, Entry::Sep]);
         }
-        list.extend([properties, filters, pop_out, Entry::Sep]);
+        list.extend([properties, filters, labels, pop_out, Entry::Sep]);
         list.extend(sharing_entries(cx, &facts));
     }
     let layer = |label: &str, layer: Layer| {
