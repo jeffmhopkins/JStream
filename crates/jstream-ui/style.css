@@ -164,6 +164,7 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
 .connection dd { margin: 0; overflow-wrap: anywhere; font-family: "IBM Plex Mono", ui-monospace, monospace; }
 .header-button { padding: 8px 14px; background: var(--menu); border-color: var(--border); }
 .header-button.on { background: var(--danger-dark); border-color: #e5484d; }
+.header-button.privacy { display: flex; align-items: center; gap: 6px; padding: 8px 12px; }
 .go-live { padding: 8px 18px; border: none; background: var(--danger); color: #fff; font-weight: 600; }
 .go-live:hover:not(:disabled) { background: #d6383f; }
 .go-live.live, .go-live.live:hover:not(:disabled) { background: var(--danger-dark); }
@@ -632,6 +633,25 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .stage { position: relative; touch-action: none; user-select: none; outline-offset: 2px; }
 /* The preview picture under the overlay; its box is set from the canvas's fit. */
 .stage-screen { position: absolute; pointer-events: none; }
+/* The privacy screen (§3.21): the frame blurred and dimmed, and a notice over it. */
+.stage.private { filter: blur(14px) brightness(0.6); }
+/* Always there, over the whole view, so the notice appears inside a live region. */
+.privacy-live { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
+.privacy-notice {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 6;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: rgba(122, 30, 35, 0.92);
+  border: 1px solid #e5484d;
+  color: #fff;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+}
 .stage-overlay {
   position: absolute;
   inset: 0;
@@ -955,6 +975,8 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
   gap: 0.5rem;
 }
 .strip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.privacy-muted { color: #ff8a8f; }
+.column-note { font-size: 10px; text-align: center; }
 .strip.master .strip-name { font-weight: 600; }
 .strip button.gain { padding: 0.1rem 0.2rem; border: none; background: none; font-variant-numeric: tabular-nums; font-size: 0.8rem; color: var(--muted); text-align: right; }
 .strip form.inline { display: flex; gap: 0.3rem; }

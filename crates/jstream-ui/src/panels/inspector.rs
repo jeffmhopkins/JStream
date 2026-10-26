@@ -1146,7 +1146,9 @@ fn HotkeyRow(scene: SceneId) -> impl IntoView {
         }
     };
     let on_key = move |event: leptos::ev::KeyboardEvent| {
-        if !capturing.get_untracked() {
+        // Pause is the window's privacy key, so it is never bound and still toggles
+        // privacy while a capture waits.
+        if !capturing.get_untracked() || event.key() == "Pause" {
             return;
         }
         // The key is the capture's: no hotkey runs, and Tab doesn't move the focus.

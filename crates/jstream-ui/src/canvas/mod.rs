@@ -9,7 +9,8 @@
 //! parent's items, do nothing there.
 //!
 //! Under the boxes is the live program preview: one `preview.subscribe` stream on the
-//! session's binary channel, decoded into a `<canvas>` ([`preview`], [`screen`]). Pure
+//! session's binary channel, decoded into a `<canvas>` ([`preview`], [`screen`]).
+//! While the privacy screen is on, the frame is blurred and a notice says so. Pure
 //! logic lives in [`transform`], [`crop`], [`snap`], [`model`] and [`preview`], which are tested
 //! natively; this module is the Leptos component that wires them to the page.
 //!
@@ -1383,6 +1384,7 @@ pub fn Canvas() -> impl IntoView {
         >
             <div
                 class="preview stage"
+                class:private=move || studio.privacy.get()
                 node_ref=stage
                 tabindex="0"
                 aria-label=move || format!("Scene canvas, {}", scene_name())
@@ -1483,6 +1485,15 @@ pub fn Canvas() -> impl IntoView {
             })}
             <div class="canvas-caption">{caption}</div>
             {legacy_note}
+            // The live region is always there, so a screen reader announces the notice
+            // when it appears inside it.
+            <div class="privacy-live" role="status">
+                <Show when=move || studio.privacy.get()>
+                    <div class="privacy-notice">
+                        "Privacy screen on · output blurred · mic muted"
+                    </div>
+                </Show>
+            </div>
         </div>
     }
 }

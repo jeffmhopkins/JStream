@@ -27,9 +27,10 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   as its first line. It seeds a small studio: scenes `Intro` and `Main` (on program),
   one colour source `Backdrop` placed in `Main` as a 640×360 box at the centre of the
   1920×1080 canvas, with two video filters (`sharpen`, then `blur` turned off), two
-  audio inputs no scene shows (`Mic · ES-9 Line` at −3 dB and `Desktop audio` at
-  −8.5 dB; the mock is told `audio_input` produces audio, so they get mixer
-  channels), and the encoder profile `High quality`. It has no outputs. It stops
+  audio sources no scene shows (`Mic · ES-9 Line`, an `audio_input`, at −3 dB and
+  `Desktop audio`, a `desktop_audio`, at −8.5 dB; the mock is told both kinds produce
+  audio, so they get mixer channels, and only the mic is one the privacy screen
+  mutes), and the encoder profile `High quality`. It has no outputs. It stops
   when its standard input closes. It is a crate of its own because `jstream-ui` (layer
   3) may not depend on `jstream-server` (layer 4), not even for tests
   ([R-ARCH-002](../../../../docs/RULES.md#R-ARCH-002)). Nothing ships it.
@@ -239,6 +240,17 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   preview; Transition and Cut are off while preview is the program scene; a value the
   preset form refused keeps the preset from being added. The mock engine refuses
   preset edits, so the edits the preset form sends are tested natively.
+- **Privacy screen** (`privacy.spec.js`, on the header, the canvas and the Audio
+  mixer tab): the Privacy button turning it on, with "Privacy on" pressed, the canvas
+  frame blurred under its notice and the Mic's row reading "muted (privacy)" while
+  Desktop audio's doesn't, then off again; Pause toggling it with focus in a gain
+  field, and a second client following each change and turning it off with Pause, and
+  then on again from a scene's rename field, which keeps its other keys; Pause
+  toggling it while the Inspector's Set key waits, which leaves Pause unbound and
+  binds the next key; a
+  client that connects while it is on showing it at once; and the vertical mixer's
+  Mic strip reading "muted (privacy)" under its short name while Desktop audio's
+  doesn't.
 
 <a id="running"></a>
 ## Running them
