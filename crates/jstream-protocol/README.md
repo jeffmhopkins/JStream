@@ -183,7 +183,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.44 because of the
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.45 because scenes
+  carry labels (`SceneMeta`'s `labels`, set by `scene.set_meta`;
+  [ADR-0078](../../docs/adr/0078-scenes-carry-labels.md)); 0.44 added the
   `hardware_session_limit` error (`output.start` refused a new hardware video session
   while other outputs held hardware sessions, ADR-0027 §3); 0.43 added scene filters
   and item effects ([ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md):

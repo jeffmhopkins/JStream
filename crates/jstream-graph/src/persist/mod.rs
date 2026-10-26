@@ -233,6 +233,9 @@ struct FileScene {
     /// omitted while they have their default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     folder: Option<FolderId>,
+    /// The labels it carries, ordered by ID.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    labels: Vec<LabelId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     icon: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -491,6 +494,7 @@ impl Graph {
                     transition_in: scene.transition_in.clone(),
                     transition_out: scene.transition_out.clone(),
                     folder: scene.folder.clone(),
+                    labels: scene.meta.labels.clone(),
                     icon: scene.meta.icon.clone(),
                     color: scene.meta.color.clone(),
                     favourite: scene.meta.favourite,
@@ -878,6 +882,7 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
             ));
         }
         let meta = SceneMeta {
+            labels: scene.labels.clone(),
             icon: scene.icon.clone(),
             color: scene.color.clone(),
             favourite: scene.favourite,
