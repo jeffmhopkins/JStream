@@ -12,8 +12,9 @@ use jstream_control::ControlError;
 use jstream_control::protocol::{
     Action, Batch, BusInfo, Call, CallResult, Canvas, Chord, DeleteTarget, Edit, Event,
     FilterChains, FilterOwner, FolderId, FolderInfo, HotkeyBinding, ItemId, ItemInfo, ItemOverride,
-    KindDescriptor, KindSummary, OutputId, OutputInfo, OverrideField, PlacementForm, Query,
-    QueryResult, Rev, SceneId, SceneInfo, SceneRole, SourceId, SourceInfo, SourceKind, SourceSize,
+    KindDescriptor, KindSummary, LabelInfo, OutputId, OutputInfo, OverrideField, PlacementForm,
+    Query, QueryResult, Rev, SceneId, SceneInfo, SceneRole, SourceId, SourceInfo, SourceKind,
+    SourceSize,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -37,6 +38,8 @@ pub struct Collection {
     /// Every audio bus, ordered by ID, the master among them: what a `bus` parameter
     /// picks from.
     pub buses: Vec<BusInfo>,
+    /// The labels sources can carry, in label order (ADR-0024 §4).
+    pub labels: Vec<LabelInfo>,
     /// The master stage's chains, which apply to everything leaving JStream (ADR-0027).
     pub master: FilterChains,
     /// Every hotkey binding, ordered by chord (ADR-0024 §5).
@@ -56,6 +59,7 @@ impl Collection {
                 scenes,
                 outputs,
                 buses,
+                labels,
                 master,
                 hotkeys,
                 folders,
@@ -83,6 +87,7 @@ impl Collection {
                     scenes,
                     outputs,
                     buses,
+                    labels,
                     master: master.filters,
                     hotkeys,
                     folders,
@@ -244,6 +249,7 @@ impl Collection {
             .any(|s| s.scene_id.as_str() == id || s.items.iter().any(|i| i.item_id.as_str() == id))
             || self.sources.iter().any(|s| s.source_id.as_str() == id)
             || self.outputs.iter().any(|o| o.output_id.as_str() == id)
+            || self.labels.iter().any(|l| l.label_id.as_str() == id)
             || self.folders.iter().any(|f| f.folder_id.as_str() == id)
     }
 
@@ -496,6 +502,9 @@ pub struct Studio {
     pub descriptors: RwSignal<HashMap<String, KindDescriptor>>,
     /// The last call that failed, for the problem bar.
     pub problem: RwSignal<Option<String>>,
+    /// The confirmation the toast shows, numbered so a repeat of the same text restarts
+    /// its timer (spec-workspace.md 6.7).
+    pub toast: RwSignal<Option<(u64, String)>>,
     /// Bumped when an output's stream key was set or cleared, which no event reports, so
     /// the header re-reads the outputs Go Live may start.
     pub keys_changed: RwSignal<u64>,
@@ -503,6 +512,9 @@ pub struct Studio {
     refresh: StoredValue<(bool, bool)>,
     /// The counter [`fresh_id`] continues from.
     next_id: StoredValue<u64>,
+    /// The number the next toast takes. It only grows, so a timer left from an earlier
+    /// toast never matches a later one.
+    next_toast: StoredValue<u64>,
 }
 
 impl Studio {
@@ -517,9 +529,11 @@ impl Studio {
             kinds: RwSignal::new(None),
             descriptors: RwSignal::new(HashMap::new()),
             problem: RwSignal::new(None),
+            toast: RwSignal::new(None),
             keys_changed: RwSignal::new(0),
             refresh: StoredValue::new((false, false)),
             next_id: StoredValue::new(0),
+            next_toast: StoredValue::new(0),
         }
     }
 
@@ -533,6 +547,7 @@ impl Studio {
         self.kinds.set(None);
         self.descriptors.set(HashMap::new());
         self.problem.set(None);
+        self.toast.set(None);
         self.refresh.set_value((false, false));
     }
 
@@ -721,6 +736,26 @@ impl Studio {
         spawn_local(async move {
             if let Err(error) = apply(&session, edits, None).await {
                 studio.report(&error);
+            }
+        });
+    }
+
+    /// Shows `text` in the toast, in place of the one shown.
+    pub fn notify(&self, text: impl Into<String>) {
+        let n = self.next_toast.get_value();
+        self.next_toast.set_value(n + 1);
+        self.toast.set(Some((n, text.into())));
+    }
+
+    /// Sends `edits` as one batch, as [`Studio::apply`] does, and once it is applied shows
+    /// `note` in the toast.
+    pub fn apply_noting(&self, session: &Session, edits: Vec<Edit>, note: String) {
+        let studio = *self;
+        let session = session.clone();
+        spawn_local(async move {
+            match apply(&session, edits, None).await {
+                Ok(_) => studio.notify(note),
+                Err(error) => studio.report(&error),
             }
         });
     }

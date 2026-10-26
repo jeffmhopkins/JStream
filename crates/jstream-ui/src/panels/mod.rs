@@ -12,7 +12,8 @@
 pub mod add_source;
 mod confirm;
 pub mod filters;
-mod inspector;
+pub mod inspector;
+pub mod labels;
 pub mod mixer;
 pub mod number;
 pub mod outputs;

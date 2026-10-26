@@ -208,6 +208,18 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   docked in the Right sidebar the strips start vertical, 64px wide, and the button
   flips them back; and, with `meterTicks`, the vertical meters filling upwards and the
   master strip's loudness and true-peak warning, announced only once over 0 dBTP.
+- **Labels** (`labels.spec.js`): the label manager, opened from the Scene objects
+  panel's filter, adding a label (its icon picker open on the tag), renaming it,
+  choosing an icon and a colour, a second label taking the next swatch, and Done; a
+  row's tag popover putting a label on the Backdrop and staying open, the row's and the
+  Inspector's chips and the Inspector's tag button, the filter's labels with their
+  count, and the item menu's Labels submenu, checked with the label's colour as its
+  swatch, taking it off; deleting a label taking it off the Backdrop in one edit.
+- **Polish** (`polish.spec.js`): Duplicate as clone's toast, which hides by itself; a
+  folded Crop section staying folded after another scene is selected and after a
+  reload; the Inspector's type icon and its 3D section, folded at first, with
+  Perspective at 1200 and a Tilt sent as one edit and then "in use"; and the View
+  menu's eleven panels, adding Live chat, which says it waits on YouTube sign-in.
 - **Transform** (`transform.spec.js`, on the Transform tab): the summary and the disabled buttons with
   nothing selected; with one item, Selection off and Canvas on, Stretch as one edit
   Ctrl+Z undoes, and Reset rotation and Clear crop sending nothing when nothing

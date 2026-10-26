@@ -14,13 +14,17 @@ use super::number::NumberField;
 use super::studio;
 use crate::app::SessionContext;
 use crate::hotkeys;
+use crate::icons::{Icon, named};
+use crate::panels::labels::{LabelChips, LabelPicker, carried};
+use crate::panels::sources::icon_of;
 use crate::store::{Collection, Studio};
 use jstream_control::protocol::{
-    BlendMode, Chord, Crop, Edit, Finite32, ItemGeometry, ItemId, ItemInfo, PlacementForm, SceneId,
-    SourceKind, TransitionPresetId, TransitionsInfo,
+    BlendMode, Chord, Crop, Edit, Finite32, ItemGeometry, ItemId, ItemInfo, LabelInfo,
+    PlacementForm, SceneId, SourceId, SourceKind, TransitionPresetId, TransitionsInfo,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
+use std::collections::HashMap;
 
 /// One of the box's number fields.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -183,6 +187,73 @@ pub fn with_side(crop: &Crop, side: Side, value: f32) -> Crop {
     crop
 }
 
+/// One of the 3D section's fields (spec-panels.md I9).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Depth3 {
+    /// Tilt about the horizontal axis, in degrees.
+    Tilt,
+    /// Turn about the vertical axis, in degrees.
+    Turn,
+    /// Offset towards the viewer, in pixels.
+    Depth,
+    /// The viewer's distance from the canvas, in pixels.
+    Perspective,
+}
+
+/// The perspective the prototype draws 3D with when an item sets none, in pixels; the
+/// first 3D change sets it, since without one the engine draws 3D orthographically, where
+/// Depth has no effect (ADR-0050).
+pub const DEFAULT_PERSPECTIVE: f32 = 1200.0;
+
+impl Depth3 {
+    /// The field's range.
+    pub fn range(self) -> (f32, f32) {
+        match self {
+            Depth3::Tilt | Depth3::Turn => (-180.0, 180.0),
+            Depth3::Depth => (-5000.0, 5000.0),
+            Depth3::Perspective => (100.0, 20_000.0),
+        }
+    }
+}
+
+/// What a 3D field shows for `geometry`; Perspective shows [`DEFAULT_PERSPECTIVE`] while
+/// the item has none.
+pub fn depth_value(geometry: &ItemGeometry, field: Depth3) -> f32 {
+    match field {
+        Depth3::Tilt => geometry.tilt_deg.get(),
+        Depth3::Turn => geometry.turn_deg.get(),
+        Depth3::Depth => geometry.depth_px.get(),
+        Depth3::Perspective => geometry
+            .perspective_px
+            .map_or(DEFAULT_PERSPECTIVE, Finite32::get),
+    }
+}
+
+/// Whether the item is drawn in 3D: the folded section's "in use" hint.
+pub fn in_3d(geometry: &ItemGeometry) -> bool {
+    geometry.tilt_deg.get() != 0.0
+        || geometry.turn_deg.get() != 0.0
+        || geometry.depth_px.get() != 0.0
+}
+
+/// The box with one 3D field set to `value`, kept to its range. A change that puts the
+/// item in 3D while it has no perspective gives it [`DEFAULT_PERSPECTIVE`].
+pub fn with_depth(geometry: &ItemGeometry, field: Depth3, value: f32) -> Option<ItemGeometry> {
+    let (min, max) = field.range();
+    let value = Finite32::new(value.clamp(min, max))?;
+    let mut next = *geometry;
+    match field {
+        Depth3::Tilt => next.tilt_deg = value,
+        Depth3::Turn => next.turn_deg = value,
+        Depth3::Depth => next.depth_px = value,
+        Depth3::Perspective => next.perspective_px = Some(value),
+    }
+    if next.perspective_px.is_none() && in_3d(&next) {
+        next.perspective_px = Finite32::new(DEFAULT_PERSPECTIVE);
+    }
+    Some(next)
+}
+
 /// A blend mode's name, as the Mode select lists it.
 pub fn blend_name(mode: BlendMode) -> &'static str {
     match mode {
@@ -337,8 +408,58 @@ pub fn Inspector() -> impl IntoView {
     }
 }
 
+/// The browser storage key of the remembered folds.
+const FOLDS_KEY: &str = "jstream.folds";
+
+/// Which sections are folded, by title, remembered across panels and reloads (G11): a
+/// section folded in one Inspector stays folded in the next. Provided as context by the
+/// shell; kept in the browser's storage, so it lasts as long as the page when storage is
+/// off.
+#[derive(Clone, Copy)]
+pub struct Folds(RwSignal<HashMap<String, bool>>);
+
+impl Folds {
+    /// The folds the browser kept, or none.
+    pub fn restore() -> Folds {
+        let kept = window()
+            .local_storage()
+            .ok()
+            .flatten()
+            .and_then(|storage| storage.get_item(FOLDS_KEY).ok().flatten())
+            .map(|text| parse_folds(&text))
+            .unwrap_or_default();
+        Folds(RwSignal::new(kept))
+    }
+
+    /// Whether the section `title` is folded: as it was last left, else `default`.
+    fn folded(&self, title: &str, default: bool) -> bool {
+        self.0.with(|f| f.get(title).copied().unwrap_or(default))
+    }
+
+    /// Remembers the section `title` as folded or not.
+    fn set(&self, title: &str, folded: bool) {
+        self.0.update(|f| {
+            f.insert(title.to_owned(), folded);
+        });
+        if let Ok(Some(storage)) = window().local_storage() {
+            let _ = storage.set_item(FOLDS_KEY, &self.0.with_untracked(folds_json));
+        }
+    }
+}
+
+/// The remembered folds as stored: an object of titles to whether they are folded.
+pub fn folds_json(folds: &HashMap<String, bool>) -> String {
+    serde_json::to_string(folds).unwrap_or_default()
+}
+
+/// Stored folds read back; anything else reads as none.
+pub fn parse_folds(text: &str) -> HashMap<String, bool> {
+    serde_json::from_str(text).unwrap_or_default()
+}
+
 /// A foldable section: an uppercase title, a hint shown while folded, an optional
-/// control at the right of its title row, and its body.
+/// control at the right of its title row, and its body. `open` is how it starts the
+/// first time; after that it is as it was last left ([`Folds`]).
 #[component]
 pub(crate) fn Fold(
     title: &'static str,
@@ -347,26 +468,35 @@ pub(crate) fn Fold(
     #[prop(optional)] extra: Option<AnyView>,
     children: Children,
 ) -> impl IntoView {
-    let folded = RwSignal::new(!open);
+    let kept = use_context::<Folds>();
+    let local = RwSignal::new(!open);
+    let folded = move || kept.map_or_else(|| local.get(), |k| k.folded(title, !open));
+    let toggle = move |_| {
+        let next = !folded();
+        match kept {
+            Some(k) => k.set(title, next),
+            None => local.set(next),
+        }
+    };
     let hint_text = move || {
         let hint = hint.get();
-        (folded.get() && !hint.is_empty()).then(|| view! { <span class="fold-hint">{hint}</span> })
+        (folded() && !hint.is_empty()).then(|| view! { <span class="fold-hint">{hint}</span> })
     };
     view! {
-        <section class="fold" class:folded=move || folded.get()>
+        <section class="fold" class:folded=folded>
             <div class="fold-head">
                 <button
                     class="fold-toggle"
-                    aria-expanded=move || (!folded.get()).to_string()
-                    on:click=move |_| folded.update(|f| *f = !*f)
+                    aria-expanded=move || (!folded()).to_string()
+                    on:click=toggle
                 >
-                    <span class="caret" aria-hidden="true">{move || if folded.get() { "▸" } else { "▾" }}</span>
+                    <span class="caret" aria-hidden="true">{move || if folded() { "▸" } else { "▾" }}</span>
                     {title}
                     {hint_text}
                 </button>
                 {extra}
             </div>
-            <div class="fold-body" hidden=move || folded.get()>{children()}</div>
+            <div class="fold-body" hidden=folded>{children()}</div>
         </section>
     }
 }
@@ -413,10 +543,13 @@ struct Head {
     kind: Option<SourceKind>,
     shared: bool,
     favourite: bool,
+    source_id: Option<SourceId>,
+    labels: Vec<LabelInfo>,
 }
 
-/// The selected item's header: its name (in italics when its source is placed in other
-/// scenes too), its kind, "+N" for the others selected, and the favourite star.
+/// The selected item's header (I1): its type icon, its name (in italics when its source
+/// is placed in other scenes too), its kind, "+N" for the others selected, its labels'
+/// chips, the labels popover and the favourite star.
 #[component]
 fn ItemHeader(item: ItemId) -> impl IntoView {
     let studio = expect_context::<Studio>();
@@ -435,6 +568,10 @@ fn ItemHeader(item: ItemId) -> impl IntoView {
                         kind: source.map(|s| s.kind.clone()),
                         shared: is_shared(c, info),
                         favourite: source.is_some_and(|s| s.meta.favourite),
+                        source_id: Some(info.source_id.clone()),
+                        labels: source
+                            .map(|s| carried(c, &s.meta.labels))
+                            .unwrap_or_default(),
                     })
                 })
                 .unwrap_or_default()
@@ -466,14 +603,28 @@ fn ItemHeader(item: ItemId) -> impl IntoView {
             studio.apply(&s, vec![edit]);
         }
     };
+    let icon = move || head.with(|h| icon_of(h.kind.as_ref()));
+    let labels = Signal::derive(move || head.with(|h| h.labels.clone()));
+    // Only a new source or name rebuilds the tag button, so putting a label on keeps
+    // its popover open.
+    let picked =
+        Memo::new(move |_| head.with(|h| h.source_id.clone().map(|id| (id, h.name.clone()))));
+    let picker = move || {
+        picked.get().map(|(source_id, name)| {
+            view! { <LabelPicker source_id=source_id name=name always=true /> }
+        })
+    };
     view! {
         <div class="inspector-head">
+            {move || view! { <span class="head-icon"><Icon name=icon() size=15 /></span> }}
             <span class="source-title" class:reference=move || head.with(|h| h.shared)
                 title=move || head.with(|h| h.name.clone())>
                 {move || head.with(|h| h.name.clone())}
             </span>
             <span class="kind-tag">{tag}</span>
             {move || (more() > 0).then(|| view! { <span class="more-tag">"+" {more()}</span> })}
+            <LabelChips labels=labels />
+            {picker}
             {favourite_button(move || head.with(|h| h.favourite), toggle)}
         </div>
     }
@@ -625,6 +776,44 @@ fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoV
     }
     .into_any();
 
+    let depth_field = move |which: Depth3| {
+        let value =
+            Signal::derive(move || geometry.get().map(|g| f64::from(depth_value(&g, which))));
+        let commit = move |v: f64| {
+            let Some(g) = geometry.get_untracked() else {
+                return false;
+            };
+            let Some(placed) = with_depth(&g, which, to_f32(v)).filter(|p| *p != g) else {
+                return false;
+            };
+            let (item_id, scene) = ids.get_value();
+            send(Edit::ItemSetGeometry {
+                item_id,
+                scene_id: Some(scene),
+                geometry: placed,
+            });
+            true
+        };
+        let (label, unit, step, decimals) = match which {
+            Depth3::Tilt => ("Tilt (X)", "°", 0.5, 1),
+            Depth3::Turn => ("Turn (Y)", "°", 0.5, 1),
+            Depth3::Depth => ("Depth (Z)", "px", 1.0, 0),
+            Depth3::Perspective => ("Perspective", "px", 10.0, 0),
+        };
+        let (min, max) = which.range();
+        view! {
+            <NumberField label unit value step decimals min=f64::from(min)
+                max=f64::from(max) send=commit />
+        }
+    };
+    let depth_hint = Signal::derive(move || {
+        if geometry.get().is_some_and(|g| in_3d(&g)) {
+            "in use".to_owned()
+        } else {
+            String::new()
+        }
+    });
+
     let crop = Memo::new(move |_| current.with(|i| i.as_ref().map(|i| i.crop)));
     let crop_field = move |side: Side, label: &'static str| {
         let value = Signal::derive(move || crop.get().map(|c| f64::from(crop_side(&c, side))));
@@ -711,6 +900,14 @@ fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoV
                 {percent_field(true)}
                 {percent_field(false)}
                 {field(Param::Rotation)}
+            </div>
+        </Fold>
+        <Fold title="3D" open=false hint=depth_hint>
+            <div class="field-grid">
+                {depth_field(Depth3::Tilt)}
+                {depth_field(Depth3::Turn)}
+                {depth_field(Depth3::Depth)}
+                {depth_field(Depth3::Perspective)}
             </div>
         </Fold>
         <Fold title="Crop" open=true hint=crop_hint>
@@ -896,9 +1093,21 @@ fn SceneSections(scene: SceneId) -> impl IntoView {
             |parent| format!("Keyframe of “{parent}”"),
         )
     };
+    // A keyframe scene shows the keyframe diamond, as its row does.
+    let icon = move || {
+        if keyframe_of.with(Option::is_some) {
+            return "keyframe";
+        }
+        info.with(|s| {
+            s.as_ref()
+                .and_then(|s| s.meta.icon.as_deref())
+                .map_or("layers", |icon| named(icon, "layers"))
+        })
+    };
 
     view! {
         <div class="inspector-head">
+            {move || view! { <span class="head-icon"><Icon name=icon() size=15 /></span> }}
             <span class="source-title" title=name>{name}</span>
             <span class="kind-tag" class:keyframe=move || keyframe_of.with(Option::is_some)>{kind}</span>
             {favourite_button(favourite, toggle)}
@@ -1101,6 +1310,39 @@ mod tests {
         let crop = with_side(&crop, Side::Top, -3.0);
         assert_eq!(crop.top, 0);
         assert_eq!(crop.left, 24);
+    }
+
+    #[test]
+    fn a_first_3d_change_brings_a_perspective() {
+        let g = geometry(100.0, 100.0, 40.0, 20.0);
+        assert!(!in_3d(&g));
+        assert_eq!(depth_value(&g, Depth3::Perspective), DEFAULT_PERSPECTIVE);
+        let tilted = with_depth(&g, Depth3::Tilt, 30.0).expect("a box");
+        assert!(in_3d(&tilted));
+        assert_eq!(tilted.tilt_deg.get(), 30.0);
+        assert_eq!(
+            tilted.perspective_px.map(Finite32::get),
+            Some(DEFAULT_PERSPECTIVE)
+        );
+        // A set perspective is kept, and every field stays in its range.
+        let far = with_depth(&tilted, Depth3::Perspective, 50_000.0).expect("a box");
+        assert_eq!(far.perspective_px.map(Finite32::get), Some(20_000.0));
+        let turned = with_depth(&far, Depth3::Turn, -400.0).expect("a box");
+        assert_eq!(depth_value(&turned, Depth3::Turn), -180.0);
+        assert_eq!(turned.perspective_px, far.perspective_px);
+        // Setting only the perspective leaves the item flat.
+        let flat = with_depth(&g, Depth3::Perspective, 800.0).expect("a box");
+        assert!(!in_3d(&flat));
+        assert_eq!(flat.center, g.center);
+    }
+
+    #[test]
+    fn folds_read_back_what_was_stored() {
+        let mut folds = HashMap::new();
+        folds.insert("3D".to_owned(), false);
+        folds.insert("Crop".to_owned(), true);
+        assert_eq!(parse_folds(&folds_json(&folds)), folds);
+        assert!(parse_folds("not json").is_empty());
     }
 
     #[test]

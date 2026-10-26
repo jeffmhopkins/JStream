@@ -332,7 +332,7 @@ pub fn Scenes() -> impl IntoView {
     };
     let shown_rows = move || {
         let filtering = filter.active();
-        let shows = |name: &str, favourite: bool| filter.shows(name, favourite);
+        let shows = |name: &str, favourite: bool| filter.shows(name, favourite, &[]);
         collapsed.with(|collapsed| {
             folded.with(|folded| {
                 studio.collection.with(|c| {
