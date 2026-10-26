@@ -1,7 +1,7 @@
 // Labels: the label manager in the Scene objects panel (new, rename, colour, icon,
 // delete), a row's tag popover putting a label on the seed's Backdrop, the row's and the
 // Inspector's chips, the filter's labels, and the item menu's Labels submenu with each
-// label's colour in its swatch column; then the same on a scene (ADR-0079): the manager
+// label's colour in its swatch column; then the same on a scene (ADR-0078): the manager
 // in the Scenes panel, the popover under the scene's row, its chips and the Scenes
 // panel's filter. The seed has no labels.
 import { test, expect, connect, rev } from '../fixtures.js';

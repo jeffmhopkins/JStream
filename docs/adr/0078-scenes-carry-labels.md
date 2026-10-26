@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0079"
+id = "ADR-0078"
 title = "Scenes carry labels"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0079: Scenes carry labels
+# ADR-0078: Scenes carry labels
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted

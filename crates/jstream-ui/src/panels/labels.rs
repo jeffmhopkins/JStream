@@ -3,7 +3,7 @@
 //! takes them off, and the label manager, an inline card in the Scenes or Scene objects
 //! panel, whichever "Edit labels…" was chosen from, that names, colours, gives icons to,
 //! adds and deletes labels. Labels are collection state (ADR-0024 §4): sources carry
-//! them, so a reference shares its original's, and scenes carry them too (ADR-0079).
+//! them, so a reference shares its original's, and scenes carry them too (ADR-0078).
 //! The edits each control sends are plain functions, tested natively.
 //!
 //! Docs: docs/UI-FEATURES.md#scenes, docs/UI-FEATURES.md#objects
@@ -63,7 +63,7 @@ pub fn pick_tint(color: &str) -> String {
     format!("{color}38")
 }
 
-/// What carries labels: a source, or a scene (ADR-0079).
+/// What carries labels: a source, or a scene (ADR-0078).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Tagged {
     /// A source, and so every item placing it.
