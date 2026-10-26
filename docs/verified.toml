@@ -4548,7 +4548,7 @@ stamp = { hash = "b3:063a37f95f399bff" }
 stamp = { hash = "b3:0b33fafc1e51563f", by = "agent:claude", note = "canvas.spec.js now waits for the revision with expect.poll(() => rev(page)) after the drop, after undo and redo, and after the nudges, instead of reading it once (#848). Harness's description of rev (the revision the header last heard of) still holds and is why the poll is needed; no fixture or config changed." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/connect.spec.js"]
-stamp = { hash = "b3:42376dd652a4332d", by = "agent:ui-polish", note = "connect.spec.js gained a fonts test using the existing connect fixture and page.request against the daemon's URL; the daemon, seed and setup are unchanged." }
+stamp = { hash = "b3:ca6c5e8ea0b9bbaa", by = "agent:ui-polish", note = "connect.spec.js gained a fonts test using the existing connect fixture and page.request against the daemon's URL, loading all five bundled faces; the daemon, seed and setup are unchanged." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/crop.spec.js"]
 stamp = { hash = "b3:8eaa166c878b6436", by = "agent:claude-crop-ui", note = "Re-read against the whole PR: the body's sourceSizes note matches fixtures.js, which answers source.sizes through the WebSocket route and sends source.size_changed (a null size leaves size out). crop.spec.js is its new user: three of its four tests call sourceSizes, and the first runs without it, as the mock reports no sizes; it uses connect and rev like the other specs." }
@@ -4605,7 +4605,7 @@ stamp = { hash = "b3:3d9f3ea44f5f25f8", by = "agent:ui-polish", note = "The Conn
 stamp = { hash = "b3:0b33fafc1e51563f", by = "agent:claude", note = "canvas.spec.js's drag and nudge specs now poll the revision until it reaches startRev + 1 and startRev + 3 rather than reading it once (#848). The assertions are as strict as before, so the Canvas bullet (one edit ending the gesture, Ctrl+Z and Ctrl+Shift+Z reverse it, nudges and Ctrl+Z) still holds." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/connect.spec.js"]
-stamp = { hash = "b3:42376dd652a4332d", by = "agent:ui-polish", note = "The Connecting entry now says the bundled Plex Sans and Mono load from the page's origin and fonts/OFL.txt is served, which the new connect.spec.js test checks." }
+stamp = { hash = "b3:ca6c5e8ea0b9bbaa", by = "agent:ui-polish", note = "The Connecting entry says the bundled Plex Sans and Mono load from the page's origin and fonts/OFL.txt is served; connect.spec.js's test loads each of the five faces (Sans 400/600/700, Mono 400/600) and reads OFL.txt." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/crop.spec.js"]
 stamp = { hash = "b3:8eaa166c878b6436", by = "agent:claude-crop-ui", note = "Re-read against the whole PR: the Crop bullet matches crop.spec.js's four tests: crop mode switched by the tool, C, V, Escape, the menu and a scene switch, with a handle drag resizing as usual while no size is known, then undone (review N1); a crop-mode drag as one undoable edit with the ghost; Alt crop then Clear crop; and W % and H % following the source's size. All 63 specs pass locally on Chromium 1243." }
