@@ -411,7 +411,7 @@ pub fn Transform() -> impl IntoView {
                     }));
                 }
                 let geometry_form = |id: &ItemId| {
-                    c.item(id)
+                    c.item_in(Some(&scene), id)
                         .is_some_and(|(_, i)| i.placement == PlacementForm::Geometry)
                 };
                 // Matching takes the primary item's size, which a legacy item doesn't have.

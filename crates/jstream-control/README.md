@@ -30,7 +30,8 @@ Contents (a first cut; [Design](#design) explains the choices):
 - **Errors** (`error.rs`): `ControlError`, a `thiserror` enum: the engine's `WireError`,
   or a lost connection.
 - **Mock** (`mock.rs`, feature `mock`, with its filter edits in `mock/filter.rs`,
-  its audio in `mock/audio.rs` and its folders and labels in `mock/organise.rs`):
+  its audio in `mock/audio.rs`, its folders and labels in `mock/organise.rs` and its
+  keyframe scenes in `mock/keyframe.rs`):
   `MockEngine` and `MockControl`, an in-memory implementation for developing and
   testing clients without the engine, which they never depend on. `jstream-core`'s `InProcessControl` is the real in-process
   implementation; its tests hold it to the mock's answers.
@@ -114,10 +115,7 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   shared with history calls. A retry with a known key gets its first result; then, in `Graph::apply`'s order, a stale
   `expected_rev` fails with `rev_conflict` before an empty batch fails with
   `empty_batch`;
-- every protocol edit but the transition ones (below) and the keyframe-scene ones
-  (`scene.create_variant` and `item.clear_override` answer `internal`, as an edit the
-  mock doesn't implement; with no keyframe scenes its `state.get` reports none and its
-  batch results drop no overrides), with the
+- every protocol edit but the transition ones (below), with the
   checks `jstream-graph` makes, in the same order per
   edit, and the same error codes and `edits.<n>.<field>` paths:
   - `not_found` and `already_exists`;
@@ -126,7 +124,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     names, and empty builtin kind names;
   - reorder and `item.move` indices out of range (`item.move` into another scene may
     name one past its top);
-  - a placement edit's `scene_id` naming a scene other than the item's own;
+  - a placement edit's `scene_id` naming a scene other than the item's own or one of
+    its keyframe scenes;
   - both `transform` and `geometry` on `item.add`, a geometry that is not positive or
     not finite or that the compositor can't draw (`ItemGeometry::check_drawable`; any
     other 3D is accepted, as the engine does from protocol 0.34), and a
@@ -183,8 +182,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   and a filter's) as sent without checking them or filling in defaults (a `null` in a
   patch removes the entry), and doesn't follow settings references when it looks for
   cycles. `kind.list` answers with no kinds, `kind.describe` and `delete.plan` answer
-  `internal`, and its refused deletes carry no `blockers`, except a folder's and a
-  label's. The folder, label and metadata edits
+  `internal`, and its refused deletes carry no `blockers`, except a folder's, a
+  label's and a scene's with keyframe scenes. The folder, label and metadata edits
   ([ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4: `folder.*`, `label.*`,
   `scene.set_folder`, `scene.set_meta` and `source.set_meta`, in `mock/organise.rs`)
   make the graph's checks with the protocol's own `check_color`, `check_icon` and
@@ -193,6 +192,16 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   source carries (with the graph's `blockers`). Reads report the folders, labels and
   each scene's and source's metadata, `source.duplicate` copies a source's, and undoing
   a scene's or source's delete restores its folder and metadata;
+- keyframe scenes (`mock/keyframe.rs`, [ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)):
+  `scene.create_variant` (refused on a keyframe scene), placement edits addressed to a
+  keyframe scene, which write its override of one of its parent's own items field by
+  field, `item.clear_override`, and no `item.add` or `item.move` into one. Removing an
+  item, or moving it to another scene, drops its overrides, and a parent with keyframe
+  scenes can't be deleted (they are the refusal's `blockers`). Each has the graph's
+  inverse, so undo restores the overrides; the batch result's `dropped_overrides` stays
+  empty. `state.get` reports each keyframe scene's `variant_of` and `overrides`, and
+  `live.set` refuses a value addressed to one (#702) after its gesture limit, as the
+  engine does;
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing
