@@ -4173,7 +4173,7 @@ stamp = { hash = "b3:6e8133bdee6d5a62", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:4450796561e8170d", by = "agent:claude", note = "Text kind: MAX_DENSITY is 32 and a dense frame is lowered to a 4K canvas's pixels and 8192 a side (ADR-0078), on set_density and update; the Kinds text entry, the seams list and the tests paragraph say so; depends_on gains ADR-0078" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/text/mod.rs"]
-stamp = { hash = "b3:d817b25a8e34de59", by = "agent:claude", note = "Text kind: MAX_DENSITY is 32 and a dense frame is lowered to a 4K canvas's pixels and 8192 a side (ADR-0078), on set_density and update; the Kinds text entry, the seams list and the tests paragraph say so; depends_on gains ADR-0078" }
+stamp = { hash = "b3:1366904339eba122", by = "agent:claude", note = "Re-read after the rustdoc fix: MAX_DENSITY's doc no longer links the private raster::render; the section's text-kind density description (32, 4K-canvas pixels, 8192 a side, ADR-0078) still holds" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/text/raster.rs"]
 stamp = { hash = "b3:e5094c03e63383d3", by = "agent:claude", note = "Text kind: MAX_DENSITY is 32 and a dense frame is lowered to a 4K canvas's pixels and 8192 a side (ADR-0078), on set_density and update; the Kinds text entry, the seams list and the tests paragraph say so; depends_on gains ADR-0078" }
