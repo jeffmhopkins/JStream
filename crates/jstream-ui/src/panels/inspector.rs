@@ -1079,14 +1079,6 @@ fn SceneSections(scene: SceneId) -> impl IntoView {
         }
     };
 
-    let icon = move || {
-        info.with(|s| {
-            s.as_ref()
-                .and_then(|s| s.meta.icon.as_deref())
-                .map_or("layers", |icon| named(icon, "layers"))
-        })
-    };
-
     // A keyframe scene's parent, for its kind tag.
     let keyframe_of = Memo::new(move |_| {
         studio.collection.with(|c| {
@@ -1100,6 +1092,17 @@ fn SceneSections(scene: SceneId) -> impl IntoView {
             || "Scene".to_owned(),
             |parent| format!("Keyframe of “{parent}”"),
         )
+    };
+    // A keyframe scene shows the keyframe diamond, as its row does.
+    let icon = move || {
+        if keyframe_of.with(Option::is_some) {
+            return "keyframe";
+        }
+        info.with(|s| {
+            s.as_ref()
+                .and_then(|s| s.meta.icon.as_deref())
+                .map_or("layers", |icon| named(icon, "layers"))
+        })
     };
 
     view! {

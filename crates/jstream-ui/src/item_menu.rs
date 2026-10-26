@@ -652,6 +652,16 @@ impl Context {
         }
     }
 
+    /// Sends `edits` as one batch, and once it is applied shows `note` in the toast.
+    fn send_noting(self, edits: Vec<Edit>, note: String) {
+        if edits.is_empty() {
+            return;
+        }
+        if let Some(s) = self.session.get() {
+            self.studio.apply_noting(&s, edits, note);
+        }
+    }
+
     /// Selects the item alone and opens its source's Properties dialog: a reference's
     /// is its source's. A nested scene's properties are the scene's, which have no
     /// dialog yet (DL-03), so it shows in the Inspector.
@@ -854,6 +864,7 @@ fn labels_entry(cx: Context, source_id: &SourceId) -> Entry {
 
 /// The reference ↔ clone block for the one selected item (spec-workspace.md 5.2.10): a
 /// head, then "Reference to original" and "Independent clone", the current one checked.
+/// Each switch is confirmed by the prototype's toast (spec-workspace.md 6.7.2).
 fn sharing_entries(cx: Context, facts: &Facts) -> Vec<Entry> {
     let item = facts.items[0].clone();
     let source = facts.source_id.clone();
@@ -869,10 +880,15 @@ fn sharing_entries(cx: Context, facts: &Facts) -> Vec<Entry> {
         let (item, source) = (item.clone(), source.clone());
         Entry::item("Reference to original", move || {
             if let Sharing::Clone {
-                original, alone, ..
+                original,
+                alone,
+                name,
             } = &sharing
             {
-                cx.send(to_reference(&item, &source, original, *alone));
+                cx.send_noting(
+                    to_reference(&item, &source, original, *alone),
+                    format!("{name} reference restored. Local changes were discarded."),
+                );
             }
         })
         .checked(!clone)
@@ -886,7 +902,10 @@ fn sharing_entries(cx: Context, facts: &Facts) -> Vec<Entry> {
             }
             let Some(s) = cx.session.get() else { return };
             let copy = SourceId::new(cx.studio.fresh_id(&s, "source"));
-            cx.send(to_clone(&item, &source, &format!("{name} copy"), copy));
+            cx.send_noting(
+                to_clone(&item, &source, &format!("{name} copy"), copy),
+                format!("{name} is now a clone. Changes stay with it."),
+            );
         })
         .checked(clone)
         .disabled_if(keyframe)

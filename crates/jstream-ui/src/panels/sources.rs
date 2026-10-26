@@ -874,6 +874,27 @@ mod tests {
     }
 
     #[test]
+    fn a_label_inside_a_nested_scene_keeps_its_scenes_open() {
+        let mut c = nested();
+        let label = super::LabelId::new("lower-third");
+        for source in &mut c.sources {
+            if source.source_id.as_str() == "title" {
+                source.meta.labels = vec![label.clone()];
+            }
+        }
+        let rows = rows(
+            &c,
+            &SceneId::new("main"),
+            &HashSet::new(),
+            true,
+            &|_, _, labels| labels.contains(&label),
+        );
+        assert_eq!(shown(&rows), ["g-@main", "  in-@grp", "    title1@inner"]);
+        assert_eq!(rows[2].label_ids, std::slice::from_ref(&label));
+        assert!(rows[0].label_ids.is_empty() && rows[0].kept);
+    }
+
+    #[test]
     fn rows_list_the_top_of_the_stack_first() {
         let rows = all(&collection(), "main");
         let ids: Vec<&str> = rows.iter().map(|r| r.item_id.as_str()).collect();
