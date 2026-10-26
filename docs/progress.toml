@@ -535,19 +535,19 @@ prs = [244]
 id = "V4"
 milestone = "M1b"
 title = "Scene filter chains and item effects"
-status = "review"
+status = "planned"
 prs = [802, 813, 815, 823, 824]
-note = "ADR-0065 designs a video chain owned by a scene or by one placement, and ADR-0068 puts item effects in v1 (#529). In review into wave/m1-5: a vignette kind (#802), the protocol part, the scene and item owners at 0.43 (#813), the graph and mock holding them at collection schema 2 (#815), the engine running scene filters over the scene's composite (#823), and item effects over each item's box (#824); then stats.tick's counts and goldens, and the UI's scene filters (FL-06) and effects"
+note = "ADR-0065 designs a video chain owned by a scene or by one placement, and ADR-0068 puts item effects in v1 (#529). Landed with wave/m1-5 (#877): a vignette kind (#802), the protocol part, the scene and item owners at 0.43 (#813's change, landed through #815), the graph and mock holding them at collection schema 2 (#815), the engine running scene filters over the scene's composite (#823), and item effects over each item's box (#824). Still to build: stats.tick's counts and goldens, and the UI's scene filters (FL-06) and effects"
 needs = ["build"]
 
 [[item]]
 id = "D9"
 milestone = "M1b"
 title = "Audio monitoring: a bus's monitor device and tap point"
-status = "review"
+status = "hardware"
 prs = [801, 816, 822]
-note = "ADR-0028 gives a bus a monitor, a device and a tap point before or after its filters (decision register D22). #801 is the mixer's monitor taps and player, #816 the protocol's bus monitor and bus.set_monitor (0.42), and #822 the engine playing it on its device; the mixer's Hear: before or after FX row (MX-05) can then be built"
-needs = ["build"]
+note = "ADR-0028 gives a bus a monitor, a device and a tap point before or after its filters (decision register D22). #801 is the mixer's monitor taps and player, #816 the protocol's bus monitor and bus.set_monitor (0.42), and #822 the engine playing it on its device, all landed with wave/m1-5 (#877); the mixer's Hear: before or after FX row (MX-05) can then be built. #822 ran only against the simulated player and the fake device, so a run on a real output device (WASAPI, Core Audio, PipeWire) is still owed: playback, drift steering and an unplug mid-stream"
+needs = ["hardware"]
 
 # M1c
 
@@ -674,7 +674,7 @@ milestone = "M1d"
 title = "Hardware acceleration by default, with GPU fallback and device-loss recovery"
 status = "hardware"
 prs = [437, 568, 569, 580, 604, 708, 829]
-note = "#437 on main; the encoder's software fallback (#568), the mid-run GPU capture fallback (#569, #580), device-loss recovery (#604) and sessions after a fallback (#708) landed with wave/m1-3 (#754); in review into wave/m1-5: a full hardware session limit failing output.start with hardware_session_limit instead of falling back (#829, #443 case 2, protocol 0.44); Windows runs: the mid-run fallback (#576) and a forced TDR (#620); open follow-ups #734, #443 and #667"
+note = "#437 on main; the encoder's software fallback (#568), the mid-run GPU capture fallback (#569, #580), device-loss recovery (#604) and sessions after a fallback (#708) landed with wave/m1-3 (#754); landed with wave/m1-5 (#877): a full hardware session limit failing output.start with hardware_session_limit instead of falling back (#829, #443 case 2, protocol 0.44); Windows runs: the mid-run fallback (#576) and a forced TDR (#620); #734's webcam restart fixed by #796 in the same landing; open follow-up #443 (#667 fixed by #672 and #694)"
 needs = ["hardware"]
 
 [[item]]
@@ -816,7 +816,7 @@ milestone = "M2"
 title = "Privacy screen and encoder sharing key"
 status = "planned"
 prs = [317, 804]
-note = "on/off privacy covering every output, the encoder owner key and cost reporting (#317) landed with wave/m1-3 (#754); muting the microphones, the default muted set (#804), in review; the look setting, the slate and choosing the muted sources to build"
+note = "on/off privacy covering every output, the encoder owner key and cost reporting (#317) landed with wave/m1-3 (#754); muting the microphones, the default muted set (#804), landed with wave/m1-5 (#877); the look setting, the slate and choosing the muted sources to build"
 needs = ["build"]
 
 [[item]]
@@ -838,9 +838,9 @@ id = "C9"
 milestone = "M2"
 title = "Media file source"
 status = "hardware"
-prs = [245, 322]
-note = "the media file run passed on main (#382) except an MP3's loop seam, a 56 ms gap at each wrap (#445): a fix to build, then a rerun"
-needs = ["build", "hardware"]
+prs = [245, 322, 875]
+note = "the media file run passed on main (#382) except an MP3's loop seam, a 56 ms gap at each wrap (#445): #875 cuts it from the LAME tag; a rerun checks it, and the ~12 ms dropout 0.42 s into each pass"
+needs = ["hardware"]
 
 [[item]]
 id = "W1"
@@ -879,17 +879,16 @@ milestone = "M2"
 title = "Desktop UI as a 1:1 match of the UI prototype"
 status = "review"
 prs = [495, 496, 615, 637, 659, 664, 766, 770, 785, 788, 792, 809]
-note = "#748; docs/UI-FEATURES.md tracks it row by row. Theme and header (#495), docking (#496), the canvas (#615, #637), the Inspector (#659) and the Transform panel (#664) landed with wave/m1-3 (#754); menus, dialogs and live drag (#766, #747), the Scenes and Scene objects panels (#770), the Filters panel and its dialogs (#785, #788) and the mixer master card (#792) landed with wave/m1-4 (#810); vertical mixer strips (#809) are in review into wave/m1-5; the rest of the mixer and the keyboard batch are still to build. Rows that wait on the engine follow B12, V4, D9, E2b, K1, X1 and Y4, and on two gaps with no item yet: previews of any scene or source (decision register D36) and the audit log over the protocol (D38); the bundled IBM Plex fonts are a licensing call for the maintainer (WS-02)"
+note = "#748; docs/UI-FEATURES.md tracks it row by row. Theme and header (#495), docking (#496), the canvas (#615, #637), the Inspector (#659) and the Transform panel (#664) landed with wave/m1-3 (#754); menus, dialogs and live drag (#766, #747), the Scenes and Scene objects panels (#770), the Filters panel and its dialogs (#785, #788) and the mixer master card (#792) landed with wave/m1-4 (#810); vertical mixer strips (#809) landed with wave/m1-5 (#877); the rest of the mixer and the keyboard batch are still to build. Rows that wait on the engine follow B12, V4, D9, E2b, K1, X1 and Y4, and on two gaps with no item yet: previews of any scene or source (decision register D36) and the audit log over the protocol (D38); the bundled IBM Plex fonts are a licensing call for the maintainer (WS-02)"
 needs = ["build", "maintainer"]
 
 [[item]]
 id = "B12"
 milestone = "M2"
 title = "Source sizes as runtime state (source.sizes)"
-status = "review"
+status = "done"
 prs = [806, 826]
-note = "ADR-0022 decision 4: the source.sizes query and source.size_changed event with the engine's sizes of stored frames and live sources (#806, protocol 0.40) landed in wave/m1-5; capture sources' sizes from the render thread (#826, #805) are in review into wave/m1-5; it unblocks crop by dragging (CV-08), size in % (IN-03) and native-size placement"
-needs = ["build", "wave"]
+note = "ADR-0022 decision 4: the source.sizes query and source.size_changed event with the engine's sizes of stored frames and live sources (#806, protocol 0.40) and capture sources' sizes from the render thread (#826, #805) landed with wave/m1-5 (#877); it unblocks crop by dragging (CV-08), size in % (IN-03) and native-size placement"
 
 [[item]]
 id = "C2b"
@@ -1012,10 +1011,10 @@ needs = ["build"]
 id = "F6b"
 milestone = "M3"
 title = "Choose HEVC or AV1 from a client"
-status = "review"
+status = "planned"
 prs = [807, 814]
-note = "F6 built the encoders; #807 names the encoder a machine lacks at output.start, landed with wave/m3-4 (#827); in wave/m1-5: #814 (protocol 0.41) adds hevc and av1 to VideoCodec and lets an encoder profile take them"
-needs = ["wave", "build"]
+note = "F6 built the encoders; #807 names the encoder a machine lacks at output.start, landed with wave/m3-4 (#827); #814 (protocol 0.41) adds hevc and av1 to VideoCodec and lets an encoder profile take them, landed with wave/m1-5 (#877)"
+needs = ["build"]
 
 [[item]]
 id = "F7"

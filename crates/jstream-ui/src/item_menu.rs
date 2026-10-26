@@ -1,7 +1,7 @@
 //! The right-click menu of the selected items, shared by the canvas and the Scene
 //! objects panel (spec-workspace.md 5.2.8 to 5.2.12): Properties, the Audio check,
-//! layer order, Center, Fit and Stretch to canvas, Reset rotation, Clear crop, the two
-//! duplicates and Remove from scene. Each choice sends one batch, so one undo step.
+//! layer order, Center, Fit and Stretch to canvas, Reset rotation, Clear crop, Crop
+//! (crop mode), the two duplicates and Remove from scene. Each choice sends one batch, so one undo step.
 //!
 //! Docs: docs/UI-FEATURES.md#menus
 
@@ -457,22 +457,34 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
         })
         .disabled_if(none)
     };
+    // Clearing a crop restores the full extent, as the prototype does.
     let clear_crop = {
         let ids = facts.items.clone();
         let scene = scene_id.clone();
+        let studio = cx.studio;
         Entry::item("Clear crop", move || {
-            cx.send(
-                ids.iter()
-                    .map(|id| Edit::ItemSetCrop {
-                        item_id: id.clone(),
-                        scene_id: Some(scene.clone()),
-                        crop: Crop::NONE,
-                    })
-                    .collect(),
-            );
+            let edits = studio.collection.with_untracked(|c| {
+                c.as_ref().map(|c| {
+                    studio
+                        .sizes
+                        .with_untracked(|sizes| crate::canvas::crop::clear(c, sizes, &scene, &ids))
+                })
+            });
+            cx.send(edits.unwrap_or_default());
         })
         .disabled_if(!facts.cropped)
     };
+    let crop_mode = cx.studio.crop_mode;
+    let crop = Entry::item(
+        if crop_mode.get_untracked() {
+            "Leave crop mode"
+        } else {
+            "Crop"
+        },
+        move || crop_mode.update(|on| *on = !*on),
+    )
+    .hint("C")
+    .disabled_if(many);
     let duplicate = |label: &str, clone: bool| {
         let facts = Rc::clone(&facts);
         let scene = scene_id.clone();
@@ -490,7 +502,7 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
         arrange("Reset rotation", |f| f.each(|g, _| Some(unrotated(g)))),
         clear_crop,
         Entry::Sep,
-        Entry::unavailable("Crop").hint("C"),
+        crop,
         duplicate("Duplicate as reference", false).hint("Ctrl+D"),
         duplicate("Duplicate as clone", true).hint("Ctrl+Shift+D"),
         remove,

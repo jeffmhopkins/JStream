@@ -3,13 +3,15 @@
 //! local file with the OS's own containers and codecs. Video comes out on the CPU as
 //! packed RGBA or BGRA, converted from the reader's RGB32 (`convert`); frames on the GPU
 //! follow the zero-copy work (E3). Audio comes out cut to its content, without the
-//! encoder's priming and padding (`gapless`).
+//! encoder's priming and padding (`gapless`), an MP3's read from its LAME tag (`lame`).
 
 // Platform-independent, so it is tested on every platform.
 #[cfg(any(windows, test))]
 mod convert;
 #[cfg(any(windows, test))]
 mod gapless;
+#[cfg(any(windows, test))]
+mod lame;
 #[cfg(windows)]
 mod reader;
 
