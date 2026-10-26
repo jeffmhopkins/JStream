@@ -92,4 +92,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0076](0076-saved-wasm-plugins-and-manifest-requests.md) | Saved WASM plugins, what a manifest asks for, and updates that need a grant | accepted | agent |  |
 | [ADR-0077](0077-bundle-ibm-plex-fonts.md) | Bundle the IBM Plex fonts with the web UI under the SIL OFL 1.1 | accepted | maintainer |  |
 | [ADR-0078](0078-scenes-carry-labels.md) | Scenes carry labels | accepted | agent |  |
+| [ADR-0079](0079-text-density-bounded-by-pixels.md) | Text density bounded by its frame's pixels, not at 8 | accepted | agent |  |
 <!-- @generated end adr-index -->

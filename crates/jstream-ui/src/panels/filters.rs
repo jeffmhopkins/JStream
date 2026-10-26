@@ -692,14 +692,16 @@ impl FilterDialogs {
     }
 
     /// Has the Filters panel show `owner`'s chains (the program output's or an
-    /// output's, from its FX button) until another item is selected or [`unpick`] runs.
+    /// output's, from its FX button, or a scene's, from its Edit filters…) until another
+    /// item or scene is selected or [`unpick`] runs.
     ///
     /// [`unpick`]: FilterDialogs::unpick
     pub fn pick(&self, owner: FilterOwner) {
         self.picked.set(Some(owner));
     }
 
-    /// Has the Filters panel show the selected item's source's chains again.
+    /// Has the Filters panel show the selection's chains again: the selected item's
+    /// source's, or with no item the selected scene's.
     pub fn unpick(&self) {
         self.picked.set(None);
     }

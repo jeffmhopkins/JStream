@@ -81,6 +81,9 @@ test('Edit filters… on a scene row and Edit scene filters… on the canvas mar
   await sceneRow(page, 'Main').locator('.row-main').click();
   await expect(panel(page).locator('.filters-title')).toHaveText('Main');
 
+  // From the Backdrop's chains, so only the pick can bring Main's back.
+  await page.locator('.sources-panel li.row .row-main').first().click();
+  await expect(panel(page).locator('.filters-title')).toHaveText('Backdrop');
   await showPanel(page, 'Transform');
   const m = await page.locator('svg.stage-overlay').evaluate((svg) => {
     const { a, d, e, f } = svg.getScreenCTM();

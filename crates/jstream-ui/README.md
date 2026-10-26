@@ -416,8 +416,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   which has no sound, has none. A scene's chain (owner `scene`, ADR-0065) shows while no
   item is selected, for the selected scene, or a keyframe's parent, since a keyframe has
   none of its own; a scene row's Edit filters… and the canvas margin's Edit scene
-  filters… pick it as an FX button does (`show_filters`). It is a video chain, and a
-  scene input on it offers only the scenes whose picture doesn't hold the scene.
+  filters… pick it as an FX button does (`show_filters`). It is a video chain, and the
+  Add filter dialog's Uses the scene picker on it offers only the scenes whose picture
+  doesn't hold the scene by nesting or as a keyframe; the engine refuses other cycles.
   Selecting another item or scene, or an item's Edit filters…, goes back to the
   selection's chains.
 - **The shell** is the header bar over the workspace. A failed call shows in a
