@@ -157,14 +157,14 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
 .app-header .spacer { flex: 1 1 auto; }
 .app-header .readout { display: flex; gap: 14px; color: var(--muted); font-size: 12px; }
 .top-menu { position: relative; }
-.menu-button { padding: 6px 10px; border: none; border-radius: 5px; background: transparent; color: var(--muted); }
+.menu-button { position: relative; z-index: 2; padding: 6px 10px; border: none; border-radius: 5px; background: transparent; color: var(--muted); }
 .menu-button:hover:not(:disabled), .menu-button.open { background: var(--hover); color: var(--text); }
 .menu-catcher { position: fixed; inset: 0; z-index: 1; }
 .dropdown {
   position: absolute;
   top: 36px;
   left: 0;
-  z-index: 2;
+  z-index: 3;
   min-width: 240px;
   padding: 6px;
   background: var(--menu);

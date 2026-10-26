@@ -302,3 +302,54 @@ test('the Scenes panel menus add and rename scenes', async ({ page, daemon }) =>
   await field.press('Enter');
   await expect(page.locator('.scenes-panel li.row').filter({ hasText: 'Break' })).toHaveClass(/selected/);
 });
+
+test('the header menus behave like a menu bar', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  const header = page.locator('header.app-header');
+  const button = (label) => header.locator(`.top-menu[data-menu="${label.toLowerCase()}"] > .menu-button`);
+  const dropdown = (name) => page.getByRole('menu', { name });
+
+  // A click opens File; pointing at Edit and then View opens each in its place.
+  await button('File').click();
+  await expect(dropdown('File')).toBeVisible();
+  await button('Edit').hover();
+  await expect(dropdown('Edit')).toBeVisible();
+  await expect(dropdown('File')).toHaveCount(0);
+  await button('View').hover();
+  await expect(dropdown('View')).toBeVisible();
+  await expect(button('View')).toHaveAttribute('aria-expanded', 'true');
+
+  // A click on the open menu's button closes it, and pointing then opens nothing.
+  await button('View').click();
+  await expect(dropdown('View')).toHaveCount(0);
+  await button('Edit').hover();
+  await expect(dropdown('Edit')).toHaveCount(0);
+
+  // A press outside closes an open menu.
+  await button('Edit').click();
+  await expect(dropdown('Edit')).toBeVisible();
+  await page.mouse.click(400, 400);
+  await expect(dropdown('Edit')).toHaveCount(0);
+
+  // The keyboard: Down opens the focused button's menu at its first item, Up and Down
+  // move through it, Right and Left move along the bar, and Escape closes it back to its
+  // button.
+  await button('Edit').focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(dropdown('Edit').getByRole('menuitem', { name: /^Undo/ })).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await expect(dropdown('Edit').getByRole('menuitem', { name: /^Redo/ })).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await expect(dropdown('Edit').getByRole('menuitem', { name: /^Undo/ })).toBeFocused();
+  await page.keyboard.press('ArrowRight');
+  await expect(dropdown('View')).toBeVisible();
+  await expect(dropdown('View').getByRole('menuitemcheckbox').first()).toBeFocused();
+  await page.keyboard.press('ArrowLeft');
+  await page.keyboard.press('ArrowLeft');
+  await expect(dropdown('File').getByRole('menuitem', { name: 'Disconnect' })).toBeFocused();
+  await page.keyboard.press('ArrowLeft');
+  await expect(dropdown('Layout')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dropdown('Layout')).toHaveCount(0);
+  await expect(button('Layout')).toBeFocused();
+});

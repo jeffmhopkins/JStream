@@ -180,7 +180,7 @@ fn place_sub(
 
 /// The next of `count` enabled items from `at`, by `delta`, wrapping at both ends. With
 /// none focused, down starts at the first and up at the last.
-fn step(count: usize, at: Option<usize>, delta: isize) -> Option<usize> {
+pub(crate) fn step(count: usize, at: Option<usize>, delta: isize) -> Option<usize> {
     if count == 0 {
         return None;
     }
@@ -259,8 +259,8 @@ fn enabled_items(menu: &leptos::web_sys::Element) -> Vec<leptos::web_sys::HtmlEl
         .collect()
 }
 
-/// Moves the focus within `menu` by `delta`, or to the first (`Some(0)`) or last item.
-fn move_focus(menu: &leptos::web_sys::Element, delta: isize, to: Option<bool>) {
+/// Moves the focus within `menu` by `delta`, or to the first (`Some(true)`) or last item.
+pub(crate) fn move_focus(menu: &leptos::web_sys::Element, delta: isize, to: Option<bool>) {
     let items = enabled_items(menu);
     let active = document().active_element();
     let at = items
