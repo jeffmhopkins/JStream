@@ -10,10 +10,11 @@
 use crate::session::Session;
 use jstream_control::ControlError;
 use jstream_control::protocol::{
-    Action, Batch, BusInfo, Call, CallResult, Canvas, Chord, DeleteTarget, Edit, Event, FolderId,
-    FolderInfo, HotkeyBinding, ItemId, ItemInfo, ItemOverride, KindDescriptor, KindSummary,
-    LabelInfo, OutputInfo, OverrideField, PlacementForm, Query, QueryResult, Rev, SceneId,
-    SceneInfo, SceneRole, SourceId, SourceInfo, SourceKind, SourceSize,
+    Action, Batch, BusInfo, Call, CallResult, Canvas, Chord, DeleteTarget, Edit, Event,
+    FilterChains, FilterOwner, FolderId, FolderInfo, HotkeyBinding, ItemId, ItemInfo, ItemOverride,
+    KindDescriptor, KindSummary, LabelInfo, OutputId, OutputInfo, OverrideField, PlacementForm,
+    Query, QueryResult, Rev, SceneId, SceneInfo, SceneRole, SourceId, SourceInfo, SourceKind,
+    SourceSize,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -39,6 +40,8 @@ pub struct Collection {
     pub buses: Vec<BusInfo>,
     /// The labels sources can carry, in label order (ADR-0024 §4).
     pub labels: Vec<LabelInfo>,
+    /// The master stage's chains, which apply to everything leaving JStream (ADR-0027).
+    pub master: FilterChains,
     /// Every hotkey binding, ordered by chord (ADR-0024 §5).
     pub hotkeys: Vec<HotkeyBinding>,
     /// The scene list's folders, in folder order (ADR-0024 §3, ADR-0064).
@@ -57,6 +60,7 @@ impl Collection {
                 outputs,
                 buses,
                 labels,
+                master,
                 hotkeys,
                 folders,
                 ..
@@ -84,6 +88,7 @@ impl Collection {
                     outputs,
                     buses,
                     labels,
+                    master: master.filters,
                     hotkeys,
                     folders,
                 })
@@ -100,6 +105,22 @@ impl Collection {
     /// The source with this ID.
     pub fn source(&self, source_id: &SourceId) -> Option<&SourceInfo> {
         self.sources.iter().find(|s| &s.source_id == source_id)
+    }
+
+    /// The output with this ID.
+    pub fn output(&self, output_id: &OutputId) -> Option<&OutputInfo> {
+        self.outputs.iter().find(|o| &o.output_id == output_id)
+    }
+
+    /// The chains `owner` has, or `None` if it doesn't exist or reports none (an item).
+    pub fn chains(&self, owner: &FilterOwner) -> Option<&FilterChains> {
+        match owner {
+            FilterOwner::Source { source_id } => self.source(source_id).map(|s| &s.filters),
+            FilterOwner::Master => Some(&self.master),
+            FilterOwner::Output { output_id } => self.output(output_id).map(|o| &o.filters),
+            FilterOwner::Scene { scene_id } => self.scene(scene_id).map(|s| &s.filters),
+            _ => None,
+        }
     }
 
     /// The item with this ID, with the scene it is in: its own scene, never a keyframe

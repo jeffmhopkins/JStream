@@ -1,6 +1,7 @@
-//! The outputs panel: create, edit and delete outputs (streams, recordings and the
-//! virtual camera), set or clear their stream keys, start and stop them, and the
-//! pipeline's health from `stats.tick`. It also holds the logic behind the header's
+//! The outputs panel: the program output and each output with its FX button, which
+//! shows that chain in the Filters panel (spec-panels.md 9, ADR-0027); create, edit and
+//! delete outputs (streams, recordings and the virtual camera), set or clear their stream
+//! keys, start and stop them, and the pipeline's health from `stats.tick`. It also holds the logic behind the header's
 //! Go Live (`go_live_targets`, `live_outputs`, `start_or_stop_all`).
 //!
 //! The stream key is write-only (R-SEC-001). It is read from its password field only
@@ -12,13 +13,16 @@
 //! Docs: crates/jstream-ui/README.md#design, docs/RULES.md#R-SEC-001
 
 use crate::app::SessionContext;
+use crate::dock::PanelId;
 use crate::icons::Icon;
+use crate::panels::filters::FilterDialogs;
 use crate::session::Session;
+use crate::workspace::DockState;
 use futures_util::StreamExt;
 use jstream_control::protocol::{
     Action, Batch, Call, CallResult, DropCounts, Edit, EncoderProfileId, EncoderProfileInfo, Event,
-    OutputId, OutputInfo, OutputKind, OutputState, Query, QueryResult, RecordContainer, Rev,
-    RtmpTarget, SecretString,
+    FilterChains, FilterOwner, OutputId, OutputInfo, OutputKind, OutputState, Query, QueryResult,
+    RecordContainer, Rev, RtmpTarget, SecretString,
 };
 use jstream_control::{Control, ControlError};
 use leptos::html;
@@ -418,6 +422,11 @@ pub fn state_label(state: OutputState) -> &'static str {
     }
 }
 
+/// An FX button's label (spec-panels.md U1): "FX" and how many filters the chains hold.
+pub fn fx_label(chains: &FilterChains) -> String {
+    format!("FX {}", chains.video.len() + chains.audio.len())
+}
+
 /// How many `stats.tick` intervals [`Health`] sums over: about five seconds.
 pub const HEALTH_WINDOW: usize = 5;
 
@@ -539,9 +548,24 @@ struct Panel {
     ///
     /// [`Studio::keys_changed`]: crate::store::Studio::keys_changed
     keys_changed: Option<RwSignal<u64>>,
+    /// The page's shared state, for the master stage's chains.
+    studio: Option<crate::store::Studio>,
+    /// What an FX button picks the Filters panel's chains through, and the dock that
+    /// shows that panel.
+    fx: Option<(FilterDialogs, Option<DockState>)>,
 }
 
 impl Panel {
+    /// Shows `owner`'s chains in the Filters panel, from an FX button.
+    fn show_chains(self, owner: FilterOwner) {
+        if let Some((dialogs, dock)) = self.fx {
+            dialogs.pick(owner);
+            if let Some(dock) = dock {
+                dock.0.update(|d| d.show(PanelId::Filters));
+            }
+        }
+    }
+
     /// Runs `work` on the open session and shows its error, if it fails. Does nothing
     /// without a session.
     fn run<F, Fut>(self, work: F)
@@ -631,6 +655,8 @@ pub fn Outputs() -> impl IntoView {
         loads: StoredValue::new(0),
         vcam: Vcam::from_host(crate::host::desktop_vcam().as_deref()),
         keys_changed: use_context::<crate::store::Studio>().map(|studio| studio.keys_changed),
+        studio: use_context(),
+        fx: use_context::<FilterDialogs>().map(|dialogs| (dialogs, use_context())),
     };
     let health = RwSignal::new(Health::default());
 
@@ -697,6 +723,7 @@ pub fn Outputs() -> impl IntoView {
                         }
                     })
             }}
+            <ChainRows panel=panel ids=ids />
             <ul class="output-list">
                 <For each=ids key=|id| id.clone() let:output_id>
                     <OutputCard panel=panel output_id=output_id />
@@ -706,6 +733,72 @@ pub fn Outputs() -> impl IntoView {
         </section>
     }
     .into_any()
+}
+
+/// The program output, then each output under it, each with its status and FX button
+/// (spec-panels.md U1, U2), and the footnote (U2).
+#[component]
+fn ChainRows(
+    panel: Panel,
+    ids: impl Fn() -> Vec<OutputId> + Send + Sync + 'static,
+) -> impl IntoView {
+    let master = move || {
+        panel.studio.map_or_else(
+            || fx_label(&FilterChains::default()),
+            |studio| {
+                studio
+                    .collection
+                    .with(|c| fx_label(&c.as_ref().map(|c| c.master.clone()).unwrap_or_default()))
+            },
+        )
+    };
+    view! {
+        <ul class="output-chains" aria-label="Output filters">
+            <li class="output-chain program">
+                <span class="output-chain-name">"Program output"</span>
+                <span class="output-chain-status">"master"</span>
+                <button
+                    type="button"
+                    class="fx-button on"
+                    title="Filters on everything leaving JStream"
+                    aria-label="Program output filters"
+                    disabled=panel.fx.is_none()
+                    on:click=move |_| panel.show_chains(FilterOwner::Master)
+                >
+                    {master}
+                </button>
+            </li>
+            <For each=ids key=|id| id.clone() let:output_id>
+                {
+                    let id = output_id.clone();
+                    let row = Memo::new(move |_| panel.rows.with(|rows| rows.get(&id).cloned()));
+                    let label = move || row.with(|r| r.as_ref().map(|r| fx_label(&r.info.filters)));
+                    let filtered = move || row.with(|r| r.as_ref().is_some_and(|r| !r.info.filters.is_empty()));
+                    let status = move || row.with(|r| r.as_ref().map_or("Gone", |r| state_label(r.state)));
+                    let name = output_id.to_string();
+                    let owner = FilterOwner::Output { output_id };
+                    view! {
+                        <li class="output-chain">
+                            <span class="output-chain-name">{name.clone()}</span>
+                            <span class="output-chain-status">{status}</span>
+                            <button
+                                type="button"
+                                class="fx-button"
+                                class:on=filtered
+                                title=format!("Filters for {name} only")
+                                aria-label=format!("{name} filters")
+                                disabled=panel.fx.is_none()
+                                on:click=move |_| panel.show_chains(owner.clone())
+                            >
+                                {label}
+                            </button>
+                        </li>
+                    }
+                }
+            </For>
+        </ul>
+        <p class="output-foot">"Program filters apply to every output; each output can add its own after them."</p>
+    }
 }
 
 /// One output: its state, target, encoder, stream key and buttons.
@@ -1465,6 +1558,24 @@ mod tests {
         let ids = |list: Vec<OutputId>| list.iter().map(|id| id.to_string()).collect::<Vec<_>>();
         assert_eq!(ids(go_live_targets(&rows)), ["a", "b"]);
         assert_eq!(ids(live_outputs(&rows)), ["d"]);
+    }
+
+    #[test]
+    fn an_fx_button_counts_both_chains() {
+        use super::fx_label;
+        use jstream_control::protocol::{FilterChains, FilterId, FilterInfo, Settings};
+        let filter = |id: &str| FilterInfo {
+            filter_id: FilterId::new(id),
+            kind: "gain".into(),
+            settings: Settings::new(),
+            enabled: true,
+        };
+        assert_eq!(fx_label(&FilterChains::default()), "FX 0");
+        let chains = FilterChains {
+            video: vec![filter("v")],
+            audio: vec![filter("a"), filter("b")],
+        };
+        assert_eq!(fx_label(&chains), "FX 3");
     }
 
     #[test]
