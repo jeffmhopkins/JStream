@@ -68,6 +68,8 @@ pub fn path(name: &str) -> &'static str {
         "out" => "M2 8a10 10 0 0 1 20 0 M5 11a7 7 0 0 1 14 0 M8.5 14a3.5 3.5 0 0 1 7 0 M12 18h.01",
         "search" => "M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14z M20 20l-4-4",
         "funnel" => "M4 5h16l-6 7v6l-4 2v-8z",
+        "close" => "M6 6l12 12 M18 6L6 18",
+        "reset" => "M4 12a8 8 0 1 0 2.3-5.6 M4 4v5h5",
         _ => "M3 5h18v14H3z M3 16l5-5 4 4 3-3 6 6 M15.5 7.5a1.5 1.5 0 1 0 0.01 0z",
     }
 }
@@ -77,7 +79,7 @@ const NAMES: &[&str] = &[
     "monitor", "window", "webcam", "mic", "speaker", "globe", "text", "film", "palette", "music",
     "layers", "spout", "wave", "bars", "chat", "tag", "keyframe", "folder", "play", "coffee",
     "gamepad", "flag", "clock", "user", "hash", "star", "heart", "bolt", "sparkle", "bell", "eye",
-    "eye-off", "lock", "wrench", "out", "search", "funnel", "image",
+    "eye-off", "lock", "wrench", "out", "search", "funnel", "close", "reset", "image",
 ];
 
 /// The icon of this name as a `'static` name, for a name read at run time (a scene's
