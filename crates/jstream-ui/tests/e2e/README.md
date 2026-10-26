@@ -168,8 +168,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   star are sent; with no item selected the scene's object count, uses and Transition
   in and out show, and a second selected item shows "+1". The mock engine doesn't
   implement `scene.set_transitions`, so choosing one isn't run.
-- **Filters** (`filters.spec.js`): with nothing selected the panel says so and offers
-  no Add filter; with the Backdrop selected, its title, note, one video chain with its
+- **Filters** (`filters.spec.js`): with no item selected the panel shows the scene's
+  chain; with the Backdrop selected, its title, note, one video chain with its
   count and the two rows, Blur struck through; the eye turning Blur on as one edit, a
   drag putting it above Sharpen as one more, and × removing Sharpen; Edit filters… in
   an item's menu selecting the item and showing the panel behind the Transform tab; the
@@ -185,6 +185,14 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   edit and updates the summary. With one setting refused late: a refusal that arrives
   after its row was closed, and one after the Filter settings dialog was cancelled,
   each in the problem bar.
+- **Scene filters** (`scene-filters.spec.js`): with no item selected the panel showing
+  Main's empty video chain with the scene note; with Sharpen and Gain described, Add
+  filter offering only Sharpen, with the scene's foot, as one edit on the scene, while
+  the Backdrop keeps its own two; another scene selected showing its own chain; a scene
+  row's Edit filters… showing that scene's chain from behind the Transform tab while
+  the item stays selected, selecting a scene going back to its chain, and the canvas
+  margin's Edit scene filters… showing the shown scene's; and the scene Properties
+  dialog listing the scene's chain, adding to it at once, which Cancel keeps.
 - **Program and output chains** (`output-chains.spec.js`): the Outputs panel's Program
   output row ("master", "FX 0"), a recording's row under it with its state and FX
   button, and the footnote; the program's FX showing the master chain in the Filters
