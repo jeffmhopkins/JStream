@@ -405,7 +405,7 @@ handlers; the real UI makes them work.
 | KB-03 | Undo and redo | Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y. | ✅ | The prototype has none; kept. |
 | KB-04 | Edit keys | Ctrl+D duplicate as reference, Ctrl+Shift+D as clone, Del remove, F2 rename. | ✅ | F2 renames and Del removes in the Scenes and Scene objects rows (Del deletes a scene or a folder there, through its plan). Ctrl+D and Ctrl+Shift+D duplicate the item as a reference or a clone on the canvas and in its row, and Del on the canvas removes the selection. |
 | KB-05 | Copy and paste | Ctrl+C, Ctrl+V. | ⬜ | Decision register D43. |
-| KB-06 | Privacy key | Pause toggles privacy. | ✅ | Anywhere in the window, as the button does. |
+| KB-06 | Privacy key | Pause toggles privacy. | ✅ | Anywhere in the window, a rename field included, as the button does. |
 | KB-07 | Scene hotkeys | F1–F5 switch to the scene bound to them. | ⬜ | `hotkey.set` binds a chord such as F1 to `scene.switch`; the UI's key handling is to build. |
 
 <a id="beyond"></a>

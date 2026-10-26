@@ -71,6 +71,15 @@ test('Pause toggles privacy from anywhere, and every client shows it', async ({ 
   await expect(privacyButton(page)).toHaveText('Privacy');
   await expect(notice(page)).toHaveCount(0);
   await expect(privacyButton(other)).toHaveText('Privacy');
+
+  // A rename field keeps its keys from the rows, but not Pause.
+  await page.locator('.scenes-panel li.row').filter({ hasText: 'Intro' }).locator('.row-main').click();
+  await page.keyboard.press('F2');
+  const field = page.locator('.scenes-panel input.rename');
+  await expect(field).toBeFocused();
+  await field.press('Pause');
+  await expect(privacyButton(page)).toHaveText('Privacy on');
+  await expect(field).toBeFocused();
 });
 
 test('a client that connects while privacy is on shows it at once', async ({ page, context, daemon }) => {
