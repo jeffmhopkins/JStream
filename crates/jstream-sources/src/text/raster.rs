@@ -25,9 +25,28 @@ pub(crate) struct Drawn {
     pub(crate) rgba: Vec<u8>,
 }
 
+/// The most pixels a frame drawn at a density holds: a 4K canvas's (ADR-0078).
+const MAX_DENSE_PIXELS: f32 = 3840.0 * 2160.0;
+
+/// The widest or tallest a frame drawn at a density is: 8192 pixels, the largest
+/// texture side every GPU the compositor runs on takes (ADR-0078).
+const MAX_DENSE_SIDE: f32 = 8192.0;
+
+/// The highest density, at least 1, that a text of `extent` draws at within
+/// [`MAX_DENSE_PIXELS`] and [`MAX_DENSE_SIDE`]. A pixel is kept spare each way, since a
+/// frame's sides are its extent's times the density, rounded up.
+fn densest(extent: FrameSize) -> f32 {
+    let (width, height) = (extent.width() as f32, extent.height() as f32);
+    let by_side = (MAX_DENSE_SIDE - 1.0) / width.max(height);
+    let by_pixels = (MAX_DENSE_PIXELS / ((width + 1.0) * (height + 1.0))).sqrt();
+    by_side.min(by_pixels).max(1.0)
+}
+
 /// Lays `text` out with `style` in `font`, then draws it `density` times as many pixels
 /// each way as `style` sizes it: the layout, its line breaks and the frame's own size
 /// (its [`Drawn::extent`]) are the same at any density, and only the drawing is finer.
+/// A density whose frame would hold more than a 4K canvas's pixels, or be wider or
+/// taller than 8192, is lowered to the highest that isn't ([`densest`]).
 ///
 /// # Errors
 /// [`SourceError::Setting`] naming `text` when the drawn text would be larger than
@@ -39,7 +58,6 @@ pub(crate) fn render(
     density: f32,
     limits: &Limits,
 ) -> Result<Drawn, SourceError> {
-    let k = density;
     // `size` is the em size in pixels, which is skrifa's pixels per em.
     let size = Size::new(style.size);
     let metrics = font.metrics(size, LocationRef::default());
@@ -109,7 +127,6 @@ pub(crate) fn render(
     // size at 1 whatever the density: dividing the dense bounds back by it can land a
     // pixel over (review B1 on #781).
     let plain = pens(1.0);
-    let dense = (k != 1.0).then(|| pens(k));
 
     // The frame holds the text box with its padding, and every glyph's ink with the
     // outline around it, which may reach past the box. Its bounds are whole pixels at a
@@ -129,6 +146,12 @@ pub(crate) fn render(
         side(right.ceil() - left, limits)?,
         side(bottom.ceil() - top, limits)?,
     )?;
+    let k = if density > 1.0 {
+        density.min(densest(extent))
+    } else {
+        density
+    };
+    let dense = (k != 1.0).then(|| pens(k));
     let width = side((extent.width() as f32 * k).ceil(), limits)?;
     let height = side((extent.height() as f32 * k).ceil(), limits)?;
     let (left, top) = (left * k, top * k);

@@ -456,12 +456,10 @@ fn a_density_draws_more_pixels_for_the_same_size() {
     );
     let extent = source.set_density(100.0).expect("text draws at a density");
     let clamped = source.frame(ms(0)).expect("a frame");
-    assert_eq!(
-        size(&clamped),
-        (
-            (extent.width() as f32 * jstream_sources::MAX_DENSITY).ceil() as u32,
-            (extent.height() as f32 * jstream_sources::MAX_DENSITY).ceil() as u32
-        )
+    let (cw, ch) = size(&clamped);
+    assert!(
+        cw <= 8192 && cw * ch <= 3840 * 2160 && cw > extent.width() * 8,
+        "drew {cw}x{ch} for an extent of {extent:?}"
     );
     // Back to 1: the frame is its own size again.
     let extent = source.set_density(1.0).expect("text draws at a density");
@@ -469,6 +467,61 @@ fn a_density_draws_more_pixels_for_the_same_size() {
         size(&source.frame(ms(0)).expect("a frame")),
         (extent.width(), extent.height())
     );
+}
+
+/// A short line stretched across the canvas is drawn at the density it is shown at,
+/// past the 8 that used to cap it: "Test" at 64 px, filling a 1920x1080 canvas, is
+/// enlarged about 15 times (the maintainer's alpha pass).
+#[test]
+fn a_line_filling_the_canvas_draws_at_its_shown_size() {
+    let mut source = Registry::builtin()
+        .create(
+            "text",
+            &settings(&[("text", json!("Test"))]),
+            &Context::default(),
+        )
+        .expect("a text source");
+    let (w, h) = size(&source.frame(ms(0)).expect("a frame"));
+    let density = 2f32.powf(3.75);
+    assert!(
+        w as f32 * density < 1920.0 * 1.25,
+        "the test text is {w} wide"
+    );
+    source
+        .set_density(density)
+        .expect("text draws at a density");
+    assert_eq!(
+        size(&source.frame(ms(0)).expect("a frame")),
+        (
+            (w as f32 * density).ceil() as u32,
+            (h as f32 * density).ceil() as u32
+        )
+    );
+}
+
+/// A density whose frame would hold more than a 4K canvas's pixels, or be wider than
+/// 8192, is lowered to the highest that isn't, and an update keeps to it too.
+#[test]
+fn a_dense_frame_holds_at_most_a_4k_canvas() {
+    let long = "A line of text much longer than the canvas is wide";
+    let mut source = Registry::builtin()
+        .create(
+            "text",
+            &settings(&[("text", json!(long))]),
+            &Context::default(),
+        )
+        .expect("a text source");
+    let extent = source.set_density(32.0).expect("text draws at a density");
+    let (w, h) = size(&source.frame(ms(0)).expect("a frame"));
+    assert!(w <= 8192 && w * h <= 3840 * 2160, "drew {w}x{h}");
+    assert!(w > extent.width() * 4, "drew {w} wide from {extent:?}");
+    // A block of lines is bounded by its pixels before its sides.
+    let block = [long; 6].join("\n");
+    source
+        .update(&settings(&[("text", json!(block))]))
+        .expect("a live update");
+    let (w, h) = size(&source.frame(ms(0)).expect("a frame"));
+    assert!(w <= 8192 && w * h <= 3840 * 2160, "drew {w}x{h}");
 }
 
 /// A density whose frame is over the limits is halved until it fits.

@@ -69,7 +69,8 @@ pub trait Source: Send {
     /// density; `None`, the default, for a kind whose frames are their own size whatever
     /// is asked. Drawing again can take as long as an update. The `text` kind draws at
     /// densities from 1 to [`MAX_DENSITY`](crate::MAX_DENSITY), lower when
-    /// the frame would be over its limits.
+    /// the frame would hold more than a 4K canvas's pixels (ADR-0078) or be over its
+    /// limits.
     fn set_density(&mut self, density: f32) -> Option<FrameSize> {
         let _ = density;
         None

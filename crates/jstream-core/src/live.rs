@@ -1078,7 +1078,8 @@ mod tests {
         assert_eq!(density_for(2.0), 2.0);
         assert_eq!(density_for(2.1), 2f32.powf(1.25));
         assert_eq!(density_for(6.0), 2f32.powf(2.75));
-        assert_eq!(density_for(9.0), jstream_sources::MAX_DENSITY);
+        assert_eq!(density_for(9.0), 2f32.powf(3.25));
+        assert_eq!(density_for(33.0), jstream_sources::MAX_DENSITY);
         assert_eq!(density_for(f32::INFINITY), jstream_sources::MAX_DENSITY);
     }
 }

@@ -177,9 +177,12 @@ struct TextSource {
     extent: FrameSize,
 }
 
-/// The highest density a source draws at ([`Source::set_density`]): 8 times as many
-/// pixels each way. The `text` kind is the one that draws at a density.
-pub const MAX_DENSITY: f32 = 8.0;
+/// The highest density a source draws at ([`Source::set_density`]): 32 times as many
+/// pixels each way, so a default 64 px line stretched across a 4K canvas is drawn at
+/// the size it is shown. The `text` kind is the one that draws at a density, and
+/// it draws at a lower one when the frame would be larger than a 4K canvas
+/// ([`raster::render`], ADR-0078).
+pub const MAX_DENSITY: f32 = 32.0;
 
 impl Source for TextSource {
     fn frame(&mut self, _: MediaTime) -> Result<Arc<VideoFrame>, SourceError> {
@@ -201,8 +204,9 @@ impl Source for TextSource {
         Ok(())
     }
 
-    /// Draws the text again at `density`, from 1 to [`MAX_DENSITY`]. A density whose
-    /// frame would be over the limits is halved until it fits, down to 1, which the text
+    /// Draws the text again at `density`, from 1 to [`MAX_DENSITY`], or at the highest
+    /// density under that whose frame [`raster::render`] allows. A density whose frame
+    /// would be over the limits is halved until it fits, down to 1, which the text
     /// already fit at when it was created or last updated.
     fn set_density(&mut self, density: f32) -> Option<FrameSize> {
         let mut density = if density.is_finite() {
