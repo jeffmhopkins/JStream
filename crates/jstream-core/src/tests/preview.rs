@@ -1,17 +1,21 @@
 //! Preview streams (U1, ADR-0045): `preview.subscribe` sends the program mix to the
 //! session that asked, as binary frames on its channel, in H.264 when the platform has
 //! an encoder and JPEG otherwise; a reader that falls behind loses frames up to a
-//! keyframe, and the streams end with `preview.unsubscribe` or the session.
+//! keyframe, and the streams end with `preview.unsubscribe` or the session. The preview
+//! captures the displays and windows the program shows itself.
 
 use super::{add, batch, block_on, code, connected, create, edits, live, moved, webcam};
-use crate::preview::{BINARY_BUFFER, KEYFRAME_EVERY};
+use crate::preview::{BINARY_BUFFER, KEYFRAME_EVERY, OpenPreviewDraw, PreviewDraw};
+use crate::snapshot::{Captures, LiveParams, Shot};
 use crate::{Engine, InProcessControl};
 use jstream_control::{BinaryStream, Control, ControlError};
 use jstream_platform::fake::{self, FakeClock};
 use jstream_protocol::{
-    Action, Batch, BinaryFrame, Call, Edit, PreviewCodec, ProtocolError, Rev, SourceId, WireError,
+    Action, Batch, BinaryFrame, Call, Edit, PreviewCodec, ProtocolError, Rev, Settings, SourceId,
+    SourceKind, WireError,
 };
-use std::sync::Arc;
+use jstream_sources::CaptureSpec;
+use std::sync::{Arc, mpsc};
 use std::task::{Context, Poll, Wake, Waker};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -317,4 +321,79 @@ fn a_live_value_is_sent_without_waiting_for_a_keyframe() {
         after < KEYFRAME_EVERY,
         "drawn only for a keyframe: {after:?}"
     );
+}
+
+/// A display the program shows is drawn into the preview with no output running: the
+/// preview thread captures it itself. A webcam opens once, so the preview leaves it to
+/// the program stage and never opens it.
+#[test]
+fn the_preview_captures_the_displays_the_program_shows() {
+    let clock = FakeClock::new(jstream_media::Timebase::MICROS);
+    let devices = fake::FakeVideoDevices::new(clock.clone());
+    let mut backends = fake::backends(&clock).expect("fake backends");
+    backends.video_devices = Arc::new(devices.clone());
+    // Each picture's captures that had a frame to draw.
+    let (seen_tx, seen) = mpsc::channel();
+    let draw: OpenPreviewDraw = Arc::new(move || {
+        let seen = seen_tx.clone();
+        let draw: PreviewDraw = Box::new(
+            move |shot: &Shot, _: &LiveParams, captures: &dyn Captures, size, _, out| {
+                let drawn: Vec<CaptureSpec> = shot
+                    .captures()
+                    .iter()
+                    .filter(|key| captures.frame(key).is_some())
+                    .map(|key| key.spec.clone())
+                    .collect();
+                let _ = seen.send(drawn);
+                out.clear();
+                out.resize(size.width() as usize * size.height() as usize * 4, 0);
+                Ok(())
+            },
+        );
+        Ok(draw)
+    });
+    let engine = Engine::new()
+        .with_backends(backends)
+        .with_cpu_compositor()
+        .with_preview_draw(draw);
+    let control = connected(&engine);
+    let mut frames = control.binary();
+    act(&control, subscribe(1, Some(30), Vec::new())).expect("subscribed");
+    let display = Edit::SourceCreate {
+        source_id: SourceId::new("screen"),
+        name: "Screen".into(),
+        kind: SourceKind::Builtin {
+            kind: "display".into(),
+        },
+        settings: Settings::new(),
+        duplicated_from: None,
+    };
+    let scene = vec![
+        create("scn"),
+        display,
+        add("scn", "itm", "screen"),
+        webcam(),
+        add("scn", "cam", "webcam"),
+    ];
+    let rev = batch(&control, edits(scene)).expect("scene");
+    frame_at(&mut frames, rev);
+    let deadline = Instant::now() + WAIT;
+    loop {
+        let drawn: Vec<CaptureSpec> = seen.try_iter().flatten().collect();
+        assert!(
+            !drawn
+                .iter()
+                .any(|spec| matches!(spec, CaptureSpec::Device(_))),
+            "the preview drew a webcam: {drawn:?}"
+        );
+        if drawn.contains(&CaptureSpec::Display(None)) {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the display never reached the preview"
+        );
+        frame(&mut frames);
+    }
+    assert_eq!(devices.open_streams(), 0, "the preview opened the webcam");
 }

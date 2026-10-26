@@ -190,7 +190,8 @@ state machine. Contents:
   (`Control::binary`), in H.264 on a software `jstream-encode` session when the
   platform has an encoder and in JPEG otherwise (`preview/jpeg.rs`, a baseline
   encoder of its own), drawn on the engine's `jstream-preview` thread with its own
-  compositor (see *Preview streams* in [Design](#design)).
+  compositor and its own captures of the displays and windows the mix shows (see
+  *Preview streams* in [Design](#design)).
 - **Transitions** (`transition.rs`, [ADR-0029](../../docs/adr/0029-transitions.md)):
   which preset a switch runs (`resolve`), and the plan that pairs what is on screen
   with the new scene's items, one `jstream-render` `Track` per item (`plan`).
@@ -391,8 +392,9 @@ state machine. Contents:
   JPEG without an encoder following the mix's changes and the canvas size, H.264 from
   the platform fakes starting at a keyframe and JPEG beside it for a client that asks,
   the subscription checks and limit, unsubscribe and the session's end, and a reader
-  that stops reading holding a bounded queue and resuming in order, and a live value
-  sent at once with the same `rev`), the
+  that stops reading holding a bounded queue and resuming in order, a live value
+  sent at once with the same `rev`, and a display the program shows captured by the
+  preview itself with a webcam beside it never opened), the
   collection file (`src/tests/collection.rs`: created when missing, batches, an undo
   and a redo each saved, a saved collection loaded by a new engine with its `rev` and
   outputs, a `waveform` drawing another source saved and loaded with the source it
@@ -1340,7 +1342,8 @@ parameter channel and the media clock's time (a brief collection lock, never hel
 drawing), and for each stream that is due draws the shot with the live values over it,
 as the render thread does, at the stream's size and that time, reads it back and
 encodes it. A stream is due at most `fps` times a second, and only when the snapshot or
-the live values changed, a transition is running in it (its picture changes with time),
+the live values changed, a transition is running in it (its picture changes with time), it
+shows a display or window capture (a new frame may have come),
 a keyframe was asked for, or 2 s passed since its last keyframe; one whose queue is full isn't drawn. H.264 runs on a `jstream-encode`
 `VideoSession` that avoids hardware (so a preview never takes an output's hardware
 session), VBR, with a keyframe every 2 s, reopened when the picture size changes; its
@@ -1350,8 +1353,15 @@ otherwise, as it does when more than 30 draws in a row fail, or after a panic on
 frame finds the queue full, the stream's frames are dropped up to the next keyframe,
 which the hub then forces (`KeyframeGate`).
 
-The display capture belongs to the program stage, so a preview draws a `display`
-source as nothing, as `video.snapshot` does. A `scene.switch` republishes the render
+The hub captures the displays and windows the program mix shows itself, so they show
+with no output running: once the engine has backends, it runs the program stage's
+`RenderCaptures` (`runtime/captures.rs`) on a `jstream-capture` thread of its own,
+started the first time the mix shows one and stopped with the hub, on the CPU path (its
+compositor isn't on the platform's GPU context). While an output runs, its stage
+captures the same display again. The sizes these captures see go nowhere; `source.sizes`
+reports the program stage's. A webcam or capture card opens once, so the preview leaves
+it to the program stage and draws it as nothing, as `video.snapshot` draws every
+capture. A `scene.switch` republishes the render
 snapshot, so the preview shows the transition onto the new program scene, then the
 scene, with the same `rev` (the switch changes none). Not yet: mixes other than program, and the
 post-master stage, which come with the video mixes and the master chain.
