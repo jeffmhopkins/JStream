@@ -45,7 +45,10 @@ This amends ADR-0073 §1, the densities the `text` kind draws at.
   size, and stays sharp on program, in the preview and in recordings.
 - A text's frame at a density holds at most about 8.3 million pixels: 33 MB of RGBA, and
   twice that as the compositor's half-float texture. ADR-0073's "up to 64 times its pixels"
-  for a text enlarged and then hidden becomes "up to a 4K canvas's pixels".
+  for a text enlarged and then hidden becomes "up to a 4K canvas's pixels". The bound is per
+  source, and nothing caps the total: each text shown greatly enlarged holds that much, so
+  ten of them hold about 1 GB between CPU and GPU, and a draw briefly needs about as much
+  again for its coverage and outline on the sources thread.
 - A text larger than a 4K canvas when drawn at the density it is shown at is resampled the
   rest of the way. That is a text cropped to a small part of itself, or shown on a canvas
   larger than 4K.
