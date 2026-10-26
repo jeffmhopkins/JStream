@@ -356,19 +356,24 @@ impl SessionPreviews {
         stream.scene.is_some()
     }
 
-    /// Ends every stream and the binary channel: the session is gone.
-    pub(crate) fn close(&self) {
-        self.drop_streams();
+    /// Ends every stream and the binary channel: the session is gone. Returns whether
+    /// any stream it closed showed a scene.
+    pub(crate) fn close(&self) -> bool {
+        let scenes = self.drop_streams();
         if let Some(sink) = lock(&self.binary).take() {
             wake(lock(&sink).close());
         }
+        scenes
     }
 
-    fn drop_streams(&self) {
+    fn drop_streams(&self) -> bool {
         let streams = std::mem::take(&mut *lock(&self.streams));
+        let mut scenes = false;
         for stream in streams.into_values() {
             stream.closed.store(true, Ordering::Release);
+            scenes |= stream.scene.is_some();
         }
+        scenes
     }
 }
 

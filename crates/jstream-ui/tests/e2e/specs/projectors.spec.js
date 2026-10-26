@@ -72,4 +72,9 @@ test('the multiview shows program over the scenes marked for it', async ({ page,
   // The scene on program has the red frame.
   await expect(scenes.filter({ hasText: 'Main' })).toHaveClass(/live/);
   await expect(scenes.filter({ hasText: 'Intro' })).not.toHaveClass(/live/);
+
+  // Studio mode turned on in the workspace reaches the open multiview.
+  await expect(popup.locator('.multiview')).not.toHaveClass(/studio/);
+  await page.locator('header.app-header').getByRole('button', { name: 'Studio mode' }).click();
+  await expect(popup.locator('.multiview')).toHaveClass(/studio/);
 });

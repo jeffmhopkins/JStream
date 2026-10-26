@@ -320,7 +320,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   stream ends (a deleted scene), and unsubscribes when it goes. One picture asks for the
   screen's size in device pixels, at most 1920×1080, at 30 fps. The multiview shows
   program (with preview beside it while the page's studio mode, read from the browser's
-  storage, is on) over up to 8 scenes that are not groups and are marked "Show in
+  storage and followed as the workspace changes it, is on) over up to 8 scenes that are not groups and are marked "Show in
   multiview", red-framed on program and green on preview. A double click fills the
   screen (the Fullscreen API) or leaves it, Escape closes a projector that isn't full
   screen, and the pointer and the hint at the bottom hide after 2 s without moving. A

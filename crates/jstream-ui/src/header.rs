@@ -128,6 +128,18 @@ pub(crate) fn kept_studio_mode() -> bool {
         .is_some_and(|value| value == "on")
 }
 
+/// Calls `changed` with studio mode each time another window of this browser (the
+/// workspace, seen from a projector) keeps a new value, until the calling component is
+/// cleaned up.
+pub(crate) fn on_kept_studio_mode(changed: impl Fn(bool) + 'static) {
+    let listener = window_event_listener(leptos::ev::storage, move |event| {
+        if event.key().as_deref() == Some(STUDIO_MODE_KEY) {
+            changed(event.new_value().as_deref() == Some("on"));
+        }
+    });
+    on_cleanup(move || listener.remove());
+}
+
 /// Keeps studio mode in the browser's storage, when it has storage.
 fn keep_studio_mode(on: bool) {
     if let Ok(Some(storage)) = window().local_storage() {

@@ -282,7 +282,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   scene in a window or full screen and opens `?projector=scene:intro`; Program full
   screen opens `&full=1` and, in a browser, says to double-click it; the multiview shows
   program captioned with Main, no preview outside studio mode, and Intro and Main below
-  it, Main framed as on program. The mock engine sends no preview streams, so no test
+  it, Main framed as on program, and turns to studio mode when the workspace does. The mock engine sends no preview streams, so no test
   checks a picture: the engine's tests check the frames.
 
 <a id="running"></a>

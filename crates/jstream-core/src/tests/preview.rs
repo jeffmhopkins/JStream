@@ -408,6 +408,21 @@ fn deleting_the_scene_ends_its_stream() {
     assert!(engine.previewed_scenes().is_empty());
 }
 
+/// A session's end stops planning the scenes its streams showed.
+#[test]
+fn a_session_end_stops_planning_its_scenes() {
+    let engine = Engine::new().with_cpu_compositor();
+    let control = connected(&engine);
+    let mut frames = control.binary();
+    batch(&control, edits(vec![create("main"), create("other")])).expect("scenes");
+    act(&control, subscribe_scene(4, "other")).expect("subscribed");
+    frame(&mut frames);
+    assert_eq!(engine.previewed_scenes(), vec![SceneId::new("other")]);
+    drop(frames);
+    drop(control);
+    assert!(engine.previewed_scenes().is_empty());
+}
+
 /// A scene's stream costs the program stage nothing: a display only that scene shows
 /// is not captured, since a preview draws a capture as nothing.
 #[test]

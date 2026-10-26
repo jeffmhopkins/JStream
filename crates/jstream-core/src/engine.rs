@@ -1960,6 +1960,12 @@ impl Engine {
         state.live.set_media(media, state.graph.state());
     }
 
+    /// Re-plans now, so the scenes preview streams show follow streams that a session's
+    /// end closed.
+    pub(crate) fn replan_previews(&self) {
+        self.shared.replan_and_sync();
+    }
+
     /// Re-plans the program mix and each video mix's scene now, as the live sources'
     /// thread does when a frame is due, for tests that move time by hand.
     #[cfg(test)]

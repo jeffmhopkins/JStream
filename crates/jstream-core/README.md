@@ -393,7 +393,7 @@ state machine. Contents:
   the subscription checks and limit, unsubscribe and the session's end, and a reader
   that stops reading holding a bounded queue and resuming in order, a live value
   sent at once with the same `rev`, and a scene's stream: a scene off program shown and
-  followed, then no longer planned once closed, a scene the collection doesn't have
+  followed, then no longer planned once closed or once its session ends, a scene the collection doesn't have
   refused, a deleted scene's stream ended, and nothing captured for it), the
   collection file (`src/tests/collection.rs`: created when missing, batches, an undo
   and a redo each saved, a saved collection loaded by a new engine with its `rev` and
@@ -1340,7 +1340,8 @@ thread alone: the render thread never sees them, so a scene stream costs an outp
 nothing. It looks its sources up with `LiveSources::look_quiet`, which doesn't count as
 reaching them, so a scene stream never makes a source shown again or heard (ADR-0028),
 and the plans' next frame changes join the program's wake. `preview.subscribe` and a
-`preview.unsubscribe` of a scene stream re-plan at once; until its scene is planned the
+`preview.unsubscribe` of a scene stream re-plan at once, as does the end of a session
+that had one; until its scene is planned the
 stream waits. A scene the collection doesn't have is `not_found`, and when a scene with
 streams is deleted the re-plan ends them with the end frame "the scene was deleted"
 (`PreviewHub::end_scene`).

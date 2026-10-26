@@ -568,7 +568,8 @@ pub fn Projector(
 #[component]
 fn Multiview() -> impl IntoView {
     let studio = expect_context::<Studio>();
-    let studio_mode = crate::header::kept_studio_mode();
+    let studio_mode = RwSignal::new(crate::header::kept_studio_mode());
+    crate::header::on_kept_studio_mode(move |on| studio_mode.set(on));
     let scenes = Memo::new(move |_| {
         studio.collection.with(|c| {
             c.as_ref()
@@ -603,9 +604,9 @@ fn Multiview() -> impl IntoView {
             .unwrap_or_default()
     };
     view! {
-        <div class="multiview" class:studio=studio_mode>
+        <div class="multiview" class:studio=move || studio_mode.get()>
             <div class="multiview-top">
-                {move || studio_mode.then(preview).flatten()}
+                {move || studio_mode.get().then(preview).flatten()}
                 <figure class="tile program">
                     <Picture scene=None max=(960, 540) fps=30 />
                     <figcaption>"Program · "{program_name}</figcaption>
@@ -622,7 +623,7 @@ fn Multiview() -> impl IntoView {
                         };
                         let on_preview = {
                             let id = id.clone();
-                            move || studio_mode && studio.preview.get().as_ref() == Some(&id)
+                            move || studio_mode.get() && studio.preview.get().as_ref() == Some(&id)
                         };
                         view! {
                             <figure class="tile" class:live=on_program class:cued=on_preview>
