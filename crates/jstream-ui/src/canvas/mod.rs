@@ -1031,6 +1031,8 @@ pub fn Canvas() -> impl IntoView {
         });
         shown.is_some() && studio.program.with(|program| *program == shown)
     };
+    // Whether the live picture is under the boxes.
+    let pictured = move || on_program() && preview_state.get() == PreviewState::Live;
     let preview_message = move || {
         if on_program() {
             preview_state.get().message()
@@ -1053,12 +1055,12 @@ pub fn Canvas() -> impl IntoView {
     // Screen pixels in canvas units, for handle sizes and label text.
     let px = move |screen: f32| viewport.get().map_or(screen, |v| v.canvas_len(screen));
 
-    // Over the live picture only the selection and the box under the pointer are drawn;
-    // without it every box is, faintly, with its name.
+    // Over the live picture only the selection, the box under the pointer and hidden
+    // items are drawn; without it every box is, faintly, with its name.
     let boxes = move || {
         let picked = chosen.get();
         let under = hovered.get();
-        let pictured = on_program() && preview_state.get() == PreviewState::Live;
+        let pictured = pictured();
         shown()
             .into_iter()
             .filter_map(|(id, name, geometry, visible)| {
@@ -1067,7 +1069,7 @@ pub fn Canvas() -> impl IntoView {
                     (selection_colour(picked.len(), crop_mode.get()), "2")
                 } else {
                     (
-                        unselected_outline(under.as_ref() == Some(&id), pictured)?,
+                        unselected_outline(under.as_ref() == Some(&id), pictured, visible)?,
                         "1",
                     )
                 };
@@ -1423,7 +1425,7 @@ pub fn Canvas() -> impl IntoView {
                     style:width=move || screen_box().map(|b| format!("{}px", b.2))
                     style:height=move || screen_box().map(|b| format!("{}px", b.3))
                     style:visibility=move || {
-                        if on_program() && preview_state.get() == PreviewState::Live {
+                        if pictured() {
                             "visible"
                         } else {
                             "hidden"
@@ -1536,11 +1538,12 @@ fn handle_cursor(handle: Handle) -> &'static str {
 
 /// The outline of an item that isn't selected: a light one under the pointer, a faint one
 /// while no live picture is under the boxes, else none, so a source over the picture
-/// shows no box until it is selected or pointed at.
-fn unselected_outline(hovered: bool, pictured: bool) -> Option<&'static str> {
+/// shows no box until it is selected or pointed at. A hidden item isn't in the picture
+/// but still takes clicks, so it keeps its faint (dashed) outline.
+fn unselected_outline(hovered: bool, pictured: bool, visible: bool) -> Option<&'static str> {
     if hovered {
         Some(HOVER)
-    } else if pictured {
+    } else if pictured && visible {
         None
     } else {
         Some(IDLE)
@@ -1816,10 +1819,12 @@ mod tests {
 
     #[test]
     fn unselected_boxes_hide_over_the_live_picture() {
-        assert_eq!(unselected_outline(false, true), None);
-        assert_eq!(unselected_outline(true, true), Some(HOVER));
-        assert_eq!(unselected_outline(false, false), Some(IDLE));
-        assert_eq!(unselected_outline(true, false), Some(HOVER));
+        assert_eq!(unselected_outline(false, true, true), None);
+        assert_eq!(unselected_outline(true, true, true), Some(HOVER));
+        assert_eq!(unselected_outline(false, false, true), Some(IDLE));
+        assert_eq!(unselected_outline(true, false, true), Some(HOVER));
+        // A hidden item still takes clicks, so it stays outlined over the picture.
+        assert_eq!(unselected_outline(false, true, false), Some(IDLE));
     }
 
     #[test]

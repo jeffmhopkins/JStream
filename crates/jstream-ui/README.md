@@ -654,8 +654,9 @@ browser, and `mod.rs` is the component.
   draws. An item still stored as a 0.3 legacy placement is not drawn: its box depends
   on the source's runtime size, which the canvas doesn't evaluate a legacy transform
   against yet (ADR-0022 decision 5), and a note top left counts such items. Over the live
-  picture only the selected items and the box under the pointer are outlined, so an
-  unselected source shows no box; without the picture every box gets a faint outline and
+  picture only the selected items, the box under the pointer and hidden items (which
+  aren't in the picture but still take clicks) are outlined, so an unselected source
+  shows no box; without the picture every box gets a faint outline and
   its name. Hidden items are drawn dashed, and the box under the pointer gets a light
   outline. A keyframe scene shows its
   parent's items at its overrides under a banner, "◆ Keyframe of “<parent>”: only
