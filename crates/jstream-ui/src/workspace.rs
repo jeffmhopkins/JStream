@@ -46,6 +46,17 @@ fn keep(dock: &Dock) {
     }
 }
 
+/// A panel whose engine side isn't there yet: its title and what it waits on.
+fn waiting(title: &'static str, note: &'static str) -> AnyView {
+    view! {
+        <section class="panel waiting-panel">
+            <h2>{title}</h2>
+            <p class="placeholder">{note}</p>
+        </section>
+    }
+    .into_any()
+}
+
 /// A panel's content.
 fn panel_view(panel: PanelId) -> AnyView {
     match panel {
@@ -57,6 +68,22 @@ fn panel_view(panel: PanelId) -> AnyView {
         PanelId::Transitions => view! { <StudioMode /> }.into_any(),
         PanelId::Transform => view! { <Transform /> }.into_any(),
         PanelId::Filters => view! { <Filters /> }.into_any(),
+        PanelId::Chat => waiting(
+            "Live chat",
+            "Live chat shows a YouTube broadcast's chat once JStream can sign in to YouTube, \
+             which this build can't yet. Streaming with a stream key works without it.",
+        ),
+        PanelId::Stats => waiting(
+            "Stream stats",
+            "Stream stats show a YouTube broadcast's viewers and stream health once JStream \
+             can sign in to YouTube, which this build can't yet. The header counts dropped \
+             frames.",
+        ),
+        PanelId::Agent => waiting(
+            "Agent activity",
+            "Agent activity lists what agents connected to the engine changed. The engine \
+             doesn't keep that log yet.",
+        ),
     }
 }
 

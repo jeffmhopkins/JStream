@@ -1031,7 +1031,7 @@ fn PresetRow(panel: Panel, preset_id: TransitionPresetId) -> impl IntoView {
                 when=move || editing.get()
                 fallback=move || {
                     view! {
-                        <div class="buttons">
+                        <div class="buttons row-hover-tools">
                             <button on:click=move |_| editing.set(true)>"Edit"</button>
                             <button disabled=is_default on:click=make_default>
                                 "Make default"

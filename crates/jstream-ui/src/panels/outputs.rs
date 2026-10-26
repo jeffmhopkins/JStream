@@ -14,6 +14,7 @@
 
 use crate::app::SessionContext;
 use crate::dock::PanelId;
+use crate::icons::Icon;
 use crate::panels::filters::FilterDialogs;
 use crate::session::Session;
 use crate::workspace::DockState;
@@ -384,6 +385,16 @@ pub fn describe_kind(kind: &OutputKind) -> String {
         OutputKind::Record { path, .. } => format!("Record to {path}"),
         OutputKind::VirtualCam => "Virtual camera: the program as a webcam".into(),
         _ => "An output kind this page doesn't know".into(),
+    }
+}
+
+/// The icon of an output of this kind (WS-04): the broadcast arcs for a stream, film
+/// for a recording, the webcam for the virtual camera.
+pub fn kind_icon(kind: &OutputKind) -> &'static str {
+    match kind {
+        OutputKind::Record { .. } => "film",
+        OutputKind::VirtualCam => "webcam",
+        _ => "out",
     }
 }
 
@@ -926,6 +937,10 @@ fn OutputCard(panel: Panel, output_id: OutputId) -> impl IntoView {
     view! {
         <li class="output">
             <div class="output-head">
+                {move || {
+                    row.with(|row| row.as_ref().map(|row| kind_icon(&row.info.kind)))
+                        .map(|icon| view! { <span class="output-icon"><Icon name=icon size=15 /></span> })
+                }}
                 <strong>{output_id.to_string()}</strong>
                 <span
                     class="badge"
