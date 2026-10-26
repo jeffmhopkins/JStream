@@ -1062,7 +1062,7 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .pairing-open { display: grid; gap: 0.25rem; }
 .pairing-code {
   margin: 0;
-  font-family: ui-monospace, monospace;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 1.6rem;
   letter-spacing: 0.15em;
 }
