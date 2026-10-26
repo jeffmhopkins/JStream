@@ -199,6 +199,7 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
 .connection dd { margin: 0; overflow-wrap: anywhere; font-family: "IBM Plex Mono", ui-monospace, monospace; }
 .header-button { padding: 8px 14px; background: var(--menu); border-color: var(--border); }
 .header-button.on { background: var(--danger-dark); border-color: #e5484d; }
+.header-button.studio-mode.on { background: var(--selected); border-color: var(--accent); }
 .header-button.privacy { display: flex; align-items: center; gap: 6px; padding: 8px 12px; }
 .go-live { padding: 8px 18px; border: none; background: var(--danger); color: #fff; font-weight: 600; }
 .go-live:hover:not(:disabled) { background: #d6383f; }
@@ -1101,19 +1102,23 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
   color: var(--text);
 }
 .studio summary { cursor: pointer; color: var(--muted); }
-.preset-list { list-style: none; margin: 0.5rem 0 0; padding: 0; display: grid; gap: 0.5rem; }
-.preset { display: grid; gap: 0.3rem; padding: 0.5rem; border: 1px solid var(--line); border-radius: 8px; }
-.preset-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
 .studio .buttons { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-.preset-form {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
-  gap: 0.4rem 0.75rem;
-  align-items: end;
-  padding-top: 0.5rem;
-}
-.preset-form h3, .preset-form .problem, .preset-form .buttons { grid-column: 1 / -1; }
-.preset-form label { display: grid; gap: 0.25rem; color: var(--muted); font-size: 0.85rem; }
+.presets { display: grid; gap: 8px; }
+.studio .presets h3 { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: var(--muted); }
+.studio select.preset-picker { height: 30px; width: 100%; }
+.preset-editor { display: grid; gap: 8px; }
+.preset-row { display: flex; align-items: center; gap: 10px; }
+.preset-row input { width: 160px; }
+.preset-editor .segmented { display: grid; grid-template-columns: repeat(3, 1fr); }
+.preset-editor .segment { position: relative; display: flex; justify-content: center; padding: 4px 10px; border-radius: 4px; color: var(--muted); font-size: 12px; cursor: pointer; }
+.preset-editor .segment.on { background: var(--selected); color: var(--text); }
+.preset-editor .segment input { position: absolute; opacity: 0; pointer-events: none; }
+.preset-editor .segment:focus-within { outline: 2px solid var(--accent); outline-offset: -2px; }
+.preset-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; }
+.preset-fields label { display: grid; gap: 4px; color: var(--muted); font-size: 12px; }
+.preset-editor .note { margin: 0; color: var(--dim); font-size: 11px; }
+.studio button.danger-text { color: var(--problem); }
+.studio-off { padding: 4px 0; }
 .overrides { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
 .overrides th { text-align: left; color: var(--muted); font-weight: 600; }
 .overrides td, .overrides th { padding: 0.25rem 0.4rem 0.25rem 0; }
@@ -1214,6 +1219,10 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 /* The Properties dialog (spec-workspace.md 6.2): name and settings on the left, filters
    on the right; Defaults sits apart from Cancel and OK. */
 .modal.props-dialog { width: 860px; height: 640px; }
+.modal.scene-props-dialog { width: 460px; }
+.scene-props-dialog .props-settings { display: grid; gap: 12px; }
+.field-note { color: var(--dim); font-size: 11px; }
+.hotkey-field { font-family: "IBM Plex Mono", ui-monospace, monospace; cursor: pointer; }
 .props-head { display: flex; align-items: center; gap: 10px; }
 .props-head .icon { color: var(--muted); }
 .props-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 1.15fr 1fr; }
@@ -1395,8 +1404,5 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 /* A menu line's colour swatch column (spec-workspace.md 5.1.2): transparent unless set. */
 .ctx-swatch { flex: 0 0 8px; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; }
 .ctx-swatch + .ctx-label { margin-left: 6px; }
-/* Row tools that fade in on hover or focus (WS-07), for rows outside the trees. */
-.row-hover-tools { opacity: 0; transition: opacity 120ms; }
-.preset:hover .row-hover-tools, .preset:focus-within .row-hover-tools { opacity: 1; }
 .output-head .output-icon { display: inline-flex; margin-right: 6px; color: var(--muted); vertical-align: middle; }
 .field .reset { display: inline-flex; align-items: center; justify-content: center; }

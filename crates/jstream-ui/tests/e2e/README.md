@@ -51,7 +51,9 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   sends the page a `meters.tick`, which the mock engine never sends.
   `sourceSizes` routes it to answer `source.sizes` with the sizes a test gives, since
   the mock makes no frames and reports none, and returns a function that sends the
-  page a `source.size_changed`.
+  page a `source.size_changed`. `recordCalls` routes it too, passing everything on, and
+  its `sent(type)` lists every edit or action of that type the page has sent, for the
+  transition edits the mock engine refuses.
 - **Console errors fail a test.** Every console error and uncaught exception on a
   test's pages fails it, unless the test allows that message. A Content-Security-Policy
   violation is a console error, so a style or script the policy refuses fails too.
@@ -78,7 +80,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   is served beside them.
 - **Scenes and sources** (`scenes.spec.js`): the seed's scenes in order with the
   program scene's "program" badge, selected, and its item listed under the scene's
-  caption; putting a scene on program, which a second client follows; F2 renaming a
+  caption; a click putting a scene on program, which a second client follows, and in
+  studio mode on preview, with the hover button putting it on program and the mode
+  kept over a reload; F2 renaming a
   scene in place (Del inside the field deletes a character, not the scene) and a drag reordering the scenes, which a second client follows and
   which doesn't select the dragged row; the search boxes and the favourites filter
   with its count, Favorites only and Clear; hiding and showing an item with its eye,
@@ -231,17 +235,27 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 - **Keyframes and hotkeys** (`keyframes.spec.js`): New keyframe on Main's row nests
   "Keyframe 1" under it with the diamond, selected, under the canvas banner, and Main's
   caret folds it away and back; in the keyframe, the eye and the X field write its
-  overrides while Main's own item stays as it was, the blend mode is locked, and the
+  overrides while Main's own item stays as it was, the blend mode is locked, the Scene switches section is gone, and the
   item menu's Remove from scene and layer order are disabled; Reset to “Main” clears
   the overrides, after which the canvas's Ctrl+D and Del change nothing there; Switch
   to it puts it on program, and Delete keyframe removes it and selects Main. The Inspector's Hotkey row binds F1 to Intro (which a second client
   sees), F1 on the canvas then puts Intro on program on both clients, binding F1 to
   Main takes it from Intro, Escape cancels a capture and × unbinds.
-- **Studio mode** (`studio.spec.js`, on the Transitions tab): a scene picked for
-  preview goes to program with Transition, and the old program scene comes back on
-  preview; Transition and Cut are off while preview is the program scene; a value the
-  preset form refused keeps the preset from being added. The mock engine refuses
-  preset edits, so the edits the preset form sends are tested natively.
+- **Studio mode** (`studio.spec.js`, on the Transitions tab): in studio mode a scene
+  picked for preview goes to program with Transition, and the old program scene comes
+  back on preview; Transition and Cut are off while preview is the program scene; the
+  studio bar shows only in studio mode; the preset picker lists the default with its
+  kind and "+ New preset…", the default's editor has no duration, Delete or Make
+  default and counts its overrides, and choosing Fade and "+ New preset…" send their
+  `transition.update` and `transition.create`. The mock engine refuses preset edits,
+  so the panel after an edit is tested natively.
+- **Scene transitions** (`transitions.spec.js`): a scene row's Transition in submenu
+  checks "Default (Cut)", lists the Cut preset with its kind, and sends
+  `scene.set_transitions`, and Manage presets… shows the Transitions tab; a double click
+  opens the scene's Properties dialog, whose hotkey field takes a chord, clears on
+  Backspace, and with a new name is saved by OK and read back by the dialog; the canvas margin's Scene properties… opens it for the shown scene; the
+  Inspector's Scene switches send `item.set_transition` with the whole settings. The
+  mock engine refuses the transition edits after the page has sent them.
 - **Privacy screen** (`privacy.spec.js`, on the header, the canvas and the Audio
   mixer tab): the Privacy button turning it on, with "Privacy on" pressed, the canvas
   frame blurred under its notice and the Mic's row reading "muted (privacy)" while
@@ -249,7 +263,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   field, and a second client following each change and turning it off with Pause, and
   then on again from a scene's rename field, which keeps its other keys; Pause
   toggling it while the Inspector's Set key waits, which leaves Pause unbound and
-  binds the next key; a
+  binds the next key; Pause toggling it from the scene Properties dialog's Hotkey
+  field, which stays empty and takes the next key; a
   client that connects while it is on showing it at once; and the vertical mixer's
   Mic strip reading "muted (privacy)" under its short name while Desktop audio's
   doesn't.

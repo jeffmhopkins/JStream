@@ -13,6 +13,7 @@ use crate::panels::filters::{AddFilter, FilterDialogs, FilterSettings};
 use crate::panels::inspector::Folds;
 use crate::panels::labels::LabelManager;
 use crate::panels::mixer::MixerOrientation;
+use crate::panels::scene_properties::{SceneDialog, SceneProperties};
 use crate::panels::source_properties::{PropertiesDialog, SourceProperties};
 use crate::session::{Session, engine_url_for_page};
 use crate::store::Studio;
@@ -253,6 +254,7 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
     provide_context(Menus::new());
     provide_context(AddSourceDialog::new());
     provide_context(PropertiesDialog::new());
+    provide_context(SceneDialog::new());
     provide_context(FilterDialogs::new());
     provide_context(Folds::restore());
     provide_context(LabelManager::new());
@@ -271,6 +273,7 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
             <Hotkeys />
             <AddSource />
             <SourceProperties />
+            <SceneProperties />
             <AddFilter />
             <FilterSettings />
             <ContextMenu />

@@ -18,6 +18,7 @@ pub mod mixer;
 pub mod number;
 pub mod outputs;
 pub mod properties;
+pub mod scene_properties;
 mod scenes;
 pub mod source_properties;
 mod sources;

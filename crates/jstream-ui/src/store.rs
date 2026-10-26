@@ -14,7 +14,7 @@ use jstream_control::protocol::{
     FilterChains, FilterOwner, FolderId, FolderInfo, HotkeyBinding, ItemId, ItemInfo, ItemOverride,
     KindDescriptor, KindSummary, LabelInfo, OutputId, OutputInfo, OverrideField, PlacementForm,
     Query, QueryResult, Rev, SceneId, SceneInfo, SceneRole, SourceId, SourceInfo, SourceKind,
-    SourceSize,
+    SourceSize, TransitionPresetId, TransitionPresetInfo, TransitionsInfo,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -46,6 +46,8 @@ pub struct Collection {
     pub hotkeys: Vec<HotkeyBinding>,
     /// The scene list's folders, in folder order (ADR-0024 §3, ADR-0064).
     pub folders: Vec<FolderInfo>,
+    /// The transition presets and which one is the default.
+    pub transitions: TransitionsInfo,
 }
 
 impl Collection {
@@ -63,6 +65,7 @@ impl Collection {
                 master,
                 hotkeys,
                 folders,
+                transitions,
                 ..
             } => {
                 let mut scenes = scenes;
@@ -91,6 +94,7 @@ impl Collection {
                     master: master.filters,
                     hotkeys,
                     folders,
+                    transitions: *transitions,
                 })
             }
             _ => None,
@@ -207,6 +211,27 @@ impl Collection {
     /// (ADR-0024), since they are shown under the items that place them.
     pub fn listed_scenes(&self) -> impl Iterator<Item = &SceneInfo> {
         self.scenes.iter().filter(|s| s.role == SceneRole::Scene)
+    }
+
+    /// The transition preset with this ID.
+    pub fn preset(&self, preset_id: &TransitionPresetId) -> Option<&TransitionPresetInfo> {
+        self.transitions
+            .presets
+            .iter()
+            .find(|p| &p.preset_id == preset_id)
+    }
+
+    /// A preset's display name, falling back to its ID.
+    pub fn preset_name(&self, preset_id: &TransitionPresetId) -> String {
+        self.preset(preset_id)
+            .map_or_else(|| preset_id.to_string(), |p| p.name.clone())
+    }
+
+    /// The chord bound to switching to this scene (`scene.switch` naming it), if any.
+    pub fn scene_hotkey(&self, scene_id: &SceneId) -> Option<&HotkeyBinding> {
+        self.hotkeys.iter().find(|binding| {
+            matches!(binding.action(), Some(Action::SceneSwitch { scene_id: id, .. }) if &id == scene_id)
+        })
     }
 
     /// A source's display name, falling back to its ID.
@@ -354,6 +379,23 @@ impl Selection {
             ..Selection::default()
         }
         .with_items(kept)
+    }
+}
+
+/// What a click on `scene_id` in the scene list sends: in studio mode a
+/// `studio.set_preview`, else a `scene.switch` that lets the engine choose the preset.
+/// It is sent even for a scene the page thinks is there already: the engine treats
+/// both as no-ops then, and the page's copy may be stale.
+pub fn scene_click(studio_mode: bool, scene_id: &SceneId) -> Action {
+    if studio_mode {
+        Action::StudioSetPreview {
+            scene_id: scene_id.clone(),
+        }
+    } else {
+        Action::SceneSwitch {
+            scene_id: scene_id.clone(),
+            preset_id: None,
+        }
     }
 }
 
@@ -520,6 +562,12 @@ pub struct Studio {
     pub collection: RwSignal<Option<Collection>>,
     /// The scene on program.
     pub program: RwSignal<Option<SceneId>>,
+    /// The scene on preview.
+    pub preview: RwSignal<Option<SceneId>>,
+    /// Whether studio mode is on: clicking a scene puts it on preview, and the
+    /// Transitions panel shows preview and program. The engine has no such switch, so
+    /// this is the page's, kept in the browser's storage.
+    pub studio_mode: RwSignal<bool>,
     /// Whether the privacy screen is on (ADR-0027 §4), as `privacy.get` and then each
     /// `privacy.changed` reported it.
     pub privacy: RwSignal<bool>,
@@ -546,6 +594,9 @@ pub struct Studio {
     pub keys_changed: RwSignal<u64>,
     /// Whether a `state.get` is in flight, and whether another is due after it.
     refresh: StoredValue<(bool, bool)>,
+    /// Bumped by each `studio.changed`, so a `studio.get` answer that an event
+    /// overtook is dropped.
+    studio_seq: StoredValue<u64>,
     /// The counter [`fresh_id`] continues from.
     next_id: StoredValue<u64>,
     /// The number the next toast takes. It only grows, so a timer left from an earlier
@@ -559,6 +610,8 @@ impl Studio {
         Studio {
             collection: RwSignal::new(None),
             program: RwSignal::new(None),
+            preview: RwSignal::new(None),
+            studio_mode: RwSignal::new(false),
             privacy: RwSignal::new(false),
             privacy_reports: StoredValue::new(PrivacyReports::default()),
             selection: RwSignal::new(Selection::default()),
@@ -570,6 +623,7 @@ impl Studio {
             toast: RwSignal::new(None),
             keys_changed: RwSignal::new(0),
             refresh: StoredValue::new((false, false)),
+            studio_seq: StoredValue::new(0),
             next_id: StoredValue::new(0),
             next_toast: StoredValue::new(0),
         }
@@ -579,6 +633,7 @@ impl Studio {
     pub fn reset(&self) {
         self.collection.set(None);
         self.program.set(None);
+        self.preview.set(None);
         self.privacy_reports.update_value(PrivacyReports::reset);
         self.privacy.set(false);
         self.selection.set(Selection::default());
@@ -598,11 +653,7 @@ impl Studio {
         studio.read_privacy(session);
         let first = session.clone();
         spawn_local(async move {
-            if let Ok(QueryResult::StudioGet { program_scene, .. }) =
-                query(&first, Query::StudioGet).await
-            {
-                studio.program.set(program_scene);
-            }
+            studio.read_studio(&first).await;
             // The state is read after the program scene, so the first selection is the
             // scene on program.
             studio.refresh(&first);
@@ -612,6 +663,39 @@ impl Studio {
         spawn_local(async move {
             studio.take_kinds(list_kinds(&kinds).await);
         });
+    }
+
+    /// Reads the program and preview scenes with `studio.get`, unless a
+    /// `studio.changed` arrives while it is in flight: that event is newer.
+    async fn read_studio(&self, session: &Session) {
+        let asked = self.studio_seq.get_value();
+        if let Ok(QueryResult::StudioGet {
+            program_scene,
+            preview_scene,
+        }) = query(session, Query::StudioGet).await
+        {
+            self.take_studio(asked, program_scene, preview_scene);
+        }
+    }
+
+    /// Keeps a `studio.get` answer asked for at `asked` (the [`Studio::studio_seq`] then),
+    /// unless a `studio.changed` came in since. Returns whether it was kept.
+    fn take_studio(&self, asked: u64, program: Option<SceneId>, preview: Option<SceneId>) -> bool {
+        if self.studio_seq.get_value() != asked {
+            return false;
+        }
+        self.program.set(program);
+        self.preview.set(preview);
+        self.reconcile();
+        true
+    }
+
+    /// Follows a `studio.changed`.
+    fn studio_changed(&self, program: Option<SceneId>, preview: Option<SceneId>) {
+        self.studio_seq.update_value(|seq| *seq += 1);
+        self.program.set(program);
+        self.preview.set(preview);
+        self.reconcile();
     }
 
     /// Keeps the kinds `kind.list` answered. A failed `kind.list` shows its error in the
@@ -636,13 +720,17 @@ impl Studio {
                     self.refresh(session);
                 }
             }
+            // A dropped `studio.changed` is recovered too.
             Event::EventsDropped { .. } => {
                 // A dropped `privacy.changed` would leave the indicator wrong.
                 self.refresh(session);
                 self.read_privacy(session);
                 let studio = *self;
                 let session = session.clone();
-                spawn_local(async move { studio.read_sizes(&session).await });
+                spawn_local(async move {
+                    studio.read_studio(&session).await;
+                    studio.read_sizes(&session).await;
+                });
             }
             Event::PrivacyChanged { on, .. } => {
                 self.privacy_reports.update_value(PrivacyReports::changed);
@@ -652,10 +740,11 @@ impl Studio {
                 Some(size) => _ = sizes.insert(source_id.clone(), (size.width, size.height)),
                 None => _ = sizes.remove(source_id),
             }),
-            Event::StudioChanged { program_scene, .. } => {
-                self.program.set(program_scene.clone());
-                self.reconcile();
-            }
+            Event::StudioChanged {
+                program_scene,
+                preview_scene,
+                ..
+            } => self.studio_changed(program_scene.clone(), preview_scene.clone()),
             _ => {}
         }
     }
@@ -747,6 +836,12 @@ impl Studio {
             self.leave_crop_mode_for(next.scene.as_ref());
             self.selection.set(next);
         }
+    }
+
+    /// What a click on a scene in the list does besides selecting it: in studio mode it
+    /// goes on preview, else on program (with the transition the engine resolves).
+    pub fn click_action(&self, scene_id: &SceneId) -> Action {
+        scene_click(self.studio_mode.get_untracked(), scene_id)
     }
 
     /// Selects a scene, and no item.
@@ -936,7 +1031,7 @@ fn unexpected(what: &str) -> ControlError {
 mod tests {
     use super::{
         Collection, PrivacyReports, Selection, Studio, apply, fresh_id, list_kinds, plan_summary,
-        query, reset_edits, sizes_of,
+        query, reset_edits, scene_click, sizes_of,
     };
     use crate::session::Session;
     use jstream_control::protocol::{
@@ -1364,5 +1459,62 @@ mod tests {
         let taken = |id: &str| id == "scene-c1-1";
         assert_eq!(fresh_id("scene", "c1", &mut next, taken), "scene-c1-2");
         assert_eq!(fresh_id("scene", "c1", &mut next, taken), "scene-c1-3");
+    }
+
+    /// Outside studio mode a click puts the scene on program; in it, on preview.
+    #[test]
+    fn a_click_on_a_scene_switches_or_previews_it() {
+        use jstream_control::protocol::Action;
+        let b = SceneId::new("b");
+        assert_eq!(
+            scene_click(false, &b),
+            Action::SceneSwitch {
+                scene_id: b.clone(),
+                preset_id: None
+            }
+        );
+        assert_eq!(
+            scene_click(true, &b),
+            Action::StudioSetPreview { scene_id: b }
+        );
+    }
+
+    /// A `studio.get` answer that a `studio.changed` overtook is stale, and dropped;
+    /// one that nothing overtook is kept.
+    #[test]
+    fn a_studio_get_answer_overtaken_by_an_event_is_dropped() {
+        let (main, intro) = (SceneId::new("main"), SceneId::new("intro"));
+        let studio = Studio::new();
+        let asked = studio.studio_seq.get_value();
+        studio.studio_changed(Some(main.clone()), Some(intro.clone()));
+        assert!(!studio.take_studio(asked, Some(main.clone()), Some(main.clone())));
+        assert_eq!(studio.preview.get_untracked(), Some(intro.clone()));
+
+        let asked = studio.studio_seq.get_value();
+        assert!(studio.take_studio(asked, Some(intro.clone()), Some(main.clone())));
+        assert_eq!(studio.program.get_untracked(), Some(intro));
+        assert_eq!(studio.preview.get_untracked(), Some(main));
+    }
+
+    #[test]
+    fn a_scene_s_hotkey_is_the_binding_that_switches_to_it() {
+        use jstream_control::protocol::{Action, Chord, HotkeyBinding};
+        let switch = |id: &str| Action::SceneSwitch {
+            scene_id: SceneId::new(id),
+            preset_id: None,
+        };
+        let c = Collection {
+            hotkeys: vec![
+                HotkeyBinding::new(Chord::new("F1"), &switch("a")),
+                HotkeyBinding::new(Chord::new("F2"), &switch("b")),
+            ],
+            ..Collection::default()
+        };
+        let chord = |id: &str| {
+            c.scene_hotkey(&SceneId::new(id))
+                .map(|b| b.chord.as_str().to_owned())
+        };
+        assert_eq!(chord("b").as_deref(), Some("F2"));
+        assert_eq!(chord("c"), None);
     }
 }

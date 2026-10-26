@@ -4,7 +4,8 @@
 //! (its default prevented, or typed in a field) is left alone, so F2 still renames a
 //! focused scene row. A scene's chords are bound from the Inspector's Hotkey row: the
 //! chord pressed there is bound to `scene.switch` of the scene, taking it from whatever
-//! it ran before.
+//! it ran before. The scene's Properties dialog also sets its first chord, and refuses
+//! one bound to something else.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#keyboard
 

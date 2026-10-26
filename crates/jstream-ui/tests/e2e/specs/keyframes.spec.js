@@ -71,6 +71,8 @@ test('a keyframe nests under its scene and overrides only its own placements', a
   await backdrop(page).locator('.row-main').click();
   await expect(inspector(page).locator('.keyframe-note')).toBeVisible();
   await expect(inspector(page).getByRole('combobox')).toBeDisabled();
+  // A keyframe's items take their scene switches from the parent: no section for them.
+  await expect(inspector(page).locator('section.fold').filter({ hasText: 'Scene switches' })).toHaveCount(0);
   const before = await rev(page);
   await field(page, 'X').fill('100');
   await field(page, 'X').press('Enter');
@@ -110,8 +112,8 @@ test('a keyframe nests under its scene and overrides only its own placements', a
   // Main again.
   await choose(page, 'Keyframe 1', 'Switch to it');
   await expect(keyframe).toHaveAttribute('aria-current', 'true');
-  await scene(page, 'Main').hover();
-  await scene(page, 'Main').getByRole('button', { name: 'Program' }).click();
+  // Outside studio mode a click on Main puts it back on program.
+  await scene(page, 'Main').locator('.row-main').first().click();
   await expect(scene(page, 'Main')).toHaveAttribute('aria-current', 'true');
   await choose(page, 'Keyframe 1', 'Delete keyframe');
   await expect(keyframe).toHaveCount(0);

@@ -19,6 +19,7 @@ use crate::menu::Entry;
 use crate::panels::add_source::{AddSourceDialog, REFERENCE_ADDED, has_picture};
 use crate::panels::filters::FilterDialogs;
 use crate::panels::labels::{self, LabelManager};
+use crate::panels::scene_properties::SceneDialog;
 use crate::panels::source_properties::{self, PropertiesDialog};
 use crate::store::{Collection, Studio};
 use crate::workspace::DockState;
@@ -626,6 +627,7 @@ pub struct Context {
     session: SessionContext,
     adder: Option<AddSourceDialog>,
     props: Option<PropertiesDialog>,
+    scenes: Option<SceneDialog>,
     dock: Option<DockState>,
     labels: Option<LabelManager>,
     filters: Option<FilterDialogs>,
@@ -639,6 +641,7 @@ impl Context {
             session: use_context()?,
             adder: use_context(),
             props: use_context(),
+            scenes: use_context(),
             dock: use_context(),
             labels: use_context(),
             filters: use_context(),
@@ -666,18 +669,20 @@ impl Context {
     }
 
     /// Selects the item alone and opens its source's Properties dialog: a reference's
-    /// is its source's. A nested scene's properties are the scene's, which have no
-    /// dialog yet (DL-03), so it shows in the Inspector.
+    /// is its source's, and a nested scene's is the scene's (DL-03).
     pub fn properties(self, item_id: ItemId) {
         let source = self.studio.collection.with_untracked(|c| {
             let c = c.as_ref()?;
             let (_, item) = c.item(&item_id)?;
             let source = c.source(&item.source_id)?;
-            source_properties::shows(&source.kind).then(|| source.source_id.clone())
+            Some(source.kind.clone()).zip(Some(source.source_id.clone()))
         });
         self.studio.select_item(Some(item_id));
-        match (source, self.props) {
-            (Some(source_id), Some(props)) => props.open(source_id),
+        match (source, self.props, self.scenes) {
+            (Some((SourceKind::Scene { scene_id }, _)), _, Some(scenes)) => scenes.open(scene_id),
+            (Some((kind, source_id)), Some(props), _) if source_properties::shows(&kind) => {
+                props.open(source_id);
+            }
             _ => {
                 if let Some(dock) = self.dock {
                     dock.0.update(|d| d.show(PanelId::Inspector));
