@@ -301,7 +301,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Opens a preview stream of the program mix for this session: low-resolution\npictures sent as binary frames on `channel`, only to this session (ADR-0045).\nThe picture is the canvas scaled down to fit `max_width` × `max_height`, with\neven sides; it follows the canvas when that changes. A picture is sent when what\nthe program mix draws changes, at most `fps` times a second, and at least once\nevery 2 s (a keyframe), so a client that lost frames recovers. The engine picks\nthe first of `codecs` it can encode, and every frame names its codec. The stream\nshows the mix before any master stage. It lasts until `preview.unsubscribe`, the\nsession's end, or an end frame (the engine could not go on; the frame says why).\n\nFails with `invalid_argument` for a field out of range (`max_width` 16 to 1920,\ndefault 640; `max_height` 16 to 1080, default 360; `fps` 1 to 30, default 15), a\ncodec named twice, a `channel` this session already has open (`channel`), or a\nfifth open stream; and with `action_failed` when the session cannot receive\nbinary frames (an MCP session) or none of `codecs` can be encoded here.",
+                "description": "Opens a preview stream of the program mix, or of the scene `scene_id`, for this\nsession: low-resolution pictures sent as binary frames on `channel`, only to this\nsession (ADR-0045). The picture is the canvas scaled down to fit `max_width` ×\n`max_height`, with even sides; it follows the canvas when that changes. A picture\nis sent when what the stream shows changes, at most `fps` times a second, and at\nleast once every 2 s (a keyframe), so a client that lost frames recovers. The\nengine picks the first of `codecs` it can encode, and every frame names its codec.\nThe stream shows the mix before any master stage. A scene's stream shows the\nscene alone, as program would show it with no transition running, and never makes\na source shown or heard (ADR-0028). It lasts until `preview.unsubscribe`, the\nsession's end, or an end frame (the engine could not go on, or the scene was\ndeleted; the frame says why).\n\nFails with `invalid_argument` for a field out of range (`max_width` 16 to 1920,\ndefault 640; `max_height` 16 to 1080, default 360; `fps` 1 to 30, default 15), a\ncodec named twice, a `channel` this session already has open (`channel`), or a\nseventeenth open stream; with `not_found` for a `scene_id` the collection doesn't\nhave; and with `action_failed` when the session cannot receive binary frames (an\nMCP session) or none of `codecs` can be encoded here.",
                 "properties": {
                   "channel": {
                     "description": "The number this stream's binary frames carry, chosen by the client. Not an\nID: it only tells this session's streams apart, and can be reused once the\nstream has ended.",
@@ -342,6 +342,17 @@ source: crates/jstream-mcp/src/tests.rs
                       "integer",
                       "null"
                     ]
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene to show. Omitted for the program mix."
                   },
                   "type": {
                     "const": "preview.subscribe",
@@ -5526,7 +5537,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Opens a preview stream of the program mix for this session: low-resolution\npictures sent as binary frames on `channel`, only to this session (ADR-0045).\nThe picture is the canvas scaled down to fit `max_width` × `max_height`, with\neven sides; it follows the canvas when that changes. A picture is sent when what\nthe program mix draws changes, at most `fps` times a second, and at least once\nevery 2 s (a keyframe), so a client that lost frames recovers. The engine picks\nthe first of `codecs` it can encode, and every frame names its codec. The stream\nshows the mix before any master stage. It lasts until `preview.unsubscribe`, the\nsession's end, or an end frame (the engine could not go on; the frame says why).\n\nFails with `invalid_argument` for a field out of range (`max_width` 16 to 1920,\ndefault 640; `max_height` 16 to 1080, default 360; `fps` 1 to 30, default 15), a\ncodec named twice, a `channel` this session already has open (`channel`), or a\nfifth open stream; and with `action_failed` when the session cannot receive\nbinary frames (an MCP session) or none of `codecs` can be encoded here.",
+                "description": "Opens a preview stream of the program mix, or of the scene `scene_id`, for this\nsession: low-resolution pictures sent as binary frames on `channel`, only to this\nsession (ADR-0045). The picture is the canvas scaled down to fit `max_width` ×\n`max_height`, with even sides; it follows the canvas when that changes. A picture\nis sent when what the stream shows changes, at most `fps` times a second, and at\nleast once every 2 s (a keyframe), so a client that lost frames recovers. The\nengine picks the first of `codecs` it can encode, and every frame names its codec.\nThe stream shows the mix before any master stage. A scene's stream shows the\nscene alone, as program would show it with no transition running, and never makes\na source shown or heard (ADR-0028). It lasts until `preview.unsubscribe`, the\nsession's end, or an end frame (the engine could not go on, or the scene was\ndeleted; the frame says why).\n\nFails with `invalid_argument` for a field out of range (`max_width` 16 to 1920,\ndefault 640; `max_height` 16 to 1080, default 360; `fps` 1 to 30, default 15), a\ncodec named twice, a `channel` this session already has open (`channel`), or a\nseventeenth open stream; with `not_found` for a `scene_id` the collection doesn't\nhave; and with `action_failed` when the session cannot receive binary frames (an\nMCP session) or none of `codecs` can be encoded here.",
                 "properties": {
                   "channel": {
                     "description": "The number this stream's binary frames carry, chosen by the client. Not an\nID: it only tells this session's streams apart, and can be reused once the\nstream has ended.",
@@ -5567,6 +5578,17 @@ source: crates/jstream-mcp/src/tests.rs
                       "integer",
                       "null"
                     ]
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene to show. Omitted for the program mix."
                   },
                   "type": {
                     "const": "preview.subscribe",
@@ -10318,7 +10340,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Opens a preview stream of the program mix for this session: low-resolution\npictures sent as binary frames on `channel`, only to this session (ADR-0045).\nThe picture is the canvas scaled down to fit `max_width` × `max_height`, with\neven sides; it follows the canvas when that changes. A picture is sent when what\nthe program mix draws changes, at most `fps` times a second, and at least once\nevery 2 s (a keyframe), so a client that lost frames recovers. The engine picks\nthe first of `codecs` it can encode, and every frame names its codec. The stream\nshows the mix before any master stage. It lasts until `preview.unsubscribe`, the\nsession's end, or an end frame (the engine could not go on; the frame says why).\n\nFails with `invalid_argument` for a field out of range (`max_width` 16 to 1920,\ndefault 640; `max_height` 16 to 1080, default 360; `fps` 1 to 30, default 15), a\ncodec named twice, a `channel` this session already has open (`channel`), or a\nfifth open stream; and with `action_failed` when the session cannot receive\nbinary frames (an MCP session) or none of `codecs` can be encoded here.",
+                "description": "Opens a preview stream of the program mix, or of the scene `scene_id`, for this\nsession: low-resolution pictures sent as binary frames on `channel`, only to this\nsession (ADR-0045). The picture is the canvas scaled down to fit `max_width` ×\n`max_height`, with even sides; it follows the canvas when that changes. A picture\nis sent when what the stream shows changes, at most `fps` times a second, and at\nleast once every 2 s (a keyframe), so a client that lost frames recovers. The\nengine picks the first of `codecs` it can encode, and every frame names its codec.\nThe stream shows the mix before any master stage. A scene's stream shows the\nscene alone, as program would show it with no transition running, and never makes\na source shown or heard (ADR-0028). It lasts until `preview.unsubscribe`, the\nsession's end, or an end frame (the engine could not go on, or the scene was\ndeleted; the frame says why).\n\nFails with `invalid_argument` for a field out of range (`max_width` 16 to 1920,\ndefault 640; `max_height` 16 to 1080, default 360; `fps` 1 to 30, default 15), a\ncodec named twice, a `channel` this session already has open (`channel`), or a\nseventeenth open stream; with `not_found` for a `scene_id` the collection doesn't\nhave; and with `action_failed` when the session cannot receive binary frames (an\nMCP session) or none of `codecs` can be encoded here.",
                 "properties": {
                   "channel": {
                     "description": "The number this stream's binary frames carry, chosen by the client. Not an\nID: it only tells this session's streams apart, and can be reused once the\nstream has ended.",
@@ -10359,6 +10381,17 @@ source: crates/jstream-mcp/src/tests.rs
                       "integer",
                       "null"
                     ]
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene to show. Omitted for the program mix."
                   },
                   "type": {
                     "const": "preview.subscribe",
@@ -14218,6 +14251,10 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "string"
               }
             ]
+          },
+          "SceneId": {
+            "description": "A scene in the collection.",
+            "type": "string"
           }
         },
         "additionalProperties": false,
@@ -14226,7 +14263,7 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "The `preview` operation, tagged by `type`.",
             "oneOf": [
               {
-                "description": "Opens a preview stream of the program mix for this session: low-resolution\npictures sent as binary frames on `channel`, only to this session (ADR-0045).\nThe picture is the canvas scaled down to fit `max_width` × `max_height`, with\neven sides; it follows the canvas when that changes. A picture is sent when what\nthe program mix draws changes, at most `fps` times a second, and at least once\nevery 2 s (a keyframe), so a client that lost frames recovers. The engine picks\nthe first of `codecs` it can encode, and every frame names its codec. The stream\nshows the mix before any master stage. It lasts until `preview.unsubscribe`, the\nsession's end, or an end frame (the engine could not go on; the frame says why).\n\nFails with `invalid_argument` for a field out of range (`max_width` 16 to 1920,\ndefault 640; `max_height` 16 to 1080, default 360; `fps` 1 to 30, default 15), a\ncodec named twice, a `channel` this session already has open (`channel`), or a\nfifth open stream; and with `action_failed` when the session cannot receive\nbinary frames (an MCP session) or none of `codecs` can be encoded here.",
+                "description": "Opens a preview stream of the program mix, or of the scene `scene_id`, for this\nsession: low-resolution pictures sent as binary frames on `channel`, only to this\nsession (ADR-0045). The picture is the canvas scaled down to fit `max_width` ×\n`max_height`, with even sides; it follows the canvas when that changes. A picture\nis sent when what the stream shows changes, at most `fps` times a second, and at\nleast once every 2 s (a keyframe), so a client that lost frames recovers. The\nengine picks the first of `codecs` it can encode, and every frame names its codec.\nThe stream shows the mix before any master stage. A scene's stream shows the\nscene alone, as program would show it with no transition running, and never makes\na source shown or heard (ADR-0028). It lasts until `preview.unsubscribe`, the\nsession's end, or an end frame (the engine could not go on, or the scene was\ndeleted; the frame says why).\n\nFails with `invalid_argument` for a field out of range (`max_width` 16 to 1920,\ndefault 640; `max_height` 16 to 1080, default 360; `fps` 1 to 30, default 15), a\ncodec named twice, a `channel` this session already has open (`channel`), or a\nseventeenth open stream; with `not_found` for a `scene_id` the collection doesn't\nhave; and with `action_failed` when the session cannot receive binary frames (an\nMCP session) or none of `codecs` can be encoded here.",
                 "properties": {
                   "channel": {
                     "description": "The number this stream's binary frames carry, chosen by the client. Not an\nID: it only tells this session's streams apart, and can be reused once the\nstream has ended.",
@@ -14267,6 +14304,17 @@ source: crates/jstream-mcp/src/tests.rs
                       "integer",
                       "null"
                     ]
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene to show. Omitted for the program mix."
                   },
                   "type": {
                     "const": "preview.subscribe",
