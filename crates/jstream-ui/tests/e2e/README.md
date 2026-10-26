@@ -221,7 +221,12 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   row's tag popover putting a label on the Backdrop and staying open, the row's and the
   Inspector's chips and the Inspector's tag button, the filter's labels with their
   count, and the item menu's Labels submenu, checked with the label's colour as its
-  swatch, taking it off; deleting a label taking it off the Backdrop in one edit.
+  swatch, taking it off; deleting a label taking it off the Backdrop in one edit; and
+  on a scene ([ADR-0078](../../../../docs/adr/0078-scenes-carry-labels.md)): the manager
+  opened from the Scenes panel's filter, in that panel, the scene row's tag popover
+  opening under the row and filling its box with the label's colour, the row's and the
+  Inspector's chips and tag button, the Scenes panel's labels filter, and a delete
+  taking the label off the scene in one edit.
 - **Polish** (`polish.spec.js`): Duplicate as clone's toast, which hides by itself; a
   folded Crop section staying folded after another scene is selected and after a
   reload; the Inspector's type icon and its 3D section, folded at first, with
