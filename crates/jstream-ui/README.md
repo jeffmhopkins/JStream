@@ -250,7 +250,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Escape or Tab. The canvas opens the empty canvas or margin menu, the scene and
   sources lists their panels' menus, and a scene row its scene's (Show in preview,
   Rename, Transition in and out, Properties…, New scene, New keyframe, New folder and
-  Delete scene work, as do a folder's own menu's; the rest waits on scene filters). The
+  Delete scene work, as do a folder's own menu's, and Edit filters… shows the scene's
+  chain in the Filters panel; Pop out and Duplicate scene wait on the engine). The
   Transition in and out submenus,
   on a scene row and on the canvas margin for the scene it shows
   (`studio::override_submenu`), start with "Default (<the default preset>)", checked
@@ -413,7 +414,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   what it runs. The scene's hotkey is the first binding
   whose action switches to it. Defaults clears the overrides and the hotkey. The engine
   has no scene background colour, multiview or scene-wide "include its audio", so the
-  dialog leaves them out, and scene filters wait on the Filters panel's scene chain.
+  dialog leaves them out. On the right, in the source Properties dialog's shell, are the
+  scene's filters: the Filters panel's rows on its video chain, which apply at once (a
+  keyframe shows its parent's).
 - **Filters** ([UI features › filters](../../docs/UI-FEATURES.md#filters)). The
   Filters panel shows the primary selected item's source's chains (ADR-0026): video
   unless the source is audio-only, audio when it has a mixer channel and isn't a
@@ -437,8 +440,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   output's chain (owner `master`) or an output's (ADR-0027) instead, and shows the
   panel; the same rows and dialogs edit it with that owner. Only their audio chains
   show, since the engine refuses their video chains so far, and the virtual camera,
-  which has no sound, has none. Selecting another item, or Edit filters…, goes back to
-  the selected item's source.
+  which has no sound, has none. A scene's chain (owner `scene`, ADR-0065) shows while no
+  item is selected, for the selected scene, or a keyframe's parent, since a keyframe has
+  none of its own; a scene row's Edit filters… and the canvas margin's Edit scene
+  filters… pick it as an FX button does (`show_filters`). It is a video chain, and a
+  scene input on it offers only the scenes whose picture doesn't hold the scene.
+  Selecting another item or scene, or an item's Edit filters…, goes back to the
+  selection's chains.
 - **The shell** is the header bar over the workspace. A failed call shows in a
   dismissable bar. A confirmation, such as "Added a reference…" after a placement of
   an existing source or a duplicate, shows in the toast (`Studio::notify`, or

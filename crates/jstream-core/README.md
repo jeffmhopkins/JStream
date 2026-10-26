@@ -1087,7 +1087,7 @@ gesture's live values, so a drag is measured once it commits), the most of any i
 the program's passes and the video mixes', and the items whose effects draw it into
 their layer. A source a video chain runs over counts as 1,
 since its filters' settings are in its pixels. `LiveSources::densities` turns each scale
-into the next quarter step of a doubling at or above it (1, 1.19, 1.41, … up to 8) and,
+into the next quarter step of a doubling at or above it (1, 1.19, 1.41, … up to 32, ADR-0079) and,
 when that differs from the source's density, queues a build at it: the thread creates the
 source and sets its density there, and `install` keeps the extent it returned. The
 source's frames then reach the plan as `Frame`s placed at that extent, and `compose`

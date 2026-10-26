@@ -22,12 +22,15 @@ use crate::app::SessionContext;
 use crate::icons::{Icon, named};
 use crate::menu::{Entry, Menus};
 use crate::panels::confirm::{Confirm, Pending};
+use crate::panels::filters::{FilterDialogs, show_filters};
 use crate::panels::scene_properties::SceneDialog;
 use crate::panels::studio::override_submenu;
 use crate::panels::tree::{Filter, Reorder, SearchBar, Side, Star, dropped_at, indent};
 use crate::store::{Collection, Studio, apply, plan_delete, plan_summary, reset_edits};
 use crate::workspace::DockState;
-use jstream_control::protocol::{Action, DeleteTarget, Edit, FolderId, SceneId, SceneInfo};
+use jstream_control::protocol::{
+    Action, DeleteTarget, Edit, FilterOwner, FolderId, SceneId, SceneInfo,
+};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use std::collections::HashSet;
@@ -331,6 +334,7 @@ pub fn Scenes() -> impl IntoView {
     let menus = use_context::<Menus>();
     let dock = use_context::<DockState>();
     let scene_dialog = use_context::<SceneDialog>();
+    let filters = use_context::<FilterDialogs>();
     let any_rows = move || {
         studio.collection.with(|c| {
             c.as_ref()
@@ -725,6 +729,7 @@ pub fn Scenes() -> impl IntoView {
                 let preview_id = id.clone();
                 let props_id = id.clone();
                 let keyframe_id = id.clone();
+                let filters_id = id.clone();
                 let (delete_id, delete_name) = (id.clone(), name.clone());
                 let folder = studio
                     .collection
@@ -756,7 +761,15 @@ pub fn Scenes() -> impl IntoView {
                         })
                         .hint("Double-click")
                         .disabled_if(scene_dialog.is_none()),
-                        Entry::unavailable("Edit filters…"),
+                        Entry::item("Edit filters…", move || {
+                            show_filters(
+                                filters,
+                                dock,
+                                FilterOwner::Scene {
+                                    scene_id: filters_id.clone(),
+                                },
+                            );
+                        }),
                         crate::projector::pop_out(studio, Some(id.clone())),
                         Entry::Sep,
                         Entry::item("New scene", move || new_scene(scene_folder.clone())),
