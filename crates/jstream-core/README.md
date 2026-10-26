@@ -336,8 +336,9 @@ state machine. Contents:
   second hardware session refused as `hardware_session_limit` naming the holder, under
   `prefer` or `require`, with `avoid` opening software beside it and `prefer` still
   falling back when no hardware session is open, and an HEVC start the machine lists no
-  hardware encoder for kept at `prefer` and failing as `action_failed`
-  (`src/tests/cpu_pipeline/hardware_sessions.rs`), a
+  hardware encoder for kept at `prefer` and failing as `action_failed`, and a start
+  beside a stopping holder whose session is still closing refused as
+  `hardware_session_limit` naming it (`src/tests/cpu_pipeline/hardware_sessions.rs`), a
   virtual camera publishing the program as BGRA at the canvas size (fitted into a canvas of another size, started again after a stop, running beside
   a stream, refused without a camera in the backends or while another output uses
   it, a refused start keeping the sink, a failed publish failing only that output, black under the privacy screen), a render panic failing both outputs, overload drops from a
@@ -608,7 +609,12 @@ which the mock answers with a made-up display. It does send the folder, label an
 metadata edits ([ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4): each
 refusal, the in-use deletes, the reads, undo and redo, and a filed scene's and a
 labelled source's delete, which the test checks applies, undone with their metadata;
-`history.rs` checks the engine's undo of them further. The mock stays the reference
+`history.rs` checks the engine's undo of them further. It sends the keyframe edits
+([ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)) too: overrides
+written and cleared, each refusal, a `live.set` on a keyframe scene, the refused parent
+delete, and a keyframe scene with a role deleted and undone. It leaves out an
+`item.remove` that drops an override, since the mock leaves the batch result's
+`dropped_overrides` empty. The mock stays the reference
 clients were developed against, and `jstream-graph` the only implementation of the edit rules
 here.
 
@@ -1575,7 +1581,12 @@ encoder's message (0.44, `StartError`; ADR-0027 §3, #443). This holds only for 
 the platform lists a hardware encoder for, or when it can't list them: a held session
 can't be what refuses a codec the machine has no hardware encoder for (HEVC or AV1 on
 many GPUs), so that session opens with its own preference, `prefer` falls back, and a
-failure stays `action_failed` with what the machine lacks. An output that joins an
+failure stays `action_failed` with what the machine lacks. An output that is stopping,
+or failed and is being joined, still holds its hardware session until that join ends
+(`Gate::drain`, then `drained`), so a start in that window counts it and names it
+among the holders, rather than falling back on a cap that is still full while another
+output keeps the program stage up (#834). The codec list is read only while a hardware
+session is held. An output that joins an
 open session opens nothing, so it is never refused. With no hardware session open,
 `prefer` still falls back to software when hardware refuses (ADR-0031). A hardware
 encoder that takes the session and then refuses its first frame no longer falls back

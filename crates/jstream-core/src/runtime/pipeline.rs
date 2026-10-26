@@ -38,7 +38,7 @@
 //! `stats.tick` has it (#385).
 
 use std::any::Any;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
@@ -389,6 +389,12 @@ pub(crate) struct Gate {
     /// stage is gone, a new start waits for this to reach 0 so it doesn't open the
     /// devices over a teardown.
     pub(crate) draining: u32,
+    /// The outputs taken out of `running` whose hardware encoder sessions are still
+    /// being released: each counts as a holder until its join ends (its session closes
+    /// as the pipeline drops), so a start beside a stopping holder can't fall back to
+    /// software on a hardware cap that is still full (#834). The weak handle only
+    /// identifies the entry for [`drained`](Self::drained).
+    releasing: Vec<(OutputId, Weak<Encoders>)>,
 }
 
 impl Gate {
@@ -401,6 +407,44 @@ impl Gate {
                 .failures
                 .upgrade()
                 .is_some_and(|failures| failures.failed())
+    }
+
+    /// Notes that `running`, `output_id`'s pipeline, is about to be joined outside the
+    /// gate: a start waits for it while the program stage is gone, and counts its
+    /// hardware encoder session as held until [`drained`](Self::drained).
+    pub(crate) fn drain(&mut self, output_id: &OutputId, running: &Running) {
+        self.draining += 1;
+        if let Some(encoders) = running.encoders().filter(|encoders| encoders.hardware()) {
+            self.releasing
+                .push((output_id.clone(), Arc::downgrade(encoders)));
+        }
+    }
+
+    /// Undoes one [`drain`](Self::drain) once its join has ended: `session` is the
+    /// drained pipeline's encoder session, if it had one.
+    pub(crate) fn drained(&mut self, session: Option<&Weak<Encoders>>) {
+        self.draining = self.draining.saturating_sub(1);
+        if let Some(session) = session
+            && let Some(at) = self
+                .releasing
+                .iter()
+                .position(|(_, held)| Weak::ptr_eq(held, session))
+        {
+            self.releasing.remove(at);
+        }
+    }
+
+    /// The outputs holding hardware video sessions, sorted: the running ones, and those
+    /// whose pipeline is still being joined (#834).
+    pub(crate) fn hardware_held(&self) -> Vec<OutputId> {
+        let running = self
+            .running
+            .iter()
+            .filter(|(_, running)| running.encoders().is_some_and(|e| e.hardware()))
+            .map(|(id, _)| id);
+        let releasing = self.releasing.iter().map(|(id, _)| id);
+        let held: BTreeSet<&OutputId> = running.chain(releasing).collect();
+        held.into_iter().cloned().collect()
     }
 
     /// The running program stage, to share.
@@ -446,6 +490,7 @@ impl MediaHost {
                 pending: None,
                 watchers: BTreeMap::new(),
                 draining: 0,
+                releasing: Vec::new(),
             }),
             gate_cv: Condvar::new(),
             next_generation: AtomicU64::new(1),
@@ -671,7 +716,8 @@ impl Program {
             let context = claim.as_ref().and(self.context.as_deref());
             // A settings error is no refusal: only the encoder's open is classified below.
             let config = video_config(&feed, &key.2)?;
-            let listed = hardware_listed(self.codecs.as_ref(), config.codec);
+            let listed =
+                !hardware_held.is_empty() && hardware_listed(self.codecs.as_ref(), config.codec);
             let (profile, limited) = while_hardware_held(&key.2, hardware_held, listed);
             let video =
                 open_video(self.codecs.as_ref(), context, &feed, &profile).map_err(|reason| {
