@@ -677,9 +677,24 @@ fn installed_plugins_are_saved_and_loaded_again() {
     assert!(plugins[0].get("disabled").is_none(), "{file}");
     assert_eq!(plugins[1]["disabled"], "trap");
 
+    // A fixed build replaces the trapping module, so once a person enables it nothing
+    // disables it again: `IDLE` has no `on_event` and gets no events. With `TRAPS` still
+    // in place, the first event after the enable traps it, and that later save of
+    // `disabled = "trap"` races the read below (#880).
+    fs::write(
+        traps.join(MODULE_FILE),
+        wat::parse_str(IDLE).expect("valid WAT"),
+    )
+    .expect("module written");
+
     // The next run loads the enabled one with its grant, and keeps the other disabled.
     let engine = opened(&dir);
     let person = connected(&engine);
+    assert_eq!(
+        saved(&dir)["plugins"][1]["disabled"],
+        "trap",
+        "a disabled plugin stays disabled across a reopen"
+    );
     call(&person, create_scene("again")).expect("the person's edit applies");
     eventually("the restored plugin's scene", || {
         scenes(&person).contains(&SceneId::new("from_plugin"))
