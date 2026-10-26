@@ -1,6 +1,6 @@
 //! Encoder profiles: how an output's video and audio are encoded, as the collection
 //! stores them (docs/ARCHITECTURE.md#data-model), and how the running outputs share
-//! encoder sessions ([ADR-0027](../../../docs/adr/0027-program-master-and-output-chains.md)).
+//! encoder sessions ([ADR-0080](../../../docs/adr/0080-program-master-and-output-chains-v2.md)).
 //!
 //! A profile is collection state, changed by edits (`encoder.create`, `encoder.update`,
 //! `encoder.delete`), and an output names the one it uses with `output.set_encoder`.
@@ -245,7 +245,7 @@ pub struct EncoderSessionInfo {
     /// Whether the session's video encoder is a hardware one.
     pub hardware: bool,
     /// Whether the output has the session to itself by rule: an output with its own
-    /// video chain never shares (ADR-0027 §2), so its picture costs one more GPU pass
+    /// video chain never shares (ADR-0080 §2), so its picture costs one more GPU pass
     /// and one more encoder session. Omitted when false, which is every output until
     /// video chains exist.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]

@@ -3730,7 +3730,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "description": "The encoder session a running output uses, as `output.status` reports it.",
       "properties": {
         "dedicated": {
-          "description": "Whether the output has the session to itself by rule: an output with its own\nvideo chain never shares (ADR-0027 §2), so its picture costs one more GPU pass\nand one more encoder session. Omitted when false, which is every output until\nvideo chains exist.",
+          "description": "Whether the output has the session to itself by rule: an output with its own\nvideo chain never shares (ADR-0080 §2), so its picture costs one more GPU pass\nand one more encoder session. Omitted when false, which is every output until\nvideo chains exist.",
           "type": "boolean"
         },
         "hardware": {
@@ -4476,7 +4476,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0027 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it.",
+          "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it.",
           "properties": {
             "type": {
               "const": "master",
@@ -4489,7 +4489,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "An output's own chains, which run after the master stage for that output only\n(ADR-0027 §2). An output with filters on its audio chain gets its own audio\nencode from its next start; edits to a chain it started with apply live.",
+          "description": "An output's own chains, which run after the master stage for that output only\n(ADR-0080 §2). An output with filters on its audio chain gets its own audio\nencode from its next start; edits to a chain it started with apply live.",
           "properties": {
             "output_id": {
               "$ref": "#/$defs/OutputId",
@@ -5333,7 +5333,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "MasterInfo": {
-      "description": "The master stage, as `state.get` reports it: what applies to everything leaving\nJStream (ADR-0027 §1).",
+      "description": "The master stage, as `state.get` reports it: what applies to everything leaving\nJStream (ADR-0080 §1).",
       "properties": {
         "filters": {
           "$ref": "#/$defs/FilterChains",
@@ -5463,7 +5463,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         "filters": {
           "$ref": "#/$defs/FilterChains",
-          "description": "Its own chains, which `filter.*` edits with the owner\n`{\"type\":\"output\",\"output_id\":…}` and which run after the master stage\n(ADR-0027 §2). Only the audio chain holds filters so far, and a virtual camera,\nwhich has no audio, has none. Omitted while both are empty."
+          "description": "Its own chains, which `filter.*` edits with the owner\n`{\"type\":\"output\",\"output_id\":…}` and which run after the master stage\n(ADR-0080 §2). Only the audio chain holds filters so far, and a virtual camera,\nwhich has no audio, has none. Omitted while both are empty."
         },
         "kind": {
           "$ref": "#/$defs/OutputKind",
@@ -8509,7 +8509,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "`output.start` could not open a hardware video encoder while other hardware\nencoder sessions were open, so the machine's hardware session limit is taken to\nbe reached (0.44, ADR-0027 §3). The engine doesn't guess vendor caps and never\nfalls back to a software encoder for this. Nothing was started. Stop one of\n`outputs`, share an encoder session with one, or start this output with an\nencoder profile whose `hardware` is `avoid`.",
+          "description": "`output.start` could not open a hardware video encoder while other hardware\nencoder sessions were open, so the machine's hardware session limit is taken to\nbe reached (0.44, ADR-0080 §3). The engine doesn't guess vendor caps and never\nfalls back to a software encoder for this. Nothing was started. Stop one of\n`outputs`, share an encoder session with one, or start this output with an\nencoder profile whose `hardware` is `avoid`.",
           "properties": {
             "code": {
               "const": "hardware_session_limit",

@@ -1520,7 +1520,7 @@ impl Engine {
             }
             // The outputs holding hardware video sessions now, stopping ones included:
             // while there is one, a new session that hardware refuses is the session
-            // limit (ADR-0027 §3, #834).
+            // limit (ADR-0080 §3, #834).
             let hardware_held = gate.hardware_held();
             // A running program stage is shared; holding it here keeps it running
             // until this start has its own hold, or gives up. Taken last, so no early
@@ -1953,7 +1953,7 @@ impl Drop for SettleOnDrop<'_> {
 
 /// Which encoder sessions `output_id` shares: the video mix it shows with that mix's
 /// size and rate now, its profile with that profile's encoding now, and the output
-/// itself when it has its own video chain, so it shares with no one (ADR-0027 §3). An
+/// itself when it has its own video chain, so it shares with no one (ADR-0080 §3). An
 /// output with no mix, or one the host declared, gets the program at the program
 /// stage's size and base rate; one with no profile the engine's default.
 fn encode_key(graph: &Graph, output_id: &OutputId) -> EncodeKey {
@@ -1984,7 +1984,7 @@ fn encode_key(graph: &Graph, output_id: &OutputId) -> EncodeKey {
 }
 
 /// Whether `output_id` starts with its own audio encode: it has an audio chain
-/// (ADR-0027), even one whose filters are all off, so switching one on later changes
+/// (ADR-0080), even one whose filters are all off, so switching one on later changes
 /// nothing but the chain. A chain added to a running output takes effect at its next
 /// start.
 fn has_audio_chain(graph: &Graph, output_id: &OutputId) -> bool {

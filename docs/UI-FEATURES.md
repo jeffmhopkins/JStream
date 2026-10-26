@@ -304,7 +304,7 @@ Spec: [panels › filters](../design/ui-prototype/spec-panels.md#filters-panel).
 has source filter chains (`filter.add`, `remove`, `set_enabled`, `set_settings`,
 `reorder`; [ADR-0026](adr/0026-source-filter-chains.md)), and the Filters panel
 (`filters.rs`) edits them. The master stage and each output own chains too
-([ADR-0027](adr/0027-program-master-and-output-chains.md)); an FX button in the Outputs
+([ADR-0080](adr/0080-program-master-and-output-chains-v2.md)); an FX button in the Outputs
 panel or on the Mixer's master card shows one in the panel (FL-07).
 
 | ID | Feature | Requirement | Status | Notes |

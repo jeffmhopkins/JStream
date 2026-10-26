@@ -500,7 +500,7 @@ pub struct BusStats {
     pub skipped_frames: u64,
 }
 
-/// The master chain (docs/adr/0027-program-master-and-output-chains.md): its filters run
+/// The master chain (docs/adr/0080-program-master-and-output-chains-v2.md): its filters run
 /// on every bus that feeds an output, the master bus and every bus an output tap reads,
 /// after that bus's own chain and fader. Monitoring ([`Mixer::bus_block`]) is before it.
 /// Each such bus runs its own copy, so filter state never mixes buses. Cheap to clone.
@@ -544,7 +544,7 @@ impl MasterControl {
 pub struct OutputTapId(pub(crate) u64);
 
 /// Controls one output tap: an output's own view of one bus after the master chain,
-/// through the tap's own filter chain (ADR-0027's per-output audio chain). An output
+/// through the tap's own filter chain (ADR-0080's per-output audio chain). An output
 /// with a tap encodes its audio from [`Mixer::output_block`] instead of sharing the
 /// master bus's encode. Cheap to clone.
 ///

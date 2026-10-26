@@ -5,7 +5,7 @@
 //! master and up to 15 more, each with its chain and fader) in fixed-size blocks stamped
 //! on the engine clock with their latency compensated, and meters inputs and buses. On
 //! each bus that feeds an output it runs the master chain, and output taps give an output
-//! its own chain after it (ADR-0027's audio half). Layer 2: no I/O, no platform code;
+//! its own chain after it (ADR-0080's audio half). Layer 2: no I/O, no platform code;
 //! inputs plug into the `jstream-platform` audio handler.
 //!
 //! ```
@@ -28,7 +28,7 @@
 //! # Ok::<(), jstream_audio::AudioError>(())
 //! ```
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-audio/README.md#purpose, crates/jstream-audio/README.md#realtime, crates/jstream-audio/README.md#meters, crates/jstream-audio/README.md#filters, docs/adr/0028-audio-model-v2.md, docs/adr/0027-program-master-and-output-chains.md, docs/adr/0014-media-clock.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-audio/README.md#purpose, crates/jstream-audio/README.md#realtime, crates/jstream-audio/README.md#meters, crates/jstream-audio/README.md#filters, docs/adr/0028-audio-model-v2.md, docs/adr/0080-program-master-and-output-chains-v2.md, docs/adr/0014-media-clock.md
 
 #![forbid(unsafe_code)]
 

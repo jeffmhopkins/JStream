@@ -1654,7 +1654,7 @@ mod property {
                     Edit::HotkeySet { chord, action }
                 }
             }
-            // A gain on the master or an output's audio chain (ADR-0027), mostly in
+            // A gain on the master or an output's audio chain (ADR-0080), mostly in
             // range.
             47 => Edit::FilterAdd {
                 owner: match rng.below(3) {

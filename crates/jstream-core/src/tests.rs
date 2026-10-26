@@ -4901,7 +4901,7 @@ mod cpu_pipeline {
     }
 
     // --- Item: outputs that encode the same mix with the same profile share one
-    // encoder session (ADR-0027), so a recording can run while streaming.
+    // encoder session (ADR-0080), so a recording can run while streaming.
 
     /// The `yt` publish output and the `rec` recording output to `path`, on one engine.
     fn streaming_and_recording(
@@ -5020,7 +5020,7 @@ mod cpu_pipeline {
         assert_eq!(encoder_status(&control, "yt").2, 0);
     }
 
-    /// A recording with an audio chain of its own (ADR-0027) gets an output tap and its
+    /// A recording with an audio chain of its own (ADR-0080) gets an output tap and its
     /// own audio encode, while its video still shares the stream's session; both
     /// outputs get audio, and the recording's file finishes.
     #[test]

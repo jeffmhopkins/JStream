@@ -27,7 +27,7 @@ send matrix with a gain per send, applied after the fader. The master bus always
 exists, and every new input sends to it at 0 dB. Each bus has its own filter chain,
 fader and mute. Chains run the kernels in [Filters](#filters), and the mixer
 compensates their latency. It also has
-[ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)'s audio half: a
+[ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)'s audio half: a
 master chain on every bus that feeds an output, output taps with their own chains for
 outputs that encode their own audio, and each bus's output before the master chain for
 monitoring. Each input has an activity gain (audio that
@@ -409,7 +409,7 @@ glitch, only on a rebuild, which resets the built-in filters anyway. The shared 
 any removed filter.
 
 **Master chain and output taps** (`tap.rs`,
-[ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)). The master chain
+[ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)). The master chain
 runs once per block on each bus that feeds an output: the master bus, and each bus an
 output tap reads. Each such bus has its own copy, so a limiter on the master never
 mixes two buses' state. The control plane builds one copy of a new master filter per

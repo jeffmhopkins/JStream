@@ -1,6 +1,6 @@
 //! Filter chains (ADR-0026): the `filter.*` edits, their checks and inverses, duplicate
 //! and delete, references in filter settings, and the collection file; and the master's
-//! and outputs' audio chains (ADR-0027).
+//! and outputs' audio chains (ADR-0080).
 
 use super::{
     add, apply_err, apply_ok, blocker, blockers, builtin, fixture, graph, invalid_reason, kinds,
@@ -485,7 +485,7 @@ fn output(id: &str) -> FilterOwner {
     }
 }
 
-/// The master stage and an output have audio chains of their own (ADR-0027): their
+/// The master stage and an output have audio chains of their own (ADR-0080): their
 /// filters apply, report and undo like a source's, keep IDs per owner, survive a save,
 /// and come back with a deleted output.
 #[test]

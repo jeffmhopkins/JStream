@@ -613,7 +613,7 @@ fn set_gain(owner: jstream_protocol::FilterOwner, id: &str, gain_db: f64) -> Edi
     }
 }
 
-/// The master stage's audio chain runs on the mixer's master chain (ADR-0027), and
+/// The master stage's audio chain runs on the mixer's master chain (ADR-0080), and
 /// follows live edits and undo.
 #[test]
 fn the_master_chain_follows_edits_and_undo() {

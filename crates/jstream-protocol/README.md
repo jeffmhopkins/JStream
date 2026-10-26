@@ -74,7 +74,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `SourceInfo`, `OutputInfo` and `SceneInfo` report (`ItemInfo.effects` is one video
   chain), and `MAX_CHAIN_FILTERS` (8). `MasterInfo` (`query.rs`) is the
   master stage as `state.get` reports it
-  ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
+  ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)).
 - **Outputs** (`output.rs`): `OutputKind` (`rtmp`, `record` and `virtual_cam` so far), `RtmpTarget`
   (a generic `url`, or a `youtube` broadcast), `RecordContainer` (only `mp4`), `OutputInfo` (with the `video_mix` it shows), and `SecretString`, the write-only stream key, which
   never prints and never comes back from the engine
@@ -88,7 +88,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   control, keyframe interval and hardware preference), its range checks
   (`EncoderProfile::problem`, shared by every implementation), `EncoderProfileInfo`,
   and `EncoderSessionInfo`, the per-output sharing and cost `output.status` reports
-  ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
+  ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)).
 - **Video mixes** (`mix.rs`): `VideoMix`, what an output's video shows: a `MixInput`
   (`program`, `preview` or one `scene`), a `MixResolution` and an `fps_divisor` of the
   base frame rate, with its range checks (`VideoMix::problem`, shared by every
@@ -187,7 +187,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   carry labels (`SceneMeta`'s `labels`, set by `scene.set_meta`;
   [ADR-0078](../../docs/adr/0078-scenes-carry-labels.md)); 0.44 added the
   `hardware_session_limit` error (`output.start` refused a new hardware video session
-  while other outputs held hardware sessions, ADR-0027 §3); 0.43 added scene filters
+  while other outputs held hardware sessions, ADR-0080 §3); 0.43 added scene filters
   and item effects ([ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md):
   `FilterOwner`'s `scene` and `item`, `SceneInfo.filters`, `ItemInfo.effects` and
   `KindDescriptor.max_outset_px`); 0.42 added bus monitors (`bus.set_monitor`,
@@ -604,7 +604,7 @@ kind for that chain (`invalid_argument` on `edits.N.kind`), and a chain holds at
 `SourceInfo.filters { video, audio }` reports them, each omitted while empty.
 
 From 0.29 the master stage and each output own chains too
-([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)), with the owners
+([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), with the owners
 `{"type":"master"}` and `{"type":"output","output_id":…}` and the same edits. The
 master's audio chain runs on every bus that feeds an output, after that bus's own chain;
 an output's runs after it, for that output only, and gives the output its own audio
@@ -694,7 +694,7 @@ changed, so this changes no `PROTOCOL_VERSION`. Its errors carry fixed reasons t
 never quote the key.
 
 Encoder profiles (0.13) are collection state as well
-([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
+([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)).
 `encoder.create` and `encoder.update` take a `profile_id`, a `name` and an
 `EncoderProfile`: H.264, HEVC or AV1 (the last two since 0.41) video with `cbr` or `vbr` rate control (100..=100000 kbit/s;
 a `vbr` peak at least the average and at most 200000), a keyframe interval of 1..=10 s
@@ -1344,7 +1344,7 @@ people and agents. Clients match on `code`, never on `message`.
 | `action_failed` | An accepted action could not be carried out | `reason` |
 | `unsupported` | A valid call this implementation doesn't serve (the pairing calls without a server in front, 0.21; the `plugin.*` calls from an engine that hosts no plugins, 0.35) | `call` |
 | `forbidden` | A plugin's call is outside its grant, or is never granted to a plugin; it never reaches the engine (0.35) | `call`, `reason` |
-| `hardware_session_limit` | `output.start` couldn't open a hardware video encoder while other outputs held hardware sessions, so the hardware session limit is taken to be reached; there is no fallback to software (0.44, [ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md) §3) | `outputs` (the holders, sorted), `reason` (the encoder's refusal) |
+| `hardware_session_limit` | `output.start` couldn't open a hardware video encoder while other outputs held hardware sessions, so the hardware session limit is taken to be reached; there is no fallback to software (0.44, [ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md) §3) | `outputs` (the holders, sorted), `reason` (the encoder's refusal) |
 | `internal` | An engine bug or unexpected condition; may be retried | `reason` |
 
 An error that isn't tied to a request (a failed handshake, or a message too broken to

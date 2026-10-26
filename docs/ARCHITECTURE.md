@@ -148,7 +148,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 2 | `jstream-platform-linux` | PipeWire, with ALSA as the audio fallback, V4L2 webcams and capture cards paired with their microphones, VAAPI, dmabuf↔Vulkan, the OpenH264 loader, AAC encoding through `jstream-aac`, secrets in the Secret Service with a `0600` file fallback (M3; [ADR-0060](adr/0060-linux-platform-support.md), [ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md), [ADR-0071](adr/0071-linux-secret-store.md); a crate loading its system libraries at run time) | **yes** |
 | 2 | `jstream-plugin-clap` | Safe wrapper over the CLAP plugin ABI ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): loading a plugin file, its stereo audio effects, parameters, latency and saved state, and real-time processing. Only `jstream-plugin-host` links it | **yes** |
 | 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0066](adr/0066-portable-windows-distribution-v2.md)). Depends only on L0 and `windows`, so it logs through its own sink (the debugger and a capped file in the host account's profile), not `tracing`: no subscriber exists inside Frame Server. | **yes** |
-| 3 | `jstream-encode` | Encoder sessions: outputs with no video chain share one per (mix, encoder profile), and an output with a video chain gets its own ([ADR-0027](adr/0027-program-master-and-output-chains.md)); rate control; fan-out of packet streams | no |
+| 3 | `jstream-encode` | Encoder sessions: outputs with no video chain share one per (mix, encoder profile), and an output with a video chain gets its own ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md)); rate control; fan-out of packet streams | no |
 | 3 | `jstream-effects` | WGSL effect packs ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): `effect.toml` manifests, WGSL validation with naga, parameters as `<pack>/<effect>` kind descriptors with a uniform layout, hot reload by polling; draws an effect through `jstream-render`'s filter harness. No GPU device of its own | no |
 | 3 | `jstream-mcp` | MCP server over `dyn Control`: generated grouped tools and the stdio transport; its streamable-HTTP transport is served by `jstream-server` | no |
 | 3 | `jstream-browser` | Browser sources' engine ([ADR-0021](adr/0021-browser-source.md), [ADR-0046](adr/0046-browser-crate-and-helper.md), [ADR-0048](adr/0048-sandboxed-browser-helper.md)): the `BrowserBackend` seam, pages' audio hand-off, custom CSS and request policy; the CEF backend (Windows, feature `cef`), which drives the sandboxed browser helper over pipes and copies its shared-texture frames onto the engine's device; and the CEF code the helper runs (feature `helper`) | **yes** |
@@ -169,7 +169,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 ## Data model
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
-depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md", "docs/adr/0064-nested-scene-folders.md"]
+depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md", "docs/adr/0080-program-master-and-output-chains-v2.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md", "docs/adr/0064-nested-scene-folders.md"]
 -->
 
 ```
@@ -291,7 +291,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   bypassed. The audio chain runs on the source's input before its fader. The master
   stage and each output own `filters { video, audio }` too, edited with the same
   `filter.*` edits under the owners `master` and `output`
-  ([ADR-0027](adr/0027-program-master-and-output-chains.md)); only their audio chains
+  ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md)); only their audio chains
   hold filters until video mixes run the video ones, and their filters can't hold a
   reference (a scene, source, bus or asset) yet. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
   multiplier in [0, 1]) and `blend` (default `normal`; a mode is rejected until the
@@ -330,13 +330,13 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   runtime state beside `program_scene`, never collection state.
 - The preview shown in the UI is a protocol stream, not an `Output`.
 - **Master and output chains**
-  ([ADR-0027](adr/0027-program-master-and-output-chains.md)): the `master` stage applies
+  ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md)): the `master` stage applies
   to every output, whichever mix and buses it takes, but not to the editing canvas or
   audio monitoring. Its video chain runs once per tick on each mix some output consumes;
   its audio chain runs on each bus that feeds an output, after the bus's own chain
   (monitors tap the bus before it). Each output may add its own chains after the master
   stage; `VirtualCam` has no audio, so it has only a video chain.
-- **Encoder sharing** ([ADR-0027](adr/0027-program-master-and-output-chains.md)):
+- **Encoder sharing** ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md)):
   outputs whose video chain is empty share one encoder session when they have the same
   `(video_mix, encoder_profile)`, the master stage counting as part of the mix. An
   output with a video chain, even one holding only disabled filters, gets its own render
@@ -462,7 +462,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <a id="threading"></a>
 ## Threads, clock and sync
 <!-- @section
-depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0032-live-edits-and-undo.md", "docs/adr/0035-clap-plugins-out-of-process.md"]
+depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0080-program-master-and-output-chains-v2.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0032-live-edits-and-undo.md", "docs/adr/0035-clap-plugins-out-of-process.md"]
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -641,7 +641,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   master stage or an output, addressed by an `owner` and a filter ID;
   `SourceInfo.filters`, `OutputInfo.filters` and `state.get`'s `master` report them
   ([ADR-0026](adr/0026-source-filter-chains.md), protocol 0.22;
-  [ADR-0027](adr/0027-program-master-and-output-chains.md), protocol 0.29). Since 0.43
+  [ADR-0080](adr/0080-program-master-and-output-chains-v2.md), protocol 0.29). Since 0.43
   the owners `scene` and `item`, `SceneInfo.filters`, `ItemInfo.effects` and a
   descriptor's `max_outset_px` are in the protocol
   ([ADR-0065](adr/0065-scene-chains-and-item-effects.md)). The engine runs both.
@@ -745,7 +745,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `require`, and when the encoder refuses it
   `output.start` fails with `hardware_session_limit` (0.44) naming the outputs that hold
   hardware sessions, with no fallback to a software encoder
-  ([ADR-0027](adr/0027-program-master-and-output-chains.md)).
+  ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md)).
 - **Queries** (`state.get` → state + `rev`, the canvas included, `scene.list`, `source.list`, `item.list`,
   `output.list`, `output.status`, `encoder.list` (protocol 0.13), `video_mix.list`
   (protocol 0.28), `video.snapshot` → the program mix (not a video mix) as a PNG in the

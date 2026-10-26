@@ -223,7 +223,7 @@ pub struct OutputInfo {
     pub encoder_profile: Option<EncoderProfileId>,
     /// Its own chains, which `filter.*` edits with the owner
     /// `{"type":"output","output_id":…}` and which run after the master stage
-    /// (ADR-0027 §2). Only the audio chain holds filters so far, and a virtual camera,
+    /// (ADR-0080 §2). Only the audio chain holds filters so far, and a virtual camera,
     /// which has no audio, has none. Omitted while both are empty.
     #[serde(default, skip_serializing_if = "FilterChains::is_empty")]
     pub filters: FilterChains,

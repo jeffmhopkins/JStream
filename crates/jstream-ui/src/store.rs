@@ -40,7 +40,7 @@ pub struct Collection {
     pub buses: Vec<BusInfo>,
     /// The labels sources can carry, in label order (ADR-0024 §4).
     pub labels: Vec<LabelInfo>,
-    /// The master stage's chains, which apply to everything leaving JStream (ADR-0027).
+    /// The master stage's chains, which apply to everything leaving JStream (ADR-0080).
     pub master: FilterChains,
     /// Every hotkey binding, ordered by chord (ADR-0024 §5).
     pub hotkeys: Vec<HotkeyBinding>,

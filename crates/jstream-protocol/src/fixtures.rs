@@ -556,7 +556,7 @@ fn item_overrides() -> Vec<ItemOverride> {
 }
 
 /// The filter edits (ADR-0026), on both chains of a source, and on the master stage's
-/// and an output's audio chains (ADR-0027).
+/// and an output's audio chains (ADR-0080).
 fn filter_edits() -> Vec<Edit> {
     let mic = || FilterOwner::Source {
         source_id: SourceId::new("src_mic"),

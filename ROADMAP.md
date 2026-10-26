@@ -91,7 +91,7 @@ depends_on = ["docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0
     (`when_shown`), filters, and peak, true-peak and loudness meters.
   - Per-client undo, `expected_rev`, audit log, recording to fMP4, and encoder sharing.
     The `Output` model reserves its video and audio chains, empty by default
-    ([ADR-0027](docs/adr/0027-program-master-and-output-chains.md)).
+    ([ADR-0080](docs/adr/0080-program-master-and-output-chains-v2.md)).
 - **M1c Virtual camera:** `jstream-vcam-windows` with in-app registration, shipped in the
   portable zip ([ADR-0066](docs/adr/0066-portable-windows-distribution-v2.md); from spike S2).
 - **M1d Hardening:** RTMP reconnect with backoff, log rotation, local minidumps, `stats.tick`,

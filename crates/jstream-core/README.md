@@ -220,7 +220,7 @@ state machine. Contents:
   its activity gain (`activity.rs`): a `when_shown` source is heard only while the
   Program mix shows it. The master stage's audio chain runs on the mixer's master
   chain, and an output with an audio chain has an output tap running it
-  ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md));
+  ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md));
   `meters.tick` carries their levels about ten times a second, with the master's true
   peak and BS.1770 loudness, which the mixer thread measures on each block, and
   `audio.reset_loudness` restarts its integrated loudness. Every bus a source's
@@ -1442,7 +1442,7 @@ brings the mixer in line with the collection under the collection lock:
   ones until the next routing sync tries again; each refusal is logged at `warn`.
 
 An output whose audio chain holds a filter, even a disabled one
-([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)), gets an output
+([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), gets an output
 tap on the master bus when it starts (`Engine::add_output_tap`), and its own audio
 encode fed from the tap's blocks, stamped earlier by its chain's latency. Its video
 still shares a session as *Encoder profiles* says. The other outputs on its video
@@ -1516,12 +1516,12 @@ other outputs on the same session, whether its video encoder is a hardware one
 (read from `VideoSession::codec`, so a hardware encoder that fell back to software at
 its first frame reports software) and whether the session is `dedicated` to it, plus
 the video sessions and hardware sessions open
-([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)); it does not
+([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)); it does not
 guess a hardware cap. Instead, while any running output holds a hardware video
 session, a new video session opens with `require` in place of `prefer` (`avoid` stays
 software), so a refusal can't fall back to software. That refusal fails the start with
 `hardware_session_limit`, naming the outputs that hold hardware sessions and keeping the
-encoder's message (0.44, `StartError`; ADR-0027 §3, #443). This holds only for a codec
+encoder's message (0.44, `StartError`; ADR-0080 §3, #443). This holds only for a codec
 the platform lists a hardware encoder for, or when it can't list them: a held session
 can't be what refuses a codec the machine has no hardware encoder for (HEVC or AV1 on
 many GPUs), so that session opens with its own preference, `prefer` falls back, and a

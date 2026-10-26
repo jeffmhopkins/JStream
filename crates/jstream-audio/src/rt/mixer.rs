@@ -7,7 +7,7 @@
 //! and mute → output (the monitor tap, [`Mixer::bus_block`]). Sends are post-fader.
 //! Each input's signal after its activity gain, before the send gains, is kept as its
 //! own monitor block ([`Mixer::input_block`]).
-//! Then (docs/adr/0027-program-master-and-output-chains.md), on each bus that feeds an
+//! Then (docs/adr/0080-program-master-and-output-chains-v2.md), on each bus that feeds an
 //! output: → master chain (each bus its own copy) → the master bus's block, and each
 //! output tap on the bus → the tap's chain → [`Mixer::output_block`].
 //!
@@ -1634,7 +1634,7 @@ mod tests {
         assert!(m.monitor_block(aux.id(), MonitorTap::PreFilters).is_none());
     }
 
-    /// ADR-0027: the master chain runs after each bus that feeds an output (the master
+    /// ADR-0080: the master chain runs after each bus that feeds an output (the master
     /// and every tapped bus), each with its own copy; monitoring hears the bus before
     /// it; a bus added later gets the master filters with their current settings.
     #[test]

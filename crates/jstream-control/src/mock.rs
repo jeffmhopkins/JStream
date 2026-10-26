@@ -476,7 +476,7 @@ struct Collection {
     output_encoders: BTreeMap<OutputId, EncoderProfileId>,
     /// The encoder profiles, ordered by ID: name and encoding.
     encoders: BTreeMap<EncoderProfileId, (String, EncoderProfile)>,
-    /// Each output's own filter chains, for those that have had a filter (ADR-0027).
+    /// Each output's own filter chains, for those that have had a filter (ADR-0080).
     output_filters: BTreeMap<OutputId, jstream_protocol::FilterChains>,
     /// The master stage's filter chains.
     master: jstream_protocol::FilterChains,
@@ -3414,7 +3414,7 @@ mod tests {
                 Edit::OutputDelete {
                     output_id: OutputId::new("yt"),
                 },
-                // Its inverse re-adds its own filter (ADR-0027).
+                // Its inverse re-adds its own filter (ADR-0080).
                 Edit::OutputDelete {
                     output_id: OutputId::new("rec"),
                 },

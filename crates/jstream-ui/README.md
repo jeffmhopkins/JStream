@@ -400,7 +400,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   than three settings or isn't described yet. Edit filters… in the item menus selects the item and shows the
   panel. Names come from the prototype's catalogue, then `kind.list`, then the kind's ID.
   An FX button (the Outputs panel's rows, the Mixer's master card or strip) picks the program
-  output's chain (owner `master`) or an output's (ADR-0027) instead, and shows the
+  output's chain (owner `master`) or an output's (ADR-0080) instead, and shows the
   panel; the same rows and dialogs edit it with that owner. Only their audio chains
   show, since the engine refuses their video chains so far, and the virtual camera,
   which has no sound, has none. A scene's chain (owner `scene`, ADR-0065) shows while no

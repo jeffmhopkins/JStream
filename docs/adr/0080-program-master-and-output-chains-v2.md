@@ -2,14 +2,14 @@
 id = "ADR-0080"
 title = "Program master and per-output chains v2: no privacy screen"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0080: Program master and per-output chains v2: no privacy screen
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 Supersedes [ADR-0027](0027-program-master-and-output-chains.md). It keeps ADR-0027's
@@ -100,7 +100,7 @@ in 1.0.
   covers what that scene's mix feeds; an output on another mix keeps showing its mix.
 - **Old clients keep connecting.** A client built for 0.x before this ADR still speaks
   the protocol. Its `privacy.set` fails with `unsupported`, and its indicator stays off.
-- **Follow-on edits when this ADR is accepted:**
+- **Follow-on edits, made with its acceptance:**
   - ADR-0027's `status` becomes `superseded`, with `superseded_by` naming this ADR, and
     every link to ADR-0027 moves here.
   - [ARCH › Data model](../ARCHITECTURE.md#data-model),

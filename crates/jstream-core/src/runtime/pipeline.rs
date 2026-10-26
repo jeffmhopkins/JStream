@@ -534,7 +534,7 @@ impl MixKey {
     };
 }
 
-/// The key that decides which outputs share an encoder session (ADR-0027 §3): the mix
+/// The key that decides which outputs share an encoder session (ADR-0080 §3): the mix
 /// they show, the profile they name (`None` for the engine's default) with its encoding
 /// when the session opened, and, for an output with its own video chain, that output.
 /// An output with an audio chain of its own shares the video session but encodes its
@@ -549,7 +549,7 @@ pub(crate) struct OutputEncode {
     pub(crate) own_audio: bool,
     /// The running outputs whose sessions hold hardware video encoders. While there is
     /// one, a new video session opens with `require`, and a refused open is the
-    /// hardware session limit (ADR-0027 §3, #443), not a fallback to software.
+    /// hardware session limit (ADR-0080 §3, #443), not a fallback to software.
     pub(crate) hardware_held: Vec<OutputId>,
 }
 
@@ -585,7 +585,7 @@ impl From<StartError> for ProtocolError {
 
 /// `profile` as a new video session opens it while `held` hold hardware sessions: a
 /// hardware preference becomes `require`, so a full hardware session limit fails the
-/// start instead of falling back to software (ADR-0027 §3). `avoid` stays software, and
+/// start instead of falling back to software (ADR-0080 §3). `avoid` stays software, and
 /// so does a codec the machine has no hardware encoder for (`hardware_listed` false):
 /// no session limit can refuse that one, so `prefer` falls back and a failure stays
 /// `action_failed`. Whether it was changed comes back with it.
@@ -608,7 +608,7 @@ fn while_hardware_held(
 pub(crate) type Release = Box<dyn FnOnce() + Send>;
 
 /// An audio encode the mixer thread feeds: from the master bus, or from one output's
-/// tap (ADR-0027's per-output chain).
+/// tap (ADR-0080's per-output chain).
 pub(crate) struct AudioTap {
     input: AudioInput,
     /// The output tap it reads, or `None` for the master bus.
@@ -1072,7 +1072,7 @@ impl Drop for AudioEncode {
     }
 }
 
-/// The audio encode of an output with an audio chain of its own (ADR-0027): an output
+/// The audio encode of an output with an audio chain of its own (ADR-0080): an output
 /// tap on the master bus runs the chain, and only this output reads the encode. Its
 /// drop removes the tap.
 pub(crate) struct OwnAudio {
@@ -4212,7 +4212,7 @@ mod tests {
     }
 
     /// An output with its own video chain gets its own drawn frame even when another
-    /// session shows the same mix at the same size and rate (ADR-0027 §3).
+    /// session shows the same mix at the same size and rate (ADR-0080 §3).
     #[test]
     fn an_owned_feed_is_drawn_on_its_own() {
         let shared = Feed {

@@ -635,7 +635,7 @@ pub struct SceneSummary {
 }
 
 /// The master stage, as `state.get` reports it: what applies to everything leaving
-/// JStream (ADR-0027 §1).
+/// JStream (ADR-0080 §1).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct MasterInfo {
     /// Its chains, which `filter.*` edits with the owner `{"type":"master"}`. Only the

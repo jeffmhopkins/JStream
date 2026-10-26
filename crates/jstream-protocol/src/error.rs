@@ -129,7 +129,7 @@ pub enum ProtocolError {
     },
     /// `output.start` could not open a hardware video encoder while other hardware
     /// encoder sessions were open, so the machine's hardware session limit is taken to
-    /// be reached (0.44, ADR-0027 §3). The engine doesn't guess vendor caps and never
+    /// be reached (0.44, ADR-0080 §3). The engine doesn't guess vendor caps and never
     /// falls back to a software encoder for this. Nothing was started. Stop one of
     /// `outputs`, share an encoder session with one, or start this output with an
     /// encoder profile whose `hardware` is `avoid`.

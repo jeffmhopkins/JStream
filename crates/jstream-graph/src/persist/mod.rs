@@ -159,7 +159,7 @@ struct File {
     /// one with no audio), every channel source keeps its default master send.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     sends: Option<Vec<FileSend>>,
-    /// The master stage (ADR-0027); omitted while it has no filters.
+    /// The master stage (ADR-0080); omitted while it has no filters.
     #[serde(default, skip_serializing_if = "FileMaster::is_empty")]
     master: FileMaster,
     /// Folders of the scene list, in folder order; omitted when there are none, like
@@ -395,7 +395,7 @@ struct FileOutput {
     /// The output's encoder profile; omitted for the engine's default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     encoder_profile: Option<EncoderProfileId>,
-    /// Its own filter chains (ADR-0027); omitted while both are empty.
+    /// Its own filter chains (ADR-0080); omitted while both are empty.
     #[serde(default, skip_serializing_if = "FileChains::is_empty")]
     filters: FileChains,
     /// The video mix the output shows; omitted for none.
