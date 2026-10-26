@@ -28,9 +28,8 @@ async function point(locator, dy) {
 
 test('the panel lists the chains, and rows turn filters on, reorder and remove them', async ({ page, daemon }) => {
   await connect(page, daemon);
-  await expect(panel(page).locator('.filters-title')).toHaveText('Nothing selected');
-  await expect(panel(page)).toContainText('Select a source to see its filters.');
-  await expect(panel(page).getByRole('button', { name: '+ Add filter…' })).toHaveCount(0);
+  // With no item selected the panel shows the scene's chain (scene-filters.spec.js).
+  await expect(panel(page).locator('.filters-title')).toHaveText('Main');
 
   await selectBackdrop(page);
   await expect(panel(page).locator('.filters-title')).toHaveText('Backdrop');
