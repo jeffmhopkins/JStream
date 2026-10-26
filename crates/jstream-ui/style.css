@@ -1,6 +1,41 @@
 /* The shell's layout, then each view's classes (panels, canvas). The palette and sizes
    follow the UI prototype (design/ui-prototype/spec-workspace.md#theme-fonts-and-global-styling):
    dark only. */
+
+/* IBM Plex, bundled under the SIL OFL 1.1 (fonts/OFL.txt, ADR-0077): IBM's own Latin-1
+   subsets, in the weights the UI uses. The page's policy loads fonts only from its own
+   origin, so they're served beside it; until one loads, the system font stands in. */
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/IBMPlexSans-Regular-Latin1.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-weight: 600;
+  font-display: swap;
+  src: url("fonts/IBMPlexSans-SemiBold-Latin1.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-weight: 700;
+  font-display: swap;
+  src: url("fonts/IBMPlexSans-Bold-Latin1.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/IBMPlexMono-Regular-Latin1.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-weight: 600;
+  font-display: swap;
+  src: url("fonts/IBMPlexMono-SemiBold-Latin1.woff2") format("woff2");
+}
+
 :root {
   color-scheme: dark;
   /* Surfaces, darkest first. */
@@ -164,6 +199,8 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
 .connection dd { margin: 0; overflow-wrap: anywhere; font-family: "IBM Plex Mono", ui-monospace, monospace; }
 .header-button { padding: 8px 14px; background: var(--menu); border-color: var(--border); }
 .header-button.on { background: var(--danger-dark); border-color: #e5484d; }
+.header-button.studio-mode.on { background: var(--selected); border-color: var(--accent); }
+.header-button.privacy { display: flex; align-items: center; gap: 6px; padding: 8px 12px; }
 .go-live { padding: 8px 18px; border: none; background: var(--danger); color: #fff; font-weight: 600; }
 .go-live:hover:not(:disabled) { background: #d6383f; }
 .go-live.live, .go-live.live:hover:not(:disabled) { background: var(--danger-dark); }
@@ -337,6 +374,31 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
   color: var(--problem);
 }
 
+/* A confirmation (spec-workspace.md 6.7): bottom centre, over the panels, until it hides. */
+/* The toast's live region stays in the page, out of the flow, over the panels' popovers
+   and menus but under modal dialogs. */
+.toast-region {
+  position: fixed;
+  z-index: 150;
+  width: 0;
+  height: 0;
+}
+
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 150;
+  max-width: 520px;
+  padding: 10px 14px;
+  background: var(--menu);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 13px;
+}
+
 /* Panels. */
 .muted { color: var(--muted); }
 .panel + .panel { margin-top: 1.25rem; }
@@ -434,6 +496,15 @@ textarea { width: 100%; min-height: 4rem; resize: vertical; }
 .row.tree-row.dragging { opacity: 0.5; }
 .row.tree-row.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
 .row.tree-row.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
+.row.tree-row.drop-into { box-shadow: inset 0 0 0 2px var(--accent); }
+/* Folders (S13, S18): a caret that folds them, and a dim name. */
+.tree-row button.tree-caret {
+  height: 100%; padding: 0; border: 0; background: none;
+  color: var(--dim); font-size: 10px;
+}
+.tree-row button.tree-caret:hover:not(:disabled) { background: none; color: var(--text); }
+.tree-row button.tree-caret:disabled { opacity: 1; cursor: default; }
+.row.tree-row.folder .row-main { color: #6b717c; cursor: default; }
 .tree-row .hov {
   flex: 0 0 24px; height: 24px; padding: 0; display: flex; align-items: center; justify-content: center;
   border: 0; border-radius: 4px; background: none; color: var(--muted);
@@ -598,6 +669,25 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .stage { position: relative; touch-action: none; user-select: none; outline-offset: 2px; }
 /* The preview picture under the overlay; its box is set from the canvas's fit. */
 .stage-screen { position: absolute; pointer-events: none; }
+/* The privacy screen (§3.21): the frame blurred and dimmed, and a notice over it. */
+.stage.private { filter: blur(14px) brightness(0.6); }
+/* Always there, over the whole view, so the notice appears inside a live region. */
+.privacy-live { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
+.privacy-notice {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 6;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: rgba(122, 30, 35, 0.92);
+  border: 1px solid #e5484d;
+  color: #fff;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+}
 .stage-overlay {
   position: absolute;
   inset: 0;
@@ -633,6 +723,7 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
   color: var(--muted);
 }
 .canvas-tool[aria-pressed="true"] { background: var(--selected); color: #b5ceff; }
+.canvas-tool.crop-tool[aria-pressed="true"] { background: #4a3510; color: #f5c77e; }
 .canvas-tool svg {
   width: 17px;
   height: 17px;
@@ -658,6 +749,38 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
   font-size: 11px;
   color: var(--muted);
 }
+/* The keyframe banner, top centre, while a keyframe scene is edited (CV-16). */
+.keyframe-banner {
+  position: absolute;
+  left: 50%;
+  top: 10px;
+  transform: translateX(-50%);
+  z-index: 4;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: rgba(176, 124, 255, 0.16);
+  border: 1px solid #6e4fb0;
+  color: #d9c6ff;
+  font-size: 11px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+/* Keyframe rows nest under their scene, with the purple diamond (SC-07). */
+.row.tree-row.keyframe { padding-left: 22px; }
+.tree-icon { display: inline-flex; }
+.tree-row .row-main .tree-icon.keyframe-icon .icon { color: #b07cff; }
+.tree-fold { width: 16px; height: 16px; padding: 0; border: 0; background: none; color: var(--dim); font-size: 10px; }
+.tree-fold:hover:not(:disabled) { background: none; color: var(--text); }
+.keyframe-note { color: #c9b3ff; }
+.inspector-head .kind-tag.keyframe { color: #c9b3ff; }
+/* A scene's Hotkey row (IN-08): its chords, each unbindable, and Set key. */
+.hotkeys { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px; }
+.hotkeys .none { color: var(--dim); }
+.hotkey-chip { display: inline-flex; align-items: center; gap: 2px; }
+.hotkey-chip kbd { padding: 1px 5px; border: 1px solid var(--border); border-radius: 4px; background: var(--raised); font: 11px "IBM Plex Mono", ui-monospace, monospace; }
+.hotkey-chip .icon-button { width: 18px; height: 18px; padding: 0; color: var(--dim); }
+.set-key { padding: 2px 8px; font-size: 11px; }
+.set-key.capturing { border-color: var(--accent); color: var(--link); }
 
 @media (max-width: 800px) {
   .shell { height: auto; }
@@ -676,6 +799,31 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .outputs .health { margin: 0; color: var(--muted); font-size: 0.85rem; }
 .outputs .health.dropping { color: var(--problem); }
 .outputs .problem { margin: 0; }
+/* The program output and each output under it, with their FX buttons (spec-panels.md U1). */
+.output-chains { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.output-chain {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 6px 0 18px;
+  border-radius: 5px;
+}
+.output-chain.program { padding-left: 4px; font-weight: 600; background: var(--menu); }
+.output-chain-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.output-chain-status { color: var(--muted); font-size: 12px; font-weight: 400; }
+.outputs .fx-button {
+  min-width: 44px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: none;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 400;
+}
+.outputs .fx-button.on { border-color: var(--accent); background: var(--selected); }
+.outputs .output-foot { margin: 0; color: var(--dim); font-size: 11px; }
 .output-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
 .output {
   display: grid;
@@ -755,6 +903,7 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
   color: #c9ced6;
   font-size: 12px;
 }
+.mixer-panel .ghost-button.hear:not(.on) { color: var(--dim); }
 .mixer-panel .fx-button {
   padding: 3px 10px;
   border: 1px solid var(--accent);
@@ -862,6 +1011,8 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
   gap: 0.5rem;
 }
 .strip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.privacy-muted { color: #ff8a8f; }
+.column-note { font-size: 10px; text-align: center; }
 .strip.master .strip-name { font-weight: 600; }
 .strip button.gain { padding: 0.1rem 0.2rem; border: none; background: none; font-variant-numeric: tabular-nums; font-size: 0.8rem; color: var(--muted); text-align: right; }
 .strip form.inline { display: flex; gap: 0.3rem; }
@@ -913,7 +1064,7 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .pairing-open { display: grid; gap: 0.25rem; }
 .pairing-code {
   margin: 0;
-  font-family: ui-monospace, monospace;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 1.6rem;
   letter-spacing: 0.15em;
 }
@@ -951,19 +1102,23 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
   color: var(--text);
 }
 .studio summary { cursor: pointer; color: var(--muted); }
-.preset-list { list-style: none; margin: 0.5rem 0 0; padding: 0; display: grid; gap: 0.5rem; }
-.preset { display: grid; gap: 0.3rem; padding: 0.5rem; border: 1px solid var(--line); border-radius: 8px; }
-.preset-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
 .studio .buttons { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-.preset-form {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
-  gap: 0.4rem 0.75rem;
-  align-items: end;
-  padding-top: 0.5rem;
-}
-.preset-form h3, .preset-form .problem, .preset-form .buttons { grid-column: 1 / -1; }
-.preset-form label { display: grid; gap: 0.25rem; color: var(--muted); font-size: 0.85rem; }
+.presets { display: grid; gap: 8px; }
+.studio .presets h3 { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: var(--muted); }
+.studio select.preset-picker { height: 30px; width: 100%; }
+.preset-editor { display: grid; gap: 8px; }
+.preset-row { display: flex; align-items: center; gap: 10px; }
+.preset-row input { width: 160px; }
+.preset-editor .segmented { display: grid; grid-template-columns: repeat(3, 1fr); }
+.preset-editor .segment { position: relative; display: flex; justify-content: center; padding: 4px 10px; border-radius: 4px; color: var(--muted); font-size: 12px; cursor: pointer; }
+.preset-editor .segment.on { background: var(--selected); color: var(--text); }
+.preset-editor .segment input { position: absolute; opacity: 0; pointer-events: none; }
+.preset-editor .segment:focus-within { outline: 2px solid var(--accent); outline-offset: -2px; }
+.preset-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; }
+.preset-fields label { display: grid; gap: 4px; color: var(--muted); font-size: 12px; }
+.preset-editor .note { margin: 0; color: var(--dim); font-size: 11px; }
+.studio button.danger-text { color: var(--problem); }
+.studio-off { padding: 4px 0; }
 .overrides { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
 .overrides th { text-align: left; color: var(--muted); font-weight: 600; }
 .overrides td, .overrides th { padding: 0.25rem 0.4rem 0.25rem 0; }
@@ -1064,6 +1219,10 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 /* The Properties dialog (spec-workspace.md 6.2): name and settings on the left, filters
    on the right; Defaults sits apart from Cancel and OK. */
 .modal.props-dialog { width: 860px; height: 640px; }
+.modal.scene-props-dialog { width: 460px; }
+.scene-props-dialog .props-settings { display: grid; gap: 12px; }
+.field-note { color: var(--dim); font-size: 11px; }
+.hotkey-field { font-family: "IBM Plex Mono", ui-monospace, monospace; cursor: pointer; }
 .props-head { display: flex; align-items: center; gap: 10px; }
 .props-head .icon { color: var(--muted); }
 .props-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 1.15fr 1fr; }
@@ -1087,6 +1246,7 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .filters-titles { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .filters-title { font-size: 14px; font-weight: 600; color: var(--text); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .filters-note { font-size: 11px; color: var(--muted); }
+.filters-later { margin: 0; font-size: 11px; color: var(--dim); }
 .filters-add { align-self: flex-start; padding: 6px 12px; background: var(--menu); border: 1px solid var(--border); border-radius: 6px; color: var(--text); }
 .filter-chains { display: flex; flex-direction: column; gap: 12px; }
 .filter-chain-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; color: #c9ced6; }
@@ -1186,3 +1346,63 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
   font-size: 12px;
   text-align: left;
 }
+
+/* Labels (spec-panels.md S4, S7, S20, I1): chips, the tag popover and the label manager. */
+.label-icon { display: inline-flex; align-items: center; }
+.label-chip {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 4px;
+}
+.label-chip .icon { stroke-width: 2; }
+.label-picker { position: relative; display: flex; }
+.inspector-head .tag-button, .tree-row .tag-button {
+  flex: 0 0 24px; width: 24px; height: 24px; padding: 0; display: flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 4px; background: none; color: var(--muted);
+}
+.inspector-head .tag-button:hover:not(:disabled) { background: var(--hover); }
+.label-pop {
+  position: absolute; z-index: 3; top: 26px; right: 0; width: 200px; padding: 6px;
+  display: flex; flex-direction: column; gap: 2px;
+  background: var(--raised); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+.label-pop .tree-check { padding: 5px 6px; }
+.label-pop .link, .label-manager .link, .tree-pop-foot .link:not(.muted) {
+  align-self: flex-start; padding: 4px 6px; border: 0; background: none; color: var(--link); font-size: 12px;
+}
+.label-none { margin: 4px 6px; color: var(--dim); font-size: 12px; }
+.tree-box.label-box.on { border-color: var(--accent); background: var(--accent); }
+.tree-pop-head { padding: 6px 8px 2px; color: var(--dim); font-size: 11px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; }
+.label-manager {
+  display: flex; flex-direction: column; gap: 8px; padding: 10px;
+  background: var(--raised); border: 1px solid var(--border); border-radius: 6px;
+}
+.label-manager-head { display: flex; justify-content: space-between; align-items: center; }
+.label-manager .section-title { font-size: 11px; font-weight: 600; letter-spacing: 0.8px; color: var(--muted); text-transform: uppercase; }
+.label-edit { display: flex; flex-direction: column; gap: 6px; padding: 6px; background: var(--panel); border-radius: 5px; }
+.label-edit-head { display: flex; align-items: center; gap: 6px; }
+.label-edit-head input { flex: 1 1 auto; min-width: 0; height: 28px; padding: 0 8px; }
+.label-icon-button {
+  flex: 0 0 28px; width: 28px; height: 28px; padding: 0; display: flex; align-items: center; justify-content: center;
+  background: var(--app); border: 1px solid; border-radius: 5px;
+}
+.label-delete {
+  flex: 0 0 24px; width: 24px; height: 24px; padding: 0; display: flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 4px; background: none; color: var(--dim);
+}
+.swatches { display: flex; gap: 5px; flex-wrap: wrap; }
+.swatch { width: 18px; height: 18px; padding: 0; border-radius: 50%; border: 2px solid transparent; }
+.swatch.on { border-color: var(--text); }
+.icon-group { display: flex; flex-direction: column; gap: 4px; padding-top: 4px; }
+.icon-group-title { font-size: 11px; color: var(--dim); }
+.icon-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.icon-pick {
+  height: 30px; padding: 0; display: flex; align-items: center; justify-content: center;
+  background: var(--app); border: 1px solid var(--border); border-radius: 5px; color: #c9ced6;
+}
+.new-label { padding-left: 0; }
+.inspector-head .head-icon { display: flex; color: var(--muted); }
+/* A menu line's colour swatch column (spec-workspace.md 5.1.2): transparent unless set. */
+.ctx-swatch { flex: 0 0 8px; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; }
+.ctx-swatch + .ctx-label { margin-left: 6px; }
+.output-head .output-icon { display: inline-flex; margin-right: 6px; color: var(--muted); vertical-align: middle; }
+.field .reset { display: inline-flex; align-items: center; justify-content: center; }

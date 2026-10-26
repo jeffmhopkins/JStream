@@ -55,8 +55,9 @@ fn parse_args() -> Result<Args> {
 
 /// The studio every test starts from: two scenes with `Main` on program, holding one
 /// colour item as a 640×360 box at the canvas's centre, whose source has two video
-/// filters (Sharpen, then Blur turned off); two audio inputs no scene shows, the mic at
-/// −3 dB and desktop audio at −8.5 dB; and one encoder profile. No outputs: the tests
+/// filters (Sharpen, then Blur turned off); two audio sources no scene shows, the mic (an
+/// `audio_input`, which the privacy screen mutes) at −3 dB and desktop audio (a
+/// `desktop_audio`, which it doesn't) at −8.5 dB; and one encoder profile. No outputs: the tests
 /// create them through the UI.
 async fn seed(engine: &MockEngine) -> Result<()> {
     let control = engine.connect();
@@ -120,8 +121,8 @@ async fn seed(engine: &MockEngine) -> Result<()> {
             opacity: None,
             blend: None,
         },
-        audio_input("mic", "Mic · ES-9 Line"),
-        audio_input("desktop", "Desktop audio"),
+        audio_source("mic", "Mic · ES-9 Line", "audio_input"),
+        audio_source("desktop", "Desktop audio", "desktop_audio"),
         gain("mic", -3.0)?,
         gain("desktop", -8.5)?,
         Edit::EncoderCreate {
@@ -149,12 +150,12 @@ async fn seed(engine: &MockEngine) -> Result<()> {
     Ok(())
 }
 
-/// The audio input kind, so the mock gives its sources a mixer channel.
-fn audio_input_kind() -> KindDescriptor {
+/// An audio-only kind, so the mock gives its sources a mixer channel.
+fn audio_kind(kind_id: &str, name: &str) -> KindDescriptor {
     KindDescriptor {
-        kind_id: "audio_input".into(),
+        kind_id: kind_id.into(),
         category: KindCategory::Source,
-        name: "Audio input".into(),
+        name: name.into(),
         version: 1,
         video: false,
         audio: true,
@@ -163,14 +164,12 @@ fn audio_input_kind() -> KindDescriptor {
     }
 }
 
-/// Creates an audio input source.
-fn audio_input(id: &str, name: &str) -> Edit {
+/// Creates an audio source of an audio-only kind.
+fn audio_source(id: &str, name: &str, kind: &str) -> Edit {
     Edit::SourceCreate {
         source_id: SourceId::new(id),
         name: name.into(),
-        kind: SourceKind::Builtin {
-            kind: "audio_input".into(),
-        },
+        kind: SourceKind::Builtin { kind: kind.into() },
         settings: Settings::default(),
         duplicated_from: None,
     }
@@ -190,7 +189,10 @@ fn gain(id: &str, db: f32) -> Result<Edit> {
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let args = parse_args()?;
-    let engine = MockEngine::new().with_kinds([audio_input_kind()]);
+    let engine = MockEngine::new().with_kinds([
+        audio_kind("audio_input", "Audio input"),
+        audio_kind("desktop_audio", "Desktop audio"),
+    ]);
     seed(&engine)
         .await
         .map_err(|error| format!("seeding the mock engine: {error}"))?;

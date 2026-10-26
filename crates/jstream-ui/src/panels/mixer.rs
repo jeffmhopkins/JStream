@@ -3,6 +3,11 @@
 //! with its meter, fader, dB field, mute and routing, and, folded under Buses, a strip
 //! per bus with its meter, fader and mute. Levels come from `meters.tick`. Docked in a
 //! side column, or flipped from its title bar, the channels are vertical strips instead.
+//! While the privacy screen is on, the microphones it mutes say so.
+//!
+//! Monitoring (D22) is a bus's monitor, `bus.set_monitor`: the master's Hear button
+//! turns the master's on and switches it between after and before FX, and each bus
+//! strip's More picks its monitor's tap or turns it off, and names its device.
 //!
 //! A fader shows the value under the pointer while it is dragged and sends one edit when
 //! it is let go (or on each key press), so a drag is one undo step. Hearing the fader
@@ -18,13 +23,14 @@ use crate::dock::PanelId;
 use crate::panels::confirm::{Confirm, Pending};
 use crate::panels::inspector::Fold;
 use crate::panels::number::NumberField;
-use crate::store::plan_summary;
+use crate::store::{Studio, plan_summary};
 use crate::workspace::DockState;
 use futures_util::StreamExt;
 use jstream_control::protocol::{
-    Action, AudioFollow, Batch, BusId, BusInfo, BusMeter, Call, CallResult, DeleteTarget, Edit,
-    Event, Finite32, Loudness, MAX_BUSES, MAX_GAIN_DB, MIN_GAIN_DB, Query, QueryResult, Rev,
-    SendInfo, SourceAudio, SourceId, SourceKind, SourceMeter, gain_db_problem,
+    Action, AudioFollow, Batch, BusId, BusInfo, BusMeter, BusMonitor, Call, CallResult,
+    DeleteTarget, Edit, Event, Finite32, Loudness, MAX_BUSES, MAX_GAIN_DB, MIN_GAIN_DB, MonitorTap,
+    Query, QueryResult, Rev, SendInfo, SourceAudio, SourceId, SourceKind, SourceMeter,
+    gain_db_problem,
 };
 use jstream_control::{Control, ControlError};
 use leptos::prelude::*;
@@ -44,6 +50,15 @@ pub struct Channel {
     pub audio: SourceAudio,
     /// Whether it is a nested scene, which has no fader, mute or sends of its own.
     pub is_scene: bool,
+    /// Whether the privacy screen mutes it: a microphone ([`privacy_mutes`]).
+    pub privacy_mutes: bool,
+}
+
+/// Whether the privacy screen mutes a source of this kind: the engine's default set is
+/// the audio input devices, an `audio_input` source's and a webcam's paired input, and
+/// not desktop or application audio (ADR-0027 §4).
+pub fn privacy_mutes(kind: &SourceKind) -> bool {
+    matches!(kind, SourceKind::Builtin { kind } if kind == "audio_input" || kind == "webcam")
 }
 
 /// The mixer's part of the collection at one revision.
@@ -138,6 +153,7 @@ pub async fn load(control: &dyn Control) -> Result<Snapshot, String> {
             let audio = source.audio?;
             Some(Channel {
                 is_scene: matches!(source.kind, SourceKind::Scene { .. }),
+                privacy_mutes: privacy_mutes(&source.kind),
                 source_id: source.source_id,
                 name: source.name,
                 audio,
@@ -478,6 +494,104 @@ pub fn channel_count(n: usize) -> String {
     }
 }
 
+/// The master's Hear button (spec-panels.md M3, MX-05): what the master's monitor hears,
+/// "Hear: after FX", "Hear: before FX" or, with no monitor, "Hear: off". `short` is the
+/// vertical strip's narrower "Hear post", "Hear pre" or "Hear off". A tap from a newer
+/// server reads as on.
+pub fn monitor_label(monitor: Option<&BusMonitor>, short: bool) -> &'static str {
+    match (monitor.map(|m| m.tap), short) {
+        (None, false) => "Hear: off",
+        (None, true) => "Hear off",
+        (Some(MonitorTap::PostFilters), false) => "Hear: after FX",
+        (Some(MonitorTap::PostFilters), true) => "Hear post",
+        (Some(MonitorTap::PreFilters), false) => "Hear: before FX",
+        (Some(MonitorTap::PreFilters), true) => "Hear pre",
+        (Some(_), false) => "Hear: on",
+        (Some(_), true) => "Hear on",
+    }
+}
+
+/// The Hear button's tooltip: where the master is heard, and what a click does.
+pub fn monitor_title(monitor: Option<&BusMonitor>) -> String {
+    match monitor {
+        None => "What your headphones hear: nothing. Click to hear the program on the \
+                 default output, after FX"
+            .into(),
+        Some(monitor) => {
+            let next = match toggled_monitor(Some(monitor)).tap {
+                MonitorTap::PreFilters => "before FX",
+                _ => "after FX",
+            };
+            format!(
+                "What your headphones hear, on {}. Click to hear it {next}",
+                device_name(&monitor.device)
+            )
+        }
+    }
+}
+
+/// A monitor's device as the mixer names it: the platform's name, or "the default
+/// output" for the empty one.
+pub fn device_name(device: &str) -> String {
+    if device.is_empty() {
+        "the default output".into()
+    } else {
+        format!("“{device}”")
+    }
+}
+
+/// The monitor a click on the Hear button sets: with none, the default output after FX,
+/// as the prototype starts; else the other tap, on the same device. Taking a monitor
+/// away is in the bus strip's More.
+pub fn toggled_monitor(monitor: Option<&BusMonitor>) -> BusMonitor {
+    match monitor {
+        None => BusMonitor::default(),
+        Some(monitor) => BusMonitor {
+            device: monitor.device.clone(),
+            tap: if monitor.tap == MonitorTap::PostFilters {
+                MonitorTap::PreFilters
+            } else {
+                MonitorTap::PostFilters
+            },
+        },
+    }
+}
+
+/// A bus strip's monitor choice, as its menu's value: `off`, `post_filters` or
+/// `pre_filters`, or `other` for a tap from a newer server.
+pub fn monitor_choice(monitor: Option<&BusMonitor>) -> &'static str {
+    match monitor.map(|m| m.tap) {
+        None => "off",
+        Some(MonitorTap::PostFilters) => "post_filters",
+        Some(MonitorTap::PreFilters) => "pre_filters",
+        Some(_) => "other",
+    }
+}
+
+/// The monitor a bus strip's menu picks, keeping the device it had: `None` for off.
+pub fn chosen_monitor(choice: &str, current: Option<&BusMonitor>) -> Option<BusMonitor> {
+    let tap = match choice {
+        "post_filters" => MonitorTap::PostFilters,
+        "pre_filters" => MonitorTap::PreFilters,
+        _ => return None,
+    };
+    let device = current.map(|m| m.device.clone()).unwrap_or_default();
+    Some(BusMonitor { device, tap })
+}
+
+/// The monitor with the device a bus strip's field names (trimmed; empty for the
+/// default output), keeping its tap, or why the engine would refuse it.
+pub fn with_device(current: &BusMonitor, typed: &str) -> Result<BusMonitor, String> {
+    let monitor = BusMonitor {
+        device: typed.trim().to_owned(),
+        tap: current.tap,
+    };
+    match monitor.problem() {
+        Some((field, reason)) => Err(format!("The monitor's {field} {reason}.")),
+        None => Ok(monitor),
+    }
+}
+
 /// The part of a channel's name before " · ", for a narrow vertical strip.
 pub fn short_name(name: &str) -> &str {
     name.split(" · ").next().unwrap_or(name)
@@ -663,6 +777,45 @@ impl Panel {
             )
             .await
         }
+    }
+
+    /// Gives a bus a monitor, or (with `None`) takes it away.
+    fn set_monitor(self, bus_id: BusId, monitor: Option<BusMonitor>) {
+        let patched = bus_id.clone();
+        let shown = monitor.clone();
+        self.apply(Edit::BusSetMonitor { bus_id, monitor }, move |s| {
+            s.patch_bus(&patched, |b| b.monitor = shown);
+        });
+    }
+
+    /// The master's monitor, once the state is read.
+    fn master_monitor(self) -> Option<BusMonitor> {
+        self.snapshot.with(|s| {
+            s.as_ref()
+                .and_then(|s| s.bus(&BusId::master()))
+                .and_then(|b| b.monitor.clone())
+        })
+    }
+
+    /// The Hear button, on the master card or (`short`) the master strip.
+    fn hear_button(self, short: bool) -> AnyView {
+        let loaded = move || self.snapshot.with(Option::is_some);
+        let monitor = move || self.master_monitor();
+        view! {
+            <button
+                class="ghost-button hear"
+                class:on=move || monitor().is_some()
+                disabled=move || !loaded()
+                title=move || monitor_title(monitor().as_ref())
+                on:click=move |_| {
+                    let next = toggled_monitor(self.master_monitor().as_ref());
+                    self.set_monitor(BusId::master(), Some(next));
+                }
+            >
+                {move || monitor_label(monitor().as_ref(), short)}
+            </button>
+        }
+        .into_any()
     }
 
     /// Sends one action, showing its error if it fails.
@@ -864,7 +1017,8 @@ pub fn Mixer() -> impl IntoView {
 }
 
 /// The master card (spec-panels.md M3): the fold button over the channels with their
-/// count, the monitor and program FX buttons that aren't built yet, the short-term
+/// count, the Hear button that sets the master's monitor, the program output's FX
+/// button, which shows the master chain in the Filters panel (FL-07), the short-term
 /// loudness against the target, and the true peak.
 #[component]
 fn MasterCard(panel: Panel, open: RwSignal<bool>) -> AnyView {
@@ -916,20 +1070,8 @@ fn MasterCard(panel: Panel, open: RwSignal<bool>) -> AnyView {
                 >
                     "Reset"
                 </button>
-                <button
-                    class="ghost-button"
-                    disabled
-                    title="What your headphones hear: not built yet (MX-05)"
-                >
-                    "Hear: after FX"
-                </button>
-                <button
-                    class="fx-button"
-                    disabled
-                    title="Filters on the program output: the master chain isn't built yet (FL-07)"
-                >
-                    "FX 0"
-                </button>
+                {panel.hear_button(false)}
+                <MasterFx />
             </div>
             <div class="master-row">
                 <span class="master-label">"Loudness"</span>
@@ -953,9 +1095,43 @@ fn MasterCard(panel: Panel, open: RwSignal<bool>) -> AnyView {
     .into_any()
 }
 
+/// The program output's "FX N" button on the master card and strip (spec-panels.md M3,
+/// M5): it counts the master chain's filters, from `Studio`'s collection, and shows that
+/// chain in the Filters panel (FL-07).
+#[component]
+fn MasterFx() -> impl IntoView {
+    let fx = use_context::<crate::panels::filters::FilterDialogs>();
+    let dock = use_context::<crate::workspace::DockState>();
+    let studio = use_context::<crate::store::Studio>();
+    let label = move || {
+        let chains = studio
+            .and_then(|s| s.collection.with(|c| c.as_ref().map(|c| c.master.clone())))
+            .unwrap_or_default();
+        crate::panels::outputs::fx_label(&chains)
+    };
+    let show = move |_| {
+        if let Some(fx) = fx {
+            fx.pick(jstream_control::protocol::FilterOwner::Master);
+            if let Some(dock) = dock {
+                dock.0.update(|d| d.show(crate::dock::PanelId::Filters));
+            }
+        }
+    };
+    view! {
+        <button
+            class="fx-button"
+            disabled=fx.is_none()
+            title="Filters on the program output"
+            on:click=show
+        >
+            {label}
+        </button>
+    }
+}
+
 /// The master strip of the vertical mixer (spec-panels.md M5): the fold button with the
 /// channel count, the short-term loudness filling up to the target line, the loudness
-/// and true peak, and the FX and monitor buttons that aren't built yet.
+/// and true peak, the program output's FX button, and the Hear button.
 #[component]
 fn MasterStrip(panel: Panel, open: RwSignal<bool>) -> AnyView {
     let count = move || {
@@ -1009,20 +1185,8 @@ fn MasterStrip(panel: Panel, open: RwSignal<bool>) -> AnyView {
                     if over { note } else { "" }
                 }}
             </span>
-            <button
-                class="fx-button"
-                disabled
-                title="Filters on the program output: the master chain isn't built yet (FL-07)"
-            >
-                "FX 0"
-            </button>
-            <button
-                class="ghost-button"
-                disabled
-                title="What your headphones hear: not built yet (MX-05)"
-            >
-                "Hear post"
-            </button>
+            <MasterFx />
+            {panel.hear_button(true)}
         </div>
     }
     .into_any()
@@ -1236,6 +1400,11 @@ fn ChannelStrip(panel: Panel, source_id: SourceId) -> AnyView {
     let name = move || channel.with(|c| c.as_ref().map(|c| c.name.clone()).unwrap_or_default());
     let audio = move || channel.with(|c| c.as_ref().map(|c| c.audio));
     let is_scene = move || channel.with(|c| c.as_ref().is_some_and(|c| c.is_scene));
+    let privacy = use_context::<Studio>().map(|studio| studio.privacy);
+    let privacy_muted = move || {
+        privacy.is_some_and(|on| on.get())
+            && channel.with(|c| c.as_ref().is_some_and(|c| c.privacy_mutes))
+    };
     let enabled = move || audio().is_some_and(|a| a.enabled);
     let muted = move || audio().is_some_and(|a| a.muted);
     let reading = move || id.with_value(|id| panel.meters.with(|m| m.sources.get(id).copied()));
@@ -1263,7 +1432,12 @@ fn ChannelStrip(panel: Panel, source_id: SourceId) -> AnyView {
 
     view! {
         <li class="mix-row" class:off=move || !enabled()>
-            <span class="strip-name" title=move || id.with_value(ToString::to_string)>{name}</span>
+            <span class="strip-name" title=move || id.with_value(ToString::to_string)>
+                {name}
+                {move || privacy_muted().then(|| view! {
+                    <span class="privacy-muted">" · muted (privacy)"</span>
+                })}
+            </span>
             <Show
                 when=move || !is_scene()
                 fallback=|| view! { <span class="hint">"Nested scene: follows its own sources"</span> }
@@ -1312,8 +1486,9 @@ fn ChannelStrip(panel: Panel, source_id: SourceId) -> AnyView {
     .into_any()
 }
 
-/// One audio source's strip in the vertical mixer (spec-panels.md M5): its short name, a
-/// meter filling upwards, its gain stacked + over − and scrubbed up and down, and mute.
+/// One audio source's strip in the vertical mixer (spec-panels.md M5): its short name
+/// (marked while the privacy screen mutes it), a meter filling upwards, its gain stacked +
+/// over − and scrubbed up and down, and mute.
 /// Its routing is in the horizontal mixer.
 #[component]
 fn ChannelColumn(panel: Panel, source_id: SourceId) -> AnyView {
@@ -1329,6 +1504,11 @@ fn ChannelColumn(panel: Panel, source_id: SourceId) -> AnyView {
     let name = move || channel.with(|c| c.as_ref().map(|c| c.name.clone()).unwrap_or_default());
     let audio = move || channel.with(|c| c.as_ref().map(|c| c.audio));
     let is_scene = move || channel.with(|c| c.as_ref().is_some_and(|c| c.is_scene));
+    let privacy = use_context::<Studio>().map(|studio| studio.privacy);
+    let privacy_muted = move || {
+        privacy.is_some_and(|on| on.get())
+            && channel.with(|c| c.as_ref().is_some_and(|c| c.privacy_mutes))
+    };
     let enabled = move || audio().is_some_and(|a| a.enabled);
     let muted = move || audio().is_some_and(|a| a.muted);
     let reading = move || id.with_value(|id| panel.meters.with(|m| m.sources.get(id).copied()));
@@ -1343,6 +1523,11 @@ fn ChannelColumn(panel: Panel, source_id: SourceId) -> AnyView {
     view! {
         <li class="mix-column" class:off=move || !enabled()>
             <span class="column-name" title=name>{move || short_name(&name()).to_owned()}</span>
+            {move || privacy_muted().then(|| view! {
+                <span class="privacy-muted column-note" title="Muted by the privacy screen">
+                    "muted (privacy)"
+                </span>
+            })}
             <Show
                 when=move || !is_scene()
                 fallback=|| view! { <span class="hint" title="Nested scene: follows its own sources">"Nested"</span> }
@@ -1452,8 +1637,8 @@ fn SendRow(panel: Panel, source_id: SourceId, bus_id: BusId) -> AnyView {
     .into_any()
 }
 
-/// One bus's strip: its meter, fader and mute, renaming and deleting. The master's
-/// loudness is on the master card.
+/// One bus's strip: its meter, fader and mute, and under More its monitor, renaming and
+/// deleting. The master's loudness is on the master card.
 #[component]
 fn BusStrip(panel: Panel, bus_id: BusId) -> AnyView {
     let bus = {
@@ -1502,6 +1687,28 @@ fn BusStrip(panel: Panel, bus_id: BusId) -> AnyView {
             },
             move |s| s.patch_bus(&patched, |b| b.muted = muted),
         );
+    };
+    let monitor = move || bus.with(|b| b.as_ref().and_then(|b| b.monitor.clone()));
+    let choice = move || bus.with(|b| monitor_choice(b.as_ref().and_then(|b| b.monitor.as_ref())));
+    let menu = NodeRef::<leptos::html::Select>::new();
+    let choose_monitor = move |event: leptos::ev::Event| {
+        let chosen = chosen_monitor(&event_target_value(&event), monitor().as_ref());
+        // The menu shows the bus's monitor, not the pick: the accepted edit moves it
+        // there, and a refused one leaves it where the bus is.
+        if let Some(menu) = menu.get_untracked() {
+            menu.set_value(choice());
+        }
+        panel.set_monitor(id.get_value(), chosen);
+    };
+    let set_device = move |event: leptos::ev::Event| {
+        let Some(current) = monitor() else {
+            return;
+        };
+        match with_device(&current, &event_target_value(&event)) {
+            Ok(next) if next == current => {}
+            Ok(next) => panel.set_monitor(id.get_value(), Some(next)),
+            Err(problem) => panel.problem.set(Some(problem)),
+        }
     };
     let begin_rename = move |_| {
         new_name.set(name());
@@ -1583,6 +1790,44 @@ fn BusStrip(panel: Panel, bus_id: BusId) -> AnyView {
             {mute_button(muted, toggle_mute)}
             <details class="routing">
                 <summary>"More"</summary>
+                <label>
+                    "Monitor"
+                    <select
+                        node_ref=menu
+                        aria-label=move || format!("{} monitor", name())
+                        on:change=choose_monitor
+                    >
+                        <option value="off" prop:selected=move || choice() == "off">"Off"</option>
+                        <option value="post_filters" prop:selected=move || choice() == "post_filters">
+                            "Hear after FX"
+                        </option>
+                        <option value="pre_filters" prop:selected=move || choice() == "pre_filters">
+                            "Hear before FX"
+                        </option>
+                        <option
+                            value="other"
+                            disabled
+                            hidden=move || choice() != "other"
+                            prop:selected=move || choice() == "other"
+                        >
+                            "Another tap (from a newer engine)"
+                        </option>
+                    </select>
+                </label>
+                <Show when=move || monitor().is_some()>
+                    <label>
+                        "Device"
+                        <input
+                            type="text"
+                            class="monitor-device"
+                            aria-label=move || format!("{} monitor device", name())
+                            placeholder="Default output"
+                            title="The output device, as the system names it; empty for the default output"
+                            prop:value=move || monitor().map(|m| m.device).unwrap_or_default()
+                            on:change=set_device
+                        />
+                    </label>
+                </Show>
                 <button on:click=begin_rename>"Rename"</button>
                 {(!is_master).then(|| view! { <button on:click=ask_delete>"Delete"</button> })}
             </details>
@@ -1649,14 +1894,16 @@ fn NewBusForm(panel: Panel) -> AnyView {
 mod tests {
     use super::{
         FADER_STEPS, HOLD_TICKS, Hold, LOUDNESS_TARGET_LUFS, MeterBank, apply_plan, channel_count,
-        checked_gain, db_to_position, edit, format_gain, format_lufs, format_true_peak, load,
-        loudness_fraction, meter_fraction, meters_vertical, next_bus_id, plan_bus_delete,
-        position_to_db, short_name, true_peak_dbtp, true_peak_note,
+        checked_gain, chosen_monitor, db_to_position, device_name, edit, format_gain, format_lufs,
+        format_true_peak, load, loudness_fraction, meter_fraction, meters_vertical, monitor_choice,
+        monitor_label, monitor_title, next_bus_id, plan_bus_delete, position_to_db, privacy_mutes,
+        short_name, toggled_monitor, true_peak_dbtp, true_peak_note, with_device,
     };
     use jstream_control::protocol::{
-        AudioFollow, Batch, BusId, BusMeter, Call, CallResult, DeleteTarget, Edit, Finite32, Hello,
-        KindCategory, KindDescriptor, Loudness, PROTOCOL_VERSION, Query, QueryResult, Response,
-        SceneId, Settings, SourceId, SourceKind, SourceMeter, Welcome,
+        AudioFollow, Batch, BusId, BusMeter, BusMonitor, Call, CallResult, DeleteTarget, Edit,
+        Finite32, Hello, KindCategory, KindDescriptor, Loudness, MonitorTap, PROTOCOL_VERSION,
+        Query, QueryResult, Response, SceneId, Settings, SourceId, SourceKind, SourceMeter,
+        Welcome,
     };
     use jstream_control::{BoxFuture, Control, ControlError, EventStream, MockEngine};
     use std::pin::pin;
@@ -1741,6 +1988,8 @@ mod tests {
         assert!(nested.is_scene);
         let channel = loaded.channel(&mic).expect("mic");
         assert!(!channel.is_scene);
+        assert!(channel.privacy_mutes, "a microphone");
+        assert!(!nested.privacy_mutes);
         assert_eq!(channel.audio.follow, AudioFollow::Always);
         assert_eq!(loaded.buses.len(), 1);
         assert!(loaded.buses[0].bus_id.is_master());
@@ -1957,6 +2206,20 @@ mod tests {
     }
 
     #[test]
+    fn the_privacy_screen_mutes_the_microphones() {
+        let builtin = |kind: &str| SourceKind::Builtin { kind: kind.into() };
+        assert!(privacy_mutes(&builtin("audio_input")));
+        assert!(privacy_mutes(&builtin("webcam")), "its paired input");
+        assert!(!privacy_mutes(&builtin("desktop_audio")));
+        assert!(!privacy_mutes(&builtin("app_audio")));
+        assert!(!privacy_mutes(&builtin("browser")));
+        let nested = SourceKind::Scene {
+            scene_id: SceneId::new("s"),
+        };
+        assert!(!privacy_mutes(&nested));
+    }
+
+    #[test]
     fn the_snapshot_patches_like_the_engine() {
         let engine = MockEngine::new().with_kinds([audio_kind("audio_input")]);
         let control = connected(&engine);
@@ -2013,6 +2276,86 @@ mod tests {
         assert_eq!(format_gain(3.0), "+3.0 dB");
         assert_eq!(format_gain(0.0), "0.0 dB");
         assert_eq!(format_gain(-12.5), "\u{2212}12.5 dB");
+    }
+
+    /// The Hear button turns the master's monitor on after FX, then switches its tap on
+    /// the same device; a strip's menu turns it off or picks a tap, and its field names
+    /// the device. The mock takes each, and `state.get` reads it back.
+    #[test]
+    fn monitors_are_set_and_read_back() {
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let master = BusId::master();
+        let snapshot = now(load(&control)).expect("load");
+        let none = snapshot.bus(&master).and_then(|b| b.monitor.clone());
+        assert_eq!(none, None);
+        assert_eq!(monitor_label(None, false), "Hear: off");
+        assert_eq!(monitor_label(None, true), "Hear off");
+        assert_eq!(monitor_choice(None), "off");
+        assert!(monitor_title(None).contains("default output, after FX"));
+
+        // Off, then after FX on the default output.
+        let on = toggled_monitor(None);
+        assert_eq!(on, BusMonitor::default());
+        assert_eq!(monitor_label(Some(&on), false), "Hear: after FX");
+        assert_eq!(monitor_label(Some(&on), true), "Hear post");
+        let set = |monitor: Option<BusMonitor>| {
+            let change = Edit::BusSetMonitor {
+                bus_id: master.clone(),
+                monitor,
+            };
+            now(edit(&control, change)).expect("set monitor");
+            let snapshot = now(load(&control)).expect("load");
+            snapshot.bus(&master).and_then(|b| b.monitor.clone())
+        };
+        assert_eq!(set(Some(on.clone())), Some(on.clone()));
+
+        // A device, kept when the tap switches.
+        let named = with_device(&on, "  Headphones (USB)  ").expect("a device");
+        assert_eq!(named.device, "Headphones (USB)");
+        assert_eq!(set(Some(named.clone())), Some(named.clone()));
+        assert!(monitor_title(Some(&named)).contains("on “Headphones (USB)”"));
+        assert!(monitor_title(Some(&named)).ends_with("before FX"));
+        let pre = toggled_monitor(Some(&named));
+        assert_eq!(pre.device, "Headphones (USB)");
+        assert_eq!(monitor_label(Some(&pre), false), "Hear: before FX");
+        assert_eq!(monitor_label(Some(&pre), true), "Hear pre");
+        assert_eq!(monitor_choice(Some(&pre)), "pre_filters");
+        assert_eq!(set(Some(pre.clone())), Some(pre.clone()));
+        assert_eq!(toggled_monitor(Some(&pre)).tap, on.tap);
+
+        // The menu keeps the device, and off takes the monitor away.
+        assert_eq!(
+            chosen_monitor("post_filters", Some(&pre)),
+            Some(BusMonitor {
+                device: "Headphones (USB)".into(),
+                tap: on.tap,
+            })
+        );
+        assert_eq!(
+            chosen_monitor("pre_filters", None),
+            Some(BusMonitor {
+                device: String::new(),
+                tap: pre.tap,
+            })
+        );
+        assert_eq!(chosen_monitor("off", Some(&pre)), None);
+        assert_eq!(set(None), None);
+
+        // An empty field is the default output; the engine's limits are checked first.
+        assert_eq!(with_device(&pre, " ").map(|m| m.device), Ok(String::new()));
+        assert_eq!(device_name(""), "the default output");
+        assert!(with_device(&pre, "a\tb").is_err());
+        assert!(with_device(&pre, &"d".repeat(513)).is_err());
+
+        // A tap from a newer server is shown as on, and switches to after FX.
+        let later = BusMonitor {
+            device: String::new(),
+            tap: MonitorTap::Unknown,
+        };
+        assert_eq!(monitor_label(Some(&later), false), "Hear: on");
+        assert_eq!(monitor_choice(Some(&later)), "other");
+        assert_eq!(toggled_monitor(Some(&later)).tap, MonitorTap::PostFilters);
     }
 
     #[test]
