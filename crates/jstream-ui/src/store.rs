@@ -1,6 +1,7 @@
 //! The UI's copy of the engine's state, shared by every panel: the collection as
 //! `state.get` last reported it, the program scene, whether the privacy screen is on,
-//! what is selected, and the kind descriptors read so far. The app keeps it current from the session's events; panels
+//! what is selected, the sources' sizes (`source.sizes` and `source.size_changed`) and
+//! the kind descriptors read so far. The app keeps it current from the session's events; panels
 //! read it reactively and change the engine only through calls, never by editing it.
 //!
 //! Docs: crates/jstream-ui/README.md#design
@@ -8,9 +9,9 @@
 use crate::session::Session;
 use jstream_control::ControlError;
 use jstream_control::protocol::{
-    Action, Batch, BusInfo, Call, CallResult, Canvas, DeleteTarget, Edit, Event, ItemId, ItemInfo,
-    KindDescriptor, KindSummary, OutputInfo, Query, QueryResult, Rev, SceneId, SceneInfo,
-    SceneRole, SourceId, SourceInfo, SourceKind,
+    Action, Batch, BusInfo, Call, CallResult, Canvas, DeleteTarget, Edit, Event, FolderId,
+    FolderInfo, ItemId, ItemInfo, KindDescriptor, KindSummary, OutputInfo, Query, QueryResult, Rev,
+    SceneId, SceneInfo, SceneRole, SourceId, SourceInfo, SourceKind, SourceSize,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -32,6 +33,8 @@ pub struct Collection {
     /// Every audio bus, ordered by ID, the master among them: what a `bus` parameter
     /// picks from.
     pub buses: Vec<BusInfo>,
+    /// The scene list's folders, in folder order (ADR-0024 §3, ADR-0064).
+    pub folders: Vec<FolderInfo>,
 }
 
 impl Collection {
@@ -45,6 +48,7 @@ impl Collection {
                 scenes,
                 outputs,
                 buses,
+                folders,
                 ..
             } => Some(Collection {
                 rev,
@@ -53,6 +57,7 @@ impl Collection {
                 scenes,
                 outputs,
                 buses,
+                folders,
             }),
             _ => None,
         }
@@ -106,7 +111,18 @@ impl Collection {
         }
     }
 
-    /// Whether any scene, source, item or output uses this ID. The engine rejects a
+    /// A source's own size in pixels, `(width, height)`: the one `source.sizes` last
+    /// reported in `sizes`, else the canvas for a nested scene, whose own size it is
+    /// (ADR-0022). `None` while the engine knows no size for it: a source that hasn't
+    /// drawn a frame yet, or has no picture.
+    pub fn source_size(&self, sizes: &Sizes, source_id: &SourceId) -> Option<(u32, u32)> {
+        sizes.get(source_id).copied().or_else(|| {
+            matches!(self.source(source_id)?.kind, SourceKind::Scene { .. })
+                .then_some((self.canvas.width, self.canvas.height))
+        })
+    }
+
+    /// Whether any scene, folder, source, item or output uses this ID. The engine rejects a
     /// creating edit whose ID exists, so new IDs are checked against all of them.
     pub fn id_taken(&self, id: &str) -> bool {
         self.scenes
@@ -114,7 +130,29 @@ impl Collection {
             .any(|s| s.scene_id.as_str() == id || s.items.iter().any(|i| i.item_id.as_str() == id))
             || self.sources.iter().any(|s| s.source_id.as_str() == id)
             || self.outputs.iter().any(|o| o.output_id.as_str() == id)
+            || self.folders.iter().any(|f| f.folder_id.as_str() == id)
     }
+
+    /// The folder with this ID.
+    pub fn folder(&self, folder_id: &FolderId) -> Option<&FolderInfo> {
+        self.folders.iter().find(|f| &f.folder_id == folder_id)
+    }
+}
+
+/// Each source's current size in pixels, `(width, height)`, as `source.sizes` and
+/// `source.size_changed` report them: runtime state, so no revision goes with it. A
+/// source the engine knows no size for is absent.
+pub type Sizes = HashMap<SourceId, (u32, u32)>;
+
+/// The sizes a `source.sizes` result reports.
+pub fn sizes_of(sources: Vec<SourceSize>) -> Sizes {
+    sources
+        .into_iter()
+        .filter_map(|s| {
+            let size = s.size?;
+            Some((s.source_id, (size.width, size.height)))
+        })
+        .collect()
 }
 
 /// What is selected: a scene being edited, and items in it.
@@ -200,12 +238,15 @@ impl Selection {
 /// confirmation: `None` when it deletes the target alone.
 pub fn plan_summary(edits: &[Edit]) -> Option<String> {
     let (mut items, mut sources, mut references) = (0_usize, 0_usize, 0_usize);
+    let (mut scenes, mut folders) = (0_usize, 0_usize);
     // The last edit is the delete of the target itself.
     for edit in edits.iter().take(edits.len().saturating_sub(1)) {
         match edit {
             Edit::ItemRemove { .. } => items += 1,
             Edit::SourceDelete { .. } | Edit::SceneDelete { .. } => sources += 1,
             Edit::SourceSetSettings { patch, .. } => references += patch.0.len(),
+            Edit::SceneSetFolder { .. } => scenes += 1,
+            Edit::FolderSetParent { .. } => folders += 1,
             _ => {}
         }
     }
@@ -224,6 +265,14 @@ pub fn plan_summary(edits: &[Edit]) -> Option<String> {
             "settings that refer to it",
         )
         .map(|p| format!("clears {p}")),
+        [
+            count(scenes, "scene", "scenes"),
+            count(folders, "folder", "folders"),
+        ]
+        .into_iter()
+        .flatten()
+        .reduce(|a, b| format!("{a} and {b}"))
+        .map(|p| format!("moves {p} up a level")),
     ]
     .into_iter()
     .flatten()
@@ -295,6 +344,11 @@ pub struct Studio {
     privacy_reports: StoredValue<PrivacyReports>,
     /// What is selected.
     pub selection: RwSignal<Selection>,
+    /// Each source's size, as the engine last reported it.
+    pub sizes: RwSignal<Sizes>,
+    /// Whether the canvas is in crop mode, where every handle crops (CV-08). The canvas
+    /// and the item menu toggle it.
+    pub crop_mode: RwSignal<bool>,
     /// The source kinds `kind.list` reported, once it answered.
     pub kinds: RwSignal<Option<Vec<KindSummary>>>,
     /// The kind descriptors read so far, by kind ID.
@@ -319,6 +373,8 @@ impl Studio {
             privacy: RwSignal::new(false),
             privacy_reports: StoredValue::new(PrivacyReports::default()),
             selection: RwSignal::new(Selection::default()),
+            sizes: RwSignal::new(Sizes::new()),
+            crop_mode: RwSignal::new(false),
             kinds: RwSignal::new(None),
             descriptors: RwSignal::new(HashMap::new()),
             problem: RwSignal::new(None),
@@ -335,6 +391,8 @@ impl Studio {
         self.privacy_reports.update_value(PrivacyReports::reset);
         self.privacy.set(false);
         self.selection.set(Selection::default());
+        self.sizes.set(Sizes::new());
+        self.crop_mode.set(false);
         self.kinds.set(None);
         self.descriptors.set(HashMap::new());
         self.problem.set(None);
@@ -356,6 +414,7 @@ impl Studio {
             // The state is read after the program scene, so the first selection is the
             // scene on program.
             studio.refresh(&first);
+            studio.read_sizes(&first).await;
         });
         let kinds = session.clone();
         spawn_local(async move {
@@ -389,11 +448,18 @@ impl Studio {
                 // A dropped `privacy.changed` would leave the indicator wrong.
                 self.refresh(session);
                 self.read_privacy(session);
+                let studio = *self;
+                let session = session.clone();
+                spawn_local(async move { studio.read_sizes(&session).await });
             }
             Event::PrivacyChanged { on, .. } => {
                 self.privacy_reports.update_value(PrivacyReports::changed);
                 self.privacy.set(*on);
             }
+            Event::SourceSizeChanged { source_id, size } => self.sizes.update(|sizes| match size {
+                Some(size) => _ = sizes.insert(source_id.clone(), (size.width, size.height)),
+                None => _ = sizes.remove(source_id),
+            }),
             Event::StudioChanged { program_scene, .. } => {
                 self.program.set(program_scene.clone());
                 self.reconcile();
@@ -429,6 +495,17 @@ impl Studio {
     /// indicator follows the `privacy.changed` the engine sends, not the request.
     pub fn set_privacy(&self, session: &Session, on: bool) {
         self.act(session, Action::PrivacySet { on });
+    }
+
+    /// Reads every source's size with `source.sizes`; `source.size_changed` keeps them
+    /// current after it. A failure shows in the problem bar and leaves no size known, so
+    /// the canvas can't crop by dragging until a size arrives.
+    async fn read_sizes(&self, session: &Session) {
+        match query(session, Query::SourceSizes).await {
+            Ok(QueryResult::SourceSizes { sources }) => self.sizes.set(sizes_of(sources)),
+            Ok(other) => self.report(&unexpected(other.name())),
+            Err(error) => self.report(&error),
+        }
     }
 
     /// Re-reads the state with `state.get`. While one read is in flight, further
@@ -475,16 +552,28 @@ impl Studio {
         if let Some(next) = next
             && self.selection.with_untracked(|s| *s != next)
         {
+            self.leave_crop_mode_for(next.scene.as_ref());
             self.selection.set(next);
         }
     }
 
     /// Selects a scene, and no item.
     pub fn select_scene(&self, scene_id: SceneId) {
+        self.leave_crop_mode_for(Some(&scene_id));
         self.selection.set(Selection {
             scene: Some(scene_id),
             ..Selection::default()
         });
+    }
+
+    /// Leaves crop mode when the canvas is about to show another scene than `next`, as
+    /// a scene switch does in the prototype.
+    fn leave_crop_mode_for(&self, next: Option<&SceneId>) {
+        if self.selection.with_untracked(|s| s.scene.as_ref() != next)
+            && self.crop_mode.get_untracked()
+        {
+            self.crop_mode.set(false);
+        }
     }
 
     /// Selects one item of the selected scene alone, or none.
@@ -634,12 +723,12 @@ fn unexpected(what: &str) -> ControlError {
 #[cfg(test)]
 mod tests {
     use super::{
-        Collection, PrivacyReports, Selection, Studio, fresh_id, list_kinds, plan_summary,
+        Collection, PrivacyReports, Selection, Studio, fresh_id, list_kinds, plan_summary, sizes_of,
     };
     use crate::session::Session;
     use jstream_control::protocol::{
         Batch, Call, CallResult, Edit, Hello, ItemId, Query, QueryResult, Response, SceneId,
-        SceneRole, Settings, SourceId, SourceKind, Welcome,
+        SceneRole, Settings, SourceId, SourceKind, SourceSize, Welcome,
     };
     use jstream_control::{BoxFuture, Control, ControlError, EventStream, MockEngine};
     use leptos::prelude::*;
@@ -772,6 +861,35 @@ mod tests {
     }
 
     #[test]
+    fn source_sizes_come_from_the_engine_or_the_canvas_for_a_scene() {
+        let c = collection();
+        let sizes = sizes_of(vec![
+            SourceSize {
+                source_id: SourceId::new("red"),
+                size: Some(jstream_control::protocol::PixelSize {
+                    width: 640,
+                    height: 360,
+                }),
+            },
+            SourceSize {
+                source_id: SourceId::new("dark"),
+                size: None,
+            },
+        ]);
+        assert_eq!(sizes.len(), 1, "a source with no size is left out");
+        assert_eq!(
+            c.source_size(&sizes, &SourceId::new("red")),
+            Some((640, 360))
+        );
+        assert_eq!(c.source_size(&sizes, &SourceId::new("dark")), None);
+        assert_eq!(
+            c.source_size(&sizes, &SourceId::new("nest")),
+            Some((c.canvas.width, c.canvas.height)),
+            "a nested scene is the canvas's size"
+        );
+    }
+
+    #[test]
     fn the_selection_follows_the_state() {
         let c = collection();
         let b = SceneId::new("b");
@@ -859,6 +977,28 @@ mod tests {
         assert_eq!(
             plan_summary(&edits).as_deref(),
             Some("This also removes 2 items, clears 1 setting that refers to it.")
+        );
+        // A folder's plan moves what it holds up to its parent.
+        let edits = vec![
+            Edit::SceneSetFolder {
+                scene_id: "a".into(),
+                folder_id: None,
+            },
+            Edit::SceneSetFolder {
+                scene_id: "b".into(),
+                folder_id: None,
+            },
+            Edit::FolderSetParent {
+                folder_id: "inner".into(),
+                parent: None,
+            },
+            Edit::FolderDelete {
+                folder_id: "outer".into(),
+            },
+        ];
+        assert_eq!(
+            plan_summary(&edits).as_deref(),
+            Some("This also moves 2 scenes and 1 folder up a level.")
         );
     }
 

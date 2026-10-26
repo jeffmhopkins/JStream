@@ -1,17 +1,18 @@
 //! The preview canvas: the selected scene's items as boxes over the preview, with
-//! selection, drag, resize, rotate and snapping on their geometry (ADR-0022), each
-//! finished gesture sent as one undoable edit, and undo and redo (ADR-0032) from the
-//! keyboard. The scene and the selected item are the shared [`Studio`] selection, so
+//! selection, drag, resize, rotate and snapping on their geometry (ADR-0022), crop by
+//! dragging (in crop mode, or with Alt), each finished gesture sent as one undoable
+//! edit, and undo and redo (ADR-0032) from the keyboard. The scene and the selected item are the shared [`Studio`] selection, so
 //! the canvas, the sources list and the properties form show the same ones.
 //!
 //! Under the boxes is the live program preview: one `preview.subscribe` stream on the
 //! session's binary channel, decoded into a `<canvas>` ([`preview`], [`screen`]).
 //! While the privacy screen is on, the frame is blurred and a notice says so. Pure
-//! logic lives in [`transform`], [`snap`], [`model`] and [`preview`], which are tested
+//! logic lives in [`transform`], [`crop`], [`snap`], [`model`] and [`preview`], which are tested
 //! natively; this module is the Leptos component that wires them to the page.
 //!
 //! Docs: crates/jstream-ui/README.md#canvas
 
+pub mod crop;
 pub mod group;
 pub mod live;
 pub mod model;
@@ -27,9 +28,12 @@ use crate::menu::{Entry, Menus};
 use crate::panels::add_source::AddSourceDialog;
 use crate::store::Studio;
 use crate::workspace::DockState;
+use crop::{CropGesture, Picture};
 use futures_util::StreamExt;
 use group::{GROUP_ROTATE_OFFSET, GroupGesture, GroupKind};
-use jstream_control::protocol::{GestureId, HistoryOp, ItemGeometry, ItemId, Placed, Rev, SceneId};
+use jstream_control::protocol::{
+    Crop, GestureId, HistoryOp, ItemGeometry, ItemId, Placed, Rev, SceneId,
+};
 use leptos::ev;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -46,6 +50,12 @@ use transform::{
 
 /// The colour of the selection, its handles and its readout.
 const ACCENT: &str = "#4c8dff";
+/// The colour of the selection, its handles and its readout in crop mode.
+const CROP: &str = "#e8a33d";
+/// The fill of the crop ghost, the uncropped extent.
+const CROP_GHOST: &str = "rgba(232,163,61,0.08)";
+/// The side of a drawn crop handle, in screen pixels.
+const CROP_HANDLE_SIZE: f32 = 12.0;
 /// The colour of snap guides.
 const GUIDE: &str = "#ff4fd8";
 /// The outline of an item under the pointer.
@@ -63,6 +73,15 @@ enum Action {
         item_id: ItemId,
         /// What the drag does, from where.
         gesture: Gesture,
+    },
+    /// Crops one item by one of its handles.
+    Crop {
+        /// The item cropped.
+        item_id: ItemId,
+        /// What the drag does, from where.
+        gesture: CropGesture,
+        /// The item's crop when the drag started.
+        start: Crop,
     },
     /// Moves, scales or rotates every selected item.
     Group(GroupGesture),
@@ -113,6 +132,7 @@ impl Awaiting {
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Active {
     One(GestureKind),
+    Crop,
     Group(GroupKind),
 }
 
@@ -127,9 +147,15 @@ pub fn Canvas() -> impl IntoView {
         studio.collection.with(|collection| {
             let collection = collection.as_ref()?;
             let scene = studio.selection.with(|s| s.scene.clone());
-            Some(Layout::of(collection, scene.as_ref()))
+            Some(
+                studio
+                    .sizes
+                    .with(|sizes| Layout::sized(collection, scene.as_ref(), sizes)),
+            )
         })
     });
+    // Crop mode, shared with the item menu; switching scenes leaves it (`Studio`).
+    let crop_mode = studio.crop_mode;
     // Every selected item, the primary one first.
     let chosen = Memo::new(move |_| {
         studio
@@ -139,6 +165,8 @@ pub fn Canvas() -> impl IntoView {
     // The geometries shown for items while they are dragged, and until the collection
     // catches up with the committed edits.
     let preview = RwSignal::new(Vec::<(ItemId, ItemGeometry)>::new());
+    // The same for crops.
+    let preview_crops = RwSignal::new(Vec::<(ItemId, Crop)>::new());
     let awaiting = StoredValue::new(Awaiting::default());
     let guides = RwSignal::new(Vec::<Guide>::new());
     let snapping = RwSignal::new(true);
@@ -180,6 +208,7 @@ pub fn Canvas() -> impl IntoView {
     let drop_preview_if_caught_up = move || {
         if awaiting.get_value().caught_up(shown_rev()) && drag.with_value(Option::is_none) {
             preview.set(Vec::new());
+            preview_crops.set(Vec::new());
         }
     };
     // Follow the collection: drop the preview once it shows the committed edits.
@@ -199,6 +228,12 @@ pub fn Canvas() -> impl IntoView {
         preview.update(|shown| {
             shown.retain(|(id, _)| !placed.iter().any(|(p, _)| p == id));
             shown.extend(placed);
+        });
+    };
+    let show_crops = move |cropped: Vec<(ItemId, Crop)>| {
+        preview_crops.update(|shown| {
+            shown.retain(|(id, _)| !cropped.iter().any(|(c, _)| c == id));
+            shown.extend(cropped);
         });
     };
 
@@ -246,6 +281,7 @@ pub fn Canvas() -> impl IntoView {
     // values opened one; a commit that can't be sent or fails cancels the gesture, so
     // the output doesn't keep the dragged geometry (ADR-0032).
     let commit = move |placed: Vec<(ItemId, ItemGeometry)>,
+                       crops: Vec<(ItemId, Crop)>,
                        scene: Option<SceneId>,
                        gesture: Option<GestureId>| {
         let Some(open) = session.and_then(|s| s.get()) else {
@@ -254,7 +290,7 @@ pub fn Canvas() -> impl IntoView {
         let scene_id = scene.or_else(|| {
             layout.with_untracked(|l| l.as_ref().and_then(|l| l.scene.clone()).map(|(id, _)| id))
         });
-        let Some(scene_id) = scene_id.filter(|_| !placed.is_empty()) else {
+        let Some(scene_id) = scene_id.filter(|_| !placed.is_empty() || !crops.is_empty()) else {
             if let Some(gesture) = gesture {
                 spawn_local(async move {
                     if let Err(error) = model::live_cancel(&*open.control, gesture).await {
@@ -265,10 +301,17 @@ pub fn Canvas() -> impl IntoView {
             return;
         };
         show(placed.clone());
+        show_crops(crops.clone());
         awaiting.update_value(|a| a.in_flight += 1);
         spawn_local(async move {
-            let result =
-                model::commit(&*open.control, scene_id, placed.clone(), gesture.clone()).await;
+            let result = model::commit(
+                &*open.control,
+                scene_id,
+                placed.clone(),
+                crops.clone(),
+                gesture.clone(),
+            )
+            .await;
             awaiting.update_value(|a| a.in_flight = a.in_flight.saturating_sub(1));
             match result {
                 Ok(rev) => awaiting.update_value(|a| a.last = a.last.max(Some(rev))),
@@ -281,6 +324,7 @@ pub fn Canvas() -> impl IntoView {
                     // Stop showing the failed geometries, unless a later gesture has
                     // already replaced them.
                     preview.update(|shown| shown.retain(|entry| !placed.contains(entry)));
+                    preview_crops.update(|shown| shown.retain(|entry| !crops.contains(entry)));
                 }
             }
             drop(open);
@@ -310,6 +354,48 @@ pub fn Canvas() -> impl IntoView {
         preview
             .with_untracked(|p| p.iter().find(|(p, _)| p == id).map(|(_, g)| *g))
             .or_else(|| current.geometry_of(id))
+    };
+    // An item's crop as the user last left it, as `latest` does for its box.
+    let latest_crop = move |current: &Layout, id: &ItemId| -> Crop {
+        preview_crops
+            .with_untracked(|p| p.iter().find(|(p, _)| p == id).map(|(_, c)| *c))
+            .or_else(|| current.item(id).map(|i| i.crop))
+            .unwrap_or(Crop::NONE)
+    };
+    // An item's picture at `geometry`, with its latest crop, while its source's size is
+    // known.
+    let picture_of = move |current: &Layout, id: &ItemId, geometry: &ItemGeometry| {
+        let size = current.item(id)?.source_size?;
+        Picture::of(geometry, size, latest_crop(current, id))
+    };
+    // The handle of the one selected item under `point`: in crop mode the resize
+    // handles sit on its picture and crop, with Alt the box's do; the picture is given
+    // when the handle crops. With no picture known there is nothing to crop, so the
+    // box's handles resize as usual.
+    let single_handle = move |current: &Layout,
+                              id: &ItemId,
+                              geometry: &ItemGeometry,
+                              fit: Viewport,
+                              point: Point,
+                              alt: bool|
+          -> Option<(Handle, Option<Picture>)> {
+        let picture = picture_of(current, id, geometry);
+        if crop_mode.get_untracked()
+            && let Some(picture) = picture
+        {
+            if let Some(Handle::Rotate) = transform::handle_at(geometry, point, fit) {
+                return Some((Handle::Rotate, None));
+            }
+            let handles = picture.geometry(geometry)?;
+            return match transform::handle_at(&handles, point, fit)? {
+                Handle::Rotate => None,
+                handle => Some((handle, Some(picture))),
+            };
+        }
+        match transform::handle_at(geometry, point, fit)? {
+            handle @ Handle::Resize { .. } if alt => Some((handle, picture)),
+            handle => Some((handle, None)),
+        }
     };
     // The selected items that have a box, with their latest geometries.
     let selected_boxes = move |current: &Layout| -> Vec<(ItemId, ItemGeometry)> {
@@ -342,7 +428,7 @@ pub fn Canvas() -> impl IntoView {
     // Starts a drag: captures the pointer and remembers what it does.
     let start = move |event: &ev::PointerEvent, point: Point, action: Action, current: &Layout| {
         let moving: Vec<ItemId> = match &action {
-            Action::One { item_id, .. } => vec![item_id.clone()],
+            Action::One { item_id, .. } | Action::Crop { item_id, .. } => vec![item_id.clone()],
             Action::Group(gesture) => gesture.starts.iter().map(|(id, _)| id.clone()).collect(),
             Action::Marquee { .. } => Vec::new(),
         };
@@ -358,12 +444,17 @@ pub fn Canvas() -> impl IntoView {
         }
         active.set(match &action {
             Action::One { gesture, .. } => Some(Active::One(gesture.kind)),
+            Action::Crop { .. } => Some(Active::Crop),
             Action::Group(gesture) => Some(Active::Group(gesture.kind)),
             Action::Marquee { .. } => None,
         });
         // A box drag opens a gesture, so the output follows it before the drop.
         let gesture = match (&action, session, current.scene.as_ref()) {
-            (Action::One { .. } | Action::Group(_), Some(session), Some((scene_id, _))) => {
+            (
+                Action::One { .. } | Action::Crop { .. } | Action::Group(_),
+                Some(session),
+                Some((scene_id, _)),
+            ) => {
                 // Unique for the session, so a remounted canvas never reuses one.
                 session.get().map(|open| {
                     let id = GestureId::new(studio.fresh_id(&open, "drag"));
@@ -407,16 +498,29 @@ pub fn Canvas() -> impl IntoView {
                 return;
             }
         } else if let Some((item_id, geometry)) = selection.first()
-            && let Some(handle) = transform::handle_at(geometry, point, fit)
+            && let Some((handle, picture)) =
+                single_handle(&current, item_id, geometry, fit, point, event.alt_key())
         {
-            let gesture = Gesture {
-                kind: handle.into(),
-                start: *geometry,
-                origin: point,
-            };
-            let action = Action::One {
-                item_id: item_id.clone(),
-                gesture,
+            let action = match (handle, picture) {
+                (Handle::Resize { x, y }, Some(picture)) => Action::Crop {
+                    item_id: item_id.clone(),
+                    gesture: CropGesture {
+                        x,
+                        y,
+                        start: *geometry,
+                        picture,
+                        origin: point,
+                    },
+                    start: latest_crop(&current, item_id),
+                },
+                _ => Action::One {
+                    item_id: item_id.clone(),
+                    gesture: Gesture {
+                        kind: handle.into(),
+                        start: *geometry,
+                        origin: point,
+                    },
+                },
             };
             start(&event, point, action, &current);
             return;
@@ -478,7 +582,7 @@ pub fn Canvas() -> impl IntoView {
 
     // The cursor and the hover outline for the pointer at `point`, while nothing is
     // dragged.
-    let hover = move |fit: Viewport, point: Point| {
+    let hover = move |fit: Viewport, point: Point, alt: bool| {
         let Some(current) = layout.get_untracked() else {
             return;
         };
@@ -486,17 +590,19 @@ pub fn Canvas() -> impl IntoView {
         let handle = if selection.len() > 1 {
             Bounds::around(selection.iter().map(|(_, g)| g))
                 .and_then(|b| group::handle_at(b, point, fit))
+                .map(|h| (h, false))
         } else {
-            selection
-                .first()
-                .and_then(|(_, g)| transform::handle_at(g, point, fit))
+            selection.first().and_then(|(id, g)| {
+                single_handle(&current, id, g, fit, point, alt).map(|(h, p)| (h, p.is_some()))
+            })
         };
         let under = transform::topmost_at(current.boxes(), point).cloned();
         let on_selected = under
             .as_ref()
             .is_some_and(|id| selection.iter().any(|(s, _)| s == id));
         let next = match handle {
-            Some(handle) => handle_cursor(handle),
+            Some((_, true)) => "crosshair",
+            Some((handle, false)) => handle_cursor(handle),
             None if on_selected => "move",
             None if under.is_some() => "pointer",
             None => "default",
@@ -514,7 +620,7 @@ pub fn Canvas() -> impl IntoView {
             return;
         };
         let Some(mut current) = drag.get_value() else {
-            hover(fit, point);
+            hover(fit, point, event.alt_key());
             return;
         };
         let modifiers = Modifiers {
@@ -537,15 +643,33 @@ pub fn Canvas() -> impl IntoView {
                 let at = current.pointer.follow(point, event.shift_key());
                 if let Some(update) = gesture.update(at, modifiers, targets, tolerance) {
                     let placed = vec![(item_id.clone(), update.geometry)];
-                    live.with_value(|l| l.iter().for_each(|l| l.show(placed.clone())));
+                    live.with_value(|l| l.iter().for_each(|l| l.show(placed.clone(), Vec::new())));
                     show(placed);
                     guides.set(update.guides);
+                }
+            }
+            Action::Crop {
+                item_id, gesture, ..
+            } => {
+                let at = current.pointer.follow(point, event.shift_key());
+                if let Some((geometry, crop)) = gesture.update(at) {
+                    let placed = vec![(item_id.clone(), geometry)];
+                    let cropped = vec![(item_id.clone(), crop)];
+                    live.with_value(|l| {
+                        l.iter()
+                            .for_each(|l| l.show(placed.clone(), cropped.clone()));
+                    });
+                    show(placed);
+                    show_crops(cropped);
                 }
             }
             Action::Group(gesture) => {
                 let at = current.pointer.follow(point, event.shift_key());
                 if let Some(update) = gesture.update(at, modifiers, targets, tolerance) {
-                    live.with_value(|l| l.iter().for_each(|l| l.show(update.geometries.clone())));
+                    live.with_value(|l| {
+                        l.iter()
+                            .for_each(|l| l.show(update.geometries.clone(), Vec::new()));
+                    });
                     show(update.geometries);
                     guides.set(update.guides);
                 }
@@ -562,7 +686,7 @@ pub fn Canvas() -> impl IntoView {
         active.set(None);
         guides.set(Vec::new());
         marquee.set(None);
-        let starts: Vec<(ItemId, ItemGeometry)> = match finished.action {
+        let (starts, crop_starts): live::Values = match finished.action {
             Action::Marquee { from, to, base } => {
                 if !keep {
                     studio.select_items(base);
@@ -572,8 +696,16 @@ pub fn Canvas() -> impl IntoView {
                 }
                 return;
             }
-            Action::One { item_id, gesture } => vec![(item_id, gesture.start)],
-            Action::Group(gesture) => gesture.starts,
+            Action::One { item_id, gesture } => (vec![(item_id, gesture.start)], Vec::new()),
+            Action::Crop {
+                item_id,
+                gesture,
+                start,
+            } => (
+                vec![(item_id.clone(), gesture.start)],
+                vec![(item_id, start)],
+            ),
+            Action::Group(gesture) => (gesture.starts, Vec::new()),
         };
         let moved: Vec<(ItemId, ItemGeometry)> = preview.with_untracked(|shown| {
             shown
@@ -582,15 +714,24 @@ pub fn Canvas() -> impl IntoView {
                 .cloned()
                 .collect()
         });
+        let cropped: Vec<(ItemId, Crop)> = preview_crops.with_untracked(|shown| {
+            shown
+                .iter()
+                .filter(|(id, c)| crop_starts.iter().any(|(s, start)| s == id && start != c))
+                .cloned()
+                .collect()
+        });
         let gesture = live.with_value(Clone::clone);
         live.set_value(None);
-        if keep && !moved.is_empty() {
+        if keep && (!moved.is_empty() || !cropped.is_empty()) {
             match gesture {
                 // The commit waits for the live values sent before it.
                 Some(gesture) => {
-                    gesture.commit(move |scene, ending| commit(moved, Some(scene), ending));
+                    gesture.commit(move |scene, ending| {
+                        commit(moved, cropped, Some(scene), ending);
+                    });
                 }
-                None => commit(moved, None, None),
+                None => commit(moved, cropped, None, None),
             }
         } else {
             if let Some(gesture) = gesture {
@@ -598,6 +739,7 @@ pub fn Canvas() -> impl IntoView {
             }
             // Back to where the gesture started, which is any commit's pending geometry.
             show(starts);
+            show_crops(crop_starts);
             drop_preview_if_caught_up();
         }
     };
@@ -611,16 +753,53 @@ pub fn Canvas() -> impl IntoView {
         studio.select_items(all);
     };
 
+    let item_cx = item_menu::Context::from_page();
+    // The selected items of the scene shown, for the edit keys.
+    let chosen_here = move || {
+        let scene = layout.with_untracked(|l| l.as_ref()?.scene.as_ref().map(|s| s.0.clone()));
+        scene.map(|scene| (scene, chosen.get_untracked()))
+    };
     let on_key = move |event: ev::KeyboardEvent| {
         let key = event.key();
         let command = event.ctrl_key() || event.meta_key();
         match key.as_str() {
+            // Ctrl+D duplicates as a reference, Ctrl+Shift+D as a clone (KB-04).
+            "d" | "D" if command => {
+                if let (Some(cx), Some((scene, items))) = (item_cx, chosen_here()) {
+                    cx.duplicate_selected(&scene, &items, event.shift_key());
+                }
+            }
+            "Delete" => {
+                let Some((cx, (scene, items))) = item_cx.zip(chosen_here()) else {
+                    return;
+                };
+                // Only the shown scene's items: the selection can outlive one, after an
+                // undo or another client's delete, and one missing ID fails the batch.
+                let items: Vec<ItemId> = studio.collection.with_untracked(|c| {
+                    let Some(shown) = c.as_ref().and_then(|c| c.scene(&scene)) else {
+                        return Vec::new();
+                    };
+                    items
+                        .into_iter()
+                        .filter(|id| shown.items.iter().any(|i| i.item_id == *id))
+                        .collect()
+                });
+                if items.is_empty() {
+                    return;
+                }
+                cx.remove(&items);
+            }
             "z" | "Z" if command && event.shift_key() => step(HistoryOp::Redo),
             "z" | "Z" if command => step(HistoryOp::Undo),
             "y" | "Y" if command => step(HistoryOp::Redo),
             "a" | "A" if command => select_all(),
+            "c" | "C" if !command && !event.alt_key() => crop_mode.update(|on| *on = !*on),
+            "v" | "V" if !command && !event.alt_key() => crop_mode.set(false),
             "Escape" if drag.with_value(Option::is_some) => end(false),
-            "Escape" => studio.select_item(None),
+            "Escape" => {
+                crop_mode.set(false);
+                studio.select_item(None);
+            }
             "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown" => {
                 let Some(current) = layout.get_untracked() else {
                     return;
@@ -639,7 +818,7 @@ pub fn Canvas() -> impl IntoView {
                 if moved.is_empty() {
                     return;
                 }
-                commit(moved, None, None);
+                commit(moved, Vec::new(), None, None);
             }
             _ => return,
         }
@@ -647,7 +826,6 @@ pub fn Canvas() -> impl IntoView {
     };
 
     // A double click on an item selects it alone and opens its properties.
-    let item_cx = item_menu::Context::from_page();
     let on_double = move |event: ev::MouseEvent| {
         let Some((_, point)) = canvas_at(event.client_x(), event.client_y()) else {
             return;
@@ -781,6 +959,25 @@ pub fn Canvas() -> impl IntoView {
             .collect()
     };
 
+    // The primary selected item's crop as shown, and its picture at `geometry` while its
+    // source's size is known.
+    let shown_crop = move || -> Option<(Crop, Option<Picture>, ItemGeometry)> {
+        let id = chosen.with(|c| c.first().cloned())?;
+        let geometry = *shown_selection().first()?;
+        let crops = preview_crops.get();
+        layout.with(|l| {
+            let item = l.as_ref()?.item(&id)?;
+            let crop = crops
+                .iter()
+                .find(|(c, _)| *c == id)
+                .map_or(item.crop, |(_, c)| *c);
+            let picture = item
+                .source_size
+                .and_then(|size| Picture::of(&geometry, size, crop));
+            Some((crop, picture, geometry))
+        })
+    };
+
     let canvas_size = move || {
         layout.with(|l| {
             let canvas = l.as_ref().map(|l| l.canvas).unwrap_or_default();
@@ -831,7 +1028,7 @@ pub fn Canvas() -> impl IntoView {
                 let points = outline(&geometry);
                 let is_selected = picked.contains(&id);
                 let (stroke, width) = if is_selected {
-                    (ACCENT, "2")
+                    (selection_colour(picked.len(), crop_mode.get()), "2")
                 } else if under.as_ref() == Some(&id) {
                     (HOVER, "1")
                 } else {
@@ -854,7 +1051,11 @@ pub fn Canvas() -> impl IntoView {
                             x=bounds.left + px(4.0)
                             y=bounds.top + px(14.0)
                             font-size=px(12.0)
-                            fill=if is_selected { ACCENT } else { "#9aa1ac" }
+                            fill=if is_selected {
+                                selection_colour(picked.len(), crop_mode.get())
+                            } else {
+                                "#9aa1ac"
+                            }
                         >
                             {name}
                         </text>
@@ -864,15 +1065,22 @@ pub fn Canvas() -> impl IntoView {
             .collect_view()
     };
 
-    // Eight square handles at `points`, and a knob on a stem from `top` towards `knob`
-    // that stops `stem` short of its full length `reach`.
+    // Square handles at `squares`, in `colour` (filled, and larger, for crop handles),
+    // and a knob on a stem from `top` towards `knob` that stops `stem` short of its full
+    // length `reach`.
     let chrome = move |fit: Viewport,
                        squares: Vec<Point>,
                        top: Point,
                        knob: Point,
                        stem: f32,
-                       reach: f32| {
-        let side = fit.canvas_len(HANDLE_SIZE);
+                       reach: f32,
+                       colour: &'static str,
+                       cropping: bool| {
+        let side = fit.canvas_len(if cropping {
+            CROP_HANDLE_SIZE
+        } else {
+            HANDLE_SIZE
+        });
         let corner = fit.canvas_len(2.0);
         let along = stem / reach;
         let end = Point {
@@ -889,8 +1097,8 @@ pub fn Canvas() -> impl IntoView {
                         width=side
                         height=side
                         rx=corner
-                        fill="#fff"
-                        stroke=ACCENT
+                        fill=if cropping { CROP } else { "#fff" }
+                        stroke=colour
                         stroke-width="2"
                         vector-effect="non-scaling-stroke"
                     />
@@ -904,7 +1112,7 @@ pub fn Canvas() -> impl IntoView {
                     y1=top.y
                     x2=end.x
                     y2=end.y
-                    stroke=ACCENT
+                    stroke=colour
                     vector-effect="non-scaling-stroke"
                 />
                 <circle
@@ -912,7 +1120,7 @@ pub fn Canvas() -> impl IntoView {
                     cy=knob.y
                     r=fit.canvas_len(KNOB_SIZE / 2.0)
                     fill="#fff"
-                    stroke=ACCENT
+                    stroke=colour
                     stroke-width="2"
                     vector-effect="non-scaling-stroke"
                 />
@@ -922,7 +1130,12 @@ pub fn Canvas() -> impl IntoView {
     };
 
     // A pill of `text` centred under `bottom`, `gap` screen pixels below it.
-    let pill = move |fit: Viewport, text: String, middle: f32, bottom: f32, gap: f32| {
+    let pill = move |fit: Viewport,
+                     text: String,
+                     middle: f32,
+                     bottom: f32,
+                     gap: f32,
+                     colour: &'static str| {
         // Mono 11px, padded 2px by 7px.
         let height = fit.canvas_len(17.0);
         let width = fit.canvas_len(text.chars().count() as f32 * 6.6 + 14.0);
@@ -935,7 +1148,7 @@ pub fn Canvas() -> impl IntoView {
                     width=width
                     height=height
                     rx=fit.canvas_len(3.0)
-                    fill=ACCENT
+                    fill=colour
                 />
                 <text
                     x=middle
@@ -959,22 +1172,60 @@ pub fn Canvas() -> impl IntoView {
         match picked.as_slice() {
             [] => None,
             [geometry] => {
-                let squares = RESIZE_HANDLES
-                    .iter()
-                    .map(|h| transform::handle_point(geometry, *h, fit))
-                    .collect();
+                let cropping = crop_mode.get();
+                let colour = selection_colour(1, cropping);
+                let (crop, picture) = shown_crop().map_or((Crop::NONE, None), |(c, p, _)| (c, p));
+                // In crop mode the handles sit on the picture, and only once its size is
+                // known.
+                let handle_box = if cropping {
+                    picture.and_then(|p| p.geometry(geometry))
+                } else {
+                    Some(*geometry)
+                };
+                let squares = handle_box.map_or_else(Vec::new, |b| {
+                    RESIZE_HANDLES
+                        .iter()
+                        .map(|h| transform::handle_point(&b, *h, fit))
+                        .collect()
+                });
                 let top = transform::handle_point(geometry, Handle::Resize { x: 0, y: -1 }, fit);
                 let knob = transform::handle_point(geometry, Handle::Rotate, fit);
-                let kind = match active.get() {
-                    Some(Active::One(kind)) => Some(kind),
-                    _ => None,
+                let text = match active.get() {
+                    Some(Active::Crop) => crop::readout(&crop),
+                    Some(Active::One(kind)) => readout_text(geometry, Some(kind), false),
+                    _ if cropping && picture.is_none() => {
+                        format!(
+                            "{}  · no source size yet",
+                            readout_text(geometry, None, false)
+                        )
+                    }
+                    _ => readout_text(geometry, None, crop != Crop::NONE),
                 };
+                // The uncropped extent, while the item is cropped or crop mode is on.
+                let ghost = picture.filter(|_| cropping || crop != Crop::NONE).map(|p| {
+                    let points: String = p
+                        .ghost(geometry)
+                        .iter()
+                        .map(|c| format!("{},{} ", c.x, c.y))
+                        .collect();
+                    view! {
+                        <polygon
+                            class="crop-ghost"
+                            points=points
+                            fill=CROP_GHOST
+                            stroke=CROP
+                            stroke-dasharray="4 3"
+                            vector-effect="non-scaling-stroke"
+                        />
+                    }
+                });
                 let bounds = Bounds::of(geometry);
                 let middle = (bounds.left + bounds.right) / 2.0;
                 Some(
                     view! {
-                        {chrome(fit, squares, top, knob, STEM_LENGTH, ROTATE_OFFSET)}
-                        {pill(fit, readout_text(geometry, kind), middle, bounds.bottom, 10.0)}
+                        {ghost}
+                        {chrome(fit, squares, top, knob, STEM_LENGTH, ROTATE_OFFSET, colour, cropping)}
+                        {pill(fit, text, middle, bounds.bottom, 10.0, colour)}
                     }
                     .into_any(),
                 )
@@ -1016,8 +1267,8 @@ pub fn Canvas() -> impl IntoView {
                             stroke-dasharray="4 3"
                             vector-effect="non-scaling-stroke"
                         />
-                        {chrome(fit, squares, top, knob, STEM_LENGTH, GROUP_ROTATE_OFFSET)}
-                        {pill(fit, text, (o.left + o.right) / 2.0, o.bottom, 12.0)}
+                        {chrome(fit, squares, top, knob, STEM_LENGTH, GROUP_ROTATE_OFFSET, ACCENT, false)}
+                        {pill(fit, text, (o.left + o.right) / 2.0, o.bottom, 12.0, ACCENT)}
                     }
                     .into_any(),
                 )
@@ -1182,11 +1433,23 @@ pub fn Canvas() -> impl IntoView {
                 <button
                     class="canvas-tool"
                     aria-label="Move and resize"
-                    aria-pressed="true"
-                    title="Move / resize (V) · Shift: half speed or add to selection · Ctrl: no snap while moving, stretch on handles"
+                    aria-pressed=move || if crop_mode.get() { "false" } else { "true" }
+                    title="Move / resize (V) · Shift: half speed or add to selection · Ctrl: no snap while moving, stretch on handles · Alt on a handle: crop"
+                    on:click=move |_| crop_mode.set(false)
                 >
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M5 3l13 8-6 1.5L9 19z" />
+                    </svg>
+                </button>
+                <button
+                    class="canvas-tool crop-tool"
+                    aria-label="Crop"
+                    aria-pressed=move || if crop_mode.get() { "true" } else { "false" }
+                    title="Crop (C) · drag a handle to trim"
+                    on:click=move |_| crop_mode.update(|on| *on = !*on)
+                >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14" />
                     </svg>
                 </button>
                 <span class="canvas-tool-gap" aria-hidden="true"></span>
@@ -1228,10 +1491,20 @@ fn handle_cursor(handle: Handle) -> &'static str {
     }
 }
 
+/// The colour of the selection's outline, handles and readout: the crop colour for one
+/// item in crop mode, else the accent.
+fn selection_colour(selected: usize, crop_mode: bool) -> &'static str {
+    if crop_mode && selected == 1 {
+        CROP
+    } else {
+        ACCENT
+    }
+}
+
 /// The readout pill's text: while moving `X n  Y n` (the box's top-left), while
-/// resizing `W × H`, while rotating `N°`, and at rest `W × H` with `  · N°` when the
-/// item is rotated.
-fn readout_text(geometry: &ItemGeometry, active: Option<GestureKind>) -> String {
+/// resizing `W × H`, while rotating `N°`, and at rest `W × H`, with `  · cropped` when
+/// the item is `cropped` and `  · N°` when it is rotated.
+fn readout_text(geometry: &ItemGeometry, active: Option<GestureKind>, cropped: bool) -> String {
     // Adding zero turns -0 into 0.
     let whole = |n: f32| n.round() + 0.0;
     let (width, height) = (geometry.size.width.get(), geometry.size.height.get());
@@ -1246,8 +1519,16 @@ fn readout_text(geometry: &ItemGeometry, active: Option<GestureKind>) -> String 
         ),
         Some(GestureKind::Resize { .. }) => size,
         Some(GestureKind::Rotate) => angle,
-        None if rotation != 0.0 => format!("{size}  · {angle}"),
-        None => size,
+        None => {
+            let mut text = size;
+            if cropped {
+                text.push_str("  · cropped");
+            }
+            if rotation != 0.0 {
+                text.push_str(&format!("  · {angle}"));
+            }
+            text
+        }
     }
 }
 
@@ -1405,19 +1686,30 @@ mod tests {
     #[test]
     fn the_readout_shows_what_the_drag_changes() {
         let upright = geometry(960.0, 540.0, 640.0, 360.0, 0.0);
-        assert_eq!(readout_text(&upright, None), "640 × 360");
+        assert_eq!(readout_text(&upright, None, false), "640 × 360");
         assert_eq!(
-            readout_text(&upright, Some(GestureKind::Move)),
+            readout_text(&upright, Some(GestureKind::Move), false),
             "X 640  Y 360"
         );
         assert_eq!(
-            readout_text(&upright, Some(GestureKind::Resize { x: 1, y: 1 })),
+            readout_text(&upright, Some(GestureKind::Resize { x: 1, y: 1 }), true),
             "640 × 360"
         );
+        assert_eq!(readout_text(&upright, None, true), "640 × 360  · cropped");
         let turned = geometry(320.0, 180.0, 640.0, 360.0, -12.34);
-        assert_eq!(readout_text(&turned, None), "640 × 360  · -12.3°");
-        assert_eq!(readout_text(&turned, Some(GestureKind::Rotate)), "-12.3°");
-        assert_eq!(readout_text(&turned, Some(GestureKind::Move)), "X 0  Y 0");
+        assert_eq!(readout_text(&turned, None, false), "640 × 360  · -12.3°");
+        assert_eq!(
+            readout_text(&turned, None, true),
+            "640 × 360  · cropped  · -12.3°"
+        );
+        assert_eq!(
+            readout_text(&turned, Some(GestureKind::Rotate), false),
+            "-12.3°"
+        );
+        assert_eq!(
+            readout_text(&turned, Some(GestureKind::Move), false),
+            "X 0  Y 0"
+        );
     }
 
     #[test]
@@ -1457,6 +1749,13 @@ mod tests {
         waiting.last = Some(Rev(6));
         assert!(!waiting.caught_up(Some(Rev(5))));
         assert!(waiting.caught_up(Some(Rev(6))));
+    }
+
+    #[test]
+    fn crop_mode_colours_one_item_only() {
+        assert_eq!(selection_colour(1, true), CROP);
+        assert_eq!(selection_colour(2, true), ACCENT);
+        assert_eq!(selection_colour(1, false), ACCENT);
     }
 
     #[test]
