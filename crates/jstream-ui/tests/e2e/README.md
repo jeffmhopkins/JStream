@@ -198,6 +198,15 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   Ctrl+Z undoes, and Reset rotation and Clear crop sending nothing when nothing
   changes; with two items, Selection on, Distribute off, and Match width and height
   giving both the primary item's size.
+- **Keyframes and hotkeys** (`keyframes.spec.js`): New keyframe on Main's row nests
+  "Keyframe 1" under it with the diamond, selected, under the canvas banner, and Main's
+  caret folds it away and back; in the keyframe, the eye and the X field write its
+  overrides while Main's own item stays as it was, the blend mode is locked, and the
+  item menu's Remove from scene and layer order are disabled; Reset to “Main” clears
+  the overrides, after which the canvas's Ctrl+D and Del change nothing there; Switch
+  to it puts it on program, and Delete keyframe removes it and selects Main. The Inspector's Hotkey row binds F1 to Intro (which a second client
+  sees), F1 on the canvas then puts Intro on program on both clients, binding F1 to
+  Main takes it from Intro, Escape cancels a capture and × unbinds.
 - **Studio mode** (`studio.spec.js`, on the Transitions tab): a scene picked for
   preview goes to program with Transition, and the old program scene comes back on
   preview; Transition and Cut are off while preview is the program scene; a value the

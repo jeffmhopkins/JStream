@@ -74,6 +74,9 @@ pub struct Layout {
     pub canvas: Canvas,
     /// The scene and its name, or `None` when the collection has no scene.
     pub scene: Option<(SceneId, String)>,
+    /// The name of the scene's parent, when it is a keyframe scene: its items are the
+    /// parent's, and their boxes are its overrides (ADR-0049).
+    pub keyframe_of: Option<String>,
     /// Its items, in stacking order: the first is at the bottom.
     pub items: Vec<CanvasItem>,
 }
@@ -119,6 +122,7 @@ impl Layout {
                 rev: collection.rev,
                 canvas: collection.canvas,
                 scene: None,
+                keyframe_of: None,
                 items: Vec::new(),
             };
         };
@@ -141,6 +145,9 @@ impl Layout {
             rev: collection.rev,
             canvas: collection.canvas,
             scene: Some((scene.scene_id.clone(), scene.name.clone())),
+            keyframe_of: collection
+                .parent_of(&scene.scene_id)
+                .map(|p| p.name.clone()),
             items,
         }
     }

@@ -1,8 +1,12 @@
 //! The preview canvas: the selected scene's items as boxes over the preview, with
 //! selection, drag, resize, rotate and snapping on their geometry (ADR-0022), crop by
 //! dragging (in crop mode, or with Alt), each finished gesture sent as one undoable
-//! edit, and undo and redo (ADR-0032) from the keyboard. The scene and the selected item are the shared [`Studio`] selection, so
-//! the canvas, the sources list and the properties form show the same ones.
+//! edit, and undo and redo (ADR-0032) from the keyboard. The scene and the selected item
+//! are the shared [`Studio`] selection, so the canvas, the sources list and the
+//! properties form show the same ones. A keyframe scene shows its parent's items at its
+//! overrides under the keyframe banner, and its drags commit without live values, which
+//! the engine doesn't take there yet (#702); Ctrl+D and Del, which would change the
+//! parent's items, do nothing there.
 //!
 //! Under the boxes is the live program preview: one `preview.subscribe` stream on the
 //! session's binary channel, decoded into a `<canvas>` ([`preview`], [`screen`]). Pure
@@ -447,13 +451,14 @@ pub fn Canvas() -> impl IntoView {
             Action::Group(gesture) => Some(Active::Group(gesture.kind)),
             Action::Marquee { .. } => None,
         });
-        // A box drag opens a gesture, so the output follows it before the drop.
+        // A box drag opens a gesture, so the output follows it before the drop. Live
+        // values on a keyframe scene wait on #702, so its drags only commit.
         let gesture = match (&action, session, current.scene.as_ref()) {
             (
                 Action::One { .. } | Action::Crop { .. } | Action::Group(_),
                 Some(session),
                 Some((scene_id, _)),
-            ) => {
+            ) if current.keyframe_of.is_none() => {
                 // Unique for the session, so a remounted canvas never reuses one.
                 session.get().map(|open| {
                     let id = GestureId::new(studio.fresh_id(&open, "drag"));
@@ -758,17 +763,25 @@ pub fn Canvas() -> impl IntoView {
         let scene = layout.with_untracked(|l| l.as_ref()?.scene.as_ref().map(|s| s.0.clone()));
         scene.map(|scene| (scene, chosen.get_untracked()))
     };
+    // A keyframe scene's items are its parent's, which its edit keys don't add or remove.
+    let in_keyframe =
+        move || layout.with_untracked(|l| l.as_ref().is_some_and(|l| l.keyframe_of.is_some()));
     let on_key = move |event: ev::KeyboardEvent| {
         let key = event.key();
         let command = event.ctrl_key() || event.meta_key();
         match key.as_str() {
             // Ctrl+D duplicates as a reference, Ctrl+Shift+D as a clone (KB-04).
             "d" | "D" if command => {
-                if let (Some(cx), Some((scene, items))) = (item_cx, chosen_here()) {
+                if !in_keyframe()
+                    && let (Some(cx), Some((scene, items))) = (item_cx, chosen_here())
+                {
                     cx.duplicate_selected(&scene, &items, event.shift_key());
                 }
             }
             "Delete" => {
+                if in_keyframe() {
+                    return event.prevent_default();
+                }
                 let Some((cx, (scene, items))) = item_cx.zip(chosen_here()) else {
                     return;
                 };
@@ -1463,6 +1476,11 @@ pub fn Canvas() -> impl IntoView {
                     </svg>
                 </button>
             </div>
+            {move || layout.with(|l| l.as_ref()?.keyframe_of.clone()).map(|parent| view! {
+                <div class="keyframe-banner" role="status">
+                    "◆ Keyframe of “" {parent} "”: only placement and visibility can change"
+                </div>
+            })}
             <div class="canvas-caption">{caption}</div>
             {legacy_note}
         </div>

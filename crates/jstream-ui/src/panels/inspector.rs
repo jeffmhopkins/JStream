@@ -13,9 +13,10 @@ use super::Properties;
 use super::number::NumberField;
 use super::studio;
 use crate::app::SessionContext;
+use crate::hotkeys;
 use crate::store::{Collection, Studio};
 use jstream_control::protocol::{
-    BlendMode, Crop, Edit, Finite32, ItemGeometry, ItemId, ItemInfo, PlacementForm, SceneId,
+    BlendMode, Chord, Crop, Edit, Finite32, ItemGeometry, ItemId, ItemInfo, PlacementForm, SceneId,
     SourceKind, TransitionPresetId, TransitionsInfo,
 };
 use leptos::prelude::*;
@@ -208,7 +209,8 @@ fn to_f32(value: f64) -> f32 {
     value
 }
 
-/// The scenes that show `scene_id` as a source, by name, in display order.
+/// The scenes that show `scene_id` as a source, by name, in display order: a keyframe
+/// scene shows its parent's items, so it is left out.
 pub fn used_in(collection: &Collection, scene_id: &SceneId) -> Vec<String> {
     let shows_it = |item: &ItemInfo| {
         matches!(
@@ -219,17 +221,20 @@ pub fn used_in(collection: &Collection, scene_id: &SceneId) -> Vec<String> {
     collection
         .scenes
         .iter()
+        .filter(|scene| scene.variant_of.is_none())
         .filter(|scene| scene.items.iter().any(shows_it))
         .map(|scene| scene.name.clone())
         .collect()
 }
 
 /// Whether the item's source is placed in more than one scene, so the item is one of
-/// several references to it and its name reads in italics.
+/// several references to it and its name reads in italics. A keyframe scene shows its
+/// parent's items and places none of its own, so it doesn't count.
 pub fn is_shared(collection: &Collection, item: &ItemInfo) -> bool {
     collection
         .scenes
         .iter()
+        .filter(|scene| scene.variant_of.is_none())
         .filter(|scene| scene.items.iter().any(|i| i.source_id == item.source_id))
         .count()
         > 1
@@ -282,7 +287,11 @@ fn shown(collection: Option<&Collection>, selection: &crate::store::Selection) -
     let Some(collection) = collection else {
         return Shown::Nothing;
     };
-    if let Some((scene, item)) = selection.item.as_ref().and_then(|id| collection.item(id)) {
+    if let Some((scene, item)) = selection
+        .item
+        .as_ref()
+        .and_then(|id| collection.item_in(selection.scene.as_ref(), id))
+    {
         return Shown::Item(scene.scene_id.clone(), item.item_id.clone());
     }
     selection
@@ -475,15 +484,27 @@ fn ItemHeader(item: ItemId) -> impl IntoView {
 fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoView {
     let studio = expect_context::<Studio>();
     let session = expect_context::<SessionContext>();
-    // The item as the collection has it now.
+    // The item as the collection has it now, as the scene shows it: in a keyframe
+    // scene, with its overrides.
     let current = {
         let item = item.clone();
+        let scene = scene.clone();
         Memo::new(move |_| {
             studio.collection.with(|c| {
                 c.as_ref()
-                    .and_then(|c| c.item(&item))
+                    .and_then(|c| c.item_in(Some(&scene), &item))
                     .map(|(_, i)| i.clone())
             })
+        })
+    };
+    // The keyframe scene's parent, when the scene is one: there only placement,
+    // visibility and opacity can change (ADR-0049).
+    let keyframe_of = {
+        let scene = scene.clone();
+        Memo::new(move |_| {
+            studio
+                .collection
+                .with(|c| c.as_ref()?.parent_of(&scene).map(|p| p.name.clone()))
         })
     };
     let geometry = Memo::new(move |_| {
@@ -701,10 +722,17 @@ fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoV
             </div>
         </Fold>
         <Fold title="Blending" open=true hint=blend_hint>
+            {move || keyframe_of.get().map(|parent| view! {
+                <p class="note keyframe-note">
+                    "Keyframe of “" {parent} "”: the blend mode, filters and properties follow \
+                     it. Only placement, visibility and opacity change here."
+                </p>
+            })}
             <div class="field-grid">
                 <label class="select-field">
                     <span class="field-label">"Mode"</span>
                     <select
+                        disabled=move || keyframe_of.with(Option::is_some)
                         prop:value=move || blend.get().map_or("Normal", blend_name)
                         on:change=move |event| send_blend(event_target_value(&event))
                     >
@@ -854,21 +882,118 @@ fn SceneSections(scene: SceneId) -> impl IntoView {
         }
     };
 
+    // A keyframe scene's parent, for its kind tag.
+    let keyframe_of = Memo::new(move |_| {
+        studio.collection.with(|c| {
+            c.as_ref()?
+                .parent_of(&id.get_value())
+                .map(|p| p.name.clone())
+        })
+    });
+    let kind = move || {
+        keyframe_of.get().map_or_else(
+            || "Scene".to_owned(),
+            |parent| format!("Keyframe of “{parent}”"),
+        )
+    };
+
     view! {
         <div class="inspector-head">
             <span class="source-title" title=name>{name}</span>
-            <span class="kind-tag">"Scene"</span>
+            <span class="kind-tag" class:keyframe=move || keyframe_of.with(Option::is_some)>{kind}</span>
             {favourite_button(favourite, toggle)}
         </div>
         <Fold title="Scene" open=true>
             <div class="key-value"><span class="key">"Objects"</span><span>{objects}</span></div>
             <div class="key-value"><span class="key">"Used as a source in"</span><span>{used}</span></div>
+            <HotkeyRow scene=id.get_value() />
         </Fold>
         <Fold title="Transitions" open=true hint=hint>
             {select(true, "Transition in")}
             {select(false, "Transition out")}
             <p class="note">"If both scenes override, the next scene's “in” wins."</p>
         </Fold>
+    }
+}
+
+/// A scene's Hotkey row: the chords that put it on program, each with a button that
+/// unbinds it, and "Set key", which binds the next chord pressed (Escape cancels).
+#[component]
+fn HotkeyRow(scene: SceneId) -> impl IntoView {
+    let studio = expect_context::<Studio>();
+    let session = expect_context::<SessionContext>();
+    let id = StoredValue::new(scene);
+    let chords = Memo::new(move |_| {
+        studio.collection.with(|c| {
+            c.as_ref()
+                .map(|c| c.scene_chords(&id.get_value()))
+                .unwrap_or_default()
+        })
+    });
+    let capturing = RwSignal::new(false);
+    let send = move |edits: Vec<Edit>| {
+        if let (Some(s), false) = (session.get(), edits.is_empty()) {
+            studio.apply(&s, edits);
+        }
+    };
+    let on_key = move |event: leptos::ev::KeyboardEvent| {
+        if !capturing.get_untracked() {
+            return;
+        }
+        // The key is the capture's: no hotkey runs, and Tab doesn't move the focus.
+        event.stop_propagation();
+        event.prevent_default();
+        if event.key() == "Escape" {
+            capturing.set(false);
+            return;
+        }
+        let Some(chord) = hotkeys::of_event(&event) else {
+            return;
+        };
+        capturing.set(false);
+        let edits = studio.collection.with_untracked(|c| {
+            c.as_ref()
+                .map(|c| hotkeys::bind_edits(c, &id.get_value(), &chord))
+                .unwrap_or_default()
+        });
+        send(edits);
+    };
+    let chip = move |chord: Chord| {
+        let shown = hotkeys::label(&chord);
+        let title = format!("Unbind {shown}");
+        view! {
+            <span class="hotkey-chip">
+                <kbd>{shown}</kbd>
+                <button
+                    type="button"
+                    class="icon-button"
+                    title=title.clone()
+                    aria-label=title
+                    on:click=move |_| send(vec![Edit::HotkeyClear { chord: chord.clone() }])
+                >
+                    "×"
+                </button>
+            </span>
+        }
+    };
+    view! {
+        <div class="key-value hotkey-row">
+            <span class="key">"Hotkey"</span>
+            <span class="hotkeys">
+                {move || chords.with(Vec::is_empty).then_some(view! { <span class="none">"none"</span> })}
+                <For each=move || chords.get() key=|c| c.clone() children=chip />
+                <button
+                    type="button"
+                    class="set-key"
+                    class:capturing=move || capturing.get()
+                    on:click=move |_| capturing.update(|c| *c = !*c)
+                    on:keydown=on_key
+                    on:blur=move |_| capturing.set(false)
+                >
+                    {move || if capturing.get() { "Press a key…" } else { "Set key" }}
+                </button>
+            </span>
+        </div>
     }
 }
 
