@@ -51,7 +51,10 @@ fn a_missing_file_is_created_empty() {
     let path = dir.join("scenes.json");
     let engine = open(&path);
     assert_eq!(engine.rev(), Rev(0));
-    assert_eq!(saved(&path)["schema_version"], 1);
+    assert_eq!(
+        saved(&path)["schema_version"],
+        jstream_graph::SCHEMA_VERSION
+    );
     assert_eq!(saved(&path)["rev"], 0);
     assert_eq!(files(&dir), ["scenes.json"]);
     let _ = fs::remove_dir_all(dir);

@@ -52,10 +52,13 @@ const AUDIO_KBPS: std::ops::RangeInclusive<u32> = 32..=320;
 impl EncoderProfile {
     /// Why an engine can't open this encoding, as the field (relative to the profile,
     /// `video.rate_control.kbps`) and the reason, or `None` when it can. Every engine
-    /// and the mock check a profile with this, so they reject the same ones.
+    /// and the mock check a profile with this, so they reject the same ones. Whether
+    /// this machine has an encoder for the codec is not part of it: the profile is
+    /// collection state, valid on any machine, and `output.start` fails when the
+    /// machine has none.
     pub fn problem(&self) -> Option<(&'static str, String)> {
         let video = &self.video;
-        if video.codec != VideoCodec::H264 {
+        if video.codec == VideoCodec::Unknown {
             return Some((
                 "video.codec",
                 "is not a video codec this engine knows".into(),
@@ -125,13 +128,20 @@ pub struct VideoEncoding {
     pub hardware: HardwarePreference,
 }
 
-/// A video codec. Serialized as a snake_case string.
+/// A video codec. Serialized as a snake_case string. Streams carry HEVC and AV1 in
+/// enhanced RTMP; a recording takes H.264 only so far, and its start fails with another.
+/// A machine with no encoder for the codec, or none that fits the profile's
+/// `hardware`, fails `output.start`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum VideoCodec {
     /// H.264 (AVC).
     H264,
+    /// HEVC (H.265). Since 0.41.
+    Hevc,
+    /// AV1. Since 0.41.
+    Av1,
     /// A codec this version of the protocol doesn't know, from a newer server. The
     /// engine refuses it in an edit with `invalid_argument`.
     #[serde(other)]
@@ -268,12 +278,37 @@ mod tests {
         );
     }
 
+    /// HEVC and AV1 are accepted (0.41), with their wire names; an unknown codec is not.
+    #[test]
+    fn hevc_and_av1_are_accepted() {
+        for (codec, name) in [
+            (VideoCodec::H264, "h264"),
+            (VideoCodec::Hevc, "hevc"),
+            (VideoCodec::Av1, "av1"),
+        ] {
+            let mut profile = EncoderProfile::DEFAULT;
+            profile.video.codec = codec;
+            assert_eq!(profile.problem(), None, "{name}");
+            assert_eq!(serde_json::to_value(codec).ok(), Some(json!(name)));
+            assert_eq!(
+                serde_json::from_value::<VideoCodec>(json!(name)).ok(),
+                Some(codec)
+            );
+        }
+        let mut profile = EncoderProfile::DEFAULT;
+        profile.video.codec = VideoCodec::Unknown;
+        assert_eq!(
+            profile.problem().map(|(field, _)| field),
+            Some("video.codec")
+        );
+    }
+
     /// `hardware` may be left out, and values from a newer server parse as `unknown`.
     #[test]
     fn omitted_and_later_values() {
         let profile: EncoderProfile = serde_json::from_value(json!({
             "video": {
-                "codec": "av1",
+                "codec": "vvc",
                 "rate_control": {"type": "cqp", "qp": 20},
                 "keyframe_interval_s": 2
             },

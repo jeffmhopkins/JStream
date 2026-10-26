@@ -153,19 +153,21 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   - an `opacity` outside 0 to 1 and a blend mode other than `normal`, in `item.add`,
     `item.set_opacity` and `item.set_blend`;
   - the filter edits (`mock/filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
-    a missing owner or filter, an empty or duplicate filter ID, an audio chain on a
-    `scene` source, a full chain and an index out of range. The master stage and
+    a missing owner (a source, output, scene or item) or filter, an empty or duplicate
+    filter ID, an audio chain on a `scene` source, a full chain and an index out of range. The master stage and
     outputs ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)) take
     audio filters only, an output only if it carries audio, and their filters no scene
-    or source reference. `source.duplicate` copies the chains, and `source.delete`'s
-    and `output.delete`'s inverses re-add them; a reference in a filter's settings
+    or source reference; a scene and an item (ADR-0065) take video filters only, and
+    `scene.delete`'s and `item.remove`'s inverses re-add theirs. `source.duplicate`
+    copies the chains, and `source.delete`'s and `output.delete`'s inverses re-add them; a reference in a filter's settings
     blocks deleting its target, as a source's own does;
   - audio (`mock/audio.rs`, ADR-0028): each audio source's `SourceAudio` with its kind's
     defaults and the master send at 0 dB, copied by `source.duplicate` and dropped by
     `source.delete`; `source.set_audio` on a source with no audio, with nothing to set,
     or setting a `scene` source's fader or mute; the bus ID, name and 16-bus limit,
     deleting the master or a bus a source's settings refer to (a `bus` reference, as
-    a `waveform` drawing it holds, #362), an empty `bus.set_fader`, sends from a `scene` source or a
+    a `waveform` drawing it holds, #362), an empty `bus.set_fader`, a monitor
+    `BusMonitor::problem` refuses (on `monitor.<field>`, after the bus), sends from a `scene` source or a
     source with no audio, removing a missing send, and gains outside −100 to +24 dB;
   - hotkeys: `hotkey.set`'s chord spelling, an already-bound chord, an action
     `Action::bind_problem` refuses and a missing named scene, output or preset (only `cut`
@@ -285,6 +287,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `internal`;
 - `capture.targets`, answered with one made-up 1920×1080 primary display whose ID is
   `MOCK_DISPLAY`;
+- `source.sizes`, answered with every source and no size, since the mock makes no
+  frames, so it never sends `source.size_changed`;
 - the privacy screen ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)):
   `privacy.set` (no `rev`), `privacy.get`, and `privacy.changed` for a change, which a
   stream opened while it is on gets first;

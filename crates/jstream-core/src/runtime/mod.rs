@@ -16,6 +16,7 @@ mod vcam;
 
 #[cfg(test)]
 pub(crate) use captures::Backends as CaptureBackends;
+pub(crate) use captures::SizeChange;
 #[cfg(test)]
 pub(crate) use captures::{RETRY_MS, start as start_capture};
 pub use pipeline::OutputStats;
@@ -25,8 +26,8 @@ pub(crate) use pipeline::{DrawError, DrawFn, STOP_DRAIN, gpu_draw, open_capture}
 pub(crate) use pipeline::{DrawHook, gpu_draw_with};
 pub(crate) use pipeline::{
     EncodeKey, Encoders, FRAME_DEN, FRAME_NUM, Gate, MediaHost, MixKey, OpenDraw, OutputEncode,
-    Pending, PipelineEvent, Release, Running, cpu_draw, launch, launch_program, launch_vcam,
-    parts_from,
+    Pending, PipelineEvent, Release, Running, StartError, cpu_draw, launch, launch_program,
+    launch_vcam, parts_from,
 };
 #[cfg(test)]
 pub(crate) use publish::tests::serve as serve_rtmp;

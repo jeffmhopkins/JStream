@@ -1,6 +1,8 @@
 //! Video filter chains (ADR-0026, roadmap V0): a source's enabled video filters, run in
 //! order over its frame before it is placed, with `jstream-render`'s built-in filter
-//! kinds.
+//! kinds. A scene's enabled video filters (ADR-0065) run the same way, over the scene's
+//! composite ([`GpuKey::Composite`]), once per frame wherever the scene shows; each
+//! chain is keyed by its [`ChainOwner`].
 //!
 //! [`plan`](crate::snapshot::plan_with) copies each reached source's chain into the
 //! [`Shot`](crate::snapshot::Shot) as a [`Chain`]: its input (the source's frame upload,
@@ -31,15 +33,52 @@
 //! Docs: crates/jstream-core/README.md#design, docs/adr/0026-source-filter-chains.md
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
-use jstream_graph::Source;
+use jstream_graph::{Filter, Source};
 use jstream_media::{FrameSize, MediaTime};
-use jstream_protocol::{FilterChain, FilterId, Reference, SceneId, Settings, SourceId};
+use jstream_protocol::{FilterChain, FilterId, ItemId, Reference, SceneId, Settings, SourceId};
 use jstream_render::{Compositor, FilterClock, Image, RenderError, ResourceCache, VideoFilter};
 
 use crate::filter_assets::{self, FilterAsset, FilterAssets};
 use crate::snapshot::GpuKey;
+
+/// What owns a video chain the engine runs: a source, over its frame, a scene, over its
+/// composite, or an item, over its box (ADR-0065).
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum ChainOwner {
+    Source(SourceId),
+    Scene(SceneId),
+    /// An item's effects, as the scene it names draws the item: a keyframe scene draws
+    /// its parent's items at its own values, so each has a chain of its own.
+    Item(SceneId, ItemId),
+}
+
+impl std::fmt::Display for ChainOwner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Source(id) => write!(f, "source {id}"),
+            Self::Scene(id) => write!(f, "scene {id}"),
+            Self::Item(scene, item) => write!(f, "item {item} in scene {scene}"),
+        }
+    }
+}
+
+/// The most `kind` draws beyond each edge of its input at any settings
+/// (`max_outset_px`, ADR-0065 §5): 0 for a kind that declares none.
+fn outset_of(kind: &str) -> u32 {
+    static OUTSETS: OnceLock<BTreeMap<String, u32>> = OnceLock::new();
+    OUTSETS
+        .get_or_init(|| {
+            jstream_render::video_filter_descriptors()
+                .into_iter()
+                .filter_map(|kind| kind.max_outset_px.map(|px| (kind.kind_id, px)))
+                .collect()
+        })
+        .get(kind)
+        .copied()
+        .unwrap_or(0)
+}
 
 /// One filter of a [`Chain`], as the collection holds it.
 #[derive(Clone, Debug, PartialEq)]
@@ -57,8 +96,9 @@ pub(crate) struct ChainFilter {
     pub(crate) scene: Option<GpuKey>,
 }
 
-/// A source's video chain as a shot draws it: the image it starts from and its enabled
-/// filters of a kind this engine draws, first filter first. Never empty.
+/// A source's or a scene's video chain as a shot draws it: the image it starts from
+/// and its enabled filters of a kind this engine draws, first filter first. Never
+/// empty.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Chain {
     pub(crate) input: GpuKey,
@@ -71,16 +111,30 @@ impl Chain {
     /// effect pack that isn't loaded). Such a filter is bypassed. A filter that reads an
     /// asset gets it from `assets`.
     pub(crate) fn of(source: &Source, input: GpuKey, assets: &FilterAssets) -> Option<Self> {
-        let filters: Vec<ChainFilter> = source
-            .filters()
-            .chain(FilterChain::Video)
+        Self::of_filters(
+            &ChainOwner::Source(source.id().clone()),
+            source.filters().chain(FilterChain::Video),
+            input,
+            assets,
+        )
+    }
+
+    /// The chain of `owner`'s video `filters` over `input`, as [`Self::of`] makes a
+    /// source's: a scene's, over its composite.
+    pub(crate) fn of_filters(
+        owner: &ChainOwner,
+        filters: &[Filter],
+        input: GpuKey,
+        assets: &FilterAssets,
+    ) -> Option<Self> {
+        let filters: Vec<ChainFilter> = filters
             .iter()
             .filter(|filter| filter.enabled())
             .filter(|filter| {
                 let drawn = VideoFilter::new(filter.kind(), filter.settings()).is_some();
                 if !drawn {
                     tracing::debug!(
-                        source = %source.id(),
+                        owner = %owner,
                         filter = %filter.id(),
                         kind = filter.kind(),
                         "video filter kind is not drawn by this engine; bypassed"
@@ -101,14 +155,49 @@ impl Chain {
         (!filters.is_empty()).then_some(Self { input, filters })
     }
 
+    /// The room its filters need beyond each edge of the input, in canvas pixels: the
+    /// sum of their kinds' `max_outset_px`. Only an item's effects layer is padded by it;
+    /// a source's or a scene's chain draws at its input's size (ADR-0065 §5).
+    pub(crate) fn outset(&self) -> u32 {
+        self.filters
+            .iter()
+            .map(|filter| outset_of(&filter.kind))
+            .fold(0, u32::saturating_add)
+    }
+
+    /// The enabled filters' kinds and settings, in order: what makes two items' effects
+    /// look the same, so a transition may pair them (ADR-0065 §6).
+    pub(crate) fn look(&self) -> Vec<(String, Settings)> {
+        self.filters
+            .iter()
+            .map(|filter| (filter.kind.clone(), filter.settings.clone()))
+            .collect()
+    }
+
     /// The scenes its filters read, in filter order: what must be drawn before it runs.
+    /// Each is read from its layer, or from its own chain's output when it has one.
     pub(crate) fn scenes(&self) -> impl Iterator<Item = &SceneId> {
         self.filters
             .iter()
             .filter_map(|filter| match &filter.scene {
-                Some(GpuKey::Layer(scene, _)) => Some(scene),
+                Some(GpuKey::Layer(scene, _) | GpuKey::Filtered(ChainOwner::Scene(scene))) => {
+                    Some(scene)
+                }
                 _ => None,
             })
+    }
+
+    /// Points each filter that reads a scene `filtered` says has a chain at that chain's
+    /// output, so a `scene_mask` sees the scene with its own filters, as it shows
+    /// wherever it is placed.
+    pub(crate) fn read_filtered(&mut self, filtered: impl Fn(&SceneId) -> bool) {
+        for filter in &mut self.filters {
+            if let Some(GpuKey::Layer(scene, _)) = &filter.scene
+                && filtered(scene)
+            {
+                filter.scene = Some(GpuKey::Filtered(ChainOwner::Scene(scene.clone())));
+            }
+        }
     }
 
     /// The size the chain draws for an input of `width` by `height`: the source's
@@ -142,12 +231,15 @@ struct Running {
     warned: bool,
 }
 
-/// The filters one compositor runs, by source, kept from frame to frame.
+/// The filters one compositor runs, by owner, kept from frame to frame.
 #[derive(Default)]
 pub(crate) struct Chains {
-    running: BTreeMap<SourceId, Vec<Running>>,
-    /// The sources whose chain failed to draw this frame, which draw nothing.
-    failed: BTreeSet<SourceId>,
+    running: BTreeMap<ChainOwner, Vec<Running>>,
+    /// The owners whose chain failed to draw this frame, which draw nothing.
+    failed: BTreeSet<ChainOwner>,
+    /// The items whose effects layer failed to be made or drawn and has been logged, so
+    /// one that keeps failing logs once; a frame it draws clears it.
+    box_warned: BTreeSet<ChainOwner>,
     /// Filters no shot runs any more, on their way to the cache.
     retired: Vec<VideoFilter>,
     /// The frame of the cache the chains last ran in. Every mix a tick draws shares one
@@ -169,7 +261,7 @@ impl Chains {
         &mut self,
         compositor: &mut Compositor,
         cache: &mut ResourceCache<GpuKey>,
-        chains: &BTreeMap<SourceId, Chain>,
+        chains: &BTreeMap<ChainOwner, Chain>,
     ) -> bool {
         let frame = cache.frame();
         if self.ran == Some(frame) {
@@ -216,7 +308,7 @@ impl Chains {
         &mut self,
         compositor: &mut Compositor,
         cache: &mut ResourceCache<GpuKey>,
-        (source, chain): (&SourceId, &Chain),
+        (source, chain): (&ChainOwner, &Chain),
         at: MediaTime,
     ) {
         let Some(running) = self.running.get_mut(source) else {
@@ -248,7 +340,7 @@ impl Chains {
                         filter = %filter.id,
                         kind = %filter.kind,
                         %error,
-                        "video filter output can't be made; the source draws nothing"
+                        "video filter output can't be made; its owner draws nothing"
                     );
                 }
                 self.failed.insert(source.clone());
@@ -293,7 +385,7 @@ impl Chains {
                         filter = %id,
                         kind = %kind,
                         %error,
-                        "video filter failed to draw; the source draws nothing"
+                        "video filter failed to draw; its owner draws nothing"
                     );
                 }
                 self.failed.insert(source.clone());
@@ -322,9 +414,34 @@ impl Chains {
         }
     }
 
+    /// Marks `owner`'s chain as failed this frame, so what shows its output draws
+    /// nothing: an item whose box couldn't be drawn.
+    pub(crate) fn fail(&mut self, owner: &ChainOwner) {
+        self.failed.insert(owner.clone());
+    }
+
+    /// Marks the effects layer of `owner` as failed this frame, as [`Self::fail`] does,
+    /// and logs `error` once until a frame draws it: a failed layer blanks only its
+    /// item, as a failed chain blanks only its owner.
+    pub(crate) fn fail_box(&mut self, owner: &ChainOwner, error: &RenderError) {
+        self.fail(owner);
+        if self.box_warned.insert(owner.clone()) {
+            tracing::warn!(
+                owner = %owner,
+                %error,
+                "item effects layer can't be made or drawn; the item draws nothing"
+            );
+        }
+    }
+
+    /// Records that `owner`'s effects layer drew, so a later failure logs again.
+    pub(crate) fn drew_box(&mut self, owner: &ChainOwner) {
+        self.box_warned.remove(owner);
+    }
+
     /// Whether `key`, an image a layer shows, is a chain output that failed this frame.
     pub(crate) fn failed(&self, key: &GpuKey) -> bool {
-        matches!(key, GpuKey::Filtered(source) if self.failed.contains(source))
+        matches!(key, GpuKey::Filtered(owner) if self.failed.contains(owner))
     }
 
     /// How many filters run, for tests.
@@ -336,7 +453,7 @@ impl Chains {
 
 /// Where the filter at index `at` of `source`'s chain draws: the last one into the
 /// chain's output, the others into their own layer.
-fn output_key(source: &SourceId, at: usize, last: usize) -> GpuKey {
+fn output_key(source: &ChainOwner, at: usize, last: usize) -> GpuKey {
     if at == last {
         GpuKey::Filtered(source.clone())
     } else {
@@ -349,7 +466,7 @@ fn output_key(source: &SourceId, at: usize, last: usize) -> GpuKey {
 /// list, keeping each filter whose ID and kind it finds, and gives each its layer's key
 /// for `source`'s chain. Allocates nothing when nothing changed.
 fn sync(
-    source: &SourceId,
+    source: &ChainOwner,
     running: &mut Vec<Running>,
     filters: &[ChainFilter],
     retired: &mut Vec<VideoFilter>,
@@ -414,7 +531,7 @@ fn sync(
 /// changes.
 fn refer(
     compositor: &mut Compositor,
-    source: &SourceId,
+    source: &ChainOwner,
     running: &mut Running,
     filter: &ChainFilter,
     retired: &mut Vec<VideoFilter>,
@@ -462,7 +579,7 @@ fn scene_read(kind: &str, settings: &Settings) -> Option<SceneId> {
 /// layer isn't there.
 fn see(
     cache: &mut ResourceCache<GpuKey>,
-    source: &SourceId,
+    source: &ChainOwner,
     running: &mut Running,
     key: &GpuKey,
 ) -> bool {
@@ -474,7 +591,7 @@ fn see(
                 filter = %running.id,
                 kind = %running.kind,
                 ?key,
-                "the scene a video filter reads wasn't drawn; the source draws nothing"
+                "the scene a video filter reads wasn't drawn; its owner draws nothing"
             );
         }
         return false;
@@ -508,13 +625,14 @@ mod tests {
     use jstream_render::{Compositor, Lut, ResourceCache};
     use jstream_sources::StillImage;
 
-    use super::Chains;
+    use super::{ChainOwner, Chains};
     use crate::filter_assets::{self, FilterAsset, FilterAssets, Loaded};
     use crate::snapshot::tests::gpu;
     use crate::snapshot::{self, Frame, GpuKey, LiveParams, Look, NoCaptures, Shot};
 
     const WHITE: [u8; 4] = [255, 255, 255, 255];
     const RED: [u8; 4] = [255, 0, 0, 255];
+    const BLACK: [u8; 4] = [0, 0, 0, 255];
 
     /// Scene `main` placing the sources `logo` and then `cam` at the canvas's top left,
     /// with one `color_correction` filter multiplying by red for each `(source,
@@ -641,6 +759,38 @@ mod tests {
         pixel.expect("a pixel")
     }
 
+    /// Draws `shot`'s program once, in a cache frame of its own, with `live` applied,
+    /// and reads back the pixels at `points`.
+    fn draw_points(
+        compositor: &mut Compositor,
+        (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+        (shot, live): (&Shot, &LiveParams),
+        points: &[(u32, u32)],
+    ) -> Vec<[u8; 4]> {
+        cache.begin_frame();
+        let canvas = shot.canvas().expect("canvas");
+        let output = snapshot::compose(
+            compositor,
+            (&mut *cache, &mut *chains),
+            (shot, MediaTime::zero(Timebase::MILLIS)),
+            snapshot::View {
+                mix: None,
+                privacy: None,
+            },
+            live,
+            &NoCaptures,
+            snapshot::DrawAt::read(canvas),
+        )
+        .expect("compose");
+        let pixels = output.pixels().expect("read back");
+        let read = points
+            .iter()
+            .map(|&(x, y)| pixels.pixel(x, y).expect("a pixel"))
+            .collect();
+        drop(cache.end_frame(compositor));
+        read
+    }
+
     /// The filter draws over the source's frame before it is placed; two mixes drawn
     /// in one cache frame run the chain once, and a shot without the chain retires its
     /// filter.
@@ -661,6 +811,145 @@ mod tests {
         assert_eq!((chains.runs, chains.len()), (2, 0), "the filter is retired");
     }
 
+    /// Applies `edits` to `graph`.
+    fn apply(graph: &mut Graph, edits: Vec<Edit>) {
+        graph.apply(&edits, None).expect("edits");
+    }
+
+    /// A `color_correction` filter multiplying by red on scene `scene`'s chain.
+    fn scene_red(scene: &str, enabled: bool) -> Edit {
+        Edit::FilterAdd {
+            owner: FilterOwner::Scene {
+                scene_id: SceneId::new(scene),
+            },
+            chain: FilterChain::Video,
+            filter_id: FilterId::new("grade"),
+            kind: "color_correction".into(),
+            settings: [("multiply", serde_json::json!("#ff0000"))]
+                .into_iter()
+                .collect(),
+            enabled: Some(enabled),
+            index: None,
+        }
+    }
+
+    /// `graph`'s shot with `program` on program, every source a white 16x9 frame.
+    fn shot_of(graph: &Graph, program: &str) -> Shot {
+        let white: Vec<u8> = std::iter::repeat_n(WHITE, 16 * 9).flatten().collect();
+        let frame = Frame::new(16, 9, &white, 1).expect("invariant: 16x9 RGBA8");
+        snapshot::plan_with(
+            graph,
+            Some(&SceneId::new(program)),
+            None,
+            &mut |_| Some(Look::Frame(frame.clone(), None)),
+            &FilterAssets::default(),
+        )
+        .shot
+    }
+
+    /// A scene's chain (ADR-0065) runs over its composite, once per frame however many
+    /// mixes draw it, and the program shows its output; a disabled one is bypassed.
+    #[test]
+    fn a_scene_chain_runs_over_its_composite_once_per_frame() {
+        let mut bypassed = graph(&[]);
+        apply(&mut bypassed, vec![scene_red("main", false)]);
+        let plain = shot(&bypassed);
+        assert!(plain.scene_chain(&SceneId::new("main")).is_none());
+        assert_eq!(
+            plain,
+            shot(&graph(&[])),
+            "a disabled filter changes nothing"
+        );
+
+        let mut graded = graph(&[]);
+        apply(&mut graded, vec![scene_red("main", true)]);
+        let filtered = shot(&graded);
+        let chain = filtered
+            .scene_chain(&SceneId::new("main"))
+            .expect("the scene's chain");
+        assert_eq!(chain.input, GpuKey::Composite(SceneId::new("main")));
+        assert_eq!(
+            filtered.chain_passes(),
+            [("main".to_owned(), 0)],
+            "composited at the program's depth, so it nests as deep as without a filter"
+        );
+        assert!(filtered.changes_with_time());
+
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let pixel = draw(&mut compositor, (&mut cache, &mut chains), &filtered, 2);
+        assert_eq!(pixel, RED, "the white composite multiplied by red");
+        assert_eq!((chains.runs, chains.len()), (1, 1));
+        let pixel = draw(&mut compositor, (&mut cache, &mut chains), &plain, 1);
+        assert_eq!(pixel, WHITE);
+        assert_eq!(chains.len(), 0, "the filter is retired");
+    }
+
+    /// A scene source shows its scene with the scene's filters, and so does a keyframe
+    /// scene, which shows its parent's (ADR-0024 §2).
+    #[test]
+    fn a_nested_or_keyframe_scene_shows_the_filtered_picture() {
+        let mut graded = graph(&[]);
+        apply(
+            &mut graded,
+            vec![
+                scene_red("main", true),
+                Edit::SceneCreate {
+                    scene_id: SceneId::new("outer"),
+                    name: "Outer".into(),
+                    role: None,
+                },
+                Edit::SourceCreate {
+                    source_id: SourceId::new("nest"),
+                    name: "Nest".into(),
+                    kind: SourceKind::Scene {
+                        scene_id: SceneId::new("main"),
+                    },
+                    settings: Default::default(),
+                    duplicated_from: None,
+                },
+                Edit::ItemAdd {
+                    scene_id: SceneId::new("outer"),
+                    item_id: ItemId::new("nest"),
+                    source_id: SourceId::new("nest"),
+                    transform: None,
+                    geometry: None,
+                    opacity: None,
+                    blend: None,
+                },
+                Edit::SceneCreateVariant {
+                    scene_id: SceneId::new("key"),
+                    variant_of: SceneId::new("main"),
+                    name: "Key".into(),
+                },
+            ],
+        );
+        let outer = shot_of(&graded, "outer");
+        assert!(outer.scene_chain(&SceneId::new("main")).is_some());
+        assert!(outer.scene_chain(&SceneId::new("outer")).is_none());
+        assert_eq!(
+            outer.chain_passes(),
+            [("main".to_owned(), 0)],
+            "a filtered nested scene is composited once, at depth 0, wherever it is placed"
+        );
+        let key = shot_of(&graded, "key");
+        assert!(
+            key.scene_chain(&SceneId::new("key")).is_some(),
+            "the parent's filters"
+        );
+
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        for shot in [outer, key] {
+            let mut cache = ResourceCache::new();
+            let mut chains = Chains::default();
+            let pixel = draw(&mut compositor, (&mut cache, &mut chains), &shot, 1);
+            assert_eq!(pixel, RED);
+        }
+    }
+
     /// A frame that only claims layers (a mix not due on that tick) keeps the chain's
     /// output layer, so the next frame that draws reuses it instead of reallocating.
     #[test]
@@ -670,7 +959,7 @@ mod tests {
         let mut cache = ResourceCache::new();
         let mut chains = Chains::default();
         let filtered = shot(&graph(&[("cam", true)]));
-        let key = GpuKey::Filtered(SourceId::new("cam"));
+        let key = GpuKey::Filtered(ChainOwner::Source(SourceId::new("cam")));
         draw(&mut compositor, (&mut cache, &mut chains), &filtered, 1);
         let output = cache
             .get(&key)
@@ -807,7 +1096,7 @@ mod tests {
         let Some(mut compositor) = gpu() else { return };
         let mut cache = ResourceCache::new();
         let mut chains = Chains::default();
-        let cam = SourceId::new("cam");
+        let cam = ChainOwner::Source(SourceId::new("cam"));
         let warned = |chains: &Chains| chains.running[&cam][0].warned;
         let failing = shot(&padded(1, 10_000));
         for _ in 0..2 {
@@ -914,5 +1203,152 @@ mod tests {
         let pixel = draw(&mut compositor, (&mut cache, &mut chains), &opaque, 1);
         assert_eq!(pixel, WHITE, "the same filter reads the scene again");
         assert_eq!(chains.runs, 3);
+    }
+
+    /// A `color_correction` effect multiplying by `colour` on item `item`.
+    fn item_tint(item: &str, colour: &str) -> Edit {
+        Edit::FilterAdd {
+            owner: FilterOwner::Item {
+                item_id: ItemId::new(item),
+            },
+            chain: FilterChain::Video,
+            filter_id: FilterId::new("tint"),
+            kind: "color_correction".into(),
+            settings: [("multiply", serde_json::json!(colour))]
+                .into_iter()
+                .collect(),
+            enabled: Some(true),
+            index: None,
+        }
+    }
+
+    /// An item's effects (ADR-0065) run over its box, once per frame however many mixes
+    /// draw it, into a layer the size of the box; the program shows their output.
+    #[test]
+    fn an_item_effect_runs_over_its_box_once_per_frame() {
+        let mut tinted = graph(&[]);
+        apply(&mut tinted, vec![item_tint("cam", "#ff0000")]);
+        let filtered = shot(&tinted);
+        let (main, cam) = (SceneId::new("main"), ItemId::new("cam"));
+        let chain = filtered.item_chain(&main, &cam).expect("cam's effects");
+        assert_eq!(chain.input, GpuKey::ItemBox(main.clone(), cam.clone()));
+        assert!(filtered.item_chain(&main, &ItemId::new("logo")).is_none());
+        assert!(
+            filtered.chain(&SourceId::new("cam")).is_none(),
+            "not the source's"
+        );
+
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let pixel = draw(&mut compositor, (&mut cache, &mut chains), &filtered, 2);
+        assert_eq!(pixel, RED, "cam's white box multiplied by red");
+        assert_eq!((chains.runs, chains.len()), (1, 1));
+        cache.begin_frame();
+        let layer = cache
+            .get(&GpuKey::ItemBox(main, cam))
+            .map(|image| (image.width(), image.height()));
+        drop(cache.end_frame(&compositor));
+        assert_eq!(layer, Some((16, 9)), "the box of an unscaled 16x9 frame");
+    }
+
+    /// A box with a geometry gets a layer of that box's size in canvas pixels, however
+    /// small the frame it shows (ADR-0065 §5).
+    #[test]
+    fn an_item_effect_belongs_to_its_placement() {
+        let mut tinted = graph(&[]);
+        let quarter = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(480.0, 270.0).expect("finite"),
+            jstream_protocol::Size::try_new(960.0, 540.0).expect("positive"),
+        )
+        .expect("valid");
+        apply(
+            &mut tinted,
+            vec![
+                Edit::ItemSetGeometry {
+                    scene_id: None,
+                    item_id: ItemId::new("cam"),
+                    geometry: quarter,
+                },
+                item_tint("cam", "#ff0000"),
+            ],
+        );
+        let filtered = shot(&tinted);
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let points = [(1, 1), (950, 530), (970, 550)];
+        let pixels = draw_points(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            (&filtered, &LiveParams::default()),
+            &points,
+        );
+        assert_eq!(
+            pixels,
+            [RED, RED, BLACK],
+            "the tinted box covers the top-left quarter, and nothing past it"
+        );
+        // A live resize (ADR-0032) draws the same layer over the live box.
+        let half = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(240.0, 135.0).expect("finite"),
+            jstream_protocol::Size::try_new(480.0, 270.0).expect("positive"),
+        )
+        .expect("valid");
+        let live = LiveParams::from_values(&[Edit::ItemSetGeometry {
+            scene_id: None,
+            item_id: ItemId::new("cam"),
+            geometry: half,
+        }]);
+        let pixels = draw_points(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            (&filtered, &live),
+            &points,
+        );
+        assert_eq!(pixels, [RED, BLACK, BLACK], "the live box is smaller");
+        cache.begin_frame();
+        let layer = cache
+            .get(&GpuKey::ItemBox(SceneId::new("main"), ItemId::new("cam")))
+            .map(|image| (image.width(), image.height()));
+        drop(cache.end_frame(&compositor));
+        assert_eq!(layer, Some((960, 540)));
+    }
+
+    /// A `scene_mask` reads its scene with the scene's own filters, as it shows where
+    /// it is placed: `spot` is opaque, but `matte`'s scene filter clears it.
+    #[test]
+    fn a_scene_mask_reads_a_scene_with_its_filters() {
+        let mut graph = masked(100.0);
+        apply(
+            &mut graph,
+            vec![Edit::FilterAdd {
+                owner: FilterOwner::Scene {
+                    scene_id: SceneId::new("matte"),
+                },
+                chain: FilterChain::Video,
+                filter_id: FilterId::new("clear"),
+                kind: "color_correction".into(),
+                settings: [("opacity", serde_json::json!(0.0))].into_iter().collect(),
+                enabled: Some(true),
+                index: None,
+            }],
+        );
+        let cleared = shot(&graph);
+        let cam = cleared.chain(&SourceId::new("cam")).expect("cam's chain");
+        let read = cam.filters.iter().find_map(|filter| filter.scene.clone());
+        assert_eq!(
+            read,
+            Some(GpuKey::Filtered(ChainOwner::Scene(SceneId::new("matte"))))
+        );
+
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let pixel = draw(&mut compositor, (&mut cache, &mut chains), &cleared, 1);
+        assert_eq!(pixel, RED, "cut out where the filtered matte is clear");
     }
 }

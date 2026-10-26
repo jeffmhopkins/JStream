@@ -24,11 +24,13 @@ use crate::preview::{Opening, PreviewHub, PreviewSource, SessionPreviews};
 use crate::privacy::Privacy;
 use crate::runtime::{
     Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, MixKey, OpenPublish,
-    OutputEncode, OutputStats, Pending, PipelineEvent, Release, RenderHub, Running, VcamOut,
-    launch, launch_program, launch_vcam, parts_from,
+    OutputEncode, OutputStats, Pending, PipelineEvent, Release, RenderHub, Running, SizeChange,
+    StartError, VcamOut, launch, launch_program, launch_vcam, parts_from,
 };
 use crate::session::InProcessControl;
-use crate::snapshot::{self, Frame, Look, SnapshotReply, SnapshotWorker, SourceFrameError};
+use crate::snapshot::{
+    self, CaptureKey, Frame, Look, SnapshotReply, SnapshotWorker, SourceFrameError,
+};
 use crate::studio::{self, Studio};
 use crate::transition;
 use crate::youtube::{NO_YOUTUBE_CLIENT, Youtube, YoutubeSetup};
@@ -43,7 +45,7 @@ use jstream_protocol::{
     EncoderProfile, EncoderSessionInfo, EntityKind, Event, FilterChain, GestureId, HistoryCall,
     HistoryDirection, IdempotencyKey, LiveOutcome, OutputId, OutputKind, OutputState, PixelSize,
     PreviewSettings, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
-    RtmpTarget, SceneId, SecretString, SourceId, TransitionPresetId, TransitionStarted,
+    RtmpTarget, SceneId, SecretString, SourceId, SourceSize, TransitionPresetId, TransitionStarted,
     YoutubeAuth,
 };
 use jstream_sources::AudioScopes;
@@ -177,7 +179,8 @@ impl Engine {
 
     /// Stores the latest straight-alpha sRGB RGBA8 frame of `source_id`.
     ///
-    /// This is runtime state: it does not change `rev` and emits no event. A snapshot
+    /// This is runtime state: it does not change `rev`, and the only event it can send
+    /// is a `source.size_changed` when the frame changes the source's size. A snapshot
     /// uses it when an item places that source. A frame may arrive before the source
     /// exists; it is kept either way. Replaces any frame already stored for the id.
     /// A `source.delete` drops the deleted source's frame.
@@ -200,6 +203,10 @@ impl Engine {
         let frame = frame.with_version(state.frame_versions);
         state.frames.insert(source_id.clone(), frame);
         state.publish_render();
+        let mut wake = Vec::new();
+        state.sync_sizes(&mut wake);
+        drop(state);
+        wake_all(wake);
         Ok(())
     }
 
@@ -361,6 +368,8 @@ impl Engine {
             state.route_audio();
             // The loaded collection is what the program mix draws now.
             state.publish_render();
+            // No client is connected yet, so nobody is woken.
+            state.sync_sizes(&mut Vec::new());
             *file = Some(opened);
         }
         Ok(self)
@@ -557,6 +566,31 @@ impl Engine {
     #[cfg(test)]
     pub(crate) fn audio_scope(&self) -> Arc<jstream_sources::AudioScope> {
         Arc::clone(self.shared.audio_scopes.program())
+    }
+
+    /// The body of the program stage's `jstream-capture-sizes` thread: records each
+    /// capture's size as the render thread reports it, and announces the sources whose
+    /// size it changes (ADR-0022 §4). When the render thread lets go of its captures,
+    /// every capture's size is forgotten. It holds the shared collection, not the
+    /// [`MediaHost`], like the ticker.
+    pub(crate) fn capture_sizes_watch(
+        &self,
+        changes: Receiver<SizeChange>,
+    ) -> impl FnOnce() + Send + 'static {
+        let shared = Arc::clone(&self.shared);
+        move || {
+            for change in changes {
+                shared.capture_sizes(|sizes| match change.size {
+                    Some(size) => {
+                        sizes.insert(change.key, size);
+                    }
+                    None => {
+                        sizes.remove(&change.key);
+                    }
+                });
+            }
+            shared.capture_sizes(BTreeMap::clear);
+        }
     }
 
     /// A thread that emits `stats.tick` about once a second until `stop` is set.
@@ -1372,7 +1406,7 @@ impl Engine {
             None => None,
         };
         let mut wake = Vec::new();
-        let (parts, publish, generation, program, key, own_audio) = loop {
+        let (parts, publish, generation, program, key, own_audio, hardware_held) = loop {
             // A failed pipeline may still be joining. When it held the program stage,
             // wait that out before opening devices, and do not hold the collection
             // lock across the wait.
@@ -1467,7 +1501,7 @@ impl Engine {
                     Arc::clone(&state.render),
                     state.audio.wanted(),
                     canvas_size(&state.graph),
-                    state.privacy.flag(),
+                    &state.privacy,
                 )
             };
             let generation = host.next_generation.fetch_add(1, Ordering::Relaxed);
@@ -1489,11 +1523,23 @@ impl Engine {
                     return Err(err);
                 }
             }
+            // The outputs holding hardware video sessions now, stopping ones included:
+            // while there is one, a new session that hardware refuses is the session
+            // limit (ADR-0027 §3, #834).
+            let hardware_held = gate.hardware_held();
             // A running program stage is shared; holding it here keeps it running
             // until this start has its own hold, or gives up. Taken last, so no early
             // return drops it under the locks.
             let program = gate.program();
-            break (parts, publish, generation, program, key, own_audio);
+            break (
+                parts,
+                publish,
+                generation,
+                program,
+                key,
+                own_audio,
+                hardware_held,
+            );
         };
         wake_all(std::mem::take(&mut wake));
 
@@ -1505,36 +1551,45 @@ impl Engine {
         };
         let (fail_tx, fail_rx) = mpsc::channel();
         let mut health = None;
-        let launched = publish.open(&output_id).and_then(|(opened, watch)| {
-            health = watch;
-            let program = match program {
-                Some(program) => program,
-                None => {
-                    let program = launch_program(self, parts)?;
-                    lock(&host.gate).set_program(&program);
-                    program
-                }
-            };
-            match opened {
-                Opened::Muxed(destination) => launch(
-                    self,
-                    program,
-                    OutputEncode { key, own_audio },
-                    destination,
-                    output_id.clone(),
-                    generation,
-                    fail_tx,
-                ),
-                Opened::Vcam(vcam, canvas) => launch_vcam(
-                    program,
-                    vcam,
-                    canvas,
-                    output_id.clone(),
-                    generation,
-                    fail_tx,
-                ),
-            }
-        });
+        let launched =
+            publish
+                .open(&output_id)
+                .map_err(StartError::from)
+                .and_then(|(opened, watch)| {
+                    health = watch;
+                    let program = match program {
+                        Some(program) => program,
+                        None => {
+                            let program = launch_program(self, parts)?;
+                            lock(&host.gate).set_program(&program);
+                            program
+                        }
+                    };
+                    match opened {
+                        Opened::Muxed(destination) => launch(
+                            self,
+                            program,
+                            OutputEncode {
+                                key,
+                                own_audio,
+                                hardware_held,
+                            },
+                            destination,
+                            output_id.clone(),
+                            generation,
+                            fail_tx,
+                        ),
+                        Opened::Vcam(vcam, canvas) => launch_vcam(
+                            program,
+                            vcam,
+                            canvas,
+                            output_id.clone(),
+                            generation,
+                            fail_tx,
+                        )
+                        .map_err(StartError::from),
+                    }
+                });
         // A link change the output thread reported before `active` is replayed once
         // the start settles; the watcher takes every later one.
         let mut link_down = false;
@@ -1566,8 +1621,11 @@ impl Engine {
                                 &mut wake,
                             );
                             // Joined below, outside the locks. A new start waits.
-                            gate.draining += 1;
-                            StartOutcome::Failed(Some(running), reason)
+                            gate.drain(&output_id, &running);
+                            StartOutcome::Failed(
+                                Some(running),
+                                ProtocolError::ActionFailed { reason },
+                            )
                         }
                         Ok(PipelineEvent::LinkDown | PipelineEvent::LinkUp)
                         | Err(TryRecvError::Disconnected) => {
@@ -1578,10 +1636,14 @@ impl Engine {
                                 &output_id,
                                 &mut wake,
                             );
-                            gate.draining += 1;
+                            gate.drain(&output_id, &running);
                             StartOutcome::Failed(
                                 Some(running),
-                                "the output thread ended before the pipeline was active".into(),
+                                ProtocolError::ActionFailed {
+                                    reason: "the output thread ended before the pipeline was \
+                                             active"
+                                        .into(),
+                                },
                             )
                         }
                         Err(TryRecvError::Empty) => {
@@ -1631,18 +1693,20 @@ impl Engine {
                                         &output_id,
                                         &mut wake,
                                     );
-                                    gate.draining += 1;
+                                    gate.drain(&output_id, &running);
                                     StartOutcome::Failed(
                                         Some(running),
-                                        format!("starting the publish watcher: {err}"),
+                                        ProtocolError::ActionFailed {
+                                            reason: format!("starting the publish watcher: {err}"),
+                                        },
                                     )
                                 }
                             }
                         }
                     },
-                    Err(reason) => {
+                    Err(err) => {
                         abandon_start(&mut state, &mut gate, &mut inflight, &output_id, &mut wake);
-                        StartOutcome::Failed(None, reason)
+                        StartOutcome::Failed(None, err.into())
                     }
                 }
             }
@@ -1662,13 +1726,13 @@ impl Engine {
                     reason: format!("output `{output_id}` stopped while starting"),
                 })
             }
-            StartOutcome::Failed(running, reason) => {
+            StartOutcome::Failed(running, err) => {
                 // `failed` is already out and `pending` cleared, so `draining` (set
                 // above when there is a pipeline) holds a new start off until this
                 // join ends, including when it unwinds.
-                let _clear_drain = ClearDrain::arm(Arc::clone(host), running.is_some());
+                let _clear_drain = ClearDrain::arm(Arc::clone(host), running.as_ref());
                 drop(running);
-                Err(ProtocolError::ActionFailed { reason })
+                Err(err)
             }
         }
     }
@@ -1698,10 +1762,10 @@ impl Engine {
                 (None, None, Some(pending.generation))
             } else {
                 let running = gate.running.remove(&output_id);
-                let watcher = if running.is_some() {
+                let watcher = if let Some(running) = &running {
                     // A start waits until this join ends, if it took the program stage
-                    // down with it.
-                    gate.draining += 1;
+                    // down with it, and counts its hardware session until that closes.
+                    gate.drain(&output_id, running);
                     gate.watchers.remove(&output_id)
                 } else {
                     None
@@ -1728,7 +1792,7 @@ impl Engine {
         // that teardown unwinds, the guards still settle the output (`failed`, since
         // the teardown did not finish) and then clear `draining`, so it is not left
         // `stopping` and a later start is not left waiting.
-        let clear_drain = ClearDrain::arm(Arc::clone(host), running.is_some());
+        let clear_drain = ClearDrain::arm(Arc::clone(host), running.as_ref());
         let mut settle = SettleOnDrop {
             engine: self,
             output_id: &output_id,
@@ -1809,6 +1873,15 @@ impl Engine {
         lock(&self.shared.state).audio.status(source_id)
     }
 
+    /// How the program stage fares with bus `bus_id`'s monitor, for tests.
+    #[cfg(test)]
+    pub(crate) fn monitor_status(
+        &self,
+        bus_id: &jstream_protocol::BusId,
+    ) -> Option<crate::audio_sources::AudioStatus> {
+        lock(&self.shared.state).audio.monitor_status(bus_id)
+    }
+
     /// The packets the mixer input of `source_id` has received, for tests.
     #[cfg(test)]
     pub(crate) fn audio_packets(&self, source_id: &SourceId) -> Option<u64> {
@@ -1820,6 +1893,24 @@ impl Engine {
     pub(crate) fn settle_sources(&self) -> bool {
         let worker = lock(&self.shared.state).live.worker();
         worker.settled(Duration::from_secs(10))
+    }
+
+    /// Forgets every source's size without telling anyone, as if plans had taken new
+    /// frames since the last `sync_sizes`, so a test sees which re-plan catches up.
+    #[cfg(test)]
+    pub(crate) fn forget_sizes(&self) {
+        lock(&self.shared.state).sizes.clear();
+    }
+
+    /// Hands the first video filter asset back to the engine as if its load had just
+    /// finished, through [`LiveHost::install_asset`]. Returns whether there was one.
+    #[cfg(test)]
+    pub(crate) fn reinstall_asset(&self) -> bool {
+        let Some(loaded) = lock(&self.shared.state).live.reload_asset() else {
+            return false;
+        };
+        LiveHost::install_asset(&*self.shared, loaded);
+        true
     }
 
     /// Runs the live sources on `clock`, for tests that move time by hand.
@@ -1840,7 +1931,7 @@ impl Engine {
     /// thread does when a frame is due, for tests that move time by hand.
     #[cfg(test)]
     pub(crate) fn replan(&self) {
-        lock(&self.shared.state).publish_render();
+        self.shared.replan_and_sync();
     }
 }
 
@@ -2029,7 +2120,7 @@ enum StartOutcome {
     /// Stop won. Any threads `launch` opened are dropped before the in-flight
     /// generation is cleared, so stop can settle `stopped`.
     Cancelled(Option<Running>),
-    Failed(Option<Running>, String),
+    Failed(Option<Running>, ProtocolError),
 }
 
 /// Clears `pending` on drop unless the start already settled.
@@ -2173,11 +2264,15 @@ fn publish_failed(
             emit_output(&mut state, output_id, OutputState::Failed, &mut wake);
             // The join happens below, outside the locks. A new start waits until
             // `draining` clears so it does not open devices over this teardown.
-            gate.draining += 1;
+            let running = gate.running.remove(output_id);
+            match &running {
+                Some(running) => gate.drain(output_id, running),
+                None => gate.draining += 1,
+            }
             // Detach this watcher. `JoinHandle`'s drop does not join, so the
             // thread can go on to drop `Running` without joining itself.
             drop(gate.watchers.remove(output_id));
-            gate.running.remove(output_id)
+            running
         } else {
             None
         }
@@ -2185,22 +2280,28 @@ fn publish_failed(
     // `pipeline` is bound after the guard. On the normal path it is dropped
     // first, and an unwind (`wake_all`, or the join itself) drops it first too,
     // so `draining` clears only after the join.
-    let _clear_drain = ClearDrain::arm(Arc::clone(host), running.is_some());
+    let _clear_drain = ClearDrain::arm(Arc::clone(host), running.as_ref());
     let pipeline = running;
     wake_all(wake);
     drop(pipeline);
 }
 
-/// Clears `Gate::draining` after the failed pipeline has been joined, including
-/// when that join unwinds.
+/// Undoes `Gate::drain` after the pipeline has been joined, including when that join
+/// unwinds: clears `draining`, and stops counting its hardware session as held.
 struct ClearDrain {
     host: Arc<MediaHost>,
     armed: bool,
+    session: Option<Weak<Encoders>>,
 }
 
 impl ClearDrain {
-    fn arm(host: Arc<MediaHost>, armed: bool) -> Self {
-        Self { host, armed }
+    /// Armed when there is a pipeline to join.
+    fn arm(host: Arc<MediaHost>, running: Option<&Running>) -> Self {
+        Self {
+            host,
+            armed: running.is_some(),
+            session: running.and_then(Running::encoders).map(Arc::downgrade),
+        }
     }
 }
 
@@ -2210,7 +2311,7 @@ impl Drop for ClearDrain {
             return;
         }
         let mut gate = lock(&self.host.gate);
-        gate.draining = gate.draining.saturating_sub(1);
+        gate.drained(self.session.as_ref());
         self.host.gate_cv.notify_all();
     }
 }
@@ -2233,9 +2334,14 @@ fn emit_output(state: &mut State, output_id: &OutputId, step: OutputState, wake:
 
 /// [`Engine::use_gpu`] and its undo.
 fn set_gpu(shared: &Shared, context: Option<&GpuContext>) {
-    let mut state = lock(&shared.state);
-    state.live.use_gpu(context);
-    state.publish_render();
+    let mut wake = Vec::new();
+    {
+        let mut state = lock(&shared.state);
+        state.live.use_gpu(context);
+        state.publish_render();
+        state.sync_sizes(&mut wake);
+    }
+    wake_all(wake);
 }
 
 fn emit_sampled(shared: &Shared, ledger: &Mutex<DropLedger>) {
@@ -2265,6 +2371,14 @@ fn stats_ticker(shared: Arc<Shared>, ledger: Arc<Mutex<DropLedger>>, stop: Arc<A
         }
         waited_ms = 0;
         emit_sampled(&shared, &ledger);
+    }
+}
+
+/// A frame size as the protocol reports it.
+fn pixel_size(size: FrameSize) -> PixelSize {
+    PixelSize {
+        width: size.width(),
+        height: size.height(),
     }
 }
 
@@ -2348,6 +2462,13 @@ struct State {
     /// Forgets the capture backend's grant for each deleted source, once there are
     /// backends ([`ForgetSources`]).
     forget: Option<ForgetSources>,
+    /// Each source's size as `source.sizes` reports it and `source.size_changed` last
+    /// announced it (ADR-0022 §4): runtime state, not part of `rev`. A source with no
+    /// size has no entry.
+    sizes: BTreeMap<SourceId, FrameSize>,
+    /// The size of each capture the program stage runs, as its render thread reports
+    /// it: what a `display`, `window` or `webcam` source's size comes from.
+    capture_sizes: BTreeMap<CaptureKey, FrameSize>,
 }
 
 impl State {
@@ -2637,6 +2758,8 @@ impl State {
         if moved {
             self.emit_studio(client_id, request_id, None, wake);
         }
+        // After `state.changed`, so a deleted source's size goes after its deletion.
+        self.sync_sizes(wake);
     }
 
     fn action(
@@ -2759,6 +2882,17 @@ impl State {
                 Query::PrivacyGet => QueryResult::PrivacyGet {
                     on: self.privacy.on(),
                 },
+                Query::SourceSizes => QueryResult::SourceSizes {
+                    sources: self
+                        .graph
+                        .state()
+                        .sources()
+                        .map(|source| SourceSize {
+                            source_id: source.id().clone(),
+                            size: self.sizes.get(source.id()).copied().map(pixel_size),
+                        })
+                        .collect(),
+                },
                 other => return Err(not_implemented(other.name())),
             },
         };
@@ -2835,6 +2969,8 @@ impl State {
             Some(transition::started(preset_id, end_ms)),
             wake,
         );
+        // The scene now on program can show a source no plan reached before.
+        self.sync_sizes(wake);
         Ok(())
     }
 
@@ -2857,6 +2993,56 @@ impl State {
             },
             wake,
         );
+    }
+
+    /// Brings `sizes` in line with each source's size now and sends a
+    /// `source.size_changed` for every change (ADR-0022 §4): a stored frame's size wins
+    /// over the live source's, as its frame does, and a source deleted since loses its
+    /// size. Runs after every plan.
+    fn sync_sizes(&mut self, wake: &mut Vec<Waker>) {
+        let Self {
+            graph,
+            frames,
+            live,
+            sizes,
+            capture_sizes,
+            subscribers,
+            ..
+        } = self;
+        let state = graph.state();
+        let mut emit = |source_id: &SourceId, size: Option<FrameSize>| {
+            subscribers.emit(
+                &Event::SourceSizeChanged {
+                    source_id: source_id.clone(),
+                    size: size.map(pixel_size),
+                },
+                wake,
+            );
+        };
+        sizes.retain(|source_id, _| {
+            let kept = state.source(source_id).is_some();
+            if !kept {
+                emit(source_id, None);
+            }
+            kept
+        });
+        for source in state.sources() {
+            let source_id = source.id();
+            let now = match frames.get(source_id) {
+                Some(frame) => frame.extent(),
+                None => live
+                    .size(source_id)
+                    .or_else(|| capture_sizes.get(&live.capture_key(source_id)?).copied()),
+            };
+            if sizes.get(source_id) == now.as_ref() {
+                continue;
+            }
+            match now {
+                Some(size) => sizes.insert(source_id.clone(), size),
+                None => sizes.remove(source_id),
+            };
+            emit(source_id, now);
+        }
     }
 
     /// Re-plans the program mix and the scene each video mix shows at the current time,
@@ -3078,26 +3264,62 @@ impl PreviewSource for Shared {
     }
 }
 
+impl Shared {
+    /// Changes the captures' sizes and announces the sources whose size that changes,
+    /// waking the subscribers once the collection lock is released.
+    fn capture_sizes(&self, change: impl FnOnce(&mut BTreeMap<CaptureKey, FrameSize>)) {
+        let mut wake = Vec::new();
+        {
+            let mut state = lock(&self.state);
+            change(&mut state.capture_sizes);
+            state.sync_sizes(&mut wake);
+        }
+        wake_all(wake);
+    }
+
+    /// Re-plans now and announces the sizes that changed, waking the subscribers once
+    /// the collection lock is released.
+    fn replan_and_sync(&self) {
+        let mut wake = Vec::new();
+        {
+            let mut state = lock(&self.state);
+            state.publish_render();
+            state.sync_sizes(&mut wake);
+        }
+        wake_all(wake);
+    }
+}
+
 impl LiveHost for Shared {
     fn install(&self, built: Built) {
-        let mut state = lock(&self.state);
-        let state = &mut *state;
+        let mut guard = lock(&self.state);
+        let state = &mut *guard;
+        let mut wake = Vec::new();
         if state.live.install(built) {
             // A source built with audio of its own is recorded from now on.
             state.audio.sync(state.graph.state(), state.live.audio());
             state.publish_render();
+            state.sync_sizes(&mut wake);
         }
+        drop(guard);
+        wake_all(wake);
     }
 
     fn install_asset(&self, loaded: LoadedAsset) {
-        let mut state = lock(&self.state);
-        if state.live.install_asset(loaded) {
-            state.publish_render();
+        let mut wake = Vec::new();
+        {
+            let mut state = lock(&self.state);
+            if state.live.install_asset(loaded) {
+                // The plan can take a source's new frame, and so a new size.
+                state.publish_render();
+                state.sync_sizes(&mut wake);
+            }
         }
+        wake_all(wake);
     }
 
     fn replan(&self) {
-        lock(&self.state).publish_render();
+        self.replan_and_sync();
     }
 }
 

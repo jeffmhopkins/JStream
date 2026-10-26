@@ -1,14 +1,15 @@
 //! What the canvas edits and the calls that change it: the selected scene's items'
 //! boxes, taken from the shared [`Collection`], the live values a drag shows as it
-//! goes (`live.set` and `live.cancel`), `item.set_geometry` as one batch per finished
-//! gesture, and `history.undo` and `history.redo` (ADR-0032).
+//! goes (`live.set` and `live.cancel`), `item.set_geometry` (and `item.set_crop` for a
+//! crop) as one batch per finished gesture, and `history.undo` and `history.redo`
+//! (ADR-0032).
 //!
 //! Docs: crates/jstream-ui/README.md#canvas, docs/adr/0032-live-edits-and-undo.md
 
-use crate::store::Collection;
+use crate::store::{Collection, Sizes};
 use jstream_control::protocol::{
-    Action, Batch, Call, CallResult, Canvas, Edit, GestureId, HistoryCall, HistoryOp, ItemGeometry,
-    ItemId, PlacementForm, Rev, SceneId,
+    Action, Batch, Call, CallResult, Canvas, Crop, Edit, GestureId, HistoryCall, HistoryOp,
+    ItemGeometry, ItemId, PlacementForm, Rev, SceneId,
 };
 use jstream_control::{Control, ControlError};
 use std::fmt;
@@ -58,6 +59,10 @@ pub struct CanvasItem {
     pub geometry: Option<ItemGeometry>,
     /// Whether it is drawn.
     pub visible: bool,
+    /// Its crop, in source pixels.
+    pub crop: Crop,
+    /// Its source's own size in pixels, while the engine knows it.
+    pub source_size: Option<(u32, u32)>,
 }
 
 /// The scene being edited, at one revision.
@@ -93,12 +98,22 @@ impl Layout {
             .find(|item| &item.item_id == item_id)
             .and_then(|item| item.geometry)
     }
+
+    /// The item, if the scene has it.
+    pub fn item(&self, item_id: &ItemId) -> Option<&CanvasItem> {
+        self.items.iter().find(|item| &item.item_id == item_id)
+    }
 }
 
 impl Layout {
     /// The layout of `scene_id` in `collection`, or an empty one with no scene when it
-    /// names none or a scene the collection doesn't have.
+    /// names none or a scene the collection doesn't have. It knows no source's size.
     pub fn of(collection: &Collection, scene_id: Option<&SceneId>) -> Layout {
+        Layout::sized(collection, scene_id, &Sizes::new())
+    }
+
+    /// [`Layout::of`], with each item's source size taken from `sizes`.
+    pub fn sized(collection: &Collection, scene_id: Option<&SceneId>, sizes: &Sizes) -> Layout {
         let Some(scene) = scene_id.and_then(|id| collection.scene(id)) else {
             return Layout {
                 rev: collection.rev,
@@ -118,6 +133,8 @@ impl Layout {
                     _ => None,
                 },
                 visible: item.visible,
+                crop: item.crop,
+                source_size: collection.source_size(sizes, &item.source_id),
             })
             .collect();
         Layout {
@@ -129,29 +146,40 @@ impl Layout {
     }
 }
 
-/// An `item.set_geometry` for each item in `scene_id`.
-fn geometry_edits(scene_id: &SceneId, placed: Vec<(ItemId, ItemGeometry)>) -> Vec<Edit> {
-    placed
+/// An `item.set_geometry` for each item in `scene_id`, then an `item.set_crop` for
+/// each crop.
+fn geometry_edits(
+    scene_id: &SceneId,
+    placed: Vec<(ItemId, ItemGeometry)>,
+    crops: Vec<(ItemId, Crop)>,
+) -> Vec<Edit> {
+    let geometries = placed
         .into_iter()
         .map(|(item_id, geometry)| Edit::ItemSetGeometry {
             item_id,
             scene_id: Some(scene_id.clone()),
             geometry,
-        })
-        .collect()
+        });
+    let crops = crops.into_iter().map(|(item_id, crop)| Edit::ItemSetCrop {
+        item_id,
+        scene_id: Some(scene_id.clone()),
+        crop,
+    });
+    geometries.chain(crops).collect()
 }
 
-/// The batch that places each item in `scene_id` at its new geometry: one batch, so one
-/// undo step however many items a gesture moved, ending the drag's gesture if its live
-/// values reached the engine. It carries no `expected_rev`: a drag's commit is last
-/// writer wins per field (ADR-0032).
+/// The batch that places each item in `scene_id` at its new geometry, and crops each
+/// of `crops`: one batch, so one undo step however many items a gesture moved, ending
+/// the drag's gesture if its live values reached the engine. It carries no
+/// `expected_rev`: a drag's commit is last writer wins per field (ADR-0032).
 pub fn set_geometry(
     scene_id: SceneId,
     placed: Vec<(ItemId, ItemGeometry)>,
+    crops: Vec<(ItemId, Crop)>,
     gesture: Option<GestureId>,
 ) -> Call {
     Call::Batch(Batch {
-        edits: geometry_edits(&scene_id, placed),
+        edits: geometry_edits(&scene_id, placed, crops),
         expected_rev: None,
         idempotency_key: None,
         ends_gesture: gesture,
@@ -163,10 +191,11 @@ pub async fn commit(
     control: &dyn Control,
     scene_id: SceneId,
     placed: Vec<(ItemId, ItemGeometry)>,
+    crops: Vec<(ItemId, Crop)>,
     gesture: Option<GestureId>,
 ) -> Result<Rev, CanvasError> {
     match control
-        .call(set_geometry(scene_id, placed, gesture))
+        .call(set_geometry(scene_id, placed, crops, gesture))
         .await?
         .result
     {
@@ -177,17 +206,19 @@ pub async fn commit(
     }
 }
 
-/// Shows the items at these geometries on output while a drag goes on, opening the
-/// gesture if it is new (`live.set`): the collection and its revision don't change.
+/// Shows the items at these geometries and crops on output while a drag goes on,
+/// opening the gesture if it is new (`live.set`): the collection and its revision don't
+/// change.
 pub async fn live_set(
     control: &dyn Control,
     gesture: GestureId,
     scene_id: SceneId,
     placed: Vec<(ItemId, ItemGeometry)>,
+    crops: Vec<(ItemId, Crop)>,
 ) -> Result<(), CanvasError> {
     let action = Action::LiveSet {
         gesture_id: gesture,
-        values: geometry_edits(&scene_id, placed),
+        values: geometry_edits(&scene_id, placed, crops),
     };
     control.call(Call::Action { action }).await?;
     Ok(())
@@ -389,6 +420,7 @@ mod tests {
             gesture.clone(),
             "s2".into(),
             vec![("box".into(), moving)],
+            Vec::new(),
         ))
         .expect("live.set");
         assert_eq!(open_gestures(&control), 1);
@@ -403,6 +435,7 @@ mod tests {
             &control,
             "s2".into(),
             vec![("box".into(), dropped)],
+            Vec::new(),
             Some(gesture),
         ))
         .expect("commit");
@@ -425,6 +458,7 @@ mod tests {
             gesture.clone(),
             "s2".into(),
             vec![("box".into(), moving)],
+            Vec::new(),
         ))
         .expect("live.set");
         now(live_cancel(&control, gesture)).expect("live.cancel");
@@ -446,6 +480,7 @@ mod tests {
             &control,
             "s2".into(),
             vec![("box".into(), moved)],
+            Vec::new(),
             None,
         ))
         .expect("commit");
@@ -465,6 +500,110 @@ mod tests {
         assert_eq!(depths.redo, Some(0));
         let redone = load(&control, "s2");
         assert_eq!(redone.geometry_of(&"box".into()), Some(moved));
+    }
+
+    #[test]
+    fn a_crop_commits_its_box_and_crop_as_one_step() {
+        let control = engine();
+        let before = load(&control, "s2");
+        let cropped = geometry(1010.0, 540.0, 540.0, 360.0);
+        let crop = Crop {
+            left: 100,
+            top: 0,
+            right: 0,
+            bottom: 0,
+        };
+        now(commit(
+            &control,
+            "s2".into(),
+            vec![("box".into(), cropped)],
+            vec![("box".into(), crop)],
+            None,
+        ))
+        .expect("commit");
+        let after = load(&control, "s2");
+        let item = after.item(&"box".into()).expect("the item");
+        assert_eq!((item.geometry, item.crop), (Some(cropped), crop));
+        assert_eq!(after.rev.0, before.rev.0 + 1, "one batch");
+        now(history(&control, HistoryOp::Undo)).expect("undo");
+        let undone = load(&control, "s2");
+        let item = undone.item(&"box".into()).expect("the item");
+        assert_eq!(
+            (item.geometry, item.crop),
+            (before.geometry_of(&"box".into()), Crop::NONE),
+            "one undo restores both"
+        );
+    }
+
+    #[test]
+    fn a_layout_knows_its_sources_sizes() {
+        let control = engine();
+        let answer = now(control.call(Call::Query {
+            query: Query::StateGet,
+        }))
+        .expect("state.get");
+        let CallResult::Query { result } = answer.result else {
+            panic!("state.get answers a query result");
+        };
+        let collection = Collection::from_result(result).expect("a state.get result");
+        let sizes = Sizes::from([(SourceId::new("cam"), (1280, 720))]);
+        let layout = Layout::sized(&collection, Some(&"s2".into()), &sizes);
+        assert_eq!(
+            layout.item(&"box".into()).and_then(|i| i.source_size),
+            Some((1280, 720))
+        );
+        let plain = Layout::of(&collection, Some(&"s2".into()));
+        assert_eq!(plain.item(&"box".into()).and_then(|i| i.source_size), None);
+    }
+
+    #[test]
+    fn clearing_a_crop_gives_the_box_its_uncropped_extent_back() {
+        let control = engine();
+        let crop = Crop {
+            left: 100,
+            ..Crop::NONE
+        };
+        // A 1280×720 source at half size, its left 100 source pixels cropped.
+        let cropped = geometry(985.0, 540.0, 590.0, 360.0);
+        now(commit(
+            &control,
+            "s2".into(),
+            vec![("box".into(), cropped)],
+            vec![("box".into(), crop)],
+            None,
+        ))
+        .expect("commit");
+        let answer = now(control.call(Call::Query {
+            query: Query::StateGet,
+        }))
+        .expect("state.get");
+        let CallResult::Query { result } = answer.result else {
+            panic!("state.get answers a query result");
+        };
+        let collection = Collection::from_result(result).expect("a state.get result");
+        let ids = [ItemId::from("box"), ItemId::from("old")];
+        let sizes = Sizes::from([(SourceId::new("cam"), (1280, 720))]);
+        let edits = crate::canvas::crop::clear(&collection, &sizes, &"s2".into(), &ids);
+        let full = geometry(960.0, 540.0, 640.0, 360.0);
+        assert_eq!(
+            edits,
+            [
+                Edit::ItemSetCrop {
+                    item_id: "box".into(),
+                    scene_id: Some("s2".into()),
+                    crop: Crop::NONE,
+                },
+                Edit::ItemSetGeometry {
+                    item_id: "box".into(),
+                    scene_id: Some("s2".into()),
+                    geometry: full,
+                },
+            ],
+            "only the cropped item, and its box only with a size"
+        );
+        let unsized_edits =
+            crate::canvas::crop::clear(&collection, &Sizes::new(), &"s2".into(), &ids);
+        assert_eq!(unsized_edits.len(), 1);
     }
 
     #[test]

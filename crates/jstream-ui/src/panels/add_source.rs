@@ -2,8 +2,9 @@
 //! groups them (Capture, Audio, Media and web, Generated, Scenes), each with its icon and
 //! description. A type is created new under a name, or an existing source of that type
 //! is placed again as a reference; the Scene type nests another scene. A new visual
-//! source is placed centred at the prototype's native size for its type, scaled down to
-//! fit the canvas, then selected with the Inspector shown.
+//! source is placed centred at the prototype's native size for its type, and an
+//! existing source placed nowhere at its own size when the engine reports one, each
+//! scaled down to fit the canvas, then selected with the Inspector shown.
 //!
 //! Docs: docs/UI-FEATURES.md#dialogs
 
@@ -12,7 +13,7 @@ use crate::dialog::Modal;
 use crate::dock::PanelId;
 use crate::icons::Icon;
 use crate::panels::source_properties::PropertiesDialog;
-use crate::store::{Collection, Studio, apply};
+use crate::store::{Collection, Sizes, Studio, apply};
 use crate::workspace::DockState;
 use jstream_control::protocol::{
     Canvas, Edit, ItemGeometry, ItemId, KindCategory, KindSummary, SceneId, Settings, Size,
@@ -298,11 +299,13 @@ pub fn native_geometry(native: (f32, f32), canvas: Canvas) -> Option<ItemGeometr
 }
 
 /// A reference's placement: its source's first placement anywhere, moved 40 px right
-/// and down, or the native box when the source isn't placed.
+/// and down, or when the source isn't placed, a box of its own size (`source.sizes`),
+/// else of its type's native size.
 fn reference_geometry(
     source_id: &SourceId,
     source_type: &SourceType,
     collection: &Collection,
+    sizes: &Sizes,
 ) -> Option<ItemGeometry> {
     let placed = collection
         .scenes
@@ -319,7 +322,10 @@ fn reference_geometry(
             geometry.center = moved;
             Some(geometry)
         }
-        None => placement(source_type, collection.canvas),
+        None => collection
+            .source_size(sizes, source_id)
+            .and_then(|(w, h)| native_geometry((w as f32, h as f32), collection.canvas))
+            .or_else(|| placement(source_type, collection.canvas)),
     }
 }
 
@@ -382,7 +388,8 @@ pub struct Ids {
 }
 
 /// The edits that add `choice` of `source_type` to `scene_id`, named `name` when it
-/// creates a source.
+/// creates a source. An existing source not placed anywhere goes at its own size from
+/// `sizes`, when the engine knows it.
 pub fn add_edits(
     source_type: &SourceType,
     choice: &Choice,
@@ -390,6 +397,7 @@ pub fn add_edits(
     scene_id: &SceneId,
     ids: Ids,
     collection: &Collection,
+    sizes: &Sizes,
 ) -> Vec<Edit> {
     let mut edits = Vec::new();
     let item = |source_id: SourceId, geometry: Option<ItemGeometry>| Edit::ItemAdd {
@@ -419,7 +427,7 @@ pub fn add_edits(
         (Choice::New, _) => {}
         (Choice::Existing(id), Some(_)) => {
             let source_id = SourceId::new(id.clone());
-            let geometry = reference_geometry(&source_id, source_type, collection);
+            let geometry = reference_geometry(&source_id, source_type, collection, sizes);
             edits.push(item(source_id, geometry));
         }
         (Choice::Existing(id), None) => {
@@ -599,8 +607,11 @@ fn AddSourceBody(
             let item_id = ids.item.clone();
             let source_id = ids.source.clone();
             let edits = studio.collection.with_untracked(|c| {
-                c.as_ref()
-                    .map(|c| add_edits(&t, &choice, &name.get_untracked(), &scene_id, ids, c))
+                c.as_ref().map(|c| {
+                    studio.sizes.with_untracked(|sizes| {
+                        add_edits(&t, &choice, &name.get_untracked(), &scene_id, ids, c, sizes)
+                    })
+                })
             });
             let Some(edits) = edits.filter(|e| !e.is_empty()) else {
                 return;
@@ -874,6 +885,7 @@ mod tests {
             geometry,
             crop: Crop::NONE,
             visible: true,
+            effects: Vec::new(),
             opacity: Finite32::ONE,
             blend: Default::default(),
             transition: jstream_control::protocol::ItemTransition::default(),
@@ -883,6 +895,7 @@ mod tests {
     fn scene(id: &str, name: &str, items: Vec<ItemInfo>) -> SceneInfo {
         SceneInfo {
             overrides: Vec::new(),
+            filters: Default::default(),
             variant_of: None,
             scene_id: id.into(),
             name: name.into(),
@@ -992,6 +1005,7 @@ mod tests {
             &SceneId::new("main"),
             ids,
             &collection(),
+            &Sizes::new(),
         );
         assert!(edits.is_empty(), "an unlisted kind can't be created");
     }
@@ -1049,6 +1063,7 @@ mod tests {
             &SceneId::new("main"),
             ids,
             &collection(),
+            &Sizes::new(),
         );
         let [
             Edit::SourceCreate { name, kind, .. },
@@ -1099,6 +1114,7 @@ mod tests {
             &SceneId::new("brb"),
             ids,
             &c,
+            &Sizes::new(),
         );
         let [
             Edit::ItemAdd {
@@ -1112,6 +1128,50 @@ mod tests {
         };
         assert_eq!(source_id.as_str(), "cam");
         assert_eq!((g.center.x.get(), g.center.y.get()), (1000.0, 580.0));
+    }
+
+    #[test]
+    fn an_unplaced_source_goes_at_its_own_size_when_the_engine_knows_it() {
+        let types = catalogue(&engine_kinds(), &[]);
+        let webcam = types
+            .iter()
+            .find(|t| t.name == "Video capture device")
+            .unwrap();
+        let mut c = collection();
+        for scene in &mut c.scenes {
+            scene.items.retain(|i| i.source_id.as_str() != "cam");
+        }
+        let place = |sizes: &Sizes| {
+            let ids = Ids {
+                item: ItemId::new("item-1"),
+                source: SourceId::new("unused"),
+            };
+            let edits = add_edits(
+                webcam,
+                &Choice::Existing("cam".into()),
+                "",
+                &SceneId::new("brb"),
+                ids,
+                &c,
+                sizes,
+            );
+            let [
+                Edit::ItemAdd {
+                    geometry: Some(g), ..
+                },
+            ] = edits.as_slice()
+            else {
+                panic!("one item.add: {edits:?}");
+            };
+            (g.size.width.get(), g.size.height.get())
+        };
+        let own = Sizes::from([(SourceId::new("cam"), (640, 480))]);
+        assert_eq!(place(&own), (640.0, 480.0));
+        // Larger than the canvas, it is scaled down to fit.
+        let big = Sizes::from([(SourceId::new("cam"), (3840, 2160))]);
+        assert_eq!(place(&big), (1920.0, 1080.0));
+        // Unknown, it takes its type's native size.
+        assert_eq!(place(&Sizes::new()), webcam.native.unwrap());
     }
 
     #[test]
@@ -1136,6 +1196,7 @@ mod tests {
             &SceneId::new("brb"),
             ids(),
             &c,
+            &Sizes::new(),
         );
         assert!(
             matches!(edits.as_slice(), [Edit::ItemAdd { source_id, .. }] if source_id.as_str() == "nest")
@@ -1148,6 +1209,7 @@ mod tests {
             &SceneId::new("main"),
             ids(),
             &c,
+            &Sizes::new(),
         );
         assert!(
             matches!(edits.as_slice(), [Edit::SourceCreate { name, .. }, Edit::ItemAdd { .. }] if name == "BRB"),
@@ -1161,7 +1223,8 @@ mod tests {
                 "",
                 &SceneId::new("main"),
                 ids(),
-                &c
+                &c,
+                &Sizes::new(),
             )
             .is_empty()
         );

@@ -39,14 +39,16 @@ Contents (a first cut; Windows first, because the window needs WebView2):
   backend the engine opens `browser` sources' pages in.
 - **Window** (`shell.rs`, Windows only): the Tauri window, its navigation guard and
   shutdown.
-- **Log file** (`logs.rs`), in the data folder `jstream-platform`'s `paths` module finds.
+- **Log file** (`logs.rs`), in the data folder `jstream-platform`'s `paths` module finds:
+  a new user-only file at each start, through `create_private_file` on Windows and
+  `jstream-crash`'s `create_new` elsewhere.
 - **Crash reports**: `jstream-crash`'s panic hook, which writes a redacted report beside
   the log file, and its `Redacting` key store wrapper, which registers each stream key
   with the redaction.
 - **Tests** (unit tests in each module, run on every platform: the server behind the
   token and the webview's origin, the bundle's paths, types and CSP, the bootstrap
   script's escaping, the command line, the virtual camera's status values, the
-  capped log file, and the control token registered for redaction; the crash hook's own
+  capped log file (user-only, checked on Unix), and the control token registered for redaction; the crash hook's own
   tests are `jstream-crash`'s), and one integration test, `tests/delay_load.rs` (Windows MSVC
   only), which reads the built `jstream.exe`'s PE headers to check that each Media
   Foundation DLL `build.rs` delay-loads is delay-loaded and none is a load-time import.
@@ -83,14 +85,16 @@ Closing the window stops the engine.
 | `--no-vcam` | Run without the virtual camera: a `virtual_cam` output can't start. |
 
 **Browser sources** need the `cef` feature (`cargo run -p jstream-desktop --features
-cef`) and the sandboxed browser helper beside `jstream.exe`: CEF's bootstrap exe renamed
-`jstream-browser-helper.exe`, `jstream-browser-helper.dll` and CEF's runtime files
+cef`) and the sandboxed browser helper in the `browser` folder beside `jstream.exe` (or
+next to it, in a build folder): CEF's bootstrap exe renamed `jstream-browser-helper.exe`,
+`jstream-browser-helper.dll` and CEF's runtime files
 ([ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md),
 [the helper's README](../jstream-browser-helper/README.md#purpose)). The app itself
 doesn't build or link CEF, so it starts without them; a `browser` source fails to open
-until they are there. It is off by default until the CEF runtime and the helper are
-packaged ([the browser crate's open items](../../crates/jstream-browser/README.md#open-items)).
-Without it, a `browser` source draws nothing. CEF's cache is the data folder's `cef`
+until they are there. The feature is off by default, because only Windows has the
+backend; the portable zip turns it on and ships the helper
+([ARCH › Packaging](../../docs/ARCHITECTURE.md#packaging)). Without it, a `browser`
+source draws nothing. CEF's cache is the data folder's `cef`
 folder, and its log `logs\cef.log`.
 
 - **Data folder.** `%APPDATA%\JStream`, the daemon's too. When a file named `portable`
@@ -100,8 +104,9 @@ folder, and its log `logs\cef.log`.
   ([jstream-platform › Purpose](../../crates/jstream-platform/README.md#purpose)).
 - **The collection** is `collection.json` in the data folder, created empty the first
   time and saved on every change, so the next start opens where the last one stopped.
-- **Logs.** `logs\jstream-desktop.log` in the data folder, replaced at each start and
-  capped at 10 MiB, filtered by `RUST_LOG` (default `info`). A debug build also logs to
+- **Logs.** `logs\jstream-desktop.log` in the data folder, replaced at each start by a
+  new, user-only file (a protected DACL for SYSTEM and the user on Windows, mode `0600`
+  on Unix, in a folder created `0700`, #780) and capped at 10 MiB, filtered by `RUST_LOG` (default `info`). A debug build also logs to
   its console; a release build has no console window. The audit log goes in the same
   folder, as the daemon's does. The token is never logged.
 - **Crash reports.** A panic writes `logs\crash-<UTC time>-<pid>-<n>.txt` in the data

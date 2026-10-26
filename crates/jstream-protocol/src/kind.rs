@@ -63,6 +63,14 @@ pub struct KindDescriptor {
     pub audio: bool,
     /// The parameters, in display order. Their IDs are unique within the kind.
     pub params: Vec<ParamDescriptor>,
+    /// For a `video_filter` kind that draws outside its input (a drop shadow, a glow, an
+    /// outline): the most it can draw beyond each edge, in pixels, at any settings
+    /// (ADR-0065 §5, since 0.43). An item's effects layer is padded by the sum over its
+    /// enabled effects, so a live edit never resizes it. On a source's or a scene's chain
+    /// it is ignored, since the output there is the input's size. Omitted for none,
+    /// and for every other category.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_outset_px: Option<u32>,
 }
 
 impl KindDescriptor {
@@ -823,6 +831,7 @@ mod tests {
             version: 1,
             video: true,
             audio: false,
+            max_outset_px: None,
             params: vec![
                 param(
                     "color",

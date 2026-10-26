@@ -38,7 +38,7 @@
 //! `stats.tick` has it (#385).
 
 use std::any::Any;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
@@ -63,7 +63,7 @@ use jstream_platform::{
 };
 use jstream_protocol::{
     EncoderProfile, EncoderProfileId, HardwarePreference as ProfileHardware, OutputId, OutputKind,
-    RateControl as ProfileRate, VideoCodec, VideoMixId,
+    ProtocolError, RateControl as ProfileRate, VideoCodec, VideoMixId,
 };
 use jstream_render::{
     Compositor, Nv12Converter, Nv12Pass, Nv12Target, OpenOptions, Reclaimed, RenderError,
@@ -71,7 +71,7 @@ use jstream_render::{
 };
 use jstream_sources::AudioScopes;
 
-use crate::audio::{MasterMetering, MixerHandles, ScopeTaps, TapFeed};
+use crate::audio::{MasterMetering, MixerHandles, MonitorRoute, ScopeTaps, TapFeed};
 use crate::audio_sources::{AudioInputs, Wanted};
 use crate::chain::Chains;
 use crate::drops::{
@@ -80,6 +80,7 @@ use crate::drops::{
 };
 use crate::engine::Engine;
 use crate::lock;
+use crate::privacy::Privacy;
 use crate::runtime::captures::{self, RenderCaptures};
 use crate::runtime::sink::{Destination, Sink, StreamInfo};
 use crate::runtime::vcam::{VcamOut, VcamSlot, VcamTap, camera_channels, run_camera};
@@ -388,6 +389,12 @@ pub(crate) struct Gate {
     /// stage is gone, a new start waits for this to reach 0 so it doesn't open the
     /// devices over a teardown.
     pub(crate) draining: u32,
+    /// The outputs taken out of `running` whose hardware encoder sessions are still
+    /// being released: each counts as a holder until its join ends (its session closes
+    /// as the pipeline drops), so a start beside a stopping holder can't fall back to
+    /// software on a hardware cap that is still full (#834). The weak handle only
+    /// identifies the entry for [`drained`](Self::drained).
+    releasing: Vec<(OutputId, Weak<Encoders>)>,
 }
 
 impl Gate {
@@ -400,6 +407,44 @@ impl Gate {
                 .failures
                 .upgrade()
                 .is_some_and(|failures| failures.failed())
+    }
+
+    /// Notes that `running`, `output_id`'s pipeline, is about to be joined outside the
+    /// gate: a start waits for it while the program stage is gone, and counts its
+    /// hardware encoder session as held until [`drained`](Self::drained).
+    pub(crate) fn drain(&mut self, output_id: &OutputId, running: &Running) {
+        self.draining += 1;
+        if let Some(encoders) = running.encoders().filter(|encoders| encoders.hardware()) {
+            self.releasing
+                .push((output_id.clone(), Arc::downgrade(encoders)));
+        }
+    }
+
+    /// Undoes one [`drain`](Self::drain) once its join has ended: `session` is the
+    /// drained pipeline's encoder session, if it had one.
+    pub(crate) fn drained(&mut self, session: Option<&Weak<Encoders>>) {
+        self.draining = self.draining.saturating_sub(1);
+        if let Some(session) = session
+            && let Some(at) = self
+                .releasing
+                .iter()
+                .position(|(_, held)| Weak::ptr_eq(held, session))
+        {
+            self.releasing.remove(at);
+        }
+    }
+
+    /// The outputs holding hardware video sessions, sorted: the running ones, and those
+    /// whose pipeline is still being joined (#834).
+    pub(crate) fn hardware_held(&self) -> Vec<OutputId> {
+        let running = self
+            .running
+            .iter()
+            .filter(|(_, running)| running.encoders().is_some_and(|e| e.hardware()))
+            .map(|(id, _)| id);
+        let releasing = self.releasing.iter().map(|(id, _)| id);
+        let held: BTreeSet<&OutputId> = running.chain(releasing).collect();
+        held.into_iter().cloned().collect()
     }
 
     /// The running program stage, to share.
@@ -445,6 +490,7 @@ impl MediaHost {
                 pending: None,
                 watchers: BTreeMap::new(),
                 draining: 0,
+                releasing: Vec::new(),
             }),
             gate_cv: Condvar::new(),
             next_generation: AtomicU64::new(1),
@@ -509,6 +555,61 @@ pub(crate) struct OutputEncode {
     /// Whether the output has an audio chain of its own, so an output tap and an audio
     /// encode only it reads.
     pub(crate) own_audio: bool,
+    /// The running outputs whose sessions hold hardware video encoders. While there is
+    /// one, a new video session opens with `require`, and a refused open is the
+    /// hardware session limit (ADR-0027 §3, #443), not a fallback to software.
+    pub(crate) hardware_held: Vec<OutputId>,
+}
+
+/// Why an output could not start.
+#[derive(Debug)]
+pub(crate) enum StartError {
+    /// The start failed (`action_failed`).
+    Failed(String),
+    /// A new hardware video session was refused while `outputs` held hardware sessions
+    /// (`hardware_session_limit`).
+    HardwareSessionLimit {
+        outputs: Vec<OutputId>,
+        reason: String,
+    },
+}
+
+impl From<String> for StartError {
+    fn from(reason: String) -> Self {
+        StartError::Failed(reason)
+    }
+}
+
+impl From<StartError> for ProtocolError {
+    fn from(err: StartError) -> Self {
+        match err {
+            StartError::Failed(reason) => ProtocolError::ActionFailed { reason },
+            StartError::HardwareSessionLimit { outputs, reason } => {
+                ProtocolError::HardwareSessionLimit { outputs, reason }
+            }
+        }
+    }
+}
+
+/// `profile` as a new video session opens it while `held` hold hardware sessions: a
+/// hardware preference becomes `require`, so a full hardware session limit fails the
+/// start instead of falling back to software (ADR-0027 §3). `avoid` stays software, and
+/// so does a codec the machine has no hardware encoder for (`hardware_listed` false):
+/// no session limit can refuse that one, so `prefer` falls back and a failure stays
+/// `action_failed`. Whether it was changed comes back with it.
+fn while_hardware_held(
+    profile: &EncoderProfile,
+    held: &[OutputId],
+    hardware_listed: bool,
+) -> (EncoderProfile, bool) {
+    let mut opened = *profile;
+    let limited = !held.is_empty()
+        && hardware_listed
+        && !matches!(profile.video.hardware, ProfileHardware::Avoid);
+    if limited {
+        opened.video.hardware = ProfileHardware::Require;
+    }
+    (opened, limited)
 }
 
 /// Undoes something once its output has stopped.
@@ -543,6 +644,9 @@ pub(crate) struct Program {
     collector: Option<JoinHandle<()>>,
     mixer: Option<JoinHandle<()>>,
     forward: Option<JoinHandle<()>>,
+    /// Hands the captures' sizes to the engine. It ends once the render thread has let
+    /// go of its captures.
+    sizes: Option<JoinHandle<()>>,
     clock: Arc<dyn MediaClock>,
     codecs: Arc<dyn Codecs>,
     size: FrameSize,
@@ -591,8 +695,14 @@ pub(crate) struct Program {
 impl Program {
     /// The encoder sessions for `key`: the open ones, or new ones not yet fed. Call
     /// [`attach`](Self::attach) once the output has subscribed, so a new session's
-    /// first packets go to it.
-    fn encoders(&self, engine: &Engine, key: EncodeKey) -> Result<Arc<Encoders>, String> {
+    /// first packets go to it. While `hardware_held` names outputs, a new video session
+    /// opens as [`while_hardware_held`] says, and its refusal is the session limit.
+    fn encoders(
+        &self,
+        engine: &Engine,
+        key: EncodeKey,
+        hardware_held: &[OutputId],
+    ) -> Result<Arc<Encoders>, StartError> {
         lock(&self.sessions).get_or_open(key.clone(), || {
             let feed = Feed {
                 mix: key.0.mix.clone(),
@@ -604,7 +714,23 @@ impl Program {
             // session's tap, so a fallback can't land between the open and the attach.
             let mut claim = self.context.as_ref().and_then(|_| self.gpu_gate.claim());
             let context = claim.as_ref().and(self.context.as_deref());
-            let video = Arc::new(open_video(self.codecs.as_ref(), context, &feed, &key.2)?);
+            // A settings error is no refusal: only the encoder's open is classified below.
+            let config = video_config(&feed, &key.2)?;
+            let listed =
+                !hardware_held.is_empty() && hardware_listed(self.codecs.as_ref(), config.codec);
+            let (profile, limited) = while_hardware_held(&key.2, hardware_held, listed);
+            let video =
+                open_video(self.codecs.as_ref(), context, &feed, &profile).map_err(|reason| {
+                    if limited {
+                        StartError::HardwareSessionLimit {
+                            outputs: hardware_held.to_vec(),
+                            reason,
+                        }
+                    } else {
+                        StartError::Failed(reason)
+                    }
+                })?;
+            let video = Arc::new(video);
             if *video.path() != VideoPath::Gpu {
                 claim = None;
             }
@@ -729,6 +855,7 @@ impl Drop for Program {
         // These end once the render and mixer threads have dropped their senders.
         join("collector", self.collector.take());
         join("program watch", self.forward.take());
+        join("capture sizes", self.sizes.take());
         join("stats", self.ticker.take());
         // After the threads stop, so the latch sees their final counters.
         self.drop_guard.take();
@@ -1182,6 +1309,10 @@ pub(crate) struct Parts {
     /// Whether the privacy screen is on: the engine sets it, the render thread reads it
     /// every tick, with no lock (ADR-0027 §4).
     privacy: Arc<AtomicBool>,
+    /// How many times the privacy screen has changed, odd while it is on: the engine
+    /// increments it, the mixer reads it before every block and the microphones' audio
+    /// threads on every packet, with no lock.
+    privacy_changes: Arc<AtomicU64>,
 }
 
 pub(crate) fn parts_from(
@@ -1191,7 +1322,7 @@ pub(crate) fn parts_from(
     render: Arc<RenderHub>,
     audio_sources: Arc<Wanted>,
     canvas: (u32, u32),
-    privacy: Arc<AtomicBool>,
+    privacy: &Privacy,
 ) -> Parts {
     Parts {
         canvas,
@@ -1205,7 +1336,8 @@ pub(crate) fn parts_from(
         open_timeout,
         render,
         audio_sources,
-        privacy,
+        privacy: privacy.flag(),
+        privacy_changes: privacy.changes(),
     }
 }
 
@@ -1448,9 +1580,20 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
     let gpu_sources = context
         .as_deref()
         .map(|context| GpuSourcesGuard(GpuSources::new(engine.use_gpu(context))));
-    let captures = captures::spawn(backends, parts.clock.timebase())?;
+    // Ends once the captures' sender goes, so on an early return it ends by itself.
+    let (size_tx, size_rx) = mpsc::channel();
+    let sizes = spawn("jstream-capture-sizes", engine.capture_sizes_watch(size_rx))?;
+    let captures = captures::spawn(backends, parts.clock.timebase(), size_tx)?;
     let format = engine_format()?;
-    let mixer = Mixer::new(MixerConfig::default()).map_err(|err| format!("mixer: {err}"))?;
+    // The mixer and its inputs' audio threads follow the engine's count of privacy
+    // changes, so a microphone's packets are zeroed from the moment privacy goes on, and
+    // a change between two polls is not missed (ADR-0027 §4).
+    let mixer =
+        Mixer::with_privacy_signal(MixerConfig::default(), Arc::clone(&parts.privacy_changes))
+            .map_err(|err| format!("mixer: {err}"))?;
+    // The monitors the audio sources' thread opens hand their feeds to the mixer
+    // thread here, at most one per bus at a time.
+    let (monitor_routes, monitor_feeds) = mpsc::sync_channel(jstream_audio::MAX_BUSES);
     // On an early return this closes the inputs, each stream before its ring's last
     // handle, so no ring is freed on a real-time thread (docs/RULES.md#R-RT-003).
     let audio = AudioInputs::start(
@@ -1460,6 +1603,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         Arc::clone(&parts.clock),
         Arc::clone(&parts.audio_sources),
         engine.drop_ledger(),
+        monitor_routes,
     )?;
     let bus = mixer.bus();
     let period = frame_period(parts.clock.timebase())?;
@@ -1548,6 +1692,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             format,
             scopes: engine.audio_scopes(),
             taps: Arc::clone(&scope_taps),
+            monitors: monitor_feeds,
         };
         let mixing = Mixing { mixer, metering };
         move || mixer_thread(mixing, clock, &out, stop, fail, &collector)
@@ -1565,6 +1710,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         collector: Some(collector_thread),
         mixer: Some(mixer_thread),
         forward: Some(forward),
+        sizes: Some(sizes),
         clock: Arc::clone(&parts.clock),
         codecs: Arc::clone(&parts.codecs),
         size,
@@ -1599,6 +1745,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
                 meters: master_meters,
                 scopes: engine.audio_scopes(),
                 taps: scope_taps,
+                wanted: Arc::clone(&parts.audio_sources),
             });
             *lock(&program.detach_audio) = Some(detach);
             Ok(Arc::new(program))
@@ -1636,12 +1783,16 @@ pub(crate) fn launch(
     output_id: OutputId,
     generation: u64,
     fail_tx: Sender<PipelineEvent>,
-) -> Result<Running, String> {
+) -> Result<Running, StartError> {
     let registration = program
         .failures
         .add(output_id.clone(), generation, fail_tx.clone());
-    let OutputEncode { key, own_audio } = encode;
-    let encoders = program.encoders(engine, key)?;
+    let OutputEncode {
+        key,
+        own_audio,
+        hardware_held,
+    } = encode;
+    let encoders = program.encoders(engine, key, &hardware_held)?;
     let origin = program.origin()?;
     let own_audio = if own_audio {
         let (tap, release) = engine.add_output_tap(&output_id)?;
@@ -1652,7 +1803,7 @@ pub(crate) fn launch(
             }),
             Err(err) => {
                 release();
-                return Err(err);
+                return Err(err.into());
             }
         }
     } else {
@@ -1896,12 +2047,13 @@ fn gpu_capture(capture: &dyn Capture, context: &GpuContext) -> Option<Arc<dyn Ca
     }
 }
 
-/// The codec `profile` encodes video in. HEVC and AV1 map here once the protocol's
-/// `VideoCodec` names them; the encoders (`MfCodecs`) and the FLV sink already take them,
-/// and [`check_video_encoder`] already names the ones a platform lacks.
+/// The codec `profile` encodes video in. A machine without that encoder fails at the
+/// open, and [`check_video_encoder`] names the ones a platform lacks.
 fn video_codec(profile: &EncoderProfile) -> Result<Codec, String> {
     match profile.video.codec {
         VideoCodec::H264 => Ok(Codec::H264),
+        VideoCodec::Hevc => Ok(Codec::Hevc),
+        VideoCodec::Av1 => Ok(Codec::Av1),
         _ => Err("the encoder profile's video codec is not one this engine knows".into()),
     }
 }
@@ -1944,6 +2096,16 @@ fn video_open_failure(
         }
         Ok(()) => opening,
     }
+}
+
+/// Whether `codecs` lists a hardware encoder for `codec`, or can't list its encoders:
+/// only then can a held hardware session be what refuses a new one.
+fn hardware_listed(codecs: &dyn Codecs, codec: Codec) -> bool {
+    codecs.list().map_or(true, |list| {
+        list.iter().any(|info| {
+            info.role == CodecRole::VideoEncoder && info.codec == codec && info.hardware
+        })
+    })
 }
 
 /// Why `codecs` can't encode `config`'s codec with its hardware preference, from the
@@ -2825,11 +2987,11 @@ fn render_loop(job: RenderJob) {
 /// thread, once per program stage.
 ///
 /// Once it is done, the render thread moves the captures to the CPU path
-/// ([`RenderCaptures::leave_gpu`], which lets go of the held frames first) and puts the
-/// new compositor in place of the old one, which goes on the render thread: it is owned
-/// there and never shared, so it is not the collector's to free (R-RT-003). The context
-/// itself stays until the render loop ends, after the captures have stopped, as its
-/// platform state requires (README › GPU frames).
+/// ([`RenderCaptures::leave_gpu`], which first lets go of the frames on the context's
+/// device) and puts the new compositor in place of the old one, which goes on the render
+/// thread: it is owned there and never shared, so it is not the collector's to free
+/// (R-RT-003). The context itself stays until the render loop ends, after the captures
+/// have stopped, as its platform state requires (README › GPU frames).
 ///
 /// A lost device (#349) starts one too, at once: on the context it leaves the GPU path as
 /// above, and on the render thread's own device it opens the compositor on a new one
@@ -3090,6 +3252,8 @@ struct MixOut {
     scopes: Arc<AudioScopes>,
     /// The bus and source scopes, each fed its bus's or input's block.
     taps: Arc<ScopeTaps>,
+    /// The bus monitors' feeds, as the audio sources' thread opens them.
+    monitors: Receiver<MonitorRoute>,
 }
 
 /// The mixer thread's boundary: a panic is caught and reported as fatal. The encoders
@@ -3113,8 +3277,9 @@ fn mixer_thread(
     }
 }
 
-/// What the mixer thread owns: the mixer, and the master's true-peak and loudness
-/// meters, which it runs on every block.
+/// What the mixer thread owns: the mixer, which follows the privacy screen itself
+/// (`Mixer::with_privacy_signal`), and the master's true-peak and loudness meters, which
+/// it runs on every block.
 struct Mixing {
     mixer: Mixer,
     metering: MasterMetering,
@@ -3143,6 +3308,7 @@ fn mixer_loop(
         format,
         scopes,
         taps,
+        monitors: monitor_feeds,
     } = out;
     let format = *format;
     let scope = scopes.program();
@@ -3152,6 +3318,9 @@ fn mixer_loop(
     // What a silent drawn source's scope gets.
     let silence = vec![0.0f32; samples_len];
     let mut targets: Vec<AudioTap> = Vec::new();
+    // Room for every bus's monitor and as many being replaced, so taking one never
+    // allocates here.
+    let mut monitors: Vec<MonitorRoute> = Vec::with_capacity(2 * jstream_audio::MAX_BUSES);
     'mix: while !stop.load(Ordering::Relaxed) {
         match mixer.poll(clock.now(), &mut samples) {
             Ok(Some(block)) => {
@@ -3171,6 +3340,7 @@ fn mixer_loop(
                 if let Some(replaced) = replaced {
                     collector.free(Garbage::Scopes(replaced));
                 }
+                feed_monitors(&mixer, &block, &mut monitors, monitor_feeds, collector);
                 targets.extend(inputs.try_iter());
                 let mut rejected = None;
                 // The mix itself does not allocate. `AudioInput::push` takes an owned
@@ -3220,6 +3390,40 @@ fn mixer_loop(
         }
     }
     collector.free(Garbage::Scopes(scope_taps.into_held()));
+    for route in monitors {
+        collector.free(Garbage::Monitor(route));
+    }
+}
+
+/// Lets go of the monitors whose device closed (to the collector), takes the newly
+/// opened ones while there is room, and pushes each the block it hears. Never locks,
+/// waits or allocates: `monitors` has its room already.
+fn feed_monitors(
+    mixer: &Mixer,
+    block: &jstream_audio::Block,
+    monitors: &mut Vec<MonitorRoute>,
+    feeds: &Receiver<MonitorRoute>,
+    collector: &Collector,
+) {
+    let mut at = 0;
+    while at < monitors.len() {
+        if monitors[at].closed.load(Ordering::Acquire) {
+            collector.free(Garbage::Monitor(monitors.swap_remove(at)));
+        } else {
+            at += 1;
+        }
+    }
+    while monitors.len() < monitors.capacity() {
+        match feeds.try_recv() {
+            Ok(route) => monitors.push(route),
+            Err(_) => break,
+        }
+    }
+    for route in monitors.iter_mut() {
+        if let Some(heard) = mixer.monitor_block(route.bus, route.tap) {
+            route.feed.push(block.frame, heard);
+        }
+    }
 }
 
 /// An output thread's encoder subscriptions, shared with the stop so that, when it
@@ -3671,10 +3875,20 @@ mod tests {
         assert!(video_config(size, &profile).is_err());
 
         let mut profile = EncoderProfile::DEFAULT;
-        assert_eq!(
-            video_config(size, &profile).expect("h264").codec,
-            Codec::H264
-        );
+        for (codec, want) in [
+            (VideoCodec::H264, Codec::H264),
+            (VideoCodec::Hevc, Codec::Hevc),
+            (VideoCodec::Av1, Codec::Av1),
+        ] {
+            profile.video.codec = codec;
+            assert_eq!(video_config(size, &profile).expect("known").codec, want);
+            assert_eq!(
+                stream_info(size, MediaTime::zero(Timebase::MICROS), &profile)
+                    .expect("known")
+                    .codec,
+                want
+            );
+        }
         profile.video.codec = VideoCodec::Unknown;
         assert!(video_config(size, &profile).is_err());
         assert!(stream_info(size, MediaTime::zero(Timebase::MICROS), &profile).is_err());

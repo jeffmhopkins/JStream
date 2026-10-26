@@ -112,7 +112,7 @@ pub const RESIZE_HANDLES: [Handle; 8] = [
 ];
 
 /// Rotates a vector clockwise (in the y-down canvas) by `deg`.
-fn rotate(x: f32, y: f32, deg: f32) -> (f32, f32) {
+pub(crate) fn rotate(x: f32, y: f32, deg: f32) -> (f32, f32) {
     let (sin, cos) = deg.to_radians().sin_cos();
     (x * cos - y * sin, x * sin + y * cos)
 }
@@ -138,7 +138,7 @@ fn to_local(geometry: &ItemGeometry, point: Point) -> (f32, f32) {
 }
 
 /// A local-frame point back on the canvas.
-fn from_local(geometry: &ItemGeometry, x: f32, y: f32) -> Point {
+pub(crate) fn from_local(geometry: &ItemGeometry, x: f32, y: f32) -> Point {
     let c = center(geometry);
     let (dx, dy) = rotate(x, y, geometry.rotation_deg.get());
     Point {
