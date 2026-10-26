@@ -64,13 +64,13 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Scene objects panel](#objects) | 9 | 8 | 0 | 0 | 1 | 0 |
 | [Inspector](#inspector) | 10 | 7 | 1 | 2 | 0 | 0 |
 | [Transform panel](#transform) | 4 | 4 | 0 | 0 | 0 | 0 |
-| [Filters](#filters) | 8 | 5 | 0 | 1 | 2 | 0 |
+| [Filters](#filters) | 8 | 5 | 1 | 0 | 2 | 0 |
 | [Mixer](#mixer) | 7 | 5 | 0 | 2 | 0 | 0 |
-| [Outputs](#outputs) | 4 | 0 | 1 | 2 | 1 | 0 |
+| [Outputs](#outputs) | 4 | 3 | 0 | 0 | 1 | 0 |
 | [Transitions](#transitions) | 6 | 3 | 2 | 1 | 0 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
 | [Keyboard](#keyboard) | 7 | 5 | 0 | 2 | 0 | 0 |
-| **Total** | **130** | **81** | **19** | **16** | **13** | **1** |
+| **Total** | **130** | **84** | **19** | **13** | **13** | **1** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -206,7 +206,7 @@ Spec: [workspace › dialogs and floating windows](../design/ui-prototype/spec-w
 | DL-02 | Properties dialog | 860 × 640: Name and the source's settings on the left, its video and audio filters on the right; Defaults, Cancel, OK; settings change only on OK. Opens on double-click and after Add source. | ✅ | Built (`source_properties.rs`): the Inspector's settings form (from `kind.describe`) editing a draft, sent with the name as one batch on OK, holding only what the user changed since it opened; Defaults empties the draft, so OK sends `null` for each value the dialog opened with. Also opened by Properties… in the item menus. The subtitle is the source's name, as the engine names no capture backend. The filter column is the Filters panel's chains (`filters.rs`), whose changes apply at once: a double-click on a row opens the Filter settings dialog ([DL-04](#dialogs)) over it, and "+ Add filter…" the Add filter dialog ([DL-05](#dialogs)). |
 | DL-03 | Scene properties | Transition in and out, hotkey, background colour, multiview, "Include its audio when nested". | 🔒 | Transitions are T1; hotkeys K1. |
 | DL-04 | Filter settings dialog | Live-preview settings with an on/off switch; Cancel restores; Defaults; Remove. | ✅ | `filters.rs`, 460 wide, over the Properties dialog when opened from it: the kind's settings form, each change a `filter.set_settings` at once, the switch a `filter.set_enabled`. Cancel, Escape and the backdrop send one batch putting back the settings and the switch it opened with, including any the dialog sent that the engine hasn't reported back yet; Defaults resets every setting but a scene input's scene; Remove sends `filter.remove`. The hint line is the prototype's for the kinds it knows. |
-| DL-05 | Add filter dialog | 720 × 520: searchable catalogue grouped by chain and group, details pane, "Uses the scene" picker for scene-input filters. | ✅ | `filters.rs`. The catalogue is `kind.list`'s filter kinds for the source's chains, not the prototype's wish list: the prototype's groups, names and hints for the kinds it knows, the engine's pixelate, aspect ratio and image mask in the groups they fit, effect-pack kinds under Effect packs and anything else under Other. A kind with a scene setting (the scene mask) needs its scene first, from the scenes that don't show the source. A filter with more than three settings, or whose kind isn't described yet, opens DL-04 once added; one with fewer opens in place in the panel. Add is off while the chain holds its eight filters. |
+| DL-05 | Add filter dialog | 720 × 520: searchable catalogue grouped by chain and group, details pane, "Uses the scene" picker for scene-input filters. | ✅ | `filters.rs`. The catalogue is `kind.list`'s filter kinds for the owner's chains (a source's, or the program output's or an output's audio chain, [FL-07](#filters)), not the prototype's wish list: the prototype's groups, names and hints for the kinds it knows, the engine's pixelate, aspect ratio and image mask in the groups they fit, effect-pack kinds under Effect packs and anything else under Other. A kind with a scene setting (the scene mask) needs its scene first, from the scenes that don't show the source. A filter with more than three settings, or whose kind isn't described yet, opens DL-04 once added; one with fewer opens in place in the panel. Add is off while the chain holds its eight filters. |
 | DL-06 | Add source dialog | 720 wide: types grouped Capture, Audio, Media and web, Generated, Scenes; "Create new" with a name, or add an existing source as a reference; new sources placed at native size and their Properties opened. | ✅ | Built and opened from the right-click menus, with the prototype's names, icons and descriptions for the engine's kinds. A kind the prototype doesn't name goes under Other, and a placed source whose kind the engine doesn't list can be added again but not created. An existing source not placed anywhere goes at its own size (`source.sizes`, scaled down to fit the canvas), a nested scene covers the canvas, and an existing placement is copied 40 px right and down. A source created new has no frame yet, so it goes at the prototype's per-type native size, as a box with the `fit` mode, which draws it at its own aspect ratio. A new source's item is selected and its Properties dialog (DL-02) opens once the engine has accepted it; a placement of an existing source is selected with the Inspector shown. A blank name becomes "<type> N", counting that kind's sources. |
 | DL-07 | Pop-out and projectors | A scene or source in a floating window, or full screen on a monitor. | 🔒 | Previews of any scene or source (decision register D36). |
 | DL-08 | Create YouTube stream | Title, description, visibility, latency, start now or schedule, category, DVR, made for kids. | 🔒 | Y4 and the OAuth client ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)). |
@@ -303,8 +303,8 @@ Spec: [panels › filters](../design/ui-prototype/spec-panels.md#filters-panel).
 has source filter chains (`filter.add`, `remove`, `set_enabled`, `set_settings`,
 `reorder`; [ADR-0026](adr/0026-source-filter-chains.md)), and the Filters panel
 (`filters.rs`) edits them. The master stage and each output own chains too
-([ADR-0027](adr/0027-program-master-and-output-chains.md)); the panel shows them once the
-Outputs panel can pick them (FL-07).
+([ADR-0027](adr/0027-program-master-and-output-chains.md)); an FX button in the Outputs
+panel or on the Mixer's master card shows one in the panel (FL-07).
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
@@ -314,7 +314,7 @@ Outputs panel can pick them (FL-07).
 | FL-04 | Add filter | "+ Add filter…" opens DL-05. | ✅ | Under the chains, and in the Properties dialog. |
 | FL-05 | Settings from descriptors | Each filter's settings come from its kind descriptor ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). | ✅ | The Inspector's form (`properties.rs`) on `kind.describe`'s descriptor. The prototype's catalogue is a wish list; the engine lists gain, noise gate, compressor, limiter and delay, its built-in video filters and effect-pack kinds. A scene setting's select is the form's, listing every scene with None, not F8's "Choose a scene…" over the allowed scenes. |
 | FL-06 | Scene filters | A scene's video chain. | 🔒 | The protocol has the `scene` owner and `SceneInfo.filters` since 0.43 ([ADR-0065](adr/0065-scene-chains-and-item-effects.md)), and the engine runs it over the scene's composite (#529); the UI PR after it builds the editor and flips this row. |
-| FL-07 | Program and output chains | Master chain on the program output, one chain per output. | ⬜ | The `master` and `output` filter owners (D8p, [ADR-0027](adr/0027-program-master-and-output-chains.md)) are in the protocol; the panel is to build. |
+| FL-07 | Program and output chains | Master chain on the program output, one chain per output. | 🟡 | The audio chains: an FX button ([OU-01](#outputs), [OU-02](#outputs), [MX-01](#mixer)) shows the program output's (`{"type":"master"}`) or an output's chain in the panel, titled "Program output" or the output's ID with the prototype's note ("Master chain: applies to everything leaving JStream.", "Only this output, after the program filters.", and "No sound." for the virtual camera, which has no sound and so no audio chain). Rows, Add filter and the settings dialog work as on a source's. Selecting another item, or an item's Edit filters…, shows its source again. The video chains are 🔒: the engine refuses them so far ([ARCH › GPU pipeline](ARCHITECTURE.md#gpu-pipeline)), and the panel says "Video filters on outputs aren’t available yet." |
 | FL-08 | CLAP plugin filter | Host a CLAP audio effect. | 🔒 | [ADR-0035](adr/0035-clap-plugins-out-of-process.md): hidden until CL1 lands in M3. |
 
 <a id="mixer"></a>
@@ -328,7 +328,7 @@ does more than the prototype (buses, sends, routing); that stays ([Beyond](#beyo
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| MX-01 | Master card | "Master · program output", N channels, Loudness bar against a target marker with "−14.2 LUFS", True peak with "safe" or a warning, "FX N". | ✅ | `mixer.rs`: the short-term loudness on a bar from −60 to +6 LUFS, the marker at the −14 LUFS target (70%), momentary, short-term and integrated in the tooltip, the true peak's note in green or red, and a Reset button for the integrated loudness. "Hear" and "FX 0" show disabled until [MX-05](#mixer) and [FL-07](#filters). |
+| MX-01 | Master card | "Master · program output", N channels, Loudness bar against a target marker with "−14.2 LUFS", True peak with "safe" or a warning, "FX N". | ✅ | `mixer.rs`: the short-term loudness on a bar from −60 to +6 LUFS, the marker at the −14 LUFS target (70%), momentary, short-term and integrated in the tooltip, the true peak's note in green or red, and a Reset button for the integrated loudness. "Hear" shows disabled until [MX-05](#mixer); "FX N", on the card and on the vertical master strip, counts the master chain's filters and shows it in the Filters panel ([FL-07](#filters)). |
 | MX-02 | Channels fold under the master | Channels hidden under the master card by default. | ✅ | The master card's button folds them (not remembered across reloads). The buses, which the prototype doesn't have, fold under their own Buses header below. |
 | MX-03 | Channel strips | Name, level bar, dB number field. | ✅ | Each row: name, the stereo meter as the level bar, the console-taper fader ([Beyond](#beyond)), the dB field (`NumberField`, −100 to +24, step 0.5), mute and Routing. |
 | MX-04 | Vertical meters | Vertical strips in side columns; a title-bar toggle flips orientation. | ✅ | `mixer.rs`: docked in a side column the meters turn vertical until the button in the mixer's title bar flips them, for the session. The master strip folds the channel strips beside it; each strip has its short name (the full one as a tooltip), a stereo meter filling upwards, the dB field stacked + over −, scrubbed up and down, and mute. Routing stays in the horizontal rows. |
@@ -348,9 +348,9 @@ doesn't show; that stays ([Beyond](#beyond)).
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| OU-01 | Program output row | "Program output" first, "master", with an FX button for the master chain. | ⬜ | The master chain is the `master` filter owner (D8p); the row and its FX button are to build. |
-| OU-02 | Output rows | Each output indented under it with its status and "FX N". | 🟡 | Output cards with status exist; the FX button needs FL-07. |
-| OU-03 | Footnote | "Program filters apply to every output; each output can add its own after them." | ⬜ | With OU-01. |
+| OU-01 | Program output row | "Program output" first, "master", with an FX button for the master chain. | ✅ | `outputs.rs`: the row above the output cards, its "FX N" button always blue, titled "Filters on everything leaving JStream", shows the master chain in the Filters panel ([FL-07](#filters)). |
+| OU-02 | Output rows | Each output indented under it with its status and "FX N". | ✅ | Each output's ID, indented, with its state ("Stopped", "Live"…) and "FX N", blue once its chain holds a filter, titled "Filters for <ID> only". The cards below keep the controls the prototype lacks ([Beyond](#beyond)). |
+| OU-03 | Footnote | "Program filters apply to every output; each output can add its own after them." | ✅ | Under the rows. |
 | OU-04 | YouTube output | A YouTube stream row bound to the chosen broadcast. | 🔒 | A6b and the OAuth client. |
 
 <a id="transitions"></a>

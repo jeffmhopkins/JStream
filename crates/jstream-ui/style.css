@@ -718,6 +718,31 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .outputs .health { margin: 0; color: var(--muted); font-size: 0.85rem; }
 .outputs .health.dropping { color: var(--problem); }
 .outputs .problem { margin: 0; }
+/* The program output and each output under it, with their FX buttons (spec-panels.md U1). */
+.output-chains { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.output-chain {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 6px 0 18px;
+  border-radius: 5px;
+}
+.output-chain.program { padding-left: 4px; font-weight: 600; background: var(--menu); }
+.output-chain-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.output-chain-status { color: var(--muted); font-size: 12px; font-weight: 400; }
+.outputs .fx-button {
+  min-width: 44px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: none;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 400;
+}
+.outputs .fx-button.on { border-color: var(--accent); background: var(--selected); }
+.outputs .output-foot { margin: 0; color: var(--dim); font-size: 11px; }
 .output-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
 .output {
   display: grid;
@@ -1129,6 +1154,7 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .filters-titles { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .filters-title { font-size: 14px; font-weight: 600; color: var(--text); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .filters-note { font-size: 11px; color: var(--muted); }
+.filters-later { margin: 0; font-size: 11px; color: var(--dim); }
 .filters-add { align-self: flex-start; padding: 6px 12px; background: var(--menu); border: 1px solid var(--border); border-radius: 6px; color: var(--text); }
 .filter-chains { display: flex; flex-direction: column; gap: 12px; }
 .filter-chain-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; color: #c9ced6; }
