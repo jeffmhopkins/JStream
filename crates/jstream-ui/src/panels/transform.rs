@@ -1,7 +1,7 @@
 //! The Transform panel: aligns, distributes and arranges the selected items
 //! (spec-panels.md §4, spec-workspace.md 9.11). Each button works on the items' unrotated
 //! boxes, as the prototype does, and sends every changed item's new box as one batch of
-//! `item.set_geometry` edits (or `item.set_crop` for Clear crop), so each press is one
+//! `item.set_geometry` edits (Clear crop: `item.set_crop`, and the uncropped box while the source's size is known), so each press is one
 //! undo step.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#transform
@@ -10,7 +10,7 @@ use crate::app::SessionContext;
 use crate::canvas::model::Layout;
 use crate::store::Studio;
 use jstream_control::protocol::{
-    Canvas, Crop, Edit, Finite32, ItemGeometry, ItemId, PlacementForm, SceneId,
+    Canvas, Edit, Finite32, ItemGeometry, ItemId, PlacementForm, SceneId,
 };
 use leptos::prelude::*;
 
@@ -211,7 +211,7 @@ fn turned(rotation: f32, by: f32) -> f32 {
 /// The new boxes `action` gives the selected `items` (the primary one first), on
 /// `canvas`, aligning to `align_to` when two or more are selected and to the canvas
 /// otherwise. Only items whose box changes are returned. Clear crop changes no box, so
-/// it returns none; see [`crops_to_clear`].
+/// it returns none; see `canvas::crop::clear`.
 pub fn plan(
     action: Action,
     items: &[(ItemId, ItemGeometry)],
@@ -378,15 +378,6 @@ fn distribute(
     out
 }
 
-/// The selected items whose crop Clear crop resets.
-pub fn crops_to_clear(items: &[(ItemId, Crop)]) -> Vec<ItemId> {
-    items
-        .iter()
-        .filter(|(_, crop)| *crop != Crop::NONE)
-        .map(|(id, _)| id.clone())
-        .collect()
-}
-
 /// The panel's summary line for `count` selected items.
 pub fn summary(count: usize) -> String {
     match count {
@@ -408,61 +399,49 @@ pub fn Transform() -> impl IntoView {
     let press = move |action: Action| {
         let Some(s) = session.get() else { return };
         let selection = studio.selection.get_untracked();
-        let edits = studio.collection.with_untracked(|c| {
-            let c = c.as_ref()?;
-            let scene: SceneId = selection.scene.clone()?;
-            let layout = Layout::of(c, Some(&scene));
-            if action == Action::ClearCrop {
-                let crops: Vec<(ItemId, Crop)> = selection
+        let edits =
+            studio.collection.with_untracked(|c| {
+                let c = c.as_ref()?;
+                let scene: SceneId = selection.scene.clone()?;
+                let layout = Layout::of(c, Some(&scene));
+                if action == Action::ClearCrop {
+                    let items: Vec<ItemId> = selection.items().cloned().collect();
+                    return Some(studio.sizes.with_untracked(|sizes| {
+                        crate::canvas::crop::clear(c, sizes, &scene, &items)
+                    }));
+                }
+                let geometry_form = |id: &ItemId| {
+                    c.item_in(Some(&scene), id)
+                        .is_some_and(|(_, i)| i.placement == PlacementForm::Geometry)
+                };
+                // Matching takes the primary item's size, which a legacy item doesn't have.
+                if matches!(action, Action::MatchWidth | Action::MatchHeight)
+                    && !selection.items().next().is_some_and(geometry_form)
+                {
+                    return None;
+                }
+                // Items in the legacy form have no box to move.
+                let items: Vec<(ItemId, ItemGeometry)> = selection
                     .items()
-                    .filter_map(|id| {
-                        c.item_in(Some(&scene), id)
-                            .map(|(_, i)| (id.clone(), i.crop))
-                    })
+                    .filter(|id| geometry_form(id))
+                    .filter_map(|id| layout.geometry_of(id).map(|g| (id.clone(), g)))
                     .collect();
-                return Some(
-                    crops_to_clear(&crops)
+                let align = if align_to.get_untracked() == AlignTo::Canvas {
+                    AlignTo::Canvas
+                } else {
+                    AlignTo::Selection
+                };
+                Some(
+                    plan(action, &items, c.canvas, align)
                         .into_iter()
-                        .map(|item_id| Edit::ItemSetCrop {
+                        .map(|(item_id, geometry)| Edit::ItemSetGeometry {
                             item_id,
                             scene_id: Some(scene.clone()),
-                            crop: Crop::NONE,
+                            geometry,
                         })
-                        .collect::<Vec<_>>(),
-                );
-            }
-            let geometry_form = |id: &ItemId| {
-                c.item_in(Some(&scene), id)
-                    .is_some_and(|(_, i)| i.placement == PlacementForm::Geometry)
-            };
-            // Matching takes the primary item's size, which a legacy item doesn't have.
-            if matches!(action, Action::MatchWidth | Action::MatchHeight)
-                && !selection.items().next().is_some_and(geometry_form)
-            {
-                return None;
-            }
-            // Items in the legacy form have no box to move.
-            let items: Vec<(ItemId, ItemGeometry)> = selection
-                .items()
-                .filter(|id| geometry_form(id))
-                .filter_map(|id| layout.geometry_of(id).map(|g| (id.clone(), g)))
-                .collect();
-            let align = if align_to.get_untracked() == AlignTo::Canvas {
-                AlignTo::Canvas
-            } else {
-                AlignTo::Selection
-            };
-            Some(
-                plan(action, &items, c.canvas, align)
-                    .into_iter()
-                    .map(|(item_id, geometry)| Edit::ItemSetGeometry {
-                        item_id,
-                        scene_id: Some(scene.clone()),
-                        geometry,
-                    })
-                    .collect(),
-            )
-        });
+                        .collect(),
+                )
+            });
         if let Some(edits) = edits.filter(|e: &Vec<Edit>| !e.is_empty()) {
             studio.apply(&s, edits);
         }
@@ -707,16 +686,6 @@ mod tests {
             assert!(!action.enabled(0));
             assert!(plan(action, &[], CANVAS, AlignTo::Selection).is_empty());
         }
-    }
-
-    #[test]
-    fn only_cropped_items_are_cleared() {
-        let crop = Crop {
-            left: 10,
-            ..Crop::NONE
-        };
-        let cleared = crops_to_clear(&[("a".into(), Crop::NONE), ("b".into(), crop)]);
-        assert_eq!(cleared, [ItemId::from("b")]);
     }
 
     #[test]

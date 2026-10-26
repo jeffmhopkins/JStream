@@ -1,7 +1,8 @@
 // Keyframe scenes and scene hotkeys: a new keyframe of the seed's Main nests under it
 // with the diamond and the canvas banner, its eye and box fields write the keyframe's
-// overrides and leave Main's item alone, Reset to “Main” clears them, Switch to it puts
-// it on program and Delete keyframe removes it; the Inspector's Hotkey row binds F1 to
+// overrides and leave Main's item alone, Reset to “Main” clears them, the canvas's
+// Ctrl+D and Del change nothing there, Switch to it puts it on program and Delete
+// keyframe removes it; the Inspector's Hotkey row binds F1 to
 // a scene, F1 then puts that scene on program, and the chip's × unbinds it.
 import { test, expect, connect, rev } from '../fixtures.js';
 
@@ -25,6 +26,15 @@ function field(page, label) {
 async function choose(page, name, item) {
   await scene(page, name).locator('.row-main').click({ button: 'right' });
   await menu(page).getByRole('menuitem', { name: item }).click();
+}
+
+/** Where canvas point (`x`, `y`) is on the screen. */
+async function onScreen(page, x, y) {
+  const m = await page.locator('svg.stage-overlay').evaluate((svg) => {
+    const { a, d, e, f } = svg.getScreenCTM();
+    return { a, d, e, f };
+  });
+  return { x: Math.round(x * m.a + m.e), y: Math.round(y * m.d + m.f) };
 }
 
 /** The seed's Backdrop row in Scene objects. */
@@ -86,6 +96,15 @@ test('a keyframe nests under its scene and overrides only its own placements', a
   await expect(backdrop(page)).not.toHaveClass(/hidden/);
   await backdrop(page).locator('.row-main').click();
   await expect(field(page, 'X')).toHaveValue('640');
+  // The canvas's Ctrl+D and Del, which would change Main, do nothing in the keyframe.
+  const keys = await rev(page);
+  const middle = await onScreen(page, 960, 540);
+  await page.mouse.click(middle.x, middle.y);
+  await expect(backdrop(page)).toHaveClass(/selected/);
+  await page.keyboard.press('Control+d');
+  await page.keyboard.press('Delete');
+  await expect(backdrop(page)).toHaveCount(1);
+  expect(await rev(page)).toBe(keys);
 
   // Switch to it puts the keyframe on program; Delete keyframe removes it and selects
   // Main again.

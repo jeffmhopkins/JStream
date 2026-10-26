@@ -1523,14 +1523,10 @@ impl Engine {
                     return Err(err);
                 }
             }
-            // The outputs holding hardware video sessions now: while there is one, a
-            // new session that hardware refuses is the session limit (ADR-0027 §3).
-            let hardware_held: Vec<OutputId> = gate
-                .running
-                .iter()
-                .filter(|(_, running)| running.encoders().is_some_and(|e| e.hardware()))
-                .map(|(id, _)| id.clone())
-                .collect();
+            // The outputs holding hardware video sessions now, stopping ones included:
+            // while there is one, a new session that hardware refuses is the session
+            // limit (ADR-0027 §3, #834).
+            let hardware_held = gate.hardware_held();
             // A running program stage is shared; holding it here keeps it running
             // until this start has its own hold, or gives up. Taken last, so no early
             // return drops it under the locks.
@@ -1625,7 +1621,7 @@ impl Engine {
                                 &mut wake,
                             );
                             // Joined below, outside the locks. A new start waits.
-                            gate.draining += 1;
+                            gate.drain(&output_id, &running);
                             StartOutcome::Failed(
                                 Some(running),
                                 ProtocolError::ActionFailed { reason },
@@ -1640,7 +1636,7 @@ impl Engine {
                                 &output_id,
                                 &mut wake,
                             );
-                            gate.draining += 1;
+                            gate.drain(&output_id, &running);
                             StartOutcome::Failed(
                                 Some(running),
                                 ProtocolError::ActionFailed {
@@ -1697,7 +1693,7 @@ impl Engine {
                                         &output_id,
                                         &mut wake,
                                     );
-                                    gate.draining += 1;
+                                    gate.drain(&output_id, &running);
                                     StartOutcome::Failed(
                                         Some(running),
                                         ProtocolError::ActionFailed {
@@ -1734,7 +1730,7 @@ impl Engine {
                 // `failed` is already out and `pending` cleared, so `draining` (set
                 // above when there is a pipeline) holds a new start off until this
                 // join ends, including when it unwinds.
-                let _clear_drain = ClearDrain::arm(Arc::clone(host), running.is_some());
+                let _clear_drain = ClearDrain::arm(Arc::clone(host), running.as_ref());
                 drop(running);
                 Err(err)
             }
@@ -1766,10 +1762,10 @@ impl Engine {
                 (None, None, Some(pending.generation))
             } else {
                 let running = gate.running.remove(&output_id);
-                let watcher = if running.is_some() {
+                let watcher = if let Some(running) = &running {
                     // A start waits until this join ends, if it took the program stage
-                    // down with it.
-                    gate.draining += 1;
+                    // down with it, and counts its hardware session until that closes.
+                    gate.drain(&output_id, running);
                     gate.watchers.remove(&output_id)
                 } else {
                     None
@@ -1796,7 +1792,7 @@ impl Engine {
         // that teardown unwinds, the guards still settle the output (`failed`, since
         // the teardown did not finish) and then clear `draining`, so it is not left
         // `stopping` and a later start is not left waiting.
-        let clear_drain = ClearDrain::arm(Arc::clone(host), running.is_some());
+        let clear_drain = ClearDrain::arm(Arc::clone(host), running.as_ref());
         let mut settle = SettleOnDrop {
             engine: self,
             output_id: &output_id,
@@ -2268,11 +2264,15 @@ fn publish_failed(
             emit_output(&mut state, output_id, OutputState::Failed, &mut wake);
             // The join happens below, outside the locks. A new start waits until
             // `draining` clears so it does not open devices over this teardown.
-            gate.draining += 1;
+            let running = gate.running.remove(output_id);
+            match &running {
+                Some(running) => gate.drain(output_id, running),
+                None => gate.draining += 1,
+            }
             // Detach this watcher. `JoinHandle`'s drop does not join, so the
             // thread can go on to drop `Running` without joining itself.
             drop(gate.watchers.remove(output_id));
-            gate.running.remove(output_id)
+            running
         } else {
             None
         }
@@ -2280,22 +2280,28 @@ fn publish_failed(
     // `pipeline` is bound after the guard. On the normal path it is dropped
     // first, and an unwind (`wake_all`, or the join itself) drops it first too,
     // so `draining` clears only after the join.
-    let _clear_drain = ClearDrain::arm(Arc::clone(host), running.is_some());
+    let _clear_drain = ClearDrain::arm(Arc::clone(host), running.as_ref());
     let pipeline = running;
     wake_all(wake);
     drop(pipeline);
 }
 
-/// Clears `Gate::draining` after the failed pipeline has been joined, including
-/// when that join unwinds.
+/// Undoes `Gate::drain` after the pipeline has been joined, including when that join
+/// unwinds: clears `draining`, and stops counting its hardware session as held.
 struct ClearDrain {
     host: Arc<MediaHost>,
     armed: bool,
+    session: Option<Weak<Encoders>>,
 }
 
 impl ClearDrain {
-    fn arm(host: Arc<MediaHost>, armed: bool) -> Self {
-        Self { host, armed }
+    /// Armed when there is a pipeline to join.
+    fn arm(host: Arc<MediaHost>, running: Option<&Running>) -> Self {
+        Self {
+            host,
+            armed: running.is_some(),
+            session: running.and_then(Running::encoders).map(Arc::downgrade),
+        }
     }
 }
 
@@ -2305,7 +2311,7 @@ impl Drop for ClearDrain {
             return;
         }
         let mut gate = lock(&self.host.gate);
-        gate.draining = gate.draining.saturating_sub(1);
+        gate.drained(self.session.as_ref());
         self.host.gate_cv.notify_all();
     }
 }

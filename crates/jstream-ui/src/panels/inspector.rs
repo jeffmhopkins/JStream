@@ -1,6 +1,7 @@
 //! The Inspector: what is selected, and how it is placed. For a selected item, a header
 //! (name, kind, how many more are selected, favourite) over foldable sections: its box
-//! (X, Y, W, H and rotation, with a W/H link), its crop, its blending (mode and
+//! (X, Y, W, H, the size as a % of its source's and rotation, with a W/H link), its
+//! crop, its blending (mode and
 //! opacity) and its source's settings ([`Properties`]). With no item selected, the
 //! selected scene's header over its object count, the scenes that use it as a source,
 //! and its transition overrides. Every field sends its edit when it changes, so the
@@ -44,6 +45,37 @@ pub const MAX_SIZE: f32 = 10_000.0;
 pub const MIN_SIZE: f32 = 1.0;
 /// The largest crop of one side the fields accept, in source pixels.
 pub const MAX_CROP: f32 = 4_000.0;
+/// The smallest size, in % of the source's, the W % and H % fields accept.
+pub const MIN_PERCENT: f32 = 0.1;
+/// The largest size, in % of the source's, the W % and H % fields accept.
+pub const MAX_PERCENT: f32 = 10_000.0;
+
+/// The box's width (`across`) or height as a % of its source's own size.
+pub fn percent(geometry: &ItemGeometry, source: (u32, u32), across: bool) -> Option<f32> {
+    let (side, own) = if across {
+        (geometry.size.width.get(), source.0)
+    } else {
+        (geometry.size.height.get(), source.1)
+    };
+    (own > 0).then(|| side / own as f32 * 100.0)
+}
+
+/// The box with its width (`across`) or height set to `value` % of its source's size
+/// (kept to 0.1–10000 %), as the W or H field would set it, `linked` or not.
+pub fn with_percent(
+    geometry: &ItemGeometry,
+    source: (u32, u32),
+    across: bool,
+    value: f32,
+    linked: bool,
+) -> Option<ItemGeometry> {
+    let value = value.clamp(MIN_PERCENT, MAX_PERCENT) / 100.0;
+    if across {
+        with_param(geometry, Param::W, value * source.0 as f32, linked)
+    } else {
+        with_param(geometry, Param::H, value * source.1 as f32, linked)
+    }
+}
 
 /// The box's top-left corner, as the X and Y fields show it: the corner of the
 /// unrotated box, as the canvas's size readout uses.
@@ -482,12 +514,54 @@ fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoV
                 .and_then(|i| i.geometry)
         })
     });
+    // The source's own size, while the engine knows it.
+    let source_size = Memo::new(move |_| {
+        let source_id = current.with(|i| i.as_ref().map(|i| i.source_id.clone()))?;
+        studio.collection.with(|c| {
+            studio
+                .sizes
+                .with(|sizes| c.as_ref()?.source_size(sizes, &source_id))
+        })
+    });
     let send = move |edit: Edit| {
         if let Some(s) = session.get() {
             studio.apply(&s, vec![edit]);
         }
     };
     let ids = StoredValue::new((item, scene));
+
+    // W % or H %: the size as a % of the source's own, blank while that isn't known.
+    let percent_field = move |across: bool| {
+        let value = Signal::derive(move || {
+            let size = source_size.get()?;
+            percent(&geometry.get()?, size, across).map(f64::from)
+        });
+        let commit = move |v: f64| {
+            let (Some(g), Some(size)) = (geometry.get_untracked(), source_size.get_untracked())
+            else {
+                return false;
+            };
+            let Some(placed) = with_percent(&g, size, across, to_f32(v), linked.get_untracked())
+            else {
+                return false;
+            };
+            if placed == g {
+                return false;
+            }
+            let (item_id, scene) = ids.get_value();
+            send(Edit::ItemSetGeometry {
+                item_id,
+                scene_id: Some(scene),
+                geometry: placed,
+            });
+            true
+        };
+        let label = if across { "W %" } else { "H %" };
+        view! {
+            <NumberField label unit="%" value step=1.0 decimals=1 min=f64::from(MIN_PERCENT)
+                max=f64::from(MAX_PERCENT) send=commit />
+        }
+    };
 
     let field = move |param: Param| {
         let value =
@@ -634,6 +708,8 @@ fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoV
                 {field(Param::Y)}
                 {field(Param::W)}
                 {field(Param::H)}
+                {percent_field(true)}
+                {percent_field(false)}
                 {field(Param::Rotation)}
             </div>
         </Fold>
@@ -942,6 +1018,30 @@ mod tests {
         assert_eq!(param_value(&g, Param::W), 460.0);
         assert_eq!(param_value(&g, Param::H), 410.0);
         assert_eq!(param_value(&g, Param::Rotation), 0.0);
+    }
+
+    #[test]
+    fn the_size_reads_and_sets_as_a_percent_of_the_sources() {
+        let g = geometry(480.0, 270.0, 960.0, 540.0);
+        assert_eq!(percent(&g, (1920, 1080), true), Some(50.0));
+        assert_eq!(percent(&g, (1920, 1080), false), Some(50.0));
+        assert_eq!(percent(&g, (0, 1080), true), None);
+        // 25 % across, linked: the height follows; the top-left corner stays.
+        let quarter = with_percent(&g, (1920, 1080), true, 25.0, true).expect("a box");
+        assert_eq!(
+            (quarter.size.width.get(), quarter.size.height.get()),
+            (480.0, 270.0)
+        );
+        assert_eq!(top_left(&quarter), (0.0, 0.0));
+        // Unlinked, H % changes the height alone.
+        let tall = with_percent(&g, (1920, 1080), false, 100.0, false).expect("a box");
+        assert_eq!(
+            (tall.size.width.get(), tall.size.height.get()),
+            (960.0, 1080.0)
+        );
+        // Kept to 0.1 %.
+        let tiny = with_percent(&g, (1920, 1080), true, 0.0, false).expect("a box");
+        assert!((tiny.size.width.get() - 1.92).abs() < 1e-4);
     }
 
     #[test]

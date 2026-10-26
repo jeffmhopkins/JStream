@@ -153,6 +153,8 @@ test('an item row has the item menu, which restacks and arranges', async ({ page
     'Properties…',
     'Edit filters…',
     'Pop out',
+    'Reference to original',
+    'Independent clone',
     'Bring to front',
     'Bring forward',
     'Send backward',
@@ -206,6 +208,66 @@ test('the canvas item menu duplicates, and selects several', async ({ page, daem
   await expect(menu(page).getByRole('menuitem', { name: 'Duplicate as reference' })).toBeDisabled();
   await menu(page).getByRole('menuitem', { name: 'Remove from scene' }).click();
   await expect(rows(page)).toHaveCount(0);
+});
+
+test('a placement switches between a reference and a clone, keeping its item', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  await placeBackdropAgain(page);
+  const check = (name) => menu(page).getByRole('menuitemcheckbox', { name });
+  await rows(page).first().click({ button: 'right' });
+  await expect(menu(page).locator('.ctx-head')).toHaveText('Source');
+  await expect(check('Reference to original')).toHaveAttribute('aria-checked', 'true');
+  await expect(check('Independent clone')).toHaveAttribute('aria-checked', 'false');
+
+  // To a clone: one edit, the same row (still selected), now placing a copy.
+  const start = await rev(page);
+  await check('Independent clone').click();
+  await expect.poll(() => rev(page)).toBe(start + 1);
+  await expect(rows(page)).toHaveCount(2);
+  await expect(rows(page).first()).toHaveClass(/selected/);
+  await rows(page).first().click({ button: 'right' });
+  await expect(menu(page).locator('.ctx-head')).toHaveText('Duplicate of Backdrop');
+  await expect(check('Independent clone')).toHaveAttribute('aria-checked', 'true');
+  // The original, now placed once, is a source of its own: no switch.
+  await page.keyboard.press('Escape');
+  await rows(page).last().click({ button: 'right' });
+  await expect(check('Independent clone')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+
+  // Back to the reference: the copy, placed nowhere else, goes with it.
+  await rows(page).first().click({ button: 'right' });
+  await check('Reference to original').click();
+  await expect.poll(() => rev(page)).toBe(start + 2);
+  await rows(page).first().click({ button: 'right' });
+  await expect(menu(page).locator('.ctx-head')).toHaveText('Source');
+  await expect(check('Reference to original')).toHaveAttribute('aria-checked', 'true');
+});
+
+test('Ctrl+D and Ctrl+Shift+D duplicate, and Del removes, on the canvas and in the rows', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  const middle = await onScreen(page, 960, 540);
+  await page.mouse.click(middle.x, middle.y);
+  await expect(rows(page).first()).toHaveClass(/selected/);
+  await page.keyboard.press('Control+d');
+  await expect(rows(page)).toHaveCount(2);
+  await expect(rows(page).first()).toHaveText(/^Backdrop/);
+  await expect(rows(page).first()).toHaveClass(/selected/);
+  await page.keyboard.press('Control+Shift+d');
+  await expect(rows(page)).toHaveCount(3);
+  await expect(rows(page).first()).toContainText('Backdrop copy');
+
+  // In the rows, on the focused row.
+  await rows(page).last().locator('.row-main').click();
+  await page.keyboard.press('Control+Shift+d');
+  await expect(rows(page)).toHaveCount(4);
+  await rows(page).first().locator('.row-main').click();
+  await page.keyboard.press('Delete');
+  await expect(rows(page)).toHaveCount(3);
+
+  // Del on the canvas removes the selection.
+  await page.mouse.click(middle.x, middle.y);
+  await page.keyboard.press('Delete');
+  await expect(rows(page)).toHaveCount(2);
 });
 
 test('a nested scene has its own menu, which opens it', async ({ page, daemon }) => {
