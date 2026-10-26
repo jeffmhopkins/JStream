@@ -189,7 +189,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   make the graph's checks with the protocol's own `check_color`, `check_icon` and
   `SceneMeta::problem`: a missing parent, folder or label, a folder inside itself, a
   label listed twice, and no deleting a folder that holds a scene or folder or a label a
-  source carries (with the graph's `blockers`). Reads report the folders, labels and
+  source or scene carries (with the graph's `blockers`; scenes carry labels since
+  [ADR-0078](../../docs/adr/0078-scenes-carry-labels.md)). Reads report the folders, labels and
   each scene's and source's metadata, `source.duplicate` copies a source's, and undoing
   a scene's or source's delete restores its folder and metadata;
 - keyframe scenes (`mock/keyframe.rs`, [ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)):

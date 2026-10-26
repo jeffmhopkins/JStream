@@ -849,7 +849,10 @@ fn labels_entry(cx: Context, source_id: &SourceId) -> Entry {
             c.labels
                 .iter()
                 .map(|label| {
-                    let (source, id) = (source_id.clone(), label.label_id.clone());
+                    let (source, id) = (
+                        labels::Tagged::Source(source_id.clone()),
+                        label.label_id.clone(),
+                    );
                     Entry::item(label.name.clone(), move || {
                         let edit = cx.studio.collection.with_untracked(|c| {
                             c.as_ref()
@@ -868,7 +871,9 @@ fn labels_entry(cx: Context, source_id: &SourceId) -> Entry {
         if !lines.is_empty() {
             lines.push(Entry::Sep);
         }
-        lines.push(Entry::item("Edit labels…", move || manager.open()));
+        lines.push(Entry::item("Edit labels…", move || {
+            manager.open(PanelId::Objects);
+        }));
     }
     Entry::submenu("Labels", lines)
 }

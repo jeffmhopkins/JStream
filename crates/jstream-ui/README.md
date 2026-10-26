@@ -86,9 +86,9 @@ Contents ([Design](#design) explains the choices):
   level shows and the edits a drop sends are tested natively), the sources list
   (`sources.rs`), what those two share (`tree.rs`: the search box, the favourites and
   labels filter, the star and drag reordering, with the matching and the drop's index
-  tested natively), labels (`labels.rs`: the chips, the tag popover, the label manager
-  and the `LabelManager` context that opens it, with the edits they send tested
-  natively), the Inspector (`inspector.rs`: the selected item's box, 3D, crop,
+  tested natively), labels (`labels.rs`: the chips, the tag button and its popover, the label manager
+  and the `LabelManager` context that opens it in the Scenes or Scene objects panel,
+  with the edits they send to a scene or a source tested natively), the Inspector (`inspector.rs`: the selected item's box, 3D, crop,
   blending, scene switches and settings, or the selected scene's objects, uses and transitions, in
   sections whose folds `Folds` remembers by title), the
   properties form inside it (`properties.rs`), the Add source dialog (`add_source.rs`:
@@ -216,17 +216,18 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   sources list shows the selected scene's items with the top of the stack first, each
   with its source's type icon, in italics when the source is placed in another scene
   too, the chips of its source's labels, an eye that shows or hides it, and a tag
-  button whose popover puts labels on the source or takes them off
-  (`source.set_meta`). A nested scene's row has a caret that shows
+  button whose popover, under the row, puts labels on the source or takes them off
+  (`source.set_meta`). A scene's row has the chips of its own labels and the same tag
+  button (`scene.set_meta`; scenes carry labels,
+  [ADR-0078](../../docs/adr/0078-scenes-carry-labels.md)). A nested scene's row has a caret that shows
   its items under it, nested ones too; a click on one of them selects it in its own
   scene, which the list then shows, since the engine draws a nested scene as one item.
   Each panel has a search box and a filter for
-  favourites (the star, `scene.set_meta` or `source.set_meta`), applied in the page; the
-  sources list's filter also keeps the rows carrying any checked label, and its "Edit
-  labels…" opens the label manager over the rows, which renames, recolours, gives icons
-  to, adds (`label.create`) and deletes labels; a delete takes the label off every
-  source that carries it in the same batch. Scenes carry no labels (ADR-0024 §4), so the
-  scene list has no labels filter;
+  favourites (the star, `scene.set_meta` or `source.set_meta`), applied in the page; each
+  filter also keeps the rows carrying any checked label, and its "Edit labels…" opens
+  the label manager over that panel's rows, which renames, recolours, gives icons to,
+  adds (`label.create`) and deletes labels; a delete takes the label off every source
+  and scene that carries it in the same batch;
   rows drag before or after each other (`scene.reorder`, `folder.reorder`,
   `item.reorder`, counted in the whole list so a hidden row doesn't shift the index) with
   pointer events, but not while a filter is on, and a drop on a folder row's middle half
@@ -329,8 +330,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **The Inspector** ([UI features › inspector](../../docs/UI-FEATURES.md#inspector))
   shows the primary selected item, or with none the selected scene, under a header with
   its type icon (the scene's icon for a scene), name, kind, "+N" for the other selected
-  items, the item's source's label chips and tag button, and a favourite star
-  (`source.set_meta` or `scene.set_meta`). An item's name is in italics when its source
+  items, the item's source's or the scene's label chips and tag button, whose popover
+  opens under the header, and a favourite star (`source.set_meta` or `scene.set_meta`). An item's name is in italics when its source
   is placed in another scene too. Its sections fold, and each stays as it was last left,
   by title, across items and reloads (`Folds`, kept in the browser's storage as
   `jstream.folds`): Parameters (X and Y of the

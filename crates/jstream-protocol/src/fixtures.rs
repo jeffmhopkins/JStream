@@ -753,6 +753,7 @@ fn send_infos() -> Vec<SendInfo> {
 /// A scene's metadata with every field away from its default.
 fn scene_meta() -> SceneMeta {
     SceneMeta {
+        labels: vec![LabelId::new("lbl_sponsor")],
         icon: Some("star".into()),
         color: Some("#1e1e2e".into()),
         favourite: true,

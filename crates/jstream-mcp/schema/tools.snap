@@ -2078,7 +2078,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Replaces a scene's organisation metadata: its icon, colour, favourite flag and\nwhether a multiview shows it. Every field left out takes its default. An icon\nthat is empty or longer than 64 bytes, or a colour that isn't\n`#rrggbb`, is `invalid_argument`. Inverse: `scene.set_meta` with the previous\nmetadata.",
+                "description": "Replaces a scene's organisation metadata: the labels it carries, its icon, colour,\nfavourite flag and whether a multiview shows it. Every field left out takes its\ndefault, so `labels` omitted removes them all. An icon that is empty or longer\nthan 64 bytes, a colour that isn't `#rrggbb`, or a label listed twice is\n`invalid_argument`, and a label that doesn't exist `not_found`; the engine stores\nlabels ordered by ID. Inverse: `scene.set_meta` with the previous metadata.",
                 "properties": {
                   "color": {
                     "description": "The scene's colour, sRGB as `#rrggbb`. Omitted for none.",
@@ -2097,6 +2097,13 @@ source: crates/jstream-mcp/src/tests.rs
                       "string",
                       "null"
                     ]
+                  },
+                  "labels": {
+                    "description": "The labels it carries, ordered by ID, each at most once. Every one must exist.\nOmitted for none.",
+                    "items": {
+                      "$ref": "#/$defs/LabelId"
+                    },
+                    "type": "array"
                   },
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -2213,7 +2220,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a label. Rejected with `invalid_argument` while a source carries it,\nlisting them as `blockers`: take it off those sources first, or send the batch\n`delete.plan` returns. Inverse: `label.create` with its name, colour and icon,\nthen `label.reorder` to its old position (unless it was last).",
+                "description": "Deletes a label. Rejected with `invalid_argument` while a source or scene carries\nit, listing them as `blockers`: take it off those first, or send the batch\n`delete.plan` returns. Inverse: `label.create` with its name, colour and icon,\nthen `label.reorder` to its old position (unless it was last).",
                 "properties": {
                   "label_id": {
                     "$ref": "#/$defs/LabelId",
@@ -7314,7 +7321,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Replaces a scene's organisation metadata: its icon, colour, favourite flag and\nwhether a multiview shows it. Every field left out takes its default. An icon\nthat is empty or longer than 64 bytes, or a colour that isn't\n`#rrggbb`, is `invalid_argument`. Inverse: `scene.set_meta` with the previous\nmetadata.",
+                "description": "Replaces a scene's organisation metadata: the labels it carries, its icon, colour,\nfavourite flag and whether a multiview shows it. Every field left out takes its\ndefault, so `labels` omitted removes them all. An icon that is empty or longer\nthan 64 bytes, a colour that isn't `#rrggbb`, or a label listed twice is\n`invalid_argument`, and a label that doesn't exist `not_found`; the engine stores\nlabels ordered by ID. Inverse: `scene.set_meta` with the previous metadata.",
                 "properties": {
                   "color": {
                     "description": "The scene's colour, sRGB as `#rrggbb`. Omitted for none.",
@@ -7333,6 +7340,13 @@ source: crates/jstream-mcp/src/tests.rs
                       "string",
                       "null"
                     ]
+                  },
+                  "labels": {
+                    "description": "The labels it carries, ordered by ID, each at most once. Every one must exist.\nOmitted for none.",
+                    "items": {
+                      "$ref": "#/$defs/LabelId"
+                    },
+                    "type": "array"
                   },
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -7449,7 +7463,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a label. Rejected with `invalid_argument` while a source carries it,\nlisting them as `blockers`: take it off those sources first, or send the batch\n`delete.plan` returns. Inverse: `label.create` with its name, colour and icon,\nthen `label.reorder` to its old position (unless it was last).",
+                "description": "Deletes a label. Rejected with `invalid_argument` while a source or scene carries\nit, listing them as `blockers`: take it off those first, or send the batch\n`delete.plan` returns. Inverse: `label.create` with its name, colour and icon,\nthen `label.reorder` to its old position (unless it was last).",
                 "properties": {
                   "label_id": {
                     "$ref": "#/$defs/LabelId",
@@ -10052,7 +10066,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a label. Rejected with `invalid_argument` while a source carries it,\nlisting them as `blockers`: take it off those sources first, or send the batch\n`delete.plan` returns. Inverse: `label.create` with its name, colour and icon,\nthen `label.reorder` to its old position (unless it was last).",
+                "description": "Deletes a label. Rejected with `invalid_argument` while a source or scene carries\nit, listing them as `blockers`: take it off those first, or send the batch\n`delete.plan` returns. Inverse: `label.create` with its name, colour and icon,\nthen `label.reorder` to its old position (unless it was last).",
                 "properties": {
                   "label_id": {
                     "$ref": "#/$defs/LabelId",
@@ -12117,7 +12131,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Replaces a scene's organisation metadata: its icon, colour, favourite flag and\nwhether a multiview shows it. Every field left out takes its default. An icon\nthat is empty or longer than 64 bytes, or a colour that isn't\n`#rrggbb`, is `invalid_argument`. Inverse: `scene.set_meta` with the previous\nmetadata.",
+                "description": "Replaces a scene's organisation metadata: the labels it carries, its icon, colour,\nfavourite flag and whether a multiview shows it. Every field left out takes its\ndefault, so `labels` omitted removes them all. An icon that is empty or longer\nthan 64 bytes, a colour that isn't `#rrggbb`, or a label listed twice is\n`invalid_argument`, and a label that doesn't exist `not_found`; the engine stores\nlabels ordered by ID. Inverse: `scene.set_meta` with the previous metadata.",
                 "properties": {
                   "color": {
                     "description": "The scene's colour, sRGB as `#rrggbb`. Omitted for none.",
@@ -12136,6 +12150,13 @@ source: crates/jstream-mcp/src/tests.rs
                       "string",
                       "null"
                     ]
+                  },
+                  "labels": {
+                    "description": "The labels it carries, ordered by ID, each at most once. Every one must exist.\nOmitted for none.",
+                    "items": {
+                      "$ref": "#/$defs/LabelId"
+                    },
+                    "type": "array"
                   },
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -12252,7 +12273,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a label. Rejected with `invalid_argument` while a source carries it,\nlisting them as `blockers`: take it off those sources first, or send the batch\n`delete.plan` returns. Inverse: `label.create` with its name, colour and icon,\nthen `label.reorder` to its old position (unless it was last).",
+                "description": "Deletes a label. Rejected with `invalid_argument` while a source or scene carries\nit, listing them as `blockers`: take it off those first, or send the batch\n`delete.plan` returns. Inverse: `label.create` with its name, colour and icon,\nthen `label.reorder` to its old position (unless it was last).",
                 "properties": {
                   "label_id": {
                     "$ref": "#/$defs/LabelId",
@@ -14430,6 +14451,10 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
             "type": "string"
           },
+          "LabelId": {
+            "description": "A label that sources carry (ADR-0024 §4).",
+            "type": "string"
+          },
           "Rev": {
             "description": "The collection state revision.\n\nEvery applied batch increments it by exactly one. Queries report the revision they\nread, and a batch may name the revision it was computed against (`expected_rev`).",
             "format": "uint64",
@@ -14668,7 +14693,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Replaces a scene's organisation metadata: its icon, colour, favourite flag and\nwhether a multiview shows it. Every field left out takes its default. An icon\nthat is empty or longer than 64 bytes, or a colour that isn't\n`#rrggbb`, is `invalid_argument`. Inverse: `scene.set_meta` with the previous\nmetadata.",
+                "description": "Replaces a scene's organisation metadata: the labels it carries, its icon, colour,\nfavourite flag and whether a multiview shows it. Every field left out takes its\ndefault, so `labels` omitted removes them all. An icon that is empty or longer\nthan 64 bytes, a colour that isn't `#rrggbb`, or a label listed twice is\n`invalid_argument`, and a label that doesn't exist `not_found`; the engine stores\nlabels ordered by ID. Inverse: `scene.set_meta` with the previous metadata.",
                 "properties": {
                   "color": {
                     "description": "The scene's colour, sRGB as `#rrggbb`. Omitted for none.",
@@ -14687,6 +14712,13 @@ source: crates/jstream-mcp/src/tests.rs
                       "string",
                       "null"
                     ]
+                  },
+                  "labels": {
+                    "description": "The labels it carries, ordered by ID, each at most once. Every one must exist.\nOmitted for none.",
+                    "items": {
+                      "$ref": "#/$defs/LabelId"
+                    },
+                    "type": "array"
                   },
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",

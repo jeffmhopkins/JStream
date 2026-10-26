@@ -114,13 +114,37 @@ impl Collection {
         scenes.chain(folders).collect()
     }
 
-    /// Everything that stops deleting label `id`: the sources carrying it, by ID.
+    /// Everything that stops deleting label `id`: the sources carrying it, by ID, then
+    /// the scenes carrying it, in display order.
     fn label_blockers(&self, id: &LabelId) -> Vec<Blocker> {
-        self.sources
+        let sources = self
+            .sources
             .iter()
             .filter(|(_, s)| s.meta.labels.contains(id))
-            .map(|(source_id, _)| blocker(EntityKind::Source, source_id.as_str(), "labels"))
-            .collect()
+            .map(|(source_id, _)| blocker(EntityKind::Source, source_id.as_str(), "labels"));
+        let scenes = self
+            .scenes
+            .iter()
+            .filter(|s| s.meta.labels.contains(id))
+            .map(|s| blocker(EntityKind::Scene, s.id.as_str(), "labels"));
+        sources.chain(scenes).collect()
+    }
+
+    /// `labels` ordered by ID, as the engine stores them: `not_found` for a label that
+    /// doesn't exist, `invalid_argument` for one listed twice.
+    fn checked_labels(&self, labels: &[LabelId], at: usize) -> Result<Vec<LabelId>, ProtocolError> {
+        let mut set = BTreeSet::new();
+        for label in labels {
+            self.label_index(label)?;
+            if !set.insert(label.clone()) {
+                return Err(invalid(
+                    at,
+                    "labels",
+                    format!("label `{label}` is listed more than once"),
+                ));
+            }
+        }
+        Ok(set.into_iter().collect())
     }
 
     fn create_folder(
@@ -258,7 +282,11 @@ impl Collection {
         if let Some((name, reason)) = meta.problem() {
             return Err(invalid(at, name, reason));
         }
-        let old = std::mem::replace(&mut self.scenes[si].meta, meta.clone());
+        let new = SceneMeta {
+            labels: self.checked_labels(&meta.labels, at)?,
+            ..meta.clone()
+        };
+        let old = std::mem::replace(&mut self.scenes[si].meta, new);
         Ok(vec![Edit::SceneSetMeta {
             scene_id: scene_id.clone(),
             meta: old,
@@ -339,24 +367,14 @@ impl Collection {
         if !self.sources.contains_key(source_id) {
             return Err(not_found(EntityKind::Source, source_id.as_str()));
         }
-        let mut labels = BTreeSet::new();
-        for label in &meta.labels {
-            self.label_index(label)?;
-            if !labels.insert(label.clone()) {
-                return Err(invalid(
-                    at,
-                    "labels",
-                    format!("label `{label}` is listed more than once"),
-                ));
-            }
-        }
+        let labels = self.checked_labels(&meta.labels, at)?;
         let source = self
             .sources
             .get_mut(source_id)
             .ok_or_else(|| not_found(EntityKind::Source, source_id.as_str()))?;
         // Stored ordered by ID, as the engine reports them.
         let new = SourceMeta {
-            labels: labels.into_iter().collect(),
+            labels,
             favourite: meta.favourite,
         };
         let old = std::mem::replace(&mut source.meta, new);
