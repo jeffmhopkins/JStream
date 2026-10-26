@@ -195,7 +195,6 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 │                  an audio filter may name a key source (sidechain)
 ├── encoders       EncoderProfile { id, codec, rate_control, … }
 ├── master         Master { filters { video[], audio[] } }   applies to everything leaving JStream
-├── privacy        Privacy { look: Blur { strength } | Slate { color | image }, muted_sources: [source_id] }
 └── outputs        Output { id, kind, video_mix, audio_buses: [bus_id], encoder_profile, filters { video[], audio[] } }
                    kind: Rtmp { target: Generic { url } | YouTube { broadcast_id } } | Record { path, container } | VirtualCam
 ```
@@ -347,15 +346,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   caps. Outputs carry no video chain until filters land, so for now every output shares
   by `(video_mix, encoder_profile)`; the engine already keys and draws an output with a
   chain on its own.
-- **Privacy screen** ([ADR-0027](adr/0027-program-master-and-output-chains.md)): whether
-  it is on is runtime state, set by an action and never stored in the collection; it
-  starts off. The collection's `privacy` setting only says how it looks (a blur or a
-  slate) and which sources it mutes, by default every audio input-device source,
-  independently of each source's own mute. While on, it covers every output and every
-  preview stream of a post-master stage. Built so far: on and off, covering every
-  output's video with the default blur and muting the default set, every audio input
-  device. The look setting, the slate and choosing the muted sources are not built
-  yet.
+- **No privacy screen** ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md)
+  §4): nothing covers the outputs or mutes the microphones on a switch. Muting a source
+  and switching scenes do that job.
 - **Audio** ([ADR-0028](adr/0028-audio-model-v2.md)): sources feed buses through the send
   matrix; buses feed outputs and monitors, never other buses. Every audio source gets a
   send to the master bus ("Program output") at 0 dB. Per source: stream → audio filters →
@@ -605,25 +598,6 @@ and reads are `SeqCst`, with a `SeqCst` fence between each side's store and its 
 fence doesn't allocate, lock or wait, so [R-RT-001](RULES.md#R-RT-001) and
 [R-RT-002](RULES.md#R-RT-002) still hold.
 
-The privacy flag ([ADR-0027](adr/0027-program-master-and-output-chains.md)) reaches the
-render thread as a lock-free atomic flag, not a snapshot rebuild, so it takes effect on
-the next tick: the engine stores it with release ordering under its lock, and the thread
-loads it with acquire ordering at the start of each tick. The blur pass's layers are
-kept whenever a mix is drawn, so turning privacy on allocates nothing on a real-time
-thread. The flag fails closed: a tick under privacy that couldn't draw pushes black,
-never the last frame. The mixer reads a count of the screen's changes instead (odd
-while it is on, stored after the flag), with acquire ordering at each poll, so a screen
-turned on and off again between two polls still reaches it. It silences the inputs it
-mutes from the next block, before their filter chains (so no delay line holds what
-they captured meanwhile) and through their activity gain, so that takes a field store
-and allocates nothing either. Those inputs' audio threads load the count with acquire
-ordering too, and zero each packet as it arrives, before the input's ring, while it is
-odd or the mixer has not yet acted on it. Turning it off follows the capture
-time: blocks mixed late by the mixer's latency that start before the clock's frame at
-the first poll after it went off, plus 40 ms for an input's timing error, stay covered,
-and the audio threads zero a packet that its stamp, the input's timing of it or its
-placement starts before that frame, an atomic the mixer stores.
-
 <a id="protocol"></a>
 ## Control protocol
 <!-- @section
@@ -751,18 +725,13 @@ The wire format, versioning, error codes and compatibility policy are designed i
   of call that applies a step's inverse (or the step again) as one `rev` bump
   ([ADR-0032](adr/0032-live-edits-and-undo.md)). It refuses with `undo_conflict`
   rather than overwrite another client's later change (protocol 0.10).
-- **Privacy screen** (protocol 0.33): the action `privacy.set { on }` on the master
-  stage, never undoable or batchable and with no `rev` change; every change emits
-  `privacy.changed { on }`, naming the client and request, to every client, and every
-  `privacy.set` goes to the audit log with the state it asked for
-  ([ADR-0027](adr/0027-program-master-and-output-chains.md)). `privacy.get` reads it. A
-  batch holds only edits, so one naming `privacy.set` is refused whole with the stable
-  code `malformed`, and nothing in it is applied. A client that connects while privacy is
-  on gets `privacy.changed { on: true }` as the first event of its subscription, so no
-  client shows it as off. Preview streams show the pre-master stage (the editing view) by
-  default; a client asks for the post-master stage to see what viewers see, and only
-  that stage is covered by the privacy screen. `preview.subscribe` has no post-master
-  stage yet, so every preview stream is uncovered.
+- **Privacy calls** (protocol 0.33, deprecated, removed in 1.0): JStream has no privacy
+  screen ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md) §4).
+  `privacy.set` is refused with `unsupported` and still goes to the audit log as a
+  refusal, `privacy.get` always reads off, and `privacy.changed` is never sent. Preview
+  streams show the pre-master stage (the editing view) by default; a client asks for the
+  post-master stage to see what viewers see. `preview.subscribe` has no post-master stage
+  yet.
 - **Encoder sessions** (protocol 0.13): `output.status` reports, per running output,
   its encoder session's profile, the other outputs sharing it and whether the session is
   dedicated to it because of its own video chain (0.33), plus the sessions and hardware
@@ -882,7 +851,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pairing`, `preview`, `privacy`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  (`audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
@@ -1093,15 +1062,11 @@ The encoded output decodes to the test page's colours (BT.709 limited range). St
 wgpu is pinned exactly, because hal interop can change between releases. Effects are WGSL
 plus an `effect.toml` manifest.
 
-**Output path** ([ADR-0027](adr/0027-program-master-and-output-chains.md)), for each
-output: mix → master video chain → the output's own video chain → privacy stage → colour
-conversion (step 4) → encoder. The render plan has a master node per consumed mix, a
-node per output with a video chain, and a privacy node per output. The privacy stage
-comes last, so no output chain can undo it, and it fails closed: if its pass can't run,
-the output gets a black frame. Built so far: the privacy stage, as a blur after the
-mix's draw (a chain of half-size downsamples to a small layer, stretched back up), and
-the sharing key's output part. The master and output video chains are not built yet
-(their audio chains are, protocol 0.29).
+**Output path** ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md)), for each
+output: mix → master video chain → the output's own video chain → colour conversion
+(step 4) → encoder. The render plan has a master node per consumed mix and a node per
+output with a video chain. Built so far: the sharing key's output part. The master and
+output video chains are not built yet (their audio chains are, protocol 0.29).
 
 <a id="browser-source"></a>
 ## Browser source

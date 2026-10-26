@@ -1320,13 +1320,8 @@ pub enum Action {
         /// The plugin.
         plugin_id: PluginId,
     },
-    /// Turns the privacy screen on or off (ADR-0027 §4). While it is on, every output's
-    /// video is covered from the next frame: a heavy blur of the outgoing picture, or
-    /// black when the blur can't be drawn, never the picture itself. It is runtime
-    /// state, not collection state: it changes no `rev`, is never undone, goes to the
-    /// audit log, and the engine starts with it off. A change emits `privacy.changed`,
-    /// which `privacy.get` reads back; setting the state it already has succeeds and
-    /// emits nothing.
+    /// **Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy
+    /// screen: the engine refuses this with `unsupported` and covers nothing.
     #[serde(rename = "privacy.set")]
     PrivacySet {
         /// Whether the privacy screen covers the outputs.

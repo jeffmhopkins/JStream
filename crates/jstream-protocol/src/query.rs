@@ -95,8 +95,8 @@ pub enum Query {
     /// state, not collection state (ADR-0030), so the result carries no `rev`.
     #[serde(rename = "studio.get")]
     StudioGet,
-    /// Reads whether the privacy screen is on (ADR-0027 §4). Runtime state, so the
-    /// result carries no `rev`.
+    /// **Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy
+    /// screen, so the answer is always `on: false`.
     #[serde(rename = "privacy.get")]
     PrivacyGet,
     /// Lists the collection's encoder profiles, ordered by ID.
@@ -408,7 +408,7 @@ pub enum QueryResult {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         preview_scene: Option<SceneId>,
     },
-    /// The result of `privacy.get`. Runtime state, so it carries no `rev`.
+    /// The result of the deprecated `privacy.get` (ADR-0080): always `on: false`.
     #[serde(rename = "privacy.get")]
     PrivacyGet {
         /// Whether the privacy screen covers the outputs.

@@ -944,58 +944,29 @@ fn privacy_call(on: bool) -> Call {
     }
 }
 
-/// `privacy.set` turns the privacy screen on or off without an edit, tells every
-/// subscriber who did it, and says nothing when nothing changed; `privacy.get` reads it.
-/// A client that subscribes while it is on hears `privacy.changed` first, naming the
-/// client that turned it on (ADR-0027 §4).
+/// JStream has no privacy screen (ADR-0080 §4): the deprecated `privacy.set` is refused
+/// as unsupported and changes nothing, `privacy.get` always answers off, and no client
+/// hears `privacy.changed`.
 #[test]
-fn privacy_set_covers_outputs_without_an_edit() {
+fn the_deprecated_privacy_calls_cover_nothing() {
     let engine = Engine::new();
     let user = connected(&engine);
-    let agent = connected(&engine);
     let mut events = user.events();
-    let on = |control: &dyn Control| match query(control, Query::PrivacyGet) {
-        Ok(QueryResult::PrivacyGet { on }) => on,
-        other => panic!("not a privacy result: {other:?}"),
-    };
-    assert!(!on(&user));
-    block_on(user.call(privacy_call(false))).expect("already off");
+    for on in [true, false] {
+        let error = block_on(user.call(privacy_call(on))).expect_err("refused");
+        assert_eq!(
+            error.protocol(),
+            Some(&ProtocolError::Unsupported {
+                call: "privacy.set".into()
+            })
+        );
+    }
+    assert_eq!(engine.rev(), Rev(0));
+    assert!(matches!(
+        query(&user, Query::PrivacyGet),
+        Ok(QueryResult::PrivacyGet { on: false })
+    ));
     assert_eq!(drain(&mut events), vec![]);
-
-    let set = block_on(agent.call(privacy_call(true))).expect("on");
-    assert_eq!(set.result, CallResult::Action { result: None });
-    assert_eq!(engine.rev(), Rev(0), "privacy is not an edit");
-    let turned_on = Event::PrivacyChanged {
-        on: true,
-        client_id: agent.client_id().expect("connected"),
-        request_id: Some(set.id),
-    };
-    assert_eq!(drain(&mut events), vec![turned_on]);
-    assert!(on(&user));
-    block_on(user.call(privacy_call(true))).expect("already on");
-    assert_eq!(drain(&mut events), vec![]);
-
-    let late = connected(&engine);
-    let mut late_events = late.events();
-    assert_eq!(
-        drain(&mut late_events),
-        vec![Event::PrivacyChanged {
-            on: true,
-            client_id: agent.client_id().expect("connected"),
-            request_id: None,
-        }],
-        "a new subscriber hears the screen is on first"
-    );
-
-    let off = block_on(user.call(privacy_call(false))).expect("off");
-    let turned_off = Event::PrivacyChanged {
-        on: false,
-        client_id: user.client_id().expect("connected"),
-        request_id: Some(off.id),
-    };
-    assert_eq!(drain(&mut events), vec![turned_off.clone()]);
-    assert_eq!(drain(&mut late_events), vec![turned_off]);
-    assert!(!on(&agent));
     assert_eq!(drain(&mut connected(&engine).events()), vec![]);
 }
 
@@ -3209,60 +3180,6 @@ mod cpu_pipeline {
             hub.caught_up(u64::MAX - 1),
             "a stopped render thread holds nothing up"
         );
-    }
-
-    /// `privacy.set` reaches the render thread through its flag, without the
-    /// collection lock: the next ticks draw every mix covered, and uncovered once it is
-    /// off again (ADR-0027 §4).
-    #[test]
-    fn the_render_thread_covers_frames_while_privacy_is_on() {
-        use jstream_protocol::{Action, Call};
-
-        let fakes = fakes();
-        let seen: Arc<Mutex<Vec<bool>>> = Arc::default();
-        let draw: OpenDraw = {
-            let seen = Arc::clone(&seen);
-            Arc::new(move |context| {
-                let seen = Arc::clone(&seen);
-                let mut inner = (cpu_draw())(context)?;
-                let draw: DrawFn = Box::new(move |shot, live, captures, frames, at| {
-                    seen.lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner)
-                        .extend(frames.iter().filter(|f| f.due).map(|f| f.privacy));
-                    inner(shot, live, captures, frames, at)
-                });
-                Ok(draw)
-            })
-        };
-        let engine = engine(
-            share(&fakes.backends),
-            draw,
-            Box::new(RecordingPublish::new()),
-        );
-        let last = || {
-            seen.lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .last()
-                .copied()
-        };
-        let privacy = |on| Call::Action {
-            action: Action::PrivacySet { on },
-        };
-        let control = connected(&engine);
-        let mut events = control.events();
-        start(&control, &mut events);
-        assert!(pump_until(&fakes.clock, &fakes.audio, || last() == Some(false)));
-        block_on(control.call(privacy(true))).expect("privacy on");
-        assert!(
-            pump_until(&fakes.clock, &fakes.audio, || last() == Some(true)),
-            "the next ticks are covered"
-        );
-        block_on(control.call(privacy(false))).expect("privacy off");
-        assert!(
-            pump_until(&fakes.clock, &fakes.audio, || last() == Some(false)),
-            "and uncovered once it is off"
-        );
-        block_on(control.call(output_call("yt", false))).expect("output.stop");
     }
 
     /// Feeds both inputs and moves the clock on by 50 ms.
@@ -5578,58 +5495,6 @@ mod cpu_pipeline {
         assert_eq!(log.pixels[0], ([30, 20, 10, 255], [30, 20, 10, 255]));
     }
 
-    /// The privacy screen covers a virtual camera: with it on, the camera gets black
-    /// frames from the CPU stand-in, here scaling a 1x1 grey capture to the 64x64
-    /// program, and the program again once it is off (ADR-0027 §4, review N5).
-    #[test]
-    fn a_virtual_camera_is_covered_by_the_privacy_screen() {
-        use crate::snapshot::{CaptureFrame, CaptureImage, Captures};
-        use jstream_protocol::{Action, Call};
-
-        struct Grey;
-        impl Captures for Grey {
-            fn frame(&self, _: &crate::snapshot::CaptureKey) -> Option<CaptureFrame<'_>> {
-                Some(CaptureFrame {
-                    version: 1,
-                    image: CaptureImage::Rgba {
-                        size: FrameSize::new(1, 1).expect("size"),
-                        rgba: &[90, 90, 90, 255],
-                    },
-                })
-            }
-        }
-        let draw: OpenDraw = Arc::new(|context| {
-            let mut inner = (cpu_draw())(context)?;
-            let draw: DrawFn =
-                Box::new(move |shot, live, _, frames, at| inner(shot, live, &Grey, frames, at));
-            Ok(draw)
-        });
-        let fakes = fakes();
-        let log = Arc::new(Mutex::new(VcamLog::default()));
-        let (_engine, control, mut events) =
-            vcam_engine(&fakes, draw, scripted(&log), (64, 64), None);
-        let last = || log.lock().expect("vcam log").pixels.last().copied();
-        let grey = ([90, 90, 90, 255], [90, 90, 90, 255]);
-        let privacy = |on| Call::Action {
-            action: Action::PrivacySet { on },
-        };
-        start_output(&control, &mut events, "cam");
-        assert!(pump_until(&fakes.clock, &fakes.audio, || last() == Some(grey)));
-        block_on(control.call(privacy(true))).expect("privacy on");
-        assert!(
-            pump_until(&fakes.clock, &fakes.audio, || {
-                last().is_some_and(|(first, middle)| first[..3] == [0; 3] && middle[..3] == [0; 3])
-            }),
-            "the camera is covered"
-        );
-        block_on(control.call(privacy(false))).expect("privacy off");
-        assert!(
-            pump_until(&fakes.clock, &fakes.audio, || last() == Some(grey)),
-            "and shows the program once it is off"
-        );
-        block_on(control.call(output_call("cam", false))).expect("output.stop");
-    }
-
     /// A virtual camera shares the program stage with a stream: both run at once, and
     /// stopping the camera leaves the stream running.
     #[test]
@@ -6247,35 +6112,20 @@ fn scene_switch_is_audited() {
     );
 }
 
-/// `privacy.set` is audited like every action, recording whether it turned the screen
-/// on or off; one that changed nothing is recorded too (ADR-0027 §4).
+/// The deprecated `privacy.set` is audited like every action, with its refusal
+/// (ADR-0080 §4).
 #[test]
-fn privacy_set_is_audited() {
+fn a_refused_privacy_set_is_audited() {
     let audit = Arc::new(crate::AuditMemory::new());
     let engine = Engine::new().with_audit(audit.clone());
     let control = connected(&engine);
-    block_on(control.call(privacy_call(true))).expect("on");
-    block_on(control.call(privacy_call(true))).expect("again");
-    block_on(control.call(privacy_call(false))).expect("off");
-
-    let entries = audit.entries();
-    let seen: Vec<_> = entries
+    block_on(control.call(privacy_call(true))).expect_err("refused");
+    let seen: Vec<_> = audit
+        .entries()
         .iter()
-        .map(|e| (e.call, e.privacy, (e.rev_before.0, e.rev_after.0), e.error))
+        .map(|e| (e.call, (e.rev_before.0, e.rev_after.0), e.error))
         .collect();
-    assert_eq!(
-        seen,
-        [
-            ("privacy.set", Some(true), (0, 0), None),
-            ("privacy.set", Some(true), (0, 0), None),
-            ("privacy.set", Some(false), (0, 0), None),
-        ]
-    );
-    assert!(
-        entries[2].to_json_line().contains(",\"privacy\":false,"),
-        "{:?}",
-        entries[2].to_json_line()
-    );
+    assert_eq!(seen, [("privacy.set", (0, 0), Some("unsupported"))]);
 }
 
 /// The audit log gets one entry per batch and action, with the client and its latest

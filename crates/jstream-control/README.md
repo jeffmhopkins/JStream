@@ -298,9 +298,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `MOCK_DISPLAY`;
 - `source.sizes`, answered with every source and no size, since the mock makes no
   frames, so it never sends `source.size_changed`;
-- the privacy screen ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)):
-  `privacy.set` (no `rev`), `privacy.get`, and `privacy.changed` for a change, which a
-  stream opened while it is on gets first;
+- the deprecated privacy calls, as from the engine
+  ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md) §4):
+  `privacy.set` is refused with `unsupported`, `privacy.get` reads off, and no
+  `privacy.changed` is sent;
 - event streams that end, after what they have buffered, when their `MockControl` or
   the engine is dropped, the way a socket's streams end when it closes. An ended stream
   stays ended: later events, including those other sessions cause, never reach it.

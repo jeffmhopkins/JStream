@@ -7,7 +7,7 @@
 //! ([`crossbeam_channel`]).
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use crossbeam_channel::Sender;
@@ -18,7 +18,7 @@ use super::chain::{
     Chain, FilterBook, FilterParams, FilterSpec, Kernel, MAX_CHAIN_LATENCY_MS, MAX_FILTERS,
 };
 use super::host::{HostFilter, HostMemory};
-use super::input::{InputProducer, InputShared, PrivacyLink};
+use super::input::{InputProducer, InputShared};
 use super::retire::Retirer;
 use super::ring::FrameRing;
 use super::sinc::{MAX_DOWN_RATIO, MAX_UP_RATIO};
@@ -122,8 +122,6 @@ pub(crate) struct ControlPlane {
     /// [`BusId`](crate::BusId)s so another mixer's id is refused (#228 N2).
     tag: u64,
     block_frames: usize,
-    /// The mixer's privacy screen as every input's audio thread reads it.
-    privacy: Arc<PrivacyLink>,
 }
 
 /// The next mixer's tag. 0 is [`BusId::MASTER`](crate::BusId::MASTER)'s, which names
@@ -141,7 +139,6 @@ impl ControlPlane {
         sample_rate: u32,
         ring_frames: usize,
         block_frames: usize,
-        privacy: Arc<PrivacyLink>,
     ) -> Self {
         Self {
             tx,
@@ -167,7 +164,6 @@ impl ControlPlane {
             ring_frames,
             tag: NEXT_TAG.fetch_add(1, Ordering::Relaxed),
             block_frames,
-            privacy,
         }
     }
 
@@ -191,7 +187,6 @@ impl ControlPlane {
     pub(crate) fn add(
         &self,
         format: AudioFormat,
-        privacy_muted: bool,
     ) -> Result<(InputProducer, u64, Arc<InputShared>, Arc<FrameRing>), AudioError> {
         if format.sample_format() != SampleFormat::F32Interleaved {
             return Err(AudioError::UnsupportedFormat);
@@ -209,11 +204,7 @@ impl ControlPlane {
         }
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let ring = Arc::new(FrameRing::new(self.ring_frames));
-        let mut shared = InputShared::new();
-        // Before the command is sent, so the mixer installs the input already marked.
-        shared.privacy_muted = AtomicBool::new(privacy_muted);
-        shared.privacy = Arc::clone(&self.privacy);
-        let shared = Arc::new(shared);
+        let shared = Arc::new(InputShared::new());
         let queued = Command::Add {
             id,
             ring: Arc::clone(&ring),

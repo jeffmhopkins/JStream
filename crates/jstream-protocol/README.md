@@ -59,7 +59,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `label.update`, `label.reorder`, `label.delete`, `source.set_meta`), with
   `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole` and `BlendMode`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
-  `scene.switch` with its optional `preset_id`, `studio.set_preview`, `privacy.set`,
+  `scene.switch` with its optional `preset_id`, `studio.set_preview`, `privacy.set` (deprecated),
   `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`,
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
@@ -109,7 +109,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `video.snapshot`, `kind.list`,
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
-  `studio.get`, `privacy.get`, `device.list`, `live.list`, `capture.targets` and
+  `studio.get`, `privacy.get` (deprecated), `device.list`, `live.list`, `capture.targets` and
   `source.sizes`, with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
   `CaptureTargetInfo` and `SourceSize` shapes the reads report. `state.get` carries the `Canvas`, and
@@ -145,7 +145,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   shares them. No source or filter kind is defined here; the transition kinds are
   (Transitions above).
 - **Events** (`event.rs`): `state.changed`, `output.state_changed`, `studio.changed`
-  (program, preview and the transition a switch started), `privacy.changed`,
+  (program, preview and the transition a switch started), `privacy.changed` (deprecated),
   `source.size_changed`, `events.dropped`,
   `stats.tick`, `meters.tick`, `youtube.status_changed`, `youtube.health_changed`,
   `youtube.stats`, `live.changed`, `live.ended` and `plugin.state_changed`.
@@ -207,7 +207,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `perspective_px`, which earlier minors rejected with `invalid_argument`, are stored and
   drawn (ADR-0050) when the compositor can draw them (`check_drawable`); the wire form is
   unchanged, so a client that sends only neutral 3D sees no difference); 0.33 added the
-  privacy screen (`privacy.set`, `privacy.get`, `privacy.changed`) and the `dedicated`
+  privacy screen (`privacy.set`, `privacy.get`, `privacy.changed`, since deprecated by
+  [ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)) and the `dedicated`
   flag on an output's encoder session; 0.32 added the geometry flips (`ItemGeometry`'s
   `flip_h` and `flip_v`); 0.31 added folders, labels and organisation metadata (the `folder.*` and `label.*` edits,
   `scene.set_folder`, `scene.set_meta`, `source.set_meta`, `state.get`'s `folders` and
@@ -907,8 +908,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   for the display an empty `display` target captures. Runtime state, so no `rev`; a
   source can still name a window closed since. `action_failed` when the engine has no
   capture backend or the OS refuses the list. Added in 0.27.
-- `privacy.get`: whether the privacy screen is on (`on`). Runtime state, so no `rev`.
-  Added in 0.33.
+- `privacy.get`: deprecated
+  ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), removed in
+  1.0. JStream has no privacy screen, so it always answers `on: false`. Added in 0.33.
 - `source.sizes`: every source, ordered by ID, with its current `size` in pixels,
   omitted while the source has no video frame (it hasn't started, it is audio-only, or
   it failed). A source of a video kind with nothing to show, such as an `image` or
@@ -1146,12 +1148,9 @@ After `welcome`, the server pushes every event to every client.
   with the committing batch's `rev`, whose `state.changed` comes first, `cancelled` or
   `expired`. A client that doesn't know these events ignores them and shows committed
   state only.
-- `privacy.changed {on, client_id, request_id?}` reports the privacy screen going on or
-  off, with the client and request that did it. A `privacy.set` that changes nothing
-  emits nothing. A client that subscribes while the screen is on gets this event first,
-  naming the client that turned it on and with no `request_id`, so it never shows an
-  uncovered picture. Runtime state, so no `rev`
-  ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)). Added in 0.33.
+- `privacy.changed {on, client_id, request_id?}`: deprecated
+  ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), removed in
+  1.0. JStream has no privacy screen, so the engine never sends it. Added in 0.33.
 - `source.size_changed {source_id, size?}` says a source's size changed: it became
   known (the first frame), changed, or became unknown (`size` omitted: the source
   stopped, failed or was deleted; a deletion's comes after its `state.changed`). The
@@ -1269,9 +1268,8 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   never granted: creating, deleting and retargeting outputs, their encoders and stream
   keys, video mixes, `video.snapshot` and previews (a capture's pixels could leave
   through a granted host), `audio.reset_loudness`, folders and labels themselves
-  (`folder.*`, `label.*`), which ADR-0069 names in no class, `privacy.set` (a plugin
-  never lifts the privacy screen), `youtube.*`, pairing and devices, and `plugin.*`
-  itself.
+  (`folder.*`, `label.*`), which ADR-0069 names in no class, the deprecated
+  `privacy.set`, `youtube.*`, pairing and devices, and `plugin.*` itself.
   `PLUGIN_SCOPES` places every command; a command it doesn't name is "never".
   `every_command_has_a_plugin_scope` fails until a new command is placed, so a new
   command can't reach plugins unreviewed.
@@ -1505,6 +1503,11 @@ shipped with `events.dropped`, so they ship as 0.11, an additive minor under
   `item.add`'s `transform` and `ItemInfo.transform`. Their doc comments, and so the
   schema descriptions in `protocol.snap` and the MCP `tools.snap`, say so
   ([R-TEST-002](../../docs/RULES.md#R-TEST-002)).
+- **Deprecated**, removed in 1.0: `privacy.set`, `privacy.get` and
+  `privacy.changed`, since JStream has no privacy screen
+  ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md) §4). Their
+  wire forms are unchanged, so no minor is bumped: `privacy.set` is refused with
+  `unsupported`, `privacy.get` answers `on: false`, and the event is never sent.
 - **Flips (0.32).** `flip_h` and `flip_v` are optional fields, an additive minor under
   [R-API-001](../../docs/RULES.md#R-API-001): an older peer ignores them, so it shows a
   flipped item unflipped, and one that writes the geometry back drops the flip.

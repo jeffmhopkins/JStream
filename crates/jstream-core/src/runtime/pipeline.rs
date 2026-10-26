@@ -80,7 +80,6 @@ use crate::drops::{
 };
 use crate::engine::Engine;
 use crate::lock;
-use crate::privacy::Privacy;
 use crate::runtime::captures::{self, RenderCaptures};
 use crate::runtime::sink::{Destination, Sink, StreamInfo};
 use crate::runtime::vcam::{VcamOut, VcamSlot, VcamTap, camera_channels, run_camera};
@@ -187,8 +186,6 @@ pub(crate) struct MixFrame {
     pub(crate) due: bool,
     /// The first base tick it is due on again.
     pub(crate) next: u64,
-    /// Whether the privacy screen covers it on this tick (ADR-0027 §4).
-    pub(crate) privacy: bool,
     /// Whether this tick reads it back into `out`: a session on the CPU path or a
     /// virtual camera is fed it. Without, `out` is left as it was.
     pub(crate) readback: bool,
@@ -214,7 +211,6 @@ impl MixFrame {
             owner,
             due: false,
             next: 0,
-            privacy: false,
             readback: false,
             out: Vec::new(),
             nv12: None,
@@ -242,9 +238,8 @@ pub(crate) type OpenDraw = Arc<dyn Fn(Option<&GpuContext>) -> Result<DrawFn, Str
 /// places when that is an RGBA8 frame, scaled nearest-neighbour to the frame's size, or
 /// fills black, which is what the GPU path draws for a collection with no scene. It
 /// ignores the scenes and the mixes, draws only the frames that ask for the readback,
-/// and never writes an encode target. It can't blur, so under the privacy screen it
-/// draws black, as the GPU path does when its blur fails. Tests use it to run the
-/// pipeline without a wgpu adapter
+/// and never writes an encode target. Tests use it to run the pipeline without a wgpu
+/// adapter
 /// ([`Engine::with_cpu_compositor`](crate::Engine::with_cpu_compositor)).
 pub(crate) fn cpu_draw() -> OpenDraw {
     Arc::new(|_: Option<&GpuContext>| {
@@ -262,12 +257,9 @@ pub(crate) fn cpu_draw() -> OpenDraw {
                     .iter_mut()
                     .filter(|frame| frame.due && frame.readback)
                 {
-                    let (size, private, out) = (frame.size, frame.privacy, &mut frame.out);
+                    let (size, out) = (frame.size, &mut frame.out);
                     out.clear();
                     match first.map(|capture| capture.image) {
-                        _ if private => {
-                            out.resize(size.width() as usize * size.height() as usize * 4, 0)
-                        }
                         Some(CaptureImage::Rgba { size: own, rgba }) if own == size => {
                             out.extend_from_slice(rgba);
                         }
@@ -1306,13 +1298,6 @@ pub(crate) struct Parts {
     /// The collection's canvas (width, height) when the program stage opens: the output
     /// size follows it ([`output_size`]).
     canvas: (u32, u32),
-    /// Whether the privacy screen is on: the engine sets it, the render thread reads it
-    /// every tick, with no lock (ADR-0027 §4).
-    privacy: Arc<AtomicBool>,
-    /// How many times the privacy screen has changed, odd while it is on: the engine
-    /// increments it, the mixer reads it before every block and the microphones' audio
-    /// threads on every packet, with no lock.
-    privacy_changes: Arc<AtomicU64>,
 }
 
 pub(crate) fn parts_from(
@@ -1322,7 +1307,6 @@ pub(crate) fn parts_from(
     render: Arc<RenderHub>,
     audio_sources: Arc<Wanted>,
     canvas: (u32, u32),
-    privacy: &Privacy,
 ) -> Parts {
     Parts {
         canvas,
@@ -1336,8 +1320,6 @@ pub(crate) fn parts_from(
         open_timeout,
         render,
         audio_sources,
-        privacy: privacy.flag(),
-        privacy_changes: privacy.changes(),
     }
 }
 
@@ -1384,8 +1366,8 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
             }
             // One frame of the cache for every mix of the tick, so the uploads and
             // nested-scene layers they share are kept for all of them. A mix not due on
-            // this tick claims its layers, and its privacy blur's, without drawing, so
-            // they aren't retired and reallocated when it is due again.
+            // this tick claims its layers without drawing, so they aren't retired and
+            // reallocated when it is due again.
             cache.begin_frame();
             for frame in frames.iter().filter(|frame| !frame.due) {
                 let claimed = snapshot::claim_layers(
@@ -1394,14 +1376,12 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
                     shot,
                     frame.mix.as_ref(),
                     frame.size,
-                )
-                .and_then(|()| snapshot::privacy_layers(&compositor, &mut cache, frame.size));
+                );
                 claimed.map_err(|err| draw_error(&compositor, &err))?;
             }
             for frame in frames.iter_mut().filter(|frame| frame.due) {
                 let view = View {
                     mix: frame.mix.as_ref(),
-                    privacy: Some(frame.privacy),
                 };
                 let drawn = snapshot::compose(
                     &mut compositor,
@@ -1585,12 +1565,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
     let sizes = spawn("jstream-capture-sizes", engine.capture_sizes_watch(size_rx))?;
     let captures = captures::spawn(backends, parts.clock.timebase(), size_tx)?;
     let format = engine_format()?;
-    // The mixer and its inputs' audio threads follow the engine's count of privacy
-    // changes, so a microphone's packets are zeroed from the moment privacy goes on, and
-    // a change between two polls is not missed (ADR-0027 §4).
-    let mixer =
-        Mixer::with_privacy_signal(MixerConfig::default(), Arc::clone(&parts.privacy_changes))
-            .map_err(|err| format!("mixer: {err}"))?;
+    let mixer = Mixer::new(MixerConfig::default()).map_err(|err| format!("mixer: {err}"))?;
     // The monitors the audio sources' thread opens hand their feeds to the mixer
     // thread here, at most one per bus at a time.
     let (monitor_routes, monitor_feeds) = mpsc::sync_channel(jstream_audio::MAX_BUSES);
@@ -1658,7 +1633,6 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             size,
             period,
             stop: Arc::clone(&stop),
-            privacy: Arc::clone(&parts.privacy),
             ready: ready_tx,
             readbacks: Arc::clone(&readbacks),
             gpu_captures: Arc::clone(&gpu_captures),
@@ -2338,8 +2312,6 @@ struct RenderJob {
     size: FrameSize,
     period: MediaTime,
     stop: Arc<AtomicBool>,
-    /// Whether the privacy screen is on, read at every tick.
-    privacy: Arc<AtomicBool>,
     ready: mpsc::Sender<Result<(), String>>,
     readbacks: Arc<AtomicU64>,
     gpu_captures: Arc<AtomicU64>,
@@ -2381,33 +2353,6 @@ struct Frames {
 }
 
 impl Frames {
-    /// Turns the last drawn frame of every due mix opaque black, in place, so a tick
-    /// that could not draw under the privacy screen repeats nothing it showed before.
-    /// Its sessions on the GPU path miss the tick's frame instead, since their last
-    /// encode target may hold a frame the screen didn't cover. Returns how many
-    /// sessions missed it, for [`encode_frame_drops`].
-    fn blacken_due(&mut self) -> u64 {
-        let mut missed: u64 = 0;
-        for ((frame, shown), (taps, encode)) in self
-            .mixes
-            .iter()
-            .zip(&mut self.shown)
-            .zip(self.targets.iter().zip(&mut self.encode))
-        {
-            if frame.due {
-                for pixel in shown.chunks_exact_mut(4) {
-                    pixel.copy_from_slice(&[0, 0, 0, 255]);
-                }
-                let gpu_taps = taps.iter().filter(|tap| tap.gpu).count() as u64;
-                if gpu_taps > 0 && !encode.starved {
-                    encode.starved = true;
-                    missed = missed.saturating_add(gpu_taps);
-                }
-            }
-        }
-        missed
-    }
-
     /// Feeds `input` the frames of `feed`, drawn alongside an existing session's with
     /// the same feed.
     fn add(&mut self, feed: Feed, mut tap: VideoTap) {
@@ -2472,12 +2417,10 @@ impl Frames {
     /// Marks the mixes due on base tick `index` and returns how many are. A mix is due
     /// once `index` reaches its `next` tick, which is then `divisor` ticks on, so an
     /// overrun that skips its tick delays it rather than starving it, and it never gets
-    /// frames closer together than its divisor. Each is covered by the privacy screen
-    /// when `privacy`.
-    fn schedule(&mut self, index: u64, privacy: bool) -> u64 {
+    /// frames closer together than its divisor.
+    fn schedule(&mut self, index: u64) -> u64 {
         let mut due = 0;
         for frame in &mut self.mixes {
-            frame.privacy = privacy;
             frame.due = index >= frame.next;
             if frame.due {
                 frame.next = index.saturating_add(u64::from(frame.divisor.max(1)));
@@ -2631,7 +2574,6 @@ fn render_loop(job: RenderJob) {
         size,
         period,
         stop,
-        privacy,
         ready,
         readbacks,
         gpu_captures,
@@ -2670,8 +2612,7 @@ fn render_loop(job: RenderJob) {
     // divisor draw on every `divisor`th, or later when an overrun skips one.
     let mut index: u64 = 0;
     let mut skipped: u64 = 0;
-    // Frames GPU sessions missed because their mix's every encode target was held, or
-    // because a covered tick's draw failed (the privacy screen fails closed).
+    // Frames GPU sessions missed because their mix's every encode target was held.
     let mut encode_held: u64 = 0;
     let mut draw_errors: u32 = 0;
     // When the device was lost, within the last `LOSS_WINDOW`: at most
@@ -2714,11 +2655,8 @@ fn render_loop(job: RenderJob) {
         };
         skipped = skipped.saturating_add(missed);
         index = index.saturating_add(missed);
-        let private = privacy.load(Ordering::Acquire);
-        let drawn = frames.schedule(index, private);
+        let drawn = frames.schedule(index);
         index = index.saturating_add(1);
-        // Whether this tick's due frames were drawn; if not, the last ones repeat.
-        let mut fresh = false;
         // Encode targets only while compositing on the context: after a fallback a
         // session on the GPU path has none, which fails the pipeline.
         if !broken && switch.is_none() && drawn > 0 {
@@ -2795,7 +2733,6 @@ fn render_loop(job: RenderJob) {
             }));
             match tick {
                 Ok(Ok(freed)) => {
-                    fresh = true;
                     draw_errors = 0;
                     let read = frames
                         .mixes
@@ -2904,11 +2841,6 @@ fn render_loop(job: RenderJob) {
             // No mix is due on this tick; it still adopts the latest snapshot, so a
             // gesture never waits on a mix with a divisor.
             reader.adopt();
-        }
-        if private && !fresh {
-            // The privacy screen fails closed: a frame it didn't cover is never repeated,
-            // black goes out instead, and GPU sessions get no frame (ADR-0027 §4).
-            encode_held = encode_held.saturating_add(frames.blacken_due());
         }
         drops.publish(
             capture_drops(captures.stats())
@@ -3277,8 +3209,7 @@ fn mixer_thread(
     }
 }
 
-/// What the mixer thread owns: the mixer, which follows the privacy screen itself
-/// (`Mixer::with_privacy_signal`), and the master's true-peak and loudness meters, which
+/// What the mixer thread owns: the mixer, and the master's true-peak and loudness meters, which
 /// it runs on every block.
 struct Mixing {
     mixer: Mixer,
@@ -4259,17 +4190,15 @@ mod tests {
         frames.add(feed(None, 1), input());
         assert_eq!(frames.mixes.len(), 2);
         assert_eq!(frames.targets[0].len(), 2);
-        assert_eq!(frames.schedule(0, false), 2);
-        assert_eq!(frames.schedule(1, false), 1);
+        assert_eq!(frames.schedule(0), 2);
+        assert_eq!(frames.schedule(1), 1);
         assert!(frames.mixes[0].due && !frames.mixes[1].due);
         // An overrun that skips tick 2 and lands on 3 still draws the half-rate mix,
         // so a steady overrun landing on odd ticks can't starve it (review N5), and
-        // the tick after that is too soon for it. The privacy screen covers every
-        // frame due while it is on.
-        assert_eq!(frames.schedule(3, false), 2);
-        assert_eq!(frames.schedule(4, true), 1);
-        assert!(frames.mixes.iter().all(|frame| frame.privacy));
-        assert_eq!(frames.schedule(5, false), 2);
+        // the tick after that is too soon for it.
+        assert_eq!(frames.schedule(3), 2);
+        assert_eq!(frames.schedule(4), 1);
+        assert_eq!(frames.schedule(5), 2);
         frames.targets[0].clear();
         let mut freed = 0;
         frames.prune(|_| freed += 1);
@@ -4311,52 +4240,7 @@ mod tests {
         assert_eq!(frames.mixes.len(), 2);
         assert_eq!(frames.mixes[1].owner, Some(OutputId::new("rec")));
         assert_eq!((frames.targets[0].len(), frames.targets[1].len()), (2, 2));
-        assert_eq!(frames.schedule(0, false), 2, "both are drawn");
-    }
-
-    /// Under the privacy screen, a tick that could not draw blackens the frames due on
-    /// it rather than repeating what they showed, and their GPU sessions miss the frame
-    /// rather than get the last encode target again; frames not due keep theirs.
-    #[test]
-    fn the_privacy_screen_fails_closed() {
-        let feed = |divisor| Feed {
-            mix: None,
-            size: FrameSize::new(2, 1).expect("size"),
-            divisor,
-            owner: None,
-        };
-        let mut frames = no_frames();
-        let session = open_video(
-            &jstream_platform::fake::FakeCodecs,
-            None,
-            &feed(1),
-            &EncoderProfile::DEFAULT,
-        )
-        .expect("fake session");
-        frames.add(feed(1), cpu_tap(session.input()));
-        frames.add(feed(2), cpu_tap(session.input()));
-        // A session on the GPU path on the first feed too.
-        frames.add(
-            feed(1),
-            VideoTap {
-                input: session.input(),
-                gpu: true,
-                claim: None,
-            },
-        );
-        assert_eq!(frames.schedule(0, false), 2);
-        for shown in &mut frames.shown {
-            *shown = vec![200; 8];
-        }
-        assert_eq!(frames.schedule(1, true), 1);
-        assert_eq!(frames.blacken_due(), 1, "the GPU session misses the frame");
-        assert_eq!(frames.shown[0], [0, 0, 0, 255, 0, 0, 0, 255]);
-        assert!(
-            frames.encode[0].starved,
-            "its last encode target isn't repeated"
-        );
-        assert_eq!(frames.shown[1], [200; 8], "not due, not pushed");
-        assert!(!frames.encode[1].starved);
+        assert_eq!(frames.schedule(0), 2, "both are drawn");
     }
 
     /// A session on the GPU path keeps the render thread from falling back off the
@@ -4454,10 +4338,10 @@ mod tests {
         assert_eq!(gate.claims.load(Ordering::SeqCst), 0);
     }
 
-    /// The CPU stand-in draws a covered frame black whatever the capture's size, and
-    /// copies or scales the capture into an uncovered one (review B2).
+    /// The CPU stand-in copies the capture into a frame of its size, and scales one of
+    /// another size (review B2).
     #[test]
-    fn the_cpu_stand_in_draws_covered_frames_black() {
+    fn the_cpu_stand_in_copies_or_scales_the_capture() {
         struct One<'a>(CaptureImage<'a>);
         impl Captures for One<'_> {
             fn frame(&self, _: &crate::snapshot::CaptureKey) -> Option<CaptureFrame<'_>> {
@@ -4470,9 +4354,8 @@ mod tests {
         let mut draw = (super::cpu_draw())(None).expect("cpu draw");
         let shot = Shot::default();
         let size = FrameSize::new(2, 1).expect("size");
-        let frame = |privacy| MixFrame {
+        let frame = || MixFrame {
             due: true,
-            privacy,
             readback: true,
             ..MixFrame::new(None, size, 1, None)
         };
@@ -4483,7 +4366,7 @@ mod tests {
             (FrameSize::new(2, 2).expect("size"), &other[..]),
         ] {
             let captures = One(CaptureImage::Rgba { size: own, rgba });
-            let mut frames = [frame(true), frame(false)];
+            let mut frames = [frame()];
             draw(
                 &shot,
                 &LiveParams::default(),
@@ -4492,12 +4375,7 @@ mod tests {
                 MediaTime::zero(Timebase::NANOS),
             )
             .expect("draw");
-            assert_eq!(frames[0].out, [0; 8], "covered, from a {own:?} capture");
-            assert_eq!(
-                frames[1].out,
-                rgba[..8],
-                "uncovered, from a {own:?} capture"
-            );
+            assert_eq!(frames[0].out, rgba[..8], "from a {own:?} capture");
         }
     }
 
@@ -4513,7 +4391,7 @@ mod tests {
         frames.prune(|_| panic!("held"));
         assert_eq!(frames.program_frame(size), Some(0));
         assert_eq!(frames.mixes.len(), 1);
-        assert_eq!(frames.schedule(1, false), 1, "drawn on every tick");
+        assert_eq!(frames.schedule(1), 1, "drawn on every tick");
 
         let program = Feed {
             mix: None,

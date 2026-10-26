@@ -158,8 +158,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the header's revision current and hands each event to `Studio`, which re-reads
   the state with `state.get` after a `state.changed` newer than its copy (or after
   `events.dropped`), and follows `studio.changed` for the program and preview scenes.
-  The UI has no privacy screen control: the engine's `privacy.*` calls stay for MCP
-  and other clients, and the UI ignores `privacy.changed`. It reads the
+  JStream has no privacy screen
+  ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md) §4), so the
+  UI sends no `privacy.*` call. It reads the
   sources' sizes with `source.sizes` after its first read and after `events.dropped`,
   and follows `source.size_changed` between them. Reads coalesce:
   while one `state.get` is in flight, any number of further changes cost one more read.

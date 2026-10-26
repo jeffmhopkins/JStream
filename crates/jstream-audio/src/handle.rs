@@ -274,31 +274,6 @@ impl InputControl {
         self.shared.activity.load()
     }
 
-    /// Marks the input as one the privacy screen mutes
-    /// (docs/adr/0027-program-master-and-output-chains.md): while the mixer's privacy
-    /// screen is on ([`Mixer::set_privacy`](crate::Mixer::set_privacy)), it is silenced
-    /// before its filter chain and its activity gain is 0, so it feeds no bus, its own
-    /// block is silent and its meter reads silence. Its audio thread also zeroes each
-    /// packet the screen covers as it arrives, so what it captured meanwhile is not
-    /// heard once the screen goes off: not through its chain, and not in the blocks
-    /// [`Mixer::poll`](crate::Mixer::poll) mixes after. Until the first poll after
-    /// the screen goes off it covers every packet; after it, a packet that its stamp,
-    /// the input's timing of it or its placement starts before 40 ms
-    /// ([`PRIVACY_MARGIN_S`](crate::PRIVACY_MARGIN_S)) past that poll's clock. So only
-    /// a packet that arrives after that poll and that all three date at least that late
-    /// is uncovered. It is independent of [`Self::set_muted`] and of the activity gain,
-    /// which it leaves as they are. A new input is not muted by it;
-    /// [`MixerControl::add_input_with`](crate::MixerControl::add_input_with) marks one
-    /// before the mixer installs it.
-    pub fn set_privacy_muted(&self, muted: bool) {
-        self.shared.privacy_muted.store(muted, Ordering::Relaxed);
-    }
-
-    /// Whether the privacy screen mutes the input.
-    pub fn privacy_muted(&self) -> bool {
-        self.shared.privacy_muted.load(Ordering::Relaxed)
-    }
-
     /// Sends the input into `bus` (post-fader) at `gain`, linear, or changes that
     /// send's gain. Clamped to 0..=+24 dB; NaN changes nothing. The mixer ramps to it
     /// over one block, from silence for a new send. A send to a bus that is later

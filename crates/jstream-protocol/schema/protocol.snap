@@ -475,7 +475,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Turns the privacy screen on or off (ADR-0027 §4). While it is on, every output's\nvideo is covered from the next frame: a heavy blur of the outgoing picture, or\nblack when the blur can't be drawn, never the picture itself. It is runtime\nstate, not collection state: it changes no `rev`, is never undone, goes to the\naudit log, and the engine starts with it off. A change emits `privacy.changed`,\nwhich `privacy.get` reads back; setting the state it already has succeeds and\nemits nothing.",
+          "description": "**Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy\nscreen: the engine refuses this with `unsupported` and covers nothing.",
           "properties": {
             "on": {
               "description": "Whether the privacy screen covers the outputs.",
@@ -4035,7 +4035,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "The privacy screen was turned on or off with `privacy.set` (ADR-0027 §4). It is\nruntime state, so the event carries no `rev`. A client that subscribes while the\nscreen is on gets `privacy.changed` first, naming the client that turned it on\nand no `request_id`, so no client shows it as off.",
+          "description": "**Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy\nscreen, so the engine never sends it.",
           "properties": {
             "client_id": {
               "$ref": "#/$defs/ClientId",
@@ -6230,7 +6230,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Reads whether the privacy screen is on (ADR-0027 §4). Runtime state, so the\nresult carries no `rev`.",
+          "description": "**Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy\nscreen, so the answer is always `on: false`.",
           "properties": {
             "type": {
               "const": "privacy.get",
@@ -6826,7 +6826,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "The result of `privacy.get`. Runtime state, so it carries no `rev`.",
+          "description": "The result of the deprecated `privacy.get` (ADR-0080): always `on: false`.",
           "properties": {
             "on": {
               "description": "Whether the privacy screen covers the outputs.",

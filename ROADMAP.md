@@ -120,8 +120,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md"]
   [ADR-0037](docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md)) with a
   default, per-scene "into" and "out of" overrides, Move pairing items by source, and
   per-item delay, easing, glide and appear and disappear effects.
-- The program master chain, per-output chains with their cost shown, and the privacy
-  screen ([ADR-0027](docs/adr/0027-program-master-and-output-chains.md)).
+- The program master chain and per-output chains with their cost shown
+  ([ADR-0080](docs/adr/0080-program-master-and-output-chains-v2.md)).
 - Source kinds ([ADR-0061](docs/adr/0061-source-types-and-decoding-scope-v2.md)): **media
   file** (video or audio, looping; OS demux and decode, A/V sync on the media clock),
   **audio waveform** and **audio spectrum**.
