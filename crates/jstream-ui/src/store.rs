@@ -10,8 +10,9 @@ use crate::session::Session;
 use jstream_control::ControlError;
 use jstream_control::protocol::{
     Batch, BusInfo, Call, CallResult, Canvas, DeleteTarget, Edit, Event, FilterChains, FilterOwner,
-    ItemId, ItemInfo, KindDescriptor, KindSummary, OutputId, OutputInfo, Query, QueryResult, Rev,
-    SceneId, SceneInfo, SceneRole, SourceId, SourceInfo, SourceKind, SourceSize,
+    FolderId, FolderInfo, ItemId, ItemInfo, KindDescriptor, KindSummary, OutputId, OutputInfo,
+    Query, QueryResult, Rev, SceneId, SceneInfo, SceneRole, SourceId, SourceInfo, SourceKind,
+    SourceSize,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -35,6 +36,8 @@ pub struct Collection {
     pub buses: Vec<BusInfo>,
     /// The master stage's chains, which apply to everything leaving JStream (ADR-0027).
     pub master: FilterChains,
+    /// The scene list's folders, in folder order (ADR-0024 §3, ADR-0064).
+    pub folders: Vec<FolderInfo>,
 }
 
 impl Collection {
@@ -49,6 +52,7 @@ impl Collection {
                 outputs,
                 buses,
                 master,
+                folders,
                 ..
             } => Some(Collection {
                 rev,
@@ -58,6 +62,7 @@ impl Collection {
                 outputs,
                 buses,
                 master: master.filters,
+                folders,
             }),
             _ => None,
         }
@@ -138,7 +143,7 @@ impl Collection {
         })
     }
 
-    /// Whether any scene, source, item or output uses this ID. The engine rejects a
+    /// Whether any scene, folder, source, item or output uses this ID. The engine rejects a
     /// creating edit whose ID exists, so new IDs are checked against all of them.
     pub fn id_taken(&self, id: &str) -> bool {
         self.scenes
@@ -146,6 +151,12 @@ impl Collection {
             .any(|s| s.scene_id.as_str() == id || s.items.iter().any(|i| i.item_id.as_str() == id))
             || self.sources.iter().any(|s| s.source_id.as_str() == id)
             || self.outputs.iter().any(|o| o.output_id.as_str() == id)
+            || self.folders.iter().any(|f| f.folder_id.as_str() == id)
+    }
+
+    /// The folder with this ID.
+    pub fn folder(&self, folder_id: &FolderId) -> Option<&FolderInfo> {
+        self.folders.iter().find(|f| &f.folder_id == folder_id)
     }
 }
 
@@ -248,12 +259,15 @@ impl Selection {
 /// confirmation: `None` when it deletes the target alone.
 pub fn plan_summary(edits: &[Edit]) -> Option<String> {
     let (mut items, mut sources, mut references) = (0_usize, 0_usize, 0_usize);
+    let (mut scenes, mut folders) = (0_usize, 0_usize);
     // The last edit is the delete of the target itself.
     for edit in edits.iter().take(edits.len().saturating_sub(1)) {
         match edit {
             Edit::ItemRemove { .. } => items += 1,
             Edit::SourceDelete { .. } | Edit::SceneDelete { .. } => sources += 1,
             Edit::SourceSetSettings { patch, .. } => references += patch.0.len(),
+            Edit::SceneSetFolder { .. } => scenes += 1,
+            Edit::FolderSetParent { .. } => folders += 1,
             _ => {}
         }
     }
@@ -272,6 +286,14 @@ pub fn plan_summary(edits: &[Edit]) -> Option<String> {
             "settings that refer to it",
         )
         .map(|p| format!("clears {p}")),
+        [
+            count(scenes, "scene", "scenes"),
+            count(folders, "folder", "folders"),
+        ]
+        .into_iter()
+        .flatten()
+        .reduce(|a, b| format!("{a} and {b}"))
+        .map(|p| format!("moves {p} up a level")),
     ]
     .into_iter()
     .flatten()
@@ -897,6 +919,28 @@ mod tests {
         assert_eq!(
             plan_summary(&edits).as_deref(),
             Some("This also removes 2 items, clears 1 setting that refers to it.")
+        );
+        // A folder's plan moves what it holds up to its parent.
+        let edits = vec![
+            Edit::SceneSetFolder {
+                scene_id: "a".into(),
+                folder_id: None,
+            },
+            Edit::SceneSetFolder {
+                scene_id: "b".into(),
+                folder_id: None,
+            },
+            Edit::FolderSetParent {
+                folder_id: "inner".into(),
+                parent: None,
+            },
+            Edit::FolderDelete {
+                folder_id: "outer".into(),
+            },
+        ];
+        assert_eq!(
+            plan_summary(&edits).as_deref(),
+            Some("This also moves 2 scenes and 1 folder up a level.")
         );
     }
 
