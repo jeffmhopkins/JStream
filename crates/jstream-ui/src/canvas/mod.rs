@@ -29,6 +29,7 @@ use crate::dock::PanelId;
 use crate::item_menu;
 use crate::menu::{Entry, Menus};
 use crate::panels::add_source::AddSourceDialog;
+use crate::panels::filters::{FilterDialogs, scene_owner, show_filters};
 use crate::store::Studio;
 use crate::workspace::DockState;
 use crop::{CropGesture, Picture};
@@ -862,6 +863,7 @@ pub fn Canvas() -> impl IntoView {
     let menus = use_context::<Menus>();
     let adder = use_context::<AddSourceDialog>();
     let scene_dialog = use_context::<crate::panels::scene_properties::SceneDialog>();
+    let filters = use_context::<FilterDialogs>();
     let on_context = move |event: ev::MouseEvent| {
         let Some(menus) = menus else {
             return;
@@ -954,7 +956,17 @@ pub fn Canvas() -> impl IntoView {
                     }
                 })
                 .disabled_if(scene_dialog.is_none() || !has_scene),
-                Entry::unavailable("Edit scene filters…"),
+                Entry::item("Edit scene filters…", move || {
+                    let owner = scene.as_ref().and_then(|scene| {
+                        studio
+                            .collection
+                            .with_untracked(|c| c.as_ref().map(|c| scene_owner(c, scene)))
+                    });
+                    if let Some(owner) = owner {
+                        show_filters(filters, dock, owner);
+                    }
+                })
+                .disabled_if(!has_scene),
             ]
         };
         menus.open(&event, entries);

@@ -1197,8 +1197,7 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 /* The Properties dialog (spec-workspace.md 6.2): name and settings on the left, filters
    on the right; Defaults sits apart from Cancel and OK. */
 .modal.props-dialog { width: 860px; height: 640px; }
-.modal.scene-props-dialog { width: 460px; }
-.scene-props-dialog .props-settings { display: grid; gap: 12px; }
+.scene-props-dialog .props-settings { display: grid; align-content: start; gap: 12px; }
 .field-note { color: var(--dim); font-size: 11px; }
 .hotkey-field { font-family: "IBM Plex Mono", ui-monospace, monospace; cursor: pointer; }
 .props-head { display: flex; align-items: center; gap: 10px; }

@@ -4,7 +4,8 @@
 //! `hotkey.clear` and `hotkey.set`); Cancel, Escape and the backdrop drop it, and
 //! Defaults clears the overrides and the hotkey, keeping the name. The engine has no
 //! scene background colour, multiview or per-scene "include its audio" setting, so the
-//! dialog leaves them out; scene filters wait on the Filters panel's scene chain.
+//! dialog leaves them out. The scene's filters show on the right, each change sent at
+//! once, as the source Properties dialog's are.
 //!
 //! Docs: docs/UI-FEATURES.md#dialogs
 
@@ -12,9 +13,10 @@ use crate::app::SessionContext;
 use crate::dialog::Modal;
 use crate::hotkeys;
 use crate::icons::Icon;
+use crate::panels::filters::{Chains, FilterDialogs, scene_owner};
 use crate::panels::inspector::transition_options;
 use crate::store::{Collection, Studio, apply};
-use jstream_control::protocol::{Action, Chord, Edit, SceneId, TransitionPresetId};
+use jstream_control::protocol::{Action, Chord, Edit, FilterOwner, SceneId, TransitionPresetId};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 
@@ -177,6 +179,24 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
         return ().into_any();
     };
     let subtitle = opened.name.clone();
+    let (owner, parent) = studio.collection.with_untracked(|c| {
+        c.as_ref().map_or_else(
+            || {
+                (
+                    FilterOwner::Scene {
+                        scene_id: scene_id.clone(),
+                    },
+                    None,
+                )
+            },
+            |c| {
+                (
+                    scene_owner(c, &scene_id),
+                    c.parent_of(&scene_id).map(|p| p.name.clone()),
+                )
+            },
+        )
+    });
     let before = StoredValue::new(opened.clone());
     let draft = RwSignal::new(opened);
     let problem = RwSignal::new(None::<String>);
@@ -292,7 +312,7 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
     };
 
     view! {
-        <Modal label="Scene properties" class="scene-props-dialog" cancel=close>
+        <Modal label="Scene properties" class="props-dialog scene-props-dialog" cancel=close>
             <div class="modal-header">
                 <div class="props-head">
                     <Icon name="layers" size=20 />
@@ -305,6 +325,7 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                     "×"
                 </button>
             </div>
+            <div class="props-body">
             <div class="props-settings">
                 <label class="field props-name">
                     <span class="label">"Name"</span>
@@ -333,6 +354,8 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                 </label>
                 {move || problem.get().map(|e| view! { <p class="problem" role="alert">{e}</p> })}
             </div>
+            <SceneFilterSide owner=owner parent=parent />
+            </div>
             <div class="modal-footer">
                 <button type="button" class="secondary props-defaults" on:click=defaults>"Defaults"</button>
                 <button type="button" class="secondary" on:click=move |_| close()>"Cancel"</button>
@@ -341,6 +364,32 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
         </Modal>
     }
     .into_any()
+}
+
+/// The scene's video chain (FL-06), each change sent at once, and the Add filter button.
+/// A keyframe scene shows its parent's chain, which it has no other of (ADR-0065 §3).
+#[component]
+fn SceneFilterSide(owner: FilterOwner, parent: Option<String>) -> impl IntoView {
+    let dialogs = expect_context::<FilterDialogs>();
+    let add = {
+        let owner = owner.clone();
+        move |_| dialogs.add(owner.clone())
+    };
+    let note = match parent {
+        Some(parent) => format!("those of “{parent}”, which this keyframe follows"),
+        None => "the whole scene".to_owned(),
+    };
+    view! {
+        <div class="props-side">
+            <div class="props-side-head">
+                <span class="props-side-title">"Filters"</span>
+                <span class="props-side-note">{note}</span>
+            </div>
+            <Chains owner=owner video=true audio=false />
+            <p class="props-side-foot">"Changes apply right away. Fine-tune settings in the Filters panel."</p>
+            <button type="button" class="primary props-add-filter" on:click=add>"+ Add filter…"</button>
+        </div>
+    }
 }
 
 #[cfg(test)]
