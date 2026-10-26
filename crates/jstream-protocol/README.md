@@ -183,7 +183,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.44 because of the
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.45 because scenes
+  carry labels (`SceneMeta`'s `labels`, set by `scene.set_meta`;
+  [ADR-0078](../../docs/adr/0078-scenes-carry-labels.md)); 0.44 added the
   `hardware_session_limit` error (`output.start` refused a new hardware video session
   while other outputs held hardware sessions, ADR-0027 §3); 0.43 added scene filters
   and item effects ([ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md):
@@ -762,14 +764,16 @@ flat display order. `folder.set_parent` refuses a parent that would put the fold
 inside itself. Labels are an ordered list of `{ label_id, name, color, icon? }`, and a
 source carries a set of them, with a favourite flag (`source.set_meta`); they belong to
 the source, so every item placing it shares them, and `source.duplicate` copies them.
-A scene's `SceneMeta` (`scene.set_meta`) is its `icon`, `color`, `favourite` and
-`show_in_multiview` (default `true`). `scene.set_meta` and `source.set_meta` replace
+A scene's `SceneMeta` (`scene.set_meta`) is its `labels` (since 0.45,
+[ADR-0078](../../docs/adr/0078-scenes-carry-labels.md); checked and stored as a
+source's), `icon`, `color`, `favourite` and `show_in_multiview` (default `true`). `scene.set_meta` and `source.set_meta` replace
 the whole metadata, so a field left out takes its default. Colours are sRGB `#rrggbb`;
 an icon is an opaque name from the UI's icon set, checked only for its length (1 to 64
-bytes). A folder that holds a scene or folder, and a label a source carries, can't be deleted:
-the `invalid_argument` lists the `blockers` (`folder`, `parent` or `labels`), and
-`delete.plan` with a `folder` or `label` target returns the batch that moves what the
-folder holds up to its parent, or takes the label off its sources, then deletes it.
+bytes). A folder that holds a scene or folder, and a label a source or scene carries, can't
+be deleted: the `invalid_argument` lists the `blockers` (`folder`, `parent` or `labels`;
+for a label, its sources first, then its scenes), and `delete.plan` with a `folder` or
+`label` target returns the batch that moves what the folder holds up to its parent, or
+takes the label off its sources and scenes, then deletes it.
 `state.get` reports `folders` and `labels`, each omitted when empty, and `scene.list`,
 `state.get` and `source.list` report each scene's and source's fields, each omitted
 while it has its default, so an older client reads the collection as before.

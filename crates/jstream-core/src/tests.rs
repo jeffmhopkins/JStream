@@ -1222,6 +1222,7 @@ fn organise_script() -> Vec<Call> {
         Edit::SceneSetMeta {
             scene_id: SceneId::new("z"),
             meta: SceneMeta {
+                labels: vec![LabelId::new("camera")],
                 icon: icon.map(str::to_owned),
                 color: color.map(str::to_owned),
                 favourite: true,
@@ -1275,6 +1276,13 @@ fn organise_script() -> Vec<Call> {
         one(labelled(&["ghost"])),
         one(labelled(&["sponsor", "sponsor"])),
         one(scene_meta(Some(""), None)),
+        one(Edit::SceneSetMeta {
+            scene_id: SceneId::new("z"),
+            meta: SceneMeta {
+                labels: vec![LabelId::new("ghost")],
+                ..SceneMeta::default()
+            },
+        }),
         one(scene_meta(None, Some("#12345"))),
         one(Edit::SceneSetFolder {
             scene_id: SceneId::new("z"),

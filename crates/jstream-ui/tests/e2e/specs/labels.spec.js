@@ -1,7 +1,9 @@
 // Labels: the label manager in the Scene objects panel (new, rename, colour, icon,
 // delete), a row's tag popover putting a label on the seed's Backdrop, the row's and the
 // Inspector's chips, the filter's labels, and the item menu's Labels submenu with each
-// label's colour in its swatch column. The seed has no labels.
+// label's colour in its swatch column; then the same on a scene (ADR-0078): the manager
+// in the Scenes panel, the popover under the scene's row, its chips and the Scenes
+// panel's filter. The seed has no labels.
 import { test, expect, connect, rev } from '../fixtures.js';
 
 function objects(page) {
@@ -150,4 +152,60 @@ test('deleting a label takes it off its sources in one edit', async ({ page, dae
   await expect(backdrop(page).getByRole('img', { name: 'New label' })).toHaveCount(0);
   await expect(objects(page).locator('li.row')).toHaveCount(rows);
   await expect(objects(page).locator('.tree-filter-count')).toHaveCount(0);
+});
+
+test('a label goes on a scene from its row, and the Scenes panel filters and manages them', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  const scenes = page.locator('.scenes-panel');
+  // "Edit labels…" in the Scenes panel's filter opens the manager there.
+  await scenes.getByRole('button', { name: 'Filter' }).click();
+  await scenes.getByRole('button', { name: 'Edit labels…' }).click();
+  const sceneManager = scenes.getByRole('group', { name: 'Labels' });
+  await expect(sceneManager).toBeVisible();
+  await expect(manager(page)).toBeHidden();
+  const before = await rev(page);
+  await sceneManager.getByRole('button', { name: '+ New label' }).click();
+  await expect.poll(() => rev(page)).toBe(before + 1);
+  const name = sceneManager.getByRole('textbox', { name: 'Label name' });
+  await name.fill('Intro / outro');
+  await name.press('Enter');
+  await expect(sceneManager.getByRole('button', { name: 'Change icon for Intro / outro' })).toBeVisible();
+  await sceneManager.getByRole('button', { name: 'Done' }).click();
+
+  // The row's tag popover opens under the row and puts the label on the scene; its box
+  // fills with the label's colour.
+  const intro = scenes.locator('li.row', { hasText: 'Intro' });
+  await intro.hover();
+  await intro.getByRole('button', { name: 'Labels for Intro' }).click();
+  const pop = scenes.locator('.label-pop');
+  const rowBox = await intro.boundingBox();
+  const popBox = await pop.boundingBox();
+  expect(popBox.y).toBeGreaterThanOrEqual(rowBox.y + rowBox.height);
+  let at = await rev(page);
+  await pop.getByRole('button', { name: 'Intro / outro' }).click();
+  await expect.poll(() => rev(page)).toBe(at + 1);
+  await expect(pop.locator('.label-box.on')).toHaveCSS('background-color', 'rgb(76, 141, 255)');
+  await page.keyboard.press('Escape');
+  await expect(pop).toBeHidden();
+  await expect(intro.getByRole('img', { name: 'Intro / outro' })).toBeVisible();
+
+  // The Inspector's scene header shows the chip and its own tag button.
+  await intro.locator('.row-main').click();
+  const head = page.locator('.panel-inspector .inspector-head');
+  await expect(head.getByRole('img', { name: 'Intro / outro' })).toBeVisible();
+  await expect(head.getByRole('button', { name: 'Labels for Intro' })).toBeVisible();
+
+  // The Scenes panel's filter keeps the scenes carrying a checked label.
+  await scenes.getByRole('button', { name: 'Filter' }).click();
+  await scenes.locator('.tree-pop').getByRole('button', { name: 'Intro / outro' }).click();
+  await expect(scenes.locator('li.row')).toHaveCount(1);
+  await scenes.getByRole('button', { name: 'Clear' }).click();
+
+  // Deleting the label takes it off the scene in the same edit.
+  await scenes.getByRole('button', { name: 'Filter' }).click();
+  await scenes.getByRole('button', { name: 'Edit labels…' }).click();
+  at = await rev(page);
+  await sceneManager.getByRole('button', { name: 'Delete label Intro / outro' }).click();
+  await expect.poll(() => rev(page)).toBe(at + 1);
+  await expect(intro.getByRole('img', { name: 'Intro / outro' })).toHaveCount(0);
 });

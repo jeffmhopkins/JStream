@@ -1,6 +1,8 @@
 //! The Scenes panel (spec-panels.md 1): the collection's scenes in display order, under
-//! a search box and a favourites filter, each row with its icon, a "program" badge on
-//! the scene on program and a favourite star. Clicking a scene shows it in Scene
+//! a search box and a favourites and labels filter, each row with its icon, a "program"
+//! badge on the scene on program, the chips of its labels (ADR-0078), the tag button
+//! whose popover opens under the row, and a favourite star. The label manager opens
+//! over the rows when "Edit labels…" is chosen here (`labels.rs`). Clicking a scene shows it in Scene
 //! objects and the canvas and puts it on program (`scene.switch`), or, in studio mode,
 //! on preview (`studio.set_preview`), where a hover button puts it on program. A double
 //! click opens its Properties dialog (a keyframe's renames it). Rows are reordered by
@@ -19,17 +21,21 @@
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#scenes
 
 use crate::app::SessionContext;
+use crate::dock::PanelId;
 use crate::icons::{Icon, named};
 use crate::menu::{Entry, Menus};
 use crate::panels::confirm::{Confirm, Pending};
 use crate::panels::filters::{FilterDialogs, show_filters};
+use crate::panels::labels::{
+    LabelChips, LabelEditor, LabelManager, LabelPopover, TagButton, TagPopover, Tagged, carried,
+};
 use crate::panels::scene_properties::SceneDialog;
 use crate::panels::studio::override_submenu;
 use crate::panels::tree::{Filter, Reorder, SearchBar, Side, Star, dropped_at, indent};
 use crate::store::{Collection, Studio, apply, plan_delete, plan_summary, reset_edits};
 use crate::workspace::DockState;
 use jstream_control::protocol::{
-    Action, DeleteTarget, Edit, FilterOwner, FolderId, SceneId, SceneInfo,
+    Action, DeleteTarget, Edit, FilterOwner, FolderId, LabelId, SceneId, SceneInfo,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -152,7 +158,7 @@ fn rows(
     collapsed: &HashSet<FolderId>,
     folded: &HashSet<SceneId>,
     filtering: bool,
-    shows: &dyn Fn(&str, bool) -> bool,
+    shows: &dyn Fn(&str, bool, &[LabelId]) -> bool,
 ) -> Vec<Row> {
     let mut walk = Walk {
         collection,
@@ -173,7 +179,7 @@ struct Walk<'a> {
     collapsed: &'a HashSet<FolderId>,
     folded: &'a HashSet<SceneId>,
     filtering: bool,
-    shows: &'a dyn Fn(&str, bool) -> bool,
+    shows: &'a dyn Fn(&str, bool, &[LabelId]) -> bool,
     /// The folders already walked, so a broken parent chain can't loop.
     seen: HashSet<FolderId>,
 }
@@ -220,10 +226,10 @@ impl Walk<'_> {
                 .collect();
             let shown: Vec<&SceneInfo> = keyframes
                 .iter()
-                .filter(|k| (self.shows)(&k.name, k.meta.favourite))
+                .filter(|k| (self.shows)(&k.name, k.meta.favourite, &k.meta.labels))
                 .copied()
                 .collect();
-            if (self.shows)(&scene.name, scene.meta.favourite) {
+            if (self.shows)(&scene.name, scene.meta.favourite, &scene.meta.labels) {
                 out.push(Row::scene(
                     scene,
                     depth,
@@ -334,6 +340,7 @@ pub fn Scenes() -> impl IntoView {
     let menus = use_context::<Menus>();
     let dock = use_context::<DockState>();
     let scene_dialog = use_context::<SceneDialog>();
+    let manager = use_context::<LabelManager>();
     let filters = use_context::<FilterDialogs>();
     let any_rows = move || {
         studio.collection.with(|c| {
@@ -343,7 +350,8 @@ pub fn Scenes() -> impl IntoView {
     };
     let shown_rows = move || {
         let filtering = filter.active();
-        let shows = |name: &str, favourite: bool| filter.shows(name, favourite, &[]);
+        let shows =
+            |name: &str, favourite: bool, labels: &[LabelId]| filter.shows(name, favourite, labels);
         collapsed.with(|collapsed| {
             folded.with(|folded| {
                 studio.collection.with(|c| {
@@ -821,6 +829,20 @@ pub fn Scenes() -> impl IntoView {
         let press_key = key.clone();
         let shown_name = name.clone();
         let star_name = name.clone();
+        let tag_name = name.clone();
+        let labels = {
+            let id = scene_id.clone();
+            Signal::derive(move || {
+                studio.collection.with(|c| {
+                    c.as_ref()
+                        .and_then(|c| Some(carried(c, &c.scene(&id)?.meta.labels)))
+                        .unwrap_or_default()
+                })
+            })
+        };
+        let popover = TagPopover::new();
+        let popover_target = Tagged::Scene(scene_id.clone());
+        let popover_indent = indent(depth);
         view! {
             <li
                 class="row tree-row"
@@ -861,6 +883,7 @@ pub fn Scenes() -> impl IntoView {
                 >
                     <RenameField value=name.clone() done=rename.clone() />
                 </Show>
+                <LabelChips labels=labels />
                 <Show when=move || studio.studio_mode.get() && !on_program.get()>
                     <button
                         type="button"
@@ -872,8 +895,14 @@ pub fn Scenes() -> impl IntoView {
                         <Icon name="out" size=14 />
                     </button>
                 </Show>
+                <TagButton popover=popover name=tag_name />
                 <Star name=star_name on=Signal::stored(favourite) toggle=toggle_favourite />
             </li>
+            {move || popover.open.get().then(|| view! {
+                <li class="tree-pop-row">
+                    <LabelPopover popover=popover target=popover_target.clone() indent=popover_indent.clone() />
+                </li>
+            })}
         }
         .into_any()
     };
@@ -1042,7 +1071,8 @@ pub fn Scenes() -> impl IntoView {
     view! {
         <section class="panel scenes-panel tree-panel" on:contextmenu=on_context>
             <h2>"Scenes"</h2>
-            <SearchBar what="scenes" filter=filter />
+            <SearchBar what="scenes" filter=filter labels=PanelId::Scenes />
+            {move || manager.is_some_and(|m| m.shown_in(PanelId::Scenes)).then(|| view! { <LabelEditor /> })}
             <Confirm pending=pending confirm=confirm_delete />
             <ul
                 class="rows tree-rows"
@@ -1124,7 +1154,9 @@ mod tests {
     use super::{Node, Row, keyframe_name, moved, rows};
     use crate::panels::tree::Side;
     use crate::store::Collection;
-    use jstream_control::protocol::{Edit, FolderId, FolderInfo, SceneId, SceneInfo, SceneRole};
+    use jstream_control::protocol::{
+        Edit, FolderId, FolderInfo, LabelId, SceneId, SceneInfo, SceneRole,
+    };
     use std::collections::HashSet;
 
     fn scene(id: &str, folder: Option<&str>, favourite: bool) -> SceneInfo {
@@ -1201,7 +1233,7 @@ mod tests {
 
     #[test]
     fn folders_come_first_at_each_level_and_hold_their_scenes() {
-        let all = |_: &str, _: bool| true;
+        let all = |_: &str, _: bool, _: &[LabelId]| true;
         let c = collection();
         assert_eq!(
             shown(&rows(&c, &HashSet::new(), &HashSet::new(), false, &all)),
@@ -1225,17 +1257,17 @@ mod tests {
         let c = collection();
         // Collapsed or not, a folder holding a match shows open, kept.
         let shut: HashSet<FolderId> = [FolderId::new("show")].into();
-        let b_only = |name: &str, _: bool| name == "B";
+        let b_only = |name: &str, _: bool, _: &[LabelId]| name == "B";
         assert_eq!(
             shown(&rows(&c, &shut, &HashSet::new(), true, &b_only)),
             ["SHOW/+@0", "OVERLAYS/+@1", "B@2"]
         );
-        let favourites = |_: &str, favourite: bool| favourite;
+        let favourites = |_: &str, favourite: bool, _: &[LabelId]| favourite;
         assert_eq!(
             shown(&rows(&c, &shut, &HashSet::new(), true, &favourites)),
             ["SHOW/+@0", "A@1"]
         );
-        let nothing = |_: &str, _: bool| false;
+        let nothing = |_: &str, _: bool, _: &[LabelId]| false;
         assert!(rows(&c, &shut, &HashSet::new(), true, &nothing).is_empty());
     }
 
@@ -1243,7 +1275,7 @@ mod tests {
     fn a_parent_loop_shows_nothing_twice() {
         let mut c = collection();
         c.folders = vec![folder("x", Some("y")), folder("y", Some("x"))];
-        let all = |_: &str, _: bool| true;
+        let all = |_: &str, _: bool, _: &[LabelId]| true;
         // Neither folder is at the top level, so neither shows; the walk ends.
         let shown = shown(&rows(&c, &HashSet::new(), &HashSet::new(), false, &all));
         assert!(
@@ -1358,7 +1390,7 @@ mod tests {
             scenes: vec![k2, scene("a", None, false), scene("b", None, false), k1],
             ..Collection::default()
         };
-        let all = |_: &str, _: bool| true;
+        let all = |_: &str, _: bool, _: &[LabelId]| true;
         let none = HashSet::new();
         let at = |folded: &HashSet<SceneId>| shown(&rows(&c, &none, folded, false, &all));
         // Under their scene, a level in, wherever their own folder says they are.
@@ -1380,7 +1412,7 @@ mod tests {
         assert_eq!(*keyframe_of, Some((SceneId::new("b"), "B".to_owned())));
         assert_eq!(at(&HashSet::from([SceneId::new("b")])), ["A@0", "B@0"]);
         // A filter keeps the keyframes that match, under their scene or not.
-        let k1_only = |name: &str, _: bool| name == "K1";
+        let k1_only = |name: &str, _: bool, _: &[LabelId]| name == "K1";
         assert_eq!(
             shown(&rows(&c, &none, &HashSet::new(), true, &k1_only)),
             ["K1@1"]
