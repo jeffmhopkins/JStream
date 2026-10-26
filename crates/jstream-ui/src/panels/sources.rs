@@ -1,7 +1,9 @@
 //! The Scene objects panel (spec-panels.md 2): the selected scene's items, top of the
 //! stack first, under the `In “<scene>”, top to bottom` caption and the search box and
-//! favourites filter. Each row shows its source's type icon and name (in italics when
-//! the source is placed in other scenes too), a visibility eye and a favourite star.
+//! favourites and labels filter. Each row shows its source's type icon and name (in
+//! italics when the source is placed in other scenes too), the chips of its labels, a
+//! visibility eye, the labels popover and a favourite star. The label manager opens over
+//! the rows (`labels.rs`).
 //! A click selects an item (Shift adds or takes it out), a double click opens its
 //! Properties dialog, F2 renames its source in place and Del removes it from the scene;
 //! rows are reordered by dragging them (`item.reorder`). A nested scene's row has a caret
@@ -25,10 +27,13 @@ use crate::menu::{Entry, Menus};
 use crate::panels::add_source::{AddSourceDialog, type_label};
 use crate::panels::confirm::{Confirm, Pending};
 use crate::panels::inspector::is_shared;
+use crate::panels::labels::{LabelChips, LabelEditor, LabelManager, LabelPicker, carried};
 use crate::panels::scenes::RenameField;
 use crate::panels::tree::{Filter, Reorder, SearchBar, Side, Star, dropped_at, indent};
 use crate::store::{Collection, Studio, apply, plan_delete, plan_summary};
-use jstream_control::protocol::{DeleteTarget, Edit, ItemId, SceneId, SourceId, SourceKind};
+use jstream_control::protocol::{
+    DeleteTarget, Edit, ItemId, LabelId, SceneId, SourceId, SourceKind,
+};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use std::collections::HashSet;
@@ -55,10 +60,24 @@ struct Row {
     open: bool,
     /// Whether a search keeps it open, for a match inside it.
     kept: bool,
+    /// The labels the source carries, for the filter. The row's chips follow the
+    /// collection themselves, so a label put on doesn't rebuild the row and close its
+    /// popover.
+    label_ids: Vec<LabelId>,
+}
+
+impl Row {
+    /// What rebuilds the row when it changes: everything but its labels.
+    fn key(&self) -> Row {
+        Row {
+            label_ids: Vec::new(),
+            ..self.clone()
+        }
+    }
 }
 
 /// The icon of a source of this kind: its type's, the scene icon for a nested scene.
-fn icon_of(kind: Option<&SourceKind>) -> &'static str {
+pub(crate) fn icon_of(kind: Option<&SourceKind>) -> &'static str {
     match kind {
         Some(SourceKind::Builtin { kind }) => type_label(kind).map_or("image", |(_, icon)| icon),
         Some(SourceKind::Scene { .. }) => "layers",
@@ -67,15 +86,15 @@ fn icon_of(kind: Option<&SourceKind>) -> &'static str {
 }
 
 /// The selected scene's items, top of the stack first, each open nested scene's items
-/// under it. `shows` says whether a row of this name, a favourite or not, passes the
-/// filters; while `filtering`, a nested scene shows when it or anything inside it does,
+/// under it. `shows` says whether a row of this name, a favourite or not, carrying these
+/// labels, passes the filters; while `filtering`, a nested scene shows when it or anything inside it does,
 /// and opens to show its matches.
 fn rows(
     collection: &Collection,
     scene_id: &SceneId,
     open: &HashSet<ItemId>,
     filtering: bool,
-    shows: &dyn Fn(&str, bool) -> bool,
+    shows: &dyn Fn(&str, bool, &[LabelId]) -> bool,
 ) -> Vec<Row> {
     let mut out = Vec::new();
     let mut walk = Walk {
@@ -94,7 +113,7 @@ struct Walk<'a> {
     collection: &'a Collection,
     open: &'a HashSet<ItemId>,
     filtering: bool,
-    shows: &'a dyn Fn(&str, bool) -> bool,
+    shows: &'a dyn Fn(&str, bool, &[LabelId]) -> bool,
     /// The scenes on the way down, which a nested scene can't repeat.
     seen: Vec<SceneId>,
 }
@@ -127,8 +146,9 @@ impl Walk<'_> {
             }
             let name = collection.source_name(&item.source_id);
             let favourite = source.is_some_and(|s| s.meta.favourite);
+            let label_ids = source.map(|s| s.meta.labels.clone()).unwrap_or_default();
             let kept = self.filtering && !inside.is_empty();
-            if self.filtering && !kept && !(self.shows)(&name, favourite) {
+            if self.filtering && !kept && !(self.shows)(&name, favourite, &label_ids) {
                 continue;
             }
             let open = kept || (nests.is_some() && self.open.contains(&item.item_id));
@@ -145,6 +165,7 @@ impl Walk<'_> {
                 nests,
                 open,
                 kept,
+                label_ids,
             });
             if open {
                 out.append(&mut inside);
@@ -168,6 +189,7 @@ pub fn Sources() -> impl IntoView {
     let reorder = Reorder::new();
     // The nested scenes' rows that show their items, by item.
     let expanded = RwSignal::new(HashSet::<ItemId>::new());
+    let manager = use_context::<LabelManager>();
 
     let scene = move || studio.selection.with(|s| s.scene.clone());
     // The selected scene's parent's name, when it is a keyframe scene.
@@ -192,7 +214,7 @@ pub fn Sources() -> impl IntoView {
         let none = HashSet::new();
         studio.collection.with(|c| {
             c.as_ref()
-                .map(|c| rows(c, &scene_id, &none, false, &|_, _| true))
+                .map(|c| rows(c, &scene_id, &none, false, &|_, _, _| true))
                 .unwrap_or_default()
         })
     };
@@ -201,7 +223,8 @@ pub fn Sources() -> impl IntoView {
             return Vec::new();
         };
         let filtering = filter.active();
-        let shows = |name: &str, favourite: bool| filter.shows(name, favourite);
+        let shows =
+            |name: &str, favourite: bool, labels: &[LabelId]| filter.shows(name, favourite, labels);
         expanded.with(|open| {
             studio.collection.with(|c| {
                 c.as_ref()
@@ -317,7 +340,18 @@ pub fn Sources() -> impl IntoView {
             nests,
             open,
             kept,
+            ..
         } = row;
+        let labels = {
+            let id = source_id.clone();
+            Signal::derive(move || {
+                studio.collection.with(|c| {
+                    c.as_ref()
+                        .and_then(|c| Some(carried(c, &c.source(&id)?.meta.labels)))
+                        .unwrap_or_default()
+                })
+            })
+        };
         let key = item_id.to_string();
         // A nested scene's item is selected in its own scene, which the panel then shows.
         let inside = depth > 0;
@@ -505,6 +539,8 @@ pub fn Sources() -> impl IntoView {
         let shown = name.clone();
         let eye_label = format!("Show or hide {name}");
         let star_name = name.clone();
+        let picker_name = name.clone();
+        let picker_source = source_id.clone();
         let container = nests.is_some();
         let caret = nests.map(|_| {
             let id = item_id.clone();
@@ -564,6 +600,7 @@ pub fn Sources() -> impl IntoView {
                 >
                     <RenameField value=name.clone() done=rename.clone() />
                 </Show>
+                <LabelChips labels=labels />
                 <button
                     type="button"
                     class="hov tree-tool eye"
@@ -575,6 +612,7 @@ pub fn Sources() -> impl IntoView {
                 >
                     <Icon name=if visible { "eye" } else { "eye-off" } size=14 />
                 </button>
+                <LabelPicker source_id=picker_source name=picker_name />
                 <Star name=star_name on=Signal::stored(favourite) toggle=toggle_favourite />
             </li>
         }
@@ -625,7 +663,8 @@ pub fn Sources() -> impl IntoView {
     view! {
         <section class="panel sources-panel tree-panel" on:contextmenu=on_context>
             <h2>"Sources"</h2>
-            <SearchBar what="objects" filter=filter />
+            <SearchBar what="objects" filter=filter labels=true />
+            {move || manager.is_some_and(|m| m.shown.get()).then(|| view! { <LabelEditor /> })}
             <Confirm pending=pending confirm=confirm_delete />
             <Show
                 when=move || scene().is_some()
@@ -646,7 +685,7 @@ pub fn Sources() -> impl IntoView {
                     on:pointerup=move |_| reorder.up(drop)
                     on:pointercancel=move |_| reorder.cancel()
                 >
-                    <For each=shown_rows key=|row| row.clone() children=row />
+                    <For each=shown_rows key=Row::key children=row />
                 </ul>
                 {move || {
                     let none = all_rows().is_empty();
@@ -723,9 +762,13 @@ mod tests {
     }
 
     fn all(c: &Collection, scene: &str) -> Vec<super::Row> {
-        rows(c, &SceneId::new(scene), &HashSet::new(), false, &|_, _| {
-            true
-        })
+        rows(
+            c,
+            &SceneId::new(scene),
+            &HashSet::new(),
+            false,
+            &|_, _, _| true,
+        )
     }
 
     /// `main` holds the camera and a nested `grp`, which holds a logo and a nested
@@ -802,7 +845,7 @@ mod tests {
         let c = nested();
         assert_eq!(shown(&all(&c, "main")), ["g+@main", "cam@main"]);
         let open: HashSet<ItemId> = [ItemId::new("g"), ItemId::new("in")].into();
-        let rows = rows(&c, &SceneId::new("main"), &open, false, &|_, _| true);
+        let rows = rows(&c, &SceneId::new("main"), &open, false, &|_, _, _| true);
         assert_eq!(
             shown(&rows),
             [
@@ -824,10 +867,31 @@ mod tests {
             &SceneId::new("main"),
             &HashSet::new(),
             true,
-            &|name, _| name == "TITLE",
+            &|name, _, _| name == "TITLE",
         );
         assert_eq!(shown(&rows), ["g-@main", "  in-@grp", "    title1@inner"]);
         assert!(rows[0].kept && rows[1].kept && !rows[2].kept);
+    }
+
+    #[test]
+    fn a_label_inside_a_nested_scene_keeps_its_scenes_open() {
+        let mut c = nested();
+        let label = super::LabelId::new("lower-third");
+        for source in &mut c.sources {
+            if source.source_id.as_str() == "title" {
+                source.meta.labels = vec![label.clone()];
+            }
+        }
+        let rows = rows(
+            &c,
+            &SceneId::new("main"),
+            &HashSet::new(),
+            true,
+            &|_, _, labels| labels.contains(&label),
+        );
+        assert_eq!(shown(&rows), ["g-@main", "  in-@grp", "    title1@inner"]);
+        assert_eq!(rows[2].label_ids, std::slice::from_ref(&label));
+        assert!(rows[0].label_ids.is_empty() && rows[0].kept);
     }
 
     #[test]
