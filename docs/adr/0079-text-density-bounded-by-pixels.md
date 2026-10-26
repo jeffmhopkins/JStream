@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0078"
+id = "ADR-0079"
 title = "Text density bounded by its frame's pixels, not at 8"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0078: Text density bounded by its frame's pixels, not at 8
+# ADR-0079: Text density bounded by its frame's pixels, not at 8
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted

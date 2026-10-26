@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0073-sources-drawn-at-their-shown-size.md", "docs/adr/0078-text-density-bounded-by-pixels.md"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0073-sources-drawn-at-their-shown-size.md", "docs/adr/0079-text-density-bounded-by-pixels.md"]
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -176,7 +176,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   pixels each way and stands for the same size, which `set_density` returns and the
   engine places it at. Densities run from 1 to `MAX_DENSITY` (32), lowered to the
   highest whose frame holds at most a 4K canvas's pixels and is at most 8192 each way
-  ([ADR-0078](../../docs/adr/0078-text-density-bounded-by-pixels.md)); one whose frame
+  ([ADR-0079](../../docs/adr/0079-text-density-bounded-by-pixels.md)); one whose frame
   would still be over the limits is halved until it fits, down to 1. An update draws at
   the density set last, lowered the same way.
 - `display` and `window`: what the platform captures, by the `target` setting, a

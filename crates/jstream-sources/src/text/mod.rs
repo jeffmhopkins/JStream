@@ -181,7 +181,7 @@ struct TextSource {
 /// pixels each way, so a default 64 px line stretched across a 4K canvas is drawn at
 /// the size it is shown. The `text` kind is the one that draws at a density, and
 /// it draws at a lower one when the frame would be larger than a 4K canvas
-/// (`raster::render`, ADR-0078).
+/// (`raster::render`, ADR-0079).
 pub const MAX_DENSITY: f32 = 32.0;
 
 impl Source for TextSource {

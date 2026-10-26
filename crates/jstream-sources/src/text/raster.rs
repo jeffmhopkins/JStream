@@ -25,11 +25,11 @@ pub(crate) struct Drawn {
     pub(crate) rgba: Vec<u8>,
 }
 
-/// The most pixels a frame drawn at a density holds: a 4K canvas's (ADR-0078).
+/// The most pixels a frame drawn at a density holds: a 4K canvas's (ADR-0079).
 const MAX_DENSE_PIXELS: f32 = 3840.0 * 2160.0;
 
 /// The widest or tallest a frame drawn at a density is: 8192 pixels, the largest
-/// texture side every GPU the compositor runs on takes (ADR-0078).
+/// texture side every GPU the compositor runs on takes (ADR-0079).
 const MAX_DENSE_SIDE: f32 = 8192.0;
 
 /// The highest density, at least 1, that a text of `extent` draws at within
