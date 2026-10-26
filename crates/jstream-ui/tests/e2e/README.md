@@ -48,6 +48,9 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   them, as `invalid_argument`, when the test calls the `release()` it returns.
   `meterTicks` routes it too, passing everything on, and returns a function that
   sends the page a `meters.tick`, which the mock engine never sends.
+  `sourceSizes` routes it to answer `source.sizes` with the sizes a test gives, since
+  the mock makes no frames and reports none, and returns a function that sends the
+  page a `source.size_changed`.
 - **Console errors fail a test.** Every console error and uncaught exception on a
   test's pages fails it, unless the test allows that message. A Content-Security-Policy
   violation is a console error, so a style or script the policy refuses fails too.
@@ -114,6 +117,14 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   canvas takes one out and Shift-click on its row in the sources list adds it back; a
   double click opens the item's Properties dialog with it selected, and a double click
   on the canvas tools over an item leaves the selection alone.
+- **Crop** (`crop.spec.js`): the Crop tool, C, V, Escape, the item menu's Crop and a
+  switch of scene enter and leave crop mode, whose readout says there is no source size
+  while the engine reports none, and then a handle drag resizes as usual; with `sourceSizes` giving the Backdrop's source a size,
+  a crop-mode drag on the right handle crops that side as one edit, with the Inspector's
+  Right field, the ` · cropped` readout and the crop ghost, which Ctrl+Z undoes; Alt on
+  the left handle crops outside crop mode, and Clear crop gives the whole picture back;
+  W % and H % read the size against the source's, set it, follow `source.size_changed`
+  and go disabled without a size.
 - **Menus and Add source** (`menus.spec.js`): the canvas's right-click menu on the
   frame (its items, Paste disabled, turning snapping off and Select all) and on the
   margin, which Escape closes; the arrow keys move through a menu, skipping a disabled

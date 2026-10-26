@@ -8,10 +8,13 @@
 
 use super::model::{self, CanvasError};
 use crate::app::SessionContext;
-use jstream_control::protocol::{GestureId, ItemGeometry, ItemId, SceneId};
+use jstream_control::protocol::{Crop, GestureId, ItemGeometry, ItemId, SceneId};
 use leptos::task::spawn_local;
 use std::cell::RefCell;
 use std::rc::Rc;
+
+/// What a drag shows: each moved item's geometry, and each cropped item's crop.
+pub(crate) type Values = (Vec<(ItemId, ItemGeometry)>, Vec<(ItemId, Crop)>);
 
 /// What runs once the gesture's last values are out: the commit, given the gesture's
 /// scene and the gesture to end if `live.set` opened one, else `None`.
@@ -30,7 +33,7 @@ struct State {
     gesture: GestureId,
     scene_id: SceneId,
     /// The newest values not yet sent.
-    latest: Option<Vec<(ItemId, ItemGeometry)>>,
+    latest: Option<Values>,
     end: Option<End>,
     /// Whether a call is in flight.
     busy: bool,
@@ -69,13 +72,13 @@ impl Live {
         }
     }
 
-    /// Shows the items at these geometries on output.
-    pub fn show(&self, placed: Vec<(ItemId, ItemGeometry)>) {
+    /// Shows the items at these geometries, and these crops, on output.
+    pub fn show(&self, placed: Vec<(ItemId, ItemGeometry)>, crops: Vec<(ItemId, Crop)>) {
         let mut state = self.state.borrow_mut();
         if state.end.is_some() {
             return;
         }
-        state.latest = Some(placed);
+        state.latest = Some((placed, crops));
         drop(state);
         self.wake();
     }
@@ -139,8 +142,8 @@ impl Live {
                 self.state.borrow_mut().busy = false;
                 return;
             };
-            if let Some(placed) = latest {
-                match model::live_set(&*open.control, gesture, scene_id, placed).await {
+            if let Some((placed, crops)) = latest {
+                match model::live_set(&*open.control, gesture, scene_id, placed, crops).await {
                     Ok(()) => self.state.borrow_mut().opened = true,
                     Err(error) => (self.report)(&error),
                 }
