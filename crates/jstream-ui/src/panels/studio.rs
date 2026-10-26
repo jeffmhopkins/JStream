@@ -550,7 +550,7 @@ pub fn preset_hint(preset: &TransitionPresetInfo, kinds: &[KindDescriptor]) -> S
     }
 }
 
-/// A preset as the picker lists it: "<name> — Cut" or "<name> — <Kind> · N ms", with
+/// A preset as the picker lists it: `"<name> — Cut"` or `"<name> — <Kind> · N ms"`, with
 /// " (default)" on the default.
 pub fn picker_label(
     preset: &TransitionPresetInfo,
