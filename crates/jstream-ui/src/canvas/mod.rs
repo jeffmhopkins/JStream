@@ -942,7 +942,7 @@ pub fn Canvas() -> impl IntoView {
             };
             let props_scene = scene.clone();
             vec![
-                Entry::submenu("Pop out", Vec::new()),
+                crate::projector::pop_out(studio, scene.clone()),
                 Entry::Sep,
                 select,
                 snap,

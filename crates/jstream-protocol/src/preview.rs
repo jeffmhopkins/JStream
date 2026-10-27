@@ -81,7 +81,7 @@ impl PreviewSettings {
     /// The codecs when the client lists none: H.264, then JPEG.
     pub const DEFAULT_CODECS: [PreviewCodec; 2] = [PreviewCodec::H264, PreviewCodec::Jpeg];
     /// The most preview streams one session may have open at once.
-    pub const MAX_PER_SESSION: usize = 4;
+    pub const MAX_PER_SESSION: usize = 16;
 
     /// Fills in the defaults of a `preview.subscribe` and checks its fields.
     ///

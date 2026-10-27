@@ -641,6 +641,28 @@ impl LiveSources {
         now: MediaTime,
         versions: &mut u64,
     ) -> Option<Look> {
+        self.look_as(source_id, now, versions, true)
+    }
+
+    /// [`Self::look`] for a plan that is not the program mix's (a scene's preview
+    /// stream): the source is not reached by it, so it is neither shown again nor heard
+    /// for it (ADR-0028).
+    pub(crate) fn look_quiet(
+        &mut self,
+        source_id: &SourceId,
+        now: MediaTime,
+        versions: &mut u64,
+    ) -> Option<Look> {
+        self.look_as(source_id, now, versions, false)
+    }
+
+    fn look_as(
+        &mut self,
+        source_id: &SourceId,
+        now: MediaTime,
+        versions: &mut u64,
+        reach: bool,
+    ) -> Option<Look> {
         if self
             .entries
             .get(source_id)?
@@ -657,10 +679,12 @@ impl LiveSources {
         let entry = self.entries.get_mut(source_id)?;
         let running = entry.running.as_mut()?;
         let at = since(now, running.start);
-        if running.planned + 1 < plan {
-            running.source.show(at);
+        if reach {
+            if running.planned + 1 < plan {
+                running.source.show(at);
+            }
+            running.planned = plan;
         }
-        running.planned = plan;
         if let Some(context) = &self.context {
             let next = next_program_frame(now);
             if let Some(texture) = running.source.gpu_frame() {

@@ -665,6 +665,33 @@ pub(crate) fn plan_with(
     look: &mut LookUp<'_>,
     assets: &FilterAssets,
 ) -> Planning {
+    plan_inner(graph, program, running, look, assets, true)
+}
+
+/// Copies the scene `scene_id` and the scenes it nests out of `graph` as the program
+/// scene of a shot of its own, with no transition and no video mix, for a preview
+/// stream of that scene (ADR-0045). What it captures is left empty: a preview draws a
+/// capture as nothing, and only the program stage captures.
+pub(crate) fn plan_scene(
+    graph: &Graph,
+    scene_id: &SceneId,
+    look: &mut LookUp<'_>,
+    assets: &FilterAssets,
+) -> Planning {
+    let mut planning = plan_inner(graph, Some(scene_id), None, look, assets, false);
+    planning.shot.captures.clear();
+    planning
+}
+
+/// [`plan_with`], drawing the scene each `scene` video mix shows when `mixes`.
+fn plan_inner(
+    graph: &Graph,
+    program: Option<&SceneId>,
+    running: Option<(&Running, MediaTime)>,
+    look: &mut LookUp<'_>,
+    assets: &FilterAssets,
+    mixes: bool,
+) -> Planning {
     let state = graph.state();
     let program = program.cloned();
     let mut shot = Shot {
@@ -714,7 +741,7 @@ pub(crate) fn plan_with(
         planner.collect(id, &mut shot, &mut path);
         shot.passes = schedule(&shot, id);
     }
-    for mix in state.video_mixes() {
+    for mix in state.video_mixes().filter(|_| mixes) {
         if let Some(scene_id) = mix.mix().scene() {
             shot.mixes.insert(mix.id().clone(), scene_id.clone());
         }
@@ -815,7 +842,7 @@ fn end_time(start: MediaTime, end_ms: f32) -> Option<MediaTime> {
     start.checked_add(ms).ok()
 }
 
-fn earliest(wake: Option<MediaTime>, at: Option<MediaTime>) -> Option<MediaTime> {
+pub(crate) fn earliest(wake: Option<MediaTime>, at: Option<MediaTime>) -> Option<MediaTime> {
     match (wake, at) {
         (Some(a), Some(b)) => Some(a.min(b)),
         (a, b) => a.or(b),

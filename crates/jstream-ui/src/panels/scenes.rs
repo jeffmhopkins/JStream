@@ -778,7 +778,7 @@ pub fn Scenes() -> impl IntoView {
                                 },
                             );
                         }),
-                        Entry::submenu("Pop out", Vec::new()),
+                        crate::projector::pop_out(studio, Some(id.clone())),
                         Entry::Sep,
                         Entry::item("New scene", move || new_scene(scene_folder.clone())),
                         Entry::item("New keyframe", move || new_keyframe(keyframe_id.clone())),

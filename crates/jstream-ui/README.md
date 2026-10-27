@@ -25,12 +25,13 @@ webview. It is a client like the CLI and the MCP server: it holds a `dyn Control
 
 Contents ([Design](#design) explains the choices):
 - **App** (`app.rs`): `App`, the root component. It shows the connect form until a
-  session is open, then the shell (the header over the workspace), and keeps the shared
-  state current from the session's events. `SessionContext` gives components the open
+  session is open, then the shell (the header over the workspace), or on a projector
+  window's page the projector, and keeps the shared state current from the session's
+  events. `SessionContext` gives components the open
   session.
 - **Header** (`header.rs`): `Header`, the bar along the top: the brand, the File menu
   (the connection's details and Disconnect), the Edit menu (Undo, Redo), the View menu
-  (show or hide each panel) and the Layout menu (saved layouts), the frames dropped
+  (show or hide each panel, and open the program or multiview projector) and the Layout menu (saved layouts), the frames dropped
   since the page connected, Studio mode (kept in the browser's storage), Record, and Go
   Live / End stream. `RecordButton` and `Dropped` are its logic, tested natively.
 - **Dock** (`dock.rs`): `Dock`, the model of which panel sits where: eight `Zone`s
@@ -44,6 +45,11 @@ Contents ([Design](#design) explains the choices):
   its title bar), and drags a tab to dock it;
   `DockState`, the dock as context, which the header's menus change; and `restore`,
   the dock the browser kept.
+- **Projectors** (`projector.rs`): `Projector`, the page a projector window shows (the
+  program, one scene or a multiview, filling the window), `Request` (what a projector
+  page's query asks for, and its window name), `open` and `pop_out` (a scene's Pop out
+  submenu), which open one, and `subscribe` and `multiview_scenes`, its logic, tested
+  natively.
 - **Host detection** (`host.rs`): `desktop()`, the engine URL and token the desktop
   app hands the page through the `__JSTREAM_DESKTOP__` global, if the page runs there,
   and `desktop_vcam()`, what that global says about the virtual camera.
@@ -291,6 +297,28 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   source, and a placement of an existing one shows in the Inspector. A `kind.list`
   that fails leaves only the placed kinds and Scene, and its error shows as any failed
   call's does.
+- **Projectors** (`projector.rs`, [UI features › DL-07](../../docs/UI-FEATURES.md#dialogs)).
+  A scene's Pop out submenu (on its row, on the canvas margin for the scene it shows,
+  and on a nested scene's item) and the View menu's Projectors group open a projector:
+  this same page, opened with `window.open` under one window name per target so asking
+  again brings that window back, with a query (`?projector=program`, `multiview` or
+  `scene:<percent-encoded ID>`, then `&full=1` for full screen) that `App` reads before
+  anything else. Such a page connects as the desktop app's page does, or in a browser
+  at once with the credentials the browser already sends (the connect form if they
+  aren't enough), keeps `Studio` current like the workspace, and shows `Projector`
+  instead of the shell. Every picture on it is a preview stream (`preview.subscribe`,
+  with `scene_id` for a scene) on the session's one binary channel, which `Channels`
+  reads and hands out by channel number, each picture taking a number never used
+  before on the page; a picture falls back to JPEG as the canvas does, says why when its
+  stream ends (a deleted scene), and unsubscribes when it goes. One picture asks for the
+  screen's size in device pixels, at most 1920×1080, at 30 fps. The multiview shows
+  program (with preview beside it while the page's studio mode, read from the browser's
+  storage and followed as the workspace changes it, is on) over up to 8 scenes that are not groups and are marked "Show in
+  multiview", red-framed on program and green on preview. A double click fills the
+  screen (the Fullscreen API) or leaves it, Escape closes a projector that isn't full
+  screen, and the pointer and the hint at the bottom hide after 2 s without moving. A
+  window the browser doesn't open is reported in the problem bar; a full-screen one in
+  a browser opens as large as the screen, and the toast says to double-click it.
 - **The Inspector** ([UI features › inspector](../../docs/UI-FEATURES.md#inspector))
   shows the primary selected item, or with none the selected scene, under a header with
   its type icon (the scene's icon for a scene), name, kind, "+N" for the other selected
