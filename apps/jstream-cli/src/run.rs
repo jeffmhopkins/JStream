@@ -418,10 +418,6 @@ fn write_action(out: &mut dyn Write, action: &Action, response: &Response) -> Re
                 action.name()
             )?,
         },
-        Action::PrivacySet { on } => {
-            let on = if *on { "on" } else { "off" };
-            writeln!(out, "{} {on} accepted ({id})", action.name())?;
-        }
         other => writeln!(out, "{} accepted ({id})", other.name())?,
     }
     Ok(())
@@ -539,9 +535,6 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
                     None => writeln!(out, "{label}: none (no scenes)")?,
                 }
             }
-        }
-        QueryResult::PrivacyGet { on } => {
-            writeln!(out, "privacy: {}", if *on { "on" } else { "off" })?;
         }
         QueryResult::SourceList { rev, sources } => {
             writeln!(out, "rev {rev}")?;
@@ -812,18 +805,6 @@ fn write_event(out: &mut dyn Write, event: &Event, json: bool) -> Result<bool, C
                 )?;
             }
             write!(out, " by {client_id}")?;
-            if let Some(request_id) = request_id {
-                write!(out, " ({request_id})")?;
-            }
-            writeln!(out)?;
-        }
-        Event::PrivacyChanged {
-            on,
-            client_id,
-            request_id,
-        } => {
-            let on = if *on { "on" } else { "off" };
-            write!(out, "privacy.changed {on} by {client_id}")?;
             if let Some(request_id) = request_id {
                 write!(out, " ({request_id})")?;
             }

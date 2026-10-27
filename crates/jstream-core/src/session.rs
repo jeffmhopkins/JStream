@@ -166,6 +166,9 @@ impl Drop for InProcessControl {
         }
         let mine = std::mem::take(&mut *lock(&self.subscriptions));
         events::close(mine);
-        self.previews.close();
+        if self.previews.close() {
+            // Stops planning the scenes it showed, unless another stream shows them.
+            self.engine.replan_previews();
+        }
     }
 }

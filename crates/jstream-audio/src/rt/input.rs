@@ -38,7 +38,7 @@
 //! fixed-size, and counters go out through atomics.
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use jstream_media::AudioFormat;
 use jstream_platform::{AudioInputHandler, AudioPacket, PlatformError};
@@ -82,13 +82,6 @@ pub(crate) struct InputShared {
     /// The activity gain, 0..=1, applied after the fader and meter and before the sends
     /// (ADR-0028's audio that follows the program).
     pub(crate) activity: AtomicF32,
-    /// Whether the privacy screen mutes this input: while the mixer's privacy screen is
-    /// on, it silences the input before its chain and applies an activity gain of 0
-    /// (docs/adr/0027-program-master-and-output-chains.md).
-    pub(crate) privacy_muted: AtomicBool,
-    /// The mixer's privacy screen as its inputs' audio threads read it, one value the
-    /// mixer shares with all its inputs.
-    pub(crate) privacy: Arc<PrivacyLink>,
     /// The input's row of the send matrix (post-fader).
     pub(crate) sends: Sends,
     pub(crate) meter: Meter,
@@ -113,43 +106,11 @@ pub(crate) struct InputShared {
     pub(crate) failed: AtomicBool,
 }
 
-/// The privacy screen's state as a mixer shares it with its inputs' audio threads
-/// (docs/adr/0027-program-master-and-output-chains.md). Only the mixer writes it.
-#[derive(Debug)]
-pub(crate) struct PrivacyLink {
-    /// The engine's count of the screen's changes, odd while it is on, when the mixer
-    /// was given one ([`crate::Mixer::with_privacy_signal`]): the audio threads cover a
-    /// marked input's packet while it is odd, from the moment the engine changes it.
-    pub(crate) signal: Option<Arc<AtomicU64>>,
-    /// The count the mixer last acted on, stored after [`Self::end`]: while it differs
-    /// from the signal, the mixer has not yet seen a change, which may have been on and
-    /// off again in between, so the audio threads cover every packet.
-    pub(crate) seen: AtomicU64,
-    /// The engine frame before which the screen covers what a marked input captured:
-    /// `i64::MAX` while it is on or its end is not yet known, `i64::MIN` when it covers
-    /// nothing. The audio thread zeroes a marked input's packet whose start is before it.
-    pub(crate) end: AtomicI64,
-}
-
-impl PrivacyLink {
-    /// A link that has seen the signal's count as it is now, and covers nothing yet.
-    pub(crate) fn new(signal: Option<Arc<AtomicU64>>) -> Self {
-        let count = signal.as_ref().map_or(0, |s| s.load(Ordering::Acquire));
-        Self {
-            signal,
-            seen: AtomicU64::new(count),
-            end: AtomicI64::new(i64::MIN),
-        }
-    }
-}
-
 impl InputShared {
     pub(crate) fn new() -> Self {
         Self {
             gain: GainParam::new(),
             activity: AtomicF32::new(1.0),
-            privacy_muted: AtomicBool::new(false),
-            privacy: Arc::new(PrivacyLink::new(None)),
             sends: Sends::new(),
             meter: Meter::default(),
             packets: Counter::default(),
@@ -392,13 +353,10 @@ impl InputProducer {
             self.stamp = Some((self.resampler.input_count() as f64, t));
         }
 
-        // The privacy screen zeroes a packet it covers before anything holds it, so
-        // what it covers never reaches the ring, wherever the input places it.
-        let private = self.privacy_covers(time);
         let sink = &mut self.sink;
         let samples = &packet.samples[..frames * self.channels];
         for frame in samples.chunks_exact(self.channels) {
-            let st = if packet.flags.silent || private {
+            let st = if packet.flags.silent {
                 [0.0; 2]
             } else {
                 self.downmix.apply(frame)
@@ -408,44 +366,6 @@ impl InputProducer {
         self.sink.flush();
         self.measure(processed);
         self.publish();
-    }
-
-    /// Whether the privacy screen covers the packet about to be written (stamped `time`,
-    /// if it has a usable stamp): the input is marked, and the engine's signal says the
-    /// screen is on, or has changed since the mixer last acted on it, or the packet
-    /// starts before [`PrivacyLink::end`]. Its start is the earliest
-    /// of its own stamp, the input's timing of it (the last accepted stamp extrapolated
-    /// by the frames since) and the engine frame it is written from, so the screen
-    /// covers it if any of them says it was captured before the end, whatever the drift
-    /// fit made of its stamp.
-    fn privacy_covers(&self, time: Option<f64>) -> bool {
-        let shared = self.shared();
-        if !shared.privacy_muted.load(Ordering::Relaxed) {
-            return false;
-        }
-        let link = &shared.privacy;
-        if let Some(signal) = &link.signal {
-            let count = signal.load(Ordering::Acquire);
-            if count % 2 == 1 || link.seen.load(Ordering::Acquire) != count {
-                return true;
-            }
-        }
-        let end = link.end.load(Ordering::Acquire);
-        if end == i64::MAX {
-            return true;
-        }
-        if end == i64::MIN {
-            return false;
-        }
-        let mut start = self.sink.next_out as f64;
-        if let Some(t) = time {
-            start = start.min(t * self.rate_out);
-        }
-        if let Some((k, t)) = self.stamp {
-            let model = t + (self.resampler.input_count() as f64 - k) / self.rate_in;
-            start = start.min(model * self.rate_out);
-        }
-        start < end as f64
     }
 
     /// Restarts the drift fit's segment and asks for a re-anchor.

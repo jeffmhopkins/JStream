@@ -416,9 +416,9 @@ impl IdMap {
     }
 }
 
-/// The client and request an event names as its cause: `state.changed`,
-/// `studio.changed` and `privacy.changed`. Their request IDs are the session's,
-/// rewritten to the wire's.
+/// The client and request an event names as its cause: `state.changed` and
+/// `studio.changed`. Their request IDs are the session's, rewritten to the
+/// wire's.
 fn caused_by(event: &mut Event) -> Option<(&ClientId, &mut Option<RequestId>)> {
     match event {
         Event::StateChanged {
@@ -427,11 +427,6 @@ fn caused_by(event: &mut Event) -> Option<(&ClientId, &mut Option<RequestId>)> {
             ..
         }
         | Event::StudioChanged {
-            client_id,
-            request_id,
-            ..
-        }
-        | Event::PrivacyChanged {
             client_id,
             request_id,
             ..

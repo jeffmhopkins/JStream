@@ -1,7 +1,7 @@
 //! Filter chains: the `filter.*` edits (ADR-0026, docs/adr/0026-source-filter-chains.md).
 //!
 //! A source has a video chain and an audio chain. The master stage and each output that
-//! carries audio have an audio chain (ADR-0027); their video chains wait for video mixes.
+//! carries audio have an audio chain (ADR-0080); their video chains wait for video mixes.
 //! A filter's kind is a filter kind of its chain, and its settings are checked and
 //! completed against the kind's descriptor exactly as a source's are (ADR-0025). Scene
 //! and source references in a source's filter settings are edges of that source
@@ -243,7 +243,7 @@ fn unknown_owner() -> ProtocolError {
 /// video chain if its kind produces video, and an audio chain if it produces audio and
 /// is not a `scene` source (ADR-0026 §1); a kind the graph doesn't describe has neither.
 /// The master stage and an output that carries audio have an audio chain; their video
-/// chains wait for video mixes (ADR-0027). A scene and an item have a video chain only
+/// chains wait for video mixes (ADR-0080). A scene and an item have a video chain only
 /// (ADR-0065 §1).
 fn check_chain(
     state: &State,

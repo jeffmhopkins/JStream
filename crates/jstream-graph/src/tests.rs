@@ -1654,7 +1654,7 @@ mod property {
                     Edit::HotkeySet { chord, action }
                 }
             }
-            // A gain on the master or an output's audio chain (ADR-0027), mostly in
+            // A gain on the master or an output's audio chain (ADR-0080), mostly in
             // range.
             47 => Edit::FilterAdd {
                 owner: match rng.below(3) {
@@ -1734,6 +1734,9 @@ mod property {
             60 => Edit::SceneSetMeta {
                 scene_id: SceneId::new(scene(rng)),
                 meta: SceneMeta {
+                    labels: (0..rng.below(3))
+                        .map(|_| LabelId::new(label(rng)))
+                        .collect(),
                     icon: (rng.below(2) == 0).then(|| "star".to_owned()),
                     color: (rng.below(2) == 0).then(|| color(rng).to_owned()),
                     favourite: rng.below(2) == 0,

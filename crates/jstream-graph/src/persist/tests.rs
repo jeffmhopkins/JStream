@@ -1199,20 +1199,21 @@ fn folders_labels_and_metadata_round_trip() {
                 scene_id: SceneId::new("a"),
                 folder_id: Some(FolderId::new("intros")),
             },
-            Edit::SceneSetMeta {
-                scene_id: SceneId::new("a"),
-                meta: SceneMeta {
-                    icon: Some("star".into()),
-                    color: Some("#1e1e2e".into()),
-                    favourite: true,
-                    show_in_multiview: false,
-                },
-            },
             Edit::LabelCreate {
                 label_id: LabelId::new("sponsor"),
                 name: "Sponsor".into(),
                 color: "#ff8800".into(),
                 icon: Some("megaphone".into()),
+            },
+            Edit::SceneSetMeta {
+                scene_id: SceneId::new("a"),
+                meta: SceneMeta {
+                    labels: vec![LabelId::new("sponsor")],
+                    icon: Some("star".into()),
+                    color: Some("#1e1e2e".into()),
+                    favourite: true,
+                    show_in_multiview: false,
+                },
             },
             Edit::SourceSetMeta {
                 source_id: SourceId::new("cam"),
@@ -1238,6 +1239,10 @@ fn folders_labels_and_metadata_round_trip() {
         saved["labels"],
         json!([{"id": "sponsor", "name": "Sponsor", "color": "#ff8800", "icon": "megaphone"}])
     );
+    let scene = saved["scenes"]
+        .as_array()
+        .and_then(|scenes| scenes.iter().find(|s| s["id"] == "a"));
+    assert_eq!(scene.map(|s| &s["labels"]), Some(&json!(["sponsor"])));
     assert_eq!(load(&json), Ok(graph));
 }
 

@@ -75,6 +75,11 @@ on **program**, drawn on the canvas in the middle.
 Panels can be moved, hidden and brought back from the **View** menu; **Layout** saves
 and resets arrangements.
 
+To watch a scene, the program or a multiview on another screen, choose **Pop out** on a
+scene's right-click menu, or a projector under **View**: each opens in a window of its
+own, or full screen. Drag a window to the monitor you want and double-click it to fill
+that screen; Esc closes it.
+
 <a id="live"></a>
 ## Going live
 <!-- @section

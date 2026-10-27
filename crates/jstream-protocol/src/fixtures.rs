@@ -556,7 +556,7 @@ fn item_overrides() -> Vec<ItemOverride> {
 }
 
 /// The filter edits (ADR-0026), on both chains of a source, and on the master stage's
-/// and an output's audio chains (ADR-0027).
+/// and an output's audio chains (ADR-0080).
 fn filter_edits() -> Vec<Edit> {
     let mic = || FilterOwner::Source {
         source_id: SourceId::new("src_mic"),
@@ -753,6 +753,7 @@ fn send_infos() -> Vec<SendInfo> {
 /// A scene's metadata with every field away from its default.
 fn scene_meta() -> SceneMeta {
     SceneMeta {
+        labels: vec![LabelId::new("lbl_sponsor")],
         icon: Some("star".into()),
         color: Some("#1e1e2e".into()),
         favourite: true,
@@ -939,6 +940,7 @@ pub(crate) fn actions() -> Vec<Action> {
             max_height: None,
             fps: Some(30),
             codecs: vec![PreviewCodec::H264, PreviewCodec::Jpeg],
+            scene_id: None,
         },
         Action::PreviewUnsubscribe { channel: 1 },
         Action::SceneSwitch {
@@ -976,6 +978,14 @@ pub(crate) fn actions() -> Vec<Action> {
             plugin_id: PluginId::new("plg_1"),
         },
         Action::PrivacySet { on: true },
+        Action::PreviewSubscribe {
+            channel: 2,
+            max_width: None,
+            max_height: None,
+            fps: None,
+            codecs: Vec::new(),
+            scene_id: Some(SceneId::new("scn_2")),
+        },
     ]
 }
 

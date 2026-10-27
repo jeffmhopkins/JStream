@@ -29,8 +29,7 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   1920×1080 canvas, with two video filters (`sharpen`, then `blur` turned off), two
   audio sources no scene shows (`Mic · ES-9 Line`, an `audio_input`, at −3 dB and
   `Desktop audio`, a `desktop_audio`, at −8.5 dB; the mock is told both kinds produce
-  audio, so they get mixer channels, and only the mic is one the privacy screen
-  mutes), and the encoder profile `High quality`. It has no outputs. It stops
+  audio, so they get mixer channels), and the encoder profile `High quality`. It has no outputs. It stops
   when its standard input closes. It is a crate of its own because `jstream-ui` (layer
   3) may not depend on `jstream-server` (layer 4), not even for tests
   ([R-ARCH-002](../../../../docs/RULES.md#R-ARCH-002)). Nothing ships it.
@@ -168,8 +167,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   star are sent; with no item selected the scene's object count, uses and Transition
   in and out show, and a second selected item shows "+1". The mock engine doesn't
   implement `scene.set_transitions`, so choosing one isn't run.
-- **Filters** (`filters.spec.js`): with nothing selected the panel says so and offers
-  no Add filter; with the Backdrop selected, its title, note, one video chain with its
+- **Filters** (`filters.spec.js`): with no item selected the panel shows the scene's
+  chain; with the Backdrop selected, its title, note, one video chain with its
   count and the two rows, Blur struck through; the eye turning Blur on as one edit, a
   drag putting it above Sharpen as one more, and × removing Sharpen; Edit filters… in
   an item's menu selecting the item and showing the panel behind the Transform tab; the
@@ -185,6 +184,14 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   edit and updates the summary. With one setting refused late: a refusal that arrives
   after its row was closed, and one after the Filter settings dialog was cancelled,
   each in the problem bar.
+- **Scene filters** (`scene-filters.spec.js`): with no item selected the panel showing
+  Main's empty video chain with the scene note; with Sharpen and Gain described, Add
+  filter offering only Sharpen, with the scene's foot, as one edit on the scene, while
+  the Backdrop keeps its own two; another scene selected showing its own chain; a scene
+  row's Edit filters… showing that scene's chain from behind the Transform tab while
+  the item stays selected, selecting a scene going back to its chain, and the canvas
+  margin's Edit scene filters… showing the shown scene's in place of the selected item's; and the scene Properties
+  dialog listing the scene's chain, adding to it at once, which Cancel keeps.
 - **Program and output chains** (`output-chains.spec.js`): the Outputs panel's Program
   output row ("master", "FX 0"), a recording's row under it with its state and FX
   button, and the footnote; the program's FX showing the master chain in the Filters
@@ -221,7 +228,12 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   row's tag popover putting a label on the Backdrop and staying open, the row's and the
   Inspector's chips and the Inspector's tag button, the filter's labels with their
   count, and the item menu's Labels submenu, checked with the label's colour as its
-  swatch, taking it off; deleting a label taking it off the Backdrop in one edit.
+  swatch, taking it off; deleting a label taking it off the Backdrop in one edit; and
+  on a scene ([ADR-0078](../../../../docs/adr/0078-scenes-carry-labels.md)): the manager
+  opened from the Scenes panel's filter, in that panel, the scene row's tag popover
+  opening under the row and filling its box with the label's colour, the row's and the
+  Inspector's chips and tag button, the Scenes panel's labels filter, and a delete
+  taking the label off the scene in one edit.
 - **Polish** (`polish.spec.js`): Duplicate as clone's toast, which hides by itself; a
   folded Crop section staying folded after another scene is selected and after a
   reload; the Inspector's type icon and its 3D section, folded at first, with
@@ -256,18 +268,14 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   Backspace, and with a new name is saved by OK and read back by the dialog; the canvas margin's Scene properties… opens it for the shown scene; the
   Inspector's Scene switches send `item.set_transition` with the whole settings. The
   mock engine refuses the transition edits after the page has sent them.
-- **Privacy screen** (`privacy.spec.js`, on the header, the canvas and the Audio
-  mixer tab): the Privacy button turning it on, with "Privacy on" pressed, the canvas
-  frame blurred under its notice and the Mic's row reading "muted (privacy)" while
-  Desktop audio's doesn't, then off again; Pause toggling it with focus in a gain
-  field, and a second client following each change and turning it off with Pause, and
-  then on again from a scene's rename field, which keeps its other keys; Pause
-  toggling it while the Inspector's Set key waits, which leaves Pause unbound and
-  binds the next key; Pause toggling it from the scene Properties dialog's Hotkey
-  field, which stays empty and takes the next key; a
-  client that connects while it is on showing it at once; and the vertical mixer's
-  Mic strip reading "muted (privacy)" under its short name while Desktop audio's
-  doesn't.
+- **Projectors** (`projectors.spec.js`): the View menu's Program in a window opens a
+  page of its own at `?projector=program`, titled for it, with one picture and the
+  toast on the workspace, and Escape closes it; Intro's row's Pop out submenu offers the
+  scene in a window or full screen and opens `?projector=scene:intro`; Program full
+  screen opens `&full=1` and, in a browser, says to double-click it; the multiview shows
+  program captioned with Main, no preview outside studio mode, and Intro and Main below
+  it, Main framed as on program, and turns to studio mode when the workspace does. The mock engine sends no preview streams, so no test
+  checks a picture: the engine's tests check the frames.
 
 <a id="running"></a>
 ## Running them

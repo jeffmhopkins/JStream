@@ -1,4 +1,4 @@
-//! Output taps (docs/adr/0027-program-master-and-output-chains.md): an output's view of
+//! Output taps (docs/adr/0080-program-master-and-output-chains-v2.md): an output's view of
 //! one bus after the master chain, through the output's own audio chain.
 
 use super::chain::Chain;

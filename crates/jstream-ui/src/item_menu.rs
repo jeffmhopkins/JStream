@@ -849,7 +849,10 @@ fn labels_entry(cx: Context, source_id: &SourceId) -> Entry {
             c.labels
                 .iter()
                 .map(|label| {
-                    let (source, id) = (source_id.clone(), label.label_id.clone());
+                    let (source, id) = (
+                        labels::Tagged::Source(source_id.clone()),
+                        label.label_id.clone(),
+                    );
                     Entry::item(label.name.clone(), move || {
                         let edit = cx.studio.collection.with_untracked(|c| {
                             c.as_ref()
@@ -868,7 +871,9 @@ fn labels_entry(cx: Context, source_id: &SourceId) -> Entry {
         if !lines.is_empty() {
             lines.push(Entry::Sep);
         }
-        lines.push(Entry::item("Edit labels…", move || manager.open()));
+        lines.push(Entry::item("Edit labels…", move || {
+            manager.open(PanelId::Objects);
+        }));
     }
     Entry::submenu("Labels", lines)
 }
@@ -947,7 +952,13 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
         let id = primary.clone();
         Entry::item("Edit filters…", move || cx.filters(id.clone()))
     };
-    let pop_out = Entry::submenu("Pop out", Vec::new());
+    // A nested scene pops out as a scene; a source alone has no preview stream.
+    let pop_out = match (many, &facts.kind) {
+        (false, SourceKind::Scene { scene_id }) => {
+            crate::projector::pop_out(cx.studio, Some(scene_id.clone()))
+        }
+        _ => crate::projector::pop_out(cx.studio, None),
+    };
     let labels = labels_entry(cx, &facts.source_id);
     let audio = facts.audio.map(|on| {
         let source_id = facts.source_id.clone();
