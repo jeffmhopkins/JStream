@@ -670,17 +670,15 @@ pub(crate) fn plan_with(
 
 /// Copies the scene `scene_id` and the scenes it nests out of `graph` as the program
 /// scene of a shot of its own, with no transition and no video mix, for a preview
-/// stream of that scene (ADR-0045). What it captures is left empty: a preview draws a
-/// capture as nothing, and only the program stage captures.
+/// stream of that scene (ADR-0045). The preview thread captures the displays and
+/// windows it shows itself; the program stage never reads this shot.
 pub(crate) fn plan_scene(
     graph: &Graph,
     scene_id: &SceneId,
     look: &mut LookUp<'_>,
     assets: &FilterAssets,
 ) -> Planning {
-    let mut planning = plan_inner(graph, Some(scene_id), None, look, assets, false);
-    planning.shot.captures.clear();
-    planning
+    plan_inner(graph, Some(scene_id), None, look, assets, false)
 }
 
 /// [`plan_with`], drawing the scene each `scene` video mix shows when `mixes`.

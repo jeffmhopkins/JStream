@@ -5,8 +5,8 @@
 //! **Scenes.** A stream of a scene draws that scene's own render snapshot, which the
 //! engine plans beside the program mix's for every scene a live stream shows
 //! ([`PreviewHub::scenes`]), after the program's plan has ended so it never makes a
-//! source shown or heard, and with no capture, so the program stage neither draws nor
-//! captures anything for it. Until the engine has planned it the stream waits; once
+//! source shown or heard. The program stage neither draws nor captures anything for
+//! it; the hub captures its displays and windows (**Captures**). Until the engine has planned it the stream waits; once
 //! the scene is deleted the engine ends it ([`PreviewHub::end_scene`]).
 //!
 //! **Sessions.** Each [`InProcessControl`](crate::InProcessControl) holds a
@@ -35,8 +35,17 @@
 //! codec. JPEG is this module's own baseline encoder ([`jpeg`]). The encoders and
 //! pacing live on the hub thread alone ([`Work`]), so a stream shared with its session
 //! holds only flags and its settings.
-//! The display capture is part of the program stage, so a preview draws `display`
-//! sources as nothing, as `video.snapshot` does.
+//!
+//! **Captures.** The hub captures the displays and windows the program mix and each
+//! streamed scene show itself,
+//! on the CPU path, through the engine's capture backend ([`PreviewCapture`]), with the
+//! program stage's [`RenderCaptures`] on a `jstream-capture` thread of its own, so a
+//! display shows in the preview with no output running. While an output runs, its stage
+//! captures the same display again: each capture belongs to one consumer. A webcam or
+//! capture card opens once, so the preview leaves it to the program stage and draws it
+//! as nothing, as `video.snapshot` draws every capture. The program's captures run only
+//! while a stream shows the program. A stream that shows a capture is due when one of
+//! the captures it shows took a new frame since its last picture.
 //!
 //! **Overload.** The hub never waits on a reader: the binary channel holds
 //! [`BINARY_BUFFER`] frames, and a [`KeyframeGate`] drops the rest of a stream's
@@ -69,10 +78,13 @@ use jstream_protocol::{
 };
 use jstream_render::{Compositor, OpenOptions, ResourceCache};
 
+use jstream_platform::Capture;
+use jstream_sources::CaptureSpec;
+
 use crate::chain::Chains;
 use crate::lock;
-use crate::runtime::RenderSnapshot;
-use crate::snapshot::{self, GpuKey, LiveParams, Shot};
+use crate::runtime::{CaptureBackends, RenderCaptures, RenderSnapshot, spawn_captures};
+use crate::snapshot::{self, CaptureKey, Captures, GpuKey, LiveParams, NoCaptures, Shot};
 
 /// How many frames a session's binary channel holds for a reader that falls behind.
 pub(crate) const BINARY_BUFFER: usize = 8;
@@ -114,18 +126,27 @@ pub(crate) trait PreviewSource: Send + Sync {
     fn current(&self) -> Current;
 }
 
-/// Draws one picture for the hub: `shot` with `live` applied at `size` and media time
-/// `at` (a running transition samples it), read back as straight RGBA8 into `out`
-/// (replacing what it held). Opened on the hub thread and kept there.
-pub(crate) type PreviewDraw =
-    Box<dyn FnMut(&Shot, &LiveParams, FrameSize, MediaTime, &mut Vec<u8>) -> Result<(), String>>;
+/// Draws one picture for the hub: `shot` with `live` applied and the latest frame of
+/// each display and window it shows from `captures`, at `size` and media time `at` (a
+/// running transition samples it), read back as straight RGBA8 into `out` (replacing
+/// what it held). Opened on the hub thread and kept there.
+pub(crate) type PreviewDraw = Box<
+    dyn FnMut(
+        &Shot,
+        &LiveParams,
+        &dyn Captures,
+        FrameSize,
+        MediaTime,
+        &mut Vec<u8>,
+    ) -> Result<(), String>,
+>;
 
 /// Opens the hub's [`PreviewDraw`], on the hub thread.
 pub(crate) type OpenPreviewDraw = Arc<dyn Fn() -> Result<PreviewDraw, String> + Send + Sync>;
 
 /// The hub's draw: its own wgpu compositor, hardware adapter first with the software one
 /// as the fallback (`OpenOptions::hardware`), drawing the program mix with
-/// [`snapshot::compose`] and no capture.
+/// [`snapshot::compose`] and the hub's captures.
 pub(crate) fn gpu_draw() -> OpenPreviewDraw {
     Arc::new(|| {
         let mut compositor =
@@ -136,7 +157,7 @@ pub(crate) fn gpu_draw() -> OpenPreviewDraw {
         );
         let mut cache = ResourceCache::<GpuKey>::new();
         let mut chains = Chains::default();
-        let draw: PreviewDraw = Box::new(move |shot, live, size, at, out| {
+        let draw: PreviewDraw = Box::new(move |shot, live, captures, size, at, out| {
             cache.begin_frame();
             let output = snapshot::compose(
                 &mut compositor,
@@ -145,7 +166,7 @@ pub(crate) fn gpu_draw() -> OpenPreviewDraw {
                 // A preview stream shows the program mix, never a video mix.
                 snapshot::View::default(),
                 live,
-                &snapshot::NoCaptures,
+                captures,
                 snapshot::DrawAt::read(size),
             );
             drop(cache.end_frame(&compositor));
@@ -166,7 +187,7 @@ pub(crate) fn gpu_draw() -> OpenPreviewDraw {
 /// machine with no adapter ([`Engine::with_cpu_compositor`](crate::Engine::with_cpu_compositor)).
 pub(crate) fn cpu_draw() -> OpenPreviewDraw {
     Arc::new(|| {
-        let draw: PreviewDraw = Box::new(|_, _, size, _, out| {
+        let draw: PreviewDraw = Box::new(|_, _, _, size, _, out| {
             out.clear();
             out.resize(size.width() as usize * size.height() as usize * 4, 0);
             Ok(())
@@ -443,6 +464,9 @@ struct Work {
     /// The render snapshot and live values the last picture showed.
     shown: Option<(Arc<RenderSnapshot>, Arc<LiveParams>)>,
     draw_errors: u32,
+    /// The newest capture frame version the last picture drew
+    /// ([`HubCaptures::frames`]).
+    frames: u64,
 }
 
 /// An H.264 stream's encoder session, its input and its packets.
@@ -467,6 +491,7 @@ impl Work {
             last_key: None,
             shown: None,
             draw_errors: 0,
+            frames: 0,
         }
     }
 }
@@ -535,12 +560,50 @@ struct HubState {
     stop: bool,
     /// How the hub draws; [`gpu_draw`] unless a test set another.
     draw: Option<OpenPreviewDraw>,
+    /// What the hub captures with, once the engine has backends.
+    capture: Option<PreviewCapture>,
+}
+
+/// The engine's capture backends, which the hub captures displays and windows with.
+#[derive(Clone)]
+pub(crate) struct PreviewCapture {
+    pub(crate) capture: Arc<dyn Capture>,
+    /// Never opened by the hub: a capture of [`CaptureSpec::Device`] is left out.
+    pub(crate) devices: Arc<dyn jstream_platform::VideoDevices>,
+    pub(crate) codecs: Arc<dyn Codecs>,
+    /// The media clock's timebase, which [`PreviewSource::current`]'s time is on.
+    pub(crate) clock: Timebase,
+}
+
+impl PreviewCapture {
+    /// Starts the `jstream-capture` thread, on the CPU path: the hub's compositor is not
+    /// on the platform's GPU context. The sizes it reports go nowhere; the program stage
+    /// reports the sizes `source.sizes` shows.
+    fn spawn(&self) -> Result<RenderCaptures, String> {
+        let (sizes, _) = std::sync::mpsc::channel();
+        spawn_captures(
+            CaptureBackends {
+                cpu: Arc::clone(&self.capture),
+                gpu: None,
+                devices: Arc::clone(&self.devices),
+                codecs: Arc::clone(&self.codecs),
+            },
+            self.clock,
+            sizes,
+        )
+    }
 }
 
 impl PreviewHub {
     /// Replaces how the hub draws, for tests. Takes effect when the thread next starts.
     pub(crate) fn set_draw(&self, draw: OpenPreviewDraw) {
         lock(&self.inner.state).draw = Some(draw);
+    }
+
+    /// Gives the hub the engine's capture backends. Takes effect when the thread next
+    /// starts.
+    pub(crate) fn set_capture(&self, capture: PreviewCapture) {
+        lock(&self.inner.state).capture = Some(capture);
     }
 
     fn next_id(&self) -> u64 {
@@ -585,10 +648,11 @@ impl PreviewHub {
                 return Ok(());
             }
             let draw = state.draw.clone().unwrap_or_else(gpu_draw);
+            let capture = state.capture.clone();
             let inner = Arc::clone(&self.inner);
             let handle = thread::Builder::new()
                 .name("jstream-preview".into())
-                .spawn(move || run(&inner, &source, &draw))
+                .spawn(move || run(&inner, &source, &draw, capture.as_ref()))
                 .map_err(|err| format!("starting the preview thread: {err}"))?;
             state.running = true;
             state.thread.replace(handle)
@@ -621,13 +685,24 @@ impl Drop for PreviewHub {
 }
 
 /// The hub thread: passes over the live streams until none is left, the engine is
-/// gone, or the hub is dropped.
-fn run(inner: &HubInner, source: &Weak<dyn PreviewSource>, open: &OpenPreviewDraw) {
+/// gone, or the hub is dropped. Its captures stop when it ends.
+fn run(
+    inner: &HubInner,
+    source: &Weak<dyn PreviewSource>,
+    open: &OpenPreviewDraw,
+    capture: Option<&PreviewCapture>,
+) {
     let mut canvas = Canvas {
         open,
         draw: None,
         rgba: Vec::new(),
         jpeg: Vec::new(),
+    };
+    let mut captures = HubCaptures {
+        capture,
+        running: None,
+        wanted: BTreeSet::new(),
+        of: None,
     };
     let mut works: HashMap<u64, Work> = HashMap::new();
     loop {
@@ -662,6 +737,13 @@ fn run(inner: &HubInner, source: &Weak<dyn PreviewSource>, open: &OpenPreviewDra
         let mut wake_at = now + MAX_SLEEP;
         // A closed stream's encoder is dropped (and its thread joined) here.
         works.retain(|id, _| streams.iter().any(|stream| stream.id == *id));
+        // The program's captures only while a stream shows the program.
+        let shows_program = streams.iter().any(|stream| stream.scene.is_none());
+        captures.tick((shows_program.then_some(&program), &scenes), at);
+        let shown: &dyn Captures = match &captures.running {
+            Some(running) => running,
+            None => &NoCaptures,
+        };
         for stream in &streams {
             let work = works
                 .entry(stream.id)
@@ -679,7 +761,14 @@ fn run(inner: &HubInner, source: &Weak<dyn PreviewSource>, open: &OpenPreviewDra
                 },
             };
             let result = panic::catch_unwind(AssertUnwindSafe(|| {
-                serve(stream, work, (snapshot, &live), rev, (now, at), &mut canvas)
+                serve(
+                    stream,
+                    work,
+                    (snapshot, &live, shown, captures.frames(snapshot)),
+                    rev,
+                    (now, at),
+                    &mut canvas,
+                )
             }));
             match result {
                 Ok(Some(next)) => wake_at = wake_at.min(next),
@@ -705,6 +794,90 @@ fn run(inner: &HubInner, source: &Weak<dyn PreviewSource>, open: &OpenPreviewDra
     }
 }
 
+/// The displays and windows the hub captures: what the program mix and the scenes with
+/// a stream show of them, on a `jstream-capture` thread started the first time one is
+/// shown.
+struct HubCaptures<'a> {
+    /// `None` when the engine has no backends, or the thread could not be started:
+    /// nothing is captured.
+    capture: Option<&'a PreviewCapture>,
+    running: Option<RenderCaptures>,
+    /// What the snapshots `of` show: their displays and windows.
+    wanted: BTreeSet<CaptureKey>,
+    of: Option<(Option<Arc<RenderSnapshot>>, Scenes)>,
+}
+
+/// The scenes' snapshots, as [`Current::scenes`] holds them.
+type Scenes = Arc<BTreeMap<SceneId, Arc<RenderSnapshot>>>;
+
+impl HubCaptures<'_> {
+    /// Starts and stops captures to follow the program's snapshot (`None` while no
+    /// stream shows the program) and the scenes', and reads their latest frames. Never
+    /// waits.
+    fn tick(&mut self, (program, scenes): (Option<&Arc<RenderSnapshot>>, &Scenes), now: MediaTime) {
+        let Some(capture) = self.capture else {
+            return;
+        };
+        let same = self.of.as_ref().is_some_and(|(p, s)| {
+            Arc::ptr_eq(s, scenes)
+                && match (p, program) {
+                    (Some(p), Some(program)) => Arc::ptr_eq(p, program),
+                    (None, None) => true,
+                    _ => false,
+                }
+        });
+        if !same {
+            self.wanted = program
+                .into_iter()
+                .chain(scenes.values())
+                .flat_map(|snapshot| snapshot.shot().captures())
+                .filter(|key| captured(key))
+                .cloned()
+                .collect();
+            self.of = Some((program.cloned(), Arc::clone(scenes)));
+        }
+        if self.running.is_none() && !self.wanted.is_empty() {
+            match capture.spawn() {
+                Ok(running) => self.running = Some(running),
+                Err(err) => {
+                    tracing::warn!(error = %err, "the preview captures nothing");
+                    self.capture = None;
+                    self.wanted.clear();
+                    return;
+                }
+            }
+        }
+        if let Some(running) = &mut self.running {
+            running.tick(&self.wanted, now);
+        }
+    }
+
+    /// The newest frame version among the captures `snapshot` shows, when it shows one
+    /// the hub runs: a picture of it is due when that has moved since it was drawn.
+    /// Versions only grow, across every capture the hub runs.
+    fn frames(&self, snapshot: &RenderSnapshot) -> Option<u64> {
+        let running = self.running.as_ref()?;
+        let mut shown = snapshot
+            .shot()
+            .captures()
+            .iter()
+            .filter(|key| captured(key))
+            .peekable();
+        shown.peek()?;
+        Some(
+            shown
+                .filter_map(|key| running.frame(key).map(|frame| frame.version))
+                .max()
+                .unwrap_or_default(),
+        )
+    }
+}
+
+/// Whether the hub captures `key`: a display or window, never a video device.
+fn captured(key: &CaptureKey) -> bool {
+    !matches!(key.spec, CaptureSpec::Device(_))
+}
+
 /// What the hub thread draws and encodes with, shared by every stream it serves.
 struct Canvas<'a> {
     /// Opens the compositor when there is none.
@@ -722,7 +895,12 @@ struct Canvas<'a> {
 fn serve(
     stream: &PreviewStream,
     work: &mut Work,
-    (snapshot, live): (&Arc<RenderSnapshot>, &Arc<LiveParams>),
+    (snapshot, live, captures, frames): (
+        &Arc<RenderSnapshot>,
+        &Arc<LiveParams>,
+        &dyn Captures,
+        Option<u64>,
+    ),
     rev: Rev,
     (now, at): (Instant, MediaTime),
     canvas: &mut Canvas<'_>,
@@ -742,8 +920,9 @@ fn serve(
         return Some(work.next_at);
     }
     // A running transition changes the picture with time, not with the snapshot, and so
-    // can a video filter (a scroll, a video delay).
+    // can a video filter (a scroll, a video delay) and a capture.
     let changed = snapshot.shot().changes_with_time()
+        || frames.is_some_and(|frames| work.frames != frames)
         || !work
             .shown
             .as_ref()
@@ -774,7 +953,7 @@ fn serve(
         }
     }
     let drawing = draw.as_mut()?;
-    if let Err(reason) = drawing(shot, live, size, at, rgba) {
+    if let Err(reason) = drawing(shot, live, captures, size, at, rgba) {
         work.draw_errors += 1;
         tracing::debug!(channel = stream.channel, error = %reason, "preview picture skipped");
         if work.draw_errors > MAX_DRAW_ERRORS {
@@ -785,6 +964,7 @@ fn serve(
     }
     work.draw_errors = 0;
     work.shown = Some((Arc::clone(snapshot), Arc::clone(live)));
+    work.frames = frames.unwrap_or_default();
     stream.keyframe.store(false, Ordering::Release);
     let pts_us =
         i64::try_from(now.saturating_duration_since(work.started).as_micros()).unwrap_or(i64::MAX);

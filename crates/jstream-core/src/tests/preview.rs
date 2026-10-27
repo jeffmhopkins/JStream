@@ -3,9 +3,12 @@
 //! an encoder and JPEG otherwise; a reader that falls behind loses frames up to a
 //! keyframe, and the streams end with `preview.unsubscribe` or the session. A stream may
 //! show one scene instead, planned for it alone, and ends when the scene is deleted.
+//! The preview captures the displays and windows the program and those scenes show
+//! itself.
 
 use super::{add, batch, block_on, code, connected, create, edits, live, moved, webcam};
-use crate::preview::{BINARY_BUFFER, KEYFRAME_EVERY};
+use crate::preview::{BINARY_BUFFER, KEYFRAME_EVERY, OpenPreviewDraw, PreviewDraw};
+use crate::snapshot::{Captures, LiveParams, Shot};
 use crate::{Engine, InProcessControl};
 use jstream_control::{BinaryStream, Control, ControlError};
 use jstream_platform::fake::{self, FakeClock};
@@ -13,7 +16,8 @@ use jstream_protocol::{
     Action, Batch, BinaryFrame, Call, Edit, PreviewCodec, ProtocolError, Rev, SceneId, SourceId,
     SourceKind, WireError,
 };
-use std::sync::Arc;
+use jstream_sources::CaptureSpec;
+use std::sync::{Arc, mpsc};
 use std::task::{Context, Poll, Wake, Waker};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -424,7 +428,7 @@ fn a_session_end_stops_planning_its_scenes() {
 }
 
 /// A scene's stream costs the program stage nothing: a display only that scene shows
-/// is not captured, since a preview draws a capture as nothing.
+/// is not captured there (the preview captures it itself).
 #[test]
 fn a_scene_stream_captures_nothing() {
     let engine = Engine::new().with_cpu_compositor();
@@ -450,5 +454,120 @@ fn a_scene_stream_captures_nothing() {
     assert!(engine.settle_sources(), "the display source was built");
     act(&control, subscribe_scene(1, "b")).expect("subscribed");
     assert_eq!(engine.previewed_scenes(), vec![SceneId::new("b")]);
+    assert!(hub.load().shot().captures().is_empty());
+}
+
+/// The engine with the platform fakes, whose video devices `devices` shares, drawing
+/// previews with a stand-in that sends, for each picture, the captures it had a frame
+/// of.
+fn recording_captures(
+    devices: &fake::FakeVideoDevices,
+) -> (Engine, mpsc::Receiver<Vec<CaptureSpec>>) {
+    let clock = FakeClock::new(jstream_media::Timebase::MICROS);
+    let mut backends = fake::backends(&clock).expect("fake backends");
+    backends.video_devices = Arc::new(devices.clone());
+    let (seen_tx, seen) = mpsc::channel();
+    let draw: OpenPreviewDraw = Arc::new(move || {
+        let seen = seen_tx.clone();
+        let draw: PreviewDraw = Box::new(
+            move |shot: &Shot, _: &LiveParams, captures: &dyn Captures, size, _, out| {
+                let drawn: Vec<CaptureSpec> = shot
+                    .captures()
+                    .iter()
+                    .filter(|key| captures.frame(key).is_some())
+                    .map(|key| key.spec.clone())
+                    .collect();
+                let _ = seen.send(drawn);
+                out.clear();
+                out.resize(size.width() as usize * size.height() as usize * 4, 0);
+                Ok(())
+            },
+        );
+        Ok(draw)
+    });
+    let engine = Engine::new()
+        .with_backends(backends)
+        .with_cpu_compositor()
+        .with_preview_draw(draw);
+    (engine, seen)
+}
+
+/// A `display` source with its default settings: the primary display.
+fn screen() -> Edit {
+    Edit::SourceCreate {
+        source_id: SourceId::new("screen"),
+        name: "Screen".into(),
+        kind: SourceKind::Builtin {
+            kind: "display".into(),
+        },
+        settings: Default::default(),
+        duplicated_from: None,
+    }
+}
+
+/// Reads `frames` until a picture had a frame of the primary display, failing if one
+/// had a frame of a video device.
+fn until_display_drawn(frames: &mut BinaryStream, seen: &mpsc::Receiver<Vec<CaptureSpec>>) {
+    let deadline = Instant::now() + WAIT;
+    loop {
+        let drawn: Vec<CaptureSpec> = seen.try_iter().flatten().collect();
+        assert!(
+            !drawn
+                .iter()
+                .any(|spec| matches!(spec, CaptureSpec::Device(_))),
+            "the preview drew a webcam: {drawn:?}"
+        );
+        if drawn.contains(&CaptureSpec::Display(None)) {
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the display never reached the preview"
+        );
+        frame(frames);
+    }
+}
+
+/// A display the program shows is drawn into the preview with no output running: the
+/// preview thread captures it itself. A webcam opens once, so the preview leaves it to
+/// the program stage and never opens it.
+#[test]
+fn the_preview_captures_the_displays_the_program_shows() {
+    let devices = fake::FakeVideoDevices::new(FakeClock::new(jstream_media::Timebase::MICROS));
+    let (engine, seen) = recording_captures(&devices);
+    let control = connected(&engine);
+    let mut frames = control.binary();
+    act(&control, subscribe(1, Some(30), Vec::new())).expect("subscribed");
+    let scene = vec![
+        create("scn"),
+        screen(),
+        add("scn", "itm", "screen"),
+        webcam(),
+        add("scn", "cam", "webcam"),
+    ];
+    let rev = batch(&control, edits(scene)).expect("scene");
+    frame_at(&mut frames, rev);
+    until_display_drawn(&mut frames, &seen);
+    assert_eq!(devices.open_streams(), 0, "the preview opened the webcam");
+}
+
+/// A scene's stream (a projector of a scene off program) draws the display that scene
+/// shows, captured by the preview, while the program stage captures nothing.
+#[test]
+fn a_scene_stream_draws_its_display() {
+    let devices = fake::FakeVideoDevices::new(FakeClock::new(jstream_media::Timebase::MICROS));
+    let (engine, seen) = recording_captures(&devices);
+    let hub = engine.render_hub();
+    let control = connected(&engine);
+    let mut frames = control.binary();
+    let scenes = vec![
+        create("main"),
+        create("b"),
+        screen(),
+        add("b", "shown", "screen"),
+    ];
+    batch(&control, edits(scenes)).expect("scenes");
+    act(&control, subscribe_scene(1, "b")).expect("subscribed");
+    until_display_drawn(&mut frames, &seen);
     assert!(hub.load().shot().captures().is_empty());
 }

@@ -20,7 +20,9 @@ use crate::live::{Built, LiveHost, LiveSources, LoadedAsset};
 use crate::lock;
 use crate::outputs::Outputs;
 use crate::plugins::kinds::{self as clap_kinds, ClapScan};
-use crate::preview::{Current, Opening, PreviewHub, PreviewSource, SessionPreviews};
+use crate::preview::{
+    Current, Opening, PreviewCapture, PreviewHub, PreviewSource, SessionPreviews,
+};
 use crate::runtime::{
     Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, MixKey, OpenPublish,
     OutputEncode, OutputStats, Pending, PipelineEvent, Release, RenderHub, RenderSnapshot, Running,
@@ -459,6 +461,13 @@ impl Engine {
                 .set_media(Arc::clone(&backends.media), state.graph.state());
             state.forget = ForgetSources::spawn(Arc::clone(&backends.capture));
         }
+        // The preview captures the displays and windows the program shows itself.
+        self.shared.previews.set_capture(PreviewCapture {
+            capture: Arc::clone(&backends.capture),
+            devices: Arc::clone(&backends.video_devices),
+            codecs: Arc::clone(&backends.codecs),
+            clock: backends.clock.timebase(),
+        });
         let host = self.host();
         let vcam = backends.vcam.take();
         host.has_vcam.store(vcam.is_some(), Ordering::Release);
@@ -744,6 +753,14 @@ impl Engine {
     pub fn with_cpu_compositor(self) -> Self {
         self.shared.previews.set_draw(crate::preview::cpu_draw());
         self.with_draw(crate::runtime::cpu_draw())
+    }
+
+    /// Replaces how the preview thread draws, for tests that watch what it is given.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn with_preview_draw(self, draw: crate::preview::OpenPreviewDraw) -> Self {
+        self.shared.previews.set_draw(draw);
+        self
     }
 
     /// Opens a new client session. It must send `hello` before any call.
