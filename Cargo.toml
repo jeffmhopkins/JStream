@@ -264,10 +264,10 @@ wgpu = { version = "=30.0.1", default-features = false, features = ["std"] }
 # no async (plugins reach `Control` through a blocking bridge), no component model, GC,
 # threads, cache or profiling.
 wasmtime = { version = "50", default-features = false, features = ["cranelift", "runtime", "std"] }
-# The WASM text format, for `jstream-plugin-wasm`'s test plugins; test-only. Held at 1.258,
-# the wasm-tools release wasmtime 49 is built on: a later one brings a second
+# The WASM text format, for `jstream-plugin-wasm`'s test plugins; test-only. Held at 1.261,
+# the wasm-tools release wasmtime 50 is built on: a later one brings a second
 # `wasm-encoder` (R-DEP-005). No default features: no component model.
-wat = { version = "~1.258", default-features = false }
+wat = { version = "~1.261", default-features = false }
 # Microsoft's official Windows bindings (R-UNSAFE-004), used only by the Windows platform
 # crate. Pinned exactly so every Windows crate resolves one version (R-DEP-005); the
 # platform crate picks its API features.
