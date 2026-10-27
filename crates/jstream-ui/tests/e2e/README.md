@@ -146,7 +146,13 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   reference in one edit each, its menu's head and checks following, and the original,
   placed once, has no switch; Ctrl+D and Ctrl+Shift+D duplicate on the canvas and in a
   row, and Del removes there; a nested scene's menu opens it; a scene row's Rename
-  renames, and the Scenes panel's New scene adds one with its name field focused.
+  renames, and the Scenes panel's New scene adds one with its name field focused. The
+  header's menus act as a menu bar: a click opens File, pointing at Edit and View opens
+  each in its place, a click on the open menu's button closes it, after which pointing
+  opens nothing, and a press outside closes one; from the keyboard Down opens a menu at
+  its first item and Up on a button at its last, Up and Down wrap through it, Right and
+  Left move along the bar (wrapping), Escape closes it back to its button, and
+  Ctrl+Right on a button is left alone.
 - **Groups** (`groups.spec.js`): Group selection on two items makes "Group 1", left
   out of the Scenes panel, whose caret shows the two items indented; a click on one
   opens the group's scene with it selected; Ungroup puts them back, which a second

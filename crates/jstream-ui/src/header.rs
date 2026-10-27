@@ -10,6 +10,7 @@
 use crate::app::{SessionContext, SessionInfo};
 use crate::canvas::model::{history, is_history_empty};
 use crate::dock::PanelId;
+use crate::menu::{move_focus, step};
 use crate::panels::outputs::{
     OutputRow, Vcam, go_live_targets, is_running, live_outputs, load, start_blocker,
     start_or_stop_all,
@@ -21,6 +22,7 @@ use futures_util::StreamExt;
 use jstream_control::protocol::{DropCounts, Event, HistoryOp, OutputId, OutputKind};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
+use leptos::wasm_bindgen::JsCast;
 
 /// The recording outputs Record starts: every recording that is stopped or failed.
 pub fn record_targets<'a>(rows: impl IntoIterator<Item = &'a OutputRow>) -> Vec<OutputId> {
@@ -153,6 +155,65 @@ enum Menu {
     Layout,
 }
 
+impl Menu {
+    /// The menus along the bar, left to right: View and Layout only with a dock.
+    fn bar(dock: bool) -> &'static [Menu] {
+        if dock {
+            &[Menu::File, Menu::Edit, Menu::View, Menu::Layout]
+        } else {
+            &[Menu::File, Menu::Edit]
+        }
+    }
+
+    /// The menu `delta` places along `bar` from this one, wrapping at both ends.
+    fn beside(self, bar: &[Menu], delta: isize) -> Menu {
+        let at = bar.iter().position(|menu| *menu == self);
+        step(bar.len(), at, delta)
+            .and_then(|n| bar.get(n).copied())
+            .unwrap_or(self)
+    }
+
+    /// Its name in the page, which finds its button and dropdown.
+    fn key(self) -> &'static str {
+        match self {
+            Menu::File => "file",
+            Menu::Edit => "edit",
+            Menu::View => "view",
+            Menu::Layout => "layout",
+        }
+    }
+}
+
+/// The element of `menu` that `part` selects, such as its button or its dropdown.
+fn menu_part(menu: Menu, part: &str) -> Option<leptos::web_sys::HtmlElement> {
+    let selector = format!(
+        ".app-header .top-menu[data-menu=\"{}\"] > {part}",
+        menu.key()
+    );
+    document()
+        .query_selector(&selector)
+        .ok()
+        .flatten()?
+        .dyn_into()
+        .ok()
+}
+
+/// Focuses the first (`true`) or last enabled item of `menu`'s dropdown, once it is drawn.
+fn focus_item(menu: Menu, first: bool) {
+    request_animation_frame(move || {
+        if let Some(dropdown) = menu_part(menu, ".dropdown") {
+            move_focus(&dropdown, 0, Some(first));
+        }
+    });
+}
+
+/// Focuses `menu`'s button.
+fn focus_button(menu: Menu) {
+    if let Some(button) = menu_part(menu, ".menu-button") {
+        let _ = button.focus();
+    }
+}
+
 /// The header bar.
 #[component]
 pub fn Header(
@@ -277,9 +338,83 @@ pub fn Header(
         }
     });
     on_cleanup(move || escape.remove());
+    // The bar behaves like a desktop menu bar: a click opens or closes a menu; while one is
+    // open, pointing at another opens that one instead; the arrow keys move along the bar
+    // and through the open menu.
+    let bar = Menu::bar(dock.is_some());
     let toggle =
         move |menu: Menu| open.update(|open| *open = (*open != Some(menu)).then_some(menu));
-    let menu_button = move |menu: Menu, label: &'static str| {
+    let open_at = move |menu: Menu, first: bool| {
+        open.set(Some(menu));
+        focus_item(menu, first);
+    };
+    // A key with Ctrl, Alt or Meta is left to the hotkeys: only plain keys drive the bar.
+    let modified =
+        |event: &leptos::ev::KeyboardEvent| event.ctrl_key() || event.alt_key() || event.meta_key();
+    let button_keys = move |menu: Menu| {
+        move |event: leptos::ev::KeyboardEvent| match event.key().as_str() {
+            _ if modified(&event) => {}
+            "ArrowDown" | "Enter" | " " => {
+                event.prevent_default();
+                open_at(menu, true);
+            }
+            "ArrowUp" => {
+                event.prevent_default();
+                open_at(menu, false);
+            }
+            key @ ("ArrowLeft" | "ArrowRight") => {
+                event.prevent_default();
+                let next = menu.beside(bar, if key == "ArrowLeft" { -1 } else { 1 });
+                if open.get_untracked().is_some() {
+                    open_at(next, true);
+                } else {
+                    focus_button(next);
+                }
+            }
+            _ => {}
+        }
+    };
+    let dropdown_keys = move |menu: Menu| {
+        move |event: leptos::ev::KeyboardEvent| {
+            if modified(&event) {
+                return;
+            }
+            let (delta, to) = match event.key().as_str() {
+                "ArrowDown" => (1, None),
+                "ArrowUp" => (-1, None),
+                "Home" => (0, Some(true)),
+                "End" => (0, Some(false)),
+                key @ ("ArrowLeft" | "ArrowRight") => {
+                    event.prevent_default();
+                    open_at(
+                        menu.beside(bar, if key == "ArrowLeft" { -1 } else { 1 }),
+                        true,
+                    );
+                    return;
+                }
+                "Escape" => {
+                    event.prevent_default();
+                    event.stop_propagation();
+                    open.set(None);
+                    focus_button(menu);
+                    return;
+                }
+                "Tab" => {
+                    open.set(None);
+                    return;
+                }
+                _ => return,
+            };
+            event.prevent_default();
+            if let Some(dropdown) = event
+                .current_target()
+                .and_then(|target| target.dyn_into::<leptos::web_sys::Element>().ok())
+            {
+                move_focus(&dropdown, delta, to);
+            }
+        }
+    };
+    let menu_button = move |menu: Menu, label: AnyView| {
         view! {
             <button
                 class="menu-button"
@@ -287,6 +422,13 @@ pub fn Header(
                 aria-haspopup="menu"
                 aria-expanded=move || if open.get() == Some(menu) { "true" } else { "false" }
                 on:click=move |_| toggle(menu)
+                on:pointerenter=move |_| {
+                    if open.get_untracked().is_some_and(|other| other != menu) {
+                        open.set(Some(menu));
+                        focus_button(menu);
+                    }
+                }
+                on:keydown=button_keys(menu)
             >
                 {label}
             </button>
@@ -302,10 +444,10 @@ pub fn Header(
             {move || open.get().map(|_| view! {
                 <div class="menu-catcher" on:pointerdown=move |_| open.set(None)></div>
             })}
-            <div class="top-menu">
-                {menu_button(Menu::File, "File")}
+            <div class="top-menu" data-menu=Menu::File.key()>
+                {menu_button(Menu::File, "File".into_any())}
                 <Show when=move || open.get() == Some(Menu::File)>
-                    <div class="dropdown" role="menu" aria-label="File">
+                    <div class="dropdown" role="menu" aria-label="File" on:keydown=dropdown_keys(Menu::File)>
                         <p class="menu-head">"CONNECTION"</p>
                         <dl class="connection">
                             <dt>"Engine"</dt>
@@ -324,10 +466,10 @@ pub fn Header(
                     </div>
                 </Show>
             </div>
-            <div class="top-menu">
-                {menu_button(Menu::Edit, "Edit")}
+            <div class="top-menu" data-menu=Menu::Edit.key()>
+                {menu_button(Menu::Edit, "Edit".into_any())}
                 <Show when=move || open.get() == Some(Menu::Edit)>
-                    <div class="dropdown" role="menu" aria-label="Edit">
+                    <div class="dropdown" role="menu" aria-label="Edit" on:keydown=dropdown_keys(Menu::Edit)>
                         <button
                             class="menuitem"
                             role="menuitem"
@@ -348,10 +490,10 @@ pub fn Header(
                 </Show>
             </div>
             {dock.map(|dock| view! {
-                <div class="top-menu">
-                    {menu_button(Menu::View, "View")}
+                <div class="top-menu" data-menu=Menu::View.key()>
+                    {menu_button(Menu::View, "View".into_any())}
                     <Show when=move || open.get() == Some(Menu::View)>
-                        <div class="dropdown" role="menu" aria-label="View">
+                        <div class="dropdown" role="menu" aria-label="View" on:keydown=dropdown_keys(Menu::View)>
                             <p class="menu-head">"PANELS"</p>
                             {PanelId::ALL.into_iter().map(|panel| {
                                 let shown = move || dock.with(|d| d.shown(panel));
@@ -394,20 +536,14 @@ pub fn Header(
                         </div>
                     </Show>
                 </div>
-                <div class="top-menu">
-                    <button
-                        class="menu-button"
-                        class:open=move || open.get() == Some(Menu::Layout)
-                        aria-haspopup="menu"
-                        aria-expanded=move || if open.get() == Some(Menu::Layout) { "true" } else { "false" }
-                        on:click=move |_| toggle(Menu::Layout)
-                    >
+                <div class="top-menu" data-menu=Menu::Layout.key()>
+                    {menu_button(Menu::Layout, view! {
                         "Layout: "
                         <span class="layout-name">{move || dock.with(|d| d.current.clone())}</span>
                         <span class="caret">"▾"</span>
-                    </button>
+                    }.into_any())}
                     <Show when=move || open.get() == Some(Menu::Layout)>
-                        <div class="dropdown layouts" role="menu" aria-label="Layout">
+                        <div class="dropdown layouts" role="menu" aria-label="Layout" on:keydown=dropdown_keys(Menu::Layout)>
                             <p class="menu-head">"SAVED LAYOUTS"</p>
                             {move || dock.with(|d| d.saved.iter().map(|l| l.name.clone()).collect::<Vec<_>>())
                                 .into_iter()
@@ -593,6 +729,18 @@ mod tests {
             RecordButton::Stop(ids(&["r1"])),
             "while one records, the button stops it"
         );
+    }
+
+    #[test]
+    fn the_arrow_keys_move_along_the_bar_and_wrap() {
+        let bar = Menu::bar(true);
+        assert_eq!(Menu::File.beside(bar, 1), Menu::Edit);
+        assert_eq!(Menu::Layout.beside(bar, 1), Menu::File);
+        assert_eq!(Menu::File.beside(bar, -1), Menu::Layout);
+        // Without a dock the bar has no View or Layout.
+        let bar = Menu::bar(false);
+        assert_eq!(Menu::Edit.beside(bar, 1), Menu::File);
+        assert_eq!(Menu::File.beside(bar, -1), Menu::Edit);
     }
 
     #[test]
