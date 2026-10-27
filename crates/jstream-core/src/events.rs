@@ -30,13 +30,9 @@ pub(crate) struct Subscribers {
 }
 
 impl Subscribers {
-    /// Opens a new subscription whose stream starts with `first`, if any. Returns the
-    /// stream and the weak handle that closes it.
-    pub(crate) fn subscribe(&mut self, first: Option<Event>) -> (Subscription, QueueRef) {
-        let queue = Arc::new(Mutex::new(Queue {
-            events: first.into_iter().collect(),
-            ..Queue::default()
-        }));
+    /// Opens a new subscription. Returns the stream and the weak handle that closes it.
+    pub(crate) fn subscribe(&mut self) -> (Subscription, QueueRef) {
+        let queue = Arc::new(Mutex::new(Queue::default()));
         let weak = Arc::downgrade(&queue);
         self.queues.push(weak.clone());
         (Subscription(queue), weak)

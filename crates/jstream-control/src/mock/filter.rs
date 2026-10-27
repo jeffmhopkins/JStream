@@ -4,7 +4,7 @@
 //! kinds, so it doesn't check a filter's kind, or whether a builtin source has the chain
 //! (a `scene` source has no audio chain, and that it does check), and stores settings as
 //! given. The master stage and each output that carries audio have an audio chain only,
-//! whose filters can't hold a reference (ADR-0027); those it checks too. A scene and an
+//! whose filters can't hold a reference (ADR-0080); those it checks too. A scene and an
 //! item have a video chain only (ADR-0065), whose references the mock's delete checks
 //! follow; it has no keyframe scenes, so it never refuses a variant owner, and it runs
 //! no cycle check.

@@ -56,9 +56,8 @@ fn parse_args() -> Result<Args> {
 /// The studio every test starts from: two scenes with `Main` on program, holding one
 /// colour item as a 640×360 box at the canvas's centre, whose source has two video
 /// filters (Sharpen, then Blur turned off); two audio sources no scene shows, the mic (an
-/// `audio_input`, which the privacy screen mutes) at −3 dB and desktop audio (a
-/// `desktop_audio`, which it doesn't) at −8.5 dB; and one encoder profile. No outputs: the tests
-/// create them through the UI.
+/// `audio_input`) at −3 dB and desktop audio (a `desktop_audio`) at −8.5 dB; and one
+/// encoder profile. No outputs: the tests create them through the UI.
 async fn seed(engine: &MockEngine) -> Result<()> {
     let control = engine.connect();
     control

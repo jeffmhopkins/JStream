@@ -41,7 +41,7 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0024](0024-scene-structure.md) | Scene structure: groups, keyframe scenes, folders and organisation | accepted | maintainer |  |
 | [ADR-0025](0025-typed-settings-kind-descriptors.md) | Typed settings through kind descriptors | accepted | agent |  |
 | [ADR-0026](0026-source-filter-chains.md) | Source filter chains and the filter edits | accepted | agent |  |
-| [ADR-0027](0027-program-master-and-output-chains.md) | Program master, per-output chains and the privacy screen | accepted | maintainer |  |
+| [ADR-0027](0027-program-master-and-output-chains.md) | Program master, per-output chains and the privacy screen | superseded | maintainer | [ADR-0080](0080-program-master-and-output-chains-v2.md) |
 | [ADR-0028](0028-audio-model-v2.md) | Audio model v2: bus matrix with faders, scene-following audio, keys, meters | accepted | maintainer |  |
 | [ADR-0029](0029-transitions.md) | Transitions | accepted | maintainer |  |
 | [ADR-0030](0030-studio-state-and-scene-switching.md) | Studio state and scene switching | accepted | agent |  |
@@ -93,4 +93,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0077](0077-bundle-ibm-plex-fonts.md) | Bundle the IBM Plex fonts with the web UI under the SIL OFL 1.1 | accepted | maintainer |  |
 | [ADR-0078](0078-scenes-carry-labels.md) | Scenes carry labels | accepted | agent |  |
 | [ADR-0079](0079-text-density-bounded-by-pixels.md) | Text density bounded by its frame's pixels, not at 8 | accepted | agent |  |
+| [ADR-0080](0080-program-master-and-output-chains-v2.md) | Program master and per-output chains v2: no privacy screen | accepted | maintainer |  |
 <!-- @generated end adr-index -->

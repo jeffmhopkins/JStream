@@ -1,6 +1,6 @@
 //! Filters (spec-panels.md 5, spec-workspace.md 6.2.6 to 6.4): the selected item's
 //! source's video and audio chains (ADR-0026) in the Filters panel and the Properties
-//! dialog, the program output's and each output's chains (ADR-0027) in the Filters panel
+//! dialog, the program output's and each output's chains (ADR-0080) in the Filters panel
 //! once an FX button picks them, and the Add filter and Filter settings dialogs over them. A row turns its
 //! filter on or off, shows a summary of its settings, opens its settings, drags to
 //! another place in its chain and removes it. A filter with three settings or fewer

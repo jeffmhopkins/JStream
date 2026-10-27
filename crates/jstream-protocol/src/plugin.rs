@@ -188,7 +188,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("audio.reset_loudness", N),
     // A studio edit (ADR-0069 S2): it puts a scene on preview, not on air.
     ("studio.set_preview", Class(E)),
-    // The privacy screen covers what is on air; a plugin never lifts it.
+    // Deprecated (ADR-0080): the engine refuses it anyway.
     ("privacy.set", N),
     // A person installs, grants and re-enables plugins; a plugin never does (G1).
     ("plugin.install", N),

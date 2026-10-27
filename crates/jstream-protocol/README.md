@@ -59,7 +59,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `label.update`, `label.reorder`, `label.delete`, `source.set_meta`), with
   `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole` and `BlendMode`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
-  `scene.switch` with its optional `preset_id`, `studio.set_preview`, `privacy.set`,
+  `scene.switch` with its optional `preset_id`, `studio.set_preview`, `privacy.set` (deprecated),
   `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`,
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
@@ -74,7 +74,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `SourceInfo`, `OutputInfo` and `SceneInfo` report (`ItemInfo.effects` is one video
   chain), and `MAX_CHAIN_FILTERS` (8). `MasterInfo` (`query.rs`) is the
   master stage as `state.get` reports it
-  ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
+  ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)).
 - **Outputs** (`output.rs`): `OutputKind` (`rtmp`, `record` and `virtual_cam` so far), `RtmpTarget`
   (a generic `url`, or a `youtube` broadcast), `RecordContainer` (only `mp4`), `OutputInfo` (with the `video_mix` it shows), and `SecretString`, the write-only stream key, which
   never prints and never comes back from the engine
@@ -88,7 +88,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   control, keyframe interval and hardware preference), its range checks
   (`EncoderProfile::problem`, shared by every implementation), `EncoderProfileInfo`,
   and `EncoderSessionInfo`, the per-output sharing and cost `output.status` reports
-  ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
+  ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)).
 - **Video mixes** (`mix.rs`): `VideoMix`, what an output's video shows: a `MixInput`
   (`program`, `preview` or one `scene`), a `MixResolution` and an `fps_divisor` of the
   base frame rate, with its range checks (`VideoMix::problem`, shared by every
@@ -109,7 +109,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `video.snapshot`, `kind.list`,
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
-  `studio.get`, `privacy.get`, `device.list`, `live.list`, `capture.targets` and
+  `studio.get`, `privacy.get` (deprecated), `device.list`, `live.list`, `capture.targets` and
   `source.sizes`, with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
   `CaptureTargetInfo` and `SourceSize` shapes the reads report. `state.get` carries the `Canvas`, and
@@ -145,7 +145,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   shares them. No source or filter kind is defined here; the transition kinds are
   (Transitions above).
 - **Events** (`event.rs`): `state.changed`, `output.state_changed`, `studio.changed`
-  (program, preview and the transition a switch started), `privacy.changed`,
+  (program, preview and the transition a switch started), `privacy.changed` (deprecated),
   `source.size_changed`, `events.dropped`,
   `stats.tick`, `meters.tick`, `youtube.status_changed`, `youtube.health_changed`,
   `youtube.stats`, `live.changed`, `live.ended` and `plugin.state_changed`.
@@ -187,7 +187,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   carry labels (`SceneMeta`'s `labels`, set by `scene.set_meta`;
   [ADR-0078](../../docs/adr/0078-scenes-carry-labels.md)); 0.44 added the
   `hardware_session_limit` error (`output.start` refused a new hardware video session
-  while other outputs held hardware sessions, ADR-0027 §3); 0.43 added scene filters
+  while other outputs held hardware sessions, ADR-0080 §3); 0.43 added scene filters
   and item effects ([ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md):
   `FilterOwner`'s `scene` and `item`, `SceneInfo.filters`, `ItemInfo.effects` and
   `KindDescriptor.max_outset_px`); 0.42 added bus monitors (`bus.set_monitor`,
@@ -209,7 +209,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `perspective_px`, which earlier minors rejected with `invalid_argument`, are stored and
   drawn (ADR-0050) when the compositor can draw them (`check_drawable`); the wire form is
   unchanged, so a client that sends only neutral 3D sees no difference); 0.33 added the
-  privacy screen (`privacy.set`, `privacy.get`, `privacy.changed`) and the `dedicated`
+  privacy screen (`privacy.set`, `privacy.get`, `privacy.changed`, since deprecated by
+  [ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)) and the `dedicated`
   flag on an output's encoder session; 0.32 added the geometry flips (`ItemGeometry`'s
   `flip_h` and `flip_v`); 0.31 added folders, labels and organisation metadata (the `folder.*` and `label.*` edits,
   `scene.set_folder`, `scene.set_meta`, `source.set_meta`, `state.get`'s `folders` and
@@ -603,7 +604,7 @@ kind for that chain (`invalid_argument` on `edits.N.kind`), and a chain holds at
 `SourceInfo.filters { video, audio }` reports them, each omitted while empty.
 
 From 0.29 the master stage and each output own chains too
-([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)), with the owners
+([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), with the owners
 `{"type":"master"}` and `{"type":"output","output_id":…}` and the same edits. The
 master's audio chain runs on every bus that feeds an output, after that bus's own chain;
 an output's runs after it, for that output only, and gives the output its own audio
@@ -693,7 +694,7 @@ changed, so this changes no `PROTOCOL_VERSION`. Its errors carry fixed reasons t
 never quote the key.
 
 Encoder profiles (0.13) are collection state as well
-([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
+([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)).
 `encoder.create` and `encoder.update` take a `profile_id`, a `name` and an
 `EncoderProfile`: H.264, HEVC or AV1 (the last two since 0.41) video with `cbr` or `vbr` rate control (100..=100000 kbit/s;
 a `vbr` peak at least the average and at most 200000), a keyframe interval of 1..=10 s
@@ -911,8 +912,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   for the display an empty `display` target captures. Runtime state, so no `rev`; a
   source can still name a window closed since. `action_failed` when the engine has no
   capture backend or the OS refuses the list. Added in 0.27.
-- `privacy.get`: whether the privacy screen is on (`on`). Runtime state, so no `rev`.
-  Added in 0.33.
+- `privacy.get`: deprecated
+  ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), removed in
+  1.0. JStream has no privacy screen, so it always answers `on: false`. Added in 0.33.
 - `source.sizes`: every source, ordered by ID, with its current `size` in pixels,
   omitted while the source has no video frame (it hasn't started, it is audio-only, or
   it failed). A source of a video kind with nothing to show, such as an `image` or
@@ -1150,12 +1152,9 @@ After `welcome`, the server pushes every event to every client.
   with the committing batch's `rev`, whose `state.changed` comes first, `cancelled` or
   `expired`. A client that doesn't know these events ignores them and shows committed
   state only.
-- `privacy.changed {on, client_id, request_id?}` reports the privacy screen going on or
-  off, with the client and request that did it. A `privacy.set` that changes nothing
-  emits nothing. A client that subscribes while the screen is on gets this event first,
-  naming the client that turned it on and with no `request_id`, so it never shows an
-  uncovered picture. Runtime state, so no `rev`
-  ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)). Added in 0.33.
+- `privacy.changed {on, client_id, request_id?}`: deprecated
+  ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), removed in
+  1.0. JStream has no privacy screen, so the engine never sends it. Added in 0.33.
 - `source.size_changed {source_id, size?}` says a source's size changed: it became
   known (the first frame), changed, or became unknown (`size` omitted: the source
   stopped, failed or was deleted; a deletion's comes after its `state.changed`). The
@@ -1273,9 +1272,8 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   never granted: creating, deleting and retargeting outputs, their encoders and stream
   keys, video mixes, `video.snapshot` and previews (a capture's pixels could leave
   through a granted host), `audio.reset_loudness`, folders and labels themselves
-  (`folder.*`, `label.*`), which ADR-0069 names in no class, `privacy.set` (a plugin
-  never lifts the privacy screen), `youtube.*`, pairing and devices, and `plugin.*`
-  itself.
+  (`folder.*`, `label.*`), which ADR-0069 names in no class, the deprecated
+  `privacy.set`, `youtube.*`, pairing and devices, and `plugin.*` itself.
   `PLUGIN_SCOPES` places every command; a command it doesn't name is "never".
   `every_command_has_a_plugin_scope` fails until a new command is placed, so a new
   command can't reach plugins unreviewed.
@@ -1344,9 +1342,9 @@ people and agents. Clients match on `code`, never on `message`.
 | `undo_conflict` | An undo or redo would overwrite another client's later work; the step is dropped | `step_rev`, `client_id`, `rev` |
 | `history_empty` | Nothing to undo or redo | `direction` |
 | `action_failed` | An accepted action could not be carried out | `reason` |
-| `unsupported` | A valid call this implementation doesn't serve (the pairing calls without a server in front, 0.21; the `plugin.*` calls from an engine that hosts no plugins, 0.35) | `call` |
+| `unsupported` | A valid call this implementation doesn't serve (the pairing calls without a server in front, 0.21; the `plugin.*` calls from an engine that hosts no plugins, 0.35; the deprecated `privacy.set`, [ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)) | `call` |
 | `forbidden` | A plugin's call is outside its grant, or is never granted to a plugin; it never reaches the engine (0.35) | `call`, `reason` |
-| `hardware_session_limit` | `output.start` couldn't open a hardware video encoder while other outputs held hardware sessions, so the hardware session limit is taken to be reached; there is no fallback to software (0.44, [ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md) §3) | `outputs` (the holders, sorted), `reason` (the encoder's refusal) |
+| `hardware_session_limit` | `output.start` couldn't open a hardware video encoder while other outputs held hardware sessions, so the hardware session limit is taken to be reached; there is no fallback to software (0.44, [ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md) §3) | `outputs` (the holders, sorted), `reason` (the encoder's refusal) |
 | `internal` | An engine bug or unexpected condition; may be retried | `reason` |
 
 An error that isn't tied to a request (a failed handshake, or a message too broken to
@@ -1509,6 +1507,11 @@ shipped with `events.dropped`, so they ship as 0.11, an additive minor under
   `item.add`'s `transform` and `ItemInfo.transform`. Their doc comments, and so the
   schema descriptions in `protocol.snap` and the MCP `tools.snap`, say so
   ([R-TEST-002](../../docs/RULES.md#R-TEST-002)).
+- **Deprecated**, removed in 1.0: `privacy.set`, `privacy.get` and
+  `privacy.changed`, since JStream has no privacy screen
+  ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md) §4). Their
+  wire forms are unchanged, so no minor is bumped: `privacy.set` is refused with
+  `unsupported`, `privacy.get` answers `on: false`, and the event is never sent.
 - **Flips (0.32).** `flip_h` and `flip_v` are optional fields, an additive minor under
   [R-API-001](../../docs/RULES.md#R-API-001): an older peer ignores them, so it shows a
   flipped item unflipped, and one that writes the geometry back drops the flip.

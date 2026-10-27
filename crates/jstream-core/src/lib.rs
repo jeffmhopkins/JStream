@@ -39,7 +39,6 @@ mod live;
 mod outputs;
 mod plugins;
 mod preview;
-mod privacy;
 mod private_file;
 mod runtime;
 mod session;

@@ -21,7 +21,6 @@ use crate::lock;
 use crate::outputs::Outputs;
 use crate::plugins::kinds::{self as clap_kinds, ClapScan};
 use crate::preview::{Opening, PreviewHub, PreviewSource, SessionPreviews};
-use crate::privacy::Privacy;
 use crate::runtime::{
     Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, MixKey, OpenPublish,
     OutputEncode, OutputStats, Pending, PipelineEvent, Release, RenderHub, Running, SizeChange,
@@ -878,12 +877,9 @@ impl Engine {
     }
 
     /// Opens an event subscription: the stream, and the weak handle its session keeps
-    /// to end it. While the privacy screen is on, the stream starts with
-    /// `privacy.changed`, so a new client never shows an uncovered picture (ADR-0027 §4).
+    /// to end it.
     pub(crate) fn subscribe(&self) -> (Subscription, QueueRef) {
-        let mut state = lock(&self.shared.state);
-        let first = state.privacy.replay();
-        state.subscribers.subscribe(first)
+        lock(&self.shared.state).subscribers.subscribe()
     }
 
     /// Executes `call` for `client_id`, whose request it is, and wakes the subscribers
@@ -1501,7 +1497,6 @@ impl Engine {
                     Arc::clone(&state.render),
                     state.audio.wanted(),
                     canvas_size(&state.graph),
-                    &state.privacy,
                 )
             };
             let generation = host.next_generation.fetch_add(1, Ordering::Relaxed);
@@ -1525,7 +1520,7 @@ impl Engine {
             }
             // The outputs holding hardware video sessions now, stopping ones included:
             // while there is one, a new session that hardware refuses is the session
-            // limit (ADR-0027 §3, #834).
+            // limit (ADR-0080 §3, #834).
             let hardware_held = gate.hardware_held();
             // A running program stage is shared; holding it here keeps it running
             // until this start has its own hold, or gives up. Taken last, so no early
@@ -1958,7 +1953,7 @@ impl Drop for SettleOnDrop<'_> {
 
 /// Which encoder sessions `output_id` shares: the video mix it shows with that mix's
 /// size and rate now, its profile with that profile's encoding now, and the output
-/// itself when it has its own video chain, so it shares with no one (ADR-0027 §3). An
+/// itself when it has its own video chain, so it shares with no one (ADR-0080 §3). An
 /// output with no mix, or one the host declared, gets the program at the program
 /// stage's size and base rate; one with no profile the engine's default.
 fn encode_key(graph: &Graph, output_id: &OutputId) -> EncodeKey {
@@ -1989,7 +1984,7 @@ fn encode_key(graph: &Graph, output_id: &OutputId) -> EncodeKey {
 }
 
 /// Whether `output_id` starts with its own audio encode: it has an audio chain
-/// (ADR-0027), even one whose filters are all off, so switching one on later changes
+/// (ADR-0080), even one whose filters are all off, so switching one on later changes
 /// nothing but the chain. A chain added to a running output takes effect at its next
 /// start.
 fn has_audio_chain(graph: &Graph, output_id: &OutputId) -> bool {
@@ -2457,8 +2452,6 @@ struct State {
     stale_keys: BTreeSet<OutputId>,
     /// Which scene is on program. Runtime state, like `outputs`: not part of `rev`.
     studio: Studio,
-    /// The privacy screen. Runtime state, like `studio`: not part of `rev`.
-    privacy: Privacy,
     /// Forgets the capture backend's grant for each deleted source, once there are
     /// backends ([`ForgetSources`]).
     forget: Option<ForgetSources>,
@@ -2821,19 +2814,11 @@ impl State {
                     id: plugin_id.to_string(),
                 });
             }
-            Action::PrivacySet { on } => {
-                // The render thread covers the next frame it draws: it reads the flag.
-                if self.privacy.set(on, client_id) {
-                    self.subscribers.emit(
-                        &Event::PrivacyChanged {
-                            on,
-                            client_id: client_id.clone(),
-                            request_id: Some(request_id.clone()),
-                        },
-                        wake,
-                    );
-                }
-                return Ok(CallResult::Action { result: None });
+            // Deprecated: JStream has no privacy screen (ADR-0080 §4).
+            Action::PrivacySet { .. } => {
+                return Err(ProtocolError::Unsupported {
+                    call: "privacy.set".into(),
+                });
             }
             other => return Err(not_implemented(other.name())),
         };
@@ -2850,8 +2835,8 @@ impl State {
     }
 
     /// Collection reads go to `Graph::query`; `output.status` reads the outputs,
-    /// `live.list` the open gestures, `studio.get` the studio state and `privacy.get`
-    /// the privacy screen.
+    /// `live.list` the open gestures and `studio.get` the studio state; the deprecated
+    /// `privacy.get` always answers off (ADR-0080 §4).
     fn query(&self, query: &Query) -> Result<CallResult, ProtocolError> {
         let result = match self.graph.query(query) {
             Some(result) => result?,
@@ -2879,9 +2864,7 @@ impl State {
                     preview_scene: self.studio.preview().cloned(),
                 },
                 Query::DeviceList => return Err(served_by_the_server(query.name())),
-                Query::PrivacyGet => QueryResult::PrivacyGet {
-                    on: self.privacy.on(),
-                },
+                Query::PrivacyGet => QueryResult::PrivacyGet { on: false },
                 Query::SourceSizes => QueryResult::SourceSizes {
                     sources: self
                         .graph
