@@ -2,14 +2,15 @@
 id = "ADR-0027"
 title = "Program master, per-output chains and the privacy screen"
 kind = "adr"
-status = "accepted"
+status = "superseded"
+superseded_by = "docs/adr/0080-program-master-and-output-chains-v2.md"
 tier = "maintainer"
 -->
 
 # ADR-0027: Program master, per-output chains and the privacy screen
 
 <!-- @generated begin adr-status -->
-> **Status:** accepted
+> **Superseded** by [ADR-0080: Program master and per-output chains v2: no privacy screen](0080-program-master-and-output-chains-v2.md). This decision no longer applies.
 <!-- @generated end adr-status -->
 
 <a id="context"></a>

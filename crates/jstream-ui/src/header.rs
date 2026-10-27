@@ -1,9 +1,8 @@
 //! The header bar along the top of the shell (docs/UI-FEATURES.md#header): the brand,
 //! the File, Edit, View and Layout menus, the dropped-frames readout, Studio mode,
-//! the privacy screen's button (which the Pause key also toggles, anywhere in the
-//! window), Record, and Go Live / End stream. The View and Layout menus change the
-//! workspace's dock
-//! (`workspace.rs`). It keeps its own copy of the outputs, like the outputs panel does, and reports
+//! Record, and Go Live / End stream. The View and Layout menus change the workspace's
+//! dock (`workspace.rs`), and the View menu opens the program and multiview projectors
+//! (`projector.rs`). It keeps its own copy of the outputs, like the outputs panel does, and reports
 //! a failed call in the shell's problem bar.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#header, docs/UI-FEATURES.md#docking
@@ -11,11 +10,11 @@
 use crate::app::{SessionContext, SessionInfo};
 use crate::canvas::model::{history, is_history_empty};
 use crate::dock::PanelId;
-use crate::icons::Icon;
 use crate::panels::outputs::{
     OutputRow, Vcam, go_live_targets, is_running, live_outputs, load, start_blocker,
     start_or_stop_all,
 };
+use crate::projector::{self, Request, Target};
 use crate::store::Studio;
 use crate::workspace::DockState;
 use futures_util::StreamExt;
@@ -117,13 +116,25 @@ fn shrank(now: DropCounts, before: DropCounts) -> bool {
 const STUDIO_MODE_KEY: &str = "jstream.studio-mode";
 
 /// Whether the browser kept studio mode on. Storage can be off; it is then off.
-fn kept_studio_mode() -> bool {
+pub(crate) fn kept_studio_mode() -> bool {
     window()
         .local_storage()
         .ok()
         .flatten()
         .and_then(|storage| storage.get_item(STUDIO_MODE_KEY).ok().flatten())
         .is_some_and(|value| value == "on")
+}
+
+/// Calls `changed` with studio mode each time another window of this browser (the
+/// workspace, seen from a projector) keeps a new value, until the calling component is
+/// cleaned up.
+pub(crate) fn on_kept_studio_mode(changed: impl Fn(bool) + 'static) {
+    let listener = window_event_listener(leptos::ev::storage, move |event| {
+        if event.key().as_deref() == Some(STUDIO_MODE_KEY) {
+            changed(event.new_value().as_deref() == Some("on"));
+        }
+    });
+    on_cleanup(move || listener.remove());
 }
 
 /// Keeps studio mode in the browser's storage, when it has storage.
@@ -266,20 +277,6 @@ pub fn Header(
         }
     });
     on_cleanup(move || escape.remove());
-    // The privacy screen goes the other way from what the engine last said it is.
-    let toggle_privacy = move || {
-        if let Some(session) = session.get() {
-            studio.set_privacy(&session, !studio.privacy.get_untracked());
-        }
-    };
-    let pause = window_event_listener(leptos::ev::keydown, move |event| {
-        if event.key() == "Pause" && !event.repeat() {
-            event.prevent_default();
-            toggle_privacy();
-        }
-    });
-    on_cleanup(move || pause.remove());
-    let private = move || studio.privacy.get();
     let toggle =
         move |menu: Menu| open.update(|open| *open = (*open != Some(menu)).then_some(menu));
     let menu_button = move |menu: Menu, label: &'static str| {
@@ -372,6 +369,28 @@ pub fn Header(
                                     </button>
                                 }
                             }).collect_view()}
+                            <div class="menu-sep"></div>
+                            <p class="menu-head">"PROJECTORS"</p>
+                            {[
+                                ("Program in a window", Target::Program, false),
+                                ("Program full screen", Target::Program, true),
+                                ("Multiview in a window", Target::Multiview, false),
+                                ("Multiview full screen", Target::Multiview, true),
+                            ].into_iter().map(|(label, target, full)| {
+                                let request = Request { target, full };
+                                view! {
+                                    <button
+                                        class="menuitem"
+                                        role="menuitem"
+                                        on:click=move |_| {
+                                            open.set(None);
+                                            projector::open_and_report(studio, &request);
+                                        }
+                                    >
+                                        {label}
+                                    </button>
+                                }
+                            }).collect_view()}
                         </div>
                     </Show>
                 </div>
@@ -458,17 +477,6 @@ pub fn Header(
                 }
             >
                 "Studio mode"
-            </button>
-            <button
-                class="header-button privacy"
-                class:on=private
-                aria-label="Privacy screen"
-                aria-pressed=move || if private() { "true" } else { "false" }
-                title="Privacy screen: blur the whole output and mute the mic (Pause)"
-                on:click=move |_| toggle_privacy()
-            >
-                <Icon name="eye-off" size=14 />
-                {move || if private() { "Privacy on" } else { "Privacy" }}
             </button>
             <button
                 class="header-button"

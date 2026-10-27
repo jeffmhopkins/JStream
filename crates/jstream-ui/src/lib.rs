@@ -27,6 +27,7 @@ pub mod item_menu;
 pub mod menu;
 pub mod pairing;
 pub mod panels;
+pub mod projector;
 pub mod session;
 pub mod store;
 pub mod workspace;

@@ -1,5 +1,6 @@
 //! The root component: the connect form until a session is open, then the shell (the
-//! header over the workspace), and the event loop that keeps the shared [`Studio`] state
+//! header over the workspace), or a projector on a projector window's page
+//! (`projector.rs`), and the event loop that keeps the shared [`Studio`] state
 //! current. Which panel sits where is the workspace's dock (`dock.rs`, `workspace.rs`).
 //!
 //! Docs: crates/jstream-ui/README.md#design
@@ -15,6 +16,7 @@ use crate::panels::labels::LabelManager;
 use crate::panels::mixer::MixerOrientation;
 use crate::panels::scene_properties::{SceneDialog, SceneProperties};
 use crate::panels::source_properties::{PropertiesDialog, SourceProperties};
+use crate::projector::Projector;
 use crate::session::{Session, engine_url_for_page};
 use crate::store::Studio;
 use crate::workspace::{DockState, Workspace, restore};
@@ -135,9 +137,15 @@ pub fn App() -> impl IntoView {
         });
     };
 
-    // In the desktop app, connect to its engine at once (`host.rs`).
+    // A projector window (`projector.rs`) shows one picture instead of the workspace.
+    let projector = crate::projector::page_request();
+    // In the desktop app, connect to its engine at once (`host.rs`). A projector in a
+    // browser connects at once too, with the credentials the browser already sends,
+    // and shows the connect form if they aren't enough.
     if let Some(engine) = crate::host::desktop() {
         connect(engine.url, engine.token);
+    } else if projector.is_some() {
+        connect(default_engine_url(), String::new());
     }
 
     view! {
@@ -145,7 +153,10 @@ pub fn App() -> impl IntoView {
             when=move || status.get() == Status::Connected
             fallback=move || view! { <ConnectForm status=status connect=connect /> }
         >
-            <Shell info=info disconnect=move || end_session(None) />
+            {match projector.clone() {
+                Some(request) => view! { <Projector request=request /> }.into_any(),
+                None => view! { <Shell info=info disconnect=move || end_session(None) /> }.into_any(),
+            }}
         </Show>
     }
 }

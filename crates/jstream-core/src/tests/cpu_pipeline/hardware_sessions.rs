@@ -1,4 +1,4 @@
-//! A full hardware session limit fails the start (ADR-0027 §3, #443 case 2): while any
+//! A full hardware session limit fails the start (ADR-0080 §3, #443 case 2): while any
 //! output holds a hardware video session, a new session opens with `require`, and a
 //! refusal is `hardware_session_limit` naming the holders, never a silent fallback to
 //! software. `avoid` still opens software, and with no hardware session open `prefer`

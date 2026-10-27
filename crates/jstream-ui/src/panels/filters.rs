@@ -1,6 +1,6 @@
 //! Filters (spec-panels.md 5, spec-workspace.md 6.2.6 to 6.4): the selected item's
 //! source's video and audio chains (ADR-0026) in the Filters panel and the Properties
-//! dialog, the program output's and each output's chains (ADR-0027) in the Filters panel
+//! dialog, the program output's and each output's chains (ADR-0080) in the Filters panel
 //! once an FX button picks them, and the Add filter and Filter settings dialogs over them. A row turns its
 //! filter on or off, shows a summary of its settings, opens its settings, drags to
 //! another place in its chain and removes it. A filter with three settings or fewer
@@ -16,11 +16,13 @@
 
 use crate::app::SessionContext;
 use crate::dialog::Modal;
+use crate::dock::PanelId;
 use crate::icons::Icon;
 use crate::panels::add_source::{has_picture, type_label};
 use crate::panels::properties::{Form, draft_patch, value_of};
 use crate::panels::tree::{Reorder, Side, dropped_at};
 use crate::store::{Collection, Studio, apply};
+use crate::workspace::DockState;
 use jstream_control::protocol::{
     Edit, FilterChain, FilterId, FilterInfo, FilterOwner, ItemId, KindCategory, KindDescriptor,
     KindSummary, MAX_CHAIN_FILTERS, OutputKind, ParamType, Reference, SceneId, Settings, SourceId,
@@ -582,6 +584,72 @@ fn own_source(owner: &FilterOwner) -> SourceId {
         .unwrap_or_else(|| SourceId::new(""))
 }
 
+/// The owner of the chain `scene_id` shows (FL-06): the scene's own, or for a keyframe
+/// scene its parent's, since a keyframe has no filters of its own (ADR-0065 §3).
+pub fn scene_owner(collection: &Collection, scene_id: &SceneId) -> FilterOwner {
+    let scene_id = collection
+        .parent_of(scene_id)
+        .map_or(scene_id, |parent| &parent.scene_id)
+        .clone();
+    FilterOwner::Scene { scene_id }
+}
+
+/// Whether `scene_id`'s picture holds `inner`'s: it is `inner`, a keyframe of a scene that
+/// holds it, or it places a nested scene that does.
+fn holds_scene(collection: &Collection, scene_id: &SceneId, inner: &SceneId) -> bool {
+    fn walk(c: &Collection, at: &SceneId, inner: &SceneId, seen: &mut HashSet<SceneId>) -> bool {
+        if at == inner {
+            return true;
+        }
+        if !seen.insert(at.clone()) {
+            return false;
+        }
+        let Some(scene) = c.scene(at) else {
+            return false;
+        };
+        if let Some(parent) = &scene.variant_of
+            && walk(c, parent, inner, seen)
+        {
+            return true;
+        }
+        scene.items.iter().any(|item| {
+            matches!(
+                c.source(&item.source_id).map(|s| &s.kind),
+                Some(SourceKind::Scene { scene_id }) if walk(c, scene_id, inner, seen)
+            )
+        })
+    }
+    walk(collection, scene_id, inner, &mut HashSet::new())
+}
+
+/// The scenes a scene-input filter on `owner` may use (F8). For a scene's chain, every
+/// scene whose picture doesn't hold the scene itself; for any other owner,
+/// [`scene_choices`]'.
+pub fn owner_scene_choices(
+    collection: &Collection,
+    owner: &FilterOwner,
+    editing: Option<&SceneId>,
+) -> Vec<(SceneId, String)> {
+    match owner {
+        FilterOwner::Scene { scene_id } => collection
+            .listed_scenes()
+            .filter(|s| !holds_scene(collection, &s.scene_id, scene_id))
+            .map(|s| (s.scene_id.clone(), s.name.clone()))
+            .collect(),
+        _ => scene_choices(collection, editing, &own_source(owner)),
+    }
+}
+
+/// Shows `owner`'s chains in the Filters panel, as a scene's Edit filters… does.
+pub fn show_filters(dialogs: Option<FilterDialogs>, dock: Option<DockState>, owner: FilterOwner) {
+    if let Some(dialogs) = dialogs {
+        dialogs.pick(owner);
+    }
+    if let Some(dock) = dock {
+        dock.0.update(|d| d.show(PanelId::Filters));
+    }
+}
+
 /// A filter of an owner, by its ID.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Target {
@@ -624,14 +692,16 @@ impl FilterDialogs {
     }
 
     /// Has the Filters panel show `owner`'s chains (the program output's or an
-    /// output's, from its FX button) until another item is selected or [`unpick`] runs.
+    /// output's, from its FX button, or a scene's, from its Edit filters…) until another
+    /// item or scene is selected or [`unpick`] runs.
     ///
     /// [`unpick`]: FilterDialogs::unpick
     pub fn pick(&self, owner: FilterOwner) {
         self.picked.set(Some(owner));
     }
 
-    /// Has the Filters panel show the selected item's source's chains again.
+    /// Has the Filters panel show the selection's chains again: the selected item's
+    /// source's, or with no item the selected scene's.
     pub fn unpick(&self) {
         self.picked.set(None);
     }
@@ -689,17 +759,17 @@ fn describe_all(
     }
 }
 
-/// The Filters panel (spec-panels.md 5): the chains of the program output or an output
-/// an FX button picked (FL-07), else the selected item's source's. A scene's chain waits
-/// on its editor (FL-06).
+/// The Filters panel (spec-panels.md 5): the chains an FX button or a scene's Edit
+/// filters… picked (FL-07, FL-06), else the selected item's source's, else the selected
+/// scene's (FL-06).
 #[component]
 pub fn Filters() -> impl IntoView {
     let studio = expect_context::<Studio>();
     let dialogs = expect_context::<FilterDialogs>();
-    let item = Memo::new(move |_| studio.selection.with(|s| s.item.clone()));
-    // Selecting another item shows its source's chains again.
-    Effect::new(move |before: Option<Option<ItemId>>| {
-        let now = item.get();
+    let selected = Memo::new(move |_| studio.selection.with(|s| (s.scene.clone(), s.item.clone())));
+    // Selecting another item or scene shows its chains again.
+    Effect::new(move |before: Option<(Option<SceneId>, Option<ItemId>)>| {
+        let now = selected.get();
         if before.is_some_and(|before| before != now) {
             dialogs.unpick();
         }
@@ -708,18 +778,24 @@ pub fn Filters() -> impl IntoView {
     // The owner shown, with its header: icon, name and note.
     let shown = Memo::new(move |_| {
         let picked = dialogs.picked();
-        let item = item.get();
+        let (scene, item) = selected.get();
         studio.collection.with(|c| {
             let c = c.as_ref()?;
             let owner = match picked.filter(|p| c.chains(p).is_some()) {
                 Some(owner) => owner,
-                None => {
-                    let (_, item) = c.item(item.as_ref()?)?;
-                    c.source(&item.source_id)?;
-                    FilterOwner::Source {
-                        source_id: item.source_id.clone(),
+                None => match item.as_ref().and_then(|item| c.item(item)) {
+                    Some((_, item)) => {
+                        c.source(&item.source_id)?;
+                        FilterOwner::Source {
+                            source_id: item.source_id.clone(),
+                        }
                     }
-                }
+                    None => {
+                        let owner = scene_owner(c, scene.as_ref()?);
+                        c.chains(&owner)?;
+                        owner
+                    }
+                },
             };
             let head = (
                 owner_icon(c, &owner),
@@ -741,7 +817,7 @@ pub fn Filters() -> impl IntoView {
                             <span class="filters-title">"Nothing selected"</span>
                         </div>
                     </div>
-                    <p class="placeholder">"Select a source to see its filters."</p>
+                    <p class="placeholder">"Select a source or a scene."</p>
                 }
                 .into_any(),
                 Some((icon, name, note)) => view! {
@@ -1485,7 +1561,6 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
             (video, audio, owner_name(c, &owner))
         })
     });
-    let source_id = own_source(&owner);
     let types = Memo::new(move |_| {
         studio
             .kinds
@@ -1534,10 +1609,10 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
         })
     });
     let foot = owner_foot(&owner);
-    let none = if owner.source_id().is_some() {
-        "The engine lists no filters for this source."
-    } else {
-        "The engine lists no filters for this output."
+    let none = match &owner {
+        FilterOwner::Source { .. } => "The engine lists no filters for this source.",
+        FilterOwner::Scene { .. } => "The engine lists no filters for this scene.",
+        _ => "The engine lists no filters for this output.",
     };
     let owner = StoredValue::new(owner);
     // Whether the owner's `chain` holds all the filters it can.
@@ -1674,74 +1749,71 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
     };
 
     let editing = studio.selection.with_untracked(|s| s.scene.clone());
-    let detail = {
-        let source_id = source_id.clone();
-        move || {
-            let t = current.get()?;
-            let chain_name = match t.chain {
-                FilterChain::Video => "Video",
-                FilterChain::Audio => "Audio",
-            };
-            let settings = descriptor.with(|d| {
-                d.as_ref().map(|d| {
-                    if d.params.is_empty() {
-                        "None".to_owned()
-                    } else {
-                        d.params
-                            .iter()
-                            .map(|p| p.label.clone())
-                            .collect::<Vec<_>>()
-                            .join(" · ")
-                    }
-                })
-            });
-            let choices = studio.collection.with(|c| {
-                c.as_ref()
-                    .map(|c| scene_choices(c, editing.as_ref(), &source_id))
-                    .unwrap_or_default()
-            });
-            let scene_select = scene_param.get().map(|_| {
-                let options = choices
-                    .into_iter()
-                    .map(|(id, name)| view! { <option value=id.to_string()>{name}</option> })
-                    .collect_view();
-                view! {
-                    <label class="field add-filter-scene">
-                        <span class="label">"Uses the scene"</span>
-                        <select
-                            prop:value=move || scene.get().map(|s| s.to_string()).unwrap_or_default()
-                            on:change=move |event| {
-                                let v = event_target_value(&event);
-                                scene.set((!v.is_empty()).then(|| SceneId::new(v)));
-                            }
-                        >
-                            <option value="">"Choose a scene…"</option>
-                            {options}
-                        </select>
-                    </label>
+    let detail = move || {
+        let t = current.get()?;
+        let chain_name = match t.chain {
+            FilterChain::Video => "Video",
+            FilterChain::Audio => "Audio",
+        };
+        let settings = descriptor.with(|d| {
+            d.as_ref().map(|d| {
+                if d.params.is_empty() {
+                    "None".to_owned()
+                } else {
+                    d.params
+                        .iter()
+                        .map(|p| p.label.clone())
+                        .collect::<Vec<_>>()
+                        .join(" · ")
                 }
-            });
-            let full_note = full(t.chain).then(|| {
-                view! {
-                    <p class="add-note">
-                        {format!("This chain is full: {MAX_CHAIN_FILTERS} filters at most.")}
-                    </p>
-                }
-            });
-            Some(view! {
-                <div class="add-filter-title">{t.name.clone()}</div>
-                <div class="add-filter-kind">{format!("{chain_name} · {}", t.group)}</div>
-                {(!t.hint.is_empty()).then(|| view! { <p class="add-filter-hint">{t.hint}</p> })}
-                {scene_select}
-                {settings.map(|s| view! {
-                    <div class="add-filter-settings">
-                        <span class="add-existing-title">"Settings"</span>
-                        <span>{s}</span>
-                    </div>
-                })}
-                {full_note}
             })
-        }
+        });
+        let choices = studio.collection.with(|c| {
+            c.as_ref()
+                .map(|c| owner.with_value(|o| owner_scene_choices(c, o, editing.as_ref())))
+                .unwrap_or_default()
+        });
+        let scene_select = scene_param.get().map(|_| {
+            let options = choices
+                .into_iter()
+                .map(|(id, name)| view! { <option value=id.to_string()>{name}</option> })
+                .collect_view();
+            view! {
+                <label class="field add-filter-scene">
+                    <span class="label">"Uses the scene"</span>
+                    <select
+                        prop:value=move || scene.get().map(|s| s.to_string()).unwrap_or_default()
+                        on:change=move |event| {
+                            let v = event_target_value(&event);
+                            scene.set((!v.is_empty()).then(|| SceneId::new(v)));
+                        }
+                    >
+                        <option value="">"Choose a scene…"</option>
+                        {options}
+                    </select>
+                </label>
+            }
+        });
+        let full_note = full(t.chain).then(|| {
+            view! {
+                <p class="add-note">
+                    {format!("This chain is full: {MAX_CHAIN_FILTERS} filters at most.")}
+                </p>
+            }
+        });
+        Some(view! {
+            <div class="add-filter-title">{t.name.clone()}</div>
+            <div class="add-filter-kind">{format!("{chain_name} · {}", t.group)}</div>
+            {(!t.hint.is_empty()).then(|| view! { <p class="add-filter-hint">{t.hint}</p> })}
+            {scene_select}
+            {settings.map(|s| view! {
+                <div class="add-filter-settings">
+                    <span class="add-existing-title">"Settings"</span>
+                    <span>{s}</span>
+                </div>
+            })}
+            {full_note}
+        })
     };
 
     view! {
@@ -2085,6 +2157,96 @@ mod tests {
         .map(|(_, name)| name)
         .collect();
         assert_eq!(choices, ["SHAPE"]);
+    }
+
+    /// A scene's chain (FL-06): a keyframe shows its parent's, and a scene input on it
+    /// leaves out the scene and every scene whose picture holds it.
+    #[test]
+    fn a_scene_shows_its_own_chain_and_its_inputs_leave_out_what_holds_it() {
+        use jstream_control::protocol::{
+            Crop, Finite32, ItemInfo, ItemTransform, PlacementForm, SceneRole,
+        };
+        let item = |source: &str| ItemInfo {
+            item_id: format!("i-{source}").as_str().into(),
+            source_id: source.into(),
+            placement: PlacementForm::Legacy,
+            transform: ItemTransform::IDENTITY,
+            geometry: None,
+            crop: Crop::NONE,
+            visible: true,
+            effects: Vec::new(),
+            opacity: Finite32::ONE,
+            blend: Default::default(),
+            transition: jstream_control::protocol::ItemTransition::default(),
+        };
+        let scene = |id: &str, items: Vec<ItemInfo>, variant_of: Option<&str>| SceneInfo {
+            overrides: Vec::new(),
+            filters: Default::default(),
+            variant_of: variant_of.map(SceneId::new),
+            scene_id: id.into(),
+            name: id.to_uppercase(),
+            role: SceneRole::Scene,
+            folder: None,
+            meta: Default::default(),
+            items,
+            transition_in: None,
+            transition_out: None,
+        };
+        let nested = |id: &str, scene_id: &str| SourceInfo {
+            source_id: SourceId::new(id),
+            name: id.into(),
+            kind: SourceKind::Scene {
+                scene_id: SceneId::new(scene_id),
+            },
+            settings: Settings::new(),
+            duplicated_from: None,
+            audio: None,
+            filters: Default::default(),
+            meta: Default::default(),
+        };
+        // `outer` nests `middle`, which nests `cam`; `cam-close` is a keyframe of `cam`.
+        let collection = Collection {
+            scenes: vec![
+                scene("cam", vec![item("webcam")], None),
+                scene("cam-close", vec![], Some("cam")),
+                scene("middle", vec![item("n-cam")], None),
+                scene("outer", vec![item("n-middle")], None),
+                scene("shape", vec![], None),
+            ],
+            sources: vec![nested("n-cam", "cam"), nested("n-middle", "middle")],
+            ..Collection::default()
+        };
+        let cam = scene_owner(&collection, &SceneId::new("cam"));
+        assert_eq!(
+            scene_owner(&collection, &SceneId::new("cam-close")),
+            cam,
+            "a keyframe shows its parent's chain"
+        );
+        assert_eq!(owner_chains(&collection, &cam), (true, false));
+        assert_eq!(owner_name(&collection, &cam), "CAM");
+        assert_eq!(
+            owner_note(&collection, &cam),
+            "Scene filters apply to the whole scene, top to bottom."
+        );
+        assert!(collection.chains(&cam).is_some());
+
+        let names = |owner: &FilterOwner| -> Vec<String> {
+            owner_scene_choices(&collection, owner, None)
+                .into_iter()
+                .map(|(_, name)| name)
+                .collect()
+        };
+        assert_eq!(names(&cam), ["SHAPE"]);
+        let middle = scene_owner(&collection, &SceneId::new("middle"));
+        assert_eq!(names(&middle), ["CAM", "CAM-CLOSE", "SHAPE"]);
+        // A source's choices are still [`scene_choices`]'.
+        let webcam = FilterOwner::Source {
+            source_id: SourceId::new("webcam"),
+        };
+        assert_eq!(
+            owner_scene_choices(&collection, &webcam, None),
+            scene_choices(&collection, None, &SourceId::new("webcam"))
+        );
     }
 
     #[test]

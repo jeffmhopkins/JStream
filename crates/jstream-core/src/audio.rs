@@ -35,7 +35,7 @@
 //! each source's filter chain); this module only sets them up.
 //!
 //! The master stage's audio chain runs on the mixer's master chain, so on every bus that
-//! feeds an output (ADR-0027, docs/adr/0027-program-master-and-output-chains.md). An
+//! feeds an output (ADR-0080, docs/adr/0080-program-master-and-output-chains-v2.md). An
 //! output that starts with an audio chain of its own gets an output tap on the master
 //! bus, which runs that chain after the master's; the output encodes its audio from the
 //! tap instead of sharing the master bus's encode. Each sync brings both chains in line
@@ -289,7 +289,7 @@ impl AudioRouting {
     }
 
     /// Adds an output tap on the master bus for `output_id`, running its audio chain as
-    /// `state` says, for an output that encodes its own audio (ADR-0027). The engine
+    /// `state` says, for an output that encodes its own audio (ADR-0080). The engine
     /// keeps the tap's chain in line on every sync, until
     /// [`remove_output_tap`](Self::remove_output_tap).
     ///

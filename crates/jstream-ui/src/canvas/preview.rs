@@ -49,6 +49,7 @@ pub fn subscribe(width: f32, height: f32, pixel_ratio: f32, h264: bool) -> Actio
         max_height: Some(side(height, 180, 720).min(*PreviewSettings::HEIGHT.end())),
         fps: Some(FPS),
         codecs,
+        scene_id: None,
     }
 }
 
@@ -308,11 +309,13 @@ mod tests {
             max_height,
             fps,
             codecs,
+            scene_id,
         } = subscribe(800.0, 450.0, 2.0, true)
         else {
             panic!("a subscribe");
         };
         assert_eq!(channel, CHANNEL);
+        assert_eq!(scene_id, None, "the program mix");
         assert_eq!((max_width, max_height), (Some(1280), Some(720)));
         assert_eq!(fps, Some(FPS));
         assert_eq!(codecs, vec![PreviewCodec::H264, PreviewCodec::Jpeg]);

@@ -603,6 +603,11 @@ impl RenderCaptures {
         total
     }
 
+    /// The frames taken from every capture so far: it moves whenever one has a new frame.
+    pub(crate) fn frames(&self) -> u64 {
+        self.versions
+    }
+
     /// GPU frames taken, for [`OutputStats::gpu_captures`](super::OutputStats).
     pub(crate) fn gpu_captures(&self) -> u64 {
         self.gpu_captures

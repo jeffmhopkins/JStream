@@ -171,7 +171,7 @@ pub struct State {
     /// Each send's gain in dB, keyed by bus, then by source: the order `bus.list`
     /// reports them in.
     pub(crate) sends: BTreeMap<(BusId, SourceId), Finite32>,
-    /// The master stage's chains (ADR-0027 §1).
+    /// The master stage's chains (ADR-0080 §1).
     pub(crate) master: Chains,
     pub(crate) hotkeys: BTreeMap<Chord, Action>,
     /// In folder order.
@@ -223,7 +223,7 @@ impl State {
     }
 
     /// The master stage's filter chains, which apply to everything leaving JStream
-    /// (ADR-0027 §1). Only the audio chain holds filters so far.
+    /// (ADR-0080 §1). Only the audio chain holds filters so far.
     pub fn master(&self) -> &Chains {
         &self.master
     }
@@ -491,7 +491,7 @@ impl Source {
 }
 
 /// An owner's two filter chains, each first filter first (ADR-0026): a source's, the master
-/// stage's, an output's, a scene's or an item's (ADR-0027, ADR-0065).
+/// stage's, an output's, a scene's or an item's (ADR-0080, ADR-0065).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Chains {
     pub(crate) video: Vec<Filter>,
@@ -892,7 +892,7 @@ pub struct Output {
     pub(crate) id: OutputId,
     pub(crate) kind: OutputKind,
     pub(crate) encoder_profile: Option<EncoderProfileId>,
-    /// Its own chains, after the master stage (ADR-0027 §2).
+    /// Its own chains, after the master stage (ADR-0080 §2).
     pub(crate) filters: Chains,
     pub(crate) video_mix: Option<VideoMixId>,
 }
@@ -913,7 +913,7 @@ impl Output {
         self.encoder_profile.as_ref()
     }
 
-    /// Its own filter chains, which run after the master stage (ADR-0027 §2). Only the
+    /// Its own filter chains, which run after the master stage (ADR-0080 §2). Only the
     /// audio chain holds filters so far.
     pub fn filters(&self) -> &Chains {
         &self.filters
@@ -934,7 +934,7 @@ impl Output {
     }
 
     /// Whether its own video filter chain has any filters. Such an output gets its own
-    /// render pass and encoder session (ADR-0027 §3). Outputs carry no video chain
+    /// render pass and encoder session (ADR-0080 §3). Outputs carry no video chain
     /// until filters land, so this is `false` for every output.
     pub fn has_video_chain(&self) -> bool {
         false

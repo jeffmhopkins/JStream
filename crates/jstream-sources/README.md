@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0073-sources-drawn-at-their-shown-size.md"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0073-sources-drawn-at-their-shown-size.md", "docs/adr/0079-text-density-bounded-by-pixels.md"]
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -174,9 +174,11 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `set_density(d)` draws the same layout with every length (the em size, the glyphs'
   positions, the outline, the padding) multiplied by `d`, so the frame has `d` times the
   pixels each way and stands for the same size, which `set_density` returns and the
-  engine places it at. Densities run from 1 to `MAX_DENSITY` (8); one whose frame would
-  be over the limits is halved until it fits, down to 1. An update draws at the density
-  set last.
+  engine places it at. Densities run from 1 to `MAX_DENSITY` (32), lowered to the
+  highest whose frame holds at most a 4K canvas's pixels and is at most 8192 each way
+  ([ADR-0079](../../docs/adr/0079-text-density-bounded-by-pixels.md)); one whose frame
+  would still be over the limits is halved until it fits, down to 1. An update draws at
+  the density set last, lowered the same way.
 - `display` and `window`: what the platform captures, by the `target` setting, a
   capture-backend target ID (on Windows `monitor:` and the display's GDI device name, or
   `hwnd:0x` and the window handle). An empty `display` target is the primary display,
@@ -424,7 +426,8 @@ temporary folder: PNG, GIF and lossless WebP files are encoded by the test, and
 the test's header describes. `tests/text.rs` draws with the bundled font: wrapping,
 alignment, padding, outline, live updates, font assets and limits, drawing at a
 density (twice the pixels for the same extent, kept across an update, clamped to
-`MAX_DENSITY`, halved to fit the limits), plus golden PNGs in `tests/data/text`, one of
+`MAX_DENSITY`, lowered to a 4K canvas's pixels, halved to fit the limits, and a short
+line filling the canvas drawn at the 13x it is shown at), plus golden PNGs in `tests/data/text`, one of
 them the styled text at a density of 2^0.75 (`JSTREAM_BLESS=1` rewrites them). The scope's unit tests check the
 ring (latest window, wrap-around, and a reader racing a writer never seeing a torn
 window), the frame ticks and easing, and draw both kinds from known audio: each
