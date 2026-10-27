@@ -37,8 +37,8 @@ Contents (a first cut; Windows first, because the window needs WebView2):
   and the virtual camera's status.
 - **Browser sources** (`browser.rs`, Windows with the `cef` feature only): the CEF
   backend the engine opens `browser` sources' pages in.
-- **Window** (`shell.rs`, Windows only): the Tauri window, its navigation guard and
-  shutdown.
+- **Window** (`shell.rs`, Windows only): the Tauri window, its navigation guard, the
+  projector windows the UI opens, and shutdown.
 - **Log file** (`logs.rs`), in the data folder `jstream-platform`'s `paths` module finds:
   a new user-only file at each start, through `create_private_file` on Windows and
   `jstream-crash`'s `create_new` elsewhere.
@@ -176,8 +176,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   Windows without that export (Windows 10), `WindowsVcam::start` probes for it first,
   so `output.start` fails with a reason rather than a delay-load exception.
 - **The window stays on the app.** Navigation to anything but the app's scheme is
-  refused, and so are new windows, so no other page loads in a webview that runs the
-  bootstrap script. The page gets no Tauri IPC: the app defines no commands and grants
+  refused, so no other page loads in a webview that runs the bootstrap script. A new
+  window opens only for one of the UI's projector pages (`?projector=`, the UI's
+  `projector.rs`): another window of the app with the same rules and script, starting
+  on `about:blank` as a window handed back to `window.open` must, placed and sized as
+  the page asked, and full screen when it asked for that (`&full=1`). Every other new
+  window is refused, and a projector can open none. The page gets no Tauri IPC: the app defines no commands and grants
   no capabilities, so the API is the only way in.
 - **Failures are a page, not a crash.** Media Foundation missing (an N edition), no
   data folder, a broken collection file or a missing bundle: the scheme serves a page

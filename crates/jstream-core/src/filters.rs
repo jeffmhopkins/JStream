@@ -6,7 +6,7 @@
 //!
 //! The mapping drives every audio chain the mixer runs: each audio source's on its own
 //! mixer input, the master stage's on every bus that feeds an output, and an output's
-//! own on its output tap (ADR-0027). One setting only a rebuild changes: a limiter's
+//! own on its output tap (ADR-0080). One setting only a rebuild changes: a limiter's
 //! `lookahead_ms`, which is its latency, so [`params`] leaves it out and the descriptor
 //! marks it not live.
 

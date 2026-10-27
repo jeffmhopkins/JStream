@@ -9,8 +9,7 @@
 //! parent's items, do nothing there.
 //!
 //! Under the boxes is the live program preview: one `preview.subscribe` stream on the
-//! session's binary channel, decoded into a `<canvas>` ([`preview`], [`screen`]).
-//! While the privacy screen is on, the frame is blurred and a notice says so. Pure
+//! session's binary channel, decoded into a `<canvas>` ([`preview`], [`screen`]). Pure
 //! logic lives in [`transform`], [`crop`], [`snap`], [`model`] and [`preview`], which are tested
 //! natively; this module is the Leptos component that wires them to the page.
 //!
@@ -30,6 +29,7 @@ use crate::dock::PanelId;
 use crate::item_menu;
 use crate::menu::{Entry, Menus};
 use crate::panels::add_source::AddSourceDialog;
+use crate::panels::filters::{FilterDialogs, scene_owner, show_filters};
 use crate::store::Studio;
 use crate::workspace::DockState;
 use crop::{CropGesture, Picture};
@@ -863,6 +863,7 @@ pub fn Canvas() -> impl IntoView {
     let menus = use_context::<Menus>();
     let adder = use_context::<AddSourceDialog>();
     let scene_dialog = use_context::<crate::panels::scene_properties::SceneDialog>();
+    let filters = use_context::<FilterDialogs>();
     let on_context = move |event: ev::MouseEvent| {
         let Some(menus) = menus else {
             return;
@@ -941,7 +942,7 @@ pub fn Canvas() -> impl IntoView {
             };
             let props_scene = scene.clone();
             vec![
-                Entry::submenu("Pop out", Vec::new()),
+                crate::projector::pop_out(studio, scene.clone()),
                 Entry::Sep,
                 select,
                 snap,
@@ -955,7 +956,17 @@ pub fn Canvas() -> impl IntoView {
                     }
                 })
                 .disabled_if(scene_dialog.is_none() || !has_scene),
-                Entry::unavailable("Edit scene filters…"),
+                Entry::item("Edit scene filters…", move || {
+                    let owner = scene.as_ref().and_then(|scene| {
+                        studio
+                            .collection
+                            .with_untracked(|c| c.as_ref().map(|c| scene_owner(c, scene)))
+                    });
+                    if let Some(owner) = owner {
+                        show_filters(filters, dock, owner);
+                    }
+                })
+                .disabled_if(!has_scene),
             ]
         };
         menus.open(&event, entries);
@@ -1405,7 +1416,6 @@ pub fn Canvas() -> impl IntoView {
         >
             <div
                 class="preview stage"
-                class:private=move || studio.privacy.get()
                 node_ref=stage
                 tabindex="0"
                 aria-label=move || format!("Scene canvas, {}", scene_name())
@@ -1506,15 +1516,6 @@ pub fn Canvas() -> impl IntoView {
             })}
             <div class="canvas-caption">{caption}</div>
             {legacy_note}
-            // The live region is always there, so a screen reader announces the notice
-            // when it appears inside it.
-            <div class="privacy-live" role="status">
-                <Show when=move || studio.privacy.get()>
-                    <div class="privacy-notice">
-                        "Privacy screen on · output blurred · mic muted"
-                    </div>
-                </Show>
-            </div>
         </div>
     }
 }

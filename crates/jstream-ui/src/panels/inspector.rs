@@ -15,7 +15,7 @@ use super::studio;
 use crate::app::SessionContext;
 use crate::hotkeys;
 use crate::icons::{Icon, named};
-use crate::panels::labels::{LabelChips, LabelPicker, carried};
+use crate::panels::labels::{LabelChips, LabelPopover, TagButton, TagPopover, Tagged, carried};
 use crate::panels::sources::icon_of;
 use crate::store::{Collection, Studio};
 use jstream_control::protocol::{
@@ -655,7 +655,7 @@ struct Head {
 
 /// The selected item's header (I1): its type icon, its name (in italics when its source
 /// is placed in other scenes too), its kind, "+N" for the others selected, its labels'
-/// chips, the labels popover and the favourite star.
+/// chips, the tag button whose popover opens under the header, and the favourite star.
 #[component]
 fn ItemHeader(item: ItemId) -> impl IntoView {
     let studio = expect_context::<Studio>();
@@ -715,9 +715,15 @@ fn ItemHeader(item: ItemId) -> impl IntoView {
     // its popover open.
     let picked =
         Memo::new(move |_| head.with(|h| h.source_id.clone().map(|id| (id, h.name.clone()))));
+    let popover = TagPopover::new();
     let picker = move || {
-        picked.get().map(|(source_id, name)| {
-            view! { <LabelPicker source_id=source_id name=name always=true /> }
+        picked
+            .get()
+            .map(|(_, name)| view! { <TagButton popover=popover name=name always=true /> })
+    };
+    let pop = move || {
+        picked.get().map(|(source_id, _)| {
+            view! { <LabelPopover popover=popover target=Tagged::Source(source_id) /> }
         })
     };
     view! {
@@ -733,6 +739,7 @@ fn ItemHeader(item: ItemId) -> impl IntoView {
             {picker}
             {favourite_button(move || head.with(|h| h.favourite), toggle)}
         </div>
+        {pop}
     }
 }
 
@@ -1126,7 +1133,8 @@ fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoV
     }
 }
 
-/// The selected scene's header and sections.
+/// The selected scene's header (its icon, name, kind, its labels' chips, the tag button
+/// whose popover opens under the header, and the favourite star) and sections.
 #[component]
 fn SceneSections(scene: SceneId) -> impl IntoView {
     let studio = expect_context::<Studio>();
@@ -1138,6 +1146,15 @@ fn SceneSections(scene: SceneId) -> impl IntoView {
             .with(|c| c.as_ref().and_then(|c| c.scene(&id.get_value()).cloned()))
     });
     let name = move || info.with(|s| s.as_ref().map(|s| s.name.clone()).unwrap_or_default());
+    let labels = Signal::derive(move || {
+        studio.collection.with(|c| {
+            c.as_ref()
+                .zip(info.with(|s| s.as_ref().map(|s| s.meta.labels.clone())))
+                .map(|(c, ids)| carried(c, &ids))
+                .unwrap_or_default()
+        })
+    });
+    let popover = TagPopover::new();
     let favourite = move || info.with(|s| s.as_ref().is_some_and(|s| s.meta.favourite));
     let toggle = move || {
         let Some(s) = session.get() else { return };
@@ -1276,8 +1293,11 @@ fn SceneSections(scene: SceneId) -> impl IntoView {
             {move || view! { <span class="head-icon"><Icon name=icon() size=15 /></span> }}
             <span class="source-title" title=name>{name}</span>
             <span class="kind-tag" class:keyframe=move || keyframe_of.with(Option::is_some)>{kind}</span>
+            <LabelChips labels=labels />
+            <TagButton popover=popover name=name() always=true />
             {favourite_button(favourite, toggle)}
         </div>
+        <LabelPopover popover=popover target=Tagged::Scene(id.get_value()) />
         <Fold title="Scene" open=true>
             <div class="key-value"><span class="key">"Objects"</span><span>{objects}</span></div>
             <div class="key-value"><span class="key">"Used as a source in"</span><span>{used}</span></div>
@@ -1312,9 +1332,7 @@ fn HotkeyRow(scene: SceneId) -> impl IntoView {
         }
     };
     let on_key = move |event: leptos::ev::KeyboardEvent| {
-        // Pause is the window's privacy key, so it is never bound and still toggles
-        // privacy while a capture waits.
-        if !capturing.get_untracked() || event.key() == "Pause" {
+        if !capturing.get_untracked() {
             return;
         }
         // The key is the capture's: no hotkey runs, and Tab doesn't move the focus.

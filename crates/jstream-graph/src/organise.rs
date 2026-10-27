@@ -116,17 +116,27 @@ pub(crate) fn folder_blockers(state: &State, id: &FolderId) -> Vec<Blocker> {
     scenes.chain(folders).collect()
 }
 
-/// Everything that stops deleting label `id`: the sources carrying it, by ID.
+/// Everything that stops deleting label `id`: the sources carrying it, by ID, then the
+/// scenes carrying it, in display order.
 pub(crate) fn label_blockers(state: &State, id: &LabelId) -> Vec<Blocker> {
-    state
+    let sources = state
         .sources()
         .filter(|s| s.labels.contains(id))
         .map(|s| Blocker {
             entity: EntityKind::Source,
             id: s.id.as_str().to_owned(),
             field: "labels".into(),
-        })
-        .collect()
+        });
+    let scenes = state
+        .scenes
+        .iter()
+        .filter(|s| s.meta.labels.contains(id))
+        .map(|s| Blocker {
+            entity: EntityKind::Scene,
+            id: s.id.as_str().to_owned(),
+            field: "labels".into(),
+        });
+    sources.chain(scenes).collect()
 }
 
 /// The `delete.plan` edits for folder `id`: what sits in it moves up to its parent,
@@ -156,11 +166,12 @@ pub(crate) fn folder_plan(state: &State, id: &FolderId) -> Result<Vec<Edit>, Pro
     Ok(edits)
 }
 
-/// The `delete.plan` edits for label `id`: each source carrying it keeps its other
-/// metadata without it, then the label's delete. `not_found` if there is no such label.
+/// The `delete.plan` edits for label `id`: each source, then each scene, carrying it
+/// keeps its other metadata without it, then the label's delete. `not_found` if there
+/// is no such label.
 pub(crate) fn label_plan(state: &State, id: &LabelId) -> Result<Vec<Edit>, ProtocolError> {
     label_index(state, id)?;
-    let mut edits: Vec<Edit> = state
+    let sources = state
         .sources()
         .filter(|s| s.labels.contains(id))
         .map(|source| {
@@ -170,8 +181,20 @@ pub(crate) fn label_plan(state: &State, id: &LabelId) -> Result<Vec<Edit>, Proto
                 source_id: source.id.clone(),
                 meta,
             }
-        })
-        .collect();
+        });
+    let scenes = state
+        .scenes
+        .iter()
+        .filter(|s| s.meta.labels.contains(id))
+        .map(|scene| {
+            let mut meta = scene.meta.clone();
+            meta.labels.retain(|l| l != id);
+            Edit::SceneSetMeta {
+                scene_id: scene.id.clone(),
+                meta,
+            }
+        });
+    let mut edits: Vec<Edit> = sources.chain(scenes).collect();
     edits.push(Edit::LabelDelete {
         label_id: id.clone(),
     });
@@ -357,7 +380,12 @@ fn set_scene_meta(
     if let Some((name, reason)) = meta.problem() {
         return Err(invalid(at, name, reason));
     }
-    let old = std::mem::replace(&mut state.scenes[si].meta, meta.clone());
+    let labels = checked_labels(state, &meta.labels, at)?;
+    let meta = SceneMeta {
+        labels: labels.into_iter().collect(),
+        ..meta.clone()
+    };
+    let old = std::mem::replace(&mut state.scenes[si].meta, meta);
     Ok(vec![Edit::SceneSetMeta {
         scene_id: scene_id.clone(),
         meta: old,
@@ -445,6 +473,27 @@ fn delete_label(state: &mut State, id: &LabelId, at: usize) -> Result<Vec<Edit>,
     Ok(inverse)
 }
 
+/// The labels `labels` as a set ordered by ID: `not_found` for a label that doesn't
+/// exist, `invalid_argument` for one listed twice.
+fn checked_labels(
+    state: &State,
+    labels: &[LabelId],
+    at: usize,
+) -> Result<BTreeSet<LabelId>, ProtocolError> {
+    let mut set = BTreeSet::new();
+    for label in labels {
+        label_index(state, label)?;
+        if !set.insert(label.clone()) {
+            return Err(invalid(
+                at,
+                "labels",
+                format!("label `{label}` is listed more than once"),
+            ));
+        }
+    }
+    Ok(set)
+}
+
 fn set_source_meta(
     state: &mut State,
     source_id: &SourceId,
@@ -454,17 +503,7 @@ fn set_source_meta(
     if state.source(source_id).is_none() {
         return Err(not_found(EntityKind::Source, source_id.as_str()));
     }
-    let mut labels = BTreeSet::new();
-    for label in &meta.labels {
-        label_index(state, label)?;
-        if !labels.insert(label.clone()) {
-            return Err(invalid(
-                at,
-                "labels",
-                format!("label `{label}` is listed more than once"),
-            ));
-        }
-    }
+    let labels = checked_labels(state, &meta.labels, at)?;
     let source = state
         .sources
         .get_mut(source_id)
@@ -787,6 +826,66 @@ mod tests {
     }
 
     #[test]
+    fn scenes_carry_labels_that_block_a_delete_until_the_plan_clears_them() {
+        let mut graph = fixture();
+        let set = |labels: &[&str]| Edit::SceneSetMeta {
+            scene_id: SceneId::new("b"),
+            meta: SceneMeta {
+                labels: labels.iter().map(|l| LabelId::new(*l)).collect(),
+                favourite: true,
+                ..SceneMeta::default()
+            },
+        };
+        assert!(matches!(
+            apply_err(&mut graph, vec![set(&["nope"])]),
+            ProtocolError::NotFound { .. }
+        ));
+        assert_eq!(
+            field(apply_err(&mut graph, vec![set(&["red", "red"])])),
+            "edits.0.labels"
+        );
+        // Stored ordered by ID, whatever order they were sent in.
+        apply_ok(&mut graph, vec![set(&["red", "blue"])]);
+        let Some(Ok(QueryResult::StateGet { scenes, .. })) = graph.query(&Query::StateGet) else {
+            panic!("state.get answers");
+        };
+        assert_eq!(
+            scenes[1].meta.labels,
+            [LabelId::new("blue"), LabelId::new("red")]
+        );
+
+        let delete_red = Edit::LabelDelete {
+            label_id: LabelId::new("red"),
+        };
+        match apply_err(&mut graph, vec![delete_red.clone()]) {
+            ProtocolError::InvalidArgument { blockers, .. } => {
+                let found: Vec<_> = blockers
+                    .iter()
+                    .map(|b| (b.entity, b.id.as_str(), b.field.as_str()))
+                    .collect();
+                assert_eq!(
+                    found,
+                    [
+                        (EntityKind::Source, "sa", "labels"),
+                        (EntityKind::Scene, "b", "labels")
+                    ]
+                );
+            }
+            other => panic!("expected blockers, got {other:?}"),
+        }
+        let Ok(QueryResult::DeletePlan { edits, .. }) = graph.delete_plan(&DeleteTarget::Label {
+            label_id: LabelId::new("red"),
+        }) else {
+            panic!("plans");
+        };
+        assert_eq!(
+            edits,
+            [tag("sa", &["blue"], true), set(&["blue"]), delete_red]
+        );
+        apply_ok(&mut graph, edits);
+    }
+
+    #[test]
     fn deleting_a_filed_scene_or_tagged_source_undoes_exactly() {
         let mut graph = fixture();
         apply_ok(
@@ -794,6 +893,7 @@ mod tests {
             vec![Edit::SceneSetMeta {
                 scene_id: SceneId::new("a"),
                 meta: SceneMeta {
+                    labels: vec![LabelId::new("red")],
                     icon: Some("star".into()),
                     color: Some("#00aa00".into()),
                     favourite: true,

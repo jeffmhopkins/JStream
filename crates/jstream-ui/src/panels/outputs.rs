@@ -1,5 +1,5 @@
 //! The outputs panel: the program output and each output with its FX button, which
-//! shows that chain in the Filters panel (spec-panels.md 9, ADR-0027); create, edit and
+//! shows that chain in the Filters panel (spec-panels.md 9, ADR-0080); create, edit and
 //! delete outputs (streams, recordings and the virtual camera), set or clear their stream
 //! keys, start and stop them, and the pipeline's health from `stats.tick`. It also holds the logic behind the header's
 //! Go Live (`go_live_targets`, `live_outputs`, `start_or_stop_all`).

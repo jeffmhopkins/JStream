@@ -33,7 +33,7 @@ protocol's types (`Overrides`).
   keyed by ID, the `video_mixes`, keyed by ID, the `buses`, keyed by ID and always
   holding the master, the `sends`, keyed by bus and source, the master stage's filter
   `Chains` (`State::master`,
-  [ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)), the `folders`
+  [ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), the `folders`
   and `labels`, each in its own order, the
   `hotkeys`: each `Chord` bound to the protocol `Action` it fires
   ([ADR-0040](../../docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)
@@ -176,7 +176,7 @@ the batch **touched**.
   source, an output, the master stage, a scene or an item), the filter ID (non-empty,
   unused on the owner), that the owner has the chain (a source: video if its kind
   produces video, audio if it produces audio and it is not a `scene` source; the master
-  and an output that carries audio: audio only, ADR-0027; a scene and an item: video
+  and an output that carries audio: audio only, ADR-0080; a scene and an item: video
   only, [ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md)), that the
   chain has room, that the kind is a filter kind of that chain (`kind`), that a master
   or output filter's settings hold no reference (a scene, source, bus or asset), the
@@ -303,10 +303,12 @@ the batch **touched**.
   with the protocol's `check_color` and `check_icon`, and `scene.set_meta` checks the
   same through `SceneMeta::problem`. `source.set_meta` replaces a source's labels (each
   must exist and appear once; stored ordered by ID) and favourite flag, and
-  `source.duplicate` copies both to the copy. `folder.delete` is refused while a scene
-  (`folder`) or folder (`parent`) sits in the folder, and `label.delete` while a source
-  (`labels`) carries the label, listing them as `blockers`; their `delete.plan` moves
-  what the folder holds up to its parent, or takes the label off those sources. Every
+  `source.duplicate` copies both to the copy; `scene.set_meta` checks and stores a
+  scene's labels the same way ([ADR-0078](../../docs/adr/0078-scenes-carry-labels.md)).
+  `folder.delete` is refused while a scene (`folder`) or folder (`parent`) sits in the
+  folder, and `label.delete` while a source, then a scene (`labels`), carries the label,
+  listing them as `blockers`; their `delete.plan` moves what the folder holds up to its
+  parent, or takes the label off those sources and scenes. Every
   edit is undone by the previous value; a delete by the create, then a reorder back
   unless it was last. `scene.delete` and `source.delete` undo the folder and metadata
   too. None of it is a dependency edge.
@@ -390,14 +392,14 @@ older file has none of these). A scene writes `transition_in` and `transition_ou
 when set, and an item its `transition` when not the default. A source's `audio` is saved
 only where it differs from its kind's defaults, except a `webcam`'s, which is always
 saved, so a webcam without it can only come from before webcams had audio (#716). `folders` and `labels` are in their
-orders, each omitted when empty. A scene's `folder`, `icon`, `color`, `favourite` and
-`show_in_multiview`, and a source's `labels` and `favourite`, are each omitted while
+orders, each omitted when empty. A scene's `folder`, `labels`, `icon`, `color`,
+`favourite` and `show_in_multiview`, and a source's `labels` and `favourite`, are each omitted while
 they have their default, so a collection without them saves as it did before they
 existed and needs no schema bump. A keyframe scene writes `variant_of` and its
 `overrides` in item ID order, each omitted for any other scene, so it needs no schema
 bump either. Loading creates the folders top level first, then
 sets each nested one's parent, so a folder may come before its parent in the file;
-labels come before the sources that carry them. Kinds, undo history and runtime state are not in it, and
+labels come before the scenes and sources that carry them. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
 carry one ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Reading and writing the file is
 the engine's; this crate does no I/O.
@@ -552,7 +554,7 @@ Planned, and kept possible by the private fields of the model types:
 
 - **More chains:** filter chains on buses, and video chains on the master and outputs
   ([ADR-0026](../../docs/adr/0026-source-filter-chains.md),
-  [ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)); keyframe
+  [ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)); keyframe
   overrides of item effects (ADR-0065).
 - **Kind versions.** The engine's kinds come from `jstream-sources`. The collection file
   records each source's kind version but refuses a mismatch: settings migrations per

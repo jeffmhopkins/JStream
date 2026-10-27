@@ -9,7 +9,7 @@
 //!
 //! The fallback is armed only until the hardware encoder takes a frame. A refusal after
 //! that fails the session as before: switching encoders mid-stream would change the
-//! codec configuration under a live stream. The fallback is never silent (ADR-0027): it
+//! codec configuration under a live stream. The fallback is never silent (ADR-0080): it
 //! logs a warning naming both encoders and the refusal, and
 //! [`info`](VideoEncoder::info) reports the software encoder from then on, which the
 //! engine's `output.status` reads as `encoder.hardware`.

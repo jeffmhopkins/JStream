@@ -367,7 +367,7 @@ task speaks the envelope
   room (`KeyframeGate`), so what the client receives decodes. The session's own queue
   is bounded the same way, so a slow client holds a few pictures and nothing more.
 - **Request IDs.** A `Control` session assigns its own IDs, which appear in the
-  `state.changed`, `studio.changed` and `privacy.changed` events its calls cause. The task maps them back to the client's wire
+  `state.changed` and `studio.changed` events its calls cause. The task maps them back to the client's wire
   IDs, so a client matches its event to its response by the ID it chose, as in the
   protocol README's example. An event can arrive before the answer that reveals the
   mapping, so while calls are in flight it is held back, with every event after it to

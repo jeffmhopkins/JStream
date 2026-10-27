@@ -6,6 +6,7 @@
 //!
 //! Docs: docs/UI-FEATURES.md#scenes, docs/UI-FEATURES.md#objects
 
+use crate::dock::PanelId;
 use crate::icons::Icon;
 use crate::panels::labels::{LabelIcon, LabelManager};
 use crate::store::Studio;
@@ -87,23 +88,24 @@ pub fn matches(search: &str, name: &str) -> bool {
 }
 
 /// The search box and the filter button over a panel's rows (S2 to S4). With
-/// `labels`, the filter lists the collection's labels and offers "Edit labels…"; the
-/// Scenes panel has none, since scenes carry no labels (ADR-0024 §4).
+/// `labels`, the filter lists the collection's labels and offers "Edit labels…", which
+/// opens the label manager in that panel. Scenes and sources both carry labels
+/// (ADR-0078), so both trees pass it.
 #[component]
 pub fn SearchBar(
     /// What the rows are, for the placeholder: "scenes" or "objects".
     what: &'static str,
     /// The filter it edits.
     filter: Filter,
-    /// Whether the rows carry labels.
-    #[prop(optional)]
-    labels: bool,
+    /// The panel the rows are in, when they carry labels.
+    #[prop(optional, into)]
+    labels: Option<PanelId>,
 ) -> impl IntoView {
     let studio = use_context::<Studio>();
-    let manager = use_context::<LabelManager>().filter(|_| labels);
+    let manager = use_context::<LabelManager>().filter(|_| labels.is_some());
     let open = RwSignal::new(false);
     // A deleted label leaves the filter, so it can't hide every row with nothing to uncheck.
-    if let Some(studio) = studio.filter(|_| labels) {
+    if let Some(studio) = studio.filter(|_| labels.is_some()) {
         Effect::new(move |_| {
             let known: Vec<LabelId> = studio.collection.with(|c| {
                 c.as_ref()
@@ -125,7 +127,7 @@ pub fn SearchBar(
     };
     let label_rows = move || {
         let all = studio
-            .filter(|_| labels)
+            .filter(|_| labels.is_some())
             .and_then(|s| s.collection.with(|c| c.as_ref().map(|c| c.labels.clone())))
             .unwrap_or_default();
         (!all.is_empty()).then(|| {
@@ -135,6 +137,7 @@ pub fn SearchBar(
                     let id = StoredValue::new(label.label_id.clone());
                     let on = move || filter.labels.with(|l| l.contains(&id.get_value()));
                     let name = label.name.clone();
+                    let color = label.color.clone();
                     view! {
                         <button
                             type="button"
@@ -151,7 +154,17 @@ pub fn SearchBar(
                                 });
                             }
                         >
-                            <span class="tree-box label-box" class:on=on>{move || on().then_some("✓")}</span>
+                            <span
+                                class="tree-box label-box"
+                                class:on=on
+                                style:border-color={
+                                    let color = color.clone();
+                                    move || on().then(|| color.clone())
+                                }
+                                style:background-color=move || on().then(|| color.clone())
+                            >
+                                {move || on().then_some("✓")}
+                            </span>
                             <LabelIcon label=label />
                             {name}
                         </button>
@@ -209,13 +222,13 @@ pub fn SearchBar(
                         {label_rows}
                         <div class="tree-pop-foot">
                             <button type="button" class="link muted" on:click=clear>"Clear"</button>
-                            {manager.map(|m| view! {
+                            {manager.zip(labels).map(|(m, panel)| view! {
                                 <button
                                     type="button"
                                     class="link"
                                     on:click=move |_| {
                                         open.set(false);
-                                        m.open();
+                                        m.open(panel);
                                     }
                                 >
                                     "Edit labels…"

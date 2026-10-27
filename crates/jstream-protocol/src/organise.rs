@@ -5,8 +5,8 @@
 //! agent, and saved with the collection. None of it changes rendering, switching or
 //! nesting. Folders organise the scene list as a tree; scenes keep their flat display
 //! order, and a folder's scenes are the scenes that name it, in that order. Labels are
-//! an ordered list that sources carry; a label belongs to the source, so every item
-//! placing the source shows it.
+//! an ordered list that sources and scenes carry; a source's labels belong to the
+//! source, so every item placing it shows them.
 //!
 //! The checks every engine and the mock run on these values are here
 //! ([`check_icon`], [`check_color`]), so they reject the same ones.
@@ -51,6 +51,10 @@ pub struct LabelInfo {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct SceneMeta {
+    /// The labels it carries, ordered by ID, each at most once. Every one must exist.
+    /// Omitted for none.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub labels: Vec<LabelId>,
     /// An icon name from the UI's icon set, at most 64 bytes. Omitted for none.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
@@ -69,6 +73,7 @@ pub struct SceneMeta {
 impl Default for SceneMeta {
     fn default() -> Self {
         SceneMeta {
+            labels: Vec::new(),
             icon: None,
             color: None,
             favourite: false,
