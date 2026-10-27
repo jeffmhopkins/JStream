@@ -1310,7 +1310,7 @@ drawing), and for each stream that is due draws the shot with the live values ov
 as the render thread does, at the stream's size and that time, reads it back and
 encodes it. A stream is due at most `fps` times a second, and only when the snapshot or
 the live values changed, a transition is running in it (its picture changes with time), it
-shows a display or window capture (a new frame may have come),
+one of the displays or windows it shows took a new frame,
 a keyframe was asked for, or 2 s passed since its last keyframe; one whose queue is full isn't drawn. H.264 runs on a `jstream-encode`
 `VideoSession` that avoids hardware (so a preview never takes an output's hardware
 session), VBR, with a keyframe every 2 s, reopened when the picture size changes; its
@@ -1325,9 +1325,10 @@ show itself, so they show with no output running: once the engine has backends, 
 runs the program stage's `RenderCaptures` (`runtime/captures.rs`) on a
 `jstream-capture` thread of its own, started the first time a stream shows one and
 stopped when the `jstream-preview` thread ends (its last stream gone), on the CPU path
-(its compositor isn't on the platform's GPU context). A stream showing a capture is due
-when one of these captures took a new frame since its last picture, so a still desktop
-costs no redraw. While an output runs, its stage
+(its compositor isn't on the platform's GPU context). The program's displays and
+windows are captured only while a stream shows the program. A stream showing a capture
+is due when one of the captures it shows took a new frame since its last picture
+(`CaptureFrame::version`), so a still desktop costs no redraw. While an output runs, its stage
 captures the same display again. The sizes these captures see go nowhere; `source.sizes`
 reports the program stage's. A webcam or capture card opens once, so the preview leaves
 it to the program stage and draws it as nothing, as `video.snapshot` draws every

@@ -43,8 +43,9 @@
 //! display shows in the preview with no output running. While an output runs, its stage
 //! captures the same display again: each capture belongs to one consumer. A webcam or
 //! capture card opens once, so the preview leaves it to the program stage and draws it
-//! as nothing, as `video.snapshot` draws every capture. A stream that shows a capture
-//! is due when any of the hub's captures took a new frame since its last picture.
+//! as nothing, as `video.snapshot` draws every capture. The program's captures run only
+//! while a stream shows the program. A stream that shows a capture is due when one of
+//! the captures it shows took a new frame since its last picture.
 //!
 //! **Overload.** The hub never waits on a reader: the binary channel holds
 //! [`BINARY_BUFFER`] frames, and a [`KeyframeGate`] drops the rest of a stream's
@@ -463,7 +464,7 @@ struct Work {
     /// The render snapshot and live values the last picture showed.
     shown: Option<(Arc<RenderSnapshot>, Arc<LiveParams>)>,
     draw_errors: u32,
-    /// The count of capture frames taken when the last picture was drawn
+    /// The newest capture frame version the last picture drew
     /// ([`HubCaptures::frames`]).
     frames: u64,
 }
@@ -736,7 +737,9 @@ fn run(
         let mut wake_at = now + MAX_SLEEP;
         // A closed stream's encoder is dropped (and its thread joined) here.
         works.retain(|id, _| streams.iter().any(|stream| stream.id == *id));
-        captures.tick((&program, &scenes), at);
+        // The program's captures only while a stream shows the program.
+        let shows_program = streams.iter().any(|stream| stream.scene.is_none());
+        captures.tick((shows_program.then_some(&program), &scenes), at);
         let shown: &dyn Captures = match &captures.running {
             Some(running) => running,
             None => &NoCaptures,
@@ -801,31 +804,37 @@ struct HubCaptures<'a> {
     running: Option<RenderCaptures>,
     /// What the snapshots `of` show: their displays and windows.
     wanted: BTreeSet<CaptureKey>,
-    of: Option<(Arc<RenderSnapshot>, Scenes)>,
+    of: Option<(Option<Arc<RenderSnapshot>>, Scenes)>,
 }
 
 /// The scenes' snapshots, as [`Current::scenes`] holds them.
 type Scenes = Arc<BTreeMap<SceneId, Arc<RenderSnapshot>>>;
 
 impl HubCaptures<'_> {
-    /// Starts and stops captures to follow the program's snapshot and the scenes', and
-    /// reads their latest frames. Never waits.
-    fn tick(&mut self, (program, scenes): (&Arc<RenderSnapshot>, &Scenes), now: MediaTime) {
+    /// Starts and stops captures to follow the program's snapshot (`None` while no
+    /// stream shows the program) and the scenes', and reads their latest frames. Never
+    /// waits.
+    fn tick(&mut self, (program, scenes): (Option<&Arc<RenderSnapshot>>, &Scenes), now: MediaTime) {
         let Some(capture) = self.capture else {
             return;
         };
-        let same = self
-            .of
-            .as_ref()
-            .is_some_and(|(p, s)| Arc::ptr_eq(p, program) && Arc::ptr_eq(s, scenes));
+        let same = self.of.as_ref().is_some_and(|(p, s)| {
+            Arc::ptr_eq(s, scenes)
+                && match (p, program) {
+                    (Some(p), Some(program)) => Arc::ptr_eq(p, program),
+                    (None, None) => true,
+                    _ => false,
+                }
+        });
         if !same {
-            self.wanted = std::iter::once(program)
+            self.wanted = program
+                .into_iter()
                 .chain(scenes.values())
                 .flat_map(|snapshot| snapshot.shot().captures())
                 .filter(|key| captured(key))
                 .cloned()
                 .collect();
-            self.of = Some((Arc::clone(program), Arc::clone(scenes)));
+            self.of = Some((program.cloned(), Arc::clone(scenes)));
         }
         if self.running.is_none() && !self.wanted.is_empty() {
             match capture.spawn() {
@@ -843,16 +852,24 @@ impl HubCaptures<'_> {
         }
     }
 
-    /// The count of capture frames taken so far, when `snapshot` shows a capture the hub
-    /// runs: a picture of it is due when the count has moved since it was drawn.
+    /// The newest frame version among the captures `snapshot` shows, when it shows one
+    /// the hub runs: a picture of it is due when that has moved since it was drawn.
+    /// Versions only grow, across every capture the hub runs.
     fn frames(&self, snapshot: &RenderSnapshot) -> Option<u64> {
         let running = self.running.as_ref()?;
-        snapshot
+        let mut shown = snapshot
             .shot()
             .captures()
             .iter()
-            .any(captured)
-            .then(|| running.frames())
+            .filter(|key| captured(key))
+            .peekable();
+        shown.peek()?;
+        Some(
+            shown
+                .filter_map(|key| running.frame(key).map(|frame| frame.version))
+                .max()
+                .unwrap_or_default(),
+        )
     }
 }
 
