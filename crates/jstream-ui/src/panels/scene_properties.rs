@@ -254,10 +254,6 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
     let hotkey_text =
         move || draft.with(|d| d.hotkey.as_ref().map(hotkeys::label).unwrap_or_default());
     let on_hotkey = move |event: leptos::ev::KeyboardEvent| {
-        // Pause is the window's privacy key: never taken, so it still toggles privacy.
-        if event.key() == "Pause" {
-            return;
-        }
         let code = event.code();
         let plain = !(event.ctrl_key() || event.alt_key() || event.shift_key() || event.meta_key());
         // Tab moves on, Escape cancels and Enter presses OK, as everywhere in a dialog.

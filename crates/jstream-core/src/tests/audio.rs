@@ -588,59 +588,6 @@ fn the_program_mix_feeds_the_audio_scope_while_an_output_runs() {
     block_on(control.call(output_call("yt", false))).expect("output.stop");
 }
 
-/// ADR-0027 §4: the privacy screen mutes the microphones from the mixer's next block,
-/// and only them: the default microphone while the collection has no audio source, then
-/// an `audio_input` source, while desktop audio plays on. Turning it off brings them
-/// back, with their own mute untouched.
-#[test]
-fn the_privacy_screen_mutes_the_microphones() {
-    let clock = FakeClock::new(Timebase::MICROS);
-    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
-    let engine = engine(&audio, &clock);
-    let control = connected(&engine);
-    let scope = engine.audio_scope();
-    let mut window = [0.0f32; 256];
-    let near = |window: &[f32], level: f32| window.iter().all(|&s| (s - level).abs() < 0.01);
-    // Every input delivers a steady 0.25 at unity: the mix is 0.25 per input heard.
-    let mixes = |level: f32, window: &mut [f32]| {
-        eventually(|| {
-            audio.deliver(480, 0.25);
-            clock.advance(10_000);
-            let (_, rate) = scope.latest(window);
-            rate == 48_000 && near(window, level)
-        })
-    };
-    let privacy = |on| block_on(control.call(super::privacy_call(on))).expect("privacy.set");
-
-    block_on(control.call(output_call("yt", true))).expect("output.start");
-    assert!(mixes(0.5, &mut window), "the default inputs: {window:?}");
-    privacy(true);
-    assert!(
-        mixes(0.25, &mut window),
-        "the default microphone muted: {window:?}"
-    );
-    privacy(false);
-    assert!(mixes(0.5, &mut window), "and back: {window:?}");
-
-    batch(
-        &control,
-        edits(vec![
-            audio_source("mic", "audio_input", None),
-            audio_source("desk", "desktop_audio", None),
-        ]),
-    )
-    .expect("created");
-    assert!(mixes(0.5, &mut window), "the sources: {window:?}");
-    privacy(true);
-    assert!(
-        mixes(0.25, &mut window),
-        "the microphone source muted: {window:?}"
-    );
-    privacy(false);
-    assert!(mixes(0.5, &mut window), "and back: {window:?}");
-    block_on(control.call(output_call("yt", false))).expect("output.stop");
-}
-
 /// #362: a `waveform` drawing a bus gets that bus's audio from the mixer thread, not
 /// the program mix's: here the desktop sends only into `vod`, so the bus's scope moves
 /// while the program mix stays silent.

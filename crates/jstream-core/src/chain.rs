@@ -744,10 +744,7 @@ mod tests {
                 compositor,
                 (&mut *cache, &mut *chains),
                 (shot, at),
-                snapshot::View {
-                    mix: None,
-                    privacy: None,
-                },
+                snapshot::View { mix: None },
                 &LiveParams::default(),
                 &NoCaptures,
                 snapshot::DrawAt::read(canvas),
@@ -773,10 +770,7 @@ mod tests {
             compositor,
             (&mut *cache, &mut *chains),
             (shot, MediaTime::zero(Timebase::MILLIS)),
-            snapshot::View {
-                mix: None,
-                privacy: None,
-            },
+            snapshot::View { mix: None },
             live,
             &NoCaptures,
             snapshot::DrawAt::read(canvas),

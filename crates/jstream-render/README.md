@@ -167,7 +167,7 @@ and calls this crate.
 not here: P010 conversion, BT.601 and BT.2020 matrices, encode-target allocation,
 loading WGSL effect packs (`jstream-effects`; this crate only draws them), the video
 filter chain runtime (`jstream-core`'s; the built-in filters' passes are here, see
-[Filters](#filters)), the master chain and the privacy stage. The GPU pipeline's encode
+[Filters](#filters)) and the master chain. The GPU pipeline's encode
 steps stay in
 [ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline).
 

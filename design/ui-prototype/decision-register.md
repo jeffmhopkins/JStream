@@ -76,7 +76,7 @@ matter.
 | D13 | Blend modes in linear FP16 | gap | A | pre-M2 |
 | D14 | Program master chain and per-output chains (video) | gap; strains encoder sharing | M | pre-M2 (shape now) |
 | D15 | Latency compensation, audio/video delay filters | gap | A | now (mixer timestamps) |
-| D16 | Privacy screen (blur + mute) | gap | M | pre-M2 |
+| D16 | Privacy screen (blur + mute) | dropped ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md) §4) | M | — |
 | D17 | Mixer UI (master + source faders) vs ADR-0007 bus matrix | gap / tension with ADR-0007 consequences | M | **now** (M1b mixer) |
 | D18 | Does audio follow scenes? (nested scene audio, per-scene mixer list) | **conflict** (ADR-0007) | **M** | **now** |
 | D19 | Per-source audio switch | gap | A | now |
@@ -102,7 +102,7 @@ matter.
 | D39 | Header and stream stats; event subscriptions | partly covered (`stats.tick`) | A | M1d |
 | D40 | YouTube chat: send as channel, feature on stream, audience stats | gap beyond ADR-0009 | **M** | later (M3) |
 | D41 | Go Live and broadcast creation | covered (ADR-0009) | — | M3 |
-| D42 | Hotkeys (scene hotkeys, Pause for privacy) | gap | A | pre-M2 |
+| D42 | Hotkeys (scene hotkeys; Pause for privacy dropped by ADR-0080) | gap | A | pre-M2 |
 | D43 | Copy, paste and duplicate scene | covered by batches (client IDs) | A | pre-M2 |
 | D44 | Deleting referenced objects (protocol OQ 12) from the UI's point of view | gap | A | now |
 
@@ -744,8 +744,9 @@ mic" (`D:81`, `D:380`, `D:1572`). The mixer's mic channel shows "muted (privacy)
 
 **Today.** Nothing.
 
-**Status.** Gap. A product feature with safety weight: it must really hide the output,
-not just the UI canvas.
+**Status.** Dropped. ADR-0027 built it, and the maintainer then removed it after the alpha:
+JStream has no privacy screen ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)
+§4). What follows is the original analysis, kept for the record.
 
 **Consequences.**
 - It must act in the engine, on the program master (or on every output), so that

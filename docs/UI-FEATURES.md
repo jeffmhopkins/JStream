@@ -23,7 +23,7 @@ prototype) are in two specs:
 
 The prototype is a design reference, not a decision: where it conflicts with an accepted
 ADR, the ADR wins, and the row says so. Behaviour the prototype only simulates (made-up
-meter levels, a CSS blur for privacy, the demo source pictures) is not a requirement; the
+meter levels, the demo source pictures) is not a requirement; the
 real UI shows the engine's real state instead.
 
 <a id="how-to-update"></a>
@@ -55,9 +55,9 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | Area | Rows | ✅ | 🟡 | ⬜ | 🔒 | ⏸ |
 |---|---|---|---|---|---|---|
 | [Theme and shared controls](#theme) | 8 | 8 | 0 | 0 | 0 | 0 |
-| [Header bar](#header) | 9 | 7 | 1 | 0 | 1 | 0 |
+| [Header bar](#header) | 9 | 6 | 1 | 0 | 1 | 1 |
 | [Docking and layouts](#docking) | 10 | 8 | 2 | 0 | 0 | 0 |
-| [Canvas](#canvas) | 18 | 16 | 1 | 0 | 1 | 0 |
+| [Canvas](#canvas) | 18 | 15 | 1 | 0 | 1 | 1 |
 | [Context menus](#menus) | 8 | 4 | 4 | 0 | 0 | 0 |
 | [Dialogs and windows](#dialogs) | 8 | 5 | 2 | 0 | 1 | 0 |
 | [Scenes panel](#scenes) | 10 | 10 | 0 | 0 | 0 | 0 |
@@ -65,12 +65,12 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Inspector](#inspector) | 10 | 10 | 0 | 0 | 0 | 0 |
 | [Transform panel](#transform) | 4 | 4 | 0 | 0 | 0 | 0 |
 | [Filters](#filters) | 8 | 6 | 1 | 0 | 1 | 0 |
-| [Mixer](#mixer) | 7 | 7 | 0 | 0 | 0 | 0 |
+| [Mixer](#mixer) | 7 | 6 | 0 | 0 | 0 | 1 |
 | [Outputs](#outputs) | 4 | 3 | 0 | 0 | 1 | 0 |
 | [Transitions](#transitions) | 6 | 6 | 0 | 0 | 0 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
-| [Keyboard](#keyboard) | 7 | 6 | 0 | 1 | 0 | 0 |
-| **Total** | **130** | **108** | **11** | **1** | **10** | **0** |
+| [Keyboard](#keyboard) | 7 | 5 | 0 | 1 | 0 | 1 |
+| **Total** | **130** | **104** | **11** | **1** | **10** | **4** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -109,7 +109,7 @@ Spec: [workspace › header bar](../design/ui-prototype/spec-workspace.md#header
 | HD-02 | View menu | Lists all 11 panels with "shown" or "add"; clicking hides a shown panel or adds a hidden one to its home zone. | ✅ | All eleven, in the prototype's order. Live chat, Stream stats and Agent activity wait on the engine ([live panels](#live-panels)), so for now they say what they wait on. Beyond the prototype, a Projectors group under them opens the program or the multiview in a window or full screen ([DL-07](#dialogs)). |
 | HD-03 | Layout menu | "Layout: <name>", saved layouts with "current", "Save current layout as new", "Reset to default". | ✅ | |
 | HD-04 | Stats readout | Mono "60 fps · 0 dropped · CPU 3%". | 🟡 | "N dropped" built from `stats.tick` (frames dropped since the page connected). fps and CPU need engine stats (decision register D39). |
-| HD-05 | Privacy button | "Privacy" / "Privacy on" (red); blurs every output and mutes the mic; Pause toggles it. | ✅ | Sends `privacy.set`; the button follows `privacy.get` and `privacy.changed`, so it shows another client's change too. The engine does the blurring and muting (E2b, ADR-0027 §4). |
+| HD-05 | Privacy button | "Privacy" / "Privacy on" (red); blurs every output and mutes the mic; Pause toggles it. | ⏸ | Removed at the maintainer's request after the alpha: JStream has no privacy screen ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md) §4). Bringing it back is the maintainer's call. |
 | HD-06 | Studio mode button | Turns studio mode (preview and program) on and off. | ✅ | A page setting, since the engine has no studio-mode switch: off at first, kept by the browser, and pressed (blue) while on. On, a click on a scene puts it on preview ([SC-10](#scenes)) and the Transitions panel shows preview and program ([TR-06](#transitions)); off, a click puts it on program and the panel shows only the presets. |
 | HD-07 | Record button | Starts and stops recording. | ✅ | Starts every stopped or failed recording output; "Stop recording" while any runs; disabled with none. |
 | HD-08 | Broadcast picker | Shows the YouTube broadcast Go Live uses; menu lists broadcasts and "+ Create new stream…". | 🔒 | YouTube sign-in needs the OAuth client (A6b, Y4, [ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)). |
@@ -168,7 +168,7 @@ Spec: [workspace › canvas structure](../design/ui-prototype/spec-workspace.md#
 | CV-14 | Right-click | Opens the canvas context menu ([menus](#menus)). | ✅ | On an item, the selected items' menu, after selecting the item alone unless it was selected; on the frame and the margin, theirs ([CM-02](#menus)). |
 | CV-15 | Opacity, blend and 3D drawn | Items draw with their opacity, blend mode and 3D tilt. | 🔒 | The picture comes from the engine; it accepts only the `normal` blend, and 3D it can draw from protocol 0.34 (X1). |
 | CV-16 | Keyframe banner | "◆ Keyframe of “<parent>”: only placement and visibility can change" while editing a keyframe. | ✅ | A keyframe scene shows its parent's items at its overrides, under the banner, and its edits are placement edits addressed to it (K1). Its drags commit without live values, which the engine refuses on a keyframe scene until #702. |
-| CV-17 | Privacy overlay | Blurred frame with "Privacy screen on · output blurred · mic muted". | ✅ | The canvas frame takes the prototype's `blur(14px) brightness(0.6)` under the notice while the engine reports privacy on. |
+| CV-17 | Privacy overlay | Blurred frame with "Privacy screen on · output blurred · mic muted". | ⏸ | Removed at the maintainer's request after the alpha: JStream has no privacy screen ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md) §4). Bringing it back is the maintainer's call. |
 | CV-18 | Half speed | Shift halves pointer speed for any drag but the marquee. | ✅ | The slow pointer follows the real one's movement, so pressing Shift mid-drag doesn't jump. |
 
 <a id="menus"></a>
@@ -205,7 +205,7 @@ Spec: [workspace › dialogs and floating windows](../design/ui-prototype/spec-w
 |---|---|---|---|---|
 | DL-01 | Modal dialog frame | Centred dialog over a dim backdrop; Esc and the backdrop cancel, Enter presses the primary button. | ✅ | `dialog.rs`. Enter isn't taken from a text area, a button or a select; from a field, it blurs the field first so its value is committed. The inline delete confirmation stays. |
 | DL-02 | Properties dialog | 860 × 640: Name and the source's settings on the left, its video and audio filters on the right; Defaults, Cancel, OK; settings change only on OK. Opens on double-click and after Add source. | ✅ | Built (`source_properties.rs`): the Inspector's settings form (from `kind.describe`) editing a draft, sent with the name as one batch on OK, holding only what the user changed since it opened; Defaults empties the draft, so OK sends `null` for each value the dialog opened with. Also opened by Properties… in the item menus. The subtitle is the source's name, as the engine names no capture backend. The filter column is the Filters panel's chains (`filters.rs`), whose changes apply at once: a double-click on a row opens the Filter settings dialog ([DL-04](#dialogs)) over it, and "+ Add filter…" the Add filter dialog ([DL-05](#dialogs)). |
-| DL-03 | Scene properties | Transition in and out, hotkey, background colour, multiview, "Include its audio when nested". | 🟡 | `scene_properties.rs`, the Properties dialog's 860 × 640 shell: Name, Transition in and out with the spec's notes, and a Hotkey field that takes the next key press as the chord (Backspace clears it; Pause, the privacy key ([KB-06](#keyboard)), is never taken), all a draft until OK, which sends what changed as one batch (`scene.rename`, `scene.set_transitions`, `hotkey.clear` and `hotkey.set` of a `scene.switch`); a chord bound already is refused, saying what it runs. Defaults clears the overrides and the hotkey. Opens on a double click on a scene row, the row menu's Properties…, the canvas margin's Scene properties… and a nested scene's Properties. The engine has no scene background colour, multiview or scene-wide "Include its audio when nested" (a nested placement's Audio check is [CM-02](#menus)'s), so those are left out. The filter column on the right is the scene's chain ([FL-06](#filters)), whose changes apply at once as in DL-02; a keyframe shows its parent's. |
+| DL-03 | Scene properties | Transition in and out, hotkey, background colour, multiview, "Include its audio when nested". | 🟡 | `scene_properties.rs`, the Properties dialog's 860 × 640 shell: Name, Transition in and out with the spec's notes, and a Hotkey field that takes the next key press as the chord (Backspace clears it), all a draft until OK, which sends what changed as one batch (`scene.rename`, `scene.set_transitions`, `hotkey.clear` and `hotkey.set` of a `scene.switch`); a chord bound already is refused, saying what it runs. Defaults clears the overrides and the hotkey. Opens on a double click on a scene row, the row menu's Properties…, the canvas margin's Scene properties… and a nested scene's Properties. The engine has no scene background colour, multiview or scene-wide "Include its audio when nested" (a nested placement's Audio check is [CM-02](#menus)'s), so those are left out. The filter column on the right is the scene's chain ([FL-06](#filters)), whose changes apply at once as in DL-02; a keyframe shows its parent's. |
 | DL-04 | Filter settings dialog | Live-preview settings with an on/off switch; Cancel restores; Defaults; Remove. | ✅ | `filters.rs`, 460 wide, over the Properties dialog when opened from it: the kind's settings form, each change a `filter.set_settings` at once, the switch a `filter.set_enabled`. Cancel, Escape and the backdrop send one batch putting back the settings and the switch it opened with, including any the dialog sent that the engine hasn't reported back yet; Defaults resets every setting but a scene input's scene; Remove sends `filter.remove`. The hint line is the prototype's for the kinds it knows. |
 | DL-05 | Add filter dialog | 720 × 520: searchable catalogue grouped by chain and group, details pane, "Uses the scene" picker for scene-input filters. | ✅ | `filters.rs`. The catalogue is `kind.list`'s filter kinds for the owner's chains (a source's, a scene's video chain, [FL-06](#filters), or the program output's or an output's audio chain, [FL-07](#filters)), not the prototype's wish list: the prototype's groups, names and hints for the kinds it knows, the engine's pixelate, aspect ratio and image mask in the groups they fit, effect-pack kinds under Effect packs and anything else under Other. A kind with a scene setting (the scene mask) needs its scene first, from the scenes that don't show the source, or for a scene's chain the scenes whose picture doesn't hold that scene. A filter with more than three settings, or whose kind isn't described yet, opens DL-04 once added; one with fewer opens in place in the panel. Add is off while the chain holds its eight filters. |
 | DL-06 | Add source dialog | 720 wide: types grouped Capture, Audio, Media and web, Generated, Scenes; "Create new" with a name, or add an existing source as a reference; new sources placed at native size and their Properties opened. | ✅ | Built and opened from the right-click menus, with the prototype's names, icons and descriptions for the engine's kinds. A kind the prototype doesn't name goes under Other, and a placed source whose kind the engine doesn't list can be added again but not created. An existing source not placed anywhere goes at its own size (`source.sizes`, scaled down to fit the canvas), a nested scene covers the canvas, and an existing placement is copied 40 px right and down. A source created new has no frame yet, so it goes at the prototype's per-type native size, as a box with the `fit` mode, which draws it at its own aspect ratio. A new source's item is selected and its Properties dialog (DL-02) opens once the engine has accepted it; a placement of an existing source is selected with the Inspector shown. A blank name becomes "<type> N", counting that kind's sources. |
@@ -273,7 +273,7 @@ in the Inspector until the Inspector's own rows say otherwise.
 | IN-05 | 3D | Tilt, Turn, Depth, Perspective, folded by default. | ✅ | Folded by default, with the "in use" hint; each field is one `item.set_geometry` ([ADR-0050](adr/0050-3d-transforms-rendering.md)). Perspective shows the prototype's 1200 px while the item has none, and the first change that puts the item in 3D sets it, since without one the engine draws 3D orthographically, where Depth has no effect. |
 | IN-06 | Crop | Left, Right, Top, Bottom in px. | ✅ | `item.set_crop`, in source pixels. The canvas crops by dragging too (CV-08). |
 | IN-07 | Blending | Mode (9 modes) and Opacity %. | ✅ | Opacity is `item.set_opacity`. The select lists all nine modes; the engine accepts only `normal`, so the others are disabled until it draws them. |
-| IN-08 | Scene section | Objects count, "Used as a source in", hotkey. | ✅ | The Hotkey row lists the chords bound to the scene's `scene.switch`, each with × to unbind (`hotkey.clear`); Set key binds the next chord pressed but Pause, the privacy key ([KB-06](#keyboard)) (`hotkey.set`, after a `hotkey.clear` when it ran something else), and Escape cancels. A keyframe's header says “Keyframe of “<parent>””, and its item's blend mode is locked, with the prototype's note. |
+| IN-08 | Scene section | Objects count, "Used as a source in", hotkey. | ✅ | The Hotkey row lists the chords bound to the scene's `scene.switch`, each with × to unbind (`hotkey.clear`); Set key binds the next chord pressed (`hotkey.set`, after a `hotkey.clear` when it ran something else), and Escape cancels. A keyframe's header says “Keyframe of “<parent>””, and its item's blend mode is locked, with the prototype's note. |
 | IN-09 | Scene transitions | Transition in and out selects, with the "next scene's in wins" note. | ✅ | `scene.set_transitions`, with "Default (<name>)" for none and the folded hint. The presets come from the shared collection. |
 | IN-10 | Scene switches per item | Delay, easing, glide, appear and disappear effects. | ✅ | The "Scene switches" section, folded, with "customised" while any value differs from the default: Delay (0–3000 ms, step 10), Easing (Inherit, Ease in-out, Ease out, Linear, Spring), Glide to other scenes (Auto, Never), Appear and Disappear (Inherit, Fade, Scale, Slide, None). Each change sends `item.set_transition` with the whole settings. A keyframe ([SC-07](#scenes)) doesn't show it, since a keyframe changes only placement, visibility and opacity. |
 
@@ -304,7 +304,7 @@ Spec: [panels › filters](../design/ui-prototype/spec-panels.md#filters-panel).
 has source filter chains (`filter.add`, `remove`, `set_enabled`, `set_settings`,
 `reorder`; [ADR-0026](adr/0026-source-filter-chains.md)), and the Filters panel
 (`filters.rs`) edits them. The master stage and each output own chains too
-([ADR-0027](adr/0027-program-master-and-output-chains.md)); an FX button in the Outputs
+([ADR-0080](adr/0080-program-master-and-output-chains-v2.md)); an FX button in the Outputs
 panel or on the Mixer's master card shows one in the panel (FL-07).
 
 | ID | Feature | Requirement | Status | Notes |
@@ -334,7 +334,7 @@ does more than the prototype (buses, sends, routing); that stays ([Beyond](#beyo
 | MX-03 | Channel strips | Name, level bar, dB number field. | ✅ | Each row: name, the stereo meter as the level bar, the console-taper fader ([Beyond](#beyond)), the dB field (`NumberField`, −100 to +24, step 0.5), mute and Routing. |
 | MX-04 | Vertical meters | Vertical strips in side columns; a title-bar toggle flips orientation. | ✅ | `mixer.rs`: docked in a side column the meters turn vertical until the button in the mixer's title bar flips them, for the session. The master strip folds the channel strips beside it; each strip has its short name (the full one as a tooltip), a stereo meter filling upwards, the dB field stacked + over −, scrubbed up and down, and mute. Routing stays in the horizontal rows. |
 | MX-05 | Monitoring | "Hear: after FX" / "before FX". | ✅ | Decision register D22: a bus's monitor (`bus.set_monitor`, protocol 0.42), which the engine plays on its device while the mixer runs. `mixer.rs`: the master card's Hear button (the vertical strip's "Hear post" / "Hear pre") turns the master's monitor on at the default output after FX, then switches it between after and before FX on the same device; it reads "Hear: off" while the master has none, where the prototype always hears something. Each bus strip's More picks its monitor (off, after FX or before FX) and names its output device, empty for the default output ([Beyond](#beyond)). |
-| MX-06 | Privacy mute | The mic reads "muted (privacy)" while privacy is on. | ✅ | Every channel the engine's privacy screen mutes: the `audio_input` and `webcam` sources (the input devices, ADR-0027 §4's default set), not desktop or application audio. A horizontal row appends " · muted (privacy)" to the name; a vertical strip shows "muted (privacy)" under its short name. Its own mute is unchanged. |
+| MX-06 | Privacy mute | The mic reads "muted (privacy)" while privacy is on. | ⏸ | Removed at the maintainer's request after the alpha: JStream has no privacy screen ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md) §4). Bringing it back is the maintainer's call. |
 | MX-07 | Real levels | Meters show the engine's levels. | ✅ | `meters.tick`, with RMS, peak and peak hold; the prototype's numbers are simulated. |
 
 <a id="outputs"></a>
@@ -408,8 +408,8 @@ handlers; the real UI makes them work.
 | KB-03 | Undo and redo | Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y. | ✅ | The prototype has none; kept. |
 | KB-04 | Edit keys | Ctrl+D duplicate as reference, Ctrl+Shift+D as clone, Del remove, F2 rename. | ✅ | F2 renames and Del removes in the Scenes and Scene objects rows (Del deletes a scene or a folder there, through its plan). Ctrl+D and Ctrl+Shift+D duplicate the item as a reference or a clone on the canvas and in its row, and Del on the canvas removes the selection; in a keyframe scene ([SC-07](#scenes)) the duplicates and Del do nothing, as they would change its parent's items. |
 | KB-05 | Copy and paste | Ctrl+C, Ctrl+V. | ⬜ | Decision register D43. |
-| KB-06 | Privacy key | Pause toggles privacy. | ✅ | Anywhere in the window, a rename field and the Inspector's Set key included, as the button does. So Pause is never bound: Set key ignores it, and a Pause binding another client made doesn't run in this UI. |
-| KB-07 | Scene hotkeys | F1–F5 switch to the scene bound to them. | ✅ | Every binding in the collection (K1) but one of Pause, the privacy key ([KB-06](#keyboard)), runs its action while the page has the focus and no dialog or menu is open (`hotkeys.rs`), unless a field or a focused row took the key: F2 on a scene row still renames, and Del on a keyframe's object row does nothing. The prototype's F1–F5 are bindings like any other, set from the Inspector ([IN-08](#inspector)). |
+| KB-06 | Privacy key | Pause toggles privacy. | ⏸ | Removed at the maintainer's request after the alpha: JStream has no privacy screen ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md) §4). Bringing it back is the maintainer's call. |
+| KB-07 | Scene hotkeys | F1–F5 switch to the scene bound to them. | ✅ | Every binding in the collection (K1) runs its action while the page has the focus and no dialog or menu is open (`hotkeys.rs`), unless a field or a focused row took the key: F2 on a scene row still renames, and Del on a keyframe's object row does nothing. The prototype's F1–F5 are bindings like any other, set from the Inspector ([IN-08](#inspector)). |
 
 <a id="beyond"></a>
 ## Beyond the prototype
@@ -467,10 +467,9 @@ starts when the one before it has passed review.
    OB-02, OB-06 to OB-09, MX-01 to MX-05).
 8. **Keyframes:** keyframe rows, their menu and the keyframe banner (SC-07, CM-08,
    CV-16), on K1's keyframe scenes.
-9. **Studio mode, privacy, chains and hotkeys**, on T1, E2b, D8p and K1's hotkeys: the studio-mode button and a
+9. **Studio mode, chains and hotkeys**, on T1, D8p and K1's hotkeys: the studio-mode button and a
    scene click putting it on program or preview, the transition submenus, per-item
-   switches and Move (HD-06, SC-10, CM-07, IN-10, TR-05); the privacy button, overlay,
-   mic label and Pause key (HD-05, CV-17, MX-06, KB-06); the program and output chains
+   switches and Move (HD-06, SC-10, CM-07, IN-10, TR-05); the program and output chains
    (FL-07, OU-01 to OU-03); and the scene hotkeys (KB-07).
 
 🔒 rows follow their engine items: each of those PRs, or a UI PR right after it, flips its

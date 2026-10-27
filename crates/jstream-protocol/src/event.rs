@@ -79,10 +79,8 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         request_id: Option<RequestId>,
     },
-    /// The privacy screen was turned on or off with `privacy.set` (ADR-0027 §4). It is
-    /// runtime state, so the event carries no `rev`. A client that subscribes while the
-    /// screen is on gets `privacy.changed` first, naming the client that turned it on
-    /// and no `request_id`, so no client shows it as off.
+    /// **Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy
+    /// screen, so the engine never sends it.
     #[serde(rename = "privacy.changed")]
     PrivacyChanged {
         /// Whether the privacy screen now covers the outputs.

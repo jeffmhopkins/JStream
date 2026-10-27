@@ -33,7 +33,7 @@ protocol's types (`Overrides`).
   keyed by ID, the `video_mixes`, keyed by ID, the `buses`, keyed by ID and always
   holding the master, the `sends`, keyed by bus and source, the master stage's filter
   `Chains` (`State::master`,
-  [ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)), the `folders`
+  [ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), the `folders`
   and `labels`, each in its own order, the
   `hotkeys`: each `Chord` bound to the protocol `Action` it fires
   ([ADR-0040](../../docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)
@@ -176,7 +176,7 @@ the batch **touched**.
   source, an output, the master stage, a scene or an item), the filter ID (non-empty,
   unused on the owner), that the owner has the chain (a source: video if its kind
   produces video, audio if it produces audio and it is not a `scene` source; the master
-  and an output that carries audio: audio only, ADR-0027; a scene and an item: video
+  and an output that carries audio: audio only, ADR-0080; a scene and an item: video
   only, [ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md)), that the
   chain has room, that the kind is a filter kind of that chain (`kind`), that a master
   or output filter's settings hold no reference (a scene, source, bus or asset), the
@@ -554,7 +554,7 @@ Planned, and kept possible by the private fields of the model types:
 
 - **More chains:** filter chains on buses, and video chains on the master and outputs
   ([ADR-0026](../../docs/adr/0026-source-filter-chains.md),
-  [ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)); keyframe
+  [ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)); keyframe
   overrides of item effects (ADR-0065).
 - **Kind versions.** The engine's kinds come from `jstream-sources`. The collection file
   records each source's kind version but refuses a mismatch: settings migrations per

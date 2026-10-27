@@ -5,7 +5,7 @@
 //! on/off switch and settings checked against the kind's descriptor, like a source's
 //! (ADR-0025). The `filter.*` edits address a filter by its owner and its ID.
 //!
-//! Sources own chains, and so do the master stage and each output (ADR-0027). The
+//! Sources own chains, and so do the master stage and each output (ADR-0080). The
 //! master's and an output's chains are audio only until video mixes run their video
 //! chains. Since 0.43 a scene and an item also name a video chain (ADR-0065): a scene's
 //! filters run on its whole composite, and an item's effects on its cropped, fitted box.
@@ -32,12 +32,12 @@ pub enum FilterOwner {
         source_id: SourceId,
     },
     /// The master stage's chains, which apply to everything leaving JStream: every
-    /// output, after the bus it takes (ADR-0027 §1). Not the `master` bus, whose
+    /// output, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose
     /// fader feeds it. Its audio chain runs once per block on each bus that feeds an
     /// output, and monitoring hears the bus before it.
     Master,
     /// An output's own chains, which run after the master stage for that output only
-    /// (ADR-0027 §2). An output with filters on its audio chain gets its own audio
+    /// (ADR-0080 §2). An output with filters on its audio chain gets its own audio
     /// encode from its next start; edits to a chain it started with apply live.
     Output {
         /// The output.

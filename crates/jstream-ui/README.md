@@ -32,8 +32,7 @@ Contents ([Design](#design) explains the choices):
 - **Header** (`header.rs`): `Header`, the bar along the top: the brand, the File menu
   (the connection's details and Disconnect), the Edit menu (Undo, Redo), the View menu
   (show or hide each panel, and open the program or multiview projector) and the Layout menu (saved layouts), the frames dropped
-  since the page connected, Studio mode (kept in the browser's storage), the Privacy
-  button (which the Pause key also toggles, anywhere in the window), Record, and Go
+  since the page connected, Studio mode (kept in the browser's storage), Record, and Go
   Live / End stream. `RecordButton` and `Dropped` are its logic, tested natively.
 - **Dock** (`dock.rs`): `Dock`, the model of which panel sits where: eight `Zone`s
   around the canvas, each holding `Group`s of tabbed `PanelId`s, the zones' sizes, and
@@ -63,8 +62,7 @@ Contents ([Design](#design) explains the choices):
   the master stage's chains, and `chains` to read any owner's; a keyframe scene's items
   are its parent's with its overrides applied, `shown_items`), the program and preview
   scenes, whether studio mode is on (and `scene_click`, what a click on a scene sends
-  in either mode), whether the privacy screen is on (from `privacy.get` and
-  `privacy.changed`, which the header, the canvas and the mixer show), the `Selection`,
+  in either mode), the `Selection`,
   each source's size (`Sizes`, from `source.sizes` and `source.size_changed`;
   `Collection::source_size` adds a nested scene's, the canvas), whether the canvas is in
   crop mode (which a switch of scene leaves), the source kinds
@@ -110,8 +108,7 @@ Contents ([Design](#design) explains the choices):
   logic behind it and the header's Go Live, tested natively against `MockEngine`; and `mixer.rs`: `Mixer`, the
   audio mixer (the master card with its loudness and true peak, the channels folded
   under it with their meters, faders, dB fields, mutes and routing, the same as
-  vertical strips, each microphone marked while the privacy screen mutes it, and the
-  buses),
+  vertical strips, and the buses),
   also tested natively against `MockEngine`; and `studio.rs`:
   `StudioMode`, the Transitions panel (preview, program, Transition and Cut in studio
   mode, the preset picker and editor, and each scene's overrides; [Design](#design)),
@@ -166,15 +163,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **Events and the shared state.** One task reads the session's event stream. It keeps
   the header's revision current and hands each event to `Studio`, which re-reads
   the state with `state.get` after a `state.changed` newer than its copy (or after
-  `events.dropped`), and follows `studio.changed` for the program and preview scenes and
-  `privacy.changed` for the privacy screen (read with `privacy.get` when the session
-  opens and again after `events.dropped`). The server may deliver another client's
-  `privacy.changed` ahead of the answer to a `privacy.get` computed before it, so an
-  answer is dropped when a `privacy.changed` arrived after it was asked
-  (`PrivacyReports`); otherwise a stale answer could show the outputs covered while
-  they are not. The
-  privacy screen is runtime state with no `rev`; the header's button and the Pause key
-  send `privacy.set` and show the state only once the engine reports it. It reads the
+  `events.dropped`), and follows `studio.changed` for the program and preview scenes.
+  JStream has no privacy screen
+  ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md) §4), so the
+  UI sends no `privacy.*` call. It reads the
   sources' sizes with `source.sizes` after its first read and after `events.dropped`,
   and follows `source.size_changed` between them. Reads coalesce:
   while one `state.get` is in flight, any number of further changes cost one more read.
@@ -350,8 +342,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the parent's) and Properties, the source's settings form. A scene shows its object
   count, the scenes that use it as a source, its Hotkey row (the chords bound to its
   `scene.switch`, an × that unbinds one, and Set key, which binds the next chord pressed
-  and takes it from whatever it ran; Pause, the privacy key, is never bound and still
-  toggles privacy), and its Transition in and out (`scene.set_transitions`, with the
+  and takes it from whatever it ran), and its Transition in and out (`scene.set_transitions`, with the
   presets from the shared collection). The panel is built
   once per selected item or scene and each field follows the collection, so an edit
   doesn't rebuild it or take the focus. The fields show committed values: a canvas drag
@@ -407,8 +398,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   nested scene's item. It edits a draft of the name, Transition in and out and the
   hotkey: the hotkey field takes the next key press as a chord (the modifiers in the
   protocol's order, then the key's `code`; Backspace or Delete clears it, Tab,
-  Escape and Enter keep their dialog meaning, and Pause, the privacy key, is never
-  taken). OK sends what changed as one batch:
+  Escape and Enter keep their dialog meaning). OK sends what changed as one batch:
   `scene.rename`, `scene.set_transitions`, and `hotkey.clear` of the old chord before
   `hotkey.set` of the new one, bound to a `scene.switch` with the preset the old binding
   named (none for a first hotkey). A chord bound already is refused before sending, with
@@ -438,7 +428,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   than three settings or isn't described yet. Edit filters… in the item menus selects the item and shows the
   panel. Names come from the prototype's catalogue, then `kind.list`, then the kind's ID.
   An FX button (the Outputs panel's rows, the Mixer's master card or strip) picks the program
-  output's chain (owner `master`) or an output's (ADR-0027) instead, and shows the
+  output's chain (owner `master`) or an output's (ADR-0080) instead, and shows the
   panel; the same rows and dialogs edit it with that owner. Only their audio chains
   show, since the engine refuses their video chains so far, and the virtual camera,
   which has no sound, has none. A scene's chain (owner `scene`, ADR-0065) shows while no
@@ -713,10 +703,6 @@ browser, and `mod.rs` is the component.
   why. WebCodecs is reached through `js_sys::Reflect`, because `web-sys` has it only
   behind the `web_sys_unstable_apis` build flag. A drag's live values (below) reach
   the output as it moves, so the preview follows the drag.
-- **The privacy screen.** While the engine reports it on, the frame (the preview and
-  the boxes) is blurred and dimmed, as the prototype does, under a centred notice,
-  "Privacy screen on · output blurred · mic muted". The engine covers the outputs
-  itself; the blur only makes the state hard to miss while editing.
 - **Selecting and dragging.** A press selects the topmost box under the pointer and
   drags it, or, on a box already selected, drags every selected box. Shift-click adds
   a box to the selection (and drags them all) or takes a selected one out. A press on

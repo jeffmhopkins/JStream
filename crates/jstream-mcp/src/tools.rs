@@ -116,8 +116,14 @@ pub(crate) const REMOTE_PREFIX: &str = "remote_";
 /// conversation. The protocol keeps them for the UI.
 pub(crate) const PEOPLE_ONLY: [&str; 2] = ["youtube", "plugin"];
 
+/// The nouns whose ops are deprecated, so no tool carries them either: an agent is
+/// never offered a call the engine always refuses. `privacy` (ADR-0080 §4): JStream has
+/// no privacy screen.
+pub(crate) const DEPRECATED: [&str; 1] = ["privacy"];
+
 impl Tools {
-    /// Generates the tools from the protocol schema, without the [`PEOPLE_ONLY`] ops.
+    /// Generates the tools from the protocol schema, without the [`PEOPLE_ONLY`] and
+    /// [`DEPRECATED`] ops.
     pub(crate) fn generate() -> Tools {
         let schema = json_schema();
         let empty = Map::new();
@@ -141,7 +147,7 @@ impl Tools {
                     continue;
                 };
                 let noun = name.split_once('.').map_or(name, |(noun, _)| noun);
-                if PEOPLE_ONLY.contains(&noun) {
+                if PEOPLE_ONLY.contains(&noun) || DEPRECATED.contains(&noun) {
                     continue;
                 }
                 let op = Op {
@@ -427,9 +433,8 @@ fn events_tool() -> Tool {
     let description = format!(
         "Returns the engine's events after the cursor `after`, oldest first, without \
          waiting: `state.changed` (the state `rev` moved; `client_id` and `request_id` \
-         say whose batch did it), `studio.changed` (another scene went on program), \
-         `privacy.changed` (the privacy screen went on or off; first in a session that \
-         opens while it is on) and `output.state_changed`, from every client, yours included, and \
+         say whose batch did it), `studio.changed` (another scene went on program) \
+         and `output.state_changed`, from every client, yours included, and \
          `events.dropped` (the server dropped `count` events because this \
          session fell behind; re-read the state). The once-a-second `stats.tick` \
          is not in `events`: each read returns the newest one as `stats` (running drop \
@@ -695,7 +700,7 @@ pub(crate) fn check_tool_names_are_valid() {
         }
     }
     // Every edit, action, query and history op in the schema reaches exactly one group
-    // tool, except the people-only ones, which reach none.
+    // tool, except the people-only and deprecated ones, which reach none.
     let schema = json_schema();
     let defs = schema["$defs"].as_object().cloned().unwrap_or_default();
     let names: Vec<String> = ["Edit", "Action", "Query", "HistoryOp"]
@@ -707,24 +712,25 @@ pub(crate) fn check_tool_names_are_valid() {
                 .map(str::to_owned)
         })
         .collect();
-    let people_only = names
-        .iter()
-        .filter(|name| {
-            PEOPLE_ONLY
-                .iter()
-                .any(|noun| name.starts_with(&format!("{noun}.")))
-        })
-        .count();
-    assert!(people_only > 0, "the people-only nouns name no op");
-    assert!(
-        tools
-            .tools
+    let count = |nouns: &[&str]| {
+        names
             .iter()
-            .all(|t| !PEOPLE_ONLY.contains(&t.name.as_str()))
-    );
+            .filter(|name| {
+                nouns
+                    .iter()
+                    .any(|noun| name.starts_with(&format!("{noun}.")))
+            })
+            .count()
+    };
+    let (people_only, deprecated) = (count(&PEOPLE_ONLY), count(&DEPRECATED));
+    assert!(people_only > 0, "the people-only nouns name no op");
+    assert!(deprecated > 0, "the deprecated nouns name no op");
+    assert!(tools.tools.iter().all(|t| {
+        !PEOPLE_ONLY.contains(&t.name.as_str()) && !DEPRECATED.contains(&t.name.as_str())
+    }));
     assert_eq!(
         tools.owners.len(),
-        names.len() - people_only,
+        names.len() - people_only - deprecated,
         "an op has no tool, or two"
     );
 }
