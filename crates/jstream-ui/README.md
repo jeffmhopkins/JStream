@@ -469,7 +469,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
     show their "Drop here" placeholders, and the element under the pointer, through its
     `data-drop` attributes, names the target: a tab strip (join that group), half of a
     group's body (a new group before or after it) or a zone (a new group at its end).
-    Escape cancels.
+    Escape cancels. A tab keeps the arrow pointer, as a title does; the grabbing hand
+    shows only while it drags.
   - Splitters and dividers capture the pointer while they drag. Zone sizes and group
     weights are set through the CSS object model, which the page's policy allows,
     unlike `style` attributes. After every dock change the workspace fires a window
@@ -680,8 +681,12 @@ browser, and `mod.rs` is the component.
   `jstream-protocol`'s placement formula, so the overlay matches what the compositor
   draws. An item still stored as a 0.3 legacy placement is not drawn: its box depends
   on the source's runtime size, which the canvas doesn't evaluate a legacy transform
-  against yet (ADR-0022 decision 5), and a note top left counts such items. Hidden items are drawn
-  dashed, and the box under the pointer gets a light outline. A keyframe scene shows its
+  against yet (ADR-0022 decision 5), and a note top left counts such items. Over the live
+  picture only the selected items, the box under the pointer and hidden items (which
+  aren't in the picture but still take clicks) are outlined, so an unselected source
+  shows no box; without the picture every box gets a faint outline and
+  its name. Hidden items are drawn dashed, and the box under the pointer gets a light
+  outline. A keyframe scene shows its
   parent's items at its overrides under a banner, "◆ Keyframe of “<parent>”: only
   placement and visibility can change", and its edits are addressed to it, so they
   write its overrides (ADR-0049). Its drags send no live values, which the engine
