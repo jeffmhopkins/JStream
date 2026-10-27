@@ -296,7 +296,8 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
   letter-spacing: 0.4px;
   text-transform: uppercase;
   white-space: nowrap;
-  cursor: grab;
+  /* A title is a label, not a link: the arrow, until a drag shows the grabbing hand. */
+  cursor: default;
 }
 .dock-tab:hover:not(:disabled), .dock-tab.active { background: transparent; color: var(--text); }
 .dock-tab.underline { border-bottom-color: var(--accent); }
