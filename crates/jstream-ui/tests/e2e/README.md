@@ -47,7 +47,9 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   on; given `refuse`, it also holds back the requests that function names and refuses
   them, as `invalid_argument`, when the test calls the `release()` it returns.
   `meterTicks` routes it too, passing everything on, and returns a function that
-  sends the page a `meters.tick`, which the mock engine never sends.
+  sends the page a `meters.tick`, which the mock engine never sends, and re-sends it
+  every 100 ms until the next one, as the engine's stream would, so the panel doesn't
+  blank the meters while a slow run is still asserting on them.
   `sourceSizes` routes it to answer `source.sizes` with the sizes a test gives, since
   the mock makes no frames and reports none, and returns a function that sends the
   page a `source.size_changed`. `recordCalls` routes it too, passing everything on, and
@@ -152,7 +154,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   opens nothing, and a press outside closes one; from the keyboard Down opens a menu at
   its first item and Up on a button at its last, Up and Down wrap through it, Right and
   Left move along the bar (wrapping), Escape closes it back to its button, and
-  Ctrl+Right on a button is left alone.
+  Ctrl+Right on a button is left alone; with animation frames delayed, a second Left
+  pressed before the next menu is drawn still moves along the bar.
 - **Groups** (`groups.spec.js`): Group selection on two items makes "Group 1", left
   out of the Scenes panel, whose caret shows the two items indented; a click on one
   opens the group's scene with it selected; Ungroup puts them back, which a second
