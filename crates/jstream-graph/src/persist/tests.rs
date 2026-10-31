@@ -989,7 +989,8 @@ fn a_geometry_flip_round_trips_and_defaults_to_false() {
     assert!(!graph.to_collection_json().contains("flip_"));
 }
 
-/// An item's opacity and blend load through `item.add`'s checks. A version 1 file's
+/// An item's opacity and blend load through `item.add`'s checks, which take every blend
+/// mode. A version 1 file's
 /// `effects` loads only empty, and holds no scene `filters`: its migration refuses both.
 #[test]
 fn opacity_blend_and_reserved_effects_are_checked() {
@@ -1011,14 +1012,20 @@ fn opacity_blend_and_reserved_effects_are_checked() {
             reason: "a version 1 scene has no `filters`".into()
         })
     );
-    for (field, value) in [("opacity", json!(1.5)), ("blend", json!("multiply"))] {
-        let file = edit_file(|v| v["scenes"][0]["items"][0][field] = value.clone());
-        assert!(
-            matches!(load(&file), Err(LoadError::Invalid { ref object, .. }) if object == "item `i4`"),
-            "{field}: {:?}",
-            load(&file)
-        );
-    }
+    let file = edit_file(|v| v["scenes"][0]["items"][0]["opacity"] = json!(1.5));
+    assert!(
+        matches!(load(&file), Err(LoadError::Invalid { ref object, .. }) if object == "item `i4`"),
+        "{:?}",
+        load(&file)
+    );
+    // Every mode is drawn (ADR-0081), so one loads and is written back.
+    let file = edit_file(|v| v["scenes"][0]["items"][0]["blend"] = json!("multiply"));
+    let graph = load(&file).expect("a multiply item loads");
+    assert!(
+        graph
+            .to_collection_json()
+            .contains("\"blend\": \"multiply\"")
+    );
 }
 
 /// R-SEC-001: a malformed file's error never quotes a value from it, so it is safe to

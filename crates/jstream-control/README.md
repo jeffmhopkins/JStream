@@ -149,8 +149,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   - video mixes: `VideoMix::problem`'s checks and a missing scene in
     `video_mix.create` and `video_mix.update`, deleting a mix an output shows, and
     `output.set_video_mix` naming a missing output, then a missing mix;
-  - an `opacity` outside 0 to 1 and a blend mode other than `normal`, in `item.add`,
-    `item.set_opacity` and `item.set_blend`;
+  - an `opacity` outside 0 to 1, in `item.add` and `item.set_opacity` (every blend
+    mode is taken, as the engine draws them all,
+    [ADR-0081](../../docs/adr/0081-blend-modes-drawn.md));
   - the filter edits (`mock/filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
     a missing owner (a source, output, scene or item) or filter, an empty or duplicate
     filter ID, an audio chain on a `scene` source, a full chain and an index out of range. The master stage and

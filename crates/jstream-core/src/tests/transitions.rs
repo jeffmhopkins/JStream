@@ -427,3 +427,59 @@ fn a_move_pairs_items_only_when_their_effects_match() {
         "b1 leaves and a1 arrives: their effects differ"
     );
 }
+
+/// A nested scene is flattened into its items for a Move only while it and they all
+/// draw `normal` (ADR-0081 §5): its items blend with its own layer, so flattening one
+/// with a blend mode would draw something else. Flattened, `n1` in the nested scene
+/// pairs with `a1`, both placing `red`; whole, nothing pairs.
+#[test]
+fn a_nested_scene_with_a_blend_mode_moves_as_one_picture() {
+    use jstream_protocol::{BlendMode, ItemId};
+    let (engine, clock) = studio();
+    let control = connected(&engine);
+    let hub = engine.render_hub();
+    batch(
+        &control,
+        edits(vec![
+            preset("move", "move", 400),
+            create("n"),
+            Edit::SourceCreate {
+                source_id: SourceId::new("nest"),
+                name: "nest".into(),
+                kind: SourceKind::Scene {
+                    scene_id: SceneId::new("n"),
+                },
+                settings: Settings::default(),
+                duplicated_from: None,
+            },
+            add("n", "n1", "red"),
+            add("b", "b2", "nest"),
+        ]),
+    )
+    .expect("b nests n");
+    let set = |item: &str, blend: BlendMode| {
+        batch(
+            &control,
+            edits(vec![Edit::ItemSetBlend {
+                item_id: ItemId::new(item),
+                blend,
+            }]),
+        )
+        .expect("blend set");
+    };
+    let tracks = |to: &str| {
+        switch(&control, to, Some("move")).expect("switched");
+        let tracks = hub.load().shot().transition_tracks();
+        clock.advance(400_000);
+        engine.replan();
+        tracks
+    };
+    assert_eq!(tracks("b"), Some(2), "a1 glides to n1, and b1 arrives");
+    assert_eq!(tracks("a"), Some(2));
+    set("n1", BlendMode::Multiply);
+    assert_eq!(tracks("b"), Some(3), "a1 leaves, b1 and n arrive");
+    assert_eq!(tracks("a"), Some(3));
+    set("n1", BlendMode::Normal);
+    set("b2", BlendMode::Screen);
+    assert_eq!(tracks("b"), Some(3), "n is placed with a mode");
+}

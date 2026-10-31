@@ -619,6 +619,7 @@ fn read(compositor: &mut jstream_render::Compositor, image: &jstream_render::Ima
         placement: Placement::IDENTITY,
         crop: Crop::NONE,
         opacity: 1.0,
+        blend: jstream_render::BlendMode::Normal,
         visible: true,
     }];
     let scene = Scene {

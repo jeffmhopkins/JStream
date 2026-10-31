@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use jstream_platform::FrameSync;
 
+use crate::blend::{self, BlendPipelines, Layouts, Steps};
 use crate::color::{self, premultiplied_linear};
 use crate::error::RenderError;
 use crate::filter::{self, FilterClock, VideoFilter};
@@ -13,11 +14,12 @@ use crate::image::{self, Alpha, Image, Maker, Owner};
 use crate::mips::{MipPipelines, Mips, Region};
 use crate::place::{self, MAX_VERTICES, Shape};
 use crate::scene::{Output, Scene, Snapshot};
+use jstream_protocol::BlendMode;
 
 /// Bytes from one vertex to the next: 26 `f32`s (position, UV, opacity, alpha mode, `w`,
 /// the item's five edge lines of three each, and its UV bounds), tightly packed. wgpu
 /// only needs the stride and attribute offsets to be multiples of 4.
-const VERTEX_STRIDE: u64 = 104;
+pub(crate) const VERTEX_STRIDE: u64 = 104;
 /// The most vertices one item draws: a five-vertex polygon as a fan of three triangles.
 const MAX_VERTICES_PER_ITEM: u32 = 3 * (MAX_VERTICES as u32 - 2);
 
@@ -28,12 +30,34 @@ struct Draw {
     /// A 3D item's mip chain, of its crop of its image (ADR-0050 decision 5), which it
     /// samples instead of the image.
     mips: Option<Arc<Mips>>,
+    blend: BlendMode,
+    /// For a mode that reads the backdrop, the target's texels it covers, which are
+    /// copied into the backdrop before it draws.
+    rect: Option<Rect>,
+}
+
+/// Texels of the target: `x`, `y`, `width`, `height`, none of them past its edge.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Rect {
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+}
+
+/// The copy of what is below an item that the modes reading it sample (ADR-0081). It
+/// only grows, so targets of different sizes in one frame share it, each copying to the
+/// same texels it reads from.
+struct Backdrop {
+    texture: wgpu::Texture,
+    bind: wgpu::BindGroup,
 }
 
 struct Targets {
     width: u32,
     height: u32,
-    /// The view holds the FP16 texture alive; the handle itself is not read again.
+    /// The FP16 texture, which a backdrop copies from.
+    working: wgpu::Texture,
     working_view: wgpu::TextureView,
     output: wgpu::Texture,
     output_view: wgpu::TextureView,
@@ -51,7 +75,8 @@ pub struct Compositor {
     owner: Owner,
     sampler: wgpu::Sampler,
     image_layout: wgpu::BindGroupLayout,
-    composite: wgpu::RenderPipeline,
+    blends: BlendPipelines,
+    backdrop: Option<Backdrop>,
     resolve_layout: wgpu::BindGroupLayout,
     resolve: wgpu::RenderPipeline,
     targets: Option<Targets>,
@@ -209,7 +234,11 @@ impl Compositor {
             .as_ref()
             .expect("invariant: ensure_targets just set them");
         self.record_mips(&mut encoder, scene);
-        self.record_composite(&mut encoder, &targets.working_view, scene);
+        self.record_composite(
+            &mut encoder,
+            (&targets.working_view, &targets.working),
+            scene,
+        );
         self.record_resolve(&mut encoder, targets);
         if let Some(buffer) = &readback_buffer {
             encoder.copy_texture_to_buffer(
@@ -337,7 +366,7 @@ impl Compositor {
                 label: Some("jstream-render-layer"),
             });
         self.record_mips(&mut encoder, scene);
-        self.record_composite(&mut encoder, view, scene);
+        self.record_composite(&mut encoder, (view, target.texture()), scene);
         self.record_release(&mut encoder);
         self.gpu.queue.submit([encoder.finish()]);
         target.mark_changed();
@@ -583,8 +612,16 @@ impl Compositor {
             "jstream-render-composite",
             include_str!("composite.wgsl"),
         );
-        let composite = composite_pipeline(&gpu.device, &image_layout, &composite_shader);
         let resolve_layout = resolve_layout(&gpu.device);
+        // The backdrop is bound as the resolve's input is: one unfiltered FP16 texture.
+        let blends = BlendPipelines::new(
+            &gpu.device,
+            &Layouts {
+                image: &image_layout,
+                backdrop: &resolve_layout,
+                shader: &composite_shader,
+            },
+        );
         let resolve_shader = shader(
             &gpu.device,
             "jstream-render-resolve",
@@ -604,7 +641,8 @@ impl Compositor {
             owner: Owner::default(),
             sampler,
             image_layout,
-            composite,
+            blends,
+            backdrop: None,
             resolve_layout,
             resolve,
             targets: None,
@@ -637,6 +675,7 @@ impl Compositor {
                     detail: format!("{} is not a finite value in 0..=1", item.opacity),
                 });
             }
+            self.blends.steps(item.blend)?;
             let (width, height) = item.image.extent();
             let mut shape = place::shape(width, height, item.placement, item.crop)?;
             if !item.visible || item.opacity == 0.0 {
@@ -644,6 +683,15 @@ impl Compositor {
             }
             let Some(shape) = shape.as_mut() else {
                 continue;
+            };
+            let rect = if blend::reads_backdrop(item.blend) {
+                match covered(shape, scene.canvas.width(), scene.canvas.height()) {
+                    Some(rect) => Some(rect),
+                    // Wholly off the target: nothing to draw.
+                    None => continue,
+                }
+            } else {
+                None
             };
             let too_many = || RenderError::TooManyItems {
                 count: scene.items.len(),
@@ -691,6 +739,8 @@ impl Compositor {
                 first_vertex,
                 vertex_count,
                 mips,
+                blend: item.blend,
+                rect,
             });
         }
         let limit = self.gpu.max_texture_dimension_2d;
@@ -779,7 +829,10 @@ impl Compositor {
             width,
             height,
             wgpu::TextureFormat::Rgba16Float,
-            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            // `COPY_SRC` for the backdrop (ADR-0081).
+            wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC,
         );
         let working_view = working.create_view(&wgpu::TextureViewDescriptor::default());
         let output = texture(
@@ -807,6 +860,7 @@ impl Compositor {
         self.targets = Some(Targets {
             width,
             height,
+            working,
             working_view,
             output,
             output_view,
@@ -822,6 +876,9 @@ impl Compositor {
         color::validate(scene.background)?;
         self.prepare(scene)?;
         self.ensure_vertex_buffer()?;
+        if self.draws.iter().any(|draw| draw.rect.is_some()) {
+            self.ensure_backdrop(scene.canvas.width(), scene.canvas.height());
+        }
         if !self.vertices.is_empty() {
             self.gpu
                 .queue
@@ -857,47 +914,168 @@ impl Compositor {
         }
     }
 
+    /// Grows the backdrop to hold `width` by `height` texels at least.
+    fn ensure_backdrop(&mut self, width: u32, height: u32) {
+        let (have_w, have_h) = self.backdrop.as_ref().map_or((0, 0), |backdrop| {
+            (backdrop.texture.width(), backdrop.texture.height())
+        });
+        if have_w >= width && have_h >= height {
+            return;
+        }
+        let texture = texture(
+            &self.gpu.device,
+            "jstream-render-backdrop",
+            have_w.max(width),
+            have_h.max(height),
+            wgpu::TextureFormat::Rgba16Float,
+            wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
+        );
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let bind = self
+            .gpu
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("jstream-render-backdrop"),
+                layout: &self.resolve_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                }],
+            });
+        self.backdrop = Some(Backdrop { texture, bind });
+    }
+
     /// The composite pass: clear `target` (`Rgba16Float`) to the background and draw
-    /// the items, premultiplied linear.
+    /// the items, premultiplied linear. An item whose mode reads the backdrop ends the
+    /// pass: the texels it covers are copied into the backdrop, and a new pass draws it
+    /// and the items after it (ADR-0081).
     fn record_composite(
         &self,
         encoder: &mut wgpu::CommandEncoder,
-        target: &wgpu::TextureView,
+        (view, texture): (&wgpu::TextureView, &wgpu::Texture),
         scene: &Scene<'_>,
     ) {
         let clear = premultiplied_linear(scene.background);
+        let clear = wgpu::Color {
+            r: f64::from(clear[0]),
+            g: f64::from(clear[1]),
+            b: f64::from(clear[2]),
+            a: f64::from(clear[3]),
+        };
+        let reads = |draw: &Draw| draw.rect.is_some();
+        let count = self.draws.len();
+        let mut cleared = false;
+        let mut first = 0;
+        loop {
+            if let Some(rect) = self.draws.get(first).and_then(|draw| draw.rect) {
+                if !cleared {
+                    self.record_draws(encoder, view, Some(clear), &[], scene);
+                    cleared = true;
+                }
+                self.record_backdrop_copy(encoder, texture, rect);
+            }
+            let end = (first + 1..count)
+                .find(|&index| reads(&self.draws[index]))
+                .unwrap_or(count.max(first));
+            let load = (!cleared).then_some(clear);
+            self.record_draws(encoder, view, load, &self.draws[first..end], scene);
+            cleared = true;
+            if end >= count {
+                break;
+            }
+            first = end;
+        }
+    }
+
+    /// One render pass over `target` drawing `draws`, after clearing it to `clear` when
+    /// that is set.
+    fn record_draws(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        clear: Option<wgpu::Color>,
+        draws: &[Draw],
+        scene: &Scene<'_>,
+    ) {
+        let load = clear.map_or(wgpu::LoadOp::Load, wgpu::LoadOp::Clear);
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("jstream-render-composite"),
-            color_attachments: &[Some(color_attachment(
-                target,
-                wgpu::LoadOp::Clear(wgpu::Color {
-                    r: f64::from(clear[0]),
-                    g: f64::from(clear[1]),
-                    b: f64::from(clear[2]),
-                    a: f64::from(clear[3]),
-                }),
-            ))],
+            color_attachments: &[Some(color_attachment(target, load))],
             depth_stencil_attachment: None,
             timestamp_writes: None,
             occlusion_query_set: None,
             multiview_mask: None,
         });
-        if !self.draws.is_empty() {
-            pass.set_pipeline(&self.composite);
-            pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            for draw in &self.draws {
-                let image = scene.items[draw.index].image;
-                let bind_group = match &draw.mips {
-                    Some(mips) => &mips.bind_group,
-                    None => image.bind_group(),
-                };
-                pass.set_bind_group(0, bind_group, &[]);
-                pass.draw(
-                    draw.first_vertex..draw.first_vertex + draw.vertex_count,
-                    0..1,
-                );
+        if draws.is_empty() {
+            return;
+        }
+        pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+        for draw in draws {
+            let image = scene.items[draw.index].image;
+            let bind_group = match &draw.mips {
+                Some(mips) => &mips.bind_group,
+                None => image.bind_group(),
+            };
+            let vertices = draw.first_vertex..draw.first_vertex + draw.vertex_count;
+            // `prepare` checked every item's mode.
+            let Ok(steps) = self.blends.steps(draw.blend) else {
+                continue;
+            };
+            match steps {
+                Steps::Fixed(pipelines) => {
+                    for pipeline in pipelines {
+                        pass.set_pipeline(pipeline);
+                        pass.set_bind_group(0, bind_group, &[]);
+                        pass.draw(vertices.clone(), 0..1);
+                    }
+                }
+                Steps::Backdrop(pipeline) => {
+                    let Some(backdrop) = &self.backdrop else {
+                        continue;
+                    };
+                    pass.set_pipeline(pipeline);
+                    pass.set_bind_group(0, bind_group, &[]);
+                    pass.set_bind_group(1, &backdrop.bind, &[]);
+                    pass.draw(vertices, 0..1);
+                }
             }
         }
+    }
+
+    /// Copies `rect` of `target` into the same texels of the backdrop.
+    fn record_backdrop_copy(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::Texture,
+        rect: Rect,
+    ) {
+        let Some(backdrop) = &self.backdrop else {
+            return;
+        };
+        let origin = wgpu::Origin3d {
+            x: rect.x,
+            y: rect.y,
+            z: 0,
+        };
+        encoder.copy_texture_to_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: target,
+                mip_level: 0,
+                origin,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyTextureInfo {
+                texture: &backdrop.texture,
+                mip_level: 0,
+                origin,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::Extent3d {
+                width: rect.width,
+                height: rect.height,
+                depth_or_array_layers: 1,
+            },
+        );
     }
 
     /// The resolve pass: the FP16 working target to the straight sRGB output.
@@ -949,6 +1127,37 @@ impl std::fmt::Debug for Compositor {
             .field("adapter", &self.adapter_description())
             .finish_non_exhaustive()
     }
+}
+
+/// The texels of a `width` by `height` target that `shape` can touch, a texel of margin
+/// around its drawn polygon, or `None` when it is wholly off the target.
+fn covered(shape: &Shape, width: u32, height: u32) -> Option<Rect> {
+    let mut min = [f32::INFINITY; 2];
+    let mut max = [f32::NEG_INFINITY; 2];
+    for vertex in shape.vertices() {
+        for axis in 0..2 {
+            min[axis] = min[axis].min(vertex.canvas[axis]);
+            max[axis] = max[axis].max(vertex.canvas[axis]);
+        }
+    }
+    let clamp = |value: f32, limit: u32| -> u32 {
+        // Not finite only for a degenerate polygon, which then covers nothing.
+        if value.is_nan() {
+            0
+        } else {
+            value.clamp(0.0, limit as f32) as u32
+        }
+    };
+    let x0 = clamp((min[0] - 1.0).floor(), width);
+    let y0 = clamp((min[1] - 1.0).floor(), height);
+    let x1 = clamp((max[0] + 1.0).ceil(), width);
+    let y1 = clamp((max[1] + 1.0).ceil(), height);
+    (x1 > x0 && y1 > y0).then(|| Rect {
+        x: x0,
+        y: y0,
+        width: x1 - x0,
+        height: y1 - y0,
+    })
 }
 
 /// Appends one item's triangles, a fan from its first vertex, and returns how many
@@ -1082,68 +1291,6 @@ fn resolve_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
     })
 }
 
-fn composite_pipeline(
-    device: &wgpu::Device,
-    layout: &wgpu::BindGroupLayout,
-    shader: &wgpu::ShaderModule,
-) -> wgpu::RenderPipeline {
-    let attributes = wgpu::vertex_attr_array![
-        0 => Float32x2,
-        1 => Float32x2,
-        2 => Float32,
-        3 => Float32,
-        4 => Float32,
-        5 => Float32x3,
-        6 => Float32x3,
-        7 => Float32x3,
-        8 => Float32x3,
-        9 => Float32x3,
-        10 => Float32x4,
-    ];
-    let buffers = [Some(wgpu::VertexBufferLayout {
-        array_stride: VERTEX_STRIDE,
-        step_mode: wgpu::VertexStepMode::Vertex,
-        attributes: &attributes,
-    })];
-    let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some("jstream-render-composite"),
-        bind_group_layouts: &[Some(layout)],
-        immediate_size: 0,
-    });
-    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("jstream-render-composite"),
-        layout: Some(&layout),
-        vertex: wgpu::VertexState {
-            module: shader,
-            entry_point: Some("vs"),
-            compilation_options: Default::default(),
-            buffers: &buffers,
-        },
-        primitive: wgpu::PrimitiveState {
-            topology: wgpu::PrimitiveTopology::TriangleList,
-            cull_mode: None,
-            ..Default::default()
-        },
-        depth_stencil: None,
-        multisample: Default::default(),
-        fragment: Some(wgpu::FragmentState {
-            module: shader,
-            entry_point: Some("fs"),
-            compilation_options: Default::default(),
-            targets: &[Some(wgpu::ColorTargetState {
-                format: wgpu::TextureFormat::Rgba16Float,
-                blend: Some(wgpu::BlendState {
-                    color: premultiplied_blend(),
-                    alpha: premultiplied_blend(),
-                }),
-                write_mask: wgpu::ColorWrites::ALL,
-            })],
-        }),
-        multiview_mask: None,
-        cache: None,
-    })
-}
-
 fn resolve_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::BindGroupLayout,
@@ -1183,14 +1330,6 @@ fn resolve_pipeline(
         multiview_mask: None,
         cache: None,
     })
-}
-
-fn premultiplied_blend() -> wgpu::BlendComponent {
-    wgpu::BlendComponent {
-        src_factor: wgpu::BlendFactor::One,
-        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-        operation: wgpu::BlendOperation::Add,
-    }
 }
 
 fn texture(

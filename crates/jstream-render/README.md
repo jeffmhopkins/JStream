@@ -57,9 +57,13 @@ and calls this crate.
 - `visible == false`, a crop that leaves no pixels, or a scale of zero draws nothing.
 - Opacity is a straight-alpha multiplier in `[0, 1]`, default 1: `jstream-core` passes
   an item's stored opacity, or during a transition its track's sampled one
-  ([ARCH › Data model](../../docs/ARCHITECTURE.md#data-model)). The only blend is
-  premultiplied src-over. Other modes stay rejected by the engine until a later change
-  draws them.
+  ([ARCH › Data model](../../docs/ARCHITECTURE.md#data-model)).
+- `Item.blend` is its `BlendMode` (re-exported), drawn per
+  [ADR-0081](../../docs/adr/0081-blend-modes-drawn.md) (`blend.rs`): `normal`,
+  `additive`, `screen` and `multiply` (two draws) with fixed-function blend states;
+  `darken`, `lighten`, `overlay`, `difference` and `exclusion` by reading a backdrop,
+  a copy of the target's texels under the item. Those three last mix sRGB-encoded
+  values, the rest linear light. A layer blends with its own texels only.
 - Nested scenes are not walked here. The caller composites the inner scene into a
   layer, an `Image` on this compositor, and places that image in the outer scene:
   `render_image` makes a new layer, and `render_into` redraws one the caller keeps
@@ -269,7 +273,12 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    opacity and by its edge coverage, `clamp(d + 0.5, 0, 1)` for the distance `d` in
    pixels to the nearest edge line (ADR-0050 decision 6), and outputs premultiplied
    linear. A 2D item's edge lines are never crossed, so its coverage is 1 and its edges
-   are drawn as before. Blend is `One, OneMinusSrcAlpha` on colour and alpha. No depth buffer:
+   are drawn as before. The pipeline is the item's blend mode's: `One, OneMinusSrcAlpha`
+   on colour and alpha for `normal`. A mode that reads the backdrop ends the pass: the
+   texels its polygon's bounding box covers (a texel of margin, clipped) are copied
+   into the backdrop, a grow-only `Rgba16Float` texture, and a new pass draws the item,
+   whose `fs_<mode>` loads the backdrop at its own pixel and writes the W3C composite
+   with blending off, and the items after it (ADR-0081). No depth buffer:
    stacking order is draw order. No cull, so a negative scale still draws (it flips
    the quad). The viewport clips to the canvas.
 4. **Resolve.** A second pass draws one fullscreen triangle into the sRGB target with
@@ -748,6 +757,14 @@ image unflipped, with `flip_h`, `flip_v` and both, flipped then turned 90° (the
 is in the box's own frame), and a flipped `fill`; another checks that a legacy
 negative scale and the geometry `from_legacy` makes of it draw the same grid.
 
+**Blend modes** (`tests/blend.rs`,
+[ADR-0081](../../docs/adr/0081-blend-modes-drawn.md)). Every mode, over an opaque, a
+translucent and a transparent background, from opaque, faded and translucent sources,
+against a CPU reference of the W3C composite in premultiplied linear light (sRGB-encoded
+for overlay, difference and exclusion), within 2 sRGB 8-bit steps; and backdrop items in
+a row seeing the ones before, clipped at the canvas edge, drawn into a layer after the
+backdrop grew larger, and a 3D item reading the backdrop across its edge fringe.
+
 **3D goldens** (`tests/three_d.rs`). Spike S5's scenarios at a quarter of its size, on a
 240×136 canvas from a 64² checkerboard with a texel grid (512² for C), against a CPU
 reference that averages 8×8 (16×16 for C and D) point samples per pixel, each mapped
@@ -877,7 +894,9 @@ real hardware.
 **Benchmarks** (`benches/composite.rs`, criterion, [R-RT-005](../../docs/RULES.md#R-RT-005)).
 A 1920x1080 frame of 1, 4 and 16 rotated 1280x720 items at 0.8 opacity, with readback
 (`composite_1080p_readback`) and without, waiting for the queue (`composite_1080p_submit`),
-and refilling a 1080p upload in place (`rewrite_rgba8_1080p`). Run them with
+4 of the items drawn `normal`, `multiply` and `overlay` (`composite_1080p_blend`, which
+prices a fixed-function mode's second draw and a backdrop mode's copy and pass), and
+refilling a 1080p upload in place (`rewrite_rgba8_1080p`). Run them with
 `cargo bench -p jstream-render --bench composite`, which takes the GPU when there is
 one; the `bench` workflow records them on lavapipe on every push to `main` ([R-GIT-003](../../docs/RULES.md#R-GIT-003)). A
 software adapter's numbers are CPU rasterisation: they track regressions in what the
@@ -907,8 +926,8 @@ a hardware GPU.
 - **Opacity and blend ownership** was left open by ADR-0022 (decision-register D2).
   The snapshot puts opacity on the item because that is what ARCH's data model and
   the compositor consequences of
-  [ADR-0023](../../docs/adr/0023-placements-references-and-clones.md) describe. Blend modes other than src-over
-  are not represented.
+  [ADR-0023](../../docs/adr/0023-placements-references-and-clones.md) describe. Blend
+  modes are on the item too ([ADR-0081](../../docs/adr/0081-blend-modes-drawn.md)).
 - **Background.** The clear colour is a field of the snapshot. `Scene.background` is
   not in the graph.
 - **Golden files.** When `cargo xtask golden` exists, WARP renders under

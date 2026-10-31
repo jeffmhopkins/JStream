@@ -30,8 +30,8 @@ use jstream_graph::{
 use jstream_media::{FrameSize, MediaTime, PixelFormat, Rounding, VideoFrame};
 use jstream_platform::{ContextKey, GpuFrame};
 use jstream_protocol::{
-    Canvas, Crop as ProtocolCrop, Edit, FilterChain, Glide, ItemGeometry, ItemId, ItemTransition,
-    ProtocolError, QueryResult, Rev, SceneId, SourceId, SourceKind, VideoMixId,
+    BlendMode, Canvas, Crop as ProtocolCrop, Edit, FilterChain, Glide, ItemGeometry, ItemId,
+    ItemTransition, ProtocolError, QueryResult, Rev, SceneId, SourceId, SourceKind, VideoMixId,
 };
 use jstream_render::transition::{Endpoint, Track};
 use jstream_render::{
@@ -283,6 +283,8 @@ struct Placed {
     crop: Crop,
     /// The item's straight alpha multiplier (ADR-0023), in [0, 1].
     opacity: f32,
+    /// How it composites onto what is below it (ADR-0081).
+    blend: BlendMode,
     /// Its effects' box, when an effect of it runs: the layer then shows the effects'
     /// output in place of `source`.
     effects: Option<Boxed>,
@@ -962,6 +964,7 @@ impl Planner<'_, '_> {
                 geometry,
                 crop: Crop::NONE,
                 opacity: OPAQUE,
+                blend: BlendMode::Normal,
             },
             size: Some([canvas.width, canvas.height]),
             // One picture that pairs with nothing crossfades (ADR-0065 §6), whatever
@@ -1169,11 +1172,21 @@ impl Planner<'_, '_> {
             };
             let (image, size) = match source.kind() {
                 SourceKind::Scene { scene_id } => {
-                    // A scene with a chain is one picture (ADR-0065 §6).
+                    // A scene with a chain is one picture (ADR-0065 §6), and so is one
+                    // placed with a blend mode or holding an item that has one: its
+                    // items blend with its own layer, not the scene it is placed in
+                    // (ADR-0081).
                     if flatten
                         && depth + 1 < MAX_NESTING
                         && covers(item, canvas)
                         && item.opacity().get() >= OPAQUE
+                        && item.blend().is_normal()
+                        && state.scene(scene_id).is_none_or(|inner| {
+                            state
+                                .shown_items(inner)
+                                .iter()
+                                .all(|inner| inner.blend().is_normal())
+                        })
                         && self.scene_chain(scene_id).is_none()
                         && !item.effects().iter().any(|effect| effect.enabled())
                     {
@@ -1236,6 +1249,7 @@ impl Planner<'_, '_> {
                     geometry,
                     crop: cut,
                     opacity: item.opacity().get(),
+                    blend: item.blend(),
                 },
                 size,
                 settings: *item.transition(),
@@ -1278,6 +1292,7 @@ impl Planner<'_, '_> {
                     placement: placement(item.placement()),
                     crop: crop(item.crop()),
                     opacity: item.opacity().get(),
+                    blend: item.blend(),
                     effects,
                 });
             }
@@ -1410,6 +1425,7 @@ struct Layer {
     placement: Placement,
     crop: Crop,
     opacity: f32,
+    blend: BlendMode,
     /// The box of an item whose effects run: `image` is their output, placed over the
     /// box grown by their outset, uncropped.
     boxed: Option<Boxed>,
@@ -1511,6 +1527,7 @@ fn schedule(shot: &Shot, program: &SceneId) -> Vec<Pass> {
                 placement: Placement::Geometry(geometry),
                 crop: Crop::NONE,
                 opacity: OPAQUE,
+                blend: BlendMode::Normal,
                 boxed: None,
             })
             .into_iter()
@@ -1716,6 +1733,7 @@ fn visit_into(
             placement: placed.placement,
             crop: placed.crop,
             opacity: placed.opacity,
+            blend: placed.blend,
             boxed: placed.effects,
         });
     }
@@ -2402,6 +2420,7 @@ pub(crate) fn compose(
                         }),
                         crop: Crop::NONE,
                         opacity: OPAQUE,
+                        blend: BlendMode::Normal,
                         visible: true,
                     }
                 })
@@ -2560,6 +2579,7 @@ fn draw_box(
         placement: Placement::Geometry(inside),
         crop,
         opacity: OPAQUE,
+        blend: BlendMode::Normal,
         visible: true,
     }];
     let size = FrameSize::new(width, height).map_err(|_| RenderError::Invalid {
@@ -2656,6 +2676,7 @@ fn fill_items<'a>(
             placement,
             crop,
             opacity: layer.opacity,
+            blend: layer.blend,
             visible: true,
         })
     }));
@@ -2683,6 +2704,7 @@ fn fill_tracks<'a>(
             placement: Placement::Geometry(sampled.geometry),
             crop: sampled.crop,
             opacity: sampled.opacity,
+            blend: sampled.blend,
             visible: true,
         })
     }));
@@ -2701,6 +2723,7 @@ fn fitted(image: &jstream_render::Image, from: FrameSize, into: FrameSize) -> It
         }),
         crop: Crop::NONE,
         opacity: OPAQUE,
+        blend: BlendMode::Normal,
         visible: true,
     }
 }
@@ -2887,7 +2910,7 @@ pub(crate) mod tests {
     };
     use jstream_media::{FrameSize, MediaTime, Timebase};
     use jstream_protocol::{
-        Canvas, Edit, ItemId, ProtocolError, QueryResult, Rev, SceneId, SourceId,
+        BlendMode, Canvas, Edit, ItemId, ProtocolError, QueryResult, Rev, SceneId, SourceId,
     };
     use jstream_render::{
         Compositor, Crop, LegacyTransform, OpenOptions, Placement, ResourceCache,
@@ -2986,6 +3009,7 @@ pub(crate) mod tests {
             placement,
             crop: Crop::NONE,
             opacity: super::OPAQUE,
+            blend: jstream_protocol::BlendMode::Normal,
             effects: None,
         }
     }
@@ -3394,6 +3418,48 @@ pub(crate) mod tests {
         for (x, y) in [(100, 360), (1100, 360)] {
             let pixel = at(&rgba, x, y);
             for (got, want) in pixel.iter().zip(half) {
+                assert!(got.abs_diff(want) <= 1, "({x}, {y}): {pixel:?}");
+            }
+        }
+    }
+
+    /// Each item draws with its blend mode (ADR-0081): additive green over red is yellow,
+    /// and a nested scene's items blend with its own layer, so its difference green over
+    /// the layer's transparent background stays green, which the layer then multiplies
+    /// onto the red, making black.
+    #[test]
+    fn items_and_nested_scenes_draw_their_blend_modes() {
+        let blended = |placed: Placed, blend: BlendMode| Placed { blend, ..placed };
+        let left = Placement::Legacy(LegacyTransform {
+            scale: [60.0, 120.0],
+            ..LegacyTransform::IDENTITY
+        });
+        let right = Placement::Legacy(LegacyTransform {
+            position: [960.0, 0.0],
+            scale: [0.5, 1.0],
+            rotation_deg: 0.0,
+        });
+        let shot = shot(vec![
+            (
+                "program",
+                vec![
+                    fill("red"),
+                    blended(
+                        placed(SourceRef::Frame(SourceId::new("green")), left),
+                        BlendMode::Additive,
+                    ),
+                    blended(nest("a", right), BlendMode::Multiply),
+                ],
+            ),
+            ("a", vec![blended(fill("green"), BlendMode::Difference)]),
+        ]);
+        let Some(rgba) = snap(&shot) else { return };
+        for ((x, y), want) in [
+            ((100, 360), [255, 255, 0, 255]),
+            ((1100, 360), [0, 0, 0, 255]),
+        ] {
+            let pixel = at(&rgba, x, y);
+            for (got, want) in pixel.iter().zip(want) {
                 assert!(got.abs_diff(want) <= 1, "({x}, {y}): {pixel:?}");
             }
         }

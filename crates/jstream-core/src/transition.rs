@@ -285,6 +285,7 @@ mod tests {
                 .expect("valid"),
                 crop: Crop::NONE,
                 opacity: 1.0,
+                blend: jstream_protocol::BlendMode::Normal,
             },
             size: None,
             settings: ItemTransition::default(),

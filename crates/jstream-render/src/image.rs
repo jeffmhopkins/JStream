@@ -497,7 +497,10 @@ pub(crate) fn layer(maker: &Maker<'_>, width: u32, height: u32) -> Result<Image,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: LAYER_FORMAT,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        // `COPY_SRC` for a blend mode that reads what is below the item (ADR-0081).
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+            | wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::COPY_SRC,
         view_formats: &[],
     });
     let target = texture.create_view(&wgpu::TextureViewDescriptor::default());

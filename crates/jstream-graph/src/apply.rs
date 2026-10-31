@@ -13,11 +13,11 @@ use crate::target::{broadcast_id_problem, record_path_problem, rtmp_url_problem}
 use crate::touched::Touched;
 use jstream_anim::Value as KeyValue;
 use jstream_protocol::{
-    Batch, BlendMode, Blocker, Canvas, Crop, DroppedOverride, Edit, EntityKind, Finite32,
-    GeometryError, HotkeyBinding, ItemGeometry, ItemId, ItemTransform, ItemTransition,
-    KindCategory, KindDescriptor, Media, OutputId, OutputKind, ParamDescriptor, ParamType,
-    ProtocolError, RecordContainer, Reference, Rev, RtmpTarget, SceneId, SceneMeta, Settings,
-    SourceAudio, SourceId, SourceKind,
+    Batch, Blocker, Canvas, Crop, DroppedOverride, Edit, EntityKind, Finite32, GeometryError,
+    HotkeyBinding, ItemGeometry, ItemId, ItemTransform, ItemTransition, KindCategory,
+    KindDescriptor, Media, OutputId, OutputKind, ParamDescriptor, ParamType, ProtocolError,
+    RecordContainer, Reference, Rev, RtmpTarget, SceneId, SceneMeta, Settings, SourceAudio,
+    SourceId, SourceKind,
 };
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -558,7 +558,6 @@ fn apply_edit(
             let opacity = opacity.unwrap_or(Finite32::ONE);
             check_opacity(opacity, at)?;
             let blend = blend.unwrap_or_default();
-            check_blend(blend, at)?;
             state.scenes[si].items.push(Item {
                 id: item_id.clone(),
                 source_id: source_id.clone(),
@@ -728,7 +727,6 @@ fn apply_edit(
         }
         Edit::ItemSetBlend { item_id, blend } => {
             let (si, ii) = find_item(state, item_id)?;
-            check_blend(*blend, at)?;
             let item = item_mut(state, (si, ii))?;
             let old = std::mem::replace(&mut item.blend, *blend);
             Ok(vec![Edit::ItemSetBlend {
@@ -995,22 +993,6 @@ fn check_geometry(geometry: &ItemGeometry, at: usize) -> Result<(), ProtocolErro
 fn check_opacity(opacity: Finite32, at: usize) -> Result<(), ProtocolError> {
     if !(0.0..=1.0).contains(&opacity.get()) {
         return Err(invalid(at, "opacity", "must be from 0 to 1"));
-    }
-    Ok(())
-}
-
-/// Rejects a blend mode the compositor doesn't draw yet, so stored state never claims
-/// one (ADR-0023 §1). Only `normal` is drawn so far.
-fn check_blend(blend: BlendMode, at: usize) -> Result<(), ProtocolError> {
-    if !blend.is_normal() {
-        return Err(invalid(
-            at,
-            "blend",
-            format!(
-                "`{}` is not drawn by the compositor yet; only `normal` is",
-                blend.as_str()
-            ),
-        ));
     }
     Ok(())
 }

@@ -1102,12 +1102,8 @@ fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoV
                             .into_iter()
                             .map(|mode| {
                                 let name = blend_name(mode);
-                                // The engine draws only Normal so far and refuses the others.
-                                view! {
-                                    <option value=name disabled=mode != BlendMode::Normal>
-                                        {name}
-                                    </option>
-                                }
+                                // The engine draws every mode (ADR-0081).
+                                view! { <option value=name>{name}</option> }
                             })
                             .collect_view()}
                     </select>

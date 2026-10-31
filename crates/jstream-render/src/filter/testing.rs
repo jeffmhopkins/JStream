@@ -58,6 +58,7 @@ pub(crate) fn read(opened: &mut Opened, image: &Image) -> Snapshot {
         placement: Placement::IDENTITY,
         crop: Crop::NONE,
         opacity: 1.0,
+        blend: crate::BlendMode::Normal,
         visible: true,
     }];
     let scene = Scene {

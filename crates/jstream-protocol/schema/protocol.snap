@@ -748,7 +748,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "BlendMode": {
-      "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers. The compositor blends in linear light and draws\n`normal` only so far; the engine rejects every other mode with `invalid_argument`\nuntil it draws it, so a client can read the list without the engine claiming it.",
+      "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0081, since\n0.48; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, which blend sRGB-encoded values.",
       "oneOf": [
         {
           "const": "normal",
@@ -8616,5 +8616,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.46"
+  "title": "JStream protocol 0.48"
 }

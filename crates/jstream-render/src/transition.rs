@@ -20,7 +20,7 @@
 //! Docs: docs/adr/0029-transitions.md
 
 use crate::scene::Crop;
-use jstream_protocol::{Easing, Finite32, ItemGeometry, Size, Vec2};
+use jstream_protocol::{BlendMode, Easing, Finite32, ItemGeometry, Size, Vec2};
 
 /// How much of its size a `scale` effect leaves at its end: 65%.
 const SCALE_TO: f32 = 0.65;
@@ -38,6 +38,8 @@ pub struct Endpoint {
     pub crop: Crop,
     /// Straight-alpha multiplier in `0..=1`.
     pub opacity: f32,
+    /// How it composites (ADR-0081). A pair that changes mode switches halfway.
+    pub blend: BlendMode,
 }
 
 /// How an item without a partner appears or disappears.
@@ -166,6 +168,7 @@ impl Track {
                     geometry: lerp_geometry(&from.geometry, &to.geometry, k),
                     crop: lerp_crop(from.crop, to.crop, k, *source),
                     opacity: lerp(from.opacity, to.opacity, k.clamp(0.0, 1.0)),
+                    blend: if k < 0.5 { from.blend } else { to.blend },
                 }
             }
             Track::Appear { to, effect, timing } => {
@@ -177,6 +180,7 @@ impl Track {
                     geometry: away(&to.geometry, 1.0 - k, *effect, canvas),
                     crop: to.crop,
                     opacity: to.opacity * k,
+                    blend: to.blend,
                 }
             }
             Track::Disappear {
@@ -192,6 +196,7 @@ impl Track {
                     geometry: away(&from.geometry, k, *effect, canvas),
                     crop: from.crop,
                     opacity: from.opacity * (1.0 - k.clamp(0.0, 1.0)),
+                    blend: from.blend,
                 }
             }
         };
@@ -313,7 +318,7 @@ fn away(geometry: &ItemGeometry, k: f32, effect: Effect, [cw, ch]: [f32; 2]) -> 
 mod tests {
     use super::{Effect, Endpoint, Timing, Track, lerp_angle};
     use crate::scene::Crop;
-    use jstream_protocol::{Easing, Finite32, ItemGeometry, Size, Vec2};
+    use jstream_protocol::{BlendMode, Easing, Finite32, ItemGeometry, Size, Vec2};
 
     const CANVAS: [f32; 2] = [1920.0, 1080.0];
 
@@ -326,6 +331,7 @@ mod tests {
             .expect("valid"),
             crop: Crop::NONE,
             opacity: 1.0,
+            blend: BlendMode::Normal,
         }
     }
 
@@ -383,6 +389,43 @@ mod tests {
         assert!(!before.geometry.flip_h && !before.geometry.flip_v);
         let after = track.sample(500.0, CANVAS).expect("drawn");
         assert!(after.geometry.flip_h && after.geometry.flip_v);
+    }
+
+    /// A blend mode can't be interpolated, so a pair switches it halfway, as it does
+    /// flips, and an item alone keeps its own.
+    #[test]
+    fn blend_switches_halfway() {
+        let to = Endpoint {
+            blend: BlendMode::Screen,
+            ..at(100.0, 100.0, 200.0, 100.0)
+        };
+        let track = Track::Pair {
+            from: at(100.0, 100.0, 200.0, 100.0),
+            to,
+            timing: linear(0.0),
+            source: None,
+        };
+        let blend = |ms: f32| track.sample(ms, CANVAS).expect("drawn").blend;
+        assert_eq!(blend(499.0), BlendMode::Normal);
+        assert_eq!(blend(500.0), BlendMode::Screen);
+        let appear = Track::Appear {
+            to,
+            effect: Effect::Fade,
+            timing: linear(0.0),
+        };
+        assert_eq!(
+            appear.sample(10.0, CANVAS).expect("drawn").blend,
+            BlendMode::Screen
+        );
+        let disappear = Track::Disappear {
+            from: to,
+            effect: Effect::Fade,
+            timing: linear(0.0),
+        };
+        assert_eq!(
+            disappear.sample(990.0, CANVAS).expect("drawn").blend,
+            BlendMode::Screen
+        );
     }
 
     #[test]
