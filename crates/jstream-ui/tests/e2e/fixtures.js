@@ -160,18 +160,45 @@ export async function describeKinds(page, kinds, { refuse = () => null } = {}) {
 
 /** Lets a test send the page `meters.tick` events, which the mock engine never sends:
  * the page's WebSocket goes through a route that passes every message on, and the
- * returned function sends `{ sources, buses }` as one tick. Call it before `connect`. */
+ * returned function sends `{ sources, buses }` as a tick. Like the engine, which sends
+ * about ten a second, it then re-sends that tick every 100 ms until the next call, the
+ * socket closes or the page does, so the panel never blanks the meters (`METERS_STALE`,
+ * 500 ms after the last tick) while a slow run is still asserting on them (#924).
+ * Call it before `connect`. */
 export async function meterTicks(page) {
   let socket = null;
+  let repeat = null;
+  const stop = () => {
+    clearInterval(repeat);
+    repeat = null;
+  };
   await page.routeWebSocket(/.*/, (ws) => {
     const server = ws.connectToServer();
     ws.onMessage((message) => server.send(message));
     server.onMessage((message) => ws.send(message));
+    // A close handler turns off Playwright's own forwarding of the close, so it
+    // forwards it to the server itself.
+    ws.onClose((code, reason) => {
+      stop();
+      return server.close({ code, reason });
+    });
     socket = ws;
   });
+  page.on('close', stop);
   return (tick) => {
     if (!socket) throw new Error('the page has no socket yet');
-    socket.send(JSON.stringify({ type: 'event', event: { type: 'meters.tick', ...tick } }));
+    const ws = socket;
+    const message = JSON.stringify({ type: 'event', event: { type: 'meters.tick', ...tick } });
+    stop();
+    ws.send(message);
+    repeat = setInterval(() => {
+      try {
+        ws.send(message);
+      } catch {
+        // The page or its socket went away between ticks.
+        stop();
+      }
+    }, 100);
   };
 }
 
