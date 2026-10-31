@@ -303,8 +303,11 @@ impl Touched {
                     self.uses.insert(Object::Folder(folder_id.clone()));
                 }
             }
-            Edit::SceneSetMeta { scene_id, .. } => {
+            Edit::SceneSetMeta { scene_id, meta } => {
                 self.prop(Object::Scene(scene_id.clone()), Prop::Meta);
+                for label in &meta.labels {
+                    self.uses.insert(Object::Label(label.clone()));
+                }
             }
             Edit::LabelCreate { label_id, .. } | Edit::LabelDelete { label_id } => {
                 self.exists.insert(Object::Label(label_id.clone()));
@@ -691,11 +694,12 @@ mod tests {
         assert!(!pointed.conflicts_with(&Touched::of(&[point("tw", None)], &[point("tw", None)])));
     }
 
-    /// Organisation edits are known: tagging a source uses its labels, so deleting one
-    /// of them conflicts, while filing a scene doesn't conflict with tagging a source.
+    /// Organisation edits are known: tagging a source or a scene uses its labels, so
+    /// deleting one of them conflicts, while filing a scene doesn't conflict with tagging
+    /// a source.
     #[test]
     fn organisation_edits_conflict_on_their_own_objects() {
-        use jstream_protocol::{FolderId, LabelId, SourceMeta};
+        use jstream_protocol::{FolderId, LabelId, SceneMeta, SourceMeta};
         let tag = |labels: &[&str]| Edit::SourceSetMeta {
             source_id: SourceId::new("cam"),
             meta: SourceMeta {
@@ -712,6 +716,22 @@ mod tests {
             &[],
         );
         assert!(tagged.conflicts_with(&unlabel));
+        let tag_scene = |labels: &[&str]| Edit::SceneSetMeta {
+            scene_id: SceneId::new("s"),
+            meta: SceneMeta {
+                labels: labels.iter().map(|l| LabelId::new(*l)).collect(),
+                ..SceneMeta::default()
+            },
+        };
+        let scene_tagged = Touched::of(&[tag_scene(&["sponsor"])], &[tag_scene(&[])]);
+        assert!(!scene_tagged.unknown);
+        assert!(scene_tagged.conflicts_with(&unlabel));
+        assert!(!scene_tagged.conflicts_with(&Touched::of(
+            &[Edit::LabelDelete {
+                label_id: LabelId::new("other"),
+            }],
+            &[],
+        )));
         let file = |folder: Option<&str>| Edit::SceneSetFolder {
             scene_id: SceneId::new("s"),
             folder_id: folder.map(FolderId::new),

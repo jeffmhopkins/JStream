@@ -100,7 +100,7 @@ Contents ([Design](#design) explains the choices):
   natively), the Filters
   panel and its dialogs (`filters.rs`: `Filters`, `Chains`, which the Properties dialog
   shows too, `AddFilter`, `FilterSettings` and the `FilterDialogs` context that opens
-  them and holds the chain an FX button picked, with the catalogue, the row summaries,
+  them and holds the chain an FX button picked, with the catalogue (a scanned CLAP plugin's `clap/` kind under Plugins), the row summaries,
   the choice of in place or dialog, each owner's chains, name and note, and Cancel's
   restore patch tested natively), the number
   field the panels share (`number.rs`) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel

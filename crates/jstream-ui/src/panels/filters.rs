@@ -241,8 +241,13 @@ fn chain_of(category: KindCategory) -> Option<FilterChain> {
     }
 }
 
+/// The prefix of a CLAP plugin's kind, `clap/<plugin id>` (ADR-0035): one kind per
+/// audio effect the engine's scan found.
+const CLAP_PREFIX: &str = "clap/";
+
 /// The filter type `kind_id` names, from `kind.list`'s summary when it has one: the
-/// prototype's name, group and hint when it knows the kind, an effect pack's kind
+/// prototype's name, group and hint when it knows the kind, a CLAP plugin's kind
+/// (`clap/<plugin id>`) under Plugins by the plugin's name, an effect pack's kind
 /// (`pack/effect`) under Effect packs, and anything else under Other by its engine name.
 fn filter_type(kind_id: &str, chain: FilterChain, engine_name: Option<&str>) -> FilterType {
     let fallback = engine_name.unwrap_or(kind_id).to_owned();
@@ -253,6 +258,13 @@ fn filter_type(kind_id: &str, chain: FilterChain, engine_name: Option<&str>) -> 
             group: k.group,
             name: k.name.to_owned(),
             hint: k.hint,
+        },
+        None if chain == FilterChain::Audio && kind_id.starts_with(CLAP_PREFIX) => FilterType {
+            kind: kind_id.to_owned(),
+            chain,
+            group: "Plugins",
+            name: fallback,
+            hint: "A CLAP audio effect",
         },
         None => FilterType {
             kind: kind_id.to_owned(),
@@ -1950,6 +1962,38 @@ mod tests {
             "color",
             "a source kind isn't a filter"
         );
+    }
+
+    /// A CLAP plugin's kind is offered under Plugins, by the plugin's name, after
+    /// the built-in audio kinds, for any owner with an audio chain (FL-08).
+    #[test]
+    fn clap_plugins_are_offered_under_plugins() {
+        use KindCategory::AudioFilter;
+        let kinds = vec![
+            kind_summary("clap/com.tdr.nova", "TDR Nova", AudioFilter),
+            kind_summary("gain", "Gain", AudioFilter),
+            kind_summary(
+                "clap/org.airwindows.consolidated",
+                "Airwindows",
+                AudioFilter,
+            ),
+        ];
+        let all = catalogue(&kinds, false, true);
+        let shape: Vec<(&str, &str, &str)> = all
+            .iter()
+            .map(|t| (t.group, t.name.as_str(), t.hint))
+            .collect();
+        assert_eq!(
+            shape,
+            vec![
+                ("Levels and dynamics", "Gain", "Turn it up or down"),
+                ("Plugins", "Airwindows", "A CLAP audio effect"),
+                ("Plugins", "TDR Nova", "A CLAP audio effect"),
+            ]
+        );
+        assert!(type_matches(&all[2], "clap"), "found by its hint");
+        assert!(type_matches(&all[2], "plugins"), "and by its group");
+        assert_eq!(filter_name(&kinds, "clap/com.tdr.nova"), "TDR Nova");
     }
 
     #[test]

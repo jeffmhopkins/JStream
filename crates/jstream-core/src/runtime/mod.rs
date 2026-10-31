@@ -8,6 +8,7 @@
 //! lost and regained publish link is one too, settled `reconnecting` and `active`.
 
 mod captures;
+mod devices;
 mod pipeline;
 mod publish;
 mod render;
@@ -18,6 +19,7 @@ pub(crate) use captures::Backends as CaptureBackends;
 #[cfg(test)]
 pub(crate) use captures::{RETRY_MS, start as start_capture};
 pub(crate) use captures::{RenderCaptures, SizeChange, spawn as spawn_captures};
+pub(crate) use devices::SharedVideoDevices;
 pub use pipeline::OutputStats;
 #[cfg(test)]
 pub(crate) use pipeline::{DrawError, DrawFn, STOP_DRAIN, gpu_draw, open_capture};

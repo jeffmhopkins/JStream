@@ -344,8 +344,12 @@ pub fn Header(
     let bar = Menu::bar(dock.is_some());
     let toggle =
         move |menu: Menu| open.update(|open| *open = (*open != Some(menu)).then_some(menu));
+    // Focus moves to the menu's button at once and to its item once the dropdown is drawn:
+    // the dropdown that held focus goes now, and a key pressed before the next frame must
+    // still reach the bar rather than the page.
     let open_at = move |menu: Menu, first: bool| {
         open.set(Some(menu));
+        focus_button(menu);
         focus_item(menu, first);
     };
     // A key with Ctrl, Alt or Meta is left to the hotkeys: only plain keys drive the bar.

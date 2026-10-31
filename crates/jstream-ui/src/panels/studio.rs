@@ -763,6 +763,20 @@ struct Running {
     seq: u64,
 }
 
+/// The program and preview of the last `studio.changed`.
+pub type StudioState = (Option<SceneId>, Option<SceneId>);
+
+/// Gives a reload's `answer` the program and preview of the last `studio.changed`
+/// (`last`) when one came in while the read was in flight (`changed`), since the event's
+/// are newer than the answer's. The event is kept apart from the snapshot, so this holds
+/// on the first load too, before the panel has a snapshot.
+pub fn keep_newer_studio(answer: &mut Snapshot, changed: bool, last: Option<StudioState>) {
+    if changed && let Some((program, preview)) = last {
+        answer.program = program;
+        answer.preview = preview;
+    }
+}
+
 /// The panel's state, shared by its parts. Every field is `Copy`.
 #[derive(Clone, Copy)]
 struct Panel {
@@ -785,6 +799,11 @@ struct Panel {
     /// Bumped by each `studio.changed`, so a reload's older program and preview don't
     /// overwrite an event's newer ones.
     changes: StoredValue<u64>,
+    /// The program and preview of the last `studio.changed`, which a reload keeps when
+    /// `changes` moved while it was in flight, even on the first load. Before the first
+    /// load has answered, `studio_changed` also compares the next event's program
+    /// against it, so a cut then still clears the running transition (#925).
+    studio: StoredValue<Option<StudioState>>,
     /// Bumped by each transition the panel shows, so a replaced one's timer can't
     /// clear its successor.
     transitions: StoredValue<u64>,
@@ -828,15 +847,11 @@ impl Panel {
                 Ok(mut snapshot) => {
                     // A `studio.changed` came in while this read was in flight: its
                     // program and preview are newer than the answer's.
-                    if self.changes.try_get_value() != asked
-                        && let Some(Some((program, preview))) =
-                            self.snapshot.try_with_untracked(|s| {
-                                s.as_ref().map(|s| (s.program.clone(), s.preview.clone()))
-                            })
-                    {
-                        snapshot.program = program;
-                        snapshot.preview = preview;
-                    }
+                    keep_newer_studio(
+                        &mut snapshot,
+                        self.changes.try_get_value() != asked,
+                        self.studio.try_get_value().flatten(),
+                    );
                     // A chosen preset that was deleted goes back to the engine's choice.
                     self.chosen.try_update(|chosen| {
                         if chosen
@@ -875,6 +890,16 @@ impl Panel {
         duration_ms: Option<u32>,
     ) {
         self.changes.try_update_value(|n| *n += 1);
+        // Before the first load answers there is no snapshot, so the program this event
+        // moves from is the one the last `studio.changed` stored (#925).
+        let before = self
+            .studio
+            .try_update_value(|studio| {
+                studio
+                    .replace((program.clone(), preview.clone()))
+                    .map(|(before, _)| before)
+            })
+            .flatten();
         let moved = self
             .snapshot
             .try_update(|snapshot| match snapshot {
@@ -884,7 +909,7 @@ impl Panel {
                     snapshot.preview = preview;
                     moved
                 }
-                None => false,
+                None => before.is_some_and(|before| before != program),
             })
             .unwrap_or_default();
         let (Some(to), Some(duration_ms)) = (program, duration_ms.filter(|&ms| ms > 0)) else {
@@ -958,6 +983,7 @@ pub fn StudioMode() -> impl IntoView {
         problem: RwSignal::new(None),
         loads: StoredValue::new(0),
         changes: StoredValue::new(0),
+        studio: StoredValue::new(None),
         transitions: StoredValue::new(0),
     };
 
@@ -1667,9 +1693,10 @@ fn OverrideRow(panel: Panel, scene: SceneRow) -> impl IntoView {
 mod tests {
     use super::{
         Draft, Reason, SceneRow, Snapshot, cut_preset, default_settings, expected_label,
-        expected_preset, initial_pick, load, new_preset_edit, next_preset_id, override_counts,
-        override_lines, override_note, param_value, parse_duration, parse_easing, picker_label,
-        preset_hint, swap_action, switch_action, switch_blocker, transition_kinds, update_edit,
+        expected_preset, initial_pick, keep_newer_studio, load, new_preset_edit, next_preset_id,
+        override_counts, override_lines, override_note, param_value, parse_duration, parse_easing,
+        picker_label, preset_hint, swap_action, switch_action, switch_blocker, transition_kinds,
+        update_edit,
     };
     use jstream_control::protocol::{
         Action, Easing, Edit, FADE, Hello, MOVE, PROTOCOL_VERSION, Rev, SceneId, Settings,
@@ -1734,6 +1761,104 @@ mod tests {
             program: Some(SceneId::new("a")),
             preview: Some(SceneId::new("b")),
         }
+    }
+
+    /// A `studio.changed` during a reload, even the first one (the panel had no
+    /// snapshot yet), wins over the answer's program and preview.
+    #[test]
+    fn an_event_during_a_reload_keeps_its_program_and_preview() {
+        let event = (Some(SceneId::new("b")), None);
+
+        let mut answer = studio();
+        keep_newer_studio(&mut answer, true, Some(event.clone()));
+        assert_eq!(answer.program, Some(SceneId::new("b")));
+        assert_eq!(answer.preview, None);
+
+        // No event while it was in flight: the answer stands, even after an older one.
+        let mut answer = studio();
+        keep_newer_studio(&mut answer, false, Some(event));
+        assert_eq!(answer, studio());
+
+        let mut answer = studio();
+        keep_newer_studio(&mut answer, true, None);
+        assert_eq!(answer, studio());
+    }
+
+    /// `studio_changed` records the event's program and preview even before the first
+    /// load has answered (no snapshot yet), so the reload can keep them (#884).
+    #[test]
+    fn an_event_before_the_first_load_is_stored() {
+        use super::Panel;
+        use crate::app::SessionContext;
+        use leptos::prelude::*;
+
+        let panel = Panel {
+            session: SessionContext(StoredValue::new_local(None)),
+            snapshot: RwSignal::new(None),
+            kinds: RwSignal::new(Vec::new()),
+            chosen: RwSignal::new(None),
+            swap: RwSignal::new(false),
+            running: RwSignal::new(None),
+            problem: RwSignal::new(None),
+            loads: StoredValue::new(0),
+            changes: StoredValue::new(0),
+            studio: StoredValue::new(None),
+            transitions: StoredValue::new(0),
+        };
+        panel.studio_changed(Some(SceneId::new("b")), None, None);
+        assert_eq!(
+            panel.studio.get_value(),
+            Some((Some(SceneId::new("b")), None))
+        );
+        assert_eq!(panel.changes.get_value(), 1);
+        assert!(panel.snapshot.get_untracked().is_none());
+    }
+
+    /// A cut that follows a transition, both before the first load has answered, ends
+    /// the transition: `moved` comes from the stored program when there is no snapshot
+    /// (#925).
+    #[test]
+    fn a_cut_before_the_first_load_ends_the_running_transition() {
+        use super::{Panel, Running};
+        use crate::app::SessionContext;
+        use leptos::prelude::*;
+
+        let panel = Panel {
+            session: SessionContext(StoredValue::new_local(None)),
+            snapshot: RwSignal::new(None),
+            kinds: RwSignal::new(Vec::new()),
+            chosen: RwSignal::new(None),
+            swap: RwSignal::new(false),
+            running: RwSignal::new(None),
+            problem: RwSignal::new(None),
+            loads: StoredValue::new(0),
+            changes: StoredValue::new(0),
+            studio: StoredValue::new(None),
+            transitions: StoredValue::new(0),
+        };
+        // The transition's own `studio.changed` would start a timer, which needs a
+        // browser, so its outcome is set by hand: "b" on program, transitioning to it.
+        panel
+            .studio
+            .set_value(Some((Some(SceneId::new("b")), None)));
+        panel.running.set(Some(Running {
+            to: SceneId::new("b"),
+            duration_ms: 1000,
+            seq: 1,
+        }));
+
+        // An event that keeps "b" on program leaves the transition running.
+        panel.studio_changed(Some(SceneId::new("b")), Some(SceneId::new("a")), None);
+        assert!(panel.running.get_untracked().is_some());
+
+        // A cut to "a" ends it.
+        panel.studio_changed(Some(SceneId::new("a")), None, None);
+        assert!(panel.running.get_untracked().is_none());
+        assert_eq!(
+            panel.studio.get_value(),
+            Some((Some(SceneId::new("a")), None))
+        );
+        assert!(panel.snapshot.get_untracked().is_none());
     }
 
     /// The scenes and studio state come from the engine, and the panel's switch and

@@ -26,7 +26,8 @@ use crate::preview::{
 use crate::runtime::{
     Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, MixKey, OpenPublish,
     OutputEncode, OutputStats, Pending, PipelineEvent, Release, RenderHub, RenderSnapshot, Running,
-    SizeChange, StartError, VcamOut, launch, launch_program, launch_vcam, parts_from,
+    SharedVideoDevices, SizeChange, StartError, VcamOut, launch, launch_program, launch_vcam,
+    parts_from,
 };
 use crate::session::InProcessControl;
 use crate::snapshot::{
@@ -461,7 +462,10 @@ impl Engine {
                 .set_media(Arc::clone(&backends.media), state.graph.state());
             state.forget = ForgetSources::spawn(Arc::clone(&backends.capture));
         }
-        // The preview captures the displays and windows the program shows itself.
+        // A webcam or capture card opens once, shared by the program stage's capture of
+        // it and the preview's.
+        backends.video_devices = Arc::new(SharedVideoDevices::new(backends.video_devices));
+        // The preview captures what the program shows itself.
         self.shared.previews.set_capture(PreviewCapture {
             capture: Arc::clone(&backends.capture),
             devices: Arc::clone(&backends.video_devices),
@@ -1907,6 +1911,13 @@ impl Engine {
             .keys()
             .cloned()
             .collect()
+    }
+
+    /// How many CLAP filters run on a host's block in the master chain and in each
+    /// output tap's chain, for tests.
+    #[cfg(test)]
+    pub(crate) fn routed_clap_hosted(&self) -> (usize, BTreeMap<OutputId, usize>) {
+        lock(&self.shared.state).routing.hosted()
     }
 
     /// How the program stage fares with audio source `source_id`, for tests.
