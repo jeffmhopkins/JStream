@@ -47,7 +47,9 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   on; given `refuse`, it also holds back the requests that function names and refuses
   them, as `invalid_argument`, when the test calls the `release()` it returns.
   `meterTicks` routes it too, passing everything on, and returns a function that
-  sends the page a `meters.tick`, which the mock engine never sends.
+  sends the page a `meters.tick`, which the mock engine never sends, and re-sends it
+  every 100 ms until the next one, as the engine's stream would, so the panel doesn't
+  blank the meters while a slow run is still asserting on them.
   `sourceSizes` routes it to answer `source.sizes` with the sizes a test gives, since
   the mock makes no frames and reports none, and returns a function that sends the
   page a `source.size_changed`. `recordCalls` routes it too, passing everything on, and
