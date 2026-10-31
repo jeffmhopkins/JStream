@@ -53,6 +53,7 @@ pub fn path(name: &str) -> &'static str {
             "M12 20s-7-4.4-9-8.5C1.7 8.4 3.6 5 7 5c2 0 3.5 1.2 5 3 1.5-1.8 3-3 5-3 3.4 0 5.3 3.4 4 6.5-2 4.1-9 8.5-9 8.5z"
         }
         "bolt" => "M13 3L5 14h6l-1 7 8-11h-6z",
+        "mask" => "M4 4h16v16H4z M12 8a4 4 0 1 0 0 8a4 4 0 1 0 0-8z",
         "sparkle" => {
             "M12 3v4 M12 17v4 M3 12h4 M17 12h4 M6 6l2.5 2.5 M15.5 15.5L18 18 M6 18l2.5-2.5 M15.5 8.5L18 6"
         }
@@ -76,10 +77,11 @@ pub fn path(name: &str) -> &'static str {
 
 /// Every icon's name.
 const NAMES: &[&str] = &[
-    "monitor", "window", "webcam", "mic", "speaker", "globe", "text", "film", "palette", "music",
-    "layers", "spout", "wave", "bars", "chat", "tag", "keyframe", "folder", "play", "coffee",
-    "gamepad", "flag", "clock", "user", "hash", "star", "heart", "bolt", "sparkle", "bell", "eye",
-    "eye-off", "lock", "wrench", "out", "search", "funnel", "close", "reset", "image",
+    "mask", "monitor", "window", "webcam", "mic", "speaker", "globe", "text", "film", "palette",
+    "music", "layers", "spout", "wave", "bars", "chat", "tag", "keyframe", "folder", "play",
+    "coffee", "gamepad", "flag", "clock", "user", "hash", "star", "heart", "bolt", "sparkle",
+    "bell", "eye", "eye-off", "lock", "wrench", "out", "search", "funnel", "close", "reset",
+    "image",
 ];
 
 /// The icon of this name as a `'static` name, for a name read at run time (a scene's

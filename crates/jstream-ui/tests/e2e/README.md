@@ -158,6 +158,10 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   it in Intro, and a row's Ctrl+C and Ctrl+V do the same; Paste scene is disabled until
   a scene is copied, then a scene row's Ctrl+C and Ctrl+V, the panel's Paste scene and
   a row's Duplicate scene each add "\<name\> copy" just below, with the scene's item.
+- **Scene-input rows** (`scene-refs.spec.js`, with a scene mask from `describeKinds`):
+  a mask added to Backdrop with Intro as its scene shows Intro as a child row with the
+  purple badge and the tooltip "Alpha mask: uses the scene “Intro”"; the row's caret
+  folds it and brings it back, and a click selects Intro.
 - **Groups** (`groups.spec.js`): Group selection on two items makes "Group 1", left
   out of the Scenes panel, whose caret shows the two items indented; a click on one
   opens the group's scene with it selected; Ungroup puts them back, which a second
