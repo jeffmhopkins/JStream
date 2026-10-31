@@ -800,7 +800,9 @@ struct Panel {
     /// overwrite an event's newer ones.
     changes: StoredValue<u64>,
     /// The program and preview of the last `studio.changed`, which a reload keeps when
-    /// `changes` moved while it was in flight, even on the first load.
+    /// `changes` moved while it was in flight, even on the first load. Before the first
+    /// load has answered, `studio_changed` also compares the next event's program
+    /// against it, so a cut then still clears the running transition (#925).
     studio: StoredValue<Option<StudioState>>,
     /// Bumped by each transition the panel shows, so a replaced one's timer can't
     /// clear its successor.
