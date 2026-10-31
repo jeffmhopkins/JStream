@@ -1018,7 +1018,7 @@ fn opacity_blend_and_reserved_effects_are_checked() {
         "{:?}",
         load(&file)
     );
-    // Every mode is drawn (ADR-0081), so one loads and is written back.
+    // Every mode is drawn (ADR-0082), so one loads and is written back.
     let file = edit_file(|v| v["scenes"][0]["items"][0]["blend"] = json!("multiply"));
     let graph = load(&file).expect("a multiply item loads");
     assert!(

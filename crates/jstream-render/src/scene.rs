@@ -138,7 +138,7 @@ pub struct Item<'a> {
     pub crop: Crop,
     /// Straight-alpha multiplier in `0..=1`.
     pub opacity: f32,
-    /// How it composites onto what is below it (ADR-0081). [`BlendMode::Normal`] is
+    /// How it composites onto what is below it (ADR-0082). [`BlendMode::Normal`] is
     /// source-over.
     pub blend: BlendMode,
     /// When false, the item is not drawn and its frame sync is not staged.

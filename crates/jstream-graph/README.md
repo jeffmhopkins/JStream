@@ -169,7 +169,7 @@ the batch **touched**.
   `item.set_opacity` (optionally addressed by `scene_id`, like the placement edits) and
   `item.add`'s `opacity` accept 0 to 1; `item.set_blend` and `item.add`'s `blend`
   accept every mode, which the compositor draws
-  ([ADR-0081](../../docs/adr/0081-blend-modes-drawn.md)). Each is undone by
+  ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md)). Each is undone by
   the previous value, and removing an item restores both.
 - **Filters** (`filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
   every filter edit first refuses a keyframe scene as the owner (`invalid_argument` on

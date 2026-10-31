@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0081"
+id = "ADR-0082"
 title = "Blend modes: how each is drawn, and in which colour space"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0081: Blend modes: how each is drawn, and in which colour space
+# ADR-0082: Blend modes: how each is drawn, and in which colour space
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted

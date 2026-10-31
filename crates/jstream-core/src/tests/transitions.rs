@@ -429,7 +429,7 @@ fn a_move_pairs_items_only_when_their_effects_match() {
 }
 
 /// A nested scene is flattened into its items for a Move only while it and they all
-/// draw `normal` (ADR-0081 §5): its items blend with its own layer, so flattening one
+/// draw `normal` (ADR-0082 §5): its items blend with its own layer, so flattening one
 /// with a blend mode would draw something else. Flattened, `n1` in the nested scene
 /// pairs with `a1`, both placing `red`; whole, nothing pairs.
 #[test]

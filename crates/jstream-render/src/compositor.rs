@@ -45,7 +45,7 @@ struct Rect {
     height: u32,
 }
 
-/// The copy of what is below an item that the modes reading it sample (ADR-0081). It
+/// The copy of what is below an item that the modes reading it sample (ADR-0082). It
 /// only grows, so targets of different sizes in one frame share it, each copying to the
 /// same texels it reads from.
 struct Backdrop {
@@ -829,7 +829,7 @@ impl Compositor {
             width,
             height,
             wgpu::TextureFormat::Rgba16Float,
-            // `COPY_SRC` for the backdrop (ADR-0081).
+            // `COPY_SRC` for the backdrop (ADR-0082).
             wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::TEXTURE_BINDING
                 | wgpu::TextureUsages::COPY_SRC,
@@ -948,7 +948,7 @@ impl Compositor {
     /// The composite pass: clear `target` (`Rgba16Float`) to the background and draw
     /// the items, premultiplied linear. An item whose mode reads the backdrop ends the
     /// pass: the texels it covers are copied into the backdrop, and a new pass draws it
-    /// and the items after it (ADR-0081).
+    /// and the items after it (ADR-0082).
     fn record_composite(
         &self,
         encoder: &mut wgpu::CommandEncoder,

@@ -73,7 +73,7 @@ matter.
 | D10 | Filters that use another scene: graph edges, cycle checks, delete rejection | gap | A | **now** |
 | D11 | Render graph: per-tick DAG, caching, render plan in the snapshot | gap | A | now (design), M1b build |
 | D12 | 3D per item: perspective per item, no depth buffer | gap (ARCH: "Transform3D", M3) | A | now (shape), M3 build |
-| D13 | Blend modes in linear FP16 | decided ([ADR-0081](../../docs/adr/0081-blend-modes-drawn.md)) | A | pre-M2 |
+| D13 | Blend modes in linear FP16 | decided ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md)) | A | pre-M2 |
 | D14 | Program master chain and per-output chains (video) | gap; strains encoder sharing | M | pre-M2 (shape now) |
 | D15 | Latency compensation, audio/video delay filters | gap | A | now (mixer timestamps) |
 | D16 | Privacy screen (blur + mute) | dropped ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md) §4) | M | — |
@@ -632,7 +632,7 @@ and Exclusion (`BLEND_NAMES`, `P:879`; mapped to CSS `mix-blend-mode`, `D:1095`)
 **Today.** ARCH: `blend` on SceneItem. Compositing is "in linear light in an FP16
 working format" (line 199).
 
-**Status.** Decided by [ADR-0081](../../docs/adr/0081-blend-modes-drawn.md), which
+**Status.** Decided by [ADR-0082](../../docs/adr/0082-blend-modes-drawn.md), which
 takes the recommendation below, but draws screen and multiply with fixed-function
 states and darken and lighten from the destination copy, since min and max are wrong
 where either side is translucent.

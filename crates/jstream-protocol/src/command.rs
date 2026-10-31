@@ -1683,7 +1683,7 @@ impl Crop {
 
 /// How an item composites onto what is below it (ADR-0023 §1, register D13).
 ///
-/// The list is the modes the UI offers, and the compositor draws every one (ADR-0081, since
+/// The list is the modes the UI offers, and the compositor draws every one (ADR-0082, since
 /// 0.48; before it the engine refused all but `normal`). They blend in linear light,
 /// except overlay, difference and exclusion, which blend sRGB-encoded values.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]

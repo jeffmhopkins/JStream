@@ -38,7 +38,7 @@ pub struct Endpoint {
     pub crop: Crop,
     /// Straight-alpha multiplier in `0..=1`.
     pub opacity: f32,
-    /// How it composites (ADR-0081). A pair that changes mode switches halfway.
+    /// How it composites (ADR-0082). A pair that changes mode switches halfway.
     pub blend: BlendMode,
 }
 

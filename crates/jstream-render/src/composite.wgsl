@@ -1,5 +1,5 @@
 // One textured polygon. Positions are clip-space (y up). `fs` outputs premultiplied
-// linear colour, which the pipeline's blend state composites (ADR-0081): One,
+// linear colour, which the pipeline's blend state composites (ADR-0082): One,
 // OneMinusSrcAlpha for `normal`. The `fs_<mode>` entry points read the backdrop, a copy of
 // the target's texels under the item, and write the composited result in place.
 //

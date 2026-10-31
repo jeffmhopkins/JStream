@@ -17,7 +17,7 @@
 //!   to drain: the encoder path.
 //! - `composite_1080p_blend`: the submit frame of 4 items, each drawn with one blend
 //!   mode: `normal`, `multiply` (two fixed-function draws) and `overlay` (a backdrop
-//!   copy and a pass per item, ADR-0081).
+//!   copy and a pass per item, ADR-0082).
 //! - `rewrite_rgba8_1080p`: refilling a 1080p upload in place (CPU premultiply in linear
 //!   light, then the queue write), as an image or browser source does on a new frame.
 

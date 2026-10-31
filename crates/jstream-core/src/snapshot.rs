@@ -283,7 +283,7 @@ struct Placed {
     crop: Crop,
     /// The item's straight alpha multiplier (ADR-0023), in [0, 1].
     opacity: f32,
-    /// How it composites onto what is below it (ADR-0081).
+    /// How it composites onto what is below it (ADR-0082).
     blend: BlendMode,
     /// Its effects' box, when an effect of it runs: the layer then shows the effects'
     /// output in place of `source`.
@@ -1175,7 +1175,7 @@ impl Planner<'_, '_> {
                     // A scene with a chain is one picture (ADR-0065 §6), and so is one
                     // placed with a blend mode or holding an item that has one: its
                     // items blend with its own layer, not the scene it is placed in
-                    // (ADR-0081).
+                    // (ADR-0082).
                     if flatten
                         && depth + 1 < MAX_NESTING
                         && covers(item, canvas)
@@ -3423,7 +3423,7 @@ pub(crate) mod tests {
         }
     }
 
-    /// Each item draws with its blend mode (ADR-0081): additive green over red is yellow,
+    /// Each item draws with its blend mode (ADR-0082): additive green over red is yellow,
     /// and a nested scene's items blend with its own layer, so its difference green over
     /// the layer's transparent background stays green, which the layer then multiplies
     /// onto the red, making black.

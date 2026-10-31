@@ -1,4 +1,4 @@
-//! How each blend mode is drawn (ADR-0081): a fixed-function blend state where one is
+//! How each blend mode is drawn (ADR-0082): a fixed-function blend state where one is
 //! exact for premultiplied colour at any alpha, and otherwise a shader that reads a copy
 //! of what is below the item, the backdrop.
 

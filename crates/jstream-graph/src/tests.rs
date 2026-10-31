@@ -3938,7 +3938,7 @@ fn item_info(graph: &Graph, item: &str) -> jstream_protocol::ItemInfo {
 }
 
 /// Opacity is checked to [0, 1], reported, and undone to the previous value; every blend
-/// mode is taken, since the compositor draws them all (ADR-0081), and undone to the last.
+/// mode is taken, since the compositor draws them all (ADR-0082), and undone to the last.
 #[test]
 fn opacity_and_blend_are_checked_reported_and_undone() {
     let mut g = fixture();

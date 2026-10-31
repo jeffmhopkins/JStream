@@ -801,7 +801,7 @@ Hidden items are skipped. A source with no stored frame is skipped, not drawn as
 placeholder. Each item is drawn at its `opacity`, multiplied into its premultiplied
 colour in linear light, so a nested scene's layer fades as one image; during a
 transition each track's sampled opacity runs between its items' own. Each item is
-drawn with its blend mode ([ADR-0081](../../docs/adr/0081-blend-modes-drawn.md)); a
+drawn with its blend mode ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md)); a
 transition's track takes its endpoint's, and a pair whose ends differ switches halfway.
 A nested scene's items blend with its own layer, so a transition flattens a nested
 scene into its items only when it and they are all `normal`.

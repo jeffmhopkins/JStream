@@ -59,7 +59,7 @@ and calls this crate.
   an item's stored opacity, or during a transition its track's sampled one
   ([ARCH › Data model](../../docs/ARCHITECTURE.md#data-model)).
 - `Item.blend` is its `BlendMode` (re-exported), drawn per
-  [ADR-0081](../../docs/adr/0081-blend-modes-drawn.md) (`blend.rs`): `normal`,
+  [ADR-0082](../../docs/adr/0082-blend-modes-drawn.md) (`blend.rs`): `normal`,
   `additive`, `screen` and `multiply` (two draws) with fixed-function blend states;
   `darken`, `lighten`, `overlay`, `difference` and `exclusion` by reading a backdrop,
   a copy of the target's texels under the item. Those three last mix sRGB-encoded
@@ -278,7 +278,7 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    texels its polygon's bounding box covers (a texel of margin, clipped) are copied
    into the backdrop, a grow-only `Rgba16Float` texture, and a new pass draws the item,
    whose `fs_<mode>` loads the backdrop at its own pixel and writes the W3C composite
-   with blending off, and the items after it (ADR-0081). No depth buffer:
+   with blending off, and the items after it (ADR-0082). No depth buffer:
    stacking order is draw order. No cull, so a negative scale still draws (it flips
    the quad). The viewport clips to the canvas.
 4. **Resolve.** A second pass draws one fullscreen triangle into the sRGB target with
@@ -758,7 +758,7 @@ is in the box's own frame), and a flipped `fill`; another checks that a legacy
 negative scale and the geometry `from_legacy` makes of it draw the same grid.
 
 **Blend modes** (`tests/blend.rs`,
-[ADR-0081](../../docs/adr/0081-blend-modes-drawn.md)). Every mode, over an opaque, a
+[ADR-0082](../../docs/adr/0082-blend-modes-drawn.md)). Every mode, over an opaque, a
 translucent and a transparent background, from opaque, faded and translucent sources,
 against a CPU reference of the W3C composite in premultiplied linear light (sRGB-encoded
 for overlay, difference and exclusion), within 2 sRGB 8-bit steps; and backdrop items in
@@ -927,7 +927,7 @@ a hardware GPU.
   The snapshot puts opacity on the item because that is what ARCH's data model and
   the compositor consequences of
   [ADR-0023](../../docs/adr/0023-placements-references-and-clones.md) describe. Blend
-  modes are on the item too ([ADR-0081](../../docs/adr/0081-blend-modes-drawn.md)).
+  modes are on the item too ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md)).
 - **Background.** The clear colour is a field of the snapshot. `Scene.background` is
   not in the graph.
 - **Golden files.** When `cargo xtask golden` exists, WARP renders under

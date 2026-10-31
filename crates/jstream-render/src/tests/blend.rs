@@ -1,4 +1,4 @@
-//! ADR-0081's blend modes, against a CPU reference of the W3C compositing formulas in
+//! ADR-0082's blend modes, against a CPU reference of the W3C compositing formulas in
 //! premultiplied linear light (sRGB-encoded for overlay, difference and exclusion), on
 //! opaque and translucent backdrops and sources.
 
@@ -25,7 +25,7 @@ fn decode(c: f64) -> f64 {
     f64::from(srgb_channel_to_linear(c as f32))
 }
 
-/// Whether `mode` mixes sRGB-encoded values (ADR-0081 decision 2).
+/// Whether `mode` mixes sRGB-encoded values (ADR-0082 decision 2).
 fn in_srgb(mode: BlendMode) -> bool {
     matches!(
         mode,
