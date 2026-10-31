@@ -511,9 +511,11 @@ Protocol commands are named `noun.verb` in snake_case (`scene.create`). MCP tool
 match `^[a-zA-Z0-9_-]{1,128}$` ([Anthropic tool use](https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/implement-tool-use)),
 which rules out the protocol's `.`. So the tools are generated from the protocol and grouped
 by noun ([ARCH › MCP](ARCHITECTURE.md#mcp)): each command or query `noun.verb` is an `op` of
-the tool named after its noun (`scene`), and reaches exactly one tool. The one exception is
-the `youtube` noun, whose ops reach no tool ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md) §3). Tool names are
-unique. IDs are opaque strings.
+the tool named after its noun (`scene`), and reaches exactly one tool. The exceptions are
+the nouns whose ops reach no tool: the people-only nouns (`PEOPLE_ONLY` in
+`crates/jstream-mcp/src/tools.rs`) and the deprecated ones (`DEPRECATED` there). Each
+constant's doc comment names the ADR behind each noun. Tool names are unique. IDs are opaque
+strings.
 
 <a id="R-API-003"></a>
 ### R-API-003: Versioned collections with migrations

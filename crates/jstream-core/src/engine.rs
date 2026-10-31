@@ -1909,6 +1909,13 @@ impl Engine {
             .collect()
     }
 
+    /// How many CLAP filters run on a host's block in the master chain and in each
+    /// output tap's chain, for tests.
+    #[cfg(test)]
+    pub(crate) fn routed_clap_hosted(&self) -> (usize, BTreeMap<OutputId, usize>) {
+        lock(&self.shared.state).routing.hosted()
+    }
+
     /// How the program stage fares with audio source `source_id`, for tests.
     #[cfg(test)]
     pub(crate) fn audio_status(
