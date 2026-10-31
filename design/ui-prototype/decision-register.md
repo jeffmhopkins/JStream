@@ -400,7 +400,8 @@ other M1b work).
 references share them and clones copy them (`copyShared`, `D:1270-1272`). Trees filter by
 search, favourites and labels (`P:1416-1441`). Scene properties: hotkey, background
 colour, "Show in multiview", "Include its audio when nested" (`D:1032-1037`). Scenes have
-an icon (`SCENE_INFO`, `P:856-864`).
+an icon (`SCENE_INFO`, `P:856-864`). Scenes carry labels too: the prototype also assigns
+labels to `scene:` keys ([ADR-0078](../../docs/adr/0078-scenes-carry-labels.md)).
 
 **Today.** Nothing. R-ARCH-001: "There are no UI-only features".
 
