@@ -77,7 +77,7 @@ in sRGB-encoded space. Working the formulas through moves two modes across that 
    An item with effects (ADR-0065) blends its effects' output by its mode.
 6. **Transitions.** A track draws with its endpoint's mode; a pair whose ends differ
    switches halfway, as flips do.
-7. **The protocol** goes to 0.48: no wire change, but a client can tell from the version
+7. **The protocol** goes to 0.47: no wire change, but a client can tell from the version
    that the engine draws every mode, as 0.34 told it the engine draws 3D.
 
 <a id="consequences"></a>
