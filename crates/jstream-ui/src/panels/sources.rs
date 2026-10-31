@@ -188,6 +188,7 @@ pub fn Sources() -> impl IntoView {
     let menus = use_context::<Menus>();
     let adder = use_context::<AddSourceDialog>();
     let item_cx = item_menu::Context::from_page();
+    let pasting = crate::clipboard::Pasting::from_page();
     let filter = Filter::new();
     let reorder = Reorder::new();
     // The nested scenes' rows that show their items, by item.
@@ -413,12 +414,33 @@ pub fn Sources() -> impl IntoView {
             }
         };
         // F2 renames the source, Del removes the item from the scene, and Ctrl+D and
-        // Ctrl+Shift+D duplicate it as a reference or a clone, as the menu's hints say. In a
-        // keyframe, Del and the duplicates do nothing, and run no hotkey either.
+        // Ctrl+Shift+D duplicate it as a reference or a clone, as the menu's hints say.
+        // Ctrl+C copies the selection, or the row's item when it isn't selected, and
+        // Ctrl+V pastes into the selected scene (KB-05). In a keyframe, Del, the
+        // duplicates and Ctrl+V do nothing, and run no hotkey either.
         let on_key = {
             let item = item_id.clone();
             let scene_id = row_scene.clone();
             move |event: leptos::ev::KeyboardEvent| match event.key().as_str() {
+                "c" | "C" if event.ctrl_key() || event.meta_key() => {
+                    if let Some(p) = pasting {
+                        let chosen: Vec<ItemId> = studio
+                            .selection
+                            .with_untracked(|s| s.items().cloned().collect());
+                        let items = if chosen.contains(&item) {
+                            chosen
+                        } else {
+                            vec![item.clone()]
+                        };
+                        p.copy_items(&scene_id, &items);
+                    }
+                }
+                "v" | "V" if event.ctrl_key() || event.meta_key() => {
+                    event.prevent_default();
+                    if let (Some(p), Some(target)) = (pasting.filter(|_| !in_keyframe()), scene()) {
+                        p.paste(&target);
+                    }
+                }
                 "d" | "D" if event.ctrl_key() || event.meta_key() => {
                     event.prevent_default();
                     if let Some(cx) = item_cx.filter(|_| !in_keyframe()) {
@@ -634,6 +656,7 @@ pub fn Sources() -> impl IntoView {
             return;
         };
         let group_into = scene_id.clone();
+        let paste_into = scene_id.clone();
         let open = move |scene_type: bool| {
             let scene_id = scene_id.clone();
             move || {
@@ -665,7 +688,15 @@ pub fn Sources() -> impl IntoView {
                 },
                 Entry::Sep,
                 Entry::item("Select all", select_all).hint("Ctrl+A"),
-                Entry::unavailable("Paste").hint("Ctrl+V"),
+                {
+                    Entry::item("Paste", move || {
+                        if let Some(p) = pasting {
+                            p.paste(&paste_into);
+                        }
+                    })
+                    .hint("Ctrl+V")
+                    .disabled_if(!pasting.is_some_and(|p| p.clipboard.has_items()) || in_keyframe())
+                },
             ],
         );
     };

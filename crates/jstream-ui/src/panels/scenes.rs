@@ -340,6 +340,7 @@ pub fn Scenes() -> impl IntoView {
     let menus = use_context::<Menus>();
     let dock = use_context::<DockState>();
     let scene_dialog = use_context::<SceneDialog>();
+    let pasting = crate::clipboard::Pasting::from_page();
     let manager = use_context::<LabelManager>();
     let filters = use_context::<FilterDialogs>();
     let any_rows = move || {
@@ -646,13 +647,25 @@ pub fn Scenes() -> impl IntoView {
                 None => renaming.set(Some(key.clone())),
             }
         };
-        // F2 renames and Del deletes, the keys the menu's hints name.
+        // F2 renames and Del deletes, the keys the menu's hints name. Ctrl+C copies the
+        // scene and Ctrl+V duplicates the copied one (KB-05).
         let on_key = {
             let id = scene_id.clone();
             let key = key.clone();
             let name = name.clone();
             let parent = keyframe_of.clone();
             move |event: leptos::ev::KeyboardEvent| match event.key().as_str() {
+                "c" | "C" if event.ctrl_key() || event.meta_key() => {
+                    if let Some(p) = pasting {
+                        p.copy_scene(&id);
+                    }
+                }
+                "v" | "V" if event.ctrl_key() || event.meta_key() => {
+                    event.prevent_default();
+                    if let Some(p) = pasting {
+                        p.paste_scene();
+                    }
+                }
                 "F2" => {
                     event.prevent_default();
                     renaming.set(Some(key.clone()));
@@ -784,7 +797,15 @@ pub fn Scenes() -> impl IntoView {
                         Entry::item("New keyframe", move || new_keyframe(keyframe_id.clone())),
                         Entry::item("New folder", move || new_folder(folder.clone())),
                         Entry::Sep,
-                        Entry::unavailable("Duplicate scene"),
+                        {
+                            let id = id.clone();
+                            Entry::item("Duplicate scene", move || {
+                                if let Some(p) = pasting {
+                                    p.duplicate_scene(&id);
+                                }
+                            })
+                            .disabled_if(pasting.is_none())
+                        },
                         Entry::item("Delete scene", move || {
                             ask_delete(delete_id.clone(), delete_name.clone());
                         })
@@ -1063,7 +1084,13 @@ pub fn Scenes() -> impl IntoView {
                 Entry::item("New scene", move || new_scene(None)),
                 Entry::item("New folder", move || new_folder(None)),
                 Entry::Sep,
-                Entry::unavailable("Paste scene").hint("Ctrl+V"),
+                Entry::item("Paste scene", move || {
+                    if let Some(p) = pasting {
+                        p.paste_scene();
+                    }
+                })
+                .hint("Ctrl+V")
+                .disabled_if(!pasting.is_some_and(|p| p.clipboard.scene().is_some())),
             ],
         );
     };

@@ -263,6 +263,7 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
     let studio = expect_context::<Studio>();
     provide_context(DockState(RwSignal::new(restore())));
     provide_context(Menus::new());
+    provide_context(crate::clipboard::Clipboard::new());
     provide_context(AddSourceDialog::new());
     provide_context(PropertiesDialog::new());
     provide_context(SceneDialog::new());
