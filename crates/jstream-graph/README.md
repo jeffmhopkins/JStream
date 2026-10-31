@@ -118,7 +118,8 @@ the batch **touched**.
   source's scene, a duplicate's original, the scene an `item.move` names, the profile
   an `output.set_encoder` names, the mix an `output.set_video_mix` names, a `scene`
   mix's scene, a send's source and bus, the preset a scene override or
-  `transition.set_default` names), the properties set (names, a scene's role, an
+  `transition.set_default` names, the labels a `source.set_meta` or `scene.set_meta`
+  puts on), the properties set (names, a scene's role, an
   item's placement, crop, visibility, opacity, blend, index and source, each settings
   parameter, a filter's switch, settings parameters and index, an output's target,
   encoder and mix choices, a profile's encoding, a mix's spec, each audio field a

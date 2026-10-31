@@ -342,8 +342,10 @@ impl Default for TagPopover {
 pub fn TagButton(
     /// The popover it opens.
     popover: TagPopover,
-    /// The scene's or source's name, for the button's label.
-    name: String,
+    /// The scene's or source's name, for the button's label. A signal, so a rename
+    /// relabels a button that stays mounted, as the Inspector's header does.
+    #[prop(into)]
+    name: Signal<String>,
     /// Whether the button shows without a hover.
     #[prop(optional)]
     always: bool,
@@ -357,7 +359,7 @@ pub fn TagButton(
             class:hov=!always
             class:on=move || open.get()
             title="Labels"
-            aria-label=format!("Labels for {name}")
+            aria-label=move || format!("Labels for {}", name.get())
             aria-expanded=move || open.get().to_string()
             on:click=move |_| open.update(|o| *o = !*o)
             on:keydown=move |event| popover.escape(&event)
