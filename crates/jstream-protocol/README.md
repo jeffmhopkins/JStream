@@ -147,7 +147,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Events** (`event.rs`): `state.changed`, `output.state_changed`, `studio.changed`
   (program, preview and the transition a switch started), `privacy.changed` (deprecated),
   `source.size_changed`, `events.dropped`,
-  `stats.tick`, `meters.tick`, `youtube.status_changed`, `youtube.health_changed`,
+  `stats.tick` (with `DropCounts` and `EngineLoad`), `meters.tick`,
+  `youtube.status_changed`, `youtube.health_changed`,
   `youtube.stats`, `live.changed`, `live.ended` and `plugin.state_changed`.
 - **Plugins** (`plugin.rs`, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)): `PluginClass` (`read`,
   `edit`, `live`, `outputs`), `PLUGIN_SCOPES`, the table that places every command in
@@ -183,8 +184,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.47 because the engine
-  draws, and so accepts, every blend mode
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.48 because of
+  `stats.tick`'s `load`, the engine's frame and CPU totals (`EngineLoad`); 0.47 made
+  the engine draw, and so accept, every blend mode
   ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md); no wire change); 0.46 added
   `preview.subscribe`'s `scene_id`, a preview stream of any scene, and its 16 streams a
   session ([Binary streams](#design)); 0.45 made scenes
@@ -1174,7 +1176,7 @@ After `welcome`, the server pushes every event to every client.
   ([jstream-server › Design](../jstream-server/README.md#design)). Answers are never
   dropped. The client re-reads what it shows with `state.get`, which carries `rev`.
   Added in 0.4.
-- `stats.tick {seq, drops}` is one sample of the pipeline's drop counters
+- `stats.tick {seq, drops, load}` is one sample of the pipeline's drop counters
   ([R-RT-004](../../docs/RULES.md#R-RT-004)). `drops` is a running total since the
   engine started, not a delta, so a client that misses a tick subtracts the last one
   it did see. The fields are `capture_frames` (frames a capture mailbox replaced
@@ -1187,8 +1189,17 @@ After `welcome`, the server pushes every event to every client.
   drop. A counter missing from `drops` parses as 0 (`DropCounts` is
   `#[serde(default)]`), so a counter added later is an optional field (minor). `seq`
   starts at 1 and increases by one each sample. While an output is
-  running, the pipeline's `jstream-stats` thread emits a tick about once a second;
-  an idle engine emits none. A render tick that falls a whole period or more behind
+  running, the pipeline's `jstream-stats` thread emits a tick about once a second.
+  While none runs, an engine emits none unless its host started the heartbeat, which
+  the daemon and the desktop app do (0.48): it then ticks about once a second as well.
+  Since 0.48 a tick carries `load` (`EngineLoad`), running totals beside the engine
+  time they were read at: `elapsed_ms` since the engine started, `program_frames` the
+  program stage has drawn (it grows only while an output runs), `cpu_ms` of CPU time
+  the engine's process has used on every thread (left out where the host can't read
+  it; the daemon reads it on Windows and macOS) and `cpus`, the logical CPUs. A client
+  takes two ticks for a rate: frames over the elapsed time for the frame rate, and CPU
+  time over the elapsed time times `cpus` for the share of every CPU. An older engine
+  leaves `load` out, and a missing field in it parses as 0 or absent. A render tick that falls a whole period or more behind
   the clock is skipped rather than drawn late, and counted in `render_ticks`. Until
   [open question 7](#open-questions) every client receives it. Added in 0.6. A late plugin block is an audio drop in
   `audio_frames` once the mixer counts it

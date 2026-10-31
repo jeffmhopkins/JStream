@@ -141,6 +141,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   pairing page or device cookie
   ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md)). On Windows the engine is live with the same wiring as the daemon (OS backends,
   keys in Credential Manager, an RTMP(S) publish opener); elsewhere it has no backends.
+  Everywhere it starts the engine's stats heartbeat, so the header's readout shows the
+  engine's load while nothing is live, and on Windows it hands the engine
+  `WindowsProcessCpu` for that readout's CPU share.
   When the app exits, the server closes its connections and the engine stops.
 - **The UI is read at run time.** The app registers its own URL scheme, `jstream`, and
   serves the bundle's files from a folder on each request, so the binary embeds nothing

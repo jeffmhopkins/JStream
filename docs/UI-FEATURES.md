@@ -55,7 +55,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | Area | Rows | ✅ | 🟡 | ⬜ | 🔒 | ⏸ |
 |---|---|---|---|---|---|---|
 | [Theme and shared controls](#theme) | 8 | 8 | 0 | 0 | 0 | 0 |
-| [Header bar](#header) | 9 | 6 | 1 | 0 | 1 | 1 |
+| [Header bar](#header) | 9 | 7 | 0 | 0 | 1 | 1 |
 | [Docking and layouts](#docking) | 10 | 8 | 2 | 0 | 0 | 0 |
 | [Canvas](#canvas) | 18 | 17 | 0 | 0 | 0 | 1 |
 | [Context menus](#menus) | 8 | 6 | 2 | 0 | 0 | 0 |
@@ -70,7 +70,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Transitions](#transitions) | 6 | 6 | 0 | 0 | 0 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
 | [Keyboard](#keyboard) | 7 | 6 | 0 | 0 | 0 | 1 |
-| **Total** | **130** | **111** | **8** | **0** | **7** | **4** |
+| **Total** | **130** | **112** | **7** | **0** | **7** | **4** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -108,7 +108,7 @@ Spec: [workspace › header bar](../design/ui-prototype/spec-workspace.md#header
 | HD-01 | Brand and menu row | Accent square and "JStream", then File, Edit, View and Layout menus; one top menu open at a time, closed by any outside press. | ✅ | The prototype leaves File and Edit empty; the real ones hold the connection details and Disconnect, and Undo and Redo. The menus behave as a desktop menu bar: a click opens or closes one; while one is open, pointing at another menu opens it instead; Escape closes it. From the keyboard, Down, Enter or Space opens the focused menu at its first item (Up at its last), Up, Down, Home and End move through it, Left and Right move along the bar (opening the next menu while one is open), and Tab closes it. Keys with Ctrl, Alt or Meta are left to the hotkeys. |
 | HD-02 | View menu | Lists all 11 panels with "shown" or "add"; clicking hides a shown panel or adds a hidden one to its home zone. | ✅ | All eleven, in the prototype's order. Live chat, Stream stats and Agent activity wait on the engine ([live panels](#live-panels)), so for now they say what they wait on. Beyond the prototype, a Projectors group under them opens the program or the multiview in a window or full screen ([DL-07](#dialogs)). |
 | HD-03 | Layout menu | "Layout: <name>", saved layouts with "current", "Save current layout as new", "Reset to default". | ✅ | |
-| HD-04 | Stats readout | Mono "60 fps · 0 dropped · CPU 3%". | 🟡 | "N dropped" built from `stats.tick` (frames dropped since the page connected). fps and CPU need engine stats (decision register D39). |
+| HD-04 | Stats readout | Mono "60 fps · 0 dropped · CPU 3%". | ✅ | Built from `stats.tick`: the frame rate is the program's over the last tick's interval, and shows only while an output runs, since the program stage draws nothing otherwise; "N dropped" counts video frames dropped since the page connected; CPU is the engine process's share of every logical CPU, as Task Manager counts it, "<1%" below half a percent (protocol 0.48's `load`). The daemon and the desktop app tick about once a second while idle too. CPU shows on Windows and macOS; elsewhere the engine can't read it and the readout leaves it out. |
 | HD-05 | Privacy button | "Privacy" / "Privacy on" (red); blurs every output and mutes the mic; Pause toggles it. | ⏸ | Removed at the maintainer's request after the alpha: JStream has no privacy screen ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md) §4). Bringing it back is the maintainer's call. |
 | HD-06 | Studio mode button | Turns studio mode (preview and program) on and off. | ✅ | A page setting, since the engine has no studio-mode switch: off at first, kept by the browser, and pressed (blue) while on. On, a click on a scene puts it on preview ([SC-10](#scenes)) and the Transitions panel shows preview and program ([TR-06](#transitions)); off, a click puts it on program and the panel shows only the presets. |
 | HD-07 | Record button | Starts and stops recording. | ✅ | Starts every stopped or failed recording output; "Stop recording" while any runs; disabled with none. |

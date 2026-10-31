@@ -33,7 +33,8 @@ state machine. Contents:
   `Engine::new()`, `with_output(id)`, `with_backends`, `with_publish`,
   `with_publish_opener`, `with_key_store`, `with_youtube`, `with_audit`,
   `with_history_limit`, `with_browser` (the browser engine `browser` sources and their
-  `youtube_chat` preset open pages in) and `with_collection_file`; `open_plugin_dir`
+  `youtube_chat` preset open pages in) and `with_collection_file`; `set_process_cpu`
+  and `start_stats_heartbeat` (`stats.tick`'s load, below); `open_plugin_dir`
   (where installed WASM plugins are saved, ADR-0076), called once the engine is built;
   `scan_clap_plugins` adds the CLAP filter kinds;
   `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
@@ -272,6 +273,11 @@ state machine. Contents:
   the publish link's, and a sampler thread
   emits a tick about once a second until the last output stops. The same thread emits
   `meters.tick` about ten times a second.
+- **Engine load** (`load.rs`): what a `stats.tick`'s `load` reads besides the render
+  hub's frame count: when the engine started, the process CPU time from the host's
+  `ProcessCpu` (`Engine::set_process_cpu`), and the idle heartbeat
+  (`Engine::start_stats_heartbeat`), which ticks while no output runs (*Engine load*
+  below).
 - **Tests** (`tests.rs`, `src/tests/history.rs`, `src/tests/live_values.rs`,
   `src/tests/audio.rs`, `src/tests/audio_routing.rs`, `src/tests/sources.rs`,
   `src/tests/transitions.rs`, `tests/mcp.rs`,
@@ -1446,6 +1452,24 @@ and their sources load the counters those handles expose. `drops` runs on the sa
 thread and must not call back into the engine. The fake capture generates a frame when
 it is read, so it does not simulate mailbox skips.
 
+### Engine load (`stats.tick`'s `load`)
+
+Each tick also carries the engine's load (protocol 0.48; `load.rs`): the milliseconds
+since the engine started, the program frames drawn so far, the process's CPU time and
+the logical CPUs. The render thread counts each tick it composites into the
+[`RenderHub`](src/runtime/render.rs) (one relaxed atomic add, R-RT-003), across every
+run of the program stage, so the total only grows and stops while no output runs. A
+skipped tick is not a frame. The CPU time comes from the
+[`ProcessCpu`](../jstream-platform/src/process.rs) the host hands
+[`Engine::set_process_cpu`](src/engine.rs); the sampler reads it before it takes the
+collection lock. Without one, `cpu_ms` is left out.
+
+While no output runs there is no sampler, so a host that wants ticks while idle calls
+[`Engine::start_stats_heartbeat`](src/engine.rs): a `jstream-stats-idle` thread that
+holds the engine weakly and emits a tick about once a second while no program stage's
+`jstream-stats` thread runs, ending once the last engine handle is gone. The daemon and
+the desktop app start it; tests and an embedding host call `emit_stats_tick` as before.
+
 ### Audio routing (`meters.tick`)
 
 [ADR-0028](../../docs/adr/0028-audio-model-v2.md)'s mixer lives in the program stage,
@@ -2459,7 +2483,8 @@ output stops, and `meters.tick` about ten times a second. The stage also starts
 render thread sends under the collection lock and announces the sources it changes
 (`source.size_changed`, *Source sizes* in [Design](#design)), and when the render thread
 lets go of its captures it forgets them all and ends. `Program`'s drop joins it after
-the render thread. The render loop publishes capture mailbox skips and the frames an encode ring drops
+the render thread. The render loop counts each tick it composites into the render hub
+(`stats.tick`'s `program_frames`), and publishes capture mailbox skips and the frames an encode ring drops
 (`encode_frames`), and a tick that falls a
 whole period behind the clock skips to the current tick and counts the skipped ones in
 `render_ticks`. None of those threads lock the collection: the render thread reads the
