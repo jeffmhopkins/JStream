@@ -156,6 +156,15 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   Left move along the bar (wrapping), Escape closes it back to its button, and
   Ctrl+Right on a button is left alone; with animation frames delayed, a second Left
   pressed before the next menu is drawn still moves along the bar.
+- **Copy and paste** (`clipboard.spec.js`): Ctrl+C and Ctrl+V on the canvas paste the
+  seed's Backdrop again as one batch, on top and selected; the empty canvas's Paste puts
+  it in Intro, and a row's Ctrl+C and Ctrl+V do the same; Paste scene is disabled until
+  a scene is copied, then a scene row's Ctrl+C and Ctrl+V, the panel's Paste scene and
+  a row's Duplicate scene each add "\<name\> copy" just below, with the scene's item.
+- **Scene-input rows** (`scene-refs.spec.js`, with a scene mask from `describeKinds`):
+  a mask added to Backdrop with Intro as its scene shows Intro as a child row with the
+  purple badge and the tooltip "Alpha mask: uses the scene “Intro”"; the row's caret
+  folds it and brings it back, and a click selects Intro.
 - **Groups** (`groups.spec.js`): Group selection on two items makes "Group 1", left
   out of the Scenes panel, whose caret shows the two items indented; a click on one
   opens the group's scene with it selected; Ungroup puts them back, which a second

@@ -499,6 +499,14 @@ textarea { width: 100%; min-height: 4rem; resize: vertical; }
 .row.tree-row.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
 .row.tree-row.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
 .row.tree-row.drop-into { box-shadow: inset 0 0 0 2px var(--accent); }
+/* Scene-reference rows (O6): an 18px role badge, the role colour at 20 % behind its
+   12px icon: purple for a mask, amber for an effect source, grey for a filter that is
+   off. */
+.tree-row .ref-badge { display: inline-flex; flex: 0 0 18px; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 4px; }
+.tree-row .row-main .ref-badge .icon { color: inherit; }
+.ref-badge.mask { color: #b07cff; background: #b07cff33; }
+.ref-badge.fx { color: #e8a33d; background: #e8a33d33; }
+.ref-badge.off { color: var(--faint); background: #5a606b33; }
 /* Folders (S13, S18): a caret that folds them, and a dim name. */
 .tree-row button.tree-caret {
   height: 100%; padding: 0; border: 0; background: none;

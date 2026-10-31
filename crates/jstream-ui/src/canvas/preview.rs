@@ -2,18 +2,21 @@
 //! each frame that don't need a browser (ADR-0045, `preview.subscribe` in
 //! `jstream-protocol`).
 //!
-//! The canvas opens one preview stream of the program mix on its session's binary
-//! channel. H.264 goes to WebCodecs' `VideoDecoder` (see `screen.rs`), and JPEG is the
+//! The canvas opens one preview stream on its session's binary channel: the program
+//! mix while it shows the program scene, else the scene it shows (CV-03,
+//! `preview.subscribe`'s `scene_id`). Showing another scene closes that stream and opens
+//! the next on a new channel number, so a late frame of the old one is never drawn.
+//! H.264 goes to WebCodecs' `VideoDecoder` (see `screen.rs`), and JPEG is the
 //! fallback when the browser has no `VideoDecoder` or the decoder fails. The program
 //! mix is the canvas fitted into the picture, so the picture has the canvas's aspect
 //! ratio and lies exactly under the item boxes.
 //!
 //! Docs: crates/jstream-ui/README.md#canvas
 
-use jstream_control::protocol::{Action, PreviewCodec, PreviewSettings};
+use jstream_control::protocol::{Action, PreviewCodec, PreviewSettings, SceneId};
 
-/// The channel the canvas's preview stream is opened on. The canvas is the only
-/// stream this session opens, so any fixed number does.
+/// The channel the canvas's first preview stream is opened on. The canvas is the only
+/// stream this session opens, so any number does; each later stream takes the next.
 pub const CHANNEL: u32 = 1;
 /// Pictures per second asked for: the engine's maximum, so the preview follows a drag
 /// smoothly. The engine only encodes when the mix changes, so a still scene costs
@@ -50,6 +53,69 @@ pub fn subscribe(width: f32, height: f32, pixel_ratio: f32, h264: bool) -> Actio
         fps: Some(FPS),
         codecs,
         scene_id: None,
+    }
+}
+
+/// The scene the canvas's stream shows: `None`, the program mix, while the canvas shows
+/// the program scene (whose picture then has its transitions) or no scene, else the
+/// scene it shows.
+pub fn stream_scene(shown: Option<&SceneId>, program: Option<&SceneId>) -> Option<SceneId> {
+    shown.filter(|s| Some(*s) != program).cloned()
+}
+
+/// The canvas's current stream: its channel and what it shows, and how to ask for it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Stream {
+    /// The channel its frames carry.
+    pub channel: u32,
+    /// The scene it shows, or `None` for the program mix.
+    pub scene: Option<SceneId>,
+    /// The stage's size in CSS pixels, and device pixels per CSS pixel.
+    pub stage: (f32, f32, f32),
+    /// Whether H.264 is still asked for.
+    pub h264: bool,
+}
+
+impl Stream {
+    /// The first stream: the program mix on [`CHANNEL`].
+    pub fn first(stage: (f32, f32, f32), h264: bool) -> Stream {
+        Stream {
+            channel: CHANNEL,
+            scene: None,
+            stage,
+            h264,
+        }
+    }
+
+    /// The stream that shows `scene` next, on the next channel.
+    pub fn showing(&self, scene: Option<SceneId>) -> Stream {
+        Stream {
+            channel: self.channel.wrapping_add(1).max(1),
+            scene,
+            ..self.clone()
+        }
+    }
+
+    /// Its `preview.subscribe`.
+    pub fn subscribe(&self) -> Action {
+        let (width, height, ratio) = self.stage;
+        match subscribe(width, height, ratio, self.h264) {
+            Action::PreviewSubscribe {
+                max_width,
+                max_height,
+                fps,
+                codecs,
+                ..
+            } => Action::PreviewSubscribe {
+                channel: self.channel,
+                max_width,
+                max_height,
+                fps,
+                codecs,
+                scene_id: self.scene.clone(),
+            },
+            other => other,
+        }
     }
 }
 
@@ -299,6 +365,37 @@ mod tests {
         slot.close();
         assert_eq!(slot.settled(), None, "nothing restarts after close");
         assert_eq!(slot.offer(6), None);
+    }
+
+    #[test]
+    fn the_stream_follows_the_shown_scene_on_a_new_channel() {
+        let (main, other) = (SceneId::new("main"), SceneId::new("other"));
+        assert_eq!(
+            stream_scene(Some(&main), Some(&main)),
+            None,
+            "the program mix"
+        );
+        assert_eq!(stream_scene(None, Some(&main)), None);
+        assert_eq!(stream_scene(Some(&other), Some(&main)), Some(other.clone()));
+        assert_eq!(stream_scene(Some(&other), None), Some(other.clone()));
+        let first = Stream::first((800.0, 450.0, 1.0), true);
+        let next = first.showing(Some(other.clone()));
+        assert_eq!(
+            (next.channel, next.scene.as_ref()),
+            (CHANNEL + 1, Some(&other))
+        );
+        let Action::PreviewSubscribe {
+            channel, scene_id, ..
+        } = next.subscribe()
+        else {
+            panic!("a subscribe");
+        };
+        assert_eq!((channel, scene_id), (CHANNEL + 1, Some(other)));
+        let wrapped = Stream {
+            channel: u32::MAX,
+            ..first
+        };
+        assert_eq!(wrapped.showing(None).channel, 1, "0 is skipped");
     }
 
     #[test]

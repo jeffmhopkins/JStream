@@ -78,7 +78,9 @@ Contents ([Design](#design) explains the choices):
   check, colour swatch, hint or submenu), `item_menu.rs` (the
   selected items' entries, which the canvas and the sources list share, with the
   layer moves, canvas arrangements, reference ↔ clone switches, grouping and
-  ungrouping they send, tested natively), `dialog.rs` (`Modal`,
+  ungrouping they send, tested natively), `clipboard.rs` (copy and paste, KB-05: the
+  page's own clipboard of items or a scene, and the batches Paste, Paste scene and
+  Duplicate scene send, tested natively), `dialog.rs` (`Modal`,
   the modal dialog frame) and `icons.rs` (`Icon`, the prototype's stroke icons).
 - **Panels** (`panels/`): the scene list (`scenes.rs`, with its folders: the rows each
   level shows and the edits a drop sends are tested natively), the sources list
@@ -121,8 +123,7 @@ Contents ([Design](#design) explains the choices):
   revoke devices), and the calls behind it, tested natively against `MockEngine` and a
   stub that answers them as the server does.
 - **Canvas** (`canvas/`): the canvas editor. It draws the selected scene's item boxes
-  over the live program preview while that scene is on program (a placeholder
-  otherwise), edits their geometry with the pointer and the keyboard, and undoes and
+  over that scene's live picture (the program mix while it is on program), edits their geometry with the pointer and the keyboard, and undoes and
   redoes ([Canvas](#canvas)).
 - **Entry point** (`main.rs`): `start()`, which mounts `App` on the page's `<body>`;
   `index.html`, `style.css` and `Trunk.toml` are the page trunk builds around it
@@ -214,7 +215,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   [ADR-0078](../../docs/adr/0078-scenes-carry-labels.md)). A nested scene's row has a caret that shows
   its items under it, nested ones too; a click on one of them selects it in its own
   scene, which the list then shows, since the engine draws a nested scene as one item.
-  Each panel has a search box and a filter for
+  A scene that one of the object's filters uses (a scene mask, or another kind's scene
+  setting, on its source's chain or its own effects) is a child row under it with a role
+  badge (OB-05); under a plain object they start open, under a nested scene they open
+  with its row, the object's caret folds them, and a click selects the
+  scene. Each panel has a search box and a filter for
   favourites (the star, `scene.set_meta` or `source.set_meta`), applied in the page; each
   filter also keeps the rows carrying any checked label, and its "Edit labels…" opens
   the label manager over that panel's rows, which renames, recolours, gives icons to,
@@ -244,7 +249,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   sources lists their panels' menus, and a scene row its scene's (Show in preview,
   Rename, Transition in and out, Properties…, New scene, New keyframe, New folder and
   Delete scene work, as do a folder's own menu's, and Edit filters… shows the scene's
-  chain in the Filters panel; Pop out and Duplicate scene wait on the engine). The
+  chain in the Filters panel; Pop out opens the scene in a projector window, and
+  Duplicate scene sends `clipboard.rs`'s copy of it). The
   Transition in and out submenus,
   on a scene row and on the canvas margin for the scene it shows
   (`studio::override_submenu`), start with "Default (<the default preset>)", checked
@@ -265,7 +271,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (crop mode, for one item), Duplicate as reference
   (`item.add` of the same source, 40 pixels down and right, just above the original)
   or as clone (`source.duplicate` first), also Ctrl+D and Ctrl+Shift+D, each confirmed by a
-  toast, and Remove from scene, each one batch. For one item of a source placed more than once, or a
+  toast, and Remove from scene, each one batch. Ctrl+C copies the selection (on a scene
+  row, the scene) into the page's own clipboard (`Clipboard` context), and Ctrl+V,
+  Paste or Paste scene sends one batch that places the copied items' sources again,
+  with their placement settings and effects, or duplicates the copied scene. For one item of a source placed more than once, or a
   copy whose original exists, it switches between a reference and an independent clone
   (decision register D3): `source.duplicate` and `item.set_source` to the copy, or
   `item.set_source` back to the original and `source.delete` of a copy nothing else
@@ -691,11 +700,11 @@ browser, and `mod.rs` is the component.
   placement and visibility can change", and its edits are addressed to it, so they
   write its overrides (ADR-0049). Its drags send no live values, which the engine
   doesn't take on a keyframe scene yet (#702): the drop commits as usual.
-- **The preview.** Under the boxes is the program mix, live, while the selected
-  scene is the one on program; on another scene the background says the preview
-  shows the program scene. The canvas opens the
+- **The preview.** Under the boxes is the shown scene's picture, live: the program
+  mix while the canvas shows the scene on program, so its transitions show, else that
+  scene's own stream (`preview.subscribe`'s `scene_id`, CV-03). The canvas opens the
   session's binary channel (`Control::binary`; a session has one, so the canvas is
-  its only reader) and one `preview.subscribe` stream on channel 1, at 30 fps and as
+  its only reader) and one `preview.subscribe` stream on it, at 30 fps and as
   sharp as the stage (its size in device pixels, kept between 320×180 and 1280×720).
   It asks for H.264 first when the browser has WebCodecs' `VideoDecoder`, then JPEG.
   H.264 frames go to a `VideoDecoder` configured from the SPS in each keyframe
@@ -705,7 +714,9 @@ browser, and `mod.rs` is the component.
   is never lost. Each decoded picture is drawn into a `<canvas>` placed with the
   canvas's own fit, so the picture lies exactly under the boxes. If the decoder fails, the canvas closes the stream and subscribes
   again for JPEG only. If the engine refuses or ends the stream, the background says
-  why. WebCodecs is reached through `js_sys::Reflect`, because `web-sys` has it only
+  why. Showing another scene closes the stream and opens that scene's on the next
+  channel number, so a late frame of the old stream is never drawn; until the new
+  stream's first frame, the background says the preview is starting. WebCodecs is reached through `js_sys::Reflect`, because `web-sys` has it only
   behind the `web_sys_unstable_apis` build flag. A drag's live values (below) reach
   the output as it moves, so the preview follows the drag.
 - **Selecting and dragging.** A press selects the topmost box under the pointer and

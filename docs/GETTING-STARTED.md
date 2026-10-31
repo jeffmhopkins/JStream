@@ -72,6 +72,9 @@ on **program**, drawn on the canvas in the middle.
    a click puts the scene on preview instead, and the button on its row, or
    **Transition** in the Transitions panel, takes it live.
 
+Ctrl+C and Ctrl+V copy sources from one scene to another, and **Duplicate scene** on a
+scene's right-click menu (or Ctrl+C then Ctrl+V on its row) copies the whole scene.
+
 Panels can be moved, hidden and brought back from the **View** menu; **Layout** saves
 and resets arrangements.
 

@@ -35,7 +35,8 @@ use crate::panels::scenes::RenameField;
 use crate::panels::tree::{Filter, Reorder, SearchBar, Side, Star, dropped_at, indent};
 use crate::store::{Collection, Studio, apply, plan_delete, plan_summary};
 use jstream_control::protocol::{
-    DeleteTarget, Edit, ItemId, LabelId, SceneId, SourceId, SourceKind,
+    DeleteTarget, Edit, FilterId, FilterInfo, ItemId, LabelId, Reference, SceneId, SourceId,
+    SourceKind,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -63,10 +64,73 @@ struct Row {
     open: bool,
     /// Whether a search keeps it open, for a match inside it.
     kept: bool,
+    /// The scenes its filters use (a mask, matte, clip or effect source), shown as
+    /// child rows under it while it is open (OB-05).
+    refs: Vec<SceneRef>,
     /// The labels the source carries, for the filter. The row's chips follow the
     /// collection themselves, so a label put on doesn't rebuild the row and close its
     /// popover.
     label_ids: Vec<LabelId>,
+}
+
+/// A scene one of a row's filters uses, for its child row (spec-panels.md O6).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct SceneRef {
+    /// The filter that uses it.
+    filter_id: FilterId,
+    /// The scene.
+    scene_id: SceneId,
+    /// The scene's name.
+    name: String,
+    /// What the filter does with it: "Alpha mask", "Luma matte", "Clip to" or "Effect
+    /// source".
+    role: &'static str,
+    /// Whether the filter shapes the picture (a mask's purple badge) rather than takes an
+    /// effect's input (amber).
+    mask: bool,
+    /// Whether the filter is on; an off one's badge is grey.
+    on: bool,
+}
+
+impl SceneRef {
+    /// The badge's tooltip: "Alpha mask (off): uses the scene “Cam shape”".
+    fn title(&self) -> String {
+        let off = if self.on { "" } else { " (off)" };
+        format!("{}{off}: uses the scene “{}”", self.role, self.name)
+    }
+}
+
+/// The scenes `filters` use, in chain order: every scene reference in their settings.
+/// The engine's `scene_mask` names its role by its `mode`; any other kind's scene is an
+/// effect source.
+fn scene_refs(collection: &Collection, filters: &[FilterInfo]) -> Vec<SceneRef> {
+    let mut out = Vec::new();
+    for filter in filters {
+        let (role, mask) = match filter.kind.as_str() {
+            "scene_mask" => match filter.settings.get("mode").and_then(|m| m.as_str()) {
+                Some("luma") => ("Luma matte", true),
+                Some("clip") => ("Clip to", true),
+                _ => ("Alpha mask", true),
+            },
+            _ => ("Effect source", false),
+        };
+        for (_, value) in filter.settings.iter() {
+            if let Some(Reference::Scene { scene_id }) = Reference::from_value(value) {
+                let name = collection
+                    .scene(&scene_id)
+                    .map_or_else(|| scene_id.to_string(), |s| s.name.clone());
+                out.push(SceneRef {
+                    filter_id: filter.filter_id.clone(),
+                    scene_id,
+                    name,
+                    role,
+                    mask,
+                    on: filter.enabled,
+                });
+            }
+        }
+    }
+    out
 }
 
 impl Row {
@@ -154,7 +218,19 @@ impl Walk<'_> {
             if self.filtering && !kept && !(self.shows)(&name, favourite, &label_ids) {
                 continue;
             }
-            let open = kept || (nests.is_some() && self.open.contains(&item.item_id));
+            // The source's chain applies wherever it is placed, the item's effects here.
+            let mut filters = source.map(|s| s.filters.video.clone()).unwrap_or_default();
+            filters.extend(item.effects.iter().cloned());
+            let refs = scene_refs(collection, &filters);
+            // A nested scene opens when asked; a row with only scene references starts
+            // open, as the prototype's does, and its caret folds it.
+            let toggled = self.open.contains(&item.item_id);
+            let open = kept
+                || if nests.is_some() {
+                    toggled
+                } else {
+                    !refs.is_empty() && !toggled
+                };
             out.push(Row {
                 item_id: item.item_id.clone(),
                 source_id: item.source_id.clone(),
@@ -168,12 +244,43 @@ impl Walk<'_> {
                 nests,
                 open,
                 kept,
+                refs,
                 label_ids,
             });
             if open {
                 out.append(&mut inside);
             }
         }
+    }
+}
+
+/// A scene-reference child row (spec-panels.md O6): its role badge, then the scene's
+/// name. A click selects the scene. It has no tag, star or eye, and isn't dragged.
+fn ref_row(studio: Studio, r: SceneRef, depth: usize) -> impl IntoView {
+    let title = r.title();
+    let label = title.clone();
+    let scene_id = r.scene_id.clone();
+    let tone = match (r.on, r.mask) {
+        (false, _) => "off",
+        (true, true) => "mask",
+        (true, false) => "fx",
+    };
+    let icon = if r.mask { "mask" } else { "sparkle" };
+    view! {
+        <li
+            class="row tree-row ref-row"
+            style:padding-left=indent(depth)
+            data-tree-ref=r.filter_id.to_string()
+        >
+            <span class="tree-caret"></span>
+            <button class="row-main" title=title on:click=move |_| studio.select_scene(scene_id.clone())>
+                <span class=format!("ref-badge {tone}") aria-label=label>
+                    <Icon name=icon size=12 />
+                </span>
+                <Icon name="layers" size=15 />
+                <span class="tree-label">{r.name}</span>
+            </button>
+        </li>
     }
 }
 
@@ -188,6 +295,7 @@ pub fn Sources() -> impl IntoView {
     let menus = use_context::<Menus>();
     let adder = use_context::<AddSourceDialog>();
     let item_cx = item_menu::Context::from_page();
+    let pasting = crate::clipboard::Pasting::from_page();
     let filter = Filter::new();
     let reorder = Reorder::new();
     // The nested scenes' rows that show their items, by item.
@@ -343,6 +451,7 @@ pub fn Sources() -> impl IntoView {
             nests,
             open,
             kept,
+            refs,
             ..
         } = row;
         let labels = {
@@ -413,12 +522,33 @@ pub fn Sources() -> impl IntoView {
             }
         };
         // F2 renames the source, Del removes the item from the scene, and Ctrl+D and
-        // Ctrl+Shift+D duplicate it as a reference or a clone, as the menu's hints say. In a
-        // keyframe, Del and the duplicates do nothing, and run no hotkey either.
+        // Ctrl+Shift+D duplicate it as a reference or a clone, as the menu's hints say.
+        // Ctrl+C copies the selection, or the row's item when it isn't selected, and
+        // Ctrl+V pastes into the selected scene (KB-05). In a keyframe, Del, the
+        // duplicates and Ctrl+V do nothing, and run no hotkey either.
         let on_key = {
             let item = item_id.clone();
             let scene_id = row_scene.clone();
             move |event: leptos::ev::KeyboardEvent| match event.key().as_str() {
+                "c" | "C" if event.ctrl_key() || event.meta_key() => {
+                    if let Some(p) = pasting {
+                        let chosen: Vec<ItemId> = studio
+                            .selection
+                            .with_untracked(|s| s.items().cloned().collect());
+                        let items = if chosen.contains(&item) {
+                            chosen
+                        } else {
+                            vec![item.clone()]
+                        };
+                        p.copy_items(&scene_id, &items);
+                    }
+                }
+                "v" | "V" if event.ctrl_key() || event.meta_key() => {
+                    event.prevent_default();
+                    if let (Some(p), Some(target)) = (pasting.filter(|_| !in_keyframe()), scene()) {
+                        p.paste(&target);
+                    }
+                }
                 "d" | "D" if event.ctrl_key() || event.meta_key() => {
                     event.prevent_default();
                     if let Some(cx) = item_cx.filter(|_| !in_keyframe()) {
@@ -547,7 +677,7 @@ pub fn Sources() -> impl IntoView {
         let popover_target = Tagged::Source(source_id.clone());
         let popover_indent = indent(depth);
         let container = nests.is_some();
-        let caret = nests.map(|_| {
+        let caret = (nests.is_some() || !refs.is_empty()).then(|| {
             let id = item_id.clone();
             let label = format!("{} {name}", if open { "Collapse" } else { "Expand" });
             let toggle = move |_| {
@@ -625,6 +755,7 @@ pub fn Sources() -> impl IntoView {
                     <LabelPopover popover=popover target=popover_target.clone() indent=popover_indent.clone() />
                 </li>
             })}
+            {open.then(|| refs.into_iter().map(|r| ref_row(studio, r, depth + 1)).collect_view())}
         }
     };
 
@@ -634,6 +765,7 @@ pub fn Sources() -> impl IntoView {
             return;
         };
         let group_into = scene_id.clone();
+        let paste_into = scene_id.clone();
         let open = move |scene_type: bool| {
             let scene_id = scene_id.clone();
             move || {
@@ -665,7 +797,15 @@ pub fn Sources() -> impl IntoView {
                 },
                 Entry::Sep,
                 Entry::item("Select all", select_all).hint("Ctrl+A"),
-                Entry::unavailable("Paste").hint("Ctrl+V"),
+                {
+                    Entry::item("Paste", move || {
+                        if let Some(p) = pasting {
+                            p.paste(&paste_into);
+                        }
+                    })
+                    .hint("Ctrl+V")
+                    .disabled_if(!pasting.is_some_and(|p| p.clipboard.has_items()) || in_keyframe())
+                },
             ],
         );
     };
@@ -916,5 +1056,77 @@ mod tests {
         );
         assert_eq!(rows[0].name, "gone", "a missing source shows its ID");
         assert!(all(&collection(), "other").is_empty());
+    }
+
+    /// OB-05: a mask filter on the camera's source and a displacement-like effect on
+    /// the item show their scenes as child rows, open until folded.
+    #[test]
+    fn filters_that_use_a_scene_show_it_under_the_object() {
+        use jstream_control::protocol::{FilterInfo, Settings};
+        use serde_json::json;
+        let mut c = collection();
+        let mut shape = c.scenes[0].clone();
+        shape.scene_id = "shape".into();
+        shape.name = "Cam shape".into();
+        shape.items.clear();
+        c.scenes.push(shape);
+        let filter = |id: &str, kind: &str, on: bool, settings: Settings| FilterInfo {
+            filter_id: id.into(),
+            kind: kind.into(),
+            enabled: on,
+            settings,
+        };
+        let scene = json!({"type": "scene", "scene_id": "shape"});
+        c.sources[0].filters.video = vec![
+            filter(
+                "f1",
+                "scene_mask",
+                false,
+                [("scene", scene.clone()), ("mode", json!("luma"))]
+                    .into_iter()
+                    .collect(),
+            ),
+            filter("f2", "blur", true, Settings::new()),
+        ];
+        c.scenes[0].items[0].effects = vec![filter(
+            "f3",
+            "warp",
+            true,
+            [("map", scene)].into_iter().collect(),
+        )];
+        let rows = all(&c, "main");
+        let cam = rows
+            .iter()
+            .find(|r| r.item_id == ItemId::new("bottom"))
+            .expect("row");
+        assert!(cam.open, "open by default");
+        let refs: Vec<(&str, &str, bool, bool)> = cam
+            .refs
+            .iter()
+            .map(|r| (r.role, r.name.as_str(), r.mask, r.on))
+            .collect();
+        assert_eq!(
+            refs,
+            [
+                ("Luma matte", "Cam shape", true, false),
+                ("Effect source", "Cam shape", false, true)
+            ]
+        );
+        assert_eq!(
+            cam.refs[0].title(),
+            "Luma matte (off): uses the scene “Cam shape”"
+        );
+        // The caret folds it.
+        let folded: HashSet<ItemId> = [ItemId::new("bottom")].into();
+        let rows = super::rows(&c, &SceneId::new("main"), &folded, false, &|_, _, _| true);
+        assert!(
+            !rows
+                .iter()
+                .find(|r| r.item_id == ItemId::new("bottom"))
+                .expect("row")
+                .open
+        );
+        // Without scene references nothing opens.
+        assert!(!all(&collection(), "main")[1].open);
     }
 }
