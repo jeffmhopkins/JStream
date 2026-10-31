@@ -64,13 +64,13 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Scene objects panel](#objects) | 9 | 8 | 0 | 0 | 1 | 0 |
 | [Inspector](#inspector) | 10 | 10 | 0 | 0 | 0 | 0 |
 | [Transform panel](#transform) | 4 | 4 | 0 | 0 | 0 | 0 |
-| [Filters](#filters) | 8 | 6 | 1 | 0 | 1 | 0 |
+| [Filters](#filters) | 8 | 7 | 1 | 0 | 0 | 0 |
 | [Mixer](#mixer) | 7 | 6 | 0 | 0 | 0 | 1 |
 | [Outputs](#outputs) | 4 | 3 | 0 | 0 | 1 | 0 |
 | [Transitions](#transitions) | 6 | 6 | 0 | 0 | 0 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
 | [Keyboard](#keyboard) | 7 | 5 | 0 | 1 | 0 | 1 |
-| **Total** | **130** | **104** | **11** | **1** | **10** | **4** |
+| **Total** | **130** | **105** | **11** | **1** | **9** | **4** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -316,7 +316,7 @@ panel or on the Mixer's master card shows one in the panel (FL-07).
 | FL-05 | Settings from descriptors | Each filter's settings come from its kind descriptor ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). | ✅ | The Inspector's form (`properties.rs`) on `kind.describe`'s descriptor. The prototype's catalogue is a wish list; the engine lists gain, noise gate, compressor, limiter and delay, its built-in video filters and effect-pack kinds. A scene setting's select is the form's, listing every scene with None, not F8's "Choose a scene…" over the allowed scenes. |
 | FL-06 | Scene filters | A scene's video chain. | ✅ | The `scene` owner ([ADR-0065](adr/0065-scene-chains-and-item-effects.md)), which the engine runs over the scene's composite. The Filters panel shows the selected scene's chain while no item is selected, with the scene's name and "Scene filters apply to the whole scene, top to bottom."; Edit filters… on a scene row ([CM-03](#menus)) and Edit scene filters… on the canvas margin ([CM-02](#menus)) show it, as an FX button does an output's, until another item or scene is selected. A keyframe scene shows its parent's chain, as it has none of its own. Rows, Add filter (video kinds only, foot "Applies to the whole scene.") and the settings dialog work as on a source's; the Add filter dialog's Uses the scene picker, on a scene's chain, offers the scenes whose picture doesn't hold that scene by nesting or as a keyframe; it doesn't follow other filters' scene references, and the settings form lists every scene, as for a source (FL-05), so the engine's cycle check refuses the rest. The scene Properties dialog shows the chain too ([DL-03](#dialogs)). |
 | FL-07 | Program and output chains | Master chain on the program output, one chain per output. | 🟡 | The audio chains: an FX button ([OU-01](#outputs), [OU-02](#outputs), [MX-01](#mixer)) shows the program output's (`{"type":"master"}`) or an output's chain in the panel, titled "Program output" or the output's ID with the prototype's note ("Master chain: applies to everything leaving JStream.", "Only this output, after the program filters.", and "No sound." for the virtual camera, which has no sound and so no audio chain). Rows, Add filter and the settings dialog work as on a source's. Selecting another item or scene, or an item's Edit filters…, shows the selection's chains again: the item's source's, or with no item the scene's ([FL-06](#filters)). The video chains are 🔒: the engine refuses them so far ([ARCH › GPU pipeline](ARCHITECTURE.md#gpu-pipeline)), and the panel says "Video filters on outputs aren’t available yet." |
-| FL-08 | CLAP plugin filter | Host a CLAP audio effect. | 🔒 | [ADR-0035](adr/0035-clap-plugins-out-of-process.md): hidden until CL1 lands in M3. |
+| FL-08 | CLAP plugin filter | Host a CLAP audio effect. | ✅ | [ADR-0035](adr/0035-clap-plugins-out-of-process.md): each effect the engine's scan finds is its own kind, `clap/<plugin id>`, so the Add filter dialog lists each plugin by name under Plugins with the hint "A CLAP audio effect", rather than the prototype's one "CLAP plugin" with a Plugin select. It goes on any audio chain: a source's, the program output's and an output's ([FL-07](#filters)); on the program output's the plugin runs on the master bus, which every output reads. Its settings are the plugin's parameters, from the kind's descriptor (FL-05). The live-audio run on Windows is #912. |
 
 <a id="mixer"></a>
 ## Mixer
