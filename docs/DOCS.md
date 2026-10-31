@@ -63,17 +63,20 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
 - **`cargo xtask docs merge-main`** ([Hash-bound verification](#verification)): merges
   `origin/main` (or, with `--from wave/<name>`, the wave a PR targets), resolves conflicts
   that are only between stamps or only inside `@generated` blocks, takes main's `by` and note
-  for each ledger entry both sides recorded at the same content, moves inline stamps a branch from before ADR-0053 still
+  for each ledger entry both sides recorded at the same content (unless the branch's note
+  holds main's in full and more), moves inline stamps a branch from before ADR-0053 still
   has, and lists the sections left stale: each stale input with the note the branch had
   written on it and the merged commits that changed it, then the PRs those commits came
-  from. `docs verify --merge` then keeps those notes and adds what the merge changed
-  ([Verification notes](#notes)), and refuses an input whose file the branch changed after
+  from. `docs verify --merge` then keeps those notes, every earlier merge's text included,
+  and adds what the merge changed ([Verification notes](#notes)), and refuses an input whose file the branch changed after
   the merge. It and `--renote` list the merged PRs behind the entries they rewrite and
   name any the note leaves out. Every verify after the merge keeps the merged side's note
   on each entry that side re-verified, each kept segment once and word for word
   ([Verification notes](#notes)). `--per-input` gives each entry its own text from a
   TOML table, the `--<mode>-file` options read the text from a file, `--merge --from`
-  checks the merged branch, and every verify refuses while a merge is in progress.
+  checks the merged branch, and every verify refuses while a merge is in progress, a flag
+  given twice (a mode's text and its file count as one), and a note or `--by` that isn't
+  one line.
 - **Weekly sweep** ([Time-based review](#ttl)): the scheduled `sweep` workflow reports
   `cargo deny` findings, docs due for review, `cargo update --dry-run` and the override
   audit list in one issue. The parts that [Time-based review](#ttl) lists as not built
@@ -339,7 +342,10 @@ rewritten in canonical form. Once the ledger has no conflict left, each entry wh
 equals main's entry for the same input takes main's entry, `by` and note included,
 whether it conflicted or not. Both sides verified the same content of that input, so no
 section's freshness changes; but the last note on it becomes the one main wrote for it,
-and the branch's ledger diff keeps only the inputs it verified at other content. This goes
+and the branch's ledger diff keeps only the inputs it verified at other content. The
+exception is a branch entry whose note holds main's note in full and more, or that has a
+note where main's has none: it is the fuller record, as on a sync PR whose wave note
+already carries main's, so it is kept (#874). This goes
 into the merge commit itself, and `merge-main` names each section it changed. A
 fast-forward, or a merge with nothing to bring in, makes no merge commit and takes
 nothing; neither does a merge whose ledger doesn't parse, which the steps after the commit
@@ -365,10 +371,13 @@ re-read. It finds the branch's latest merge (one that no `origin/main` or `origi
 branch contains) and the entries the branch had written itself before it. An input whose
 hash equals the merged side's entry gets that entry as it is, `by` and note included: the
 branch changes nothing in it, so its diff against the merged side shows no rewrite there.
+The exception is the branch's own entry from before the merge that `merge-main` kept as the
+fuller record (above): it stays as it is.
 Each other entry a verify would rewrite, and each the branch had written whose input the
 merge has since changed, gets the branch's note on it, then ` | merge: `, then the text.
-An earlier merge's addendum is dropped first, because what it brought in is part of the
-base by then. An entry the branch hadn't written gets `merge: ` and the text alone. Because
+Every earlier ` | merge: ` segment of that note is kept, since on a sync PR into a wave
+they are other PRs' records; a note that already ends with the same text isn't extended
+again. An entry the branch hadn't written gets `merge: ` and the text alone. Because
 it rewrites the branch's entries whose input the merge changed even when they are fresh, it
 also repairs a plain re-verify after the merge that replaced the branch's notes. It
 refuses, naming each input, when the file an entry it would rewrite with the branch's note
@@ -505,8 +514,9 @@ holds**. The note says what was checked and why it still holds, e.g.:
 - After `docs merge-main`, each stale section needs its own note: what its earlier note
   said about this PR's change, plus what the merge changed in that section's inputs.
   `docs verify --merge "<what the merge changed>"` keeps the earlier note on each entry
-  this PR changes and adds the text. On an input whose hash equals the merged side's
-  entry, it keeps that entry as it is, which `merge-main` has already given main's note.
+  this PR changes and adds the text, after every earlier merge's text. On an input whose
+  hash equals the merged side's entry, it keeps the entry `merge-main` left there: main's,
+  or this PR's own when its note held main's in full and more.
   `merge-main` prints the merged commits behind each
   stale input to write it from ([Hash-bound verification](#verification)), and under each
   stale section the PRs (`(#N)` in their subjects) those commits came from. A wave's
@@ -533,8 +543,10 @@ holds**. The note says what was checked and why it still holds, e.g.:
   kept that way are carried too. Each kept segment (the text after each mark, up to the
   next one) appears once (#842): a segment the new text or another segment already holds
   in full is left out, and a newer one that holds older ones in full takes the first one's
-  place. Kept notes are per entry: each entry keeps the notes of its own input, also with
-  `--per-input`. So a
+  place. Within a kept segment, each piece (split at ` | merge: `) that the note already
+  holds, in the new text or a segment before it, is left out too (#888), so a kept record
+  that repeats this PR's own text adds only what is new. Kept notes are per entry: each
+  entry keeps the notes of its own input, also with `--per-input`. So a
   record both sides kept isn't copied again, and a merged note that repeats records
   the branch kept may appear split into its segments rather than as one block. Write
   only this PR's text; never copy the merged side's notes by hand. Before

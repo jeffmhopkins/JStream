@@ -145,7 +145,9 @@ impl Ledger {
     /// `by` and `note` included; returns the sections changed, sorted. Both recorded the
     /// same content of that input, so no section's freshness changes, but the last note on
     /// the input becomes the one the merged side wrote for it, and the branch's ledger diff
-    /// keeps only the inputs it verified at other content (#697).
+    /// keeps only the inputs it verified at other content (#697). An entry whose note holds
+    /// `theirs`'s note in full, and more, is kept instead (#874): it is the fuller record, as
+    /// when a sync PR merges `main` into a wave whose note on the input carries main's.
     pub(crate) fn adopt(&mut self, theirs: &Self) -> Vec<String> {
         let mut changed = Vec::new();
         for (section, stamp) in &mut self.sections {
@@ -154,7 +156,10 @@ impl Ledger {
             };
             let mut any = false;
             for (input, e) in stamp.iter_mut() {
-                if let Some(t) = other.get(input).filter(|t| t.hash == e.hash && *t != e) {
+                if let Some(t) = other
+                    .get(input)
+                    .filter(|t| t.hash == e.hash && *t != e && !holds_more(e, t))
+                {
                     *e = t.clone();
                     any = true;
                 }
@@ -173,6 +178,16 @@ impl Ledger {
             self.sections.remove(k);
         }
         gone
+    }
+}
+
+/// Whether `ours`'s note holds `theirs`'s note in full and more, or `theirs` has none: on
+/// the same hash, `ours` is then the fuller record of that input (#874).
+pub(crate) fn holds_more(ours: &Entry, theirs: &Entry) -> bool {
+    match (&ours.note, &theirs.note) {
+        (Some(o), Some(t)) => o != t && o.contains(t.as_str()),
+        (Some(_), None) => true,
+        (None, _) => false,
     }
 }
 
@@ -219,21 +234,33 @@ pub(crate) fn restamp(
         .collect()
 }
 
-/// Where a note written by `docs verify --merge` turns from this branch's note to what the
-/// merge changed. A later merge's `--merge` drops everything from here on before adding its
-/// own: what an earlier merge brought in is part of the base by then, not this branch's
-/// change.
+/// Where a note written by `docs verify --merge` turns from the note before to what a merge
+/// changed. Each later merge's `--merge` keeps every earlier segment and appends its own
+/// (#874): on a sync PR into a wave, the segments after the first mark are other PRs'
+/// records, not this branch's superseded text.
 pub(crate) const MERGE_MARK: &str = " | merge: ";
 
-/// The note `docs verify --merge` writes on an entry: the branch's `earlier` note, without
-/// any earlier merge's addendum, then `merge`, what this merge changed in the input.
+/// The note `docs verify --merge` writes on an entry: the branch's `earlier` note, every
+/// earlier merge's segment included but without the merged-side notes it kept, then
+/// `merge`, what this merge changed in the input. A `merge` the earlier note already ends
+/// with isn't added again.
 pub(crate) fn merge_note(earlier: Option<&str>, merge: &str) -> String {
+    let lead = MERGE_MARK.trim_start();
     let own = earlier
-        .map(|n| split_kept(n).0)
-        .map(|n| n.split_once(MERGE_MARK).map_or(n, |(own, _)| own).trim())
+        .map(|n| split_kept(n).0.trim())
         .filter(|n| !n.is_empty());
     match own {
-        Some(own) => format!("{own}{MERGE_MARK}{merge}"),
+        Some(own)
+            if own == format!("merge: {merge}")
+                || own.ends_with(&format!("{MERGE_MARK}{merge}")) =>
+        {
+            own.to_owned()
+        }
+        // A note that starts at the mark had no text of the branch's before its merge.
+        Some(own) => match own.strip_prefix(lead) {
+            Some(rest) => format!("merge: {rest}{MERGE_MARK}{merge}"),
+            None => format!("{own}{MERGE_MARK}{merge}"),
+        },
         None => format!("merge: {merge}"),
     }
 }
@@ -257,7 +284,8 @@ pub(crate) fn split_kept(note: &str) -> (&str, &str) {
 /// and the segments it kept in turn. Each segment is kept word for word, in the order it is
 /// first met. One that `head` or another segment already holds in full is left out, so a
 /// record two sides both kept appears once and a newer segment that holds an older one in
-/// full takes its place.
+/// full takes its place. Each piece of a segment (split at [`MERGE_MARK`]) that the note
+/// already holds, in the new text or a segment before it, is left out too (#888).
 pub(crate) fn keep_notes(head: &str, earlier: Option<&str>, theirs: Option<&str>) -> String {
     let earlier = earlier.map_or("", |n| split_kept(n).1);
     let theirs = theirs.map_or("", str::trim);
@@ -291,10 +319,36 @@ pub(crate) fn keep_notes(head: &str, earlier: Option<&str>, theirs: Option<&str>
             None => kept.push(s),
         }
     }
+    // #888: each kept segment is also checked piece by piece (split at [`MERGE_MARK`])
+    // against everything already in the note, the new text and the segments before it: a
+    // piece already there is left out, so a kept record that repeats this branch's own text,
+    // or another kept segment's, adds only what is new. A segment with nothing new is left
+    // out, and one with every piece new is kept word for word.
     let mut note = head.to_owned();
     for k in kept {
+        let pieces: Vec<(usize, &str)> = k
+            .split(MERGE_MARK)
+            .map(str::trim)
+            .enumerate()
+            .filter(|(_, p)| !p.is_empty() && !note.contains(p))
+            .collect();
+        if pieces.is_empty() {
+            continue;
+        }
         note.push_str(KEPT_MARK);
-        note.push_str(k);
+        if pieces.len() == k.split(MERGE_MARK).count() {
+            note.push_str(k);
+            continue;
+        }
+        for (n, (i, p)) in pieces.into_iter().enumerate() {
+            // A piece that followed a merge mark keeps that label.
+            note.push_str(match (n, i) {
+                (0, 0) => "",
+                (0, _) => "merge: ",
+                _ => MERGE_MARK,
+            });
+            note.push_str(p);
+        }
     }
     note
 }
@@ -305,7 +359,9 @@ pub(crate) fn keep_notes(head: &str, earlier: Option<&str>, theirs: Option<&str>
 /// re-verify after the merge replaced the branch's note), gets [`merge_note`] of the branch's
 /// note on it. `merged` is the section's stamp on the merged side: an input whose hash equals
 /// that side's entry gets that entry as it is, since this branch changes nothing in it
-/// (#596). The rest are kept, and removed inputs dropped, as `restamp` does.
+/// (#596), unless the entry there is still the branch's own from before the merge and the
+/// fuller record ([`holds_more`]), which `merge-main` kept (#874). The rest are kept, and
+/// removed inputs dropped, as `restamp` does.
 pub(crate) fn restamp_merge(
     old: Option<&Stamp>,
     inputs: &BTreeMap<String, String>,
@@ -320,6 +376,11 @@ pub(crate) fn restamp_merge(
             let own = branch.and_then(|b| b.get(k));
             let theirs = merged.and_then(|m| m.get(k)).filter(|e| &e.hash == h);
             let e = match (theirs, old.and_then(|o| o.get(k))) {
+                // The branch's own entry from before the merge, which `merge-main` kept as the
+                // fuller record, stays (#874).
+                (Some(t), Some(e)) if e.hash == t.hash && own == Some(e) && holds_more(e, t) => {
+                    e.clone()
+                }
                 (Some(t), _) => t.clone(),
                 (None, Some(e)) if &e.hash == h && own.is_none_or(|o| &o.hash == h) => e.clone(),
                 _ => Entry {
@@ -387,6 +448,12 @@ mod tests {
                 })
                 .collect(),
         };
+        // #874: a note that holds the other side's in full, and more, is the fuller record.
+        let full = Entry {
+            hash: "b3:7".into(),
+            by: Some("agent:wave".into()),
+            note: Some("wave's own | kept from the merged side: main's note".into()),
+        };
         let mut ours = ledger(vec![
             (
                 "S#a",
@@ -395,6 +462,8 @@ mod tests {
                     ("file:a.rs", e("b3:2", Some("branch"))),
                     ("file:b.rs", e("b3:3", Some("branch"))),
                     ("file:new.rs", e("b3:4", Some("branch"))),
+                    ("file:hold.rs", full.clone()),
+                    ("file:none.rs", e("b3:8", None)),
                 ],
             ),
             ("T#a", vec![("body", e("b3:5", Some("branch")))]),
@@ -407,6 +476,8 @@ mod tests {
                     ("body", e("b3:1", Some("main"))),
                     ("file:a.rs", e("b3:2", None)),
                     ("file:b.rs", e("b3:9", Some("main"))),
+                    ("file:hold.rs", e("b3:7", Some("main"))),
+                    ("file:none.rs", e("b3:8", Some("main"))),
                 ],
             ),
             ("T#a", vec![("body", e("b3:5", Some("branch")))]),
@@ -414,8 +485,14 @@ mod tests {
         assert_eq!(ours.adopt(&theirs), vec!["S#a".to_owned()]);
         let s = &ours.sections["S#a"];
         assert_eq!(s["body"], e("b3:1", Some("main")));
-        // A hash-only entry on the other side is taken too: the input is the same.
-        assert_eq!(s["file:a.rs"], e("b3:2", None));
+        // A hash-only entry on the other side has no note to keep: ours holds more (#874).
+        assert_eq!(s["file:a.rs"], e("b3:2", Some("branch")));
+        assert_eq!(s["file:hold.rs"], full, "ours holds main's note in full");
+        assert_eq!(
+            s["file:none.rs"],
+            e("b3:8", Some("main")),
+            "ours has no note"
+        );
         assert_eq!(s["file:b.rs"], e("b3:3", Some("branch")), "another hash");
         assert_eq!(
             s["file:new.rs"],
@@ -734,15 +811,65 @@ mod tests {
     fn merge_notes_keep_the_branch_part() {
         let m = MERGE_MARK;
         assert_eq!(merge_note(Some("pr part"), "now"), format!("pr part{m}now"));
+        // #874: every earlier merge segment is kept, and the new one appended.
         assert_eq!(
             merge_note(Some(&format!("pr part{m}earlier")), "now"),
-            format!("pr part{m}now")
+            format!("pr part{m}earlier{m}now")
+        );
+        assert_eq!(
+            merge_note(Some(&format!("wave{m}one{m}two")), "now"),
+            format!("wave{m}one{m}two{m}now")
         );
         assert_eq!(merge_note(None, "now"), "merge: now");
         assert_eq!(
-            merge_note(Some(&format!("{m}earlier")), "now"),
-            "merge: now"
+            merge_note(Some("merge: earlier"), "now"),
+            format!("merge: earlier{m}now")
         );
+        assert_eq!(
+            merge_note(Some(&format!("{m}earlier")), "now"),
+            format!("merge: earlier{m}now")
+        );
+        // Running the same `--merge` again adds nothing.
+        assert_eq!(
+            merge_note(Some(&format!("pr part{m}now")), "now"),
+            format!("pr part{m}now")
+        );
+        assert_eq!(merge_note(Some("merge: now"), "now"), "merge: now");
+    }
+
+    /// #874: on a sync PR, an input whose hash equals the merged side's keeps the branch's own
+    /// entry from before the merge when its note holds the merged side's in full and more;
+    /// an entry a verify after the merge wrote, or one that holds less, takes the merged side's.
+    #[test]
+    fn restamp_merge_keeps_the_fuller_own_entry_at_the_same_hash() {
+        let e = |h: &str, n: &str| Entry {
+            hash: h.to_owned(),
+            by: Some("agent:x".to_owned()),
+            note: Some(n.to_owned()),
+        };
+        let now = inputs(&[("body", "b3:1")]);
+        let main = Stamp::from([("body".to_owned(), e("b3:1", "main's note"))]);
+        let wave = Stamp::from([(
+            "body".to_owned(),
+            e(
+                "b3:1",
+                "wave's note | kept from the merged side: main's note",
+            ),
+        )]);
+        let got = restamp_merge(Some(&wave), &now, Some(&wave), Some(&main), "agent:y", "m");
+        assert_eq!(got, wave, "the wave's fuller record stays");
+        let later = Stamp::from([(
+            "body".to_owned(),
+            e(
+                "b3:1",
+                "a re-verify | kept from the merged side: main's note",
+            ),
+        )]);
+        let got = restamp_merge(Some(&later), &now, Some(&wave), Some(&main), "agent:y", "m");
+        assert_eq!(got, main, "written after the merge (#596)");
+        let thin = Stamp::from([("body".to_owned(), e("b3:1", "wave's note"))]);
+        let got = restamp_merge(Some(&thin), &now, Some(&thin), Some(&main), "agent:y", "m");
+        assert_eq!(got, main, "holds less than main's");
     }
 
     #[test]
