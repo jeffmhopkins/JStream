@@ -33,8 +33,8 @@
 //!   engine can open: H.264 and AAC, with bit rates and keyframe interval in range.
 //! - Every output's video mix exists, every mix passes `VideoMix::problem`, and the
 //!   scene a `scene` mix shows exists.
-//! - Every item's opacity is in [0, 1], and its blend mode is one the compositor draws
-//!   (`normal` so far).
+//! - Every item's opacity is in [0, 1]. Every blend mode is one the compositor draws
+//!   (ADR-0082).
 //! - A scene's filters and an item's effects (ADR-0065) are video chains: their audio
 //!   chains are empty, each holds at most [`MAX_CHAIN_FILTERS`] filters of
 //!   `video_filter` kinds, and filter IDs are unique within the owner. A keyframe scene

@@ -343,8 +343,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   shows the prototype's 1200 px while the item has none, and the first change that puts
   the item in 3D sets it, since without one the engine draws 3D orthographically, where
   Depth has no effect), Crop
-  (`item.set_crop`, in source pixels), Blending (the nine modes, of which the engine
-  draws only Normal so the others are disabled, and Opacity, `item.set_opacity`) and
+  (`item.set_crop`, in source pixels), Blending (the nine modes, `item.set_blend`, each drawn by
+  the engine since 0.47, and Opacity, `item.set_opacity`) and
   Scene switches (folded: the item's delay, easing, glide and appear and disappear
   effects, each change one `item.set_transition` with the whole settings, "customised"
   while they differ from the defaults; not shown in a keyframe, whose items switch as

@@ -1479,7 +1479,6 @@ impl Collection {
                 let opacity = opacity.unwrap_or(Finite32::ONE);
                 check_opacity(opacity, at)?;
                 let blend = blend.unwrap_or_default();
-                check_blend(blend, at)?;
                 self.scenes[index].items.push(item_id.clone());
                 self.items.insert(
                     item_id.clone(),
@@ -1616,7 +1615,6 @@ impl Collection {
             }
             Edit::ItemSetBlend { item_id, blend } => {
                 let item = self.existing_item(&item_id)?;
-                check_blend(blend, at)?;
                 let old = std::mem::replace(&mut item.blend, blend);
                 vec![Edit::ItemSetBlend {
                     item_id,
@@ -2507,22 +2505,6 @@ fn restore_item(
 fn check_opacity(opacity: Finite32, at: usize) -> Result<(), ProtocolError> {
     if !(0.0..=1.0).contains(&opacity.get()) {
         return Err(invalid(at, "opacity", "must be from 0 to 1"));
-    }
-    Ok(())
-}
-
-/// Rejects every blend mode but `normal`, which is all the engine draws, as
-/// `jstream-graph` does.
-fn check_blend(blend: BlendMode, at: usize) -> Result<(), ProtocolError> {
-    if !blend.is_normal() {
-        return Err(invalid(
-            at,
-            "blend",
-            format!(
-                "`{}` is not drawn by the compositor yet; only `normal` is",
-                blend.as_str()
-            ),
-        ));
     }
     Ok(())
 }

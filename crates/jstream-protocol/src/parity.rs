@@ -797,16 +797,6 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
             invalid("edits.0.opacity", "must be from 0 to 1"),
         ),
         (
-            Batch::single(Edit::ItemSetBlend {
-                item_id: ItemId::new("i1"),
-                blend: BlendMode::Multiply,
-            }),
-            invalid(
-                "edits.0.blend",
-                "`multiply` is not drawn by the compositor yet; only `normal` is",
-            ),
-        ),
-        (
             Batch::single(Edit::ItemSetGeometry {
                 item_id: ItemId::new("i1"),
                 scene_id: None,

@@ -222,6 +222,7 @@ fn compositor_output_converts_like_its_readback() {
         }),
         crop: Crop::NONE,
         opacity: 0.75,
+        blend: crate::BlendMode::Normal,
         visible: true,
     }];
     let scene = Scene {

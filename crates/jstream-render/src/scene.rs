@@ -1,6 +1,7 @@
 //! The snapshot the engine hands the compositor: one canvas, a clear colour, a stack of items.
 
 use jstream_media::FrameSize;
+use jstream_protocol::BlendMode;
 
 use crate::image::Image;
 
@@ -137,6 +138,9 @@ pub struct Item<'a> {
     pub crop: Crop,
     /// Straight-alpha multiplier in `0..=1`.
     pub opacity: f32,
+    /// How it composites onto what is below it (ADR-0082). [`BlendMode::Normal`] is
+    /// source-over.
+    pub blend: BlendMode,
     /// When false, the item is not drawn and its frame sync is not staged.
     pub visible: bool,
 }

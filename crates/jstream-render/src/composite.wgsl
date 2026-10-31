@@ -1,5 +1,7 @@
-// One textured polygon. Positions are clip-space (y up). The fragment outputs premultiplied
-// linear colour; the FP16 target blends with One, OneMinusSrcAlpha.
+// One textured polygon. Positions are clip-space (y up). `fs` outputs premultiplied
+// linear colour, which the pipeline's blend state composites (ADR-0082): One,
+// OneMinusSrcAlpha for `normal`. The `fs_<mode>` entry points read the backdrop, a copy of
+// the target's texels under the item, and write the composited result in place.
 //
 // `w` is ADR-0050's homogeneous coordinate, 1 for a 2D item. The vertex writes
 // clip = (pos * w, 0, w): the GPU divides by w, giving back the projected point, and
@@ -83,8 +85,8 @@ fn edge(e: vec3<f32>, at: vec2<f32>) -> f32 {
 @group(0) @binding(0) var tex: texture_2d<f32>;
 @group(0) @binding(1) var samp: sampler;
 
-@fragment
-fn fs(in: VsOut) -> @location(0) vec4<f32> {
+// The item's premultiplied linear colour at this fragment, coverage and opacity applied.
+fn source(in: VsOut) -> vec4<f32> {
     let uv = clamp(in.uv, in.uv_bounds.xy, in.uv_bounds.zw);
     let c = textureSample(tex, samp, uv);
     var rgb = c.rgb;
@@ -105,4 +107,101 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
     );
     let coverage = clamp(d + 0.5, 0.0, 1.0);
     return vec4<f32>(rgb, alpha) * (in.opacity * coverage);
+}
+
+@fragment
+fn fs(in: VsOut) -> @location(0) vec4<f32> {
+    return source(in);
+}
+
+// The modes that read the backdrop. It is bound only to their pipelines.
+@group(1) @binding(0) var backdrop: texture_2d<f32>;
+
+// IEC 61966-2-1 encode, of a value in [0, 1].
+fn linear_to_srgb(c: vec3<f32>) -> vec3<f32> {
+    let low = c * 12.92;
+    let high = 1.055 * pow(c, vec3<f32>(1.0 / 2.4)) - vec3<f32>(0.055);
+    return select(high, low, c <= vec3<f32>(0.0031308));
+}
+
+fn unpremultiply(c: vec4<f32>) -> vec3<f32> {
+    return select(vec3<f32>(0.0), c.rgb / c.a, c.a > 0.0);
+}
+
+const DARKEN: u32 = 0u;
+const LIGHTEN: u32 = 1u;
+const OVERLAY: u32 = 2u;
+const DIFFERENCE: u32 = 3u;
+const EXCLUSION: u32 = 4u;
+
+// The mixed colour B(cs, cb) of the W3C compositing spec, straight. Darken and lighten
+// take linear light; overlay, difference and exclusion take sRGB-encoded values in [0, 1].
+fn mix_colour(mode: u32, cs: vec3<f32>, cb: vec3<f32>) -> vec3<f32> {
+    switch mode {
+        case DARKEN: {
+            return min(cs, cb);
+        }
+        case LIGHTEN: {
+            return max(cs, cb);
+        }
+        case OVERLAY: {
+            // Hard light with the layers swapped: multiply below a backdrop of 0.5,
+            // screen above it.
+            let multiply = 2.0 * cs * cb;
+            let screen = vec3<f32>(1.0) - 2.0 * (vec3<f32>(1.0) - cs) * (vec3<f32>(1.0) - cb);
+            return select(screen, multiply, cb <= vec3<f32>(0.5));
+        }
+        case DIFFERENCE: {
+            return abs(cs - cb);
+        }
+        default: {
+            return cs + cb - 2.0 * cs * cb;
+        }
+    }
+}
+
+// The W3C source-over composite of a separable mode, premultiplied:
+// s·(1 − αb) + b·(1 − αs) + αs·αb·B(cs, cb), alpha αs + αb − αs·αb.
+fn blended(in: VsOut, mode: u32) -> vec4<f32> {
+    let s = source(in);
+    let b = textureLoad(backdrop, vec2<i32>(in.clip.xy), 0);
+    var cs = unpremultiply(s);
+    var cb = unpremultiply(b);
+    var mixed: vec3<f32>;
+    if mode >= OVERLAY {
+        // These blend in sRGB-encoded space, where their midpoint is perceptual, as in
+        // other editors; the encoding needs [0, 1], so brighter-than-white is clamped.
+        cs = linear_to_srgb(clamp(cs, vec3<f32>(0.0), vec3<f32>(1.0)));
+        cb = linear_to_srgb(clamp(cb, vec3<f32>(0.0), vec3<f32>(1.0)));
+        mixed = srgb_to_linear(mix_colour(mode, cs, cb));
+    } else {
+        mixed = mix_colour(mode, cs, cb);
+    }
+    let rgb = s.rgb * (1.0 - b.a) + b.rgb * (1.0 - s.a) + mixed * (s.a * b.a);
+    return vec4<f32>(rgb, s.a + b.a - s.a * b.a);
+}
+
+@fragment
+fn fs_darken(in: VsOut) -> @location(0) vec4<f32> {
+    return blended(in, DARKEN);
+}
+
+@fragment
+fn fs_lighten(in: VsOut) -> @location(0) vec4<f32> {
+    return blended(in, LIGHTEN);
+}
+
+@fragment
+fn fs_overlay(in: VsOut) -> @location(0) vec4<f32> {
+    return blended(in, OVERLAY);
+}
+
+@fragment
+fn fs_difference(in: VsOut) -> @location(0) vec4<f32> {
+    return blended(in, DIFFERENCE);
+}
+
+@fragment
+fn fs_exclusion(in: VsOut) -> @location(0) vec4<f32> {
+    return blended(in, EXCLUSION);
 }

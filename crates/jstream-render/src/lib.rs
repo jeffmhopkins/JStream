@@ -8,6 +8,7 @@
 
 #![forbid(unsafe_code)]
 
+mod blend;
 mod cache;
 mod color;
 mod compositor;
@@ -31,6 +32,7 @@ pub use filter::{
 };
 pub use gpu::OpenOptions;
 pub use image::Image;
+pub use jstream_protocol::BlendMode;
 pub use scene::{Color, Crop, Item, LegacyTransform, Output, Placement, Scene, Snapshot};
 
 #[cfg(test)]
