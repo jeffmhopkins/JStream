@@ -445,8 +445,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
   and hotkey bindings (protocol 0.25), as the organisation bullet above describes.
   Not yet: settings migrations between kind versions (a source saved at another
-  version is refused on load), blend modes
-  other than `normal`, a keyframe scene's overrides of a group's
+  version is refused on load), a keyframe scene's overrides of a group's
   children (so `scene.set_role` and removing or retargeting a group's item drop none
   yet, #702), `background`, output audio buses and chains, the `YouTube` kind, a virtual
   camera's video mix (it always shows the program), and everything outside `sources`,

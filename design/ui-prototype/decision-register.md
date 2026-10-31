@@ -633,9 +633,9 @@ and Exclusion (`BLEND_NAMES`, `P:879`; mapped to CSS `mix-blend-mode`, `D:1095`)
 working format" (line 199).
 
 **Status.** Decided by [ADR-0082](../../docs/adr/0082-blend-modes-drawn.md), which
-takes the recommendation below, but draws screen and multiply with fixed-function
-states and darken and lighten from the destination copy, since min and max are wrong
-where either side is translucent.
+takes the recommendation below, but draws screen with a fixed-function state and darken
+and lighten from the destination copy, since min and max are wrong where either side is
+translucent.
 
 **Consequences.**
 - Normal, Additive, Darken/Lighten (min/max) and Multiply map to fixed-function blend
