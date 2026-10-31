@@ -1784,6 +1784,11 @@ async fn run_preview(
             if subscribe(close).await.is_none() {
                 return;
             }
+            // A switch while the close was on its way has closed this channel and
+            // opened the next one: reopening it would leave a stream nobody draws.
+            if stream.try_get_value().flatten().map(|s| s.channel) != Some(jpeg.channel) {
+                continue;
+            }
             if let Some(Err(error)) = subscribe(jpeg.subscribe()).await {
                 state.try_set(PreviewState::Unavailable(error.to_string()));
             }

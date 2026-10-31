@@ -217,7 +217,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   scene, which the list then shows, since the engine draws a nested scene as one item.
   A scene that one of the object's filters uses (a scene mask, or another kind's scene
   setting, on its source's chain or its own effects) is a child row under it with a role
-  badge (OB-05); they start open, the object's caret folds them, and a click selects the
+  badge (OB-05); under a plain object they start open, under a nested scene they open
+  with its row, the object's caret folds them, and a click selects the
   scene. Each panel has a search box and a filter for
   favourites (the star, `scene.set_meta` or `source.set_meta`), applied in the page; each
   filter also keeps the rows carrying any checked label, and its "Edit labels…" opens
