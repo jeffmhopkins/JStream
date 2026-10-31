@@ -3,8 +3,8 @@
 //! an encoder and JPEG otherwise; a reader that falls behind loses frames up to a
 //! keyframe, and the streams end with `preview.unsubscribe` or the session. A stream may
 //! show one scene instead, planned for it alone, and ends when the scene is deleted.
-//! The preview captures the displays and windows the program and those scenes show
-//! itself.
+//! The preview captures the displays, windows and webcams the program and those scenes
+//! show itself.
 
 use super::{add, batch, block_on, code, connected, create, edits, live, moved, webcam};
 use crate::preview::{BINARY_BUFFER, KEYFRAME_EVERY, OpenPreviewDraw, PreviewDraw};
@@ -505,34 +505,31 @@ fn screen() -> Edit {
     }
 }
 
-/// Reads `frames` until a picture had a frame of the primary display, failing if one
-/// had a frame of a video device.
-fn until_display_drawn(frames: &mut BinaryStream, seen: &mpsc::Receiver<Vec<CaptureSpec>>) {
+/// Reads `frames` until the pictures drawn so far had a frame of each of `wanted`.
+fn until_drawn(
+    frames: &mut BinaryStream,
+    seen: &mpsc::Receiver<Vec<CaptureSpec>>,
+    wanted: &[CaptureSpec],
+) {
     let deadline = Instant::now() + WAIT;
+    let mut drawn = Vec::new();
     loop {
-        let drawn: Vec<CaptureSpec> = seen.try_iter().flatten().collect();
-        assert!(
-            !drawn
-                .iter()
-                .any(|spec| matches!(spec, CaptureSpec::Device(_))),
-            "the preview drew a webcam: {drawn:?}"
-        );
-        if drawn.contains(&CaptureSpec::Display(None)) {
+        drawn.extend(seen.try_iter().flatten());
+        if wanted.iter().all(|spec| drawn.contains(spec)) {
             return;
         }
         assert!(
             Instant::now() < deadline,
-            "the display never reached the preview"
+            "{wanted:?} never all reached the preview: {drawn:?}"
         );
         frame(frames);
     }
 }
 
-/// A display the program shows is drawn into the preview with no output running: the
-/// preview thread captures it itself. A webcam opens once, so the preview leaves it to
-/// the program stage and never opens it.
+/// A display and a webcam the program shows are drawn into the preview with no output
+/// running: the preview thread captures them itself, opening the webcam once.
 #[test]
-fn the_preview_captures_the_displays_the_program_shows() {
+fn the_preview_captures_what_the_program_shows() {
     let devices = fake::FakeVideoDevices::new(FakeClock::new(jstream_media::Timebase::MICROS));
     let (engine, seen) = recording_captures(&devices);
     let control = connected(&engine);
@@ -547,8 +544,12 @@ fn the_preview_captures_the_displays_the_program_shows() {
     ];
     let rev = batch(&control, edits(scene)).expect("scene");
     frame_at(&mut frames, rev);
-    until_display_drawn(&mut frames, &seen);
-    assert_eq!(devices.open_streams(), 0, "the preview opened the webcam");
+    until_drawn(
+        &mut frames,
+        &seen,
+        &[CaptureSpec::Display(None), CaptureSpec::Device(None)],
+    );
+    assert_eq!(devices.open_streams(), 1, "the webcam opens once");
 }
 
 /// A scene's stream (a projector of a scene off program) draws the display that scene
@@ -568,6 +569,6 @@ fn a_scene_stream_draws_its_display() {
     ];
     batch(&control, edits(scenes)).expect("scenes");
     act(&control, subscribe_scene(1, "b")).expect("subscribed");
-    until_display_drawn(&mut frames, &seen);
+    until_drawn(&mut frames, &seen, &[CaptureSpec::Display(None)]);
     assert!(hub.load().shot().captures().is_empty());
 }

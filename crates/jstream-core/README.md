@@ -190,7 +190,8 @@ state machine. Contents:
   (`Control::binary`), in H.264 on a software `jstream-encode` session when the
   platform has an encoder and in JPEG otherwise (`preview/jpeg.rs`, a baseline
   encoder of its own), drawn on the engine's `jstream-preview` thread with its own
-  compositor and its own captures of the displays and windows the mix shows (see
+  compositor and its own captures of what the mix shows, a webcam's one open shared
+  with the program stage (`runtime/devices.rs`; see
   *Preview streams* in [Design](#design)).
 - **Transitions** (`transition.rs`, [ADR-0029](../../docs/adr/0029-transitions.md)):
   which preset a switch runs (`resolve`), and the plan that pairs what is on screen
@@ -290,8 +291,10 @@ state machine. Contents:
   pointer as each source's `show_cursor` says, stopping it when its source leaves
   and starting it again after a failed start or a lost target, and opening each webcam
   on program from the fake video devices, shared between sources, closed when it leaves
-  or the output stops, and closed when unplugged with the output staying up
-  (`src/tests/cpu_pipeline/captures.rs`), the format a webcam opens in, with and
+  or the output stops, closed when unplugged with the output staying up, and shared
+  with a preview stream that showed it first (`src/tests/cpu_pipeline/captures.rs`),
+  one open of a device shared by two readers, each taking each frame once, closed
+  with its last reader, and a lost device failing every reader (`runtime/devices.rs`), the format a webcam opens in, with and
   without an MJPEG decoder, its frames, decoded or not, read as RGBA, and a webcam
   left running, and not opened twice, when the GPU path is left (`runtime/captures.rs`), which capture path an output takes and each
   fallback, an output compositing GPU capture frames (opaque, whatever alpha the
@@ -385,8 +388,8 @@ state machine. Contents:
   the platform fakes starting at a keyframe and JPEG beside it for a client that asks,
   the subscription checks and limit, unsubscribe and the session's end, and a reader
   that stops reading holding a bounded queue and resuming in order, a live value
-  sent at once with the same `rev`, a display the program shows captured by the
-  preview itself with a webcam beside it never opened, and a scene's stream: a scene
+  sent at once with the same `rev`, a display and a webcam the program shows captured
+  by the preview itself, the webcam opened once, and a scene's stream: a scene
   off program shown and followed, then no longer planned once closed or once its
   session ends, a scene the collection doesn't have refused, a deleted scene's stream
   ended, its display drawn from the preview's own capture, and nothing captured for it
@@ -1320,19 +1323,27 @@ otherwise, as it does when more than 30 draws in a row fail, or after a panic on
 frame finds the queue full, the stream's frames are dropped up to the next keyframe,
 which the hub then forces (`KeyframeGate`).
 
-The hub captures the displays and windows the program mix and each streamed scene
-show itself, so they show with no output running: once the engine has backends, it
+The hub captures the displays, windows, webcams and capture cards the program mix and
+each streamed scene show itself, so they show with no output running: once the engine has backends, it
 runs the program stage's `RenderCaptures` (`runtime/captures.rs`) on a
 `jstream-capture` thread of its own, started the first time a stream shows one and
 stopped when the `jstream-preview` thread ends (its last stream gone), on the CPU path
-(its compositor isn't on the platform's GPU context). The program's displays and
-windows are captured only while a stream shows the program. A stream showing a capture
+(its compositor isn't on the platform's GPU context). The program's captures run only
+while a stream shows the program. A stream showing a capture
 is due when one of the captures it shows took a new frame since its last picture
 (`CaptureFrame::version`), so a still desktop costs no redraw. While an output runs, its stage
 captures the same display again. The sizes these captures see go nowhere; `source.sizes`
-reports the program stage's. A webcam or capture card opens once, so the preview leaves
-it to the program stage and draws it as nothing, as `video.snapshot` draws every
-capture. A `scene.switch` republishes the render
+reports the program stage's. A webcam or capture card opens once, so the two share it:
+the engine wraps the backends' `VideoDevices` in `SharedVideoDevices`
+(`runtime/devices.rs`), whose open of a device already open returns another reader of
+the same stream, in the format it was opened in. Each reader takes every frame that
+arrives after it joined, once; the newest frame waits in the device's slot until every
+reader has taken it or a newer one replaces it, and the last reader moves it out while
+the others copy it, outside the lock. A read takes the device's lock with `try_lock`
+and reads nothing when the other reader holds it, so the render thread never waits on
+the preview thread; the frame is still there on its next tick. The device closes with
+its last reader, and once it is lost every reader reports it and the next open opens it
+afresh. `video.snapshot` still draws every capture as nothing. A `scene.switch` republishes the render
 snapshot, so the preview shows the transition onto the new program scene, then the
 scene, with the same `rev` (the switch changes none). Not yet: video mixes other than
 program, sources on their own, and the post-master stage, which come with the video mixes and the master chain.
@@ -2359,7 +2370,9 @@ capture's frame size, only when it changes (the first frame, a resize, and none 
 capture is no longer wanted), on another such channel (`SizeChange`), so a steady size
 sends and allocates nothing. A capture restarting after a failure or a move off the GPU
 path keeps the size it had until a frame says otherwise. The primary display is looked up when its
-capture starts. A webcam or capture card is opened on the backends' `VideoDevices`, on
+capture starts. A webcam or capture card is opened on the backends' `VideoDevices`
+(shared with the preview thread's captures, `SharedVideoDevices`; see *Preview streams*
+in Design), on
 the CPU path, in the format `device_format` picks from those it lists: frames that arrive
 uncompressed as RGBA, BGRA or NV12 (YUY2 is delivered as NV12), the largest of at most
 1920x1080 (else the smallest), then the fastest. An empty `device` is the first device

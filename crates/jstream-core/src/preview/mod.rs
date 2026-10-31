@@ -36,14 +36,15 @@
 //! pacing live on the hub thread alone ([`Work`]), so a stream shared with its session
 //! holds only flags and its settings.
 //!
-//! **Captures.** The hub captures the displays and windows the program mix and each
-//! streamed scene show itself,
-//! on the CPU path, through the engine's capture backend ([`PreviewCapture`]), with the
-//! program stage's [`RenderCaptures`] on a `jstream-capture` thread of its own, so a
-//! display shows in the preview with no output running. While an output runs, its stage
-//! captures the same display again: each capture belongs to one consumer. A webcam or
-//! capture card opens once, so the preview leaves it to the program stage and draws it
-//! as nothing, as `video.snapshot` draws every capture. The program's captures run only
+//! **Captures.** The hub captures the displays, windows, webcams and capture cards the
+//! program mix and each streamed scene show itself, on the CPU path, through the
+//! engine's backends ([`PreviewCapture`]), with the program stage's [`RenderCaptures`]
+//! on a `jstream-capture` thread of its own, so they show in the preview with no output
+//! running. While an output runs, its stage captures the same display again: each
+//! display capture belongs to one consumer. A webcam or capture card opens once, so
+//! the engine's video-device backend shares that one open between the program stage
+//! and the hub (`runtime/devices.rs`). `video.snapshot` still draws every capture as
+//! nothing. The program's captures run only
 //! while a stream shows the program. A stream that shows a capture is due when one of
 //! the captures it shows took a new frame since its last picture.
 //!
@@ -79,7 +80,6 @@ use jstream_protocol::{
 use jstream_render::{Compositor, OpenOptions, ResourceCache};
 
 use jstream_platform::Capture;
-use jstream_sources::CaptureSpec;
 
 use crate::chain::Chains;
 use crate::lock;
@@ -564,11 +564,11 @@ struct HubState {
     capture: Option<PreviewCapture>,
 }
 
-/// The engine's capture backends, which the hub captures displays and windows with.
+/// The engine's capture backends, which the hub captures with.
 #[derive(Clone)]
 pub(crate) struct PreviewCapture {
     pub(crate) capture: Arc<dyn Capture>,
-    /// Never opened by the hub: a capture of [`CaptureSpec::Device`] is left out.
+    /// Shared with the program stage: a device opens once (`SharedVideoDevices`).
     pub(crate) devices: Arc<dyn jstream_platform::VideoDevices>,
     pub(crate) codecs: Arc<dyn Codecs>,
     /// The media clock's timebase, which [`PreviewSource::current`]'s time is on.
@@ -831,7 +831,6 @@ impl HubCaptures<'_> {
                 .into_iter()
                 .chain(scenes.values())
                 .flat_map(|snapshot| snapshot.shot().captures())
-                .filter(|key| captured(key))
                 .cloned()
                 .collect();
             self.of = Some((program.cloned(), Arc::clone(scenes)));
@@ -852,30 +851,20 @@ impl HubCaptures<'_> {
         }
     }
 
-    /// The newest frame version among the captures `snapshot` shows, when it shows one
-    /// the hub runs: a picture of it is due when that has moved since it was drawn.
-    /// Versions only grow, across every capture the hub runs.
+    /// The newest frame version among the captures `snapshot` shows, when it shows one:
+    /// a picture of it is due when that has moved since it was drawn. Versions only
+    /// grow, across every capture the hub runs.
     fn frames(&self, snapshot: &RenderSnapshot) -> Option<u64> {
         let running = self.running.as_ref()?;
-        let mut shown = snapshot
-            .shot()
-            .captures()
-            .iter()
-            .filter(|key| captured(key))
-            .peekable();
-        shown.peek()?;
-        Some(
+        let shown = snapshot.shot().captures();
+        (!shown.is_empty()).then(|| {
             shown
+                .iter()
                 .filter_map(|key| running.frame(key).map(|frame| frame.version))
                 .max()
-                .unwrap_or_default(),
-        )
+                .unwrap_or_default()
+        })
     }
-}
-
-/// Whether the hub captures `key`: a display or window, never a video device.
-fn captured(key: &CaptureKey) -> bool {
-    !matches!(key.spec, CaptureSpec::Device(_))
 }
 
 /// What the hub thread draws and encodes with, shared by every stream it serves.
