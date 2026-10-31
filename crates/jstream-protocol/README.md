@@ -183,7 +183,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.46 because of
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.47 because the engine
+  draws, and so accepts, every blend mode
+  ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md); no wire change); 0.46 added
   `preview.subscribe`'s `scene_id`, a preview stream of any scene, and its 16 streams a
   session ([Binary streams](#design)); 0.45 made scenes
   carry labels (`SceneMeta`'s `labels`, set by `scene.set_meta`;
@@ -589,8 +591,10 @@ All of this is added in 0.22. A placement has an `opacity`, an alpha multiplier 
 `BlendMode` (`normal`, `additive`, `multiply`, `screen`, `overlay`, `darken`, `lighten`,
 `difference`, `exclusion`; default `normal`). `item.add` takes both, optional;
 `item.set_opacity { item_id, scene_id?, opacity }` and `item.set_blend { item_id, blend }`
-set them. Out of range is `invalid_argument` on `edits.N.opacity`, and every mode but
-`normal` is `invalid_argument` on `edits.N.blend` until the compositor draws it.
+set them. Out of range is `invalid_argument` on `edits.N.opacity`. Before 0.47 every
+mode but `normal` was `invalid_argument` on `edits.N.blend`; from 0.47 the compositor
+draws all nine, in linear light except overlay, difference and exclusion, which blend
+sRGB-encoded values ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md)).
 `ItemInfo` reports both.
 
 A source has a video and an audio filter chain

@@ -1311,7 +1311,7 @@ mod property {
         let opacity = |rng: &mut Rng| {
             Finite32::new([0.0, 0.25, 0.5, 1.0, 1.5][rng.below(5)]).expect("finite")
         };
-        // Mostly `normal`; one in three a mode that isn't drawn yet.
+        // Mostly `normal`; one in three another mode.
         let blend = |rng: &mut Rng| {
             [
                 jstream_protocol::BlendMode::Normal,
@@ -3938,7 +3938,7 @@ fn item_info(graph: &Graph, item: &str) -> jstream_protocol::ItemInfo {
 }
 
 /// Opacity is checked to [0, 1], reported, and undone to the previous value; every blend
-/// mode but `normal` is refused, since the compositor doesn't draw it (ADR-0023 §1).
+/// mode is taken, since the compositor draws them all (ADR-0082), and undone to the last.
 #[test]
 fn opacity_and_blend_are_checked_reported_and_undone() {
     let mut g = fixture();
@@ -3982,14 +3982,12 @@ fn opacity_and_blend_are_checked_reported_and_undone() {
         applied.inverse.edits,
         vec![set_blend("i", BlendMode::Normal)]
     );
-    for mode in [
-        BlendMode::Additive,
-        BlendMode::Multiply,
-        BlendMode::Exclusion,
-    ] {
-        let (field, reason) = invalid_reason(apply_err(&mut g, vec![set_blend("i", mode)]));
-        assert_eq!(field, "edits.0.blend");
-        assert!(reason.contains(mode.as_str()), "{reason}");
+    let mut last = BlendMode::Normal;
+    for mode in BlendMode::ALL.into_iter().skip(1) {
+        let applied = apply_ok(&mut g, vec![set_blend("i", mode)]);
+        assert_eq!(applied.inverse.edits, vec![set_blend("i", last)]);
+        assert_eq!(item_info(&g, "i").blend, mode);
+        last = mode;
     }
     assert!(matches!(
         apply_err(&mut g, vec![set_blend("ghost", BlendMode::Normal)]),
@@ -4001,7 +3999,8 @@ fn opacity_and_blend_are_checked_reported_and_undone() {
 }
 
 /// `item.add` takes an opacity and a blend mode, checked like the set edits, and
-/// `item.remove`'s inverse puts back an opacity other than 1.
+/// `item.remove`'s inverse puts back an opacity other than 1 and a mode other than
+/// `normal`.
 #[test]
 fn item_add_takes_opacity_and_blend_and_remove_restores_them() {
     let mut g = fixture();
@@ -4016,10 +4015,9 @@ fn item_add_takes_opacity_and_blend_and_remove_restores_them() {
     };
     let (field, _) = invalid_reason(apply_err(&mut g, vec![with(1.5, BlendMode::Normal)]));
     assert_eq!(field, "edits.0.opacity");
-    let (field, _) = invalid_reason(apply_err(&mut g, vec![with(0.5, BlendMode::Screen)]));
-    assert_eq!(field, "edits.0.blend");
-    apply_ok(&mut g, vec![with(0.5, BlendMode::Normal)]);
+    apply_ok(&mut g, vec![with(0.5, BlendMode::Screen)]);
     assert_eq!(item_info(&g, "i").opacity.get(), 0.5);
+    assert_eq!(item_info(&g, "i").blend, BlendMode::Screen);
 
     let before = g.state().clone();
     let removed = apply_ok(
@@ -4032,7 +4030,7 @@ fn item_add_takes_opacity_and_blend_and_remove_restores_them() {
         panic!("not an item.add: {:?}", removed.inverse.edits);
     };
     assert_eq!(*opacity, Finite32::new(0.5));
-    assert_eq!(*blend, None, "`normal` is the default, so it is left out");
+    assert_eq!(*blend, Some(BlendMode::Screen));
     apply_ok(&mut g, removed.inverse.edits);
     assert_eq!(g.state(), &before);
 }

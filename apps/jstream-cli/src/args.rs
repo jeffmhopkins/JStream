@@ -88,7 +88,7 @@ Edits (each is its protocol command name followed by its arguments):
   item.set_source <item-id> <source-id>
   item.set_opacity <item-id> <0..1>
   item.set_blend <item-id> normal|additive|multiply|screen|overlay|darken|lighten
-                 |difference|exclusion   (the engine draws only normal so far)
+                 |difference|exclusion
   item.set_crop <item-id> <left> <top> <right> <bottom>
   item.set_transform <item-id> <x> <y> <scale-x> <scale-y> <rotation-deg>
   item.set_geometry <item-id> <center-x> <center-y> <width> <height> <rotation-deg>

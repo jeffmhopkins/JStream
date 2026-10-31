@@ -169,7 +169,8 @@ the batch **touched**.
   persisted with it (the collection file writes them only when set).
   `item.set_opacity` (optionally addressed by `scene_id`, like the placement edits) and
   `item.add`'s `opacity` accept 0 to 1; `item.set_blend` and `item.add`'s `blend`
-  accept only `normal` until the compositor draws the other modes. Each is undone by
+  accept every mode, which the compositor draws
+  ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md)). Each is undone by
   the previous value, and removing an item restores both.
 - **Filters** (`filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
   every filter edit first refuses a keyframe scene as the owner (`invalid_argument` on
@@ -560,7 +561,7 @@ Planned, and kept possible by the private fields of the model types:
 - **Kind versions.** The engine's kinds come from `jstream-sources`. The collection file
   records each source's kind version but refuses a mismatch: settings migrations per
   kind, and keeping the data of a source whose kind is missing, come later.
-- Blend modes other than `normal` on placements. Legacy placements go in 1.0, whose
+- Legacy placements go in 1.0, whose
   collection migration converts them
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md) decision 5).
 - Overrides of a group's children in a keyframe scene (ADR-0024 §2), and the drops

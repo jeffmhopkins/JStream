@@ -15,6 +15,9 @@
 //!   that `video.snapshot` asks for, so the time includes the GPU finishing the frame.
 //! - `composite_1080p_submit`: the same frame without readback, then a wait for the queue
 //!   to drain: the encoder path.
+//! - `composite_1080p_blend`: the submit frame of 4 items, each drawn with one blend
+//!   mode: `normal`, `multiply` (two fixed-function draws) and `overlay` (a backdrop
+//!   copy and a pass per item, ADR-0082).
 //! - `rewrite_rgba8_1080p`: refilling a 1080p upload in place (CPU premultiply in linear
 //!   light, then the queue write), as an image or browser source does on a new frame.
 
@@ -24,7 +27,7 @@ use std::io::Write;
 use criterion::{BenchmarkId, Criterion, criterion_main};
 use jstream_media::FrameSize;
 use jstream_render::{
-    Color, Compositor, Crop, Image, Item, LegacyTransform, OpenOptions, Placement, Scene,
+    BlendMode, Color, Compositor, Crop, Image, Item, LegacyTransform, OpenOptions, Placement, Scene,
 };
 
 const WIDTH: u32 = 1920;
@@ -92,6 +95,11 @@ fn images(compositor: &Compositor, count: usize) -> Vec<Image> {
 /// Items spread over the canvas, each a little rotated and scaled so sampling is not
 /// one texel per pixel, at 0.8 opacity so every one blends.
 fn items(images: &[Image]) -> Vec<Item<'_>> {
+    blended(images, BlendMode::Normal)
+}
+
+/// [`items`], each drawn with `blend`.
+fn blended(images: &[Image], blend: BlendMode) -> Vec<Item<'_>> {
     images
         .iter()
         .enumerate()
@@ -106,6 +114,7 @@ fn items(images: &[Image]) -> Vec<Item<'_>> {
                 }),
                 crop: Crop::NONE,
                 opacity: 0.8,
+                blend,
                 visible: true,
             }
         })
@@ -160,6 +169,24 @@ fn composite(c: &mut Criterion) {
                 wait(&compositor);
             });
         });
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("composite_1080p_blend");
+    group.sample_size(20);
+    for mode in [BlendMode::Normal, BlendMode::Multiply, BlendMode::Overlay] {
+        let items = blended(&images[..4], mode);
+        let scene = scene(&items);
+        group.bench_with_input(
+            BenchmarkId::new("mode", mode.as_str()),
+            &scene,
+            |b, scene| {
+                b.iter(|| {
+                    black_box(compositor.render(scene, false).expect("render"));
+                    wait(&compositor);
+                });
+            },
+        );
     }
     group.finish();
 }

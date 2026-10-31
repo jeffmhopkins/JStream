@@ -57,7 +57,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Theme and shared controls](#theme) | 8 | 8 | 0 | 0 | 0 | 0 |
 | [Header bar](#header) | 9 | 6 | 1 | 0 | 1 | 1 |
 | [Docking and layouts](#docking) | 10 | 8 | 2 | 0 | 0 | 0 |
-| [Canvas](#canvas) | 18 | 15 | 1 | 0 | 1 | 1 |
+| [Canvas](#canvas) | 18 | 16 | 1 | 0 | 0 | 1 |
 | [Context menus](#menus) | 8 | 4 | 4 | 0 | 0 | 0 |
 | [Dialogs and windows](#dialogs) | 8 | 5 | 2 | 0 | 1 | 0 |
 | [Scenes panel](#scenes) | 10 | 10 | 0 | 0 | 0 | 0 |
@@ -70,7 +70,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Transitions](#transitions) | 6 | 6 | 0 | 0 | 0 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
 | [Keyboard](#keyboard) | 7 | 5 | 0 | 1 | 0 | 1 |
-| **Total** | **130** | **105** | **11** | **1** | **9** | **4** |
+| **Total** | **130** | **106** | **11** | **1** | **8** | **4** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -166,7 +166,7 @@ Spec: [workspace › canvas structure](../design/ui-prototype/spec-workspace.md#
 | CV-12 | Nudge | Arrows move 1px, Shift 10px. | ✅ | |
 | CV-13 | Double-click | Opens the item's Properties (a reference opens its source's). | ✅ | Selects the item alone and opens its source's Properties dialog ([DL-02](#dialogs)), which is the same for every placement of the source. A nested scene opens the scene's Properties dialog ([DL-03](#dialogs)). |
 | CV-14 | Right-click | Opens the canvas context menu ([menus](#menus)). | ✅ | On an item, the selected items' menu, after selecting the item alone unless it was selected; on the frame and the margin, theirs ([CM-02](#menus)). |
-| CV-15 | Opacity, blend and 3D drawn | Items draw with their opacity, blend mode and 3D tilt. | 🔒 | The picture comes from the engine; it accepts only the `normal` blend, and 3D it can draw from protocol 0.34 (X1). |
+| CV-15 | Opacity, blend and 3D drawn | Items draw with their opacity, blend mode and 3D tilt. | ✅ | The picture comes from the engine. It draws every blend mode from protocol 0.47, in linear light except overlay, difference and exclusion, which blend in sRGB as other editors do ([ADR-0082](adr/0082-blend-modes-drawn.md)), and any 3D from 0.34 (X1). |
 | CV-16 | Keyframe banner | "◆ Keyframe of “<parent>”: only placement and visibility can change" while editing a keyframe. | ✅ | A keyframe scene shows its parent's items at its overrides, under the banner, and its edits are placement edits addressed to it (K1). Its drags commit without live values, which the engine refuses on a keyframe scene until #702. |
 | CV-17 | Privacy overlay | Blurred frame with "Privacy screen on · output blurred · mic muted". | ⏸ | Removed at the maintainer's request after the alpha: JStream has no privacy screen ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md) §4). Bringing it back is the maintainer's call. |
 | CV-18 | Half speed | Shift halves pointer speed for any drag but the marquee. | ✅ | The slow pointer follows the real one's movement, so pressing Shift mid-drag doesn't jump. |
@@ -272,7 +272,7 @@ in the Inspector until the Inspector's own rows say otherwise.
 | IN-04 | W/H link | Link toggle keeps the aspect ratio while editing W or H. | ✅ | On by default, kept while the panel is shown. |
 | IN-05 | 3D | Tilt, Turn, Depth, Perspective, folded by default. | ✅ | Folded by default, with the "in use" hint; each field is one `item.set_geometry` ([ADR-0050](adr/0050-3d-transforms-rendering.md)). Perspective shows the prototype's 1200 px while the item has none, and the first change that puts the item in 3D sets it, since without one the engine draws 3D orthographically, where Depth has no effect. |
 | IN-06 | Crop | Left, Right, Top, Bottom in px. | ✅ | `item.set_crop`, in source pixels. The canvas crops by dragging too (CV-08). |
-| IN-07 | Blending | Mode (9 modes) and Opacity %. | ✅ | Opacity is `item.set_opacity`. The select lists all nine modes; the engine accepts only `normal`, so the others are disabled until it draws them. |
+| IN-07 | Blending | Mode (9 modes) and Opacity %. | ✅ | Opacity is `item.set_opacity`. The select lists all nine modes, each sent as `item.set_blend`, and the engine draws them all (0.47, [ADR-0082](adr/0082-blend-modes-drawn.md)). |
 | IN-08 | Scene section | Objects count, "Used as a source in", hotkey. | ✅ | The Hotkey row lists the chords bound to the scene's `scene.switch`, each with × to unbind (`hotkey.clear`); Set key binds the next chord pressed (`hotkey.set`, after a `hotkey.clear` when it ran something else), and Escape cancels. A keyframe's header says “Keyframe of “<parent>””, and its item's blend mode is locked, with the prototype's note. |
 | IN-09 | Scene transitions | Transition in and out selects, with the "next scene's in wins" note. | ✅ | `scene.set_transitions`, with "Default (<name>)" for none and the folded hint. The presets come from the shared collection. |
 | IN-10 | Scene switches per item | Delay, easing, glide, appear and disappear effects. | ✅ | The "Scene switches" section, folded, with "customised" while any value differs from the default: Delay (0–3000 ms, step 10), Easing (Inherit, Ease in-out, Ease out, Linear, Spring), Glide to other scenes (Auto, Never), Appear and Disappear (Inherit, Fade, Scale, Slide, None). Each change sends `item.set_transition` with the whole settings. A keyframe ([SC-07](#scenes)) doesn't show it, since a keyframe changes only placement, visibility and opacity. |

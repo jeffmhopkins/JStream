@@ -13,6 +13,7 @@ use crate::{
     ResourceCache, Scene, Snapshot,
 };
 
+mod blend;
 mod three_d;
 
 /// A compositor whose device drops before the WARP lock.
@@ -109,6 +110,7 @@ fn item<'a>(image: &'a crate::Image, placement: Placement, crop: Crop, opacity: 
         placement,
         crop,
         opacity,
+        blend: crate::BlendMode::Normal,
         visible: true,
     }
 }

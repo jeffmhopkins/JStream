@@ -497,7 +497,7 @@ pub(crate) fn edits() -> Vec<Edit> {
             chord: Chord::new("Ctrl+Digit1"),
         },
     ];
-    // Every blend mode, though the engine draws only `normal` so far.
+    // Every blend mode, each of which the engine draws (ADR-0082).
     edits.extend(BlendMode::ALL.map(|blend| Edit::ItemSetBlend {
         item_id: ItemId::new("itm_3"),
         blend,

@@ -294,8 +294,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md)); only their audio chains
   hold filters until video mixes run the video ones, and their filters can't hold a
   reference (a scene, source, bus or asset) yet. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
-  multiplier in [0, 1]) and `blend` (default `normal`; a mode is rejected until the
-  compositor draws it). A scene's `filters` and a placement's `effects[]` are video filter
+  multiplier in [0, 1]) and `blend` (default `normal`; every mode is drawn,
+  [ADR-0082](adr/0082-blend-modes-drawn.md)). A scene's `filters` and a placement's `effects[]` are video filter
   chains, the owners `scene` and `item` of `filter.*`
   ([ADR-0065](adr/0065-scene-chains-and-item-effects.md); item effects are in v1 under
   [ADR-0068](adr/0068-item-effects-in-v1.md)). A reference in them is an edge of the
@@ -377,7 +377,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   scene, with `settings` checked against the kind's descriptor and stored complete, and
   its video and audio filter chains, each filter's settings checked the same way),
   scenes in display order, and items in stacking order with `source_id`, a placement,
-  `crop`, `visible`, `opacity` and `blend` (only `normal` is accepted), and its
+  `crop`, `visible`, `opacity` and `blend` (every mode, ADR-0082), and its
   `effects[]`, a scene's `filters` beside them. The placement is a `geometry` or, until 1.0, a
   legacy placement (protocol 0.3's 2D transform as written), and the collection has
   its `canvas` (protocol 0.11); any 3D geometry the compositor can draw is accepted from
@@ -445,8 +445,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
   and hotkey bindings (protocol 0.25), as the organisation bullet above describes.
   Not yet: settings migrations between kind versions (a source saved at another
-  version is refused on load), blend modes
-  other than `normal`, a keyframe scene's overrides of a group's
+  version is refused on load), a keyframe scene's overrides of a group's
   children (so `scene.set_role` and removing or retargeting a group's item drop none
   yet, #702), `background`, output audio buses and chains, the `YouTube` kind, a virtual
   camera's video mix (it always shows the program), and everything outside `sources`,
@@ -960,8 +959,10 @@ clipped by the near plane, with a per-vertex `w` for perspective-correct texturi
 analytic edge coverage, sampled from a mip chain of its cropped source (rebuilt on the
 GPU once per change to the source, so at most once per source and frame) with 16×
 anisotropic filtering. The engine accepts any 3D it can draw from protocol 0.34.
-Opacity is a straight multiplier in `[0, 1]` and the blend is premultiplied
-src-over. The composite pass writes premultiplied linear light into `Rgba16Float`; a
+Opacity is a straight multiplier in `[0, 1]`. The blend is the item's mode
+([ADR-0082](adr/0082-blend-modes-drawn.md)): fixed-function for `normal` (premultiplied
+src-over), `additive`, `screen` and `multiply`; the other five read a copy of the
+target under the item, and overlay, difference and exclusion mix sRGB-encoded values. The composite pass writes premultiplied linear light into `Rgba16Float`; a
 resolve pass un-premultiplies into
 `Rgba8UnormSrgb`, which a snapshot can read back. The device is the platform `GpuContext`
 when interop is present, and otherwise a device the crate opens with a hardware adapter
