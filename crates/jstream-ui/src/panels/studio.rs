@@ -888,8 +888,16 @@ impl Panel {
         duration_ms: Option<u32>,
     ) {
         self.changes.try_update_value(|n| *n += 1);
-        self.studio
-            .try_set_value(Some((program.clone(), preview.clone())));
+        // Before the first load answers there is no snapshot, so the program this event
+        // moves from is the one the last `studio.changed` stored (#925).
+        let before = self
+            .studio
+            .try_update_value(|studio| {
+                studio
+                    .replace((program.clone(), preview.clone()))
+                    .map(|(before, _)| before)
+            })
+            .flatten();
         let moved = self
             .snapshot
             .try_update(|snapshot| match snapshot {
@@ -899,7 +907,7 @@ impl Panel {
                     snapshot.preview = preview;
                     moved
                 }
-                None => false,
+                None => before.is_some_and(|before| before != program),
             })
             .unwrap_or_default();
         let (Some(to), Some(duration_ms)) = (program, duration_ms.filter(|&ms| ms > 0)) else {
@@ -1801,6 +1809,53 @@ mod tests {
             Some((Some(SceneId::new("b")), None))
         );
         assert_eq!(panel.changes.get_value(), 1);
+        assert!(panel.snapshot.get_untracked().is_none());
+    }
+
+    /// A cut that follows a transition, both before the first load has answered, ends
+    /// the transition: `moved` comes from the stored program when there is no snapshot
+    /// (#925).
+    #[test]
+    fn a_cut_before_the_first_load_ends_the_running_transition() {
+        use super::{Panel, Running};
+        use crate::app::SessionContext;
+        use leptos::prelude::*;
+
+        let panel = Panel {
+            session: SessionContext(StoredValue::new_local(None)),
+            snapshot: RwSignal::new(None),
+            kinds: RwSignal::new(Vec::new()),
+            chosen: RwSignal::new(None),
+            swap: RwSignal::new(false),
+            running: RwSignal::new(None),
+            problem: RwSignal::new(None),
+            loads: StoredValue::new(0),
+            changes: StoredValue::new(0),
+            studio: StoredValue::new(None),
+            transitions: StoredValue::new(0),
+        };
+        // The transition's own `studio.changed` would start a timer, which needs a
+        // browser, so its outcome is set by hand: "b" on program, transitioning to it.
+        panel
+            .studio
+            .set_value(Some((Some(SceneId::new("b")), None)));
+        panel.running.set(Some(Running {
+            to: SceneId::new("b"),
+            duration_ms: 1000,
+            seq: 1,
+        }));
+
+        // An event that keeps "b" on program leaves the transition running.
+        panel.studio_changed(Some(SceneId::new("b")), Some(SceneId::new("a")), None);
+        assert!(panel.running.get_untracked().is_some());
+
+        // A cut to "a" ends it.
+        panel.studio_changed(Some(SceneId::new("a")), None, None);
+        assert!(panel.running.get_untracked().is_none());
+        assert_eq!(
+            panel.studio.get_value(),
+            Some((Some(SceneId::new("a")), None))
+        );
         assert!(panel.snapshot.get_untracked().is_none());
     }
 
