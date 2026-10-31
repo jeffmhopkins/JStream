@@ -266,8 +266,9 @@ pub(crate) fn merge_note(earlier: Option<&str>, merge: &str) -> String {
 }
 
 /// Where a note turns from this branch's text to the merged side's notes it keeps (#840):
-/// each merged-side note follows this mark word for word, as that side wrote it, so a
-/// verify after a merge never drops the records a wave or `main` wrote on the same input.
+/// each merged-side note follows this mark as that side wrote it, apart from pieces the
+/// note already holds (#888), so a verify after a merge never drops the records a wave or
+/// `main` wrote on the same input.
 pub(crate) const KEPT_MARK: &str = " | kept from the merged side: ";
 
 /// A note split into this branch's text and the merged side's notes it keeps: everything
@@ -281,8 +282,8 @@ pub(crate) fn split_kept(note: &str) -> (&str, &str) {
 /// `head`, its new text, then each kept segment once (#842). The segments are those the
 /// entry's `earlier` note (this branch's own) kept, then `theirs`, the note the merged side
 /// wrote on the input since the branch left it, split at [`KEPT_MARK`] into its own text
-/// and the segments it kept in turn. Each segment is kept word for word, in the order it is
-/// first met. One that `head` or another segment already holds in full is left out, so a
+/// and the segments it kept in turn. Each segment is kept word for word, apart from the pieces
+/// left out below, in the order it is first met. One that `head` or another segment already holds in full is left out, so a
 /// record two sides both kept appears once and a newer segment that holds an older one in
 /// full takes its place. Each piece of a segment (split at [`MERGE_MARK`]) that the note
 /// already holds, in the new text or a segment before it, is left out too (#888).

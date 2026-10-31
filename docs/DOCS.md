@@ -64,15 +64,15 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
   `origin/main` (or, with `--from wave/<name>`, the wave a PR targets), resolves conflicts
   that are only between stamps or only inside `@generated` blocks, takes main's `by` and note
   for each ledger entry both sides recorded at the same content (unless the branch's note
-  holds main's in full and more), moves inline stamps a branch from before ADR-0053 still
+  holds main's in full and more, or main's has none), moves inline stamps a branch from before ADR-0053 still
   has, and lists the sections left stale: each stale input with the note the branch had
   written on it and the merged commits that changed it, then the PRs those commits came
   from. `docs verify --merge` then keeps those notes, every earlier merge's text included,
   and adds what the merge changed ([Verification notes](#notes)), and refuses an input whose file the branch changed after
   the merge. It and `--renote` list the merged PRs behind the entries they rewrite and
   name any the note leaves out. Every verify after the merge keeps the merged side's note
-  on each entry that side re-verified, each kept segment once and word for word
-  ([Verification notes](#notes)). `--per-input` gives each entry its own text from a
+  on each entry that side re-verified, each kept segment once, word for word apart from pieces
+  the note already holds (#888) ([Verification notes](#notes)). `--per-input` gives each entry its own text from a
   TOML table, the `--<mode>-file` options read the text from a file, `--merge --from`
   checks the merged branch, and every verify refuses while a merge is in progress, a flag
   given twice (a mode's text and its file count as one), and a note or `--by` that isn't
@@ -539,7 +539,8 @@ holds**. The note says what was checked and why it still holds, e.g.:
 - **The merged side's notes are kept** (#840). After the branch's own merge, every verify
   (`--note`, `--merge` or `--renote`) that rewrites an entry the merged side (main or the
   wave) re-verified since the branch left it ends the new note with that side's note, word
-  for word, after ` | kept from the merged side: `. The notes the branch's earlier note
+  for word apart from pieces the note already holds (#888), after
+  ` | kept from the merged side: `. The notes the branch's earlier note
   kept that way are carried too. Each kept segment (the text after each mark, up to the
   next one) appears once (#842): a segment the new text or another segment already holds
   in full is left out, and a newer one that holds older ones in full takes the first one's
