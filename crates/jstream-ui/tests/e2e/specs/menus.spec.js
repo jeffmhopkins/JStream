@@ -362,3 +362,27 @@ test('the header menus behave like a menu bar', async ({ page, daemon }) => {
   await page.keyboard.press('Control+ArrowRight');
   await expect(button('Layout')).toBeFocused();
 });
+
+test('an arrow key pressed before the next menu is drawn still moves along the bar', async ({ page, daemon }) => {
+  // A slow frame, as on a loaded machine: the next menu's first item is focused only once
+  // a frame is drawn, so the second Left lands before it.
+  await page.addInitScript(() => {
+    const raf = window.requestAnimationFrame.bind(window);
+    window.requestAnimationFrame = (callback) => {
+      setTimeout(() => raf(callback), 150);
+      return 0;
+    };
+  });
+  await connect(page, daemon);
+  const header = page.locator('header.app-header');
+  const button = (label) => header.locator(`.top-menu[data-menu="${label.toLowerCase()}"] > .menu-button`);
+  const dropdown = (name) => page.getByRole('menu', { name });
+
+  await button('View').focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(dropdown('View').getByRole('menuitemcheckbox').first()).toBeFocused();
+  await page.keyboard.press('ArrowLeft');
+  await page.keyboard.press('ArrowLeft');
+  await expect(dropdown('File').getByRole('menuitem', { name: 'Disconnect' })).toBeFocused();
+  await expect(dropdown('Edit')).toHaveCount(0);
+});
