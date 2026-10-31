@@ -1774,6 +1774,36 @@ mod tests {
         assert_eq!(answer, studio());
     }
 
+    /// `studio_changed` records the event's program and preview even before the first
+    /// load has answered (no snapshot yet), so the reload can keep them (#884).
+    #[test]
+    fn an_event_before_the_first_load_is_stored() {
+        use super::Panel;
+        use crate::app::SessionContext;
+        use leptos::prelude::*;
+
+        let panel = Panel {
+            session: SessionContext(StoredValue::new_local(None)),
+            snapshot: RwSignal::new(None),
+            kinds: RwSignal::new(Vec::new()),
+            chosen: RwSignal::new(None),
+            swap: RwSignal::new(false),
+            running: RwSignal::new(None),
+            problem: RwSignal::new(None),
+            loads: StoredValue::new(0),
+            changes: StoredValue::new(0),
+            studio: StoredValue::new(None),
+            transitions: StoredValue::new(0),
+        };
+        panel.studio_changed(Some(SceneId::new("b")), None, None);
+        assert_eq!(
+            panel.studio.get_value(),
+            Some((Some(SceneId::new("b")), None))
+        );
+        assert_eq!(panel.changes.get_value(), 1);
+        assert!(panel.snapshot.get_untracked().is_none());
+    }
+
     /// The scenes and studio state come from the engine, and the panel's switch and
     /// preview calls move them.
     #[test]
