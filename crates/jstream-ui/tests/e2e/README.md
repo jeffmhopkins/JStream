@@ -154,7 +154,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   opens nothing, and a press outside closes one; from the keyboard Down opens a menu at
   its first item and Up on a button at its last, Up and Down wrap through it, Right and
   Left move along the bar (wrapping), Escape closes it back to its button, and
-  Ctrl+Right on a button is left alone.
+  Ctrl+Right on a button is left alone; with animation frames delayed, a second Left
+  pressed before the next menu is drawn still moves along the bar.
 - **Groups** (`groups.spec.js`): Group selection on two items makes "Group 1", left
   out of the Scenes panel, whose caret shows the two items indented; a click on one
   opens the group's scene with it selected; Ungroup puts them back, which a second
