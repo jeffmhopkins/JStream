@@ -77,14 +77,17 @@ stamped on the clock, and no device is the master.
   engine rate) to the chain, and return a `FilterControl` whose `set(FilterParams)`
   edits it and `remove` removes it. They go through the command queue like inputs. At
   most 8 filters and 100 ms of latency per chain. `insert_host_filter(index, memory)`
-  on `InputControl`, `BusControl` and `OutputTapControl` adds a CLAP filter instead:
+  on `InputControl`, `BusControl`, `MasterControl` and `OutputTapControl` adds a CLAP
+  filter instead:
   the mixer's side of an out-of-process plugin host, through its shared block
   (`HostMemory`, a [`jstream-plugin-proto`](../jstream-plugin-proto/README.md)
   `EngineBlock`: the `Shared` block however it is mapped, and the miss counts beside
   it). The block must be initialised for the mixer's rate
-  and block size (`InputControl::mixer_rate`, `mixer_block_frames`) and its host
-  ready, with one filter on it at a time; the master chain refuses one, since each bus's
-  copy would need its own host. `Mixer::latency_frames` is the
+  and block size (`mixer_rate` and `mixer_block_frames` on each of those handles) and
+  its host ready, with one filter on it at a time. On the master chain the plugin runs
+  on the master bus's copy only, and every other bus's copy delays its dry signal by
+  the filter's latency instead (see [Master chain and output taps](#realtime)).
+  `Mixer::latency_frames` is the
   chains' latency the mixer compensates, and each block's `pts` is its first frame minus
   it, the master chain's included.
 - `Mixer::master` and `MixerControl::master` return the `MasterControl`, whose
@@ -192,7 +195,9 @@ not start. No variant allocates.
 - the master chain and output taps: the master chain on the master bus and on a
   tapped bus but not before monitoring, a master filter's edit reaching every copy and
   a bus added later, an output tap's own chain and stamp, a tap reading silence once
-  its bus is gone, and the 16-tap limit;
+  its bus is gone, and the 16-tap limit; a CLAP filter on the master chain heard
+  through the plugin on the master bus and as delayed dry, with the same stamp, on a
+  tapped bus and on a bus added later;
 - inputs added from another thread while the mixer runs, then removed, the 64-input
   limit, and the ring freed on the collector thread whichever of the mixer and the
   producer lets go last, and the collector ending with its last handle.
@@ -419,7 +424,14 @@ edits applied, so a bus added later is built with the chain as it stands. A bus 
 stops feeding outputs skips its copy, and the copy restarts from silence when the bus
 feeds one again. An output tap (at most 16, reserved in `Mixer::new`) is built on the
 control thread with its block buffer and its own chain; it reads silence once its bus
-is removed. Removed taps and master copies go to the collector.
+is removed. Removed taps and master copies go to the collector. A CLAP filter on the
+master chain is the exception to one copy per bus: its host takes one chain's blocks
+([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md) › 1, one host per filter
+instance), so the plugin runs on the master bus's copy, and every other bus's copy,
+one added later included, holds a stand-in that delays its dry signal by the filter's
+latency, so the master chain's latency stays the same on every bus. The engine taps
+only the master bus, so every output hears the plugin; #922 tracks outputs that will
+take other buses.
 
 **Adding and removing inputs and buses** (`cmd.rs`, `retire.rs`). The control thread
 allocates the ring and the producer (or a bus's shared state) and sends them on a
@@ -633,7 +645,8 @@ descriptors and the protocol. The kernels' cost in the mixer is measured in
   ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)): the mixer's side is
   here (`insert_host_filter`), and starting and watching the host process are built
   (`jstream-platform`'s `PluginHosts`, `jstream-core`'s `HostSupervisor`), and
-  `jstream-core` runs a CLAP filter from a source's chain and sends its settings as
+  `jstream-core` runs a CLAP filter from a source's, the master's or an output's chain
+  and sends its settings as
   parameter changes, and the miss counts are kept on the engine's side of the block
   (#351), but reporting them in `stats.tick` and the degraded event in the protocol
   are not.

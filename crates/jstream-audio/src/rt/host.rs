@@ -211,6 +211,49 @@ impl AudioFilter for HostFilter {
     }
 }
 
+/// A master-chain CLAP filter's place on every bus but the master's: the dry signal,
+/// delayed by the filter's latency. A CLAP filter has one host, which only one chain
+/// may feed (ADR-0035 › 1), so the master chain runs the plugin on the master bus's copy
+/// and this on the others' (ADR-0080 runs the master chain on each bus that feeds an
+/// output), keeping the master chain's latency the same on every bus.
+#[derive(Debug)]
+pub(crate) struct HostStandIn {
+    dry: Delay,
+    latency: usize,
+}
+
+impl HostStandIn {
+    /// A stand-in delaying by `latency` frames at `rate`. Allocates: control thread only.
+    ///
+    /// # Errors
+    /// [`AudioError::InvalidConfig`] when `latency` passes a chain's 100 ms.
+    pub(crate) fn new(rate: u32, latency: usize) -> Result<Self, AudioError> {
+        let latency_ms = latency as f64 * 1000.0 / f64::from(rate);
+        if latency_ms > f64::from(MAX_CHAIN_LATENCY_MS) {
+            return Err(AudioError::InvalidConfig {
+                what: "a CLAP filter's latency must be at most 100 ms",
+            });
+        }
+        let mut dry = Delay::new(rate, (latency_ms + 1.0) as f32)?;
+        dry.set_delay_frames(latency)?;
+        Ok(Self { dry, latency })
+    }
+}
+
+impl AudioFilter for HostStandIn {
+    fn process(&mut self, block: &mut [f32]) {
+        self.dry.process(block);
+    }
+
+    fn latency_frames(&self) -> usize {
+        self.latency
+    }
+
+    fn reset(&mut self) {
+        self.dry.reset();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -91,7 +91,12 @@ state machine. Contents:
   the `audio_filter` kinds `gain`, `noise_gate`, `compressor`, `limiter` and `delay`,
   one per `jstream-audio` kernel, the mapping from a filter's settings to the kernel's
   `FilterSpec` and `FilterParams`, and `Chain`, which keeps one mixer input's, the
-  master's or an output tap's filters in line with its owner's audio chain.
+  master's or an output tap's filters in line with its owner's audio chain. A CLAP
+  filter's plugin host (`ClapHosts`) runs on the program stage's
+  `jstream-audio-sources` thread for every chain: a source's chain is kept there too,
+  and the master's and the output taps' chains, which the routing keeps under the
+  collection lock, take each ready host's block from that thread, so starting or
+  stopping a host process never holds the lock.
 - **CLAP plugins** (`plugins/`, [ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)):
   - `Engine::scan_clap_plugins(Arc<dyn PluginHosts>)` scans the CLAP search directories
     (recursively, for `.clap` entries, each scanned in its own host process) and adds
@@ -127,11 +132,15 @@ state machine. Contents:
     state over `MAX_STATE` (2 MiB) is ignored. Each dropped reply counts in `rejected`,
     and the first of each host run is an `Error`. `stop` asks the host to stop and
     kills it after `STOP_GRACE`.
-  - A CLAP filter in a source's audio chain runs as `plugins::filter::ClapFilter`,
-    one per filter, owned by the input's `filters::Chain` (see *Audio sources*). A
-    collection holding one loads before the scan describes its kind (the graph keeps
-    such a filter verbatim), and the filter is bypassed until then. One on the master
-    stage's or an output's audio chain is logged once and bypassed for now.
+  - A CLAP filter runs as `plugins::filter::ClapFilter`, one host per filter. In a
+    source's audio chain the input's `filters::Chain` owns it (see *Audio sources*). On
+    the master stage's audio chain or an output's (ADR-0080), the program stage's
+    `jstream-audio-sources` thread owns it (`filters::ClapHosts`), and the routing puts
+    the filter on its host's block once that is ready (see *Audio routing*): on the
+    master bus's copy of the mixer's master chain, every other bus's copy delaying its
+    dry signal by the same latency. A collection holding one loads before the scan
+    describes its kind (the graph keeps such a filter verbatim), and the filter is
+    bypassed until then.
   - **Not yet:** writing the plugin's own parameter changes and saved state back to the
     filter's settings (the supervisor keeps the state for its restarts only, so a new
     host after an engine restart starts from the plugin's defaults and the filter's
@@ -350,7 +359,9 @@ state machine. Contents:
   with no paired input and one not connected unavailable with their reasons, the
   output staying active, and its input closed while its audio is off, closed when its
   last send is removed and opened again by a send, and closed when it is deleted
-  (`a_webcam_records_its_paired_audio_input`), a media file's sound reaching
+  (`a_webcam_records_its_paired_audio_input`), a CLAP filter on the master chain run on its
+  own fake host by the program stage's thread, put on the host's block, and its host
+  stopped when the filter is removed (`a_master_clap_filter_runs_on_a_host`), a media file's sound reaching
   its own input beside the defaults, silent while hidden, routed and metered, quieted
   by a `gain` filter on its source and loud again once it is removed, closed while its
   audio is off and removed with the source, the program mix reaching the
@@ -368,8 +379,9 @@ state machine. Contents:
   the record and tried again; a CLAP filter bypassed until its fake host is ready, kept
   on the same host when the chain is rebuilt, kept on a crashed host's block until the
   restart, a missing plugin reported once, a running host told to stop when its filter
-  is dropped, a disabled filter taken off its block and not restarted, and one on the
-  master chain bypassed; `plugins/filter.rs`: settings sent to a ready host's
+  is dropped, a disabled filter taken off its block and not restarted, and the master
+  chain running one on the block of a host run elsewhere (`ClapHosts`), its settings
+  reaching the plugin, and its host stopped when it is dropped; `plugins/filter.rs`: settings sent to a ready host's
   parameter ring once each, and only CLAP ids with finite values), item opacity in linear light through a nested scene
   (`snapshot.rs`), the output edits and the
   stream-key actions against `jstream-platform`'s `MemoryKeyStore` (with `secrets_are_redacted`,
@@ -1109,8 +1121,14 @@ settings go to the plugin as parameter changes on the block's ring, never throug
 rebuild: each setting whose ID is a CLAP parameter id with a finite number, when it
 differs from what the host was sent, all of them when a new host is ready. A CLAP
 filter with no plugin for its kind (no scan yet, or the plugin is gone) is logged once
-and bypassed, as is one on the master stage's or an output's chain, whose `FilterHost`
-has no `clap_input`; one removed from the chain, or on a closed input, stops its host. Host
+and bypassed; one removed from the chain, or on a closed input, stops its host. The
+same thread runs the hosts of the master stage's and the running output taps' CLAP
+filters (`filters::ClapHosts`), which the routing names with
+`Wanted::set_routed_chains`: started, ticked, sent their settings and stopped as a
+source's are, at the mixer's rate and block size, and each ready host's block listed in
+`Routed` (`Wanted::routed_blocks`) for the routing (see *Audio routing*). A change to
+that list marks the routing stale, as a new input does, so the next `meters.tick`
+syncs it. They stop when the program stage closes. Host
 crashes, a disabled filter, host errors (as `plugin_text`) and a degraded or recovered
 host are logged at `warn` like refusals. Each input is opened by asking the platform
 for the format the device delivers (`AudioIo::input_format`), adding the mixer input
@@ -1474,7 +1492,11 @@ brings the mixer in line with the collection under the collection lock:
   (below), with `filters::Chain::apply`: a filter whose kind and position are
   unchanged is updated in place, anything else rebuilds the chain. A filter the mixer
   refuses to add is bypassed, and new settings it refuses leave the filter on its old
-  ones until the next routing sync tries again; each refusal is logged at `warn`.
+  ones until the next routing sync tries again; each refusal is logged at `warn`. A
+  CLAP filter on either goes on its host's block once the program stage's thread lists
+  it ready (see *Audio sources*), bypassed until then, and a new tap for an output
+  that already has one queues the old tap's removal first, so a block never feeds two
+  taps; while the mixer hasn't taken that removal, the new tap's CLAP filters wait.
 
 An output whose audio chain holds a filter, even a disabled one
 ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), gets an output
