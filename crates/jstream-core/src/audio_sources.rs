@@ -20,6 +20,14 @@
 //! when only its settings changed. A filter the mixer refuses is bypassed, and new
 //! settings it refuses are tried again on the next pass; both are logged.
 //!
+//! The thread also runs the plugin hosts of the CLAP filters (ADR-0035) on the master
+//! chain and on each output tap's chain (ADR-0080), which the engine's audio routing
+//! (`crate::audio`) keeps in line under the collection lock: the routing names those
+//! chains ([`Wanted::set_routed_chains`]), and the thread starts, supervises and stops
+//! their hosts here, sends them their settings, and lists each ready host's block
+//! ([`Routed::blocks`]) for the routing to put the filter on. Starting or stopping a
+//! process never holds the collection lock.
+//!
 //! A source that makes audio of its own (a `browser` page) gets an input too, fed by
 //! the running source itself ([`jstream_sources::SourceAudio`]) from when it is built
 //! until it is deleted or built again, and not while its audio is turned off.
@@ -60,18 +68,19 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use jstream_audio::{InputControl, MixerControl, Monitor, MonitorControl, monitor_socket};
+use jstream_platform::HostBlock;
 use jstream_platform::{
     AudioInputTarget, AudioIo, AudioOutputTarget, AudioProcess, AudioStream, DeviceId, MediaClock,
     PlatformError, PluginHosts, VideoDeviceInfo, VideoDevices,
 };
-use jstream_protocol::{BusId, BusMonitor, MonitorTap, SourceId, SourceKind};
+use jstream_protocol::{BusId, BusMonitor, FilterId, MonitorTap, OutputId, SourceId, SourceKind};
 use std::sync::mpsc::SyncSender;
 
 use crate::audio::MonitorRoute;
 use jstream_sources::{AudioTarget, SourceAudio, webcam_device};
 
 use crate::drops::{AudioInputDrops, DropLedger, DropSourceId, lock_ledger};
-use crate::filters::{Chain, Chained, chain_of};
+use crate::filters::{Chain, Chained, Clap, ClapHosts, chain_of};
 use crate::live::LiveAudio;
 use crate::lock;
 use crate::plugins::filter::ClapCatalog;
@@ -122,6 +131,58 @@ impl Wanted {
             self.changed.notify_all();
         }
     }
+
+    /// Has the program stage's thread run the CLAP filters' hosts of `chains`, the
+    /// master chain and the output taps' chains, and wakes it when they changed. The
+    /// routing calls it under the collection lock whenever it applies them, and with
+    /// none when its mixer goes.
+    pub(crate) fn set_routed_chains(&self, chains: RoutedChains) {
+        let mut wanted = lock(&self.state);
+        if wanted.routed_chains != chains {
+            wanted.routed_chains = chains;
+            self.changed.notify_all();
+        }
+    }
+
+    /// The block of each routed chain's CLAP filter whose host is ready, as the thread
+    /// last listed them.
+    pub(crate) fn routed_blocks(&self) -> RoutedBlocks {
+        lock(&self.routed.blocks).clone()
+    }
+}
+
+/// The audio chains the routing runs that may hold CLAP filters: the master chain and
+/// each output tap's, by output.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct RoutedChains {
+    pub(crate) master: Vec<Chained>,
+    pub(crate) outputs: BTreeMap<OutputId, Vec<Chained>>,
+}
+
+/// The ready block of each CLAP filter in [`RoutedChains`], by filter ID.
+#[derive(Clone, Default)]
+pub(crate) struct RoutedBlocks {
+    pub(crate) master: BTreeMap<FilterId, HostBlock>,
+    pub(crate) outputs: BTreeMap<OutputId, BTreeMap<FilterId, HostBlock>>,
+}
+
+/// Blocks compare by identity: a restarted host has a new one.
+impl PartialEq for RoutedBlocks {
+    fn eq(&self, other: &Self) -> bool {
+        fn same(a: &BTreeMap<FilterId, HostBlock>, b: &BTreeMap<FilterId, HostBlock>) -> bool {
+            a.len() == b.len()
+                && a.iter()
+                    .zip(b)
+                    .all(|((ia, ba), (ib, bb))| ia == ib && Arc::ptr_eq(ba, bb))
+        }
+        same(&self.master, &other.master)
+            && self.outputs.len() == other.outputs.len()
+            && self
+                .outputs
+                .iter()
+                .zip(&other.outputs)
+                .all(|((ia, a), (ib, b))| ia == ib && same(a, b))
+    }
 }
 
 /// The mixer input of each audio source that records, kept by the program stage's
@@ -130,7 +191,10 @@ impl Wanted {
 #[derive(Default)]
 pub(crate) struct Routed {
     inputs: Mutex<BTreeMap<SourceId, InputControl>>,
-    /// Set when an input opened or closed, until the routing has caught up.
+    /// The routed chains' ready CLAP blocks.
+    blocks: Mutex<RoutedBlocks>,
+    /// Set when an input opened or closed, or a routed chain's CLAP block changed,
+    /// until the routing has caught up.
     changed: AtomicBool,
 }
 
@@ -143,6 +207,16 @@ impl Routed {
     fn remove(&self, id: &SourceId) {
         lock(&self.inputs).remove(id);
         self.changed.store(true, Ordering::Release);
+    }
+
+    /// Lists `blocks` for the routing, which catches up on its next pass when they
+    /// changed.
+    fn set_blocks(&self, blocks: RoutedBlocks) {
+        let mut listed = lock(&self.blocks);
+        if *listed != blocks {
+            *listed = blocks;
+            self.changed.store(true, Ordering::Release);
+        }
     }
 }
 
@@ -174,6 +248,8 @@ struct WantedState {
     chains: BTreeMap<SourceId, Vec<Chained>>,
     /// What runs the CLAP filters, once a scan has found plugins.
     clap: Option<Arc<ClapCatalog>>,
+    /// The chains the routing runs whose CLAP filters' hosts the thread runs.
+    routed_chains: RoutedChains,
     /// How each source fares while the program stage runs.
     status: BTreeMap<SourceId, AudioStatus>,
     /// The bus monitors to play, keyed by bus.
@@ -421,6 +497,8 @@ struct Wants {
     clap: Option<Arc<ClapCatalog>>,
     /// The bus monitors to play.
     monitors: BTreeMap<BusId, WantedMonitor>,
+    /// The routed chains whose CLAP hosts run here.
+    routed: RoutedChains,
 }
 
 impl Wants {
@@ -436,6 +514,7 @@ impl Wants {
                 .collect(),
             chains: state.chains.clone(),
             clap: state.clap.clone(),
+            routed: state.routed_chains.clone(),
         }
     }
 
@@ -509,6 +588,10 @@ struct Open {
     monitor_routes: SyncSender<MonitorRoute>,
     /// Each wanted bus monitor, and its device stream while it plays.
     monitors: BTreeMap<BusId, MonitorSlot>,
+    /// The hosts of the master chain's CLAP filters.
+    master_hosts: ClapHosts,
+    /// The hosts of each output tap's CLAP filters, by output.
+    output_hosts: BTreeMap<OutputId, ClapHosts>,
 }
 
 /// One wanted bus monitor, and its stream while it plays.
@@ -577,6 +660,8 @@ impl AudioInputs {
             removing: Vec::new(),
             monitor_routes,
             monitors: BTreeMap::new(),
+            master_hosts: ClapHosts::default(),
+            output_hosts: BTreeMap::new(),
         }));
         let stop = Arc::new(AtomicBool::new(false));
         let mut inputs = Self {
@@ -628,6 +713,11 @@ impl AudioInputs {
             }
         }
         open.removing.clear();
+        // Their hosts stop; the routing's filters on their blocks pass dry until the
+        // mixer goes too.
+        open.master_hosts = ClapHosts::default();
+        open.output_hosts.clear();
+        open.wanted.routed.set_blocks(RoutedBlocks::default());
         for slot in std::mem::take(&mut open.monitors).into_values() {
             if let Some(live) = slot.live {
                 close_monitor(live);
@@ -686,6 +776,8 @@ enum Note {
     MonitorReopening(BusId),
     MonitorAvailable(BusId),
     MonitorUnavailable(BusId, String),
+    /// A CLAP filter's host on the master chain, or on this output's tap.
+    Routed(Option<OutputId>, String),
 }
 
 impl Pass {
@@ -713,6 +805,12 @@ impl Pass {
                 }
                 Note::MonitorUnavailable(bus_id, reason) => {
                     tracing::warn!(bus_id = %bus_id, reason, "monitor is unavailable");
+                }
+                Note::Routed(None, reason) => {
+                    tracing::warn!(reason, "master filter");
+                }
+                Note::Routed(Some(output_id), reason) => {
+                    tracing::warn!(output_id = %output_id, reason, "output filter");
                 }
             }
         }
@@ -811,7 +909,7 @@ impl Open {
             }
             if let (Key::Source(id), Some(live)) = (&key, input.live.as_mut()) {
                 let chain = wants.chains.get(id).map_or(&[][..], Vec::as_slice);
-                let clap = wants.clap.as_deref();
+                let clap = Clap::Run(wants.clap.as_deref());
                 for reason in live.chain.apply(&live.control, chain, clap, now) {
                     notes.push(Note::Refused(key.clone(), reason));
                 }
@@ -833,6 +931,7 @@ impl Open {
             })
             .collect();
         let monitor_status = self.reconcile_monitors(wants, &mut notes);
+        self.reconcile_routed(wants, now, &mut notes);
         #[cfg(test)]
         let packets = self
             .inputs
@@ -851,6 +950,39 @@ impl Open {
             #[cfg(test)]
             packets,
         }
+    }
+
+    /// Runs the hosts of the routed chains' CLAP filters (ADR-0035): starts those
+    /// wanted, stops the rest, ticks them and sends them their settings, then lists
+    /// each ready host's block for the routing.
+    fn reconcile_routed(&mut self, wants: &Wants, now: Instant, notes: &mut Vec<Note>) {
+        let master = self.mixer.master();
+        let format = (master.mixer_rate(), master.mixer_block_frames());
+        let clap = wants.clap.as_deref();
+        let routed = &wants.routed;
+        for reason in self.master_hosts.sync(&routed.master, clap, format, now) {
+            notes.push(Note::Routed(None, reason));
+        }
+        self.master_hosts.send(&routed.master);
+        // An output no longer tapped stops its hosts.
+        self.output_hosts
+            .retain(|id, _| routed.outputs.contains_key(id));
+        for (output_id, chain) in &routed.outputs {
+            let hosts = self.output_hosts.entry(output_id.clone()).or_default();
+            for reason in hosts.sync(chain, clap, format, now) {
+                notes.push(Note::Routed(Some(output_id.clone()), reason));
+            }
+            hosts.send(chain);
+        }
+        self.wanted.routed.set_blocks(RoutedBlocks {
+            master: self.master_hosts.blocks(),
+            outputs: self
+                .output_hosts
+                .iter()
+                .map(|(id, hosts)| (id.clone(), hosts.blocks()))
+                .filter(|(_, blocks)| !blocks.is_empty())
+                .collect(),
+        });
     }
 
     /// Brings the monitors in line with `wants`: closes those no longer wanted or
