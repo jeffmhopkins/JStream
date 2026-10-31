@@ -430,7 +430,8 @@ master chain is the exception to one copy per bus: its host takes one chain's bl
 instance), so the plugin runs on the master bus's copy, and every other bus's copy,
 one added later included, holds a stand-in that delays its dry signal by the filter's
 latency, so the master chain's latency stays the same on every bus. The engine taps
-only the master bus, so every output hears the plugin.
+only the master bus, so every output hears the plugin; #922 tracks outputs that will
+take other buses.
 
 **Adding and removing inputs and buses** (`cmd.rs`, `retire.rs`). The control thread
 allocates the ring and the producer (or a bus's shared state) and sends them on a
