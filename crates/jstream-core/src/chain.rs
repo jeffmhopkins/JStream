@@ -166,7 +166,7 @@ impl Chain {
     }
 
     /// The enabled filters' kinds and settings, in order: what makes two items' effects
-    /// look the same, so a transition may pair them (ADR-0065 §6).
+    /// look the same, so a transition may pair them (ADR-0065 §6, as ADR-0081 amends it).
     pub(crate) fn look(&self) -> Vec<(String, Settings)> {
         self.filters
             .iter()
@@ -1344,5 +1344,279 @@ mod tests {
         let mut chains = Chains::default();
         let pixel = draw(&mut compositor, (&mut cache, &mut chains), &cleared, 1);
         assert_eq!(pixel, RED, "cut out where the filtered matte is clear");
+    }
+
+    /// Goldens of the `vignette` kind at each level (ADR-0065, #861), as the render
+    /// crate's geometry goldens are: small text grids, not images, so they hold on any
+    /// conformant adapter. The canvas is 64x36 and black, every source a white 16x9
+    /// frame, and the vignette a hard blue edge, so each grid shows where the ellipse
+    /// falls. `.` is the canvas, `W` the picture and `B` the vignette. Each sample is the
+    /// pixel right of and below its cell's centre, so a grid is not quite symmetric.
+    const CANVAS: (u32, u32) = (64, 36);
+
+    /// An item stretched over a box: its ID, centre, size and rotation in degrees.
+    type Placed<'a> = (&'a str, (f32, f32), (f32, f32), f32);
+
+    /// A hard blue `vignette` on `owner`'s video chain: the picture is blue where the
+    /// ellipse's distance (0 at the centre, 1 at the corners) is over 0.8.
+    fn vignette(owner: FilterOwner) -> Edit {
+        Edit::FilterAdd {
+            owner,
+            chain: FilterChain::Video,
+            filter_id: FilterId::new("vignette"),
+            kind: "vignette".into(),
+            settings: [
+                ("strength", serde_json::json!(1.0)),
+                ("radius", serde_json::json!(0.8)),
+                ("softness", serde_json::json!(0.0)),
+                ("color", serde_json::json!("#0000ff")),
+            ]
+            .into_iter()
+            .collect(),
+            enabled: Some(true),
+            index: None,
+        }
+    }
+
+    /// [`graph`] on the 64x36 canvas with item `id` stretched over the box centred at
+    /// `center`, of `size` and turned `rotation_deg`, for each `(id, center, size,
+    /// rotation_deg)` in `boxes`.
+    fn placed(boxes: &[Placed]) -> Graph {
+        let mut graph = graph(&[]);
+        let mut edits = vec![Edit::CanvasSetSize {
+            width: CANVAS.0,
+            height: CANVAS.1,
+        }];
+        for &(id, (x, y), (w, h), rotation_deg) in boxes {
+            let mut geometry = jstream_protocol::ItemGeometry::try_new(
+                jstream_protocol::Vec2::new(x, y).expect("finite"),
+                jstream_protocol::Size::try_new(w, h).expect("positive"),
+            )
+            .expect("valid");
+            geometry.fit_mode = jstream_protocol::FitMode::Stretch;
+            geometry.rotation_deg = jstream_protocol::Finite32::new(rotation_deg).expect("finite");
+            edits.push(Edit::ItemSetGeometry {
+                scene_id: None,
+                item_id: ItemId::new(id),
+                geometry,
+            });
+        }
+        apply(&mut graph, edits);
+        graph
+    }
+
+    /// Item `id` hidden, so a grid shows only the others.
+    fn hide(id: &str) -> Edit {
+        Edit::ItemSetVisible {
+            scene_id: None,
+            item_id: ItemId::new(id),
+            visible: false,
+        }
+    }
+
+    /// `shot`'s program drawn once, sampled every 4 pixels at the centre of each 4x4
+    /// cell: `.` black, `W` white, `B` blue, `?` anything more than a few levels from
+    /// all three. `None` where the machine has no adapter.
+    fn golden(shot: &Shot) -> Option<String> {
+        const PALETTE: [(char, [u8; 3]); 3] =
+            [('.', [0, 0, 0]), ('W', [255, 255, 255]), ('B', [0, 0, 255])];
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let mut compositor = gpu()?;
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let (width, height) = CANVAS;
+        let points: Vec<_> = (0..height / 4)
+            .flat_map(|y| (0..width / 4).map(move |x| (x * 4 + 2, y * 4 + 2)))
+            .collect();
+        let pixels = draw_points(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            (shot, &LiveParams::default()),
+            &points,
+        );
+        let mut out = String::new();
+        for row in pixels.chunks((width / 4) as usize) {
+            for pixel in row {
+                let class = PALETTE
+                    .iter()
+                    .find(|(_, rgb)| (0..3).all(|c| pixel[c].abs_diff(rgb[c]) <= 4))
+                    .map_or('?', |(name, _)| *name);
+                out.push(class);
+            }
+            out.push('\n');
+        }
+        Some(out)
+    }
+
+    /// Asserts `shot`'s [`golden`] is `expected`, a grid written one row per line,
+    /// where the machine has an adapter.
+    fn assert_golden(shot: &Shot, expected: &str, what: &str) {
+        let Some(actual) = golden(shot) else { return };
+        let expected: String = expected
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .flat_map(|line| line.chars().chain(['\n']))
+            .collect();
+        assert_eq!(actual, expected, "{what}\nactual:\n{actual}");
+    }
+
+    /// `cam`, cropped to the middle half of its frame and stretched over the canvas.
+    /// A vignette on the item frames the cropped shot. The same vignette on the source
+    /// frames the source's whole frame, so its corners are cut away with the rest
+    /// (issue #529's case).
+    #[test]
+    fn golden_a_vignette_on_a_cropped_item() {
+        let mut graph = placed(&[("cam", (32.0, 18.0), (64.0, 36.0), 0.0)]);
+        let crop = Edit::ItemSetCrop {
+            item_id: ItemId::new("cam"),
+            scene_id: None,
+            crop: jstream_protocol::Crop {
+                left: 4,
+                top: 0,
+                right: 4,
+                bottom: 0,
+            },
+        };
+        apply(&mut graph, vec![hide("logo"), crop]);
+        let mut on_source = graph.clone();
+        apply(
+            &mut graph,
+            vec![vignette(FilterOwner::Item {
+                item_id: ItemId::new("cam"),
+            })],
+        );
+        apply(
+            &mut on_source,
+            vec![vignette(FilterOwner::Source {
+                source_id: SourceId::new("cam"),
+            })],
+        );
+        assert_golden(
+            &shot(&graph),
+            "
+            BBWWWWWWWWWWWWBB
+            WWWWWWWWWWWWWWWB
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            BWWWWWWWWWWWWWWB
+            BBBWWWWWWWWWWBBB
+            ",
+            "on the item, the vignette frames the cropped shot",
+        );
+        let on_source = shot(&on_source);
+        assert!(
+            on_source.chain(&SourceId::new("cam")).is_some(),
+            "the source's chain runs"
+        );
+        assert_golden(
+            &on_source,
+            "
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            ",
+            "on the source, the crop cuts its corners away",
+        );
+    }
+
+    /// `logo` on the canvas's left half and `cam` on its right. A scene filter frames
+    /// the scene's whole picture, and the same vignette as each item's effect frames
+    /// each box.
+    #[test]
+    fn golden_a_vignette_on_a_scene() {
+        let mut graph = placed(&[
+            ("logo", (16.0, 18.0), (32.0, 36.0), 0.0),
+            ("cam", (48.0, 18.0), (32.0, 36.0), 0.0),
+        ]);
+        let mut on_items = graph.clone();
+        apply(
+            &mut graph,
+            vec![vignette(FilterOwner::Scene {
+                scene_id: SceneId::new("main"),
+            })],
+        );
+        apply(
+            &mut on_items,
+            ["logo", "cam"]
+                .into_iter()
+                .map(|id| {
+                    vignette(FilterOwner::Item {
+                        item_id: ItemId::new(id),
+                    })
+                })
+                .collect(),
+        );
+        assert_golden(
+            &shot(&graph),
+            "
+            BBWWWWWWWWWWWWBB
+            WWWWWWWWWWWWWWWB
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            BWWWWWWWWWWWWWWB
+            BBBWWWWWWWWWWBBB
+            ",
+            "on the scene, one ellipse frames the canvas",
+        );
+        assert_golden(
+            &shot(&on_items),
+            "
+            BWWWWWWBBWWWWWWB
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            WWWWWWWBWWWWWWWB
+            BWWWWWWBBWWWWWWB
+            ",
+            "on each item, an ellipse frames each box",
+        );
+    }
+
+    /// `cam` in a 32x16 box turned 90 degrees, so it stands 16 wide and 32 tall. Its
+    /// vignette is drawn over the flat box and turned with it, so the ellipse is the
+    /// box's, standing.
+    #[test]
+    fn golden_a_vignette_on_a_rotated_item() {
+        let mut graph = placed(&[("cam", (32.0, 20.0), (32.0, 16.0), 90.0)]);
+        apply(
+            &mut graph,
+            vec![
+                hide("logo"),
+                vignette(FilterOwner::Item {
+                    item_id: ItemId::new("cam"),
+                }),
+            ],
+        );
+        assert_golden(
+            &shot(&graph),
+            "
+            ................
+            ......WWWB......
+            ......WWWW......
+            ......WWWW......
+            ......WWWW......
+            ......WWWW......
+            ......WWWW......
+            ......WWWW......
+            ......BWWB......
+            ",
+            "the ellipse turns with the box",
+        );
     }
 }
