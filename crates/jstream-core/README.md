@@ -929,7 +929,12 @@ it. A legacy transform has the box its quad covers, so
 over a capture, whose size isn't known when planning, its effects are bypassed. A
 source's own chain still runs once, wherever it is placed. In a transition an item
 with effects is its effects' layer over its grown box, uncropped, and two items pair
-only when their effects are the same kinds with the same settings in order. Not yet:
+only when their effects are the same kinds with the same settings in order
+([ADR-0081](../../docs/adr/0081-effects-pair-by-their-look.md)). Goldens in `chain.rs`
+draw a hard-edged `vignette` and compare small text grids of the canvas, as the render
+crate's geometry goldens do: on a cropped item, against the same vignette on its source,
+whose corners the crop cuts away; on a scene, against one on each of its items; and on an
+item turned 90°, whose ellipse stands with its box. Not yet:
 `stats.tick`'s counts of these layers and passes (ADR-0065 §7), which need protocol
 fields.
 
