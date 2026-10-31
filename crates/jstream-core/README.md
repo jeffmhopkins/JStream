@@ -294,7 +294,8 @@ state machine. Contents:
   or the output stops, closed when unplugged with the output staying up, and shared
   with a preview stream that showed it first (`src/tests/cpu_pipeline/captures.rs`),
   one open of a device shared by two readers, each taking each frame once, closed
-  with its last reader, and a lost device failing every reader (`runtime/devices.rs`), the format a webcam opens in, with and
+  with its last reader, a reader that joins counting frames from then on, and a lost
+  device failing every reader and not shared again (`runtime/devices.rs`), the format a webcam opens in, with and
   without an MJPEG decoder, its frames, decoded or not, read as RGBA, and a webcam
   left running, and not opened twice, when the GPU path is left (`runtime/captures.rs`), which capture path an output takes and each
   fallback, an output compositing GPU capture frames (opaque, whatever alpha the
@@ -1343,7 +1344,10 @@ the others copy it, outside the lock. A read takes the device's lock with `try_l
 and reads nothing when the other reader holds it, so the render thread never waits on
 the preview thread; the frame is still there on its next tick. The device closes with
 its last reader, and once it is lost every reader reports it and the next open opens it
-afresh. `video.snapshot` still draws every capture as nothing. A `scene.switch` republishes the render
+afresh. Each reader's `stats` count from when it joined, so an output that joins a
+webcam the preview opened reports only its own frames and drops in `stats.tick`. While
+the program stage reads a device the preview also shows, the reader that is not last
+copies each frame; a run on a capture card at 1080p60 has not measured that copy. `video.snapshot` still draws every capture as nothing. A `scene.switch` republishes the render
 snapshot, so the preview shows the transition onto the new program scene, then the
 scene, with the same `rev` (the switch changes none). Not yet: video mixes other than
 program, sources on their own, and the post-master stage, which come with the video mixes and the master chain.

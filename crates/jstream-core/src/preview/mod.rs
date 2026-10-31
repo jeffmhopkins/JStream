@@ -6,8 +6,9 @@
 //! engine plans beside the program mix's for every scene a live stream shows
 //! ([`PreviewHub::scenes`]), after the program's plan has ended so it never makes a
 //! source shown or heard. The program stage neither draws nor captures anything for
-//! it; the hub captures its displays and windows (**Captures**). Until the engine has planned it the stream waits; once
-//! the scene is deleted the engine ends it ([`PreviewHub::end_scene`]).
+//! it; the hub captures its displays, windows and webcams (**Captures**). Until the
+//! engine has planned it the stream waits; once the scene is deleted the engine ends it
+//! ([`PreviewHub::end_scene`]).
 //!
 //! **Sessions.** Each [`InProcessControl`](crate::InProcessControl) holds a
 //! [`SessionPreviews`]: its binary channel (a bounded queue, read through
@@ -794,15 +795,15 @@ fn run(
     }
 }
 
-/// The displays and windows the hub captures: what the program mix and the scenes with
-/// a stream show of them, on a `jstream-capture` thread started the first time one is
+/// The displays, windows and video devices the hub captures: what the program mix and
+/// the scenes with a stream show of them, on a `jstream-capture` thread started the first time one is
 /// shown.
 struct HubCaptures<'a> {
     /// `None` when the engine has no backends, or the thread could not be started:
     /// nothing is captured.
     capture: Option<&'a PreviewCapture>,
     running: Option<RenderCaptures>,
-    /// What the snapshots `of` show: their displays and windows.
+    /// What the snapshots `of` show: their displays, windows and video devices.
     wanted: BTreeSet<CaptureKey>,
     of: Option<(Option<Arc<RenderSnapshot>>, Scenes)>,
 }

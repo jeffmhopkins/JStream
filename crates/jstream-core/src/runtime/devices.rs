@@ -12,7 +12,10 @@
 //! replaces it; the last reader to take a frame moves it out, the others copy it. A read
 //! takes the device's lock with `try_lock` and reads no frame when another reader holds
 //! it, so the render thread never waits on the preview thread (R-RT-002); the frame is
-//! still there on its next tick. Copies are made outside the lock.
+//! still there on its next tick. Copies are made outside the lock. Each reader counts the
+//! device's frames from when it joined, so an output that joins a webcam the preview
+//! opened reports only the skips since, and a capture that stops and starts again doesn't
+//! count them twice.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, TryLockError, Weak};
@@ -71,15 +74,20 @@ impl VideoDevices for SharedVideoDevices {
                     );
                 }
                 let seen = state.seq;
+                // Counted from now: the frames the device skipped before are not this
+                // reader's.
+                let base = state.stream.stats();
                 drop(state);
                 return Ok(Box::new(Reader {
                     device: shared,
                     seen,
-                    stats: CaptureStats::default(),
+                    base,
+                    stats: base,
                 }));
             }
         }
         let stream = self.inner.open(device, format, decoder)?;
+        let base = stream.stats();
         let shared = Arc::new(Device {
             format: *format,
             state: Mutex::new(State {
@@ -94,7 +102,8 @@ impl VideoDevices for SharedVideoDevices {
         Ok(Box::new(Reader {
             device: shared,
             seen: 0,
-            stats: CaptureStats::default(),
+            base,
+            stats: base,
         }))
     }
 }
@@ -127,6 +136,9 @@ struct Reader {
     device: Arc<Device>,
     /// The number of the last frame this reader took.
     seen: u64,
+    /// The device's counters when this reader joined: [`stats`](CaptureStream::stats)
+    /// reports what they counted since.
+    base: CaptureStats,
     /// The device's counters as of this reader's last read.
     stats: CaptureStats,
 }
@@ -180,7 +192,14 @@ impl CaptureStream for Reader {
     }
 
     fn stats(&self) -> CaptureStats {
-        self.stats
+        let (now, base) = (self.stats, self.base);
+        CaptureStats {
+            frames_captured: now.frames_captured.saturating_sub(base.frames_captured),
+            frames_skipped: now.frames_skipped.saturating_sub(base.frames_skipped),
+            frames_undecodable: now
+                .frames_undecodable
+                .saturating_sub(base.frames_undecodable),
+        }
     }
 }
 
@@ -189,7 +208,7 @@ mod tests {
     use super::SharedVideoDevices;
     use jstream_media::Timebase;
     use jstream_platform::fake::{FAKE_WEBCAM, FakeClock, FakeVideoDevices};
-    use jstream_platform::{DeviceId, PlatformError, VideoDevices};
+    use jstream_platform::{CaptureStats, DeviceId, PlatformError, VideoDevices};
     use std::sync::Arc;
 
     fn setup() -> (FakeClock, FakeVideoDevices, SharedVideoDevices) {
@@ -227,8 +246,32 @@ mod tests {
         assert_eq!(fake.open_streams(), 0);
     }
 
+    /// A reader that joins a device already capturing counts from then on, so an output
+    /// that joins the preview's webcam reports only its own frames and drops (R-RT-004).
+    /// (The fake skips none; every counter is subtracted alike.)
     #[test]
-    fn a_lost_device_fails_every_reader_and_opens_afresh() {
+    fn a_reader_counts_from_when_it_joined() {
+        let (clock, _fake, shared) = setup();
+        let id = DeviceId::new(FAKE_WEBCAM);
+        let format = shared.formats(&id).expect("formats")[0];
+        let mut first = shared.open(&id, &format, None).expect("opens");
+        for _ in 0..3 {
+            clock.advance(1);
+            assert!(first.latest().expect("reads").is_some());
+        }
+        assert_eq!(first.stats().frames_captured, 3);
+        let mut joined = shared.open(&id, &format, None).expect("shares");
+        assert_eq!(joined.stats(), CaptureStats::default());
+        clock.advance(1);
+        assert!(joined.latest().expect("reads").is_some());
+        assert_eq!(joined.stats().frames_captured, 1);
+        assert_eq!(first.stats().frames_captured, 3, "not read since");
+    }
+
+    /// A lost device fails every reader, and the next open asks the backend again rather
+    /// than sharing the lost stream; here that fails, the device being gone.
+    #[test]
+    fn a_lost_device_fails_every_reader_and_is_not_shared() {
         let (clock, fake, shared) = setup();
         let id = DeviceId::new(FAKE_WEBCAM);
         let format = shared.formats(&id).expect("formats")[0];
@@ -239,7 +282,8 @@ mod tests {
         let lost = |result| matches!(result, Err(PlatformError::DeviceLost { .. }));
         assert!(lost(first.latest()));
         assert!(lost(second.latest()));
-        // Lost for good: the next open opens it again, alongside the lost stream.
+        let lost_again = fake.open_streams();
         assert!(shared.open(&id, &format, None).is_err(), "unplugged");
+        assert_eq!(fake.open_streams(), lost_again, "nothing shared or opened");
     }
 }

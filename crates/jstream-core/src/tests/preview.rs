@@ -550,6 +550,20 @@ fn the_preview_captures_what_the_program_shows() {
         &[CaptureSpec::Display(None), CaptureSpec::Device(None)],
     );
     assert_eq!(devices.open_streams(), 1, "the webcam opens once");
+
+    // Once no stream shows it, the preview closes the webcam.
+    act(
+        &control,
+        Call::Action {
+            action: Action::PreviewUnsubscribe { channel: 1 },
+        },
+    )
+    .expect("unsubscribed");
+    let deadline = Instant::now() + WAIT;
+    while devices.open_streams() > 0 {
+        assert!(Instant::now() < deadline, "the webcam stays open");
+        thread::sleep(Duration::from_millis(10));
+    }
 }
 
 /// A scene's stream (a projector of a scene off program) draws the display that scene
