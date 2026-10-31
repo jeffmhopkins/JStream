@@ -1294,7 +1294,7 @@ fn SceneSections(scene: SceneId) -> impl IntoView {
             <span class="source-title" title=name>{name}</span>
             <span class="kind-tag" class:keyframe=move || keyframe_of.with(Option::is_some)>{kind}</span>
             <LabelChips labels=labels />
-            <TagButton popover=popover name=name() always=true />
+            <TagButton popover=popover name=Signal::derive(name) always=true />
             {favourite_button(favourite, toggle)}
         </div>
         <LabelPopover popover=popover target=Tagged::Scene(id.get_value()) />

@@ -153,6 +153,13 @@ fn check_stamp<'a>(by: &str, note: &'a str) -> Result<&'a str> {
     if note.contains("-->") || by.contains("-->") {
         bail!("`-->` is not allowed in metadata values");
     }
+    // A stamp is one line (ADR-0053): a newline would render as a multi-line string (#858).
+    if note.chars().chain(by.chars()).any(char::is_control) {
+        bail!(
+            "the note and --by must be one line, with no newline, tab or other control \
+             character; join a wrapped note file's lines with spaces"
+        );
+    }
     if !(by.starts_with("human:") || by.starts_with("agent:")) {
         bail!("--by must be `human:<github-user>` or `agent:<name>`");
     }
@@ -905,6 +912,107 @@ fn repo_path(root: &Path, arg: &str) -> Result<String> {
     check::normalize(&rel).with_context(|| format!("`{arg}` escapes the repository"))
 }
 
+/// A parsed `docs verify` command line: the section, `--by`, and the mode with its text.
+#[derive(Debug, PartialEq, Eq)]
+enum Verify {
+    Note {
+        target: String,
+        by: String,
+        text: Text,
+    },
+    Merge {
+        target: String,
+        by: String,
+        text: Text,
+        from: Option<String>,
+    },
+    Renote {
+        target: String,
+        by: String,
+        text: Text,
+        from: Option<String>,
+    },
+}
+
+const VERIFY_USAGE: &str = "usage: cargo xtask docs verify <DOC#anchor> --by <human:..|agent:..> \
+     (--note \"<what you checked>\" | --merge \"<what the merge changed>\" [--from <branch>] | \
+     --renote \"<the better note>\" [--from <base branch>]); --note-file, --merge-file and \
+     --renote-file <path> read the text from a file, and --per-input reads it as a TOML table \
+     of one text per input";
+
+/// Parses the arguments of `docs verify` (after `verify`). `--<mode>-file <path>` reads the
+/// mode's text from a file (#855). A flag given twice, or a mode given both as text and as a
+/// file, is refused rather than letting the last one win (#858).
+fn parse_verify(args: &[String]) -> Result<Verify> {
+    let mut target = None;
+    let mut by = None;
+    let mut texts: BTreeMap<&str, String> = BTreeMap::new();
+    let mut from = None;
+    let mut per_input = false;
+    let mut seen: Vec<&str> = Vec::new();
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        let flag = a.as_str();
+        if flag.starts_with("--") {
+            // `--note` and `--note-file` set the same text, so they count as one flag.
+            let name = flag.strip_suffix("-file").unwrap_or(flag);
+            if seen.contains(&name) {
+                bail!("`{name}` is given more than once (as text or as a file); give it once");
+            }
+            seen.push(name);
+        }
+        let value = |it: &mut std::slice::Iter<'_, String>| {
+            it.next()
+                .cloned()
+                .with_context(|| format!("`{flag}` needs a value; {VERIFY_USAGE}"))
+        };
+        match flag {
+            "--by" => by = Some(value(&mut it)?),
+            "--from" => from = Some(value(&mut it)?),
+            "--per-input" => per_input = true,
+            "--note" | "--merge" | "--renote" => {
+                texts.insert(&flag[2..], value(&mut it)?);
+            }
+            "--note-file" | "--merge-file" | "--renote-file" => {
+                let path = value(&mut it)?;
+                let text = std::fs::read_to_string(&path)
+                    .with_context(|| format!("reading the text in `{path}`"))?;
+                texts.insert(&flag[2..flag.len() - 5], text);
+            }
+            t if target.is_none() && !t.starts_with("--") => target = Some(t.to_owned()),
+            other => bail!("unexpected argument `{other}`"),
+        }
+    }
+    let (Some(target), Some(by)) = (target, by) else {
+        bail!(VERIFY_USAGE);
+    };
+    let mut modes = texts.into_iter();
+    let (Some((mode, text)), None) = (modes.next(), modes.next()) else {
+        bail!(VERIFY_USAGE);
+    };
+    let text = if per_input {
+        Text::per_input(&text)?
+    } else {
+        Text::One(text)
+    };
+    Ok(match mode {
+        "note" if from.is_none() => Verify::Note { target, by, text },
+        "merge" => Verify::Merge {
+            target,
+            by,
+            text,
+            from,
+        },
+        "renote" => Verify::Renote {
+            target,
+            by,
+            text,
+            from,
+        },
+        _ => bail!(VERIFY_USAGE),
+    })
+}
+
 /// Entry point for `cargo xtask docs <args>`.
 pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
     match args.first().map(String::as_str) {
@@ -947,62 +1055,25 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
             Ok(g.problems.is_empty())
         }
         Some("verify") => {
-            let mut target = None;
-            let mut by = None;
-            let mut note = None;
-            let mut merge = None;
-            let mut renote = None;
-            let mut from = None;
-            let mut per_input = false;
-            let mut it = args[1..].iter();
-            // `--<mode>-file <path>` reads the mode's text from a file (#855).
-            let read = |path: Option<&String>| -> Result<Option<String>> {
-                path.map(|p| {
-                    std::fs::read_to_string(p).with_context(|| format!("reading the text in `{p}`"))
-                })
-                .transpose()
-            };
-            while let Some(a) = it.next() {
-                match a.as_str() {
-                    "--by" => by = it.next(),
-                    "--note" => note = it.next().cloned(),
-                    "--merge" => merge = it.next().cloned(),
-                    "--renote" => renote = it.next().cloned(),
-                    "--note-file" => note = read(it.next())?,
-                    "--merge-file" => merge = read(it.next())?,
-                    "--renote-file" => renote = read(it.next())?,
-                    "--from" => from = it.next(),
-                    "--per-input" => per_input = true,
-                    t if target.is_none() => target = Some(t),
-                    other => bail!("unexpected argument `{other}`"),
+            match parse_verify(&args[1..])? {
+                Verify::Note { target, by, text } => verify_text(root, &target, &by, &text)?,
+                Verify::Merge {
+                    target,
+                    by,
+                    text,
+                    from,
+                } => {
+                    verify_merge_text(root, &target, &by, &text, from.as_deref())?;
                 }
-            }
-            let text = |t: String| -> Result<Text> {
-                if per_input {
-                    Text::per_input(&t)
-                } else {
-                    Ok(Text::One(t))
+                Verify::Renote {
+                    target,
+                    by,
+                    text,
+                    from,
+                } => {
+                    let branch = from.as_deref().unwrap_or(merge::BRANCH);
+                    verify_renote_text(root, &target, &by, &text, branch)?;
                 }
-            };
-            let from = from.map(String::as_str);
-            match (target, by, note, merge, renote, from) {
-                (Some(target), Some(by), Some(note), None, None, None) => {
-                    verify_text(root, target, by, &text(note)?)?;
-                }
-                (Some(target), Some(by), None, Some(merge), None, from) => {
-                    verify_merge_text(root, target, by, &text(merge)?, from)?;
-                }
-                (Some(target), Some(by), None, None, Some(renote), from) => {
-                    let branch = from.unwrap_or(merge::BRANCH);
-                    verify_renote_text(root, target, by, &text(renote)?, branch)?;
-                }
-                _ => bail!(
-                    "usage: cargo xtask docs verify <DOC#anchor> --by <human:..|agent:..> \
-                     (--note \"<what you checked>\" | --merge \"<what the merge changed>\" \
-                     [--from <branch>] | --renote \"<the better note>\" [--from <base branch>]); \
-                     --note-file, --merge-file and --renote-file <path> read the text from a \
-                     file, and --per-input reads it as a TOML table of one text per input"
-                ),
             }
             Ok(true)
         }
@@ -1986,8 +2057,8 @@ mod tests {
         assert!(work.diags("is stale").is_empty());
         commit_all(&work, "work: re-verify S after the merge");
 
-        // The next merge reports the note with the first addendum, and `--merge` replaces
-        // that addendum with its own.
+        // The next merge reports the note with the first addendum, and `--merge` keeps it and
+        // appends its own (#874).
         main_edit("2");
         let m = merge::merge_main(&work.0, "main").expect("merges again");
         let i = &m.inputs["S#a"];
@@ -1997,7 +2068,10 @@ mod tests {
         assert_eq!(merge::pr_numbers(&i[0].commits), vec![2]);
         let second = "main's second a5 edit (#2) is outside it too";
         verify_merge(&work.0, "S#a", "agent:work", second).expect("S verifies");
-        assert_eq!(note("file:src/a.rs"), joined(second));
+        assert_eq!(
+            note("file:src/a.rs"),
+            joined(&format!("{first}{}{second}", ledger::MERGE_MARK))
+        );
         assert!(work.diags("is stale").is_empty());
     }
 
@@ -2209,6 +2283,241 @@ mod tests {
         work.git(&["merge", "--abort"]);
     }
 
+    /// #858 N2: plain `--note --per-input` gives each rewritten entry its own text, before a
+    /// merge and after one, where each entry also keeps its own merged-side note
+    /// (`Upstream::keep`).
+    #[test]
+    fn verify_note_per_input_writes_each_entry_its_own_text() {
+        let mut files = REGISTRIES.to_vec();
+        let s = "<!-- @doc\nid = \"S\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"src/**\"]\n-->\nText.\n";
+        files.extend([
+            ("S.md", s),
+            ("src/a.rs", "a1\n\n\n\n\na5\n"),
+            ("src/b.rs", "b\n"),
+        ]);
+        let (origin, work) = origin_and_clone("verify-note-per-input", &files);
+        verify(&origin.0, "S#a", "agent:test", NOTE).expect("S verifies");
+        commit_all(&origin, "stamps");
+        work.git(&["pull", "-q", "--no-rebase", "origin", "main"]);
+        let note = |input: &str| {
+            ledger::Ledger::read(&work.0)
+                .expect("invariant: parses")
+                .sections["S#a"][input]
+                .note
+                .clone()
+                .unwrap_or_default()
+        };
+        let table = |t: &str| Text::per_input(t).expect("parses");
+        let by = "agent:work";
+        // Before any merge: each rewritten entry gets its own text, `"*"` the rest.
+        work.write("src/a.rs", "a1 work\n\n\n\n\na5\n");
+        work.write("src/b.rs", "b work\n");
+        let a = "the branch's a1 edit, which the text still describes";
+        let b = "the branch's b edit, which the text still describes";
+        let t = table(&format!("\"file:src/a.rs\" = \"{a}\"\n\"*\" = \"{b}\""));
+        verify_text(&work.0, "S#a", by, &t).expect("verifies");
+        assert_eq!(
+            (note("file:src/a.rs"), note("file:src/b.rs")),
+            (a.into(), b.into())
+        );
+        assert_eq!(note("body"), NOTE, "the body didn't change");
+        commit_all(&work, "work: a1 and b");
+        // After a merge, a plain `--note --per-input` keeps main's note on a.rs.
+        origin.write("src/a.rs", "a1\n\n\n\n\na5 main\n");
+        let main = "[#1] main's a5 edit, which the text still describes";
+        verify(&origin.0, "S#a", "agent:main", main).expect("S verifies on main");
+        commit_all(&origin, "main: a5 (#1)");
+        merge::merge_main(&work.0, "main").expect("merges");
+        let a2 = "a1 and main's a5 (#1), both of which the text still describes";
+        verify_text(
+            &work.0,
+            "S#a",
+            by,
+            &table(&format!("\"file:src/a.rs\" = \"{a2}\"")),
+        )
+        .expect("verifies after the merge");
+        let k = ledger::KEPT_MARK;
+        assert_eq!(note("file:src/a.rs"), format!("{a2}{k}{main}"));
+        assert_eq!(note("file:src/b.rs"), b, "the merge left b.rs alone");
+        assert!(work.diags("is stale").is_empty());
+    }
+
+    /// #858: `docs verify`'s arguments. `--<mode>-file` reads the text from a file,
+    /// `--per-input` parses it as a table, `--merge` and `--renote` take `--from`; a flag
+    /// given twice, a mode given as text and as a file, two modes, a missing value and a
+    /// `--note --from` are refused.
+    #[test]
+    fn verify_arguments_parse_and_refuse_repeats() {
+        let dir = std::env::temp_dir().join(format!("xtask-verify-args-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("invariant: temp dir is writable");
+        let file = |name: &str, text: &str| {
+            let p = dir.join(name);
+            std::fs::write(&p, text).expect("invariant: temp dir is writable");
+            p.to_string_lossy().into_owned()
+        };
+        let one = file("one.txt", "the text, read from a file\n");
+        let table = file("t.toml", "body = \"the body text, which still holds\"\n");
+        let parse =
+            |args: &[&str]| parse_verify(&args.iter().map(|a| (*a).to_owned()).collect::<Vec<_>>());
+        let (s, by) = ("S#a".to_owned(), "agent:x".to_owned());
+        assert_eq!(
+            parse(&["S#a", "--by", "agent:x", "--note", "n"]).expect("parses"),
+            Verify::Note {
+                target: s.clone(),
+                by: by.clone(),
+                text: Text::One("n".into())
+            }
+        );
+        assert_eq!(
+            parse(&["S#a", "--by", "agent:x", "--note-file", &one]).expect("parses"),
+            Verify::Note {
+                target: s.clone(),
+                by: by.clone(),
+                text: Text::One("the text, read from a file\n".into())
+            }
+        );
+        assert_eq!(
+            parse(&[
+                "--per-input",
+                "S#a",
+                "--merge-file",
+                &table,
+                "--by",
+                "agent:x",
+                "--from",
+                "main"
+            ])
+            .expect("parses"),
+            Verify::Merge {
+                target: s.clone(),
+                by: by.clone(),
+                text: Text::per_input("body = \"the body text, which still holds\"")
+                    .expect("parses"),
+                from: Some("main".into())
+            }
+        );
+        assert_eq!(
+            parse(&[
+                "S#a",
+                "--by",
+                "agent:x",
+                "--renote-file",
+                &one,
+                "--from",
+                "pr"
+            ])
+            .expect("parses"),
+            Verify::Renote {
+                target: s.clone(),
+                by: by.clone(),
+                text: Text::One("the text, read from a file\n".into()),
+                from: Some("pr".into())
+            }
+        );
+        for (args, why) in [
+            (
+                vec!["S#a", "--by", "agent:x", "--note", "a", "--note", "b"],
+                "more than once",
+            ),
+            (
+                vec![
+                    "S#a",
+                    "--by",
+                    "agent:x",
+                    "--note",
+                    "a",
+                    "--note-file",
+                    one.as_str(),
+                ],
+                "more than once",
+            ),
+            (
+                vec!["S#a", "--by", "agent:x", "--by", "agent:y", "--note", "a"],
+                "more than once",
+            ),
+            (
+                vec![
+                    "S#a", "--by", "agent:x", "--merge", "a", "--from", "main", "--from", "x",
+                ],
+                "more than once",
+            ),
+            (
+                vec![
+                    "S#a",
+                    "--per-input",
+                    "--per-input",
+                    "--by",
+                    "agent:x",
+                    "--note",
+                    "a",
+                ],
+                "more than once",
+            ),
+            (
+                vec!["S#a", "--by", "agent:x", "--note", "a", "--merge", "b"],
+                "usage",
+            ),
+            (
+                vec!["S#a", "--by", "agent:x", "--note", "a", "--from", "main"],
+                "usage",
+            ),
+            (vec!["S#a", "--by", "agent:x"], "usage"),
+            (vec!["S#a", "--by", "agent:x", "--note"], "needs a value"),
+            (
+                vec!["S#a", "T#b", "--by", "agent:x", "--note", "a"],
+                "unexpected argument",
+            ),
+            (
+                vec!["S#a", "--by", "agent:x", "--nope", "a"],
+                "unexpected argument",
+            ),
+            (
+                vec!["S#a", "--by", "agent:x", "--note-file", "/nonexistent/x"],
+                "reading the text",
+            ),
+            (
+                vec![
+                    "S#a",
+                    "--by",
+                    "agent:x",
+                    "--per-input",
+                    "--note",
+                    "body = [",
+                ],
+                "TOML table",
+            ),
+        ] {
+            let err = parse(&args).expect_err(&args.join(" "));
+            assert!(format!("{err:#}").contains(why), "{args:?}: {err:#}");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// #858 N1: a stamp is one line, so a note or `--by` with a newline, tab or other control
+    /// character is refused; surrounding whitespace, as a note file's last newline, is trimmed.
+    #[test]
+    fn check_stamp_refuses_control_characters() {
+        let ok = "the text, which still holds after the edit";
+        assert_eq!(
+            check_stamp("agent:x", &format!("  {ok}\n")).expect("trimmed"),
+            ok
+        );
+        for (by, note) in [
+            ("agent:x", format!("{ok},\nwrapped")),
+            ("agent:x", format!("{ok}\r\nwrapped")),
+            ("agent:x", format!("{ok}\tand a tab")),
+            ("agent:x", format!("{ok}\u{7}")),
+            ("agent:x\ny", ok.to_owned()),
+        ] {
+            let err = check_stamp(by, &note).expect_err(&note);
+            assert!(format!("{err:#}").contains("one line"), "{err:#}");
+        }
+        // A `--per-input` text is checked the same way.
+        let t = Text::per_input(&format!("body = \"\"\"{ok}\nwrapped\"\"\"")).expect("parses");
+        assert!(t.check("agent:x").is_err());
+    }
+
     /// `--per-input` takes a TOML table of string texts, each checked as a note (#855).
     #[test]
     fn per_input_text_parses_and_checks() {
@@ -2274,11 +2583,40 @@ mod tests {
             ledger::keep_notes("new, W1", Some(&earlier), Some("W1")),
             "new, W1"
         );
-        // `--merge` keeps the kept notes out of the part it replaces.
-        let merged = format!("own{}m1{k}W1", ledger::MERGE_MARK);
+        // `--merge` keeps the kept notes out of the part it extends, and every earlier merge
+        // segment in it (#874).
+        let m = ledger::MERGE_MARK;
+        let merged = format!("own{m}m1{k}W1");
         assert_eq!(
             ledger::merge_note(Some(&merged), "m2"),
-            format!("own{}m2", ledger::MERGE_MARK)
+            format!("own{m}m1{m}m2")
+        );
+        // #888: a kept segment's pieces that the note already holds, in the new text or an
+        // earlier segment, are left out; a piece after a merge mark keeps its label.
+        assert_eq!(
+            ledger::keep_notes(&format!("own{m}m1"), None, Some(&format!("W{m}own"))),
+            format!("own{m}m1{k}W")
+        );
+        assert_eq!(
+            ledger::keep_notes(&format!("own{m}m1"), None, Some(&format!("own{m}W"))),
+            format!("own{m}m1{k}merge: W")
+        );
+        assert_eq!(
+            ledger::keep_notes(
+                "new, own",
+                Some(&format!("o{k}W1")),
+                Some(&format!("W1{m}own{k}W2"))
+            ),
+            format!("new, own{k}W1{k}W2")
+        );
+        assert_eq!(
+            ledger::keep_notes(
+                &format!("own{m}m1"),
+                Some(&format!("o{k}m1{m}own")),
+                Some("W")
+            ),
+            format!("own{m}m1{k}W"),
+            "a kept segment of this branch's own pieces only is left out"
         );
     }
 
