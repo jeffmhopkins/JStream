@@ -301,7 +301,8 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   `WindowsPluginHosts` (`Engine::scan_clap_plugins`), so they appear in `kind.list` as
   audio-filter kinds once found, and logs each file it couldn't scan; the daemon
   serves meanwhile. The engine keeps the hosts, and from then on starts a
-  `jstream-plugin-host.exe` for each CLAP filter in a source's audio chain. Without
+  `jstream-plugin-host.exe` for each CLAP filter in an audio chain (a source's, the
+  master's or an output's). Without
   `jstream-plugin-host.exe` beside the daemon every file fails to scan, and is logged.
 - **Live on macOS** (`serve.rs`). Under `cfg(target_os = "macos")` the engine gets
   the `jstream-platform-macos` backends built so far (`macos_backends`):

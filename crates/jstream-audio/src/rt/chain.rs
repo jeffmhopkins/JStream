@@ -14,7 +14,7 @@
 //! in every bus sum and all buses line up with each other. A [`Delay`] filter is a
 //! deliberate shift with no latency, so it is not compensated.
 
-use super::host::HostFilter;
+use super::host::{HostFilter, HostStandIn};
 use crate::AudioError;
 use crate::filter::{
     AudioFilter, Compressor, CompressorParams, Delay, Gain, GateParams, Limiter, LimiterParams,
@@ -134,6 +134,8 @@ pub(crate) enum Kernel {
     Limiter(Limiter),
     Delay(Delay),
     Host(HostFilter),
+    /// A master-chain CLAP filter on a bus other than the master: delayed dry.
+    HostStandIn(HostStandIn),
 }
 
 impl Kernel {
@@ -162,7 +164,7 @@ impl Kernel {
             Self::Compressor(_) => KernelKind::Compressor,
             Self::Limiter(_) => KernelKind::Limiter,
             Self::Delay(_) => KernelKind::Delay,
-            Self::Host(_) => KernelKind::Host,
+            Self::Host(_) | Self::HostStandIn(_) => KernelKind::Host,
         }
     }
 
@@ -174,6 +176,7 @@ impl Kernel {
             Self::Limiter(f) => f,
             Self::Delay(f) => f,
             Self::Host(f) => f,
+            Self::HostStandIn(f) => f,
         }
     }
 
@@ -185,6 +188,7 @@ impl Kernel {
             Self::Limiter(f) => f.latency_frames(),
             Self::Delay(f) => f.latency_frames(),
             Self::Host(f) => f.latency_frames(),
+            Self::HostStandIn(f) => f.latency_frames(),
         }
     }
 

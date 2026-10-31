@@ -1683,6 +1683,82 @@ mod tests {
         assert_frames(m.output_block(late_tap.id()).unwrap().1, [0.5; 2], "late");
     }
 
+    /// A CLAP filter on the master chain runs its plugin on the master bus only (one
+    /// host takes one chain's blocks); every other bus's copy, a later bus's included,
+    /// passes its dry signal delayed by the same latency, so every output keeps the
+    /// same stamp.
+    #[test]
+    fn a_master_clap_filter_runs_on_the_master_bus_only() {
+        use crate::HostMemory;
+        use jstream_plugin_proto::{Config, EngineBlock, Shared, first_useful};
+        let block = 480;
+        let mut m = Mixer::new(config(block)).unwrap();
+        let (mut a, ca) = m.add_input(stereo48()).unwrap();
+        feed(&mut a, 0.5, 0.5, 1.0);
+        let aux = m.add_bus().unwrap();
+        ca.set_send(aux.id(), 1.0);
+        let tap = m.add_output_tap(aux.id()).unwrap();
+        let shared: Arc<Shared> = Arc::from(Shared::new_boxed());
+        shared
+            .init(Config {
+                sample_rate: RATE,
+                block_frames: block as u32,
+                depth: 1,
+            })
+            .unwrap();
+        shared.publish_ready(0);
+        let memory: HostMemory = Arc::new(EngineBlock::new(Arc::clone(&shared)));
+        let clap = m.master().insert_host_filter(0, memory).unwrap();
+        assert_eq!(clap.latency_frames(), block);
+        // The host, inline: halves every block the mixer wrote.
+        let mut next = 0u64;
+        let mut host = || {
+            let head = shared.input.head();
+            next = next.max(first_useful(head, 1));
+            let mut buf = vec![0.0; 2 * block];
+            while next < head {
+                if shared.input.read(next, &mut buf) {
+                    buf.iter_mut().for_each(|s| *s *= 0.5);
+                    shared.output.write(next, &buf);
+                }
+                next += 1;
+            }
+        };
+        let mut out = vec![0.0; 2 * block];
+        let mut at = 40_000i64;
+        let mut last = None;
+        for _ in 0..4 {
+            last = Some(m.mix(at, &mut out).unwrap());
+            host();
+            at += block as i64;
+        }
+        assert_eq!(m.latency_frames(), block);
+        assert_frames(&out, [0.25; 2], "the master bus through the plugin");
+        let (pts, tapped) = m.output_block(tap.id()).unwrap();
+        assert_frames(tapped, [0.5; 2], "aux: delayed dry");
+        assert_eq!(pts, last.unwrap().pts, "the same stamp");
+
+        let late = m.add_bus().unwrap();
+        ca.set_send(late.id(), 1.0);
+        let late_tap = m.add_output_tap(late.id()).unwrap();
+        for _ in 0..3 {
+            m.mix(at, &mut out).unwrap();
+            host();
+            at += block as i64;
+        }
+        assert_frames(&out, [0.25; 2], "still through the plugin");
+        assert_frames(
+            m.output_block(late_tap.id()).unwrap().1,
+            [0.5; 2],
+            "late bus",
+        );
+
+        assert!(clap.remove());
+        m.mix(at, &mut out).unwrap();
+        assert_eq!(m.latency_frames(), 0);
+        assert_frames(&out, [0.5; 2], "removed");
+    }
+
     /// An output tap's own chain changes only that tap's blocks, and its latency only
     /// that tap's presentation time; the master chain's latency moves every output's.
     #[test]

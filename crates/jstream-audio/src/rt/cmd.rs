@@ -17,7 +17,7 @@ use super::bus::{BusShared, MASTER_ID, MAX_BUSES};
 use super::chain::{
     Chain, FilterBook, FilterParams, FilterSpec, Kernel, MAX_CHAIN_LATENCY_MS, MAX_FILTERS,
 };
-use super::host::{HostFilter, HostMemory};
+use super::host::{HostFilter, HostMemory, HostStandIn};
 use super::input::{InputProducer, InputShared};
 use super::retire::Retirer;
 use super::ring::FrameRing;
@@ -277,15 +277,16 @@ impl ControlPlane {
     }
 
     /// A bus's copy of the master chain: each filter in `book` built from its spec,
-    /// edits included.
+    /// edits included, and a CLAP filter's stand-in.
     fn master_copy(&self, book: Option<&Vec<FilterBook>>) -> Result<Chain, AudioError> {
         let mut chain = Chain::new(self.sample_rate)?;
         for filter in book.into_iter().flatten() {
-            // Every master filter has a spec: `add_host_filter` refuses the master.
-            let spec = filter.spec.ok_or(AudioError::InvalidConfig {
-                what: "a CLAP filter can't be on the master chain",
-            })?;
-            let kernel = Box::new(Kernel::build(self.sample_rate, spec)?);
+            // A CLAP filter runs only on the master bus, which always exists: a new
+            // bus gets its stand-in.
+            let kernel = Box::new(match filter.spec {
+                Some(spec) => Kernel::build(self.sample_rate, spec)?,
+                None => Kernel::HostStandIn(HostStandIn::new(self.sample_rate, filter.latency)?),
+            });
             // The book holds at most MAX_FILTERS, which the chain has room for.
             if chain.insert(usize::MAX, filter.id, kernel).is_err() {
                 return Err(AudioError::TooManyFilters);
@@ -363,8 +364,9 @@ impl ControlPlane {
 
     /// Builds the mixer side of the CLAP filter whose host uses `memory`, and queues it
     /// for `target`'s chain at `index` (clamped to the end). Returns its id and latency.
-    /// Not on the master chain, which every bus runs its own copy of: each copy would
-    /// need its own host.
+    /// On the master chain, which every bus runs its own copy of, the plugin runs on the
+    /// master bus's copy and every other bus's copy delays its dry signal by the same
+    /// latency ([`HostStandIn`]): one host takes one chain's blocks.
     pub(crate) fn add_host_filter(
         &self,
         target: ChainTarget,
@@ -372,9 +374,13 @@ impl ControlPlane {
         memory: HostMemory,
     ) -> Result<(u64, usize), AudioError> {
         if target == ChainTarget::Master {
-            return Err(AudioError::InvalidConfig {
-                what: "a CLAP filter can't be on the master chain",
-            });
+            let rate = self.sample_rate;
+            return self.add_master_kernels(
+                index,
+                None,
+                || HostFilter::new(rate, self.block_frames, memory).map(Kernel::Host),
+                |latency| HostStandIn::new(rate, latency).map(Kernel::HostStandIn),
+            );
         }
         self.queue_filter(target, index, None, || {
             HostFilter::new(self.sample_rate, self.block_frames, memory).map(Kernel::Host)
@@ -438,13 +444,34 @@ impl ControlPlane {
         index: usize,
         spec: FilterSpec,
     ) -> Result<(u64, usize), AudioError> {
+        let rate = self.sample_rate;
+        self.add_master_kernels(
+            index,
+            Some(spec),
+            || Kernel::build(rate, spec),
+            |_| Kernel::build(rate, spec),
+        )
+    }
+
+    /// Builds a master filter for the master bus with `first`, and for every other bus
+    /// with `other` given the first's latency, and queues the copies in one command, so
+    /// every bus's master chain gets it at the same block. `spec` is what it was built
+    /// from, if anything.
+    fn add_master_kernels(
+        &self,
+        index: usize,
+        spec: Option<FilterSpec>,
+        first: impl FnOnce() -> Result<Kernel, AudioError>,
+        other: impl Fn(usize) -> Result<Kernel, AudioError>,
+    ) -> Result<(u64, usize), AudioError> {
         let buses = lock(&self.buses);
         let mut books = lock(&self.books);
         let book = books.entry(ChainTarget::Master).or_default();
-        let first = self.admit(book, || Kernel::build(self.sample_rate, spec))?;
+        let first = self.admit(book, first)?;
         let latency = first.latency_frames();
         let id = self.next_filter_id.fetch_add(1, Ordering::Relaxed);
-        let filter = FilterBook::new(id, Some(spec), &first);
+        let filter = FilterBook::new(id, spec, &first);
+        // Slot 0, the master bus, always holds a bus, so it takes `first`.
         let mut first = Some(first);
         let mut kernels: Vec<Option<(u64, Box<Kernel>)>> = Vec::with_capacity(MAX_BUSES);
         for bus in buses.iter() {
@@ -452,7 +479,7 @@ impl ControlPlane {
                 Some(bus) => {
                     let kernel = match first.take() {
                         Some(kernel) => kernel,
-                        None => Kernel::build(self.sample_rate, spec)?,
+                        None => other(latency)?,
                     };
                     Some((*bus, Box::new(kernel)))
                 }

@@ -40,10 +40,16 @@
 //! bus, which runs that chain after the master's; the output encodes its audio from the
 //! tap instead of sharing the master bus's encode. Each sync brings both chains in line
 //! with the collection, so their filters change live.
+//!
+//! A CLAP filter on either (ADR-0035) runs in a plugin host process, which the program
+//! stage's audio thread starts and supervises off the collection lock
+//! (`crate::audio_sources::Wanted::set_routed_chains`). Each sync names both chains to
+//! that thread and puts each CLAP filter on its host's block once it is ready; until
+//! then the filter is bypassed. The next `meters.tick` syncs again when a block changes.
 
 use crate::activity::activity_gains;
-use crate::audio_sources::{Wanted, WantedMonitor};
-use crate::filters::{Chain, chain_of};
+use crate::audio_sources::{RoutedChains, Wanted, WantedMonitor};
+use crate::filters::{Chain, Clap, chain_of};
 use arc_swap::ArcSwap;
 use jstream_audio::meter::{LoudnessMeter, TruePeakMeter};
 use jstream_audio::{
@@ -89,8 +95,11 @@ struct Attached {
     master_chain: Chain,
     /// The output tap of each running output with its own audio chain.
     output_taps: BTreeMap<OutputId, Tap>,
-    /// Output taps whose removal the mixer refused: each sync tries again.
-    removing_taps: Vec<OutputTapControl>,
+    /// Output taps whose removal the mixer refused, by output: each sync tries again.
+    removing_taps: Vec<(OutputId, OutputTapControl)>,
+    /// The chains last named to the program stage's audio thread, which runs their
+    /// CLAP filters' hosts.
+    routed: RoutedChains,
     /// Where the program stage's audio thread learns which monitors to play.
     wanted: Arc<Wanted>,
 }
@@ -245,6 +254,38 @@ fn drawn_sources(state: &State) -> BTreeSet<SourceId> {
         .collect()
 }
 
+impl Attached {
+    /// Names the master chain and each tapped output's chain to the program stage's
+    /// audio thread, which runs their CLAP filters' hosts.
+    fn name_routed(&mut self, state: &State) {
+        self.routed = RoutedChains {
+            master: chain_of(state.master()),
+            outputs: self
+                .output_taps
+                .keys()
+                .filter_map(|id| Some((id.clone(), chain_of(state.output(id)?.filters()))))
+                .collect(),
+        };
+        self.wanted.set_routed_chains(self.routed.clone());
+    }
+
+    /// The ready CLAP blocks of `output_id`'s tap chain: none while an older tap of
+    /// the output that the mixer still runs may hold them.
+    fn tap_blocks(
+        &self,
+        output_id: &OutputId,
+    ) -> BTreeMap<jstream_protocol::FilterId, jstream_platform::HostBlock> {
+        if self.removing_taps.iter().any(|(id, _)| id == output_id) {
+            return BTreeMap::new();
+        }
+        self.wanted
+            .routed_blocks()
+            .outputs
+            .remove(output_id)
+            .unwrap_or_default()
+    }
+}
+
 impl AudioRouting {
     /// Starts routing into `mixer`, set up as `state` says with `program` on the
     /// Program mix, with the audio sources' mixer `inputs`. Returns the attach's number,
@@ -267,6 +308,7 @@ impl AudioRouting {
             master_chain: Chain::default(),
             output_taps: BTreeMap::new(),
             removing_taps: Vec::new(),
+            routed: RoutedChains::default(),
             scopes: mixer.scopes,
             taps: mixer.taps,
             wanted: mixer.wanted,
@@ -285,6 +327,7 @@ impl AudioRouting {
         {
             // Its mixer buses go with it: the next program's names its own.
             attached.wanted.set_monitors(BTreeMap::new());
+            attached.wanted.set_routed_chains(RoutedChains::default());
         }
     }
 
@@ -308,23 +351,51 @@ impl AudioRouting {
             .control
             .add_output_tap(attached.master.id())
             .map_err(|err| format!("output tap: {err}"))?;
+        // Queued before the new tap's filters, so a CLAP filter's block never feeds two
+        // taps at once.
+        if let Some(old) = attached.output_taps.remove(output_id)
+            && !old.control.remove()
+        {
+            attached
+                .removing_taps
+                .push((output_id.clone(), old.control));
+        }
         let mut chain = Chain::default();
         if let Some(output) = state.output(output_id) {
-            for reason in chain.apply(&control, &chain_of(output.filters()), None, Instant::now()) {
+            let blocks = attached.tap_blocks(output_id);
+            for reason in chain.apply(
+                &control,
+                &chain_of(output.filters()),
+                Clap::Blocks(&blocks),
+                Instant::now(),
+            ) {
                 tracing::warn!(output_id = %output_id, reason, "output filter not applied");
             }
         }
-        if let Some(old) = attached.output_taps.insert(
+        attached.output_taps.insert(
             output_id.clone(),
             Tap {
                 control: control.clone(),
                 chain,
             },
-        ) && !old.control.remove()
-        {
-            attached.removing_taps.push(old.control);
-        }
+        );
+        attached.name_routed(state);
         Ok(control)
+    }
+
+    /// How many CLAP filters run on a host's block in the master chain and in each
+    /// output tap's chain, for tests.
+    #[cfg(test)]
+    pub(crate) fn hosted(&self) -> (usize, BTreeMap<OutputId, usize>) {
+        self.attached.as_ref().map_or_else(Default::default, |a| {
+            (
+                a.master_chain.hosted(),
+                a.output_taps
+                    .iter()
+                    .map(|(id, tap)| (id.clone(), tap.chain.hosted()))
+                    .collect(),
+            )
+        })
     }
 
     /// Removes `output_id`'s tap `tap`, once its output has stopped. A tap of an earlier
@@ -338,9 +409,15 @@ impl AudioRouting {
             .get(output_id)
             .is_some_and(|own| own.control.id() == tap)
             && let Some(own) = attached.output_taps.remove(output_id)
-            && !own.control.remove()
         {
-            attached.removing_taps.push(own.control);
+            if !own.control.remove() {
+                attached
+                    .removing_taps
+                    .push((output_id.clone(), own.control));
+            }
+            // Its CLAP filters' hosts stop.
+            attached.routed.outputs.remove(output_id);
+            attached.wanted.set_routed_chains(attached.routed.clone());
         }
     }
 
@@ -360,27 +437,35 @@ impl AudioRouting {
             return;
         };
         attached.removing.retain(|bus| !bus.remove());
-        attached.removing_taps.retain(|tap| !tap.remove());
+        attached.removing_taps.retain(|(_, tap)| !tap.remove());
+        attached.name_routed(state);
+        let blocks = attached.wanted.routed_blocks();
         for reason in attached.master_chain.apply(
             &attached.control.master(),
-            &chain_of(state.master()),
-            None,
+            &attached.routed.master,
+            Clap::Blocks(&blocks.master),
             Instant::now(),
         ) {
             tracing::warn!(reason, "master filter not applied");
         }
+        let none = BTreeMap::new();
         for (output_id, tap) in &mut attached.output_taps {
             // The output may be gone while its failed pipeline drains; its release
             // removes the tap.
-            let Some(output) = state.output(output_id) else {
+            let Some(wanted) = attached.routed.outputs.get(output_id) else {
                 continue;
             };
-            for reason in tap.chain.apply(
-                &tap.control,
-                &chain_of(output.filters()),
-                None,
-                Instant::now(),
-            ) {
+            // An older tap of this output that the mixer still runs may hold the
+            // blocks: they wait for it to go.
+            let blocks = if attached.removing_taps.iter().any(|(id, _)| id == output_id) {
+                &none
+            } else {
+                blocks.outputs.get(output_id).unwrap_or(&none)
+            };
+            for reason in
+                tap.chain
+                    .apply(&tap.control, wanted, Clap::Blocks(blocks), Instant::now())
+            {
                 tracing::warn!(output_id = %output_id, reason, "output filter not applied");
             }
         }

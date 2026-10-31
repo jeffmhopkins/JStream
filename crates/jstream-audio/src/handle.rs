@@ -537,6 +537,31 @@ impl MasterControl {
     ) -> Result<FilterControl, AudioError> {
         insert_filter(&self.plane, ChainTarget::Master, index, spec)
     }
+
+    /// [`InputControl::insert_host_filter`] for the master chain. The plugin runs on
+    /// the master bus's copy only, as one host takes one chain's blocks; every other
+    /// bus's copy delays its dry signal by the filter's latency instead, so the master
+    /// chain's latency stays the same on every bus.
+    ///
+    /// # Errors
+    /// As [`InputControl::insert_host_filter`].
+    pub fn insert_host_filter(
+        &self,
+        index: usize,
+        memory: HostMemory,
+    ) -> Result<FilterControl, AudioError> {
+        insert_host_filter(&self.plane, ChainTarget::Master, index, memory)
+    }
+
+    /// The mixer's sample rate, which a CLAP filter's block is initialised for.
+    pub fn mixer_rate(&self) -> u32 {
+        self.plane.sample_rate()
+    }
+
+    /// Frames per mixer block, which a CLAP filter's block is initialised for.
+    pub fn mixer_block_frames(&self) -> usize {
+        self.plane.block_frames()
+    }
 }
 
 /// One mixer's output tap. Opaque: [`OutputTapControl::id`] produces one.
@@ -607,6 +632,16 @@ impl OutputTapControl {
             index,
             memory,
         )
+    }
+
+    /// The mixer's sample rate, which a CLAP filter's block is initialised for.
+    pub fn mixer_rate(&self) -> u32 {
+        self.plane.sample_rate()
+    }
+
+    /// Frames per mixer block, which a CLAP filter's block is initialised for.
+    pub fn mixer_block_frames(&self) -> usize {
+        self.plane.block_frames()
     }
 
     /// Removes the tap; its filters go with it. False when it was already removed, or
