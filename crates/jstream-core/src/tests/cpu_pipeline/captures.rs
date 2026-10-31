@@ -653,6 +653,64 @@ fn an_unplugged_webcam_is_closed_and_the_output_stays_up() {
     block_on_stop(&control);
 }
 
+/// A preview stream and an output showing the same webcam share its one open: the
+/// preview opens it with no output running, the output's stage reads the same open
+/// while it runs, and the preview keeps it once the output stops.
+#[test]
+fn the_preview_and_an_output_share_a_webcam() {
+    let (fakes, devices) = with_devices();
+    let engine = engine(
+        share(&fakes.backends),
+        cpu_draw(),
+        Box::new(RecordingPublish::new()),
+    )
+    .with_preview_draw(crate::preview::cpu_draw());
+    let control = connected(&engine);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            webcam("cam", FAKE_WEBCAM),
+            add("a", "i1", "cam"),
+        ]),
+    )
+    .expect("created");
+    assert!(engine.settle_sources(), "the sources were built in time");
+    let _frames = control.binary();
+    super::super::block_on(control.call(jstream_protocol::Call::Action {
+        action: jstream_protocol::Action::PreviewSubscribe {
+            channel: 1,
+            max_width: None,
+            max_height: None,
+            fps: Some(30),
+            codecs: Vec::new(),
+            scene_id: None,
+        },
+    }))
+    .expect("preview.subscribe");
+    assert!(
+        pump_until(&fakes.clock, &fakes.audio, || devices.open_streams() == 1),
+        "the preview opened the webcam"
+    );
+
+    let mut events = control.events();
+    start(&control, &mut events);
+    let since = fakes.clock.now().ticks();
+    let mut most = 0;
+    assert!(pump_until(&fakes.clock, &fakes.audio, || {
+        most = most.max(devices.open_streams());
+        fakes.clock.now().ticks() - since > RETRY_MS * 1_000
+    }));
+    assert_eq!(most, 1, "the output's stage opened the webcam again");
+
+    block_on_stop(&control);
+    assert_eq!(
+        devices.open_streams(),
+        1,
+        "the preview still shows the webcam"
+    );
+}
+
 fn block_on_stop(control: &dyn Control) {
     super::super::block_on(control.call(output_call("yt", false))).expect("output.stop");
 }
