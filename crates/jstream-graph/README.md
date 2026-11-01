@@ -25,7 +25,8 @@ protocol's types (`Overrides`).
 
 **Model** (`model/`, [ARCH › Data model](../../docs/ARCHITECTURE.md#data-model)):
 - `Graph`: the `State` plus its `rev`, and the kind descriptors it validates `builtin`
-  sources against. The engine supplies them (`Graph::with_kinds`); they are not
+  sources against. The engine supplies them (`Graph::with_kinds`, and
+  `Graph::without_kinds` for an effect pack that's gone); they are not
   collection state, and `Graph::new()` describes only the built-in transition kinds
   (`cut`, `fade`, `move`), which every graph has.
 - `State`: the `canvas` (default 1920×1080), the `sources`, keyed by ID, the `scenes`

@@ -156,7 +156,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 4 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; token and Origin checks; serves UI assets; serves MCP's streamable-HTTP transport on the control port behind the same checks | no |
 | 4 | `jstream-sources` | `Source` trait plus built-ins ([ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md)): display, window, video capture device, image, color, text, browser, audio input, desktop audio, application audio, scene (M1b); media file, audio waveform, audio spectrum (M2); YouTube chat message ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)) (M3); Spout2 receiver (later). Uses platform traits; backends are injected. Images and fonts use pure-Rust crates. | no |
 | 4 | `jstream-outputs` | RTMP(S) publish client with reconnect, and the recording file sink. Uses `mux`. Planned: the `Output` trait, and use of `encode` and platform traits. The virtual-camera output runs in `jstream-core`'s runtime. | no |
-| 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl`; CLAP filter kinds from plugin scans and the host supervisor (ADR-0035); runs WASM automation plugins on `jstream-plugin-wasm`'s host, behind the default `wasm-plugins` feature ([ADR-0075](adr/0075-wasm-plugin-host-in-the-engine.md)) | no |
+| 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl`; CLAP filter kinds from plugin scans and the host supervisor (ADR-0035); WGSL effect-pack video filter kinds from a watched folder, drawn through `jstream-effects` (ADR-0035); runs WASM automation plugins on `jstream-plugin-wasm`'s host, behind the default `wasm-plugins` feature ([ADR-0075](adr/0075-wasm-plugin-host-in-the-engine.md)) | no |
 | 3 | `jstream-ui` | Leptos app compiled to WASM ([ADR-0045](adr/0045-leptos-web-ui.md)); depends on `jstream-protocol` and `jstream-control` only | no |
 | 6 | `jstream-ui-e2e` | Test-only harness at `crates/jstream-ui/tests/e2e/mock-daemon`: `MockEngine` behind `jstream-server`, serving the built UI for the Playwright tests; never shipped | no |
 | 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server, and the platform crate of the OS they run on; `jstream-desktop` also links sources, and `jstream-browser` with its `cef` feature; `jstream-daemon` always links `jstream-browser` to give the engine a browser backend, CEF's with its `cef` feature); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host (plugin-clap, which only it may link, plugin-proto, and the Windows platform crate for its shared block; [ADR-0035](adr/0035-clap-plugins-out-of-process.md)); `jstream-browser-helper`, the sandboxed browser helper's DLL ([ADR-0048](adr/0048-sandboxed-browser-helper.md); it declares `unsafe` for its one export) | no |
@@ -410,10 +410,11 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   source's enabled audio filters of the built-in kinds (`gain`, `noise_gate`,
   `compressor`, `limiter`, `delay`). A `browser` page's audio and a `media` file's
   sound are mixer inputs of their running source, routed the same way. A source's
-  enabled video filters of `jstream-render`'s built-in kinds run in order over its
-  frame or capture before every placement of it, in every mix (roadmap V0,
-  [core › Design](../crates/jstream-core/README.md#design)); effect-pack kinds are
-  bypassed there for now.
+  enabled video filters of `jstream-render`'s built-in kinds, and of the effect packs'
+  kinds once their pack is loaded, run in order over its frame or capture before every
+  placement of it, in every mix (roadmap V0,
+  [core › Design](../crates/jstream-core/README.md#design)); a filter whose pack isn't
+  loaded is bypassed.
   Outputs, ordered by ID, with their `kind`, an optional `encoder_profile` and an
   optional `video_mix`: `Rtmp {
   target: Generic { url } }`, the URL checked to carry no credential, or `Record { path,
@@ -1043,8 +1044,8 @@ reports the loss as an error rather than panicking. The third loss within
 engine event for a loss (a protocol change), attributing a loss to the effect pack that
 was drawing, quarantining that pack, and the GPU-time guard (timestamp queries that
 quarantine an effect whose pass runs over half the frame budget for 30 frames running,
-before Windows' TDR fires), all of which wait for packs to be drawn in the engine (V0's
-effect-pack kinds).
+before Windows' TDR fires). The engine draws pack kinds now
+([jstream-core › Design](../crates/jstream-core/README.md#design)), so these can be built.
 
 **Transitions** ([ADR-0029](adr/0029-transitions.md), with
 [ADR-0052](adr/0052-transition-mechanics-and-studio-preview.md)'s mechanics). A Move is not a texture blend:

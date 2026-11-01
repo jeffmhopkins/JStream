@@ -179,6 +179,7 @@ pub fn engine(
         let _ = (data, vcam, secrets);
         Arc::new(engine)
     };
+    engine.watch_effect_packs(data.join(jstream_platform::paths::EFFECTS_DIR));
     // `stats.tick`'s load: the process's CPU time, and a tick a second while idle.
     #[cfg(windows)]
     engine.set_process_cpu(Arc::new(jstream_platform_windows::WindowsProcessCpu));

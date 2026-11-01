@@ -104,6 +104,10 @@ folder, and its log `logs\cef.log`.
   ([jstream-platform › Purpose](../../crates/jstream-platform/README.md#purpose)).
 - **The collection** is `collection.json` in the data folder, created the first time
   with nothing in it but the prototype's four sample labels, and saved on every change, so the next start opens where the last one stopped.
+- **Effect packs** are the pack folders in the data folder's `effects`, the folder the
+  daemon watches by default: the engine loads them at start and reloads them when they
+  change (`Engine::watch_effect_packs`,
+  [jstream-core › Design](../../crates/jstream-core/README.md#design)).
 - **The workspace layout** (the dock and saved layouts) is kept in `ui-settings.json` in
   the data folder, the file the daemon keeps it in too, so the window and a browser of
   the daemon show the same layout
@@ -148,7 +152,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   folder's `ui-settings.json` (`Host::start`'s `ui_settings`,
   [ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)). On Windows the engine is live with the same wiring as the daemon (OS backends,
   keys in Credential Manager, an RTMP(S) publish opener); elsewhere it has no backends.
-  Everywhere it starts the engine's stats heartbeat, so the header's readout shows the
+  Everywhere it watches the data folder's `effects` for effect packs
+  (`Engine::watch_effect_packs`) and starts the engine's stats heartbeat, so the header's readout shows the
   engine's load while nothing is live, and on Windows it hands the engine
   `WindowsProcessCpu` for that readout's CPU share.
   When the app exits, the server closes its connections and the engine stops.
