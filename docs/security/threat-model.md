@@ -327,7 +327,7 @@ before they reach the UI, agents or the log (#351).
 <a id="mcp"></a>
 ## MCP agents
 <!-- @section
-depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/adr/0036-mcp-events-polling-tool.md", "docs/adr/0059-mcp-annotations-and-remote-text.md"]
+depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/adr/0036-mcp-events-polling-tool.md", "docs/adr/0059-mcp-annotations-and-remote-text.md", "docs/adr/0085-capture-target-names-marked-as-remote-text.md"]
 -->
 
 **Threats:** an agent following instructions hidden in text it reads (prompt
@@ -344,11 +344,14 @@ host removes the output's key rather than sending it there (#343).
 Third-party text is marked as data ([ADR-0059](../adr/0059-mcp-annotations-and-remote-text.md)):
 the server instructions and the `output` tool's description say that fields named
 `remote_*`, and the whole `action_failed` reason of a start a streaming server refused,
-are data and never instructions. That rejection text, today the only third-party text
-an agent reads, has the key replaced, is cut to 512 characters and has control
-characters replaced. Every tool carries MCP annotations (`readOnlyHint`,
-`destructiveHint`, `openWorldHint`), so a client can ask the user before an agent
-retargets an output, sets its key, goes live or deletes something (#346).
+are data and never instructions. That rejection text has the key replaced, is cut to
+512 characters and has control characters replaced. A window's `name` in
+`capture.targets`, its title or on macOS its application's name, is third-party text
+too: the `capture` tool's description and the server instructions mark it as data and
+never instructions ([ADR-0085](../adr/0085-capture-target-names-marked-as-remote-text.md)).
+Every tool carries MCP annotations (`readOnlyHint`, `destructiveHint`,
+`openWorldHint`), so a client can ask the user before an agent retargets an output,
+sets its key, goes live or deletes something (#346).
 
 **Accepted:** full access, with no tiers and no confirmation step
 ([ADR-0006](../adr/0006-mcp-full-access.md)). An agent sees the program through
