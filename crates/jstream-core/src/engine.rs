@@ -2806,10 +2806,9 @@ impl State {
         self.route_audio();
         self.publish_render();
         let state = self.graph.state();
-        if self
-            .gestures
-            .drop_missing(|item_id| state.item(item_id).is_some())
-        {
+        if self.gestures.drop_missing(|item_id, keyframe| {
+            state.item(item_id).is_some() && keyframe.is_none_or(|id| is_keyframe(state, id))
+        }) {
             self.publish_live();
         }
         self.subscribers.emit(
@@ -3197,22 +3196,15 @@ impl State {
         wake: &mut Vec<Waker>,
     ) -> Result<CallResult, ProtocolError> {
         self.gestures.check_set(client_id, gesture_id, &values)?;
-        // Live values are drawn per item, so one meant for a keyframe scene's override
-        // would move the parent's item wherever it shows (#702 builds them).
-        let state = self.graph.state();
-        if let Some(at) = values.iter().position(|value| {
-            live_scene(value).is_some_and(|scene| state.family_of(scene) != scene)
-        }) {
-            return Err(ProtocolError::invalid_argument(
-                format!("values.{at}.scene_id"),
-                "live values on a keyframe scene are not supported yet (#702); send the value in a batch",
-            ));
-        }
         self.graph
             .clone()
             .apply(&values, None)
             .map_err(values_error)?;
-        self.gestures.set(client_id, gesture_id, values);
+        // A value addressed to a keyframe scene is a parameter of that keyframe's: it
+        // shows only where the keyframe draws the item (#846).
+        let state = self.graph.state();
+        self.gestures
+            .set(client_id, gesture_id, values, |id| is_keyframe(state, id));
         self.publish_live();
         self.live_tick(Instant::now(), wake);
         Ok(CallResult::action())
@@ -3538,12 +3530,9 @@ fn not_implemented(what: &str) -> ProtocolError {
     }
 }
 
-/// The scene a live-adjustable setter names, if it names one.
-fn live_scene(value: &Edit) -> Option<&SceneId> {
-    match value {
-        Edit::ItemSetTransform { scene_id, .. }
-        | Edit::ItemSetGeometry { scene_id, .. }
-        | Edit::ItemSetCrop { scene_id, .. } => scene_id.as_ref(),
-        _ => None,
-    }
+/// Whether `scene_id` names a keyframe scene of `state` (ADR-0024 §2).
+fn is_keyframe(state: &jstream_graph::State, scene_id: &SceneId) -> bool {
+    state
+        .scene(scene_id)
+        .is_some_and(|scene| scene.variant_of().is_some())
 }

@@ -1102,9 +1102,13 @@ named by a `gesture_id` it chooses, and sends its values as it goes:
   real-time paths exist. Values are checked as a batch's edits are, named
   `values.<n>.<field>`. Any other edit (`values.<n>.type`), an empty list, more than 256
   values, or a 17th open gesture of the client is `invalid_argument`, and nothing in the
-  message is applied. So is a value whose `scene_id` names a keyframe scene
-  (`values.<n>.scene_id`, since 0.39): live values are per item, and on keyframe
-  scenes they come with #702; a batch writes the override. The engine never refuses a `live.set` for arriving fast; a client
+  message is applied. A value whose `scene_id` names a keyframe scene (refused with
+  `values.<n>.scene_id` from 0.39 until #846) is a parameter of that keyframe's, apart
+  from the item's own, so a gesture on each can be open at once. It shows only where the
+  keyframe draws the item. Where the keyframe draws it, the item's own live value shows
+  only in a field the keyframe doesn't override, as an edit to the parent would
+  (ADR-0049 §1). Its commit is a batch that writes the override, and deleting the
+  keyframe drops it. The engine never refuses a `live.set` for arriving fast; a client
   keeps one per gesture in flight and sends its newest values when the answer comes.
 - **Commit:** the client sends one ordinary batch with the final values and
   `ends_gesture`. It is one `rev`, one undo step whose inverse restores the values from

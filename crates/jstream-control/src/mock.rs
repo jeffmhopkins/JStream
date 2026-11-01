@@ -290,17 +290,20 @@ struct State {
 }
 
 /// A parameter a live value overrides: an item's placement (`false`) or its crop
-/// (`true`). Ordered as the engine orders them, placements first, so `live.changed` and
+/// (`true`), as the item has it (`None`) or as a keyframe scene overrides it (#846).
+/// Ordered as the engine orders them, placements first, so `live.changed` and
 /// `live.list` list values in the same order.
-type Param = (bool, ItemId);
+type Param = (bool, Option<SceneId>, ItemId);
 
-/// The parameter `value` sets, if it is live-adjustable.
-fn param_of(value: &Edit) -> Option<Param> {
+/// The parameter `value` sets, if it is live-adjustable. `is_keyframe` says whether the
+/// scene it names is a keyframe scene, whose values are parameters of their own.
+fn param_of(value: &Edit, is_keyframe: impl Fn(&SceneId) -> bool) -> Option<Param> {
+    let keyframe = live_scene(value).filter(|id| is_keyframe(id)).cloned();
     match value {
         Edit::ItemSetTransform { item_id, .. } | Edit::ItemSetGeometry { item_id, .. } => {
-            Some((false, item_id.clone()))
+            Some((false, keyframe, item_id.clone()))
         }
-        Edit::ItemSetCrop { item_id, .. } => Some((true, item_id.clone())),
+        Edit::ItemSetCrop { item_id, .. } => Some((true, keyframe, item_id.clone())),
         _ => None,
     }
 }
@@ -765,8 +768,8 @@ impl State {
     }
 
     /// What follows every applied batch, undo and redo: the outputs follow the
-    /// collection, live values on deleted items go, `state.changed` is emitted, and the
-    /// program scene is reconciled.
+    /// collection, live values on deleted items and keyframe scenes go, `state.changed`
+    /// is emitted, and the program scene is reconciled.
     fn changed(
         &mut self,
         client_id: &ClientId,
@@ -775,11 +778,14 @@ impl State {
         cause: Option<HistoryDirection>,
     ) {
         self.sync_outputs();
-        let items = &self.collection.items;
-        self.holders
-            .retain(|(_, item_id), _| items.contains_key(item_id));
+        let collection = &self.collection;
+        let exists = |(_, keyframe, item_id): &Param| {
+            collection.items.contains_key(item_id)
+                && keyframe.as_ref().is_none_or(|id| collection.is_variant(id))
+        };
+        self.holders.retain(|param, _| exists(param));
         for values in self.gestures.values_mut() {
-            values.retain(|(_, item_id), _| items.contains_key(item_id));
+            values.retain(|param, _| exists(param));
         }
         self.emit(Event::StateChanged {
             rev,
@@ -1139,16 +1145,6 @@ impl State {
         if !self.gestures.contains_key(&key) && open >= MAX_GESTURES_PER_CLIENT {
             return Err(invalid("gesture_id".into(), "16 gestures are open"));
         }
-        // Live values on a keyframe scene wait on #702, after the gesture limit, as in the engine.
-        if let Some(at) = values.iter().position(|value| {
-            live_scene(value).is_some_and(|scene_id| self.collection.is_variant(scene_id))
-        }) {
-            return Err(invalid(
-                format!("values.{at}.scene_id"),
-                "live values on a keyframe scene are not supported yet (#702); send the value \
-                 in a batch",
-            ));
-        }
         let running = self.running();
         let mut check = self.collection.clone();
         for (at, value) in values.iter().enumerate() {
@@ -1172,7 +1168,7 @@ impl State {
         }
         let mut changed = BTreeMap::new();
         for value in values {
-            let Some(param) = param_of(&value) else {
+            let Some(param) = param_of(&value, |id| self.collection.is_variant(id)) else {
                 continue;
             };
             if let Some(holder) = self.holders.insert(param.clone(), key.clone())
@@ -4005,7 +4001,8 @@ mod tests {
         assert!(undo(&*control).is_ok());
         assert_eq!(state(&*control), before);
 
-        // `live.set` refuses a keyframe target, after the gesture limit as the engine does.
+        // `live.set` takes a keyframe target as a parameter of the keyframe's, apart from
+        // the item's own, as the engine does (#846).
         let crop = |scene: &str| Edit::ItemSetCrop {
             item_id: ItemId::new("i1"),
             scene_id: Some(SceneId::new(scene)),
@@ -4028,10 +4025,23 @@ mod tests {
             },
             Ok(other) => panic!("applied: {other:?}"),
         };
-        assert_eq!(field(live("g0", "k")), "values.0.scene_id");
-        for n in 0..16 {
+        assert!(live("g0", "k").is_ok());
+        for n in 1..16 {
             assert!(live(&format!("g{n}"), "a").is_ok());
         }
+        let Ok(QueryResult::LiveList { gestures }) = query(&*control, Query::LiveList) else {
+            panic!("not live.list");
+        };
+        let holding: Vec<_> = gestures
+            .iter()
+            .filter(|g| !g.values.is_empty())
+            .map(|g| g.gesture_id.to_string())
+            .collect();
+        assert_eq!(
+            holding,
+            ["g0", "g15"],
+            "the item's own is another parameter"
+        );
         assert_eq!(field(live("g16", "k")), "gesture_id");
 
         // Deleting the keyframe scene, then undoing, restores it with its override.

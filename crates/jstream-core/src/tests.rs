@@ -1489,7 +1489,7 @@ fn keyframe_script() -> Vec<Call> {
             visible: false,
         }),
         delete("kp"),
-        // A live value on a keyframe waits on #702.
+        // A live value on a keyframe is the keyframe's own parameter (#846).
         live("gk", vec![crop("kk", 4)]),
         one(clear(OverrideField::Visible)),
         read(Query::StateGet),
