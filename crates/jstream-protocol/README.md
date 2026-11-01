@@ -188,7 +188,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.59 because of
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.58 because of
   `stats.tick`'s `outputs`, each running output's live stats (`OutputStatsInfo`); 0.55
   made a keyframe scene override the children of the groups in its parent's tree (#846; no wire
   change); 0.54 added `stats.tick`'s `chains`, what scene filter chains and item effects
@@ -1281,7 +1281,7 @@ After `welcome`, the server pushes every event to every client.
   are a source's own chain, a `scene_mask`'s scene, and the canvas-sized layer a
   nested scene without a chain is drawn into for an item with effects that shows it
   (it takes the place of the layer that scene would be drawn into anyway). An older engine leaves `chains`
-  out, and a count missing from it parses as 0. `chains` was added in 0.54. Since 0.59
+  out, and a count missing from it parses as 0. `chains` was added in 0.54. Since 0.58
   a tick also lists each running output in `outputs` (`OutputStatsInfo`, ordered by
   ID; left out while none runs, and on an engine with no media backends): `uptime_ms`
   since its `output.start` began, `bytes` and `frames` (the encoded bytes and video

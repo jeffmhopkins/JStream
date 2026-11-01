@@ -304,7 +304,7 @@ state machine. Contents:
   emits a tick about once a second until the last output stops. The same thread emits
   `meters.tick` about ten times a second.
 - **Output stats** (`output_stats.rs`): each running output's meter for `stats.tick`'s
-  `outputs` (protocol 0.59). `output.start` registers one per output once it runs (not
+  `outputs` (protocol 0.58). `output.start` registers one per output once it runs (not
   for a virtual camera yet), and the stop removes it (*Output stats* below).
 - **Engine load** (`load.rs`): what a `stats.tick`'s `load` reads besides the render
   hub's frame count: when the engine started, the process CPU time from the host's
@@ -1583,7 +1583,7 @@ the desktop app start it; tests and an embedding host call `emit_stats_tick` as 
 
 ### Output stats (`stats.tick`'s `outputs`)
 
-Each tick also lists every running output's live stats (protocol 0.59;
+Each tick also lists every running output's live stats (protocol 0.58;
 `output_stats.rs`). The output thread counts each packet the muxer takes while the
 publish link is up into its `SentCounters` (two relaxed atomic adds: the bytes, and a
 frame for video), so a link that is down sends nothing and its tags count as the

@@ -4308,7 +4308,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               "description": "The engine's load: how many frames the program drew and how much CPU time\nthe engine's process used, as running totals beside the time they were read\nat (0.48). An older engine leaves it out."
             },
             "outputs": {
-              "description": "Each running output's live stats, by output ID: what it has sent and lost\nsince it started, its bitrate over the last tick and its health (0.59).\nEmpty, and left out, while no output runs or on an engine with no media\nbackends; an older engine leaves it out too.",
+              "description": "Each running output's live stats, by output ID: what it has sent and lost\nsince it started, its bitrate over the last tick and its health (0.58).\nEmpty, and left out, while no output runs or on an engine with no media\nbackends; an older engine leaves it out too.",
               "items": {
                 "$ref": "#/$defs/OutputStatsInfo"
               },
@@ -5828,7 +5828,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       ]
     },
     "OutputStatsInfo": {
-      "description": "One running output's live stats in a `stats.tick` (0.59): what it has sent and lost\nsince its `output.start`, its bitrate and its health.\n\nThe counts are running totals for this run of the output: they start at 0 on each\n`output.start`, and a client that misses a tick subtracts the last one it did see.\n`kbps` and `health` are gauges the engine works out from its own previous samples, so\nthey don't depend on the client seeing every tick.\n\nEvery field but `output_id` may be missing and parses as 0 (or `waiting`), so a\nfield added later can be left out by an older sender (R-API-001). Unknown fields are\nignored.",
+      "description": "One running output's live stats in a `stats.tick` (0.58): what it has sent and lost\nsince its `output.start`, its bitrate and its health.\n\nThe counts are running totals for this run of the output: they start at 0 on each\n`output.start`, and a client that misses a tick subtracts the last one it did see.\n`kbps` and `health` are gauges the engine works out from its own previous samples, so\nthey don't depend on the client seeing every tick.\n\nEvery field but `output_id` may be missing and parses as 0 (or `waiting`), so a\nfield added later can be left out by an older sender (R-API-001). Unknown fields are\nignored.",
       "properties": {
         "bytes": {
           "default": 0,
@@ -9047,5 +9047,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.59"
+  "title": "JStream protocol 0.58"
 }

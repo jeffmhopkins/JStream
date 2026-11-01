@@ -119,7 +119,7 @@ struct Shared {
     /// `stats.tick`'s load. Its lock is its own, never taken with the collection's.
     load: LoadMeter,
     /// Each running output's live stats meter, for `stats.tick`'s `outputs` (protocol
-    /// 0.59). Its lock is its own: the stats thread takes it before the collection
+    /// 0.58). Its lock is its own: the stats thread takes it before the collection
     /// lock, never with it.
     output_meters: Arc<Mutex<OutputMeters>>,
     /// The WASM automation plugins installed this run (ADR-0069). On its own lock,
@@ -608,7 +608,7 @@ impl Engine {
     }
 
     /// Meters `output_id`'s run, which began at `started`, in each `stats.tick` until
-    /// the returned guard drops (protocol 0.59).
+    /// the returned guard drops (protocol 0.58).
     pub(crate) fn add_output_meter(
         &self,
         output_id: OutputId,

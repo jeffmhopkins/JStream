@@ -4101,7 +4101,7 @@ mod cpu_pipeline {
         block_on(control.call(output_call("yt", false))).expect("output.stop");
     }
 
-    // --- Item: each running output's live stats (protocol 0.59).
+    // --- Item: each running output's live stats (protocol 0.58).
 
     /// While an output runs, each `stats.tick` lists it with what it has sent and its
     /// uptime; once it stops, the tick leaves it out.
@@ -4622,7 +4622,7 @@ mod cpu_pipeline {
     }
 
     /// While its link is down an output's stats say `poor`, count what the target
-    /// dropped, and stop counting bytes as sent (protocol 0.59).
+    /// dropped, and stop counting bytes as sent (protocol 0.58).
     #[test]
     fn a_lost_link_makes_the_output_poor_in_its_stats() {
         let fakes = fakes();

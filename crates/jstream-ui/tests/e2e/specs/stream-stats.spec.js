@@ -1,5 +1,5 @@
 // The Stream stats panel (ST-01): one output's pill, uptime, bitrate, dropped frames,
-// health and bitrate chart, from `stats.tick`'s `outputs` (protocol 0.59). The mock
+// health and bitrate chart, from `stats.tick`'s `outputs` (protocol 0.58). The mock
 // engine runs no pipeline, so the test sends the ticks (`statsTicks`).
 import { test, expect, connect, showPanel, statsTicks } from '../fixtures.js';
 

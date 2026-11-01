@@ -773,7 +773,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   drawn and process CPU time, from which a client derives the frame rate and CPU use;
   the daemon and the desktop app also tick about once a second while idle); since 0.54
   it also carries what scene filter chains and item effects add to each frame
-  ([ADR-0065](adr/0065-scene-chains-and-item-effects.md) §7); since 0.59 it lists each
+  ([ADR-0065](adr/0065-scene-chains-and-item-effects.md) §7); since 0.58 it lists each
   running output's live stats: its uptime, the bytes and video frames it sent, its bitrate
   over the last tick, what it dropped this run, and a health the engine works out over
   the last ten seconds. `meters.tick` (protocol 0.19, about ten a second

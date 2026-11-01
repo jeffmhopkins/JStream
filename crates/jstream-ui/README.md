@@ -498,7 +498,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   adds a `PanelId` and a line there. Live chat waits on the engine (YouTube sign-in),
   so it says what it waits on and is in no built-in layout. Stream stats
   (`panels/stats.rs`) shows one output's live stats from `stats.tick`'s `outputs`
-  (protocol 0.59): the output picked in its menu, else the first running stream, the
+  (protocol 0.58): the output picked in its menu, else the first running stream, the
   first running output, then the first stream. It reads the outputs and profiles as
   the Outputs panel does, keeps the last 120 `kbps` readings of each listed output for
   the bitrate chart (an output a tick leaves out, or whose uptime went down, starts

@@ -852,7 +852,7 @@ fn write_event(out: &mut dyn Write, event: &Event, json: bool) -> Result<bool, C
                     write!(out, " cpu_ms {cpu_ms}")?;
                 }
             }
-            // Each running output's stats (protocol 0.59), in the order the engine
+            // Each running output's stats (protocol 0.58), in the order the engine
             // lists them.
             for output in outputs {
                 write!(
