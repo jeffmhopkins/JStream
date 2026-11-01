@@ -276,9 +276,9 @@ It has:
   copies each filled buffer into the stream's own `blit::Ring` texture on the context's
   queue, made opaque, and waits for that copy before it hands the buffer back with
   `VIDIOC_QBUF`, so the driver never writes into a frame the GPU still reads. The ring
-  texture is the `Gpu` frame. Other formats, compressed ones, and a device whose
-  buffers don't export or import, are `Unsupported` there, which the engine opens on
-  the CPU path. A buffer that can't be read on the GPU (one whose data doesn't start at
+  texture is the `Gpu` frame. Other formats and compressed ones are `Unsupported`
+  there, and a device whose buffers don't export or import fails the open with the OS
+  error; either way the engine opens it on the CPU path. A buffer that can't be read on the GPU (one whose data doesn't start at
   its memory's start) or a copy that fails or isn't done within a second ends the
   stream as `DeviceLost`, without handing that buffer back, and the backend on that
   context then refuses every format, so the engine's retry opens the device on the CPU

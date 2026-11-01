@@ -1,8 +1,9 @@
 //! An open V4L2 capture: a thread of its own waits on the device, converts or decodes
 //! each filled buffer, or on the GPU path copies it on the GPU and waits for the copy
 //! (`super::gpu`), hands it back to the driver, and puts the frame in the single-slot
-//! mailbox [`CaptureStream::latest`] reads (the same mailbox display capture uses). Dropping the stream wakes the thread through an `eventfd` and joins it, which
-//! turns the device's stream off and closes it.
+//! mailbox [`CaptureStream::latest`] reads (the same mailbox display capture uses).
+//! Dropping the stream wakes the thread through an `eventfd` and joins it, which turns
+//! the device's stream off and closes it.
 
 use std::io;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
@@ -224,7 +225,8 @@ fn run(capture: &mut Capture, wake: i32, clock: &MonotonicClock, shared: &Shared
 
 /// The surface for one filled buffer, or `None` to drop it: one the driver marks as
 /// corrupt, a raw frame shorter than its format, a compressed one the decoder rejects
-/// (counted), or a GPU copy with no free texture (counted as skipped).
+/// (counted), or on the GPU path a buffer shorter than its planes or a copy with no free
+/// texture (both counted as skipped).
 ///
 /// # Errors
 /// The GPU path's failure ([`GpuDeliver::frame`]): the stream ends.
