@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 pub(crate) const CHANGED_INTERVAL: Duration = Duration::from_micros(33_334);
 
 /// One parameter a live value can override: a field of an item, as the item itself has
-/// it (`None`) or as a keyframe scene of the item's scene overrides it (#846). The two
+/// it (`None`) or as a keyframe scene whose tree holds the item overrides it (#846). The two
 /// are different parameters, so gestures on both can be open at once.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Param {

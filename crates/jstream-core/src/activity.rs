@@ -13,7 +13,7 @@
 //! block.
 
 use jstream_graph::State;
-use jstream_protocol::{AudioFollow, SceneId, SourceId, SourceKind};
+use jstream_protocol::{AudioFollow, SceneId, SceneRole, SourceId, SourceKind};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// The activity gain of every audio source in `state` while `program` is on the
@@ -58,24 +58,29 @@ fn weighted_gains(state: &State, roots: &[(&SceneId, f32)]) -> BTreeMap<SourceId
 }
 
 /// The sources `root` reaches: those its visible items place, and through each placed
-/// nested scene source whose audio is on, what that scene reaches. The scene graph has
-/// no cycles; each scene is still walked once.
+/// nested scene source whose audio is on, what that scene reaches. A keyframe scene's
+/// overrides apply to its parent's items and to the children of the groups in its tree
+/// (ADR-0024 §2), so a child it hides is not reached. The scene graph has no cycles;
+/// each scene is still walked once per keyframe it is reached through.
 fn reachable<'a>(state: &'a State, root: &SceneId) -> BTreeSet<&'a SourceId> {
     let mut reached = BTreeSet::new();
     let mut walked = BTreeSet::new();
-    let mut pending = vec![root.clone()];
-    while let Some(scene_id) = pending.pop() {
-        if !walked.insert(scene_id.clone()) {
+    let keyframe = state
+        .scene(root)
+        .filter(|scene| scene.variant_of().is_some());
+    let mut pending = vec![(root.clone(), keyframe)];
+    while let Some((scene_id, keyframe)) = pending.pop() {
+        if !walked.insert((scene_id.clone(), keyframe.map(|k| k.id().clone()))) {
             continue;
         }
         let Some(scene) = state.scene(&scene_id) else {
             continue;
         };
-        for item in state
-            .shown_items(scene)
-            .into_iter()
-            .filter(|item| item.visible())
-        {
+        let items = match keyframe {
+            Some(keyframe) if scene.variant_of().is_none() => State::items_through(scene, keyframe),
+            _ => state.shown_items(scene),
+        };
+        for item in items.into_iter().filter(|item| item.visible()) {
             let Some(source) = state.source(item.source_id()) else {
                 continue;
             };
@@ -83,7 +88,11 @@ fn reachable<'a>(state: &'a State, root: &SceneId) -> BTreeSet<&'a SourceId> {
             if let SourceKind::Scene { scene_id } = source.kind()
                 && source.audio().is_none_or(|audio| audio.enabled)
             {
-                pending.push(scene_id.clone());
+                // Only a group stays in the keyframe's tree.
+                let group = state
+                    .scene(scene_id)
+                    .is_some_and(|inner| inner.role() == SceneRole::Group);
+                pending.push((scene_id.clone(), keyframe.filter(|_| group)));
             }
         }
     }
@@ -203,6 +212,39 @@ mod tests {
 
     fn gain(gains: &std::collections::BTreeMap<SourceId, f32>, id: &str) -> f32 {
         gains[&SourceId::new(id)]
+    }
+
+    /// A keyframe scene that hides a group's child stops what the child shows from
+    /// being heard there, and the parent still hears it (#846).
+    #[test]
+    fn a_keyframe_hiding_a_groups_child_silences_it() {
+        let mut graph = graph();
+        apply(
+            &mut graph,
+            vec![
+                Edit::SceneSetRole {
+                    scene_id: SceneId::new("c"),
+                    role: jstream_protocol::SceneRole::Group,
+                },
+                Edit::SceneCreateVariant {
+                    scene_id: SceneId::new("k"),
+                    variant_of: SceneId::new("a"),
+                    name: "K".into(),
+                },
+                Edit::ItemSetVisible {
+                    item_id: ItemId::new("c1"),
+                    scene_id: Some(SceneId::new("k")),
+                    visible: false,
+                },
+            ],
+        );
+        let k = SceneId::new("k");
+        let gains = activity_gains(graph.state(), Some(&k));
+        assert_eq!(gain(&gains, "media"), 1.0);
+        assert_eq!(gain(&gains, "nested_media"), 0.0, "hidden in the keyframe");
+        let a = SceneId::new("a");
+        let gains = activity_gains(graph.state(), Some(&a));
+        assert_eq!(gain(&gains, "nested_media"), 1.0);
     }
 
     #[test]

@@ -1774,7 +1774,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "DroppedOverride": {
-      "description": "Overrides a batch dropped because their item left the keyframe scene's parent\n(ADR-0040 §1): `item.remove` of the item, or `item.move` of it to another scene.\nUndoing the batch restores them.",
+      "description": "Overrides a batch dropped because their item left the keyframe scene's tree\n(ADR-0040 §1): `item.remove` of the item, `item.move` of it out of the tree, or an\nedit that takes the group holding it out (`scene.set_role` of the group, or removing\nor retargeting the last item that places it). Undoing the batch restores them.",
       "properties": {
         "crop": {
           "anyOf": [
@@ -1933,7 +1933,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Removes one field of a keyframe scene's override of an item (ADR-0049 §2), so\nthat field follows the parent again. \"Reset keyframe\" is a batch of these.\n`scene_id` must name a keyframe scene and `item_id` an item of its parent, else\n`invalid_argument` (`not_found` for a missing one). Clearing a field the variant\ndoesn't override is allowed and changes nothing. Inverse: the placement edit that\nwrites the old value with `scene_id` set, or nothing when the field was absent.",
+          "description": "Removes one field of a keyframe scene's override of an item (ADR-0049 §2), so\nthat field follows the parent again. \"Reset keyframe\" is a batch of these.\n`scene_id` must name a keyframe scene and `item_id` an item in its parent's tree\n(one of the parent's own, or, since 0.55, a child of a group it places, at any\ndepth), else `invalid_argument` (`not_found` for a missing one). Clearing a field the variant\ndoesn't override is allowed and changes nothing. Inverse: the placement edit that\nwrites the old value with `scene_id` set, or nothing when the field was absent.",
           "properties": {
             "field": {
               "$ref": "#/$defs/OverrideField",
@@ -1941,7 +1941,7 @@ source: crates/jstream-protocol/src/fixtures.rs
             },
             "item_id": {
               "$ref": "#/$defs/ItemId",
-              "description": "The parent's item."
+              "description": "The item in the parent's tree."
             },
             "scene_id": {
               "$ref": "#/$defs/SceneId",
@@ -1984,7 +1984,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Changes what a scene is for (ADR-0024 §1): a `scene`, or a `group` placed in\nother scenes through a `scene` source. The role changes no engine behaviour: a\ngroup renders, nests and can be placed more than once like any scene, and clients\nhide groups from the scene list. Inverse: `scene.set_role` with the previous role.",
+          "description": "Changes what a scene is for (ADR-0024 §1): a `scene`, or a `group` placed in\nother scenes through a `scene` source. A group renders, nests and can be placed\nmore than once like any scene, and clients hide groups from the scene list. A\nkeyframe scene may override a group's children, and draws a group it overrides\nwith those values (since 0.55): so setting a group to `scene` takes its children\nout of every keyframe scene's tree and drops their overrides there, reported in\nthe batch result's `dropped_overrides` (ADR-0040 §1). Inverse: `scene.set_role`\nwith the previous role, then the writes that restore any dropped overrides.",
           "properties": {
             "role": {
               "$ref": "#/$defs/SceneRole",
@@ -2097,7 +2097,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Removes an item from its scene. The source itself stays. Every keyframe scene of\nthat scene loses its override of the item, reported in the batch result's\n`dropped_overrides` (ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default, and the\nplacement edits that write each dropped override back.",
+          "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default, and the\nplacement edits that write each dropped override back.",
           "properties": {
             "item_id": {
               "$ref": "#/$defs/ItemId",
@@ -2115,7 +2115,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Moves an item to a stacking position in another scene, keeping its ID, source,\nplacement, crop and visibility (ADR-0024 §1). Grouping is a batch that creates a\ngroup scene, places it, and moves the selected items into it. Rejected with\n`invalid_argument` if the move would make a scene contain itself (field\n`scene_id`, naming the cycle), if the index is out of range, or if the scene is\na keyframe scene, which has no items of its own. A move to another scene drops\nthe item's overrides in the keyframe scenes of the scene it leaves, as\n`item.remove` does. Inverse: `item.move` back to its previous scene and index,\nthen the placement edits that write each dropped override back.",
+          "description": "Moves an item to a stacking position in another scene, keeping its ID, source,\nplacement, crop and visibility (ADR-0024 §1). Grouping is a batch that creates a\ngroup scene, places it, and moves the selected items into it. Rejected with\n`invalid_argument` if the move would make a scene contain itself (field\n`scene_id`, naming the cycle), if the index is out of range, or if the scene is\na keyframe scene, which has no items of its own. A move out of a keyframe scene's\ntree drops the item's overrides there, as `item.remove` does; a move between a\nparent and a group it places keeps them. Inverse: `item.move` back to its previous scene and index,\nthen the placement edits that write each dropped override back.",
           "properties": {
             "index": {
               "description": "Its position in that scene after the move, counted from the bottom (0). Must\nbe at most the number of items already in that scene (less than it for the\nitem's own scene), else `invalid_argument`.",
@@ -2228,7 +2228,7 @@ source: crates/jstream-protocol/src/fixtures.rs
                   "type": "null"
                 }
               ],
-              "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item. A\nkeyframe scene of the item's scene writes that scene's override of this\nfield (since 0.39), whose inverse is `item.clear_override` if the field was\nnot overridden and this edit with the old value if it was. Any other scene is\n`invalid_argument`."
+              "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item. A\nkeyframe scene whose tree holds the item (of the item's scene, or of a scene\nthat reaches the item's group through groups it places, at any depth) writes\nthat scene's override of this\nfield (since 0.39), whose inverse is `item.clear_override` if the field was\nnot overridden and this edit with the old value if it was. Any other scene is\n`invalid_argument`."
             },
             "type": {
               "const": "item.set_visible",
@@ -2329,7 +2329,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Changes which source an item places, keeping the item's ID, transform, crop,\nvisibility and stacking position (ADR-0023). It switches an item between a\nreference and a clone: `source.duplicate` then `item.set_source` to the copy makes\na clone, and `item.set_source` back to the copy's `duplicated_from` (then\n`source.delete` of the copy if nothing else places it) makes it a reference again.\nRejected with `not_found` if the item or the source doesn't exist, and with\n`invalid_argument` naming the cycle if the scene would then contain itself,\ndirectly or through other scenes. Inverse: `item.set_source` with the previous\nsource.",
+          "description": "Changes which source an item places, keeping the item's ID, transform, crop,\nvisibility and stacking position (ADR-0023). It switches an item between a\nreference and a clone: `source.duplicate` then `item.set_source` to the copy makes\na clone, and `item.set_source` back to the copy's `duplicated_from` (then\n`source.delete` of the copy if nothing else places it) makes it a reference again.\nRejected with `not_found` if the item or the source doesn't exist, and with\n`invalid_argument` naming the cycle if the scene would then contain itself,\ndirectly or through other scenes. Retargeting the last item that places a group\ntakes the group's children out of a keyframe scene's tree and drops their\noverrides there, reported in `dropped_overrides` (ADR-0040 §1, since 0.55).\nInverse: `item.set_source` with the previous source, then the writes that restore\nany dropped overrides.",
           "properties": {
             "item_id": {
               "$ref": "#/$defs/ItemId",
@@ -5213,7 +5213,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "ItemOverride": {
-      "description": "What a keyframe scene overrides for one of its parent's items, as `state.get` reports\nit. An omitted field follows the parent. At least one field is set: an item with no\noverride has no entry.",
+      "description": "What a keyframe scene overrides for one item in its parent's tree, as `state.get`\nreports it. An omitted field follows the parent. At least one field is set: an item with no\noverride has no entry.",
       "properties": {
         "crop": {
           "anyOf": [
@@ -8950,5 +8950,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.54"
+  "title": "JStream protocol 0.55"
 }

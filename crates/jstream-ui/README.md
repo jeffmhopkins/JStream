@@ -289,10 +289,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   scene and an audio-only source get the prototype's shorter menus; the first can be
   opened, and a group ungrouped: its items move back where it was, each given the box
   it draws at when the group isn't at its default placement (ADR-0024 §1), and the group
-  scene and its sources are deleted; a hidden group's items are hidden with it. Ungroup
-  shows disabled, with the reason, while another item places the group, the group scene
-  has filters, or the group's look can't become its items' own (`Kept` in
-  `item_menu.rs`). The scene and object lists fill their dock group, so the space under
+  scene and its sources are deleted; a hidden group's items are hidden with it. Each
+  keyframe scene whose tree holds the parent (its own, or one of a scene that places
+  the parent as a group, at any depth) gets the overrides it needs to keep drawing the items
+  where it drew them through the group: its override of an item, or its own value of
+  the group, carried onto the item's box, and hidden where it hid the group (#846).
+  Ungroup shows disabled, with the reason, while another item places the group, the
+  group scene has filters, or the group's look, or a keyframe scene's, can't become its
+  items' own (`Kept` in `item_menu.rs`). The scene and object lists fill their dock group, so the space under
   their rows opens the panel's menu. `dialog.rs` is the modal frame: Escape and the
   backdrop cancel, and Enter presses the button marked `data-primary`. The Add source
   dialog (`panels/add_source.rs`, opened through `AddSourceDialog` context) lists the

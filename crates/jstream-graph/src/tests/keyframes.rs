@@ -10,7 +10,7 @@ use crate::{Graph, Placement};
 use jstream_protocol::{
     Crop, DeleteTarget, DroppedOverride, Edit, EntityKind, Finite32, FolderId, ItemGeometry,
     ItemId, ItemOverride, ItemTransform, OverrideField, ProtocolError, SceneId, SceneRole, Size,
-    Vec2,
+    SourceId, Vec2,
 };
 
 fn variant(id: &str, of: &str) -> Edit {
@@ -244,6 +244,11 @@ fn a_keyframe_scene_refuses_what_it_cant_hold() {
             scene_source("sg", "g"),
             add("g", "gi", "cam"),
             add("a", "ig", "sg"),
+            // A scene placed in the parent that isn't a group.
+            scene_create("n"),
+            scene_source("sn", "n"),
+            add("n", "ni", "cam"),
+            add("a", "in", "sn"),
         ],
     );
     let refused = |graph: &mut Graph, edit: Edit| invalid_reason(apply_err(graph, vec![edit]));
@@ -269,22 +274,24 @@ fn a_keyframe_scene_refuses_what_it_cant_hold() {
         folder_id: Some(FolderId::new("f")),
     };
     assert_eq!(refused(&mut graph, folder).0, "edits.0.scene_id");
-    // Only the item's own scene and its keyframe scenes can be named.
+    // Only the item's own scene and a keyframe scene whose tree holds it can be named.
     assert_eq!(
         refused(&mut graph, set_visible("i1", Some("b"), false)).0,
         "edits.0.scene_id"
     );
-    // A group's items can't be overridden yet (#702).
-    let (field, reason) = refused(&mut graph, set_visible("gi", Some("k"), false));
+    // A group's items can be overridden (#846), but not those of a scene that isn't a
+    // group, placed in the parent.
+    apply_ok(&mut graph, vec![set_visible("gi", Some("k"), false)]);
+    let (field, reason) = refused(&mut graph, set_visible("ni", Some("k"), false));
     assert_eq!(field, "edits.0.scene_id");
-    assert!(reason.contains("#702"), "{reason}");
-    // `item.clear_override` names a keyframe scene and one of its parent's items.
+    assert!(reason.contains("group placed in it"), "{reason}");
+    // `item.clear_override` names a keyframe scene and an item in its parent's tree.
     assert_eq!(
         refused(&mut graph, clear("b", "i1", OverrideField::Visible)).0,
         "edits.0.scene_id"
     );
     assert_eq!(
-        refused(&mut graph, clear("k", "gi", OverrideField::Visible)).0,
+        refused(&mut graph, clear("k", "ni", OverrideField::Visible)).0,
         "edits.0.item_id"
     );
     assert!(matches!(
@@ -454,6 +461,136 @@ fn deleting_a_keyframe_scene_undoes_with_its_overrides() {
         }],
     );
     assert_eq!(applied.inverse.edits[0], variant("k", "a"));
+}
+
+/// `family` with group `g` placed in `a` by item `ig` (source `sg`), holding `gi` (cam)
+/// and group `h`, placed in `g` by `ih` (source `sh`), holding `hi` (mic).
+fn nested_groups() -> Graph {
+    let mut graph = family();
+    let group = |id: &str| Edit::SceneSetRole {
+        scene_id: SceneId::new(id),
+        role: SceneRole::Group,
+    };
+    apply_ok(
+        &mut graph,
+        vec![
+            scene_create("g"),
+            group("g"),
+            scene_source("sg", "g"),
+            scene_create("h"),
+            group("h"),
+            scene_source("sh", "h"),
+            add("g", "gi", "cam"),
+            add("h", "hi", "mic"),
+            add("g", "ih", "sh"),
+            add("a", "ig", "sg"),
+        ],
+    );
+    graph
+}
+
+/// Overrides of a group's children at any depth (ADR-0024 §2, #846): written and shown
+/// through the group, kept while any path reaches the child (ADR-0040 §2), and dropped,
+/// with undo restoring them, by each edit that takes the child out of the tree (§1).
+#[test]
+fn a_keyframe_overrides_a_groups_children_at_any_depth() {
+    let mut graph = nested_groups();
+    apply_ok(
+        &mut graph,
+        vec![
+            set_visible("gi", Some("k"), false),
+            set_geometry("hi", Some("k"), 700.0),
+        ],
+    );
+    let state = graph.state();
+    let k = state.scene(&SceneId::new("k")).expect("k");
+    let h = state.scene(&SceneId::new("h")).expect("h");
+    let through: Vec<_> = crate::State::items_through(h, k)
+        .iter()
+        .map(|item| match item.placement() {
+            Placement::Geometry(g) => g.center.x.get(),
+            _ => f32::NAN,
+        })
+        .collect();
+    assert_eq!(through, [700.0], "h's child as k shows it");
+    assert!(state.overrides_within(k, &SceneId::new("g")));
+    assert!(state.overrides_within(k, &SceneId::new("h")));
+    assert!(!state.overrides_within(
+        state.scene(&SceneId::new("k2")).expect("k2"),
+        &SceneId::new("g")
+    ));
+    assert_eq!(overrides(&graph, "k").len(), 2);
+
+    // Grouping keeps overrides: a child moved from the group into the parent stays in
+    // the tree, and so does a group placed twice when one placement goes.
+    let up = Edit::ItemMove {
+        item_id: ItemId::new("gi"),
+        scene_id: SceneId::new("a"),
+        index: 0,
+    };
+    assert!(apply_ok(&mut graph, vec![up]).dropped_overrides.is_empty());
+    apply_ok(&mut graph, vec![add("a", "ig2", "sg")]);
+    let one = Edit::ItemRemove {
+        item_id: ItemId::new("ig"),
+    };
+    assert!(apply_ok(&mut graph, vec![one]).dropped_overrides.is_empty());
+    assert_eq!(overrides(&graph, "k").len(), 2);
+
+    // A group that becomes a scene takes its children out of every tree.
+    let before = overrides(&graph, "k");
+    let role = Edit::SceneSetRole {
+        scene_id: SceneId::new("h"),
+        role: SceneRole::Scene,
+    };
+    let applied = apply_ok(&mut graph, vec![role]);
+    assert_eq!(
+        applied
+            .dropped_overrides
+            .iter()
+            .map(|d| d.dropped.item_id.as_str())
+            .collect::<Vec<_>>(),
+        ["hi"]
+    );
+    apply_ok(&mut graph, applied.inverse.edits.clone());
+    assert_eq!(overrides(&graph, "k"), before);
+
+    // So does removing the last item that places the outer group, which reaches `hi`
+    // through it.
+    let last = Edit::ItemRemove {
+        item_id: ItemId::new("ig2"),
+    };
+    let applied = apply_ok(&mut graph, vec![last]);
+    assert_eq!(applied.dropped_overrides.len(), 1);
+    assert_eq!(
+        overrides(&graph, "k").len(),
+        1,
+        "gi is the parent's own now"
+    );
+    apply_ok(&mut graph, applied.inverse.edits.clone());
+    assert_eq!(overrides(&graph, "k"), before);
+
+    // Retargeting the item that places it does too.
+    let retarget = Edit::ItemSetSource {
+        item_id: ItemId::new("ig2"),
+        source_id: SourceId::new("cam"),
+    };
+    let applied = apply_ok(&mut graph, vec![retarget]);
+    assert_eq!(applied.dropped_overrides.len(), 1);
+    apply_ok(&mut graph, applied.inverse.edits.clone());
+    assert_eq!(overrides(&graph, "k"), before);
+}
+
+/// A keyframe's overrides of a group's children are saved and loaded.
+#[test]
+fn overrides_of_a_groups_children_save_and_load() {
+    let mut graph = nested_groups();
+    apply_ok(&mut graph, vec![set_geometry("hi", Some("k"), 700.0)]);
+    let json = graph.to_collection_json();
+    let loaded = super::graph()
+        .with_collection_json(&json)
+        .expect("the file loads");
+    assert_eq!(loaded.state(), graph.state());
+    assert_eq!(overrides(&loaded, "k").len(), 1);
 }
 
 #[test]

@@ -998,7 +998,7 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
             )?;
         }
     }
-    // After every item, since an override names one of its parent's.
+    // After every item, since an override names an item in its parent's tree.
     for scene in &file.scenes {
         for o in &scene.overrides {
             let object = format!("scene `{}`", scene.id);

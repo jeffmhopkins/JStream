@@ -277,23 +277,28 @@ the batch **touched**.
   back. The placement edits (`item.set_geometry`, `item.set_transform`, `item.set_crop`,
   `item.set_visible`, `item.set_opacity`)
   take an optional `scene_id`: absent or the item's own scene changes the item, a
-  keyframe scene of the item's scene writes its override, any other scene is
-  `invalid_argument`, and the inverse keeps the addressing.
+  keyframe scene whose tree holds the item (its scene's, or one whose parent reaches
+  the item's group through groups it places, at any depth) writes its override, any
+  other scene is `invalid_argument`, and the inverse keeps the addressing.
 - **Keyframe scenes** (`keyframe.rs`, [ADR-0024](../../docs/adr/0024-scene-structure.md)
   §2, [ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)):
   `scene.create_variant` appends a variant of a scene that isn't one, undone by
   `scene.delete`. A placement edit addressed to it writes one field of its override
   through `Keyframe::write`, after the same checks as the item's own edit, and is undone
   by `item.clear_override` of the field or by the old value. `item.clear_override` of an
-  absent field changes nothing and has no inverse. An override names one of the
-  parent's own items. A group's child is refused, naming #702. `item.add`, `item.move`
-  into a variant and `scene.set_folder` of one are refused. `item.remove` of a parent's
-  item and `item.move` of it out drop its overrides in every variant (`drop_unless`),
-  report them in `Applied::dropped_overrides`, and restore them in the inverse after the
-  item is back
+  absent field changes nothing and has no inverse. An override names an item in the
+  parent's tree (`State::tree_items`: its own, or a child of a group placed in it, at
+  any depth, protocol 0.55, #846), and any other is refused. `item.add`, `item.move` into a variant
+  and `scene.set_folder` of one are refused. After every edit of a batch,
+  `keyframe::drop_orphans` drops each override whose item is no longer in its
+  variant's tree (`drop_unless`), reports it in `Applied::dropped_overrides`, and
+  restores it in the inverse after the edit's own
   ([ADR-0040](../../docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)
-  §1). A role change orphans no override, since overrides name only a parent's own
-  items, so `scene.set_role` drops none. A variant's `scene.delete` is undone by
+  §1): `item.remove`, `item.move` out of the tree, `scene.set_role` of a group, and
+  removing or retargeting the last item that places a group. A move between the
+  parent and a group it places keeps them. `State::items_through` gives a group's
+  items as a variant shows them, and `State::overrides_within` whether it overrides any
+  in a group's tree. A variant's `scene.delete` is undone by
   `scene.create_variant`, its role, position, transitions and metadata, then the writes
   of its overrides. A parent's delete is blocked by its variants, and its
   `delete.plan` deletes them (and the `scene` sources that show them) first.
@@ -566,7 +571,4 @@ Planned, and kept possible by the private fields of the model types:
 - Legacy placements go in 1.0, whose
   collection migration converts them
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md) decision 5).
-- Overrides of a group's children in a keyframe scene (ADR-0024 §2), and the drops
-  ADR-0040 §1 then needs: `scene.set_role` of the group, and removing or retargeting
-  the item that places it (#702).
 - Item lookup is a linear scan over scenes. An ID index can come once collections grow.
