@@ -1,7 +1,8 @@
 //! The outputs panel: the program output and each output with its FX button, which
 //! shows that chain in the Filters panel (spec-panels.md 9, ADR-0080); create, edit and
 //! delete outputs (streams, recordings and the virtual camera), set or clear their stream
-//! keys, start and stop them, and the pipeline's health from `stats.tick`. It also holds the logic behind the header's
+//! keys, choose each one's encoder profile and the audio bus it carries, start and stop
+//! them, and the pipeline's health from `stats.tick`. It also holds the logic behind the header's
 //! Go Live (`go_live_targets`, `live_outputs`, `start_or_stop_all`).
 //!
 //! The stream key is write-only (R-SEC-001). It is read from its password field only
@@ -20,9 +21,9 @@ use crate::session::Session;
 use crate::workspace::DockState;
 use futures_util::StreamExt;
 use jstream_control::protocol::{
-    Action, Batch, Call, CallResult, DropCounts, Edit, EncoderProfileId, EncoderProfileInfo, Event,
-    FilterChains, FilterOwner, OutputId, OutputInfo, OutputKind, OutputState, Query, QueryResult,
-    RecordContainer, Rev, RtmpTarget, SecretString,
+    Action, Batch, BusId, BusInfo, Call, CallResult, DropCounts, Edit, EncoderProfileId,
+    EncoderProfileInfo, Event, FilterChains, FilterOwner, OutputId, OutputInfo, OutputKind,
+    OutputState, Query, QueryResult, RecordContainer, Rev, RtmpTarget, SecretString,
 };
 use jstream_control::{Control, ControlError};
 use leptos::html;
@@ -66,18 +67,21 @@ pub struct Snapshot {
     pub outputs: Vec<OutputRow>,
     /// The encoder profiles an output can choose, ordered by ID.
     pub encoders: Vec<EncoderProfileInfo>,
+    /// The audio buses an output can carry, ordered by ID, the master among them.
+    pub buses: Vec<BusInfo>,
 }
 
-/// Reads the outputs and encoder profiles (`state.get`), then each output's status
-/// (`output.status`).
+/// Reads the outputs, encoder profiles and buses (`state.get`), then each output's
+/// status (`output.status`).
 pub async fn load(control: &dyn Control) -> Result<Snapshot, String> {
-    let (rev, outputs, encoders) = match query(control, Query::StateGet).await? {
+    let (rev, outputs, encoders, buses) = match query(control, Query::StateGet).await? {
         QueryResult::StateGet {
             rev,
             outputs,
             encoders,
+            buses,
             ..
-        } => (rev, outputs, encoders),
+        } => (rev, outputs, encoders, buses),
         other => return Err(unexpected("state.get", other.name())),
     };
     let mut rows = Vec::with_capacity(outputs.len());
@@ -98,6 +102,7 @@ pub async fn load(control: &dyn Control) -> Result<Snapshot, String> {
         rev,
         outputs: rows,
         encoders,
+        buses,
     })
 }
 
@@ -246,6 +251,15 @@ pub fn take_key(typed: String) -> Option<SecretString> {
         Some(SecretString::new(typed))
     } else {
         Some(SecretString::new(trimmed))
+    }
+}
+
+/// The edit that has `output_id` carry the bus a select's `value` names: one audio track
+/// (`output.set_audio_buses`, protocol 0.61), applied from the output's next start.
+pub fn bus_edit(output_id: OutputId, value: &str) -> Edit {
+    Edit::OutputSetAudioBuses {
+        output_id,
+        audio_buses: vec![BusId::new(value)],
     }
 }
 
@@ -538,6 +552,8 @@ struct Panel {
     rows: RwSignal<BTreeMap<OutputId, OutputRow>>,
     /// The encoder profiles an output can choose.
     encoders: RwSignal<Vec<EncoderProfileInfo>>,
+    /// The audio buses an output can carry.
+    buses: RwSignal<Vec<BusInfo>>,
     /// The last failed call, shown until the next one succeeds or is dismissed.
     problem: RwSignal<Option<String>>,
     /// Bumped by each reload, so an older reload that finishes late is dropped.
@@ -608,6 +624,7 @@ impl Panel {
                             .collect(),
                     );
                     self.encoders.try_set(snapshot.encoders);
+                    self.buses.try_set(snapshot.buses);
                 }
                 Err(problem) => {
                     self.problem.try_set(Some(problem));
@@ -651,6 +668,7 @@ pub fn Outputs() -> impl IntoView {
         session,
         rows: RwSignal::new(BTreeMap::new()),
         encoders: RwSignal::new(Vec::new()),
+        buses: RwSignal::new(Vec::new()),
         problem: RwSignal::new(None),
         loads: StoredValue::new(0),
         vcam: Vcam::from_host(crate::host::desktop_vcam().as_deref()),
@@ -933,6 +951,17 @@ fn OutputCard(panel: Panel, output_id: OutputId) -> impl IntoView {
                 .and_then(|row| row.info.encoder_profile.clone())
         })
     };
+    let choose_bus = move |event: leptos::ev::Event| {
+        let output_id = id.get_value();
+        let set = bus_edit(output_id, &event_target_value(&event));
+        panel.run(move |session| async move { edit(&*session.control, set).await });
+    };
+    let chosen_bus = move || {
+        row.with(|row| {
+            row.as_ref()
+                .and_then(|row| row.info.audio_buses.first().cloned())
+        })
+    };
 
     view! {
         <li class="output">
@@ -1000,6 +1029,33 @@ fn OutputCard(panel: Panel, output_id: OutputId) -> impl IntoView {
                                     }
                                 >
                                     {encoder.name}
+                                </option>
+                            }
+                        }
+                    </For>
+                </select>
+            </label>
+            <label class="encoder">
+                "Audio"
+                <select
+                    on:change=choose_bus
+                    title=move || {
+                        if running() { "Applies from its next start" } else { "The bus it carries" }
+                    }
+                >
+                    <For
+                        each=move || panel.buses.get()
+                        key=|bus| (bus.bus_id.clone(), bus.name.clone())
+                        let:bus
+                    >
+                        {
+                            let bus_id = bus.bus_id.clone();
+                            view! {
+                                <option
+                                    value=bus.bus_id.to_string()
+                                    prop:selected=move || chosen_bus().as_ref() == Some(&bus_id)
+                                >
+                                    {bus.name}
                                 </option>
                             }
                         }
@@ -1246,6 +1302,19 @@ mod tests {
 
         let loaded = now(load(&control)).expect("load");
         assert_eq!(go_live_targets(&loaded.outputs), vec![id.clone()]);
+
+        // The Audio select lists the buses and moves the output onto one.
+        let vod = jstream_protocol::BusId::new("vod");
+        let bus = Edit::BusCreate {
+            bus_id: vod.clone(),
+            name: "VOD".into(),
+        };
+        now(super::edit(&control, bus)).expect("a bus");
+        now(super::edit(&control, super::bus_edit(id.clone(), "vod"))).expect("onto the bus");
+        let loaded = now(load(&control)).expect("load");
+        let buses: Vec<_> = loaded.buses.iter().map(|b| b.bus_id.clone()).collect();
+        assert_eq!(buses, vec![jstream_protocol::BusId::master(), vod.clone()]);
+        assert_eq!(loaded.outputs[0].info.audio_buses, vec![vod]);
         now(super::action(
             &control,
             Action::OutputStart {
