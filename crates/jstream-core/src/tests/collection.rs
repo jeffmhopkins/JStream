@@ -46,7 +46,7 @@ fn files(dir: &Path) -> Vec<String> {
 }
 
 #[test]
-fn a_missing_file_is_created_empty() {
+fn a_missing_file_is_created_with_the_sample_labels() {
     let dir = temp_dir("missing");
     let path = dir.join("scenes.json");
     let engine = open(&path);
@@ -56,6 +56,15 @@ fn a_missing_file_is_created_empty() {
         jstream_graph::SCHEMA_VERSION
     );
     assert_eq!(saved(&path)["rev"], 0);
+    // Nothing else, but the prototype's four sample labels, at rev 0.
+    let names: Vec<_> = saved(&path)["labels"]
+        .as_array()
+        .expect("labels")
+        .iter()
+        .map(|l| l["name"].as_str().expect("a name").to_owned())
+        .collect();
+    assert_eq!(names, ["Intro / outro", "Gameplay", "Overlay", "Sponsor"]);
+    assert_eq!(saved(&path)["scenes"], serde_json::json!([]));
     assert_eq!(files(&dir), ["scenes.json"]);
     let _ = fs::remove_dir_all(dir);
 }

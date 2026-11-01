@@ -88,7 +88,12 @@ Contents:
   decoded on the decoder side: opening a compressed format takes a `CaptureDecoder`
   (`Send`), which the capture thread calls with each `CompressedFrame` before the mailbox;
   a frame it rejects is dropped and the stream goes on. The engine gets one decoder per
-  stream from `Codecs::capture_decoder` (below).
+  stream from `Codecs::capture_decoder` (below). `VideoDevices::on_context`, a default
+  method like `Capture::on_context`, returns the backend on a `GpuContext`'s device,
+  whose streams deliver `Gpu` frames, or `None` (the default) when it has no GPU path.
+  That backend opens only the formats it can deliver there and is `Unsupported` for the
+  rest; the engine then opens the device on the backend itself, and never asks it for a
+  compressed format.
 - **Audio:** `AudioIo` (`Send + Sync`) lists devices and running processes (every
   process on Windows, only Core Audio's audio clients on macOS)
   (`AudioProcess`: ID, parent ID, executable name, for process loopback), says which
@@ -397,8 +402,9 @@ the same reason.
 
 - **GPU frames.** Designed and typed in [GPU frames](#gpu-frames) above. Windows capture
   delivers them, the engine composites them, and Windows' H.264 encoder takes encode
-  targets. Capture and the encoders reach the context through default methods,
-  `Capture::on_context` and `Codecs::on_context`, so other backends are unchanged. The
+  targets. Capture, video devices and the encoders reach the context through default
+  methods, `Capture::on_context`, `VideoDevices::on_context` and `Codecs::on_context`,
+  so other backends are unchanged. The
   engine's render thread writes encode targets and pushes them to the encoders that
   take them. Open: the virtual camera taking them.
 - **Device formats.** `jstream-media`'s `ChannelLayout` has mono, stereo and 5.1 only.

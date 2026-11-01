@@ -998,6 +998,7 @@ fn a_sources_capture_is_started_for_that_source() {
         cpu: Arc::clone(&capture) as Arc<dyn jstream_platform::Capture>,
         gpu: None,
         devices: Arc::new(jstream_platform::fake::FakeVideoDevices::new(clock)),
+        gpu_devices: None,
         codecs: Arc::new(jstream_platform::fake::FakeCodecs),
     };
     let key = crate::snapshot::CaptureKey::for_source(

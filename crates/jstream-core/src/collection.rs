@@ -63,7 +63,8 @@ impl CollectionFile {
     }
 
     /// Loads the collection at `path` into a copy of `graph` (whose kinds check its
-    /// sources), or, when there is no file there, saves `graph` to it.
+    /// sources), or, when there is no file there, creates it: `graph` with the sample
+    /// labels when it has none yet ([`Graph::with_sample_labels`]), saved there.
     pub(crate) fn open(
         path: PathBuf,
         graph: &Graph,
@@ -80,13 +81,14 @@ impl CollectionFile {
                 Err(source) => Err(CollectionFileError::Load { path, source }),
             },
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                let graph = graph.clone().with_sample_labels();
                 match write_atomically(&path, graph.to_collection_json().as_bytes()) {
                     Ok(()) => Ok((
                         CollectionFile {
                             path,
                             saved: graph.rev(),
                         },
-                        graph.clone(),
+                        graph,
                     )),
                     Err(source) => Err(CollectionFileError::Create { path, source }),
                 }

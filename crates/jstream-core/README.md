@@ -77,7 +77,8 @@ state machine. Contents:
   keeps entries in memory; `AuditFile` writes them as JSON lines to a size-capped
   `audit.jsonl` from its own writer thread (see *Audit log* in [Design](#design)).
 - **Collection file** (`collection.rs`): loads the collection from the file the host
-  names with `with_collection_file` (or creates it), and saves it atomically after every
+  names with `with_collection_file` (or creates it, with the four sample labels,
+  `Graph::with_sample_labels`, at the same `rev`), and saves it atomically after every
   change (see *Collection file* in [Design](#design)).
 - **Kinds** (`kinds.rs`): the built-in kinds the graph validates settings
   against and `kind.list` reports ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)):
@@ -303,11 +304,19 @@ state machine. Contents:
   or the output stops, closed when unplugged with the output staying up, and shared
   with a preview stream that showed it first (`src/tests/cpu_pipeline/captures.rs`),
   one open of a device shared by two readers, each taking each frame once, closed
-  with its last reader, a reader that joins counting frames from then on, and a lost
-  device failing every reader and not shared again (`runtime/devices.rs`), the format a webcam opens in, with and
-  without an MJPEG decoder, its frames, decoded or not, read as RGBA, and a webcam
-  left running, and not opened twice, when the GPU path is left (`runtime/captures.rs`), which capture path an output takes and each
-  fallback, an output compositing GPU capture frames (opaque, whatever alpha the
+  with its last reader, a reader that joins counting frames from then on, a lost
+  device failing every reader and not shared again, a device the GPU view opened moved
+  to the CPU path in place when a CPU reader joins, its counters carried on, and
+  `DeviceLost` for every reader when it doesn't open again there, and one open on the
+  CPU path refused by the GPU view (`runtime/devices.rs`), the format a webcam opens in, with and
+  without an MJPEG decoder, its frames, decoded or not, read as RGBA, a webcam
+  opening on the video-device backend's GPU path in an uncompressed format, MJPEG and a
+  refused format on the CPU path, a webcam on the CPU path left running, and not opened
+  twice, when the GPU path is left, and one on the GPU path, running or still starting,
+  moved to the CPU path, closed before it opens again (`runtime/captures.rs`), which
+  capture path an output takes and each
+  fallback, the video-device backend asked onto the platform's device and
+  `SharedVideoDevices` passing that through, an output compositing GPU capture frames (opaque, whatever alpha the
   texture holds), a browser page painting on
   the stage's context, composited as premultiplied red and given back the device when
   the stage stops, an output leaving the GPU path mid-run when every GPU frame
@@ -407,7 +416,8 @@ state machine. Contents:
   session ends, a scene the collection doesn't have refused, a deleted scene's stream
   ended, its display drawn from the preview's own capture, and nothing captured for it
   by the program stage), the
-  collection file (`src/tests/collection.rs`: created when missing, batches, an undo
+  collection file (`src/tests/collection.rs`: created when missing with the sample
+  labels at `rev` 0, batches, an undo
   and a redo each saved, a saved collection loaded by a new engine with its `rev` and
   outputs, a `waveform` drawing another source saved and loaded with the source it
   draws made first, and loaded from a file from before `audio_source` existed
@@ -1371,7 +1381,16 @@ and reads nothing when the other reader holds it, so the render thread never wai
 the preview thread; the frame is still there on its next tick. The device closes with
 its last reader, and once it is lost every reader reports it and the next open opens it
 afresh. Each reader's `stats` count from when it joined, so an output that joins a
-webcam the preview opened reports only its own frames and drops in `stats.tick`. While
+webcam the preview opened reports only its own frames and drops in `stats.tick`. The
+program stage on the GPU context opens through a second view of the same devices
+(`VideoDevices::on_context`), which opens a device that isn't open yet on the
+platform's GPU path, shares one open on the GPU path, and refuses one open on the CPU
+path, which the program then shares through the CPU view, on CPU frames. The preview can't read GPU frames, so when it joins a
+device open on the GPU path, the device is closed there and opened again on the CPU
+backend in the same format, under its lock: the program's reader reads on, its
+counters carried over, missing only the frames of the move, and the device stays on
+the CPU path until it closes. One that doesn't open again is lost (`DeviceLost`) for
+both, so each capture stops and opens it afresh later. While
 the program stage reads a device the preview also shows, the reader that is not last
 copies each frame; a run on a capture card at 1080p60 has not measured that copy. `video.snapshot` still draws every capture as nothing. A `scene.switch` republishes the render
 snapshot, so the preview shows the transition onto the new program scene, then the
@@ -2215,12 +2234,13 @@ are UTC, RFC 3339 to the millisecond, formatted without a date crate.
 `Engine::with_collection_file(path)` loads the collection from `path`
 (`jstream-graph`'s `Graph::with_collection_json`, checked against the engine's kinds)
 and replaces the engine's collection and `rev` with it; the outputs' runtime state
-follows, so a loaded output is `stopped`. With no file at `path` it saves the current,
-empty, collection there at once, so an unwritable path fails at startup rather than at
-the first change. A file that doesn't read or load is refused with
-`CollectionFileError` (`Read`, `Load` or `Create`, each naming the path but never the
-contents) and left as it is. It is configured before `connect`, like the other
-builders.
+follows, so a loaded output is `stopped`. With no file at `path` it saves the current
+collection there at once, with `Graph::with_sample_labels`'s four labels when it has
+none, still at its `rev`, and keeps that as the engine's collection, so the file and the
+engine agree and an unwritable path fails at startup rather than at the first change.
+A file that doesn't read or load is refused with `CollectionFileError` (`Read`, `Load`
+or `Create`, each naming the path but never the contents) and left as it is. It is
+configured before `connect`, like the other builders.
 
 After each applied batch, undo or redo, `Engine::execute` saves the collection before
 the call returns, so the client whose call it was knows the file holds its `rev`. The save
@@ -2315,7 +2335,15 @@ platform's `GpuInterop` for its device. With one, the render thread's compositor
 `GpuContext`, and the capture backend is asked for a copy of itself on the context
 (`Capture::on_context`); a capture started from that copy delivers `GpuFrame`s, which
 the render thread samples where they are, with no CPU copy, and counts
-(`OutputStats::gpu_captures`). Each fallback is logged and keeps the output running on
+(`OutputStats::gpu_captures`). The video-device backend is asked the same
+(`VideoDevices::on_context`): a webcam or capture card opens in its uncompressed format on
+that copy, and on the CPU backend in the same format when the copy refuses it; MJPEG
+always opens on the CPU backend, which decodes it there. A device opens once, shared
+with the preview (`runtime/devices.rs`), and the preview reads only CPU frames: when it
+joins a device open on the GPU path, the device is closed there and opened again on the
+CPU backend in the same format, in place, so the program's capture reads on. A device
+the preview has open already, on the CPU path, is refused by the GPU view and shared
+through the CPU backend, on CPU frames. Each fallback is logged and keeps the output running on
 CPU frames: no device (the fakes, CI, a machine without interop; the compositor then
 opens its own device, hardware adapter first with the software one as the fallback), a
 backend with no GPU path or one that refuses the context, and a GPU capture that does not start (that capture then runs on
@@ -2331,10 +2359,13 @@ a row on the context, a third of a second, the render thread leaves it once. A
 takes the collection lock) and opens the compositor on a device of its own, while the
 render thread keeps repeating the last frames and adopting snapshots. Then the render
 thread lets go of the frames it holds on the context's device, has the `jstream-capture` thread drop its GPU
-backend and start every display and window capture again on the CPU path (a start asked
+backends and start every display and window capture again on the CPU path (a start asked
 for before is stopped when it comes back), and takes the new compositor. A webcam or
-capture card is on the CPU path already, so it keeps running and keeps its frame, and
-one still starting takes the stream it asked for: most devices open only once (#734). Until the re-planned snapshot
+capture card on the GPU path is stopped and started again on the CPU path, the stop
+first, so the device is closed before it opens again. One on the CPU path keeps running
+and keeps its frame, and one still starting takes the stream it asked for: most devices
+open only once (#734). If that stream is on the GPU path, it is stopped and started
+again on the CPU path. Until the re-planned snapshot
 arrives, the pages' frames, carrying the context's key, draw nothing on it. The fallback
 is logged as a warning and counted (`OutputStats::gpu_fallbacks`). The output fails at
 once if the compositor can't open on its own device, the fallback panics, or it isn't
@@ -2405,8 +2436,10 @@ sends and allocates nothing. A capture restarting after a failure or a move off 
 path keeps the size it had until a frame says otherwise. The primary display is looked up when its
 capture starts. A webcam or capture card is opened on the backends' `VideoDevices`
 (shared with the preview thread's captures, `SharedVideoDevices`; see *Preview streams*
-in Design), on
-the CPU path, in the format `device_format` picks from those it lists: frames that arrive
+in Design), in the format `device_format` picks from those it lists: on the backend's
+GPU view (`VideoDevices::on_context`) when there is one and it takes that uncompressed
+format, else on the CPU path; MJPEG always on the CPU path (see *Capture path*). The
+candidates are frames that arrive
 uncompressed as RGBA, BGRA or NV12 (YUY2 is delivered as NV12), the largest of at most
 1920x1080 (else the smallest), then the fastest. An empty `device` is the first device
 listed, looked up when it starts. MJPEG is a candidate when the device offers it and the
