@@ -491,6 +491,8 @@ struct Collection {
     master: jstream_protocol::FilterChains,
     /// The video mix each output shows, for those that chose one.
     output_mixes: BTreeMap<OutputId, VideoMixId>,
+    /// The bus each output carries, for those that carry one other than the master.
+    output_buses: BTreeMap<OutputId, BusId>,
     /// The video mixes, ordered by ID: name and mix.
     video_mixes: BTreeMap<VideoMixId, (String, VideoMix)>,
     /// The hotkey bindings, ordered by chord.
@@ -520,6 +522,7 @@ impl Default for Collection {
             output_encoders: BTreeMap::new(),
             encoders: BTreeMap::new(),
             output_mixes: BTreeMap::new(),
+            output_buses: BTreeMap::new(),
             video_mixes: BTreeMap::new(),
             buses: BTreeMap::from([audio::Bus::master()]),
             sends: BTreeMap::new(),
@@ -1842,6 +1845,12 @@ impl Collection {
                         mix_id: Some(mix_id),
                     });
                 }
+                if let Some(bus_id) = self.output_buses.remove(&output_id) {
+                    inverse.push(Edit::OutputSetAudioBuses {
+                        output_id: output_id.clone(),
+                        audio_buses: vec![bus_id],
+                    });
+                }
                 if let Some(filters) = self.output_filters.remove(&output_id) {
                     let owner = jstream_protocol::FilterOwner::Output { output_id };
                     inverse.extend(filter::restore_all(&owner, filters));
@@ -1991,6 +2000,42 @@ impl Collection {
                 vec![Edit::OutputSetVideoMix {
                     output_id,
                     mix_id: old,
+                }]
+            }
+            Edit::OutputSetAudioBuses {
+                output_id,
+                audio_buses,
+            } => {
+                let Some(kind) = self.outputs.get(&output_id) else {
+                    return Err(not_found(EntityKind::Output, output_id.as_str()));
+                };
+                let [bus_id] = audio_buses.as_slice() else {
+                    return Err(invalid(
+                        at,
+                        "audio_buses",
+                        "an output carries exactly one bus: it writes one audio track",
+                    ));
+                };
+                if matches!(kind, OutputKind::VirtualCam) {
+                    return Err(invalid(
+                        at,
+                        "audio_buses",
+                        format!(
+                            "output `{output_id}` has no audio: a virtual camera sends video only"
+                        ),
+                    ));
+                }
+                if !self.buses.contains_key(bus_id) {
+                    return Err(not_found(EntityKind::Bus, bus_id.as_str()));
+                }
+                let old = if bus_id.is_master() {
+                    self.output_buses.remove(&output_id)
+                } else {
+                    self.output_buses.insert(output_id.clone(), bus_id.clone())
+                };
+                vec![Edit::OutputSetAudioBuses {
+                    output_id,
+                    audio_buses: vec![old.unwrap_or_else(BusId::master)],
                 }]
             }
             edit @ (Edit::FilterAdd { .. }
@@ -2208,6 +2253,12 @@ impl Collection {
                 encoder_profile: self.output_encoders.get(id).cloned(),
                 filters: self.output_filters.get(id).cloned().unwrap_or_default(),
                 video_mix: self.output_mixes.get(id).cloned(),
+                audio_buses: vec![
+                    self.output_buses
+                        .get(id)
+                        .cloned()
+                        .unwrap_or_else(BusId::master),
+                ],
             })
             .collect()
     }
@@ -3402,6 +3453,11 @@ mod tests {
                     source_id: SourceId::new("mic_copy"),
                     bus_id: BusId::master(),
                     gain_db: Finite32::ZERO,
+                },
+                // `rec` carries `vod`, which blocks its delete until it moves off it.
+                Edit::OutputSetAudioBuses {
+                    output_id: OutputId::new("rec"),
+                    audio_buses: vec![BusId::master()],
                 },
                 Edit::BusDelete {
                     bus_id: BusId::new("vod"),
@@ -4790,6 +4846,7 @@ mod tests {
                     encoder_profile: None,
                     filters: Default::default(),
                     video_mix: None,
+                    audio_buses: vec![BusId::master()],
                 }],
             })
         );

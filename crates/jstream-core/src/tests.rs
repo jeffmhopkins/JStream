@@ -5932,6 +5932,7 @@ fn output_edits_configure_the_collection() {
             encoder_profile: None,
             filters: Default::default(),
             video_mix: None,
+            audio_buses: vec![jstream_protocol::BusId::master()],
         }]
     );
     assert_eq!(
@@ -5958,6 +5959,7 @@ fn output_edits_configure_the_collection() {
                 encoder_profile: None,
                 filters: Default::default(),
                 video_mix: None,
+                audio_buses: vec![jstream_protocol::BusId::master()],
             }]
         ),
         other => panic!("not a state: {other:?}"),

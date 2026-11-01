@@ -1776,7 +1776,9 @@ mod property {
             // Sometimes two buses or none, which are refused.
             67 => Edit::OutputSetAudioBuses {
                 output_id: OutputId::new(output(rng)),
-                audio_buses: (0..[1, 1, 1, 0, 2][rng.below(5)]).map(|_| bus(rng)).collect(),
+                audio_buses: (0..[1, 1, 1, 0, 2][rng.below(5)])
+                    .map(|_| bus(rng))
+                    .collect(),
             },
             _ => Edit::CanvasSetSize {
                 width: u32::try_from(rng.below(3000)).expect("fits"),
