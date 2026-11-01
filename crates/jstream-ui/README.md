@@ -31,9 +31,10 @@ Contents ([Design](#design) explains the choices):
   session.
 - **Header** (`header.rs`): `Header`, the bar along the top: the brand, the File menu
   (the connection's details and Disconnect), the Edit menu (Undo, Redo), the View menu
-  (show or hide each panel, and open the program or multiview projector) and the Layout menu (saved layouts), the frames dropped
-  since the page connected, Studio mode (kept in the browser's storage), Record, and Go
-  Live / End stream. `RecordButton` and `Dropped` are its logic, tested natively.
+  (show or hide each panel, and open the program or multiview projector) and the Layout menu (saved layouts), the stats
+  readout (the program's frame rate, the frames dropped since the page connected and the
+  engine's CPU use), Studio mode (kept in the browser's storage), Record, and Go
+  Live / End stream. `RecordButton`, `Dropped` and `Load` are its logic, tested natively.
 - **Dock** (`dock.rs`): `Dock`, the model of which panel sits where: eight `Zone`s
   around the canvas, each holding `Group`s of tabbed `PanelId`s, the zones' sizes, and
   the saved layouts (`Layout`, with Editing and Live built in). Every change goes
@@ -494,8 +495,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   cleared, since no event reports that. Go Live and End stream are described under
   Outputs. Record starts every stopped or failed recording output and, while any runs,
   becomes "Stop recording", which stops them; with no recording output it is disabled.
-  The dropped readout counts captured, rendered and encoded frames dropped since the
-  first `stats.tick` this page saw, starting over when the engine restarts. Undo and
+  The stats readout reads "60 fps · 0 dropped · CPU 3%" from `stats.tick`. The dropped
+  count is captured, rendered and encoded frames dropped since the first tick this page
+  saw, starting over when the engine restarts. The frame rate and CPU (`Load`) come from
+  the last two ticks' `load` (protocol 0.48): program frames over the elapsed time,
+  shown only while the program drew some, and CPU time over the elapsed time and the
+  logical CPUs, "<1%" below half a percent, left out when the engine reads none. Undo and
   Redo in the Edit menu call `history.undo` and `history.redo`, like the canvas's
   buttons. A failed call shows in the shell's problem bar. The menus close on Escape
   or on a press anywhere outside them.

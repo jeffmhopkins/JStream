@@ -17,6 +17,7 @@ use crate::forget::ForgetSources;
 use crate::gesture::{Ended, Gestures};
 use crate::history::History;
 use crate::live::{Built, LiveHost, LiveSources, LoadedAsset};
+use crate::load::LoadMeter;
 use crate::lock;
 use crate::outputs::Outputs;
 use crate::plugins::kinds::{self as clap_kinds, ClapScan};
@@ -40,13 +41,14 @@ use jstream_audio::OutputTapId;
 use jstream_graph::Graph;
 use jstream_media::FrameSize;
 use jstream_platform::{
-    Backends, CaptureTarget, CaptureTargetInfo, GpuContext, PluginHosts, Secret, StreamKeyStore,
+    Backends, CaptureTarget, CaptureTargetInfo, GpuContext, PluginHosts, ProcessCpu, Secret,
+    StreamKeyStore,
 };
 use jstream_protocol::{
     Action, ActionResult, Batch, Call, CallResult, CaptureTargetKind, ClientId, DropCounts, Edit,
-    EncoderProfile, EncoderSessionInfo, EntityKind, Event, FilterChain, GestureId, HistoryCall,
-    HistoryDirection, IdempotencyKey, LiveOutcome, OutputId, OutputKind, OutputState, PixelSize,
-    PreviewSettings, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
+    EncoderProfile, EncoderSessionInfo, EngineLoad, EntityKind, Event, FilterChain, GestureId,
+    HistoryCall, HistoryDirection, IdempotencyKey, LiveOutcome, OutputId, OutputKind, OutputState,
+    PixelSize, PreviewSettings, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
     RtmpTarget, SceneId, SecretString, SourceId, SourceSize, TransitionPresetId, TransitionStarted,
     YoutubeAuth,
 };
@@ -111,6 +113,9 @@ struct Shared {
     youtube: Mutex<Option<Arc<Youtube>>>,
     /// The preview thread, which draws and encodes every session's preview streams.
     previews: PreviewHub,
+    /// When the engine started, the process CPU time and the idle heartbeat, for
+    /// `stats.tick`'s load. Its lock is its own, never taken with the collection's.
+    load: LoadMeter,
     /// The WASM automation plugins installed this run (ADR-0069). On its own lock,
     /// never taken with the collection lock held, nor while a plugin runs.
     #[cfg(feature = "wasm-plugins")]
@@ -164,6 +169,7 @@ impl Default for Engine {
                 audio_scopes,
                 youtube: Mutex::new(None),
                 previews: PreviewHub::default(),
+                load: LoadMeter::default(),
                 #[cfg(feature = "wasm-plugins")]
                 automation: crate::plugins::automation::Registry::default(),
             }),
@@ -564,6 +570,33 @@ impl Engine {
     /// with no sources: the tick then carries zeros.
     pub fn emit_stats_tick(&self) {
         emit_sampled(&self.shared, &self.drops);
+    }
+
+    /// Reads the process's CPU time from `cpu` for each `stats.tick`'s load from now
+    /// on (protocol 0.48). Without one a tick's `cpu_ms` is left out. The engine's
+    /// stats threads call it about once a second, outside the collection lock.
+    pub fn set_process_cpu(&self, cpu: Arc<dyn ProcessCpu>) {
+        self.shared.load.set_cpu(cpu);
+    }
+
+    /// Starts the engine's stats heartbeat: a `jstream-stats-idle` thread that emits a
+    /// `stats.tick` about once a second while no output runs, so a client sees the
+    /// engine's load while it is idle too (protocol 0.48). While the program stage runs,
+    /// its own sampler emits the ticks and the heartbeat stays quiet. A host calls it
+    /// once; later calls do nothing. The thread holds the engine weakly and ends once
+    /// the last engine handle is gone.
+    pub fn start_stats_heartbeat(&self) {
+        if !self.shared.load.claim_heartbeat() {
+            return;
+        }
+        let shared = Arc::downgrade(&self.shared);
+        let ledger = Arc::downgrade(&self.drops);
+        if let Err(err) = thread::Builder::new()
+            .name("jstream-stats-idle".into())
+            .spawn(move || stats_heartbeat(&shared, &ledger))
+        {
+            tracing::error!(error = %err, "stats heartbeat did not start");
+        }
     }
 
     /// The ledger the pipeline's [`DropGuard`](crate::drops::DropGuard) removes from.
@@ -2411,16 +2444,37 @@ fn set_gpu(shared: &Shared, context: Option<&GpuContext>) {
 
 fn emit_sampled(shared: &Shared, ledger: &Mutex<DropLedger>) {
     let sampled = drops::lock_ledger(ledger).sample();
+    // Read before the collection lock: the CPU reader makes a system call.
+    let cpu = shared.load.cpu_time();
     let mut wake = Vec::new();
-    lock(&shared.state).emit_stats(sampled, &mut wake);
+    {
+        let mut state = lock(&shared.state);
+        let load = shared.load.load(state.render.drawn(), cpu);
+        state.emit_stats(sampled, load, &mut wake);
+    }
     for waker in wake {
         waker.wake();
+    }
+}
+
+/// The idle heartbeat ([`Engine::start_stats_heartbeat`]): about once a second, a
+/// `stats.tick` unless a program stage's sampler runs, until the engine is gone.
+fn stats_heartbeat(shared: &Weak<Shared>, ledger: &Weak<Mutex<DropLedger>>) {
+    loop {
+        thread::sleep(Duration::from_secs(1));
+        let (Some(shared), Some(ledger)) = (shared.upgrade(), ledger.upgrade()) else {
+            return;
+        };
+        if !shared.load.ticking() {
+            emit_sampled(&shared, &ledger);
+        }
     }
 }
 
 /// Wakes every 100 ms so a stop joins promptly, emits `meters.tick` on each wake, and
 /// `stats.tick` once those waits add up to a second.
 fn stats_ticker(shared: Arc<Shared>, ledger: Arc<Mutex<DropLedger>>, stop: Arc<AtomicBool>) {
+    shared.load.ticker_started();
     let mut waited_ms = 0u32;
     while !stop.load(Ordering::Relaxed) {
         thread::sleep(Duration::from_millis(100));
@@ -2437,6 +2491,7 @@ fn stats_ticker(shared: Arc<Shared>, ledger: Arc<Mutex<DropLedger>>, stop: Arc<A
         waited_ms = 0;
         emit_sampled(&shared, &ledger);
     }
+    shared.load.ticker_ended();
 }
 
 /// A frame size as the protocol reports it.
@@ -3326,12 +3381,13 @@ impl State {
         }
     }
 
-    fn emit_stats(&mut self, drops: DropCounts, wake: &mut Vec<Waker>) {
+    fn emit_stats(&mut self, drops: DropCounts, load: EngineLoad, wake: &mut Vec<Waker>) {
         self.stats_seq = self.stats_seq.saturating_add(1);
         self.subscribers.emit(
             &Event::StatsTick {
                 seq: self.stats_seq,
                 drops,
+                load: Some(load),
             },
             wake,
         );

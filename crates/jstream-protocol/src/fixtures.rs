@@ -7,11 +7,11 @@
 
 use crate::{
     Action, Batch, BlendMode, Blocker, Call, CallResult, Canvas, ClientId, ClientMessage, Command,
-    CommandClass, Crop, DeleteTarget, DropCounts, Edit, EntityKind, ErrorResponse, Event,
-    EventMessage, FilterChain, FilterChains, FilterId, FilterInfo, FilterOwner, Finite32, FitMode,
-    Hello, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, MasterInfo, OutputId,
-    OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query,
-    QueryResult, RecordContainer, Request, RequestId, Response, Rev, RtmpTarget, SceneId,
+    CommandClass, Crop, DeleteTarget, DropCounts, Edit, EngineLoad, EntityKind, ErrorResponse,
+    Event, EventMessage, FilterChain, FilterChains, FilterId, FilterInfo, FilterOwner, Finite32,
+    FitMode, Hello, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, MasterInfo,
+    OutputId, OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError,
+    Query, QueryResult, RecordContainer, Request, RequestId, Response, Rev, RtmpTarget, SceneId,
     SceneInfo, SceneRole, SceneSummary, SecretString, ServerMessage, Settings, Size, SourceId,
     SourceInfo, SourceKind, Vec2, Welcome, json_schema,
 };
@@ -1860,6 +1860,12 @@ pub(crate) fn events() -> Vec<Event> {
             encode_blocks: 6,
             output_packets: 7,
         },
+        load: Some(EngineLoad {
+            elapsed_ms: 2_000,
+            program_frames: 120,
+            cpu_ms: Some(150),
+            cpus: 8,
+        }),
     });
     events.push(Event::LiveChanged {
         gesture_id: GestureId::new("drag_1"),
