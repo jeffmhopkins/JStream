@@ -149,7 +149,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Events** (`event.rs`): `state.changed`, `output.state_changed`, `studio.changed`
   (program, preview and the transition a switch started), `privacy.changed` (deprecated),
   `source.size_changed`, `events.dropped`,
-  `stats.tick` (with `DropCounts`, `EngineLoad` and `ChainCost`), `meters.tick`,
+  `stats.tick` (with `DropCounts`, `EngineLoad`, `ChainCost` and each running output's
+  `OutputStatsInfo` and `OutputHealth`), `meters.tick`,
   `youtube.status_changed`, `youtube.health_changed`,
   `youtube.stats`, `live.changed`, `live.ended` and `plugin.state_changed`.
 - **Plugins** (`plugin.rs`, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)): `PluginClass` (`read`,
@@ -190,7 +191,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   negative scale is not refused: `from_legacy` returns the drawn outline with the
   reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.58 because it added the
   `plugin.list` query, the installed WASM plugins with what each manifest asks for and
-  what a person granted ([Plugins](#design)); 0.55 made a keyframe
+  what a person granted ([Plugins](#design)); 0.57 added
+  `stats.tick`'s `outputs`, each running output's live stats (`OutputStatsInfo`); 0.56
+  added `preview.subscribe`'s `source_id`, a stream of one of the collection's sources alone
+  (a projector of the source); 0.55 made a keyframe
   scene override the children of the groups in its parent's tree (#846; no wire
   change); 0.54 added `stats.tick`'s `chains`, what scene filter chains and item effects
   add to each frame (`ChainCost`); 0.53 made the engine take live values on a keyframe scene (`live.set`,
@@ -1246,7 +1250,7 @@ After `welcome`, the server pushes every event to every client.
   ([jstream-server › Design](../jstream-server/README.md#design)). Answers are never
   dropped. The client re-reads what it shows with `state.get`, which carries `rev`.
   Added in 0.4.
-- `stats.tick {seq, drops, load, chains}` is one sample of the pipeline's drop counters
+- `stats.tick {seq, drops, load, chains, outputs}` is one sample of the pipeline's drop counters
   ([R-RT-004](../../docs/RULES.md#R-RT-004)). `drops` is a running total since the
   engine started, not a delta, so a client that misses a tick subtracts the last one
   it did see. The fields are `capture_frames` (frames a capture mailbox replaced
@@ -1284,12 +1288,29 @@ After `welcome`, the server pushes every event to every client.
   are a source's own chain, a `scene_mask`'s scene, and the canvas-sized layer a
   nested scene without a chain is drawn into for an item with effects that shows it
   (it takes the place of the layer that scene would be drawn into anyway). An older engine leaves `chains`
-  out, and a count missing from it parses as 0. `chains` was added in 0.54. Until
+  out, and a count missing from it parses as 0. `chains` was added in 0.54. Since 0.57
+  a tick also lists each running output in `outputs` (`OutputStatsInfo`, ordered by
+  ID; left out while none runs, and on an engine with no media backends): `uptime_ms`
+  since the engine received its `output.start` (opening the destination and
+  starting the pipeline included), `bytes` and `frames` (the encoded bytes and video
+  frames it handed its muxer this run while its link was up), `kbps` over the
+  interval since the engine's previous sample, `dropped_frames` (video frames its
+  encoder dropped since it started, plus encoded frames it fell behind on; a shared
+  encoder session counts for each output on it), `dropped_packets` (audio packets it
+  fell behind on, packets the muxer refused or a stop's drain gave up on, and what the
+  publish target dropped while its link was down) and `health`: `waiting` until it has
+  sent a video frame, `good` with nothing lost in the last ten seconds, `fair` with
+  something lost there but under 2% of its video frames, and `poor` at 2% or more or
+  while it is `reconnecting`. A health this version doesn't know parses as `other`. The
+  counts are running totals for the run and start at 0 on each start; `kbps` and
+  `health` come from the engine's own samples, so a missed tick doesn't change them. A
+  virtual camera output is not listed yet. A field missing from an entry parses as 0
+  (or `waiting`). Until
   [open question 7](#open-questions) every client receives it. Added in 0.6. A late plugin block is an audio drop in
   `audio_frames` once the mixer counts it
   ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)); that host is not
-  built. Per-output bitrate, render and encode times, and CPU and GPU load wait until
-  those meters exist, as later optional fields. Audience figures are `youtube.stats`
+  built. Render and encode times and GPU load wait until those meters exist, as later
+  optional fields. Audience figures are `youtube.stats`
   ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)).
 - `meters.tick {sources, buses}` is one reading of the audio levels (0.19), about ten
   a second while the mixer runs; an idle engine emits none. Each routed source and
@@ -1638,8 +1659,9 @@ the JSON text messages of the same connection (0.20,
 `meters.tick` event; a binary meter stream would be another kind of the same frame.
 
 - **Opening and closing.** `preview.subscribe {channel, max_width?, max_height?, fps?,
-  codecs?, scene_id?, source?}` is an action: it opens a stream of the program mix, of
-  the scene `scene_id` (0.46), or of the draft source `source` (0.49), for the calling
+  codecs?, scene_id?, source?, source_id?}` is an action: it opens a stream of the
+  program mix, of the scene `scene_id` (0.46), of the draft source `source` (0.49), or
+  of the collection's source `source_id` alone (0.56), for the calling
   session only, tagged with the `channel`
   number the client chose (a `u32`, not an ID: it only tells the session's streams
   apart in the frame header). The picture is the canvas scaled down to fit
@@ -1674,6 +1696,15 @@ the JSON text messages of the same connection (0.20,
   subscribes again for other settings. A webcam or capture card already open is shared,
   not opened twice. Nothing reaches the collection: no `rev` changes and no event goes
   out.
+- **Source streams.** A `source_id` stream (0.56) shows one of the collection's sources
+  alone, fitted into the canvas as an item covering it would show it, with the source's
+  own filters and none of an item's: what the UI's projector of a source shows. Like a
+  scene's stream it follows the source's settings, filters and the canvas as they
+  change, never makes the source shown or heard, and costs an output nothing. A source
+  the collection doesn't have fails with `not_found`, a request with `scene_id` or
+  `source` too (or both) fails with `invalid_argument` naming `source_id`, and a source deleted
+  while its stream is open ends the stream with the end frame "the source was
+  deleted".
 - **The frame.** A fixed 32-byte little-endian header, then the payload:
 
   | Offset | Size | Field |

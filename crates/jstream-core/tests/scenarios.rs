@@ -61,12 +61,17 @@ fn unloaded(events: Vec<Event>) -> Vec<Event> {
         .into_iter()
         .map(|event| match event {
             Event::StatsTick {
-                seq, drops, chains, ..
+                seq,
+                drops,
+                chains,
+                outputs,
+                ..
             } => Event::StatsTick {
                 seq,
                 drops,
                 load: None,
                 chains,
+                outputs,
             },
             other => other,
         })
@@ -221,6 +226,7 @@ fn overload_drops_and_counts() {
         drops: expected,
         load: None,
         chains: Some(ChainCost::default()),
+        outputs: Vec::new(),
     };
     assert_eq!(unloaded(drain(&mut user_events)), vec![tick.clone()]);
     assert_eq!(unloaded(drain(&mut agent_events)), vec![tick]);
@@ -231,6 +237,7 @@ fn overload_drops_and_counts() {
         drops: expected,
         load: None,
         chains: Some(ChainCost::default()),
+        outputs: Vec::new(),
     };
     assert_eq!(
         unloaded(drain(&mut user_events)),

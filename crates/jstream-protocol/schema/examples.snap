@@ -35,6 +35,7 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"request","id":"r36","call":{"kind":"action","action":{"type":"privacy.set","on":true}}}
 {"type":"request","id":"r37","call":{"kind":"action","action":{"type":"preview.subscribe","channel":2,"scene_id":"scn_2"}}}
 {"type":"request","id":"r38","call":{"kind":"action","action":{"type":"preview.subscribe","channel":3,"max_width":480,"max_height":270,"source":{"kind":"webcam","settings":{"device":"usb-cam-1"}}}}}
+{"type":"request","id":"r39","call":{"kind":"action","action":{"type":"preview.subscribe","channel":4,"source_id":"src_cam"}}}
 {"type":"request","id":"r20","call":{"kind":"query","query":{"type":"scene.list"}}}
 {"type":"request","id":"r21","call":{"kind":"query","query":{"type":"output.status","output_id":"out_yt"}}}
 {"type":"request","id":"r22","call":{"kind":"query","query":{"type":"source.list"}}}
@@ -169,7 +170,7 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"event","event":{"type":"plugin.state_changed","plugin_id":"plg_1","state":"disabled","reason":"memory_limit"}}
 {"type":"event","event":{"type":"plugin.state_changed","plugin_id":"plg_1","state":"disabled","reason":"trap"}}
 {"type":"event","event":{"type":"plugin.state_changed","plugin_id":"plg_1","state":"disabled","reason":"needs_grant"}}
-{"type":"event","event":{"type":"stats.tick","seq":4,"drops":{"capture_frames":2,"audio_frames":5,"render_ticks":1,"encode_frames":4,"encode_blocks":6,"output_packets":7},"load":{"elapsed_ms":2000,"program_frames":120,"cpu_ms":150,"cpus":8},"chains":{"scene_chains":1,"scene_layers":2,"scene_passes":2,"item_effects":1,"item_layers":3,"item_passes":3,"layer_bytes":99532800}}}
+{"type":"event","event":{"type":"stats.tick","seq":4,"drops":{"capture_frames":2,"audio_frames":5,"render_ticks":1,"encode_frames":4,"encode_blocks":6,"output_packets":7},"load":{"elapsed_ms":2000,"program_frames":120,"cpu_ms":150,"cpus":8},"chains":{"scene_chains":1,"scene_layers":2,"scene_passes":2,"item_effects":1,"item_layers":3,"item_passes":3,"layer_bytes":99532800},"outputs":[{"output_id":"out_1","uptime_ms":61000,"bytes":45750000,"frames":3660,"kbps":6000,"dropped_frames":3,"dropped_packets":1,"health":"fair"},{"output_id":"out_2","uptime_ms":400,"bytes":0,"frames":0,"kbps":0,"dropped_frames":0,"dropped_packets":0,"health":"waiting"},{"output_id":"out_3","uptime_ms":3600000,"bytes":2700000000,"frames":216000,"kbps":6010,"dropped_frames":0,"dropped_packets":0,"health":"good"},{"output_id":"out_4","uptime_ms":90000,"bytes":60000000,"frames":5100,"kbps":0,"dropped_frames":260,"dropped_packets":41,"health":"poor"}]}}
 {"type":"event","event":{"type":"live.changed","gesture_id":"drag_1","client_id":"cli_7","values":[{"type":"item.set_geometry","item_id":"itm_1","geometry":{"center":{"x":1600.0,"y":900.0},"size":{"width":480.0,"height":270.0},"fit_mode":"fit","rotation_deg":0.0,"tilt_deg":0.0,"turn_deg":0.0,"depth_px":0.0}},{"type":"item.set_crop","item_id":"itm_2","crop":{"left":4,"top":0,"right":4,"bottom":0}}]}}
 {"type":"event","event":{"type":"live.ended","gesture_id":"drag_1","client_id":"cli_7","outcome":"committed","rev":17}}
 {"type":"event","event":{"type":"live.ended","gesture_id":"drag_2","client_id":"cli_8","outcome":"cancelled"}}

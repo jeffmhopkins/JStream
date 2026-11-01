@@ -80,6 +80,7 @@ use crate::drops::{
 };
 use crate::engine::Engine;
 use crate::lock;
+use crate::output_stats::{MeterGuard, OutputSample, ReadSample, SentCounters};
 use crate::runtime::captures::{self, RenderCaptures};
 use crate::runtime::sink::{Destination, Sink, StreamInfo};
 use crate::runtime::vcam::{VcamOut, VcamSlot, VcamTap, camera_channels, run_camera};
@@ -551,6 +552,9 @@ pub(crate) struct OutputEncode {
     /// one, a new video session opens with `require`, and a refused open is the
     /// hardware session limit (ADR-0080 §3, #443), not a fallback to software.
     pub(crate) hardware_held: Vec<OutputId>,
+    /// When its `output.start` call began, before any wait for an earlier start, the
+    /// destination's open and the program stage's launch: where its uptime counts from.
+    pub(crate) started: Instant,
 }
 
 /// Why an output could not start.
@@ -1137,6 +1141,13 @@ pub(crate) struct Running {
     /// no encoder queues.
     queues: Weak<Queues>,
     drop_guard: Option<DropGuard>,
+    /// What the output thread has handed its muxer this run, for `stats.tick`.
+    sent: Arc<SentCounters>,
+    /// When this run's `output.start` call began, for its uptime; a vcam, which has no
+    /// meter, takes its launch instead.
+    started: Instant,
+    /// Its meter in each `stats.tick`'s `outputs`, removed with the drop guard.
+    meter: Option<MeterGuard>,
     /// Its failure channel's place in the program, given up once its thread is gone.
     registration: Option<Registration>,
     /// Dropped last: when this was the program's last output, that stops the render
@@ -1202,6 +1213,56 @@ impl Running {
             )
         }))];
         self.drop_guard = Some(DropGuard::new(engine.drop_ledger(), ids));
+        self.meter =
+            Some(engine.add_output_meter(self.output_id.clone(), self.started, self.read_sample()));
+    }
+
+    /// How this output's meter reads its counters: what the output thread sent, and
+    /// what it lost on the way, from its video encoder (counted from the time it was
+    /// armed: a session another output already ran may have dropped frames before)
+    /// to the publish target.
+    fn read_sample(&self) -> ReadSample {
+        let sent = Arc::clone(&self.sent);
+        let stats = Arc::clone(&self.stats);
+        let own = Arc::clone(&self.output_drops);
+        let link = Arc::clone(&self.link_drops);
+        let video = self
+            .encoders
+            .as_ref()
+            .map(|encoders| Arc::downgrade(&encoders.video));
+        let encode_drops = |video: &Option<Weak<VideoSession>>| {
+            video.as_ref().and_then(Weak::upgrade).map_or(0, |video| {
+                let stats = video.stats();
+                stats
+                    .dropped_queue_full
+                    .saturating_add(stats.dropped_encoder_busy)
+            })
+        };
+        let base = encode_drops(&video);
+        // The last count while the session was alive, so the total doesn't fall once
+        // the session closes.
+        let last = AtomicU64::new(0);
+        Box::new(move || {
+            let (bytes, frames) = sent.read();
+            let video_sub = *lock(&stats.video_subscriber);
+            let audio_sub = *lock(&stats.audio_subscriber);
+            let encoded = match video.as_ref().and_then(Weak::upgrade) {
+                Some(_) => {
+                    let now = encode_drops(&video).saturating_sub(base);
+                    last.fetch_max(now, Ordering::Relaxed).max(now)
+                }
+                None => last.load(Ordering::Relaxed),
+            };
+            OutputSample {
+                bytes,
+                frames,
+                dropped_frames: encoded.saturating_add(video_sub.dropped),
+                dropped_packets: audio_sub
+                    .dropped
+                    .saturating_add(own.load(Ordering::Relaxed))
+                    .saturating_add(link.load(Ordering::Relaxed)),
+            }
+        })
     }
 }
 
@@ -1268,6 +1329,7 @@ impl Drop for Running {
         // After the thread stops, or after the count above, so the latch sees the
         // final counters.
         self.drop_guard.take();
+        self.meter.take();
         if let Some((left, held)) = abandoned {
             drop(held);
             tracing::warn!(
@@ -1776,6 +1838,7 @@ pub(crate) fn launch(
         key,
         own_audio,
         hardware_held,
+        started,
     } = encode;
     let encoders = program.encoders(engine, key, &output_id, &hardware_held)?;
     let origin = program.origin()?;
@@ -1809,6 +1872,7 @@ pub(crate) fn launch(
     let stats = PipelineStats::new();
     let output_drops = Arc::new(AtomicU64::new(0));
     let link_drops = Arc::new(AtomicU64::new(0));
+    let sent = Arc::new(SentCounters::default());
 
     // Subscribe before a new session is fed, so its first packets (the first video
     // keyframe among them) are not encoded before the output thread is listening. A
@@ -1836,6 +1900,7 @@ pub(crate) fn launch(
         let stats = Arc::clone(&stats);
         let own = Arc::clone(&output_drops);
         let link = Arc::clone(&link_drops);
+        let sent = Arc::clone(&sent);
         let stop = Arc::clone(&stop);
         let drain_by = Arc::clone(&drain_by);
         let cut = Arc::clone(&cut);
@@ -1850,6 +1915,7 @@ pub(crate) fn launch(
                 stats,
                 output_drops: own,
                 link_drops: link,
+                sent,
                 stop,
                 drain_by,
                 cut,
@@ -1878,6 +1944,9 @@ pub(crate) fn launch(
         link_drops,
         queues: shared_queues,
         drop_guard: None,
+        sent,
+        started,
+        meter: None,
         registration: Some(registration),
         program: Some(program),
     };
@@ -1944,6 +2013,9 @@ pub(crate) fn launch_vcam(
         link_drops: Arc::new(AtomicU64::new(0)),
         queues: Weak::new(),
         drop_guard: None,
+        sent: Arc::default(),
+        started: Instant::now(),
+        meter: None,
         registration: Some(registration),
         program: Some(program),
     })
@@ -3458,6 +3530,8 @@ struct OutputJob {
     stats: Arc<PipelineStats>,
     output_drops: Arc<AtomicU64>,
     link_drops: Arc<AtomicU64>,
+    /// What it hands the muxer while the link is up.
+    sent: Arc<SentCounters>,
     stop: Arc<AtomicBool>,
     drain_by: Arc<OnceLock<Instant>>,
     cut: Arc<AtomicBool>,
@@ -3507,6 +3581,7 @@ fn output_loop(job: OutputJob) {
         stats,
         output_drops,
         link_drops,
+        sent,
         stop,
         drain_by,
         cut,
@@ -3568,8 +3643,9 @@ fn output_loop(job: OutputJob) {
             match received {
                 Ok(Some(packet)) => {
                     got = true;
-                    if let Err(err) = sink.forward(&packet, &output_drops) {
-                        failed = Some(err);
+                    match sink.forward(&packet, &output_drops) {
+                        Ok(taken) => count_sent(&sent, &packet, taken, link, true),
+                        Err(err) => failed = Some(err),
                     }
                 }
                 Ok(None) => {}
@@ -3591,8 +3667,9 @@ fn output_loop(job: OutputJob) {
             match received {
                 Ok(Some(packet)) => {
                     got = true;
-                    if let Err(err) = sink.forward(&packet, &output_drops) {
-                        failed = Some(err);
+                    match sink.forward(&packet, &output_drops) {
+                        Ok(taken) => count_sent(&sent, &packet, taken, link, false),
+                        Err(err) => failed = Some(err),
                     }
                 }
                 Ok(None) => {}
@@ -3638,6 +3715,20 @@ fn output_loop(job: OutputJob) {
     }
     link_drops.store(sink.dropped(), Ordering::Relaxed);
     sink.finish();
+}
+
+/// Counts a packet the muxer `taken` in `sent`, unless the live link is down: the
+/// publish target drops it then, and counts it with the link's drops.
+fn count_sent(
+    sent: &SentCounters,
+    packet: &jstream_media::Packet,
+    taken: bool,
+    link: LinkState,
+    video: bool,
+) {
+    if taken && link == LinkState::Active {
+        sent.add(packet.data().len(), video);
+    }
 }
 
 /// Takes and counts the packets queued on `sub` without sending them. Nothing when
