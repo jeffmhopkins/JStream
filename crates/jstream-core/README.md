@@ -225,7 +225,8 @@ state machine. Contents:
   `scene.switch` and `studio.set_preview` set and `studio.get` reads
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)).
 - **Preview** (`preview/`): `preview.subscribe` and `preview.unsubscribe`, the program
-  mix, one scene or a draft source the collection doesn't hold as small pictures sent to the session that asked as binary frames
+  mix, one scene, one of the collection's sources alone (`snapshot::plan_source`) or a
+  draft source the collection doesn't hold as small pictures sent to the session that asked as binary frames
   (`Control::binary`), in H.264 on a software `jstream-encode` session when the
   platform has an encoder and in JPEG otherwise (`preview/jpeg.rs`, a baseline
   encoder of its own), drawn on the engine's `jstream-preview` thread with its own
@@ -1472,6 +1473,20 @@ for other settings. The preview thread captures what it shows like a scene's, be
 the program's and the scenes' captures, and a draft stream doesn't count as showing the
 program; nothing reaches the engine's collection, plan or sources, so a draft is
 never shown on program, heard or listed.
+
+A stream with a `source_id` shows one of the collection's sources alone (0.56): a
+projector of the source. `publish_render` plans each source a live stream shows
+(`PreviewHub::sources`) after the scenes, with `snapshot::plan_source`: on a copy of the
+collection, one scene of its own whose one item (each under an ID the collection
+doesn't hold, numbered when it holds the plain one) places the source over the whole canvas, planned as `plan_scene` plans a scene, so the
+source's own filters draw and no item's do. Its shots are kept beside the scenes'
+(`source_shots`), replaced only when what they draw changed, and read by the preview
+thread alone, which captures what they show as it does a draft's. Like a scene stream
+it looks its source up quietly, so it never makes the source shown or heard, and a
+subscription or unsubscription re-plans at once. A source the collection doesn't have
+is `not_found`, a request with `scene_id` or `source` too (or both) is
+`invalid_argument` naming `source_id`, checked before the two of them, and a deleted source's streams end with "the source was deleted"
+(`PreviewHub::end_source`).
 
 The codec is picked when the client subscribes: the first of its `codecs` the engine
 can encode, H.264 when `codecs.list()` names an H.264 encoder (only with backends) and

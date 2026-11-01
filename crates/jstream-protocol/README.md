@@ -189,9 +189,11 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   negative scale is not refused: `from_legacy` returns the drawn outline with the
   reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.60 because the master
   stage and every output take video filters on their `video` chain (ADR-0080; no wire
-  change: earlier minors refused them with `invalid_argument` on `chain`); 0.55 made
-  a keyframe scene override the children of the groups in its parent's tree (#846; no
-  wire change); 0.54 added `stats.tick`'s `chains`, what scene filter chains and item effects
+  change: earlier minors refused them with `invalid_argument` on `chain`); 0.56 added
+  `preview.subscribe`'s `source_id`, a stream of one of the collection's sources alone
+  (a projector of the source); 0.55 made a keyframe
+  scene override the children of the groups in its parent's tree (#846; no wire
+  change); 0.54 added `stats.tick`'s `chains`, what scene filter chains and item effects
   add to each frame (`ChainCost`); 0.53 made the engine take live values on a keyframe scene (`live.set`,
   #846; no wire change); 0.52 added
   `ui_settings.set` and `ui_settings.get`, the UI settings the server keeps
@@ -1631,8 +1633,9 @@ the JSON text messages of the same connection (0.20,
 `meters.tick` event; a binary meter stream would be another kind of the same frame.
 
 - **Opening and closing.** `preview.subscribe {channel, max_width?, max_height?, fps?,
-  codecs?, scene_id?, source?}` is an action: it opens a stream of the program mix, of
-  the scene `scene_id` (0.46), or of the draft source `source` (0.49), for the calling
+  codecs?, scene_id?, source?, source_id?}` is an action: it opens a stream of the
+  program mix, of the scene `scene_id` (0.46), of the draft source `source` (0.49), or
+  of the collection's source `source_id` alone (0.56), for the calling
   session only, tagged with the `channel`
   number the client chose (a `u32`, not an ID: it only tells the session's streams
   apart in the frame header). The picture is the canvas scaled down to fit
@@ -1667,6 +1670,15 @@ the JSON text messages of the same connection (0.20,
   subscribes again for other settings. A webcam or capture card already open is shared,
   not opened twice. Nothing reaches the collection: no `rev` changes and no event goes
   out.
+- **Source streams.** A `source_id` stream (0.56) shows one of the collection's sources
+  alone, fitted into the canvas as an item covering it would show it, with the source's
+  own filters and none of an item's: what the UI's projector of a source shows. Like a
+  scene's stream it follows the source's settings, filters and the canvas as they
+  change, never makes the source shown or heard, and costs an output nothing. A source
+  the collection doesn't have fails with `not_found`, a request with `scene_id` or
+  `source` too (or both) fails with `invalid_argument` naming `source_id`, and a source deleted
+  while its stream is open ends the stream with the end frame "the source was
+  deleted".
 - **The frame.** A fixed 32-byte little-endian header, then the payload:
 
   | Offset | Size | Field |
