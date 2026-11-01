@@ -236,14 +236,15 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 - **Program and output chains** (`output-chains.spec.js`): the Outputs panel's Program
   output row ("master", "FX 0"), a recording's row under it with its state and FX
   button, and the footnote; the program's FX showing the master chain in the Filters
-  panel from behind the Transform tab, with its note, its one audio chain and the note
-  on video, the output's FX its own chain, and selecting an item going back to its
-  source's. With Gain and Sharpen described: Add filter on the master offering only
-  Gain, with its foot, as one edit that the program's FX and the Mixer's count; the new
-  filter opening in place, a setting there as one more edit; the output's chain adding
-  its own Gain, counted on its FX button alone, whose eye and × edit the output's chain,
-  not the master's; and the master's filter in the Filter settings dialog, whose Remove
-  deletes it.
+  panel from behind the Transform tab, with its note and its video and audio chains,
+  the output's FX its own chain, and selecting an item going back to its source's. With
+  Gain and Sharpen described: Add filter on the master offering both, with its foot,
+  Gain added as one edit that the program's FX and the Mixer's count; the new filter
+  opening in place, a setting there as one more edit; on the output, Sharpen showing
+  the first video filter's cost note, then its own Gain, counted on its FX button
+  alone, whose eye and × edit the output's chain, not the master's; and the master's
+  filter in the Filter settings dialog on a double-click (the dblclick event alone, as
+  the panel scrolls), whose Remove deletes it.
 - **Mixer** (`mixer.spec.js`, on the Audio mixer tab): the master card counting the
   seed's two channels, its Hear button enabled, its "FX 0" showing the program
   output's chain in the Filters panel, and its button (with its tooltip) unfolding the

@@ -1,8 +1,8 @@
 // The program output's and each output's filter chains (ADR-0080): the Outputs panel's
 // rows with their FX buttons and footnote, the Mixer's master FX button, and the Filters
-// panel and Add filter dialog on those chains. The engine takes only their audio chains
-// so far. The mock engine lists and describes no kinds, so the page's socket answers for
-// Gain (`describeKinds`).
+// panel and Add filter dialog on those chains: a video chain on each, and an audio chain
+// on the master and outputs that carry sound. The mock engine lists and describes no
+// kinds, so the page's socket answers for Sharpen and Gain (`describeKinds`).
 import { test, expect, connect, describeKinds, rev, showPanel } from '../fixtures.js';
 
 function filters(page) {
@@ -63,10 +63,11 @@ test('the Outputs panel lists the program output, then each output, and an FX bu
   await expect(page.getByRole('tabpanel', { name: 'Filters' })).toBeVisible();
   await expect(filters(page).locator('.filters-title')).toHaveText('Program output');
   await expect(filters(page).locator('.filters-note')).toHaveText('Master chain: applies to everything leaving JStream.');
-  await expect(filters(page).locator('.filter-chain')).toHaveCount(1);
-  await expect(filters(page).locator('.filter-chain')).toHaveAttribute('data-chain', 'audio');
+  await expect(filters(page).locator('.filter-chain')).toHaveCount(2);
+  await expect(filters(page).locator('.filter-chain[data-chain="video"]')).toHaveCount(1);
+  await expect(filters(page).locator('.filter-chain[data-chain="audio"]')).toHaveCount(1);
   await expect(filters(page)).toContainText('No audio filters.');
-  await expect(filters(page).locator('.filters-later')).toHaveText('Video filters on outputs aren’t available yet.');
+  await expect(filters(page).locator('.filters-later')).toHaveCount(0);
 
   await fx.click();
   await expect(filters(page).locator('.filters-title')).toHaveText('output-1');
@@ -90,9 +91,11 @@ test('filters added to the program output and to an output count on their FX but
   await filters(page).getByRole('button', { name: '+ Add filter…' }).click();
   const add = page.getByRole('dialog', { name: 'Add filter' });
   await expect(add.locator('.modal-sub')).toHaveText('For “Program output”');
-  // Only the audio chain: Sharpen isn't offered.
-  await expect(add.getByRole('listbox', { name: 'Filter type' }).getByRole('option')).toHaveText(['Gain']);
+  // Both chains: Sharpen for the video chain, Gain for the audio chain.
+  const types = add.getByRole('listbox', { name: 'Filter type' }).getByRole('option');
+  await expect(types).toHaveText(['Sharpen', 'Gain']);
   await expect(add.locator('.add-filter-foot')).toHaveText('Applies to everything leaving JStream.');
+  await types.filter({ hasText: 'Gain' }).click();
   let start = await rev(page);
   await add.getByRole('button', { name: 'Add filter' }).click();
   await expect(add).toBeHidden();
@@ -116,6 +119,10 @@ test('filters added to the program output and to an output count on their FX but
   await filters(page).getByRole('button', { name: '+ Add filter…' }).click();
   await expect(add.locator('.modal-sub')).toHaveText('For “output-1”');
   await expect(add.locator('.add-filter-foot')).toHaveText('Applies to this output only, after the program filters.');
+  // An output's first video filter states its cost (ADR-0080 §3).
+  await types.filter({ hasText: 'Sharpen' }).click();
+  await expect(add.locator('.add-filter-cost')).toContainText('its own GPU pass and encoder session');
+  await types.filter({ hasText: 'Gain' }).click();
   await add.getByRole('button', { name: 'Add filter' }).click();
   await expect(add).toBeHidden();
   await expect(audioRows(page).locator('.filter-name')).toHaveText(['Gain']);
@@ -135,8 +142,11 @@ test('filters added to the program output and to an output count on their FX but
   await expect(program).toHaveText('FX 1');
 
   // The master's filter opens in the Filter settings dialog on a double-click.
+  // The panel now scrolls (the video chain sits above), and the double-click's first
+  // click folds the open editor, which scrolls the row from under the second; so the
+  // test sends the dblclick event alone.
   await program.click();
-  await audioRows(page).first().locator('.filter-row').dblclick();
+  await audioRows(page).first().locator('.filter-row').dispatchEvent('dblclick');
   const dialog = page.getByRole('dialog', { name: 'Filter settings' });
   await expect(dialog.locator('.modal-sub')).toHaveText('Audio filter on “Program output”');
   await dialog.getByRole('button', { name: 'Remove' }).click();
