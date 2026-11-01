@@ -497,3 +497,123 @@ fn a_move_within_a_family_moves_a_groups_children() {
         .collect();
     assert_eq!(moves, [(100.0, 100.0), (500.0, 500.0), (300.0, 800.0)]);
 }
+
+/// Each moving child's ID, its x at both ends and the track's duration.
+fn moving(engine: &Engine) -> Vec<(String, f32, f32, f32)> {
+    engine
+        .render_hub()
+        .load()
+        .shot()
+        .moving()
+        .into_iter()
+        .map(|(item, track)| match track {
+            Track::Pair {
+                from, to, timing, ..
+            } => (
+                item.to_string(),
+                from.geometry.center.x.get(),
+                to.geometry.center.x.get(),
+                timing.duration_ms,
+            ),
+            other => panic!("not a pair: {other:?}"),
+        })
+        .collect()
+}
+
+/// A Move within a family moves a group drawn as one image (placed in a box, so not
+/// flattened) as one item, and its children inside its layer from their values on the
+/// outgoing side to those on the incoming side, with the group item's progress
+/// (ADR-0049 §3): whether both sides override a child, only one does, or one side is
+/// the parent, which draws the group as it is. A switch mid-Move starts the children
+/// from where they are.
+#[test]
+fn a_move_within_a_family_moves_an_unflattened_groups_children() {
+    use jstream_media::Timebase;
+    use jstream_platform::fake::FakeClock;
+    let clock = FakeClock::new(Timebase::MICROS);
+    let engine = Engine::new();
+    engine.set_source_clock(std::sync::Arc::new(clock.clone()));
+    let control = connected(&engine);
+    apply(
+        &control,
+        vec![
+            create("a"),
+            colour("red"),
+            add("a", "a1", "red"),
+            geometry("a1", None, 100.0),
+            variant("k", "a"),
+            variant("k2", "a"),
+        ],
+    );
+    assert!(engine.settle_sources(), "the sources were built in time");
+    family_with_group(&engine);
+    apply(
+        &control,
+        vec![
+            Edit::TransitionCreate {
+                preset_id: TransitionPresetId::new("move"),
+                name: "Move".into(),
+                kind: "move".into(),
+                duration_ms: 400,
+                easing: Easing::Linear,
+                settings: Settings::default(),
+            },
+            // The group in a box of its own: it moves as one image.
+            geometry("ag", None, 960.0),
+            add("g", "g2", "red"),
+            geometry("g2", None, 400.0),
+            geometry("g1", Some("k"), 800.0),
+            geometry("g2", Some("k"), 600.0),
+            geometry("g1", Some("k2"), 200.0),
+        ],
+    );
+    switch(&control, "a", None);
+
+    // From the parent, which draws the group as it is, to a keyframe that overrides
+    // both children.
+    switch(&control, "k", Some("move"));
+    assert_eq!(
+        moving(&engine),
+        [
+            ("g1".into(), 300.0, 800.0, 400.0),
+            ("g2".into(), 400.0, 600.0, 400.0)
+        ]
+    );
+    clock.advance(400_000);
+    engine.replan();
+    assert!(moving(&engine).is_empty(), "the Move ended");
+
+    // Between two keyframes: g1 from one override to the other, and g2, which only
+    // `k` overrides, from `k`'s value back to the group's.
+    switch(&control, "k2", Some("move"));
+    assert_eq!(
+        moving(&engine),
+        [
+            ("g1".into(), 800.0, 200.0, 400.0),
+            ("g2".into(), 600.0, 400.0, 400.0)
+        ]
+    );
+    let tracks = engine
+        .render_hub()
+        .load()
+        .shot()
+        .tracks()
+        .expect("a transition runs");
+    assert!(
+        tracks
+            .iter()
+            .all(|track| matches!(track, Track::Pair { .. })),
+        "the group pairs as one item: {tracks:?}"
+    );
+
+    // Back to `k` half-way: the children start from where they are.
+    clock.advance(200_000);
+    switch(&control, "k", Some("move"));
+    assert_eq!(
+        moving(&engine),
+        [
+            ("g1".into(), 500.0, 800.0, 400.0),
+            ("g2".into(), 500.0, 600.0, 400.0)
+        ]
+    );
+}
