@@ -66,8 +66,6 @@ so that ADR-0080 §1 holds for CLAP filters too. The rest of both ADRs stands.
   host's editor opens and how a parameter change reaches every host.
 - Option 2, refusing a master CLAP filter, is not taken: no outputs or buses are
   restricted by it.
-- **Built with protocol 0.60's `output.set_audio_buses`.** Which host's editor opens is
-  moot so far: the engine opens no CLAP editor. A parameter change reaches every host,
-  since each gets the filter's settings. While a bus's host starts, and once the bus
-  feeds no output, its copy is the delayed-dry stand-in, which is decision 3's bypass
-  at the same latency. #922 tracked the gap until then.
+- **Not built yet.** #922 stays open until the multi-bus output work builds this. The
+  stand-in described in `jstream-audio`'s and `jstream-core`'s READMEs and in
+  [ARCH](../ARCHITECTURE.md) is the behaviour until then.
