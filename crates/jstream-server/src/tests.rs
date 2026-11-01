@@ -684,6 +684,224 @@ fn malformed_messages_get_malformed_errors() {
     );
 }
 
+/// A raw socket to the server that has completed the handshake, and its `welcome`.
+fn raw_session(harness: &Harness) -> (RawSocket, Welcome) {
+    let bearer = format!("Bearer {TOKEN}");
+    let mut socket = match harness.raw(
+        Some(&harness.own_origin()),
+        Some(&harness.authority.clone()),
+        Some(&bearer),
+    ) {
+        Ok(socket) => socket,
+        Err(status) => panic!("refused: {status}"),
+    };
+    match exchange(harness, &mut socket, &raw_hello()) {
+        ServerMessage::Welcome(welcome) => (socket, welcome),
+        other => panic!("unexpected reply {other:?}"),
+    }
+}
+
+/// Sends a raw text message and reads the next reply (`response` or `error`), skipping
+/// the events before it.
+fn answer(harness: &Harness, socket: &mut RawSocket, text: &str) -> ServerMessage {
+    let mut message = exchange(harness, socket, text);
+    while let ServerMessage::Event(_) = message {
+        message = harness.run(async {
+            loop {
+                match socket.next().await {
+                    Some(Ok(Message::Text(reply))) => match serde_json::from_str(reply.as_str()) {
+                        Ok(message) => return message,
+                        Err(error) => panic!("unreadable reply {reply}: {error}"),
+                    },
+                    Some(Ok(_)) => continue,
+                    other => panic!("no reply: {other:?}"),
+                }
+            }
+        });
+    }
+    message
+}
+
+/// A `request` of `call` with wire ID `id`, as JSON text.
+fn request_text(id: &str, call: serde_json::Value) -> String {
+    serde_json::json!({"type": "request", "id": id, "call": call}).to_string()
+}
+
+/// The `result` of a raw `state.get` on `socket`, as JSON.
+fn raw_state(harness: &Harness, socket: &mut RawSocket) -> serde_json::Value {
+    let get = request_text(
+        "get",
+        serde_json::json!({"kind": "query", "query": {"type": "state.get"}}),
+    );
+    match answer(harness, socket, &get) {
+        ServerMessage::Response(response) => match serde_json::to_value(&response.result) {
+            Ok(result) => result,
+            Err(error) => panic!("result: {error}"),
+        },
+        other => panic!("state.get: unexpected reply {other:?}"),
+    }
+}
+
+/// The `too_large` error `message` must be, for a message of `size` bytes.
+fn expect_too_large(message: ServerMessage, id: Option<&str>, size: usize) {
+    match message {
+        ServerMessage::Error(error) => {
+            assert_eq!(error.id, id.map(RequestId::new));
+            assert_eq!(
+                error.error.error,
+                ProtocolError::TooLarge {
+                    size_bytes: size as u64,
+                    limit_bytes: crate::REQUEST_LIMIT as u64,
+                }
+            );
+        }
+        other => panic!("expected too_large, got {other:?}"),
+    }
+}
+
+/// ADR-0074: `welcome` advertises the request limit; a message just over it is refused
+/// with `too_large` and its request ID, and is never forwarded; the next request on the
+/// same connection is answered.
+#[test]
+fn a_message_over_the_request_limit_is_refused_and_the_connection_stays_open() {
+    let harness = start(&MockEngine::new());
+    let (mut socket, welcome) = raw_session(&harness);
+    assert_eq!(welcome.max_request_bytes, Some(4 << 20));
+    // A valid scene.create whose name puts the message one byte over the limit.
+    let call = |name: &str| {
+        serde_json::json!({"kind": "batch", "edits": [
+            {"type": "scene.create", "scene_id": "scn_big", "name": name}
+        ]})
+    };
+    let base = request_text("big", call("")).len();
+    let big = request_text("big", call(&"n".repeat(crate::REQUEST_LIMIT + 1 - base)));
+    assert_eq!(big.len(), crate::REQUEST_LIMIT + 1);
+    expect_too_large(answer(&harness, &mut socket, &big), Some("big"), big.len());
+    // Without a readable `id` (not a request) the error has none; a binary message over
+    // the limit is refused the same way.
+    let unnamed = "x".repeat(crate::REQUEST_LIMIT + 1);
+    expect_too_large(answer(&harness, &mut socket, &unnamed), None, unnamed.len());
+    let binary = vec![0u8; crate::REQUEST_LIMIT + 1];
+    let reply = harness.run(async {
+        if let Err(error) = socket.send(Message::Binary(binary.into())).await {
+            panic!("send: {error}");
+        }
+        loop {
+            match socket.next().await {
+                Some(Ok(Message::Text(reply))) => match serde_json::from_str(reply.as_str()) {
+                    Ok(message) => return message,
+                    Err(error) => panic!("unreadable reply {reply}: {error}"),
+                },
+                Some(Ok(_)) => continue,
+                other => panic!("no reply: {other:?}"),
+            }
+        }
+    });
+    expect_too_large(reply, None, crate::REQUEST_LIMIT + 1);
+    // The connection is still open, and nothing was applied: the scene doesn't exist.
+    let state = raw_state(&harness, &mut socket);
+    assert_eq!(state["result"]["rev"], 0, "{state}");
+    assert_eq!(state["result"]["scenes"], serde_json::json!([]), "{state}");
+    // A message at the limit is handled as before.
+    let at = request_text("atl", call(&"n".repeat(crate::REQUEST_LIMIT - base)));
+    assert_eq!(at.len(), crate::REQUEST_LIMIT);
+    match answer(&harness, &mut socket, &at) {
+        ServerMessage::Response(response) => assert_eq!(response.id, RequestId::new("atl")),
+        other => panic!("unexpected reply {other:?}"),
+    }
+}
+
+/// ADR-0074: a batch carrying two full (2 MiB) CLAP states is refused with `too_large`
+/// and changes nothing; the same states, one filter per batch, apply.
+#[test]
+fn a_batch_with_two_full_plugin_states_is_refused_and_changes_nothing() {
+    let harness = start(&MockEngine::new());
+    let (mut socket, _) = raw_session(&harness);
+    for (n, filter_id) in ["clap_a", "clap_b"].into_iter().enumerate() {
+        let add = request_text(
+            &format!("add{n}"),
+            serde_json::json!({"kind": "batch", "edits": [{
+                "type": "filter.add", "owner": {"type": "master"}, "chain": "audio",
+                "filter_id": filter_id, "kind": "clap.example"
+            }]}),
+        );
+        match answer(&harness, &mut socket, &add) {
+            ServerMessage::Response(_) => {}
+            other => panic!("filter.add: unexpected reply {other:?}"),
+        }
+    }
+    // 2 MiB of state as base64.
+    let state = "A".repeat(4 * (2_usize << 20).div_ceil(3));
+    let set = |filter_id: &str| {
+        serde_json::json!({
+            "type": "filter.set_settings", "owner": {"type": "master"},
+            "filter_id": filter_id, "patch": {"state": state}
+        })
+    };
+    let both = request_text(
+        "both",
+        serde_json::json!({"kind": "batch", "edits": [set("clap_a"), set("clap_b")], "expected_rev": 2}),
+    );
+    assert!(both.len() > crate::REQUEST_LIMIT && both.len() < crate::FRAME_LIMIT);
+    expect_too_large(
+        answer(&harness, &mut socket, &both),
+        Some("both"),
+        both.len(),
+    );
+    let before = raw_state(&harness, &mut socket);
+    assert_eq!(before["result"]["rev"], 2, "nothing was applied");
+    let filters = &before["result"]["master"]["filters"]["audio"];
+    assert_eq!(filters.as_array().map(Vec::len), Some(2), "{filters}");
+    assert!(
+        filters.as_array().into_iter().flatten().all(|filter| filter
+            .get("settings")
+            .is_none_or(|s| s.get("state").is_none())),
+        "{filters}"
+    );
+    for filter_id in ["clap_a", "clap_b"] {
+        let one = request_text(
+            filter_id,
+            serde_json::json!({"kind": "batch", "edits": [set(filter_id)]}),
+        );
+        assert!(one.len() <= crate::REQUEST_LIMIT);
+        match answer(&harness, &mut socket, &one) {
+            ServerMessage::Response(response) => assert_eq!(response.id, RequestId::new(filter_id)),
+            other => panic!("one state: unexpected reply {other:?}"),
+        }
+    }
+    let after = raw_state(&harness, &mut socket);
+    assert_eq!(after["result"]["rev"], 4);
+}
+
+/// ADR-0074: a message over the frame limit closes the connection with close code 1009
+/// (message too big). This also pins how the session tells that read error from others
+/// (`session::over_frame_limit`).
+#[test]
+fn over_frame_limit_closes_with_1009() {
+    let harness = start(&MockEngine::new());
+    let (socket, _) = raw_session(&harness);
+    let (mut sink, mut stream) = socket.split();
+    let huge = "x".repeat(crate::FRAME_LIMIT + 1);
+    let code = harness.run(async move {
+        // The server closes before it has read the message: the send may fail.
+        let writing = tokio::spawn(async move {
+            let _ = sink.send(Message::Text(huge.into())).await;
+        });
+        let code = loop {
+            match stream.next().await {
+                Some(Ok(Message::Close(frame))) => break frame.map(|frame| u16::from(frame.code)),
+                Some(Ok(_)) => continue,
+                None | Some(Err(_)) => break None,
+            }
+        };
+        writing.abort();
+        code
+    });
+    assert_eq!(code, Some(1009));
+    // The session is dropped.
+    harness.wait_until(|| harness.open.load(Ordering::SeqCst) == 0);
+}
+
 #[test]
 fn a_server_shutdown_disconnects_calls_and_ends_events() {
     let mut harness = start(&MockEngine::new());
@@ -2090,7 +2308,8 @@ fn mcp_refuses_malformed_requests() {
         &body,
     );
     assert_eq!(reply.status, 400);
-    // A body declared over 4 MiB is refused from its `Content-Length`, before it is
+    // A body declared over the 16 MiB frame limit is refused from its `Content-Length`,
+    // before it is
     // read. Only the headers are sent: the server may close the connection as soon as it
     // has answered, so writing the whole body could fail on the client's side.
     let addr = harness.authority.clone();
@@ -2104,7 +2323,7 @@ fn mcp_refuses_malformed_requests() {
             "POST {} HTTP/1.1\r\nHost: {addr}\r\nAuthorization: {bearer}\r\n\
              Content-Type: application/json\r\nContent-Length: {}\r\n\r\n",
             crate::MCP_PATH,
-            5 << 20
+            crate::FRAME_LIMIT + 1
         );
         if let Err(error) = stream.write_all(head.as_bytes()).await {
             panic!("write: {error}");
@@ -2137,6 +2356,52 @@ fn mcp_refuses_malformed_requests() {
     );
     assert_eq!(reply.status, 200);
     assert_eq!(reply.json()["error"]["code"], -32700, "{}", reply.body);
+}
+
+/// ADR-0074 §5: a body over the request limit, up to the frame limit, is answered with
+/// a JSON-RPC error whose `data.code` is `too_large`, carrying the body's `id`, and is
+/// never handled: no session opens and the engine sees no call.
+#[test]
+fn mcp_answers_a_body_over_the_request_limit_with_too_large() {
+    let harness = start_with(&MockEngine::new(), mcp_on());
+    let bearer = format!("Bearer {TOKEN}");
+    let headers = [
+        ("Authorization", bearer.as_str()),
+        ("Content-Type", "application/json"),
+    ];
+    let call = |id: serde_json::Value, name: &str| {
+        serde_json::json!({
+            "jsonrpc": "2.0", "id": id, "method": "tools/call",
+            "params": {"name": "scene", "arguments": {"name": name}}
+        })
+        .to_string()
+    };
+    let body = call(serde_json::json!(7), &"n".repeat(crate::REQUEST_LIMIT));
+    let reply = harness.http("POST", &headers, &body);
+    assert_eq!(reply.status, 200);
+    let json = reply.json();
+    assert_eq!(json["id"], 7, "{json}");
+    assert_eq!(json["error"]["code"], -32000, "{json}");
+    assert_eq!(
+        json["error"]["data"],
+        serde_json::json!({
+            "code": "too_large",
+            "size_bytes": body.len(),
+            "limit_bytes": crate::REQUEST_LIMIT,
+        })
+    );
+    // A string `id` is answered too; without a readable one the answer's `id` is `null`.
+    let body = call(serde_json::json!("a"), &"n".repeat(crate::REQUEST_LIMIT));
+    assert_eq!(harness.http("POST", &headers, &body).json()["id"], "a");
+    let body = "x".repeat(crate::REQUEST_LIMIT + 1);
+    let json = harness.http("POST", &headers, &body).json();
+    assert_eq!(json["id"], serde_json::Value::Null, "{json}");
+    assert_eq!(json["error"]["data"]["code"], "too_large", "{json}");
+    assert_eq!(
+        harness.sessions.load(Ordering::SeqCst),
+        0,
+        "never handled: no session opened"
+    );
 }
 
 /// `initialize` beyond `max_mcp_sessions` is 503; an idle session expires, freeing its

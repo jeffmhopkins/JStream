@@ -73,8 +73,14 @@ use ui_settings::UiSettings;
 /// dropped when it closes.
 pub type Connector = Arc<dyn Fn() -> Box<dyn Control> + Send + Sync>;
 
-/// The largest client message accepted, in bytes. Larger messages close the connection.
-const MAX_MESSAGE_BYTES: usize = 4 << 20;
+/// The request limit (ADR-0074): the largest client message handled, in bytes, and the
+/// largest MCP body. A larger one, up to [`FRAME_LIMIT`], is read and refused with
+/// `too_large`, and the connection stays open. `welcome` advertises it.
+const REQUEST_LIMIT: usize = 4 << 20;
+
+/// The frame limit (ADR-0074): the largest client message read at all, in bytes. A
+/// larger one closes the connection with close code 1009, and a larger MCP body is `413`.
+const FRAME_LIMIT: usize = 16 << 20;
 
 /// A bound server, ready to [`serve`](Server::serve).
 pub struct Server {
@@ -345,7 +351,8 @@ async fn upgrade(
     // connection unless one is selected; the token's is never echoed.
     let mut response = upgrade
         .protocols([WS_PROTOCOL])
-        .max_message_size(MAX_MESSAGE_BYTES)
+        .max_message_size(FRAME_LIMIT)
+        .max_frame_size(FRAME_LIMIT)
         .on_upgrade(move |socket| {
             async move {
                 session::run(socket, control, shutdown, revoked, hello_by, liveness).await;

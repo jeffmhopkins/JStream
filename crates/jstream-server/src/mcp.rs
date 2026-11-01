@@ -24,12 +24,15 @@
 //! - **Limits.** At most `ServerConfig::max_mcp_sessions` sessions are open; an
 //!   `initialize` beyond that is `503`. A session unused for
 //!   `ServerConfig::mcp_idle_timeout` is ended, checked whenever a request arrives.
-//!   Bodies over 4 MiB are `413`, refused from `Content-Length` before they are read.
+//!   A body over the request limit (4 MiB) and up to the frame limit (16 MiB) is answered
+//!   with a JSON-RPC error, code `-32000` and `data` `{"code": "too_large", "size_bytes",
+//!   "limit_bytes"}`, after reading only its `id` (ADR-0074 §5). A body over the frame
+//!   limit is `413`, refused from `Content-Length` before it is read when it declares one.
 
 use crate::devices::Now;
 use crate::gate::{Credential, Refusal};
 use crate::listener::Accepted;
-use crate::{App, MAX_MESSAGE_BYTES, ServerConfig};
+use crate::{App, FRAME_LIMIT, REQUEST_LIMIT, ServerConfig};
 use axum::body::{Body, Bytes};
 use axum::extract::{ConnectInfo, State};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, header};
@@ -288,13 +291,16 @@ async fn post(
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.parse::<u64>().ok());
     // A body declared too long is refused before any of it is read.
-    if declared.is_some_and(|length| length > MAX_MESSAGE_BYTES as u64) {
+    if declared.is_some_and(|length| length > FRAME_LIMIT as u64) {
         return too_large();
     }
-    let bytes = match axum::body::to_bytes(body, MAX_MESSAGE_BYTES).await {
+    let bytes = match axum::body::to_bytes(body, FRAME_LIMIT).await {
         Ok(bytes) => bytes,
         Err(_) => return too_large(),
     };
+    if bytes.len() > REQUEST_LIMIT {
+        return over_request_limit(&bytes);
+    }
     let Ok(message) = std::str::from_utf8(&bytes) else {
         return bad_request("the body is not UTF-8".into());
     };
@@ -392,9 +398,49 @@ fn reply(answer: Option<String>) -> Response {
 fn too_large() -> Response {
     (
         StatusCode::PAYLOAD_TOO_LARGE,
-        "the body is over 4 MiB, or could not be read\n",
+        "the body is over 16 MiB, or could not be read\n",
     )
         .into_response()
+}
+
+/// JSON-RPC's generic server error (ADR-0074 §5). The integer is not the promise:
+/// clients match on `data.code`.
+const SERVER_ERROR: i64 = -32000;
+
+/// The answer to a body over [`REQUEST_LIMIT`] (ADR-0074 §5): `200` with a JSON-RPC error
+/// whose `data` is `{"code": "too_large", "size_bytes", "limit_bytes"}`. Only the body's
+/// `id` is read; the rest is skipped unparsed, so it is never handled, and whether it
+/// was a `tools/call` is unknown. `id` is `null` when none can be read.
+fn over_request_limit(body: &[u8]) -> Response {
+    let id = serde_json::from_slice::<RpcId>(body)
+        .ok()
+        .and_then(|envelope| envelope.id)
+        .filter(|id| id.is_string() || id.is_number())
+        .unwrap_or(Value::Null);
+    let size = body.len();
+    let answer = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "error": {
+            "code": SERVER_ERROR,
+            "message": format!(
+                "the message is {size} bytes, over the {REQUEST_LIMIT}-byte request limit: \
+                 split the work"
+            ),
+            "data": {
+                "code": "too_large",
+                "size_bytes": size,
+                "limit_bytes": REQUEST_LIMIT,
+            },
+        },
+    });
+    reply(Some(answer.to_string()))
+}
+
+/// Just the `id` of a JSON-RPC message; every other member is skipped unparsed.
+#[derive(serde::Deserialize)]
+struct RpcId {
+    id: Option<Value>,
 }
 
 fn bad_request(reason: String) -> Response {
