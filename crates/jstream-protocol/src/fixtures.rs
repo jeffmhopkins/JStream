@@ -1118,6 +1118,7 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::UiSettingsGet {
             key: "workspace.dock".into(),
         },
+        Query::PluginList,
         Query::YoutubeStats,
         Query::SourceSizes,
     ]
@@ -1814,6 +1815,40 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
         QueryResult::UiSettingsGet {
             key: "workspace.dock".into(),
             value: Some(serde_json::json!({"version": 1, "current": "Live"})),
+        },
+        QueryResult::PluginList {
+            plugins: vec![
+                crate::PluginInfo {
+                    plugin_id: crate::PluginId::new("chat_switcher"),
+                    state: crate::PluginState::Enabled,
+                    reason: None,
+                    remote_name: Some("Chat switcher".into()),
+                    path: "/home/me/plugins/chat-switcher".into(),
+                    request: crate::PluginRequest {
+                        classes: [crate::PluginClass::Live].into(),
+                        hosts: vec!["https://api.example.com:443".into()],
+                        folders: false,
+                    },
+                    grant: crate::PluginGrant {
+                        classes: [crate::PluginClass::Live].into(),
+                        hosts: Vec::new(),
+                        folders: Vec::new(),
+                    },
+                },
+                crate::PluginInfo {
+                    plugin_id: crate::PluginId::new("scene_timer"),
+                    state: crate::PluginState::Disabled,
+                    reason: Some(crate::PluginDisabledReason::NeedsGrant),
+                    remote_name: None,
+                    path: "/home/me/plugins/scene-timer".into(),
+                    request: crate::PluginRequest {
+                        classes: [crate::PluginClass::Edit, crate::PluginClass::Live].into(),
+                        hosts: Vec::new(),
+                        folders: true,
+                    },
+                    grant: crate::PluginGrant::default(),
+                },
+            ],
         },
     ]
 }

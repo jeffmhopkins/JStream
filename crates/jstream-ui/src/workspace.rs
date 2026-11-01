@@ -16,6 +16,7 @@ use crate::panels::mixer::MixerFlip;
 use crate::panels::{
     AgentActivity, Filters, Inspector, Mixer, Outputs, Scenes, Sources, StudioMode, Transform,
 };
+use crate::plugins::Plugins;
 use crate::ui_settings::{self, DOCK_KEY, FirstStep, Kept, Theirs};
 use leptos::html;
 use leptos::prelude::*;
@@ -205,7 +206,7 @@ fn panel_view(panel: PanelId) -> AnyView {
     match panel {
         PanelId::Scenes => view! { <Scenes /> }.into_any(),
         PanelId::Objects => view! { <Sources /> }.into_any(),
-        PanelId::Inspector => view! { <Inspector /><Pairing /> }.into_any(),
+        PanelId::Inspector => view! { <Inspector /><Pairing /><Plugins /> }.into_any(),
         PanelId::Mixer => view! { <Mixer /> }.into_any(),
         PanelId::Outputs => view! { <Outputs /> }.into_any(),
         PanelId::Transitions => view! { <StudioMode /> }.into_any(),

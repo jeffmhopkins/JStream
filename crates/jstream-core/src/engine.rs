@@ -1077,13 +1077,20 @@ impl Engine {
         Executed::Ready(Box::new(result))
     }
 
-    /// `plugin.install`, `plugin.grant` and `plugin.enable`, or `None` for any other call
+    /// `plugin.install`, `plugin.grant`, `plugin.enable` and `plugin.list`, or `None` for any other call
     /// or without the `wasm-plugins` feature. They run with no engine lock held: a plugin
     /// loads, and may call back into the engine, while its install waits.
     #[cfg(feature = "wasm-plugins")]
     fn plugin_call(&self, call: &Call) -> Option<Result<CallResult, ProtocolError>> {
         match call {
             Call::Action { action } => crate::plugins::automation::action(self, action),
+            Call::Query {
+                query: Query::PluginList,
+            } => Some(Ok(CallResult::Query {
+                result: QueryResult::PluginList {
+                    plugins: crate::plugins::automation::list(self),
+                },
+            })),
             _ => None,
         }
     }

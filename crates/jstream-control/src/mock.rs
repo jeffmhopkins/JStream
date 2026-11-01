@@ -14,6 +14,7 @@
 //! [`MOCK_WINDOW`]),
 //! `source.sizes` (every source without a size, since the mock makes no frames),
 //! `activity.list` (always empty: the mock keeps no activity log),
+//! `plugin.list` (always empty: the mock runs no plugins),
 //! `state.changed`, `studio.changed` and `output.state_changed` events, per-client undo
 //! and redo, and live-value gestures (`live.set`, `live.cancel`, `live.list`,
 //! `ends_gesture`, takeover and expiry). Each [`MockEngine::connect`] opens one client
@@ -1136,6 +1137,10 @@ impl State {
                     call: query.name().into(),
                 });
             }
+            // The mock runs no plugins (ADR-0069), so none is installed.
+            Query::PluginList => QueryResult::PluginList {
+                plugins: Vec::new(),
+            },
             // The mock keeps no activity log (ADR-0083), so it lists none.
             Query::ActivityList { .. } => QueryResult::ActivityList {
                 now_ms: std::time::SystemTime::now()
@@ -3141,6 +3146,15 @@ mod tests {
         assert_eq!(targets[1].kind, crate::protocol::CaptureTargetKind::Window);
         assert_eq!(targets[1].target, super::MOCK_WINDOW);
         assert!(!targets[1].primary);
+    }
+
+    #[test]
+    fn plugin_list_is_empty() {
+        let (_engine, control) = parity_engine();
+        let Ok(QueryResult::PluginList { plugins }) = query(&*control, Query::PluginList) else {
+            panic!("a plugin.list result");
+        };
+        assert!(plugins.is_empty(), "the mock runs no plugins");
     }
 
     #[test]

@@ -123,7 +123,7 @@ covers = ["crates/jstream-ui/src/app.rs", "crates/jstream-ui/src/dock.rs", "crat
 
 Spec: [workspace › dock zones and docking](../design/ui-prototype/spec-workspace.md#dock-zones-and-docking).
 The dock is built (`dock.rs`, `workspace.rs`) with the prototype's eleven panels: Scenes,
-Scene objects, Inspector (with the pairing panel under the properties), Transform,
+Scene objects, Inspector (with the pairing panel and the Plugins section under the properties), Transform,
 Filters, Live chat, Stream stats, Audio mixer, Outputs, Agent activity and Transitions
 (studio mode and the presets). Live chat and Stream stats say what they wait on until
 their rows are built ([live panels](#live-panels)).
@@ -419,7 +419,7 @@ handlers; the real UI makes them work.
 <a id="beyond"></a>
 ## Beyond the prototype
 <!-- @section
-covers = ["crates/jstream-ui/src/session.rs", "crates/jstream-ui/src/host.rs", "crates/jstream-ui/src/pairing.rs"]
+covers = ["crates/jstream-ui/src/session.rs", "crates/jstream-ui/src/host.rs", "crates/jstream-ui/src/pairing.rs", "crates/jstream-ui/src/plugins.rs"]
 -->
 
 The real UI does these and the prototype doesn't show them. Matching the prototype must
@@ -431,6 +431,14 @@ not remove them; they move into the prototype's look.
   one-time code for a remote browser and lists and revokes paired devices. In the
   workspace it sits under the properties in the Inspector panel, since it hides itself
   where the server pairs nothing.
+- WASM automation plugins (WA1, [ADR-0069](adr/0069-wasm-plugin-limits-and-capabilities.md),
+  [ADR-0076](adr/0076-saved-wasm-plugins-and-manifest-requests.md)): the Plugins section
+  under the pairing panel in the Inspector lists the installed plugins with why one is
+  off and what it asks for that isn't granted, installs one from its package folder, and
+  turns a disabled one back on. Its grant dialog offers only what the plugin's manifest
+  asks for: `read`, always on, the other classes with what each lets it do, the hosts,
+  and folders when it asks for them. It opens after an install that asks for more than
+  `read`, and grants and turns on, in one step, a plugin whose update needs a grant.
 - Undo and redo, with the engine's history.
 - Delete plans: deleting a scene, source or bus shows what else it takes.
 - Outputs: creating stream, recording and virtual camera outputs, the write-only stream
