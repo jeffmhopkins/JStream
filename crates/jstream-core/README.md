@@ -304,8 +304,10 @@ state machine. Contents:
   or the output stops, closed when unplugged with the output staying up, and shared
   with a preview stream that showed it first (`src/tests/cpu_pipeline/captures.rs`),
   one open of a device shared by two readers, each taking each frame once, closed
-  with its last reader, a reader that joins counting frames from then on, and a lost
-  device failing every reader and not shared again (`runtime/devices.rs`), the format a webcam opens in, with and
+  with its last reader, a reader that joins counting frames from then on, a lost
+  device failing every reader and not shared again, a device the GPU view opened moved
+  to the CPU path in place when a CPU reader joins, its counters carried on, and lost
+  when it doesn't open again there (`runtime/devices.rs`), the format a webcam opens in, with and
   without an MJPEG decoder, its frames, decoded or not, read as RGBA, a webcam
   opening on the video-device backend's GPU path in an uncompressed format, MJPEG and a
   refused format on the CPU path, a webcam on the CPU path left running, and not opened
@@ -2325,7 +2327,10 @@ the render thread samples where they are, with no CPU copy, and counts
 (`OutputStats::gpu_captures`). The video-device backend is asked the same
 (`VideoDevices::on_context`): a webcam or capture card opens in its uncompressed format on
 that copy, and on the CPU backend in the same format when the copy refuses it; MJPEG
-always opens on the CPU backend, which decodes it there. Each fallback is logged and keeps the output running on
+always opens on the CPU backend, which decodes it there. A device opens once, shared
+with the preview (`runtime/devices.rs`), and the preview reads only CPU frames: when it
+joins a device open on the GPU path, the device is closed there and opened again on the
+CPU backend in the same format, in place, so the program's capture reads on. Each fallback is logged and keeps the output running on
 CPU frames: no device (the fakes, CI, a machine without interop; the compositor then
 opens its own device, hardware adapter first with the software one as the fallback), a
 backend with no GPU path or one that refuses the context, and a GPU capture that does not start (that capture then runs on
