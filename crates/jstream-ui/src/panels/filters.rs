@@ -611,18 +611,14 @@ pub fn refers(kind: &KindDescriptor) -> bool {
 /// §3): its own GPU pass and encoder session, beside the `sessions` in use now, from its
 /// next start when it is `running`.
 pub fn first_video_cost(sessions: u32, running: bool) -> String {
-    let in_use = match sessions {
-        1 => "the 1 in use now".to_owned(),
-        n => format!("the {n} in use now"),
-    };
     let when = if running {
         " It takes effect the next time this output starts."
     } else {
         ""
     };
     format!(
-        "A video filter gives this output its own GPU pass and encoder session, one more \
-         than {in_use}, even while the filter is off.{when}"
+        "A video filter gives this output its own GPU pass and encoder session, even \
+         while the filter is off. Encoder sessions in use now: {sessions}.{when}"
     )
 }
 
@@ -2696,11 +2692,11 @@ mod tests {
     fn the_first_video_filter_states_its_cost() {
         assert_eq!(
             first_video_cost(1, false),
-            "A video filter gives this output its own GPU pass and encoder session, one more \
-             than the 1 in use now, even while the filter is off."
+            "A video filter gives this output its own GPU pass and encoder session, even \
+             while the filter is off. Encoder sessions in use now: 1."
         );
-        assert!(first_video_cost(2, true).contains("the 2 in use now"));
-        assert!(first_video_cost(0, true).ends_with("the next time this output starts."));
+        assert!(first_video_cost(0, false).ends_with("in use now: 0."));
+        assert!(first_video_cost(2, true).ends_with("the next time this output starts."));
     }
 
     #[test]

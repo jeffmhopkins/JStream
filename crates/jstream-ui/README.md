@@ -465,8 +465,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   won't add a kind whose settings name a scene, a source, a bus or a file there
   (`refers`: the engine refuses those references yet), and, for an output whose video
   chain is empty, reads `output.status` and states what its first video filter costs
-  (`first_video_cost`, ADR-0080 §3): its own GPU pass and encoder session, beside the
-  sessions in use, from its next start if it runs. A scene's chain (owner `scene`, ADR-0065) shows while no
+  (`first_video_cost`, ADR-0080 §3): its own GPU pass and encoder session, with the
+  encoder sessions in use now, from its next start if it runs. A scene's chain (owner `scene`, ADR-0065) shows while no
   item is selected, for the selected scene, or a keyframe's parent, since a keyframe has
   none of its own; a scene row's Edit filters… and the canvas margin's Edit scene
   filters… pick it as an FX button does (`show_filters`). It is a video chain, and the

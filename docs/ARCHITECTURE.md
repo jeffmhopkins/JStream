@@ -642,7 +642,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   [ADR-0080](adr/0080-program-master-and-output-chains-v2.md), protocol 0.29). Since 0.43
   the owners `scene` and `item`, `SceneInfo.filters`, `ItemInfo.effects` and a
   descriptor's `max_outset_px` are in the protocol
-  ([ADR-0065](adr/0065-scene-chains-and-item-effects.md)). The engine runs both.
+  ([ADR-0065](adr/0065-scene-chains-and-item-effects.md)). The engine runs both. Since
+  0.61 the master stage's and outputs' video chains take filters too (ADR-0080).
   `source.set_audio`, `bus.create`, `bus.rename`, `bus.set_fader`, `bus.delete`,
   `send.set` and `send.remove` edit sources' audio, the buses and the send matrix
   ([ADR-0028](adr/0028-audio-model-v2.md), protocol 0.19), and `bus.set_monitor` a
