@@ -1353,7 +1353,7 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): ws_web.rs gains main's error handler; State::close still takes the binary queue, so the binary stream ends on error as on close; contents text holds" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:c4f24610dba3c800", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Preview streams paragraph: GPU view opens a device not yet open on the GPU path, shares a GPU-path one, refuses a CPU-path one; a failed reopen is DeviceLost for both; matches devices.rs" }
+stamp = { hash = "b3:b072b0ec7c07b44a", by = "agent:claude-window-picker", note = "The control README's mock now answers capture.targets with a display and a window; Design's differential paragraph says the script doesn't call capture.targets and now names both of the mock's targets (review B1). Protocol 0.50's capture_target type: core's Design names no parameter types. | merge: the merge brings #931's sample labels (collection file created with them) and #936's GPU view of video devices (on_context, devices moved to the CPU path when the preview joins) into Design and its test lists; the differential paragraph's mock capture.targets clause (a display and a window) this PR edits is untouched and still holds | kept from the merged side: Preview streams paragraph: GPU view opens a device not yet open on the GPU path, shares a GPU-path one, refuses a CPU-path one; a failed reopen is DeviceLost for both; matches devices.rs" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:3b3ef26e9423422c", by = "agent:claude-window-picker", note = "The control README's mock now answers capture.targets with a display and a window; Design's differential paragraph says the script doesn't call capture.targets and now names both of the mock's targets (review B1). Protocol 0.50's capture_target type: core's Design names no parameter types." }
@@ -1782,7 +1782,7 @@ stamp = { hash = "b3:03d1d6659abcca55", by = "agent:claude", note = "Secrets kee
 stamp = { hash = "b3:29e7e31c24cd9674", by = "agent:claude-webcam-preview", note = "Live on Windows: the capture and video-device backends open when a preview shows a display, window or webcam, and a webcam's one open is shared with an output's; the rest holds against core's design | merge: #913 changed the CLAP host line to name the master and output chains; the preview's capture and video-device line, and the shared webcam open, still hold. | kept from the merged side: Re-read Live on Windows against core's change: the engine now starts a plugin host for a CLAP filter on the master's or an output's chain too; updated that sentence. Nothing else in the daemon changed." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:c4f24610dba3c800", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Upstream core design wording on the GPU view changed; the daemon's statement that a webcam's one open is shared with the output's holds" }
+stamp = { hash = "b3:b072b0ec7c07b44a", by = "agent:claude-window-picker", note = "Dep core Design changed one clause (the mock's capture.targets now a display and a window); the daemon's design doesn't describe the mock and still holds. | merge: core Design's merged changes (#931 sample labels, #936 VideoDevices::on_context and the GPU device view) don't touch what the daemon's design says about the mock or capture targets; it still holds | kept from the merged side: Upstream core design wording on the GPU view changed; the daemon's statement that a webcam's one open is shared with the output's holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:6329bf91b0ab645f", by = "agent:claude", note = "Re-read Design against core's removed privacy screen and the server's caused_by change; the daemon wiring it describes is unchanged." }
@@ -5133,7 +5133,7 @@ stamp = { hash = "b3:747acc8bf268e7d7", by = "agent:wave-owner", note = "merge: 
 stamp = { hash = "b3:015556b4e8abdee7", by = "agent:claude-labels", note = "Re-read: the upstream changes are the sample labels in a new collection (desktop usage, SC-08); going live is unchanged." }
 
 ["GETTING-STARTED#live"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:32274fdeae798a43", by = "agent:claude-labels", note = "Re-read: the upstream changes are the sample labels in a new collection (desktop usage, SC-08); going live is unchanged." }
+stamp = { hash = "b3:af0ea51acbb06f20", by = "agent:claude-window-picker", note = "Dep UI-FEATURES changed only the Inspector intro (capture targets picked from a list); the going-live steps are unaffected and still hold. | merge: #931 changed only UI-FEATURES' SC-08 row (sample labels); the going-live steps are unaffected and still hold | kept from the merged side: Re-read: the upstream changes are the sample labels in a new collection (desktop usage, SC-08); going live is unchanged." }
 
 ["GETTING-STARTED#record"."body"]
 stamp = { hash = "b3:b21c49ef28545229", by = "agent:wave-owner", note = "merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: Recording (MP4) output with a file path, the header's Record/Stop recording (HD-07)" }
@@ -5142,7 +5142,7 @@ stamp = { hash = "b3:b21c49ef28545229", by = "agent:wave-owner", note = "merge: 
 stamp = { hash = "b3:015556b4e8abdee7", by = "agent:claude-labels", note = "Re-read: the upstream changes are the sample labels in a new collection (desktop usage, SC-08); recording is unchanged." }
 
 ["GETTING-STARTED#record"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:32274fdeae798a43", by = "agent:claude-labels", note = "Re-read: the upstream changes are the sample labels in a new collection (desktop usage, SC-08); recording is unchanged." }
+stamp = { hash = "b3:af0ea51acbb06f20", by = "agent:claude-window-picker", note = "Dep UI-FEATURES changed only the Inspector intro (capture targets picked from a list); the recording steps are unaffected and still hold. | merge: #931 changed only UI-FEATURES' SC-08 row (sample labels); the recording steps are unaffected and still hold | kept from the merged side: Re-read: the upstream changes are the sample labels in a new collection (desktop usage, SC-08); recording is unchanged." }
 
 ["GETTING-STARTED#requirements"."body"]
 stamp = { hash = "b3:33e39447d2457615", by = "agent:wave-owner", note = "merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: Windows 11 x64 build 22000 per README Platforms (fact min-windows-build), D3D12, Media Feature Pack on N editions (the desktop app's can't-start window), WebView2, no installer or admin per ADR-0066" }
@@ -5157,10 +5157,10 @@ stamp = { hash = "b3:015556b4e8abdee7", by = "agent:claude-labels", note = "Re-r
 stamp = { hash = "b3:67130f6f84b33399", by = "agent:wave-owner", note = "merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: Windows 11 x64 build 22000 per README Platforms (fact min-windows-build), D3D12, Media Feature Pack on N editions (the desktop app's can't-start window), WebView2, no installer or admin per ADR-0066" }
 
 ["GETTING-STARTED#scene"."body"]
-stamp = { hash = "b3:4be90c176fd17591", by = "agent:claude-labels", note = "Edited the opening: a new JStream starts empty but for the four sample labels; the scene steps are unchanged." }
+stamp = { hash = "b3:111869823b023759", by = "agent:claude-window-picker", note = "Step 2 now says the properties let you choose the display or window from the list of those open now, as the capture_target picker does. | merge: #931 added the four sample labels to this section's opening sentence and its SC-08 row in UI-FEATURES; step 2's display-or-window-from-a-list wording this PR edits is untouched and still holds | kept from the merged side: Edited the opening: a new JStream starts empty but for the four sample labels; the scene steps are unchanged." }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:32274fdeae798a43", by = "agent:claude-labels", note = "Edited the opening: a new JStream starts empty but for the four sample labels; the scene steps are unchanged." }
+stamp = { hash = "b3:af0ea51acbb06f20", by = "agent:claude-window-picker", note = "Step 2 now says the properties let you choose the display or window from the list of those open now, as the capture_target picker does. | merge: #931 added the four sample labels to this section's opening sentence and its SC-08 row in UI-FEATURES; step 2's display-or-window-from-a-list wording this PR edits is untouched and still holds | kept from the merged side: Edited the opening: a new JStream starts empty but for the four sample labels; the scene steps are unchanged." }
 
 ["GETTING-STARTED#trouble"."body"]
 stamp = { hash = "b3:cdea88ae9fde1c6f", by = "agent:wave-owner", note = '''merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: logs\jstream-desktop.log and cef.log, crash-*.txt with secrets redacted and never uploaded (R-SEC-004, desktop Usage), issue and private-advisory links (registered in external.toml), SECURITY.md''' }
