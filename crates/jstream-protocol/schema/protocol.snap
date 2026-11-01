@@ -5861,7 +5861,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "The ID of a display or window, as `capture.targets` lists it, so a UI can offer\nthe targets of that kind to pick from: a string, empty for the kind's default.\nSince 0.51.",
+          "description": "The ID of a display or window, as `capture.targets` lists it, so a UI can offer\nthe targets of that kind to pick from: a string, empty for the kind's default.\nSince 0.50.",
           "properties": {
             "kind": {
               "$ref": "#/$defs/CaptureTargetKind",
@@ -8641,5 +8641,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.51"
+  "title": "JStream protocol 0.50"
 }

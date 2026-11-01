@@ -231,7 +231,7 @@ pub enum ParamType {
     Bus,
     /// The ID of a display or window, as `capture.targets` lists it, so a UI can offer
     /// the targets of that kind to pick from: a string, empty for the kind's default.
-    /// Since 0.51.
+    /// Since 0.50.
     CaptureTarget {
         /// The kind of target it names.
         kind: CaptureTargetKind,
@@ -698,6 +698,19 @@ mod tests {
         assert!(window.check(&json!(42)).is_err());
         assert!(window.check(&Value::Null).is_err());
         assert!(!window.is_reference());
+        // A target kind from a newer server still parses.
+        let newer = serde_json::from_value::<ParamDescriptor>(json!({
+            "id": "app", "type": "capture_target", "kind": "application", "max_len": 8,
+            "default": "", "label": "App"
+        }))
+        .expect("parses");
+        assert_eq!(
+            newer.ty,
+            ParamType::CaptureTarget {
+                kind: CaptureTargetKind::Unknown,
+                max_len: 8
+            }
+        );
         assert_eq!(
             window.value_schema(),
             json!({"type": "string", "maxLength": 4, "title": "target", "default": ""})

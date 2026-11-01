@@ -186,7 +186,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   version 1 ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)). An
   empty `window` target captures nothing. A new target needs a new source. The engine's
   `capture.targets` query lists the IDs a `target` can take, and the parameter's type,
-  `capture_target` of kind `display` or `window` (protocol 0.51), says so, so a UI lists
+  `capture_target` of kind `display` or `window` (protocol 0.50), says so, so a UI lists
   them to pick from. `show_cursor` (on by
   default, which is what the kinds did before it, so they keep version 1) says whether
   the pointer shows; `Source::show_cursor` reports it, and the engine asks the capture

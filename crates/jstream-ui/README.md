@@ -388,8 +388,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `target`) lists the targets of its kind that `capture.targets` reports, each by name
   and size, after "Primary display" or "None" for the empty value, and a target the
   source names that isn't listed now (a closed window) as "Window not open (<ID>)". It
-  asks again each time the list gets focus, so a window opened since shows up; until
-  the first answer, or when the engine can't list targets, it is the ID as text. Fields
+  asks again each time the field gets focus, so a window opened since shows up; until
+  the first list arrives, or while the engine can't list targets, it is the ID as text,
+  and a failed refresh keeps the last list. Fields
   come in the descriptor's order, grouped by `group`, advanced
   ones collapsed, and hidden while their `visible_if` doesn't hold. A type this UI
   doesn't know is shown read-only. A change is checked with the descriptor's own check,

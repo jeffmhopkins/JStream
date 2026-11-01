@@ -4,7 +4,7 @@
 //! A changed field is checked with the descriptor's own check, then sent as a
 //! one-parameter `source.set_settings` patch; "Reset" sends `null` for the default.
 //! A capture target parameter (a display or window source's `target`) is a list of the
-//! targets of its kind that `capture.targets` reports, read again each time the list
+//! targets of its kind that `capture.targets` reports, read again each time the field
 //! gets focus, so a window opened since shows up.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/adr/0025-typed-settings-kind-descriptors.md
@@ -684,8 +684,13 @@ fn capture_target_input(
                 Ok(other) => Err(format!("unexpected {} result", other.name())),
                 Err(e) => Err(e.to_string()),
             };
-            // The form may have closed meanwhile.
-            listed.try_set(Some(got));
+            // A failed refresh keeps the last list, so an open select stays one. The form
+            // may have closed meanwhile.
+            listed.try_update(|l| {
+                if got.is_ok() || !matches!(l, Some(Ok(_))) {
+                    *l = Some(got);
+                }
+            });
         });
     };
     refresh();
@@ -748,7 +753,8 @@ fn capture_target_input(
         }
         Err(reason) => view! {
             <input type="text" maxlength=max_len.to_string() title=reason
-                prop:value=current.clone() on:change=on_text.clone() />
+                prop:value=current.clone() on:focus=move |_| refresh()
+                on:change=on_text.clone() />
         }
         .into_any(),
     };

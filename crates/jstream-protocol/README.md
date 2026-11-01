@@ -183,7 +183,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.51 because 0.51 added the
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.50 because 0.50 added the
   `capture_target` parameter type, which a `display` or `window` source's `target` has, so
   a UI can offer what `capture.targets` lists ([Kinds](#design)); 0.47 made the engine
   draw, and so accept, every blend mode
@@ -527,7 +527,9 @@ never a type per kind.
   object (`bool`; `int` and `float` with `min`, `max`, `step`, `unit`; `enum` with
   `options`; `color` with `alpha`; `string` with `multiline` and `max_len`; `asset` with
   `accept`; `scene`; `source` with an optional `media`; `bus`, since 0.24;
-  `capture_target` with a `kind`, `display` or `window`, and `max_len`, since 0.51: a
+  `capture_target` with a `kind`, `display` or `window` (an unknown one parses as
+  `CaptureTargetKind::Unknown`, so adding a kind is a minor change), and `max_len`,
+  since 0.50: a
   string checked as `string` is, naming a target of that kind as `capture.targets`
   lists it, so a UI can offer those to pick from), a `default`, a `label`, an
   optional `description`, the UI hints `group`, `advanced` and `visible_if`, and `live`.
