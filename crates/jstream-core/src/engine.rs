@@ -335,8 +335,11 @@ impl Engine {
     ///
     /// The file is a versioned JSON collection (`jstream-graph`), upgraded on load if it
     /// is older, and checked as edits are, against this engine's kinds. When there is
-    /// no file at `path`, it is created with the current, empty, collection, so a path
-    /// that can't be written fails here rather than at the first change.
+    /// no file at `path`, it is created with the current collection, given the
+    /// prototype's four sample labels if it has none
+    /// ([`Graph::with_sample_labels`](jstream_graph::Graph::with_sample_labels)), still
+    /// at its `rev`, so a path that can't be written fails here rather than at the first
+    /// change.
     ///
     /// Every applied batch, undo and redo then replaces the file atomically before its
     /// call returns, so the client whose call it was knows the file holds its `rev`. A
