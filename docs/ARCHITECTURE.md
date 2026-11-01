@@ -694,7 +694,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   with what a person grants it, change the grant and re-enable it; they are for a person,
   so no MCP tool, plugin or hotkey carries them. The event `plugin.state_changed` reports
   a plugin enabled or disabled, with why the engine disabled it. Likewise
-  `effect.enable` (0.62, #349) is for a person: it re-enables an effect-pack kind the
+  `effect.enable` (0.61, #349) is for a person: it re-enables an effect-pack kind the
   engine quarantined because a GPU device loss was blamed on it, which the event
   `gpu.device_lost` reports and `kind.list` marks (`quarantined`). A plugin calls the API
   through a scoped `Control` that checks each call against its grant, using
@@ -1050,7 +1050,7 @@ reports the loss as an error rather than panicking. The third loss within
 on the effect-pack kinds the shot being drawn draws, which are quarantined (their
 filters bypassed, and the whole pack after a second loss blamed on one of its effects
 in a run) until a person re-enables them with `effect.enable`, and reported in the
-engine event `gpu.device_lost` (protocol 0.62). The quarantine is kept in the packs
+engine event `gpu.device_lost` (protocol 0.61). The quarantine is kept in the packs
 folder, across restarts and pack edits
 ([jstream-core › Design](../crates/jstream-core/README.md#design)). Not built yet: the
 GPU-time guard (timestamp queries that quarantine an effect whose pass runs over half

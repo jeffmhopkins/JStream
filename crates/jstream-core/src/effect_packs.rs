@@ -315,7 +315,7 @@ impl Packs {
             .map_err(std::io::Error::other)
             .and_then(|bytes| {
                 std::fs::create_dir_all(self.watcher.root())?;
-                std::fs::write(&path, bytes)
+                crate::collection::write_atomically(&path, &bytes)
             });
         if let Err(error) = written {
             tracing::warn!(path = %path.display(), %error, "effect quarantine not saved; it lasts until the engine stops");

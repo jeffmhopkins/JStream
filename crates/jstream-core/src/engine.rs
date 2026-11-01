@@ -339,17 +339,22 @@ impl Engine {
         Ok(CallResult::action())
     }
 
-    /// What the program stage's render thread calls when its GPU device is lost
-    /// (#349), with the pack kinds the frames before the loss drew: blames and
-    /// quarantines them, re-plans without them, and sends `gpu.device_lost`. Holds the
-    /// engine weakly.
-    pub(crate) fn device_loss_hook(&self) -> crate::runtime::LossHook {
-        let shared = Arc::downgrade(&self.shared);
-        Arc::new(move |loss: crate::runtime::DeviceLoss| {
-            if let Some(shared) = shared.upgrade() {
+    /// The body of the program stage's `jstream-device-losses` thread: for each GPU
+    /// device the render thread lost (#349), with the pack kinds the frames before the
+    /// loss drew, blames and quarantines them, re-plans without them, and sends
+    /// `gpu.device_lost`. The render thread hands the loss over a channel, so it takes
+    /// no lock and writes no file itself (R-RT-003). It ends once the render thread
+    /// drops its sender, and holds the shared collection like the capture-sizes thread.
+    pub(crate) fn device_loss_watch(
+        &self,
+        losses: Receiver<crate::runtime::DeviceLoss>,
+    ) -> impl FnOnce() + Send + 'static {
+        let shared = Arc::clone(&self.shared);
+        move || {
+            for loss in losses {
                 shared.device_lost(loss);
             }
-        })
+        }
     }
 
     /// Gives the engine YouTube (ADR-0058): a Google OAuth client, the HTTPS transport
@@ -1555,7 +1560,8 @@ impl Engine {
     }
 
     /// `output.start` / `output.stop` when backends are injected. Events are emitted
-    /// on this thread. The pipeline threads never take the collection lock.
+    /// on this thread. The real-time pipeline threads (render, mixer) never take the
+    /// collection lock.
     fn run_media_action(&self, call: Call) -> Result<CallResult, ProtocolError> {
         let Call::Action { action } = call else {
             return Err(not_implemented("this kind of call"));
@@ -3567,9 +3573,15 @@ impl Shared {
     /// A GPU device loss on the program stage (#349): blames the pack kinds it drew,
     /// quarantines them and re-plans without them, then sends `gpu.device_lost`.
     fn device_lost(&self, loss: crate::runtime::DeviceLoss) {
+        let crate::runtime::DeviceLoss {
+            cause,
+            drawn,
+            recovering,
+            handled,
+        } = loss;
         let blame = lock(&self.effect_packs)
             .as_mut()
-            .map(|packs| packs.blame(&loss.drawn));
+            .map(|packs| packs.blame(&drawn));
         let (blamed, quarantined) = match blame {
             Some(crate::effect_packs::Blame {
                 blamed,
@@ -3583,13 +3595,16 @@ impl Shared {
             }
             None => (Vec::new(), Vec::new()),
         };
+        // The render snapshot without the quarantined kinds is published: the render
+        // thread may draw on its new device.
+        drop(handled);
         let mut wake = Vec::new();
         lock(&self.state).subscribers.emit(
             &Event::GpuDeviceLost {
-                cause: loss.cause,
+                cause,
                 blamed,
                 quarantined,
-                recovering: loss.recovering,
+                recovering,
             },
             &mut wake,
         );

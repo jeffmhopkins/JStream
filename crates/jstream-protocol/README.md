@@ -189,7 +189,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.62 because a GPU device
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.61 because a GPU device
   loss is blamed on the effect-pack kinds that drew before it, which are quarantined
   until a person re-enables them (#349: the `gpu.device_lost` event, `KindSummary`'s
   `quarantined` and the `effect.enable` action, [Effect quarantine](#design)); 0.55
@@ -1305,7 +1305,7 @@ After `welcome`, the server pushes every event to every client.
   [YouTube](#design).
 - `plugin.state_changed {plugin_id, state, reason?, remote_name?}` (0.35) is described
   under [Plugins](#design).
-- `gpu.device_lost {cause, blamed, quarantined, recovering}` (0.62) is described under
+- `gpu.device_lost {cause, blamed, quarantined, recovering}` (0.61) is described under
   [Effect quarantine](#design).
 
 ### YouTube
@@ -1430,7 +1430,7 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
 
 A WGSL effect pack is validated, not bounded: a shader that loops too long can hang the
 GPU, and the OS resets the device (#349,
-[ADR-0087](../../docs/adr/0087-effect-quarantine-after-gpu-device-loss.md)). Since 0.62:
+[ADR-0087](../../docs/adr/0087-effect-quarantine-after-gpu-device-loss.md)). Since 0.61:
 - **`gpu.device_lost {cause, blamed, quarantined, recovering}`** reports a lost device
   on the program stage. `blamed` lists the effect-pack kinds drawn in the frames before
   the loss (empty when none was, and the loss had another cause), `quarantined` the

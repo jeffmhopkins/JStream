@@ -1376,7 +1376,7 @@ pub enum Action {
         plugin_id: PluginId,
     },
     /// Re-enables an effect-pack kind the engine quarantined after a GPU device loss was
-    /// blamed on it (0.62, #349; `gpu.device_lost`), and the whole pack when the pack
+    /// blamed on it (0.61, #349; `gpu.device_lost`), and the whole pack when the pack
     /// was quarantined. Its filters draw again from the next frame. The engine never
     /// lifts a quarantine by itself, nor when the pack's files change. Succeeds for a
     /// kind that isn't quarantined. Fails with `invalid_argument` on `kind_id`, as

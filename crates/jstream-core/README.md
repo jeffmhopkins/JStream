@@ -47,7 +47,8 @@ state machine. Contents:
   (*Stream keys* below). It holds the
   `jstream-graph` `Graph`, the outputs, those frames, the idempotency keys, the undo
   history, the open gestures and the subscribers behind one lock, and the drop ledger behind another, and executes
-  batches, history calls, actions and queries. The pipeline threads do not take the collection lock.
+  batches, history calls, actions and queries. The real-time pipeline threads (render,
+  mixer) do not take the collection lock.
 - **YouTube** (`youtube.rs`, [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)):
   `with_youtube(YoutubeSetup)` gives the engine a Google OAuth client, the HTTPS
   transport and the `OAuthTokenStore`. `YoutubeSetup::built_in` uses JStream's built-in
@@ -2556,11 +2557,17 @@ test pattern. Each loss is logged as a warning and counted
 (`OutputStats::gpu_device_losses`; leaving the context also counts in
 `gpu_fallbacks`). The third loss within 60 s fails the output instead ("the GPU was
 lost ... and the compositor could not reopen"), as does a switch that fails as above.
-The render thread then calls the engine's `device_loss_hook` with the cause, whether
-it is switching, and the effect-pack kinds the held shot draws (`Shot::pack_kinds`):
-the frames submitted just before the loss drew the same, unless the shot changed in the
-frame or two a loss takes to surface. The engine blames and quarantines them
-([Design](#design), *Effect packs*) and sends `gpu.device_lost`.
+The render thread then sends a `DeviceLoss` over a channel to `jstream-device-losses`
+(`Engine::device_loss_watch`), with the cause, whether it is switching, and the
+effect-pack kinds the held shot draws (`Shot::pack_kinds`): the frames submitted just
+before the loss drew the same, unless the shot changed in the frame or two a loss takes
+to surface. That thread blames and quarantines them ([Design](#design), *Effect
+packs*), which takes the packs' and the collection's locks, writes the quarantine file
+and publishes a render snapshot without them, and then sends `gpu.device_lost`; the
+render thread does none of it. It doesn't adopt the new device until the engine has
+handled the loss (`LossHandled`, set once the snapshot is published, or when the loss
+is dropped unhandled), and adopts that snapshot first, so a shader that hangs at once
+isn't drawn again.
 
 A session on the GPU encode path rules the fallback out: its encode targets are the
 context's, which a compositor on its own device can't write. If one runs when the
@@ -2665,7 +2672,8 @@ output stops, and `meters.tick` about ten times a second. The stage also starts
 render thread sends under the collection lock and announces the sources it changes
 (`source.size_changed`, *Source sizes* in [Design](#design)), and when the render thread
 lets go of its captures it forgets them all and ends. `Program`'s drop joins it after
-the render thread. The render loop counts each tick it composites into the render hub
+the render thread. So it does `jstream-device-losses`, which takes each GPU device loss
+the render thread sends it to the engine (below). The render loop counts each tick it composites into the render hub
 (`stats.tick`'s `program_frames`), and publishes capture mailbox skips and the frames an encode ring drops
 (`encode_frames`), and a tick that falls a
 whole period behind the clock skips to the current tick and counts the skipped ones in

@@ -226,7 +226,7 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         remote_name: Option<String>,
     },
-    /// The program stage's GPU device was lost (0.62, #349): a GPU hang that the OS
+    /// The program stage's GPU device was lost (0.61, #349): a GPU hang that the OS
     /// reset (Windows' TDR), a driver reset or a removed GPU. The engine opens a new
     /// device and the outputs repeat their last frame meanwhile, unless `recovering` is
     /// `false`. A loss is blamed on the effect-pack kinds drawn in the frames before it;

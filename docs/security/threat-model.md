@@ -323,7 +323,7 @@ before they reach the UI, agents or the log (#351).
   blamed on the pack effects drawn before it, which are quarantined until a person
   re-enables them (`effect.enable`, which no MCP tool, plugin or hotkey carries), the
   whole pack after a second blame in a run, and reported in `gpu.device_lost` (protocol
-  0.62). Not built yet: the GPU-time guard against long loops, which would turn an
+  0.61). Not built yet: the GPU-time guard against long loops, which would turn an
   effect off before the OS resets the device.
 
 <a id="mcp"></a>

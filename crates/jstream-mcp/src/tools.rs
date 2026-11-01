@@ -116,7 +116,9 @@ pub(crate) const REMOTE_PREFIX: &str = "remote_";
 /// plugins (ADR-0069 G1), so an agent can't hand its access to code that outlives the
 /// conversation, and re-enabling an effect quarantined after a GPU device loss (ADR-0087
 /// §4), so an agent can't put a shader that hung the GPU back on air. The protocol keeps
-/// them for the UI.
+/// them for the UI. `events.rs` hides these nouns' events from agents too, so an
+/// `effect.*` event would never reach one; a loss is reported as `gpu.device_lost`,
+/// which does (ADR-0087 §5).
 pub(crate) const PEOPLE_ONLY: [&str; 3] = ["youtube", "plugin", "effect"];
 
 /// The nouns whose ops are deprecated, so no tool carries them either: an agent is
