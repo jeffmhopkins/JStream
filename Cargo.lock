@@ -2869,6 +2869,7 @@ dependencies = [
  "jstream-browser",
  "jstream-control",
  "jstream-crash",
+ "jstream-effects",
  "jstream-encode",
  "jstream-graph",
  "jstream-mcp",

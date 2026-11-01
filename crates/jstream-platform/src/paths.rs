@@ -16,6 +16,11 @@ pub const PORTABLE_MARKER: &str = "portable";
 /// The folder, beside the exe, that holds the state of a portable JStream.
 pub const PORTABLE_DATA_DIR: &str = "data";
 
+/// The folder in the data folder that holds the WGSL effect packs the engine loads
+/// and hot-reloads (ADR-0035), one pack folder each. The desktop app and the daemon both
+/// watch it.
+pub const EFFECTS_DIR: &str = "effects";
+
 /// The file in the data folder that keeps the UI settings (ADR-0084), such as the web
 /// UI's dock. The desktop app and the daemon both keep them there, so both show the
 /// same workspace.

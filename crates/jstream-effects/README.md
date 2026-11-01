@@ -70,9 +70,8 @@ settings map, reading a missing or invalid value as its default. A test checks t
 layout against the offsets naga computes.
 
 **Drawing.** `Effect` implements render's `ExternalFilter` (label: the kind ID), and
-`Effect::video_filter(settings)` makes the `VideoFilter` a source's video chain would
-keep; `jstream-core`'s chain runtime bypasses pack kinds until it runs them (a V0
-follow-up). The
+`Effect::video_filter(settings)` makes the `VideoFilter` a video chain keeps;
+`jstream-core`'s chain runtime draws pack kinds with it once their pack is loaded. The
 host's prelude is `jstream_render::FILTER_PRELUDE`. A filter made from a reloaded effect
 draws the new WGSL, because the render side rebuilds a label's pipeline when its source
 changes. A test draws an effect on the test adapter, changes its settings in place, and
@@ -91,5 +90,5 @@ Polling needs no dependency and behaves the same on every file system. The cost 
 poll's latency, and an edit that keeps a file's size within the file system's timestamp
 resolution is seen on the next change.
 
-Not here yet: listing pack kinds in `kind.list` and running the watcher in the engine, and pack
-transitions (ADR-0037 §1).
+`jstream-core` runs the watcher (`Engine::watch_effect_packs`) and lists pack kinds in
+`kind.list`. Not here yet: pack transitions (ADR-0037 §1).

@@ -51,6 +51,7 @@ use jstream_sources::{
     SourceAudio, SourceError,
 };
 
+use crate::effect_packs::PackEffects;
 use crate::filter_assets::{self, AssetKey, FilterAsset, FilterAssets, LoadError, Loaded};
 use crate::lock;
 use crate::runtime::{FRAME_DEN, FRAME_NUM};
@@ -481,14 +482,21 @@ impl LiveSources {
         })
     }
 
-    /// Rebuilds what plans read from the loaded assets.
+    /// Rebuilds what plans read from the loaded assets, keeping the pack effects.
     fn share_assets(&mut self) {
+        let effects = self.loaded.effects().clone();
         self.loaded = Arc::new(
             self.assets
                 .iter()
                 .filter_map(|(key, entry)| Some((key.clone(), Arc::clone(entry.loaded.as_ref()?))))
-                .collect(),
+                .collect::<FilterAssets>()
+                .with_effects(effects),
         );
+    }
+
+    /// Hands plans the effect packs' effects as now loaded ([`crate::effect_packs`]).
+    pub(crate) fn set_effects(&mut self, effects: PackEffects) {
+        self.loaded = Arc::new((*self.loaded).clone().with_effects(effects));
     }
 
     /// The loaded video filter assets, for a plan.
