@@ -702,7 +702,7 @@ the render parameter channel, never through the collection:
   or its crop) from any gesture that held it, and the table is published on the
   channel (`RenderHub::publish_live`, a `LiveParams` of per-item overrides, swapped
   with `arc-swap` only when it changed). A value whose `scene_id` names a keyframe
-  scene is a parameter of its own, the keyframe's field of the item (protocol 0.48,
+  scene is a parameter of its own, the keyframe's field of the item (protocol 0.53,
   #846), so a
   gesture on the parent's item and one on the keyframe's can both be open. A batch
   that deletes an item, or a keyframe scene, drops the live values addressed to it.
