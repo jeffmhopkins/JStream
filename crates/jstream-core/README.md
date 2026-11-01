@@ -925,7 +925,9 @@ or the transition running onto it, whose tracks the shot holds in place of the
 program's pass. A `program` or `preview` mix draws the program's passes, or the
 transition while one runs (no mix draws studio mode's preview scene yet), and
 so does a mix the shot doesn't have, such as one deleted while an output still
-renders it. The engine re-plans after every applied batch, undo and redo, a
+renders it. The mixes' scenes are planned after the transition, so a scene a Move
+inside a group left out of the shot (`Shot::keep_read`) is planned again in full, with
+its chain and its items' boxes, for a mix that shows it (#961). The engine re-plans after every applied batch, undo and redo, a
 `scene.switch` that moves program, a transition's end, every `set_source_frame`, a
 collection file's load, a live source's build and a live source's next frame (see
 *Live sources*), under the collection lock, and `RenderHub::publish` stores
