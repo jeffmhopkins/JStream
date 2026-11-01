@@ -645,7 +645,7 @@ pub struct PluginRequest {
     pub folders: bool,
 }
 
-/// One installed plugin, as `plugin.list` lists it (0.59).
+/// One installed plugin, as `plugin.list` lists it (0.58).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct PluginInfo {
     /// The plugin.

@@ -188,7 +188,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.59 because it added the
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.58 because it added the
   `plugin.list` query, the installed WASM plugins with what each manifest asks for and
   what a person granted ([Plugins](#design)); 0.55 made a keyframe
   scene override the children of the groups in its parent's tree (#846; no wire
@@ -988,7 +988,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
 - `ui_settings.get {key}`: the UI setting kept under `key`, or no `value` when there is
   none. Not collection state, so no `rev`. Added in 0.52 (see *UI settings* below).
 - `plugin.list`: the installed WASM automation plugins, ordered by ID. Not collection
-  state, so no `rev`. Added in 0.59 (see *Plugins* below).
+  state, so no `rev`. Added in 0.58 (see *Plugins* below).
 - `delete.plan {target}`: the batch that deletes a scene, source or bus (`target` is
   `{"type":"scene","scene_id":…}`, `{"type":"source","source_id":…}` or, since 0.24,
   `{"type":"bus","bus_id":…}`), or a folder or label (`{"type":"folder","folder_id":…}`,

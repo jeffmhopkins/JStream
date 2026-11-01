@@ -204,7 +204,7 @@ pub enum Query {
         /// The setting's key.
         key: String,
     },
-    /// Lists the installed WASM automation plugins (0.59, ADR-0069), ordered by ID: each
+    /// Lists the installed WASM automation plugins (0.58, ADR-0069), ordered by ID: each
     /// one's state, its package, what its manifest asks for and what a person granted it,
     /// so a client can show them and offer a grant. For a person only, like
     /// `plugin.install`: no plugin is ever granted it, and no MCP tool carries it. Not
@@ -576,7 +576,7 @@ pub enum QueryResult {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         value: Option<serde_json::Value>,
     },
-    /// The result of `plugin.list` (0.59). Installed plugins are not collection state, so
+    /// The result of `plugin.list` (0.58). Installed plugins are not collection state, so
     /// it carries no `rev`.
     #[serde(rename = "plugin.list")]
     PluginList {

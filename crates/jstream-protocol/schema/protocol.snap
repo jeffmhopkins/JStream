@@ -6254,7 +6254,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "string"
     },
     "PluginInfo": {
-      "description": "One installed plugin, as `plugin.list` lists it (0.59).",
+      "description": "One installed plugin, as `plugin.list` lists it (0.58).",
       "properties": {
         "grant": {
           "$ref": "#/$defs/PluginGrant",
@@ -6794,7 +6794,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Lists the installed WASM automation plugins (0.59, ADR-0069), ordered by ID: each\none's state, its package, what its manifest asks for and what a person granted it,\nso a client can show them and offer a grant. For a person only, like\n`plugin.install`: no plugin is ever granted it, and no MCP tool carries it. Not\ncollection state, so the result carries no `rev`. An engine built without WASM\nplugins lists none.",
+          "description": "Lists the installed WASM automation plugins (0.58, ADR-0069), ordered by ID: each\none's state, its package, what its manifest asks for and what a person granted it,\nso a client can show them and offer a grant. For a person only, like\n`plugin.install`: no plugin is ever granted it, and no MCP tool carries it. Not\ncollection state, so the result carries no `rev`. An engine built without WASM\nplugins lists none.",
           "properties": {
             "type": {
               "const": "plugin.list",
@@ -7588,7 +7588,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "The result of `plugin.list` (0.59). Installed plugins are not collection state, so\nit carries no `rev`.",
+          "description": "The result of `plugin.list` (0.58). Installed plugins are not collection state, so\nit carries no `rev`.",
           "properties": {
             "plugins": {
               "description": "The installed plugins, ordered by ID.",
@@ -9060,5 +9060,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.59"
+  "title": "JStream protocol 0.58"
 }
