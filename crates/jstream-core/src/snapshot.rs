@@ -737,6 +737,58 @@ pub(crate) fn plan_scene(
     plan_inner(graph, Some(scene_id), None, look, assets, false)
 }
 
+/// The scene and item a source's preview stream draws it through, in a copy of the
+/// collection, each with a number added while the collection holds that ID.
+const SOURCE_SCENE: &str = "jstream-source-preview";
+const SOURCE_ITEM: &str = "jstream-source-preview-item";
+
+/// Plans the source `source_id` alone, for a preview stream of it (a projector of the
+/// source): on a copy of `graph`, one scene of its own whose one item places the source
+/// over the whole canvas, as an item filling it would show it, so the source's own
+/// filters draw and no item's do. Like [`plan_scene`], nothing here reaches the
+/// collection or the program's plan. `None` when the copy refuses the scene, which a
+/// source the collection holds never makes it do.
+pub(crate) fn plan_source(
+    graph: &Graph,
+    source_id: &SourceId,
+    look: &mut LookUp<'_>,
+    assets: &FilterAssets,
+) -> Option<Planning> {
+    let canvas = graph.state().canvas();
+    let geometry = ItemGeometry::covering_canvas(canvas.width, canvas.height).ok()?;
+    let mut scene_id = SceneId::new(SOURCE_SCENE);
+    let mut n = 1;
+    while graph.state().scene(&scene_id).is_some() {
+        n += 1;
+        scene_id = SceneId::new(format!("{SOURCE_SCENE}-{n}"));
+    }
+    let mut item_id = ItemId::new(SOURCE_ITEM);
+    let mut n = 1;
+    while graph.state().item(&item_id).is_some() {
+        n += 1;
+        item_id = ItemId::new(format!("{SOURCE_ITEM}-{n}"));
+    }
+    let mut own = graph.clone();
+    let edits = [
+        Edit::SceneCreate {
+            scene_id: scene_id.clone(),
+            name: "Source preview".into(),
+            role: None,
+        },
+        Edit::ItemAdd {
+            scene_id: scene_id.clone(),
+            item_id,
+            source_id: source_id.clone(),
+            transform: None,
+            geometry: Some(geometry),
+            opacity: None,
+            blend: None,
+        },
+    ];
+    own.apply(&edits, None).ok()?;
+    Some(plan_inner(&own, Some(&scene_id), None, look, assets, false))
+}
+
 /// [`plan_with`], drawing the scene each `scene` video mix shows when `mixes`.
 fn plan_inner(
     graph: &Graph,

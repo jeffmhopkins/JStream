@@ -813,8 +813,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `label.delete` refused because a scene or folder is in the folder or a source carries
   the label.
 - **Binary streams** (WebSocket binary frames, protocol 0.20): preview video.
-  `preview.subscribe` opens a stream of the program mix, or of any one scene (0.46,
-  `scene_id`: the UI's projector windows and multiview), for the calling session,
+  `preview.subscribe` opens a stream of the program mix, of any one scene (0.46,
+  `scene_id`: the UI's projector windows and multiview), or of one source alone (0.56,
+  `source_id`: the UI's projector of a source), for the calling session,
   scaled down, at most `fps` pictures a second and only when the mix changes (as it
   does throughout a running transition), in H.264
   when the platform has an encoder and JPEG otherwise; `preview.unsubscribe` or the
@@ -891,7 +892,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 749 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 758 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking
