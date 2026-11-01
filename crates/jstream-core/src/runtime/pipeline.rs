@@ -1508,6 +1508,24 @@ pub(crate) enum PipelineEvent {
     LinkUp,
 }
 
+/// A lost GPU device on the program stage's render thread (#349), for the engine to
+/// blame on the pack effects drawn before it.
+#[derive(Debug)]
+pub(crate) struct DeviceLoss {
+    /// What the compositor said about the loss.
+    pub(crate) cause: String,
+    /// The effect-pack kinds the shot being drawn when the loss surfaced draws: the
+    /// frames submitted just before it drew the same, unless the shot changed in the
+    /// frame or two a loss takes to surface.
+    pub(crate) drawn: BTreeSet<String>,
+    /// Whether the render thread is switching to a new device; `false` when it gave up
+    /// and the outputs fail.
+    pub(crate) recovering: bool,
+}
+
+/// What the render thread calls on a lost device ([`crate::Engine::device_loss_hook`]).
+pub(crate) type LossHook = Arc<dyn Fn(DeviceLoss) + Send + Sync>;
+
 /// Sends a fatal pipeline error to the publish watcher, which settles `failed`.
 fn report(fail: &Sender<PipelineEvent>, reason: String) {
     tracing::error!(error = %reason, "pipeline failed");
@@ -1652,6 +1670,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             gpu_gate: Arc::clone(&gpu_gate),
             drops: capture_drops.clone(),
             fail: fail_tx.clone(),
+            losses: engine.device_loss_hook(),
         };
         move || render_thread(job)
     });
@@ -2381,6 +2400,8 @@ struct RenderJob {
     gpu_gate: Arc<GpuGate>,
     drops: DropSnapshot,
     fail: Sender<PipelineEvent>,
+    /// Told of each lost device, with the pack kinds drawn before it (#349).
+    losses: LossHook,
 }
 
 /// The render thread's boundary: a panic outside a tick (opening the compositor,
@@ -2642,6 +2663,7 @@ fn render_loop(job: RenderJob) {
         gpu_gate,
         drops,
         fail,
+        losses: loss_hook,
     } = job;
     let mut cams: Vec<VcamTap> = Vec::new();
     let mut draw = match open(context.as_deref()) {
@@ -2812,7 +2834,9 @@ fn render_loop(job: RenderJob) {
                     gpu_losses.fetch_add(1, Ordering::Relaxed);
                     losses.retain(|lost: &Instant| at.duration_since(*lost) < LOSS_WINDOW);
                     losses.push(at);
-                    let why = SwitchWhy::Lost { cause };
+                    let why = SwitchWhy::Lost {
+                        cause: cause.clone(),
+                    };
                     let started = if losses.len() >= MAX_DEVICE_LOSSES {
                         Err(format!(
                             "it was lost {} times within {}s, so the engine stopped \
@@ -2834,6 +2858,13 @@ fn render_loop(job: RenderJob) {
                     on_context = false;
                     gpu_gate.shut();
                     draw_errors = 0;
+                    // The pack effects the lost frames drew are blamed for the loss and
+                    // quarantined (#349); a loss with none drawn had another cause.
+                    loss_hook(DeviceLoss {
+                        cause,
+                        drawn: reader.held().0.shot().pack_kinds(),
+                        recovering: started.is_ok(),
+                    });
                     match started {
                         Ok(started) => switch = Some(started),
                         Err(fell) => {

@@ -1091,6 +1091,141 @@ fn an_output_survives_losing_its_own_gpu_device() {
     assert!(engine.output_stats().is_none());
 }
 
+/// A device loss while an effect-pack filter draws is blamed on that effect (#349): it
+/// is quarantined and bypassed from then on, `gpu.device_lost` names it, `kind.list`
+/// marks it, the quarantine survives a new engine on the same folder, and
+/// `effect.enable` lifts it.
+#[test]
+fn a_device_loss_quarantines_the_pack_effect_that_was_drawing() {
+    use crate::effect_packs::test_pack::{self, KIND, Temp};
+    use jstream_protocol::{
+        Action, Call, Event, FilterChain, FilterId, FilterOwner, Query, QueryResult,
+    };
+
+    let _gpu = one_gpu_test_at_a_time();
+    if !have_software_gpu() {
+        return;
+    }
+    let temp = Temp::new("loss");
+    test_pack::write(&temp.pack(), test_pack::MUL);
+    let clock = FakeClock::new(Timebase::MICROS);
+    let opens = Arc::new(Mutex::new(Vec::new()));
+    let engine = losing_engine(
+        &clock,
+        Arc::new(FakeGpuInterop),
+        GpuMode::None,
+        losing_draw(1, 5, Arc::clone(&opens)),
+    );
+    engine.watch_effect_packs(&temp.0);
+    let control = connected(&engine);
+    let mut events = control.events();
+    batch(
+        &control,
+        Batch {
+            edits: vec![
+                create("main"),
+                Edit::SourceCreate {
+                    source_id: SourceId::new("bg"),
+                    name: "bg".into(),
+                    kind: SourceKind::Builtin {
+                        kind: "color".into(),
+                    },
+                    settings: Settings::default(),
+                    duplicated_from: None,
+                },
+                add("main", "item", "bg"),
+                Edit::FilterAdd {
+                    owner: FilterOwner::Source {
+                        source_id: SourceId::new("bg"),
+                    },
+                    chain: FilterChain::Video,
+                    filter_id: FilterId::new("tint"),
+                    kind: KIND.into(),
+                    settings: Settings::default(),
+                    enabled: None,
+                    index: None,
+                },
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+            ends_gesture: None,
+        },
+    )
+    .expect("a scene drawing a pack filter");
+    engine
+        .set_source_frame(&SourceId::new("bg"), 1, 1, &[255, 255, 255, 255])
+        .expect("a frame for bg");
+    block_on(control.call(switch_call("main"))).expect("scene.switch");
+    let quarantined = |control: &InProcessControl| {
+        let Ok(QueryResult::KindList { kinds }) = super::query(control, Query::KindList) else {
+            panic!("kind.list");
+        };
+        kinds
+            .iter()
+            .find(|k| k.kind_id == KIND)
+            .expect("the pack kind is listed")
+            .quarantined
+    };
+    assert!(!quarantined(&control));
+
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+    let lost = tick_until(&clock, || {
+        engine
+            .output_stats()
+            .is_some_and(|stats| stats.gpu_device_losses == 1)
+            && opens.lock().unwrap_or_else(PoisonError::into_inner).len() == 2
+    });
+    assert!(lost, "no loss, or no reopen: {:?}", engine.output_stats());
+    // The counter goes up before the engine hears of the loss, so wait for the event.
+    let mut event = None;
+    let heard = tick_until(&clock, || {
+        event = event.take().or_else(|| {
+            super::drain(&mut events)
+                .into_iter()
+                .find_map(|event| match event {
+                    Event::GpuDeviceLost {
+                        blamed,
+                        quarantined,
+                        recovering,
+                        ..
+                    } => Some((blamed, quarantined, recovering)),
+                    _ => None,
+                })
+        });
+        event.is_some()
+    });
+    assert!(heard, "no gpu.device_lost");
+    assert_eq!(
+        event,
+        Some((vec![KIND.to_owned()], vec![KIND.to_owned()], true)),
+        "the loss names the pack effect that drew"
+    );
+    assert!(quarantined(&control));
+    assert_eq!(output_state(&control, "yt"), OutputState::Active);
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
+
+    // A new engine on the same folder keeps the quarantine.
+    let again = Engine::new();
+    again.watch_effect_packs(&temp.0);
+    let again_control = connected(&again);
+    assert!(quarantined(&again_control), "kept across restarts");
+
+    let enable = |control: &InProcessControl, kind: &str| {
+        block_on(control.call(Call::Action {
+            action: Action::EffectEnable {
+                kind_id: kind.into(),
+            },
+        }))
+    };
+    enable(&control, KIND).expect("effect.enable");
+    assert!(!quarantined(&control));
+    enable(&control, KIND).expect("a kind not quarantined: nothing to do");
+    assert!(
+        enable(&control, "tint/none").is_err(),
+        "a kind no pack has and no quarantine names"
+    );
+}
+
 /// When the platform context's device is lost mid-run, the render thread leaves the GPU
 /// path at once, without waiting for [`GPU_FALLBACK_ERRORS`]: the compositor opens on a
 /// device of its own and the capture moves to the CPU path (#349, #451).

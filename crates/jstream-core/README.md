@@ -994,7 +994,9 @@ doesn't show its unfiltered input, so a failing key or mask reveals nothing it h
 **Effect packs** (`effect_packs.rs`, [ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md),
 X1). `Engine::watch_effect_packs(root)` watches a folder of pack folders with
 `jstream-effects`' `PackWatcher`: it loads them before it returns, then a
-`jstream-effect-packs` thread polls every 500 ms while the engine lives. Each effect is a
+`jstream-effect-packs` thread polls every 500 ms while the engine lives. It is called
+once; a second call is logged and ignored. A poll that panics (naga parsing or
+validating untrusted WGSL) is caught, logged once and changes nothing. Each effect is a
 `video_filter` kind, `<pack>/<effect>`, added to the graph's kinds, so `kind.list` and
 `kind.describe` report it and a video chain, a scene's or an item's effects take it. A
 poll that changes kinds applies them under the collection lock (`Graph::without_kinds`
@@ -1009,6 +1011,18 @@ in the collection and is bypassed, as before its pack loaded. The daemon watches
 `--effects-dir` (default `effects` in the data folder, `paths::EFFECTS_DIR`) and the
 desktop app the data folder's `effects`. A filter's stored settings are not migrated
 through the effect's renames yet.
+A GPU device loss on the program stage (#349, [Runtime](#runtime),
+[ADR-0087](../../docs/adr/0087-effect-quarantine-after-gpu-device-loss.md)) is blamed on the pack
+kinds the frames before it drew (`Packs::blame`): each is quarantined, and a pack one
+of whose effects is blamed a second time in a run is quarantined whole. A quarantined
+kind stays in `kind.list`, marked `quarantined`, and is left out of the effects plans
+read, so its filters are bypassed. The quarantine is kept in `quarantine.json` in the
+packs folder (`QUARANTINE_FILE`; the watcher reads only sub-folders), not in the
+collection, so it isn't undoable and survives restarts; editing the pack doesn't lift
+it, and a file that can't be read quarantines nothing. Only `effect.enable` lifts it,
+for the kind and its pack, run before the collection lock is taken. The engine then
+sends `gpu.device_lost` with the cause, the blamed and quarantined kinds, and whether
+it is recovering. The GPU-time guard of #349 is not built.
 Each filter's layer key is made when the chain's shape changes, so a steady frame
 builds none. A shot with a chain counts as
 changing with time (`Shot::changes_with_time`), so the preview redraws it like a
@@ -2542,9 +2556,11 @@ test pattern. Each loss is logged as a warning and counted
 (`OutputStats::gpu_device_losses`; leaving the context also counts in
 `gpu_fallbacks`). The third loss within 60 s fails the output instead ("the GPU was
 lost ... and the compositor could not reopen"), as does a switch that fails as above.
-There is no engine event for a loss yet (a protocol change), and no attribution of a
-loss to the pack effects drawn before it, or quarantine of them, though packs are drawn
-now (X1).
+The render thread then calls the engine's `device_loss_hook` with the cause, whether
+it is switching, and the effect-pack kinds the held shot draws (`Shot::pack_kinds`):
+the frames submitted just before the loss drew the same, unless the shot changed in the
+frame or two a loss takes to surface. The engine blames and quarantines them
+([Design](#design), *Effect packs*) and sends `gpu.device_lost`.
 
 A session on the GPU encode path rules the fallback out: its encode targets are the
 context's, which a compositor on its own device can't write. If one runs when the

@@ -555,6 +555,16 @@ impl Shot {
         self.chains.len()
     }
 
+    /// The effect-pack kinds this shot's chains draw, which a GPU device loss while it
+    /// is drawn is blamed on (#349).
+    pub(crate) fn pack_kinds(&self) -> std::collections::BTreeSet<String> {
+        self.chains
+            .values()
+            .flat_map(|chain| chain.pack_kinds())
+            .map(str::to_owned)
+            .collect()
+    }
+
     /// The video chain of `source_id` in this shot, for tests.
     #[cfg(test)]
     pub(crate) fn chain(&self, source_id: &SourceId) -> Option<&Chain> {

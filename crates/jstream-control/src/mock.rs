@@ -939,6 +939,13 @@ impl State {
             Action::PluginGrant { plugin_id, .. } | Action::PluginEnable { plugin_id } => {
                 return Err(not_found(EntityKind::Plugin, plugin_id.as_str()));
             }
+            // The mock loads no effect packs, so nothing is quarantined to re-enable.
+            Action::EffectEnable { kind_id } => {
+                return Err(ProtocolError::invalid_argument(
+                    "kind_id",
+                    format!("no effect pack has a kind `{kind_id}`: the engine loads no packs"),
+                ));
+            }
             // The mock runs no mixer, so there is no loudness to reset.
             Action::AudioResetLoudness {} => return Ok(CallResult::action()),
             other => return Err(unimplemented_by_mock(other.name())),

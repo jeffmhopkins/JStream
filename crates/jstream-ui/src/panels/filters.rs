@@ -1966,6 +1966,7 @@ mod tests {
             category,
             name: name.into(),
             version: 1,
+            quarantined: false,
         }
     }
 

@@ -188,6 +188,14 @@ impl Chain {
             .fold(0, u32::saturating_add)
     }
 
+    /// The kinds of its filters an effect pack draws.
+    pub(crate) fn pack_kinds(&self) -> impl Iterator<Item = &str> {
+        self.filters
+            .iter()
+            .filter(|filter| filter.effect.is_some())
+            .map(|filter| filter.kind.as_str())
+    }
+
     /// The enabled filters' kinds and settings, in order: what makes two items' effects
     /// look the same, so a transition may pair them (ADR-0065 §6, as ADR-0081 amends it).
     pub(crate) fn look(&self) -> Vec<(String, Settings)> {

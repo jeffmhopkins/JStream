@@ -518,6 +518,24 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Re-enables an effect-pack kind the engine quarantined after a GPU device loss was\nblamed on it (0.62, #349; `gpu.device_lost`), and the whole pack when the pack\nwas quarantined. Its filters draw again from the next frame. The engine never\nlifts a quarantine by itself, nor when the pack's files change. Succeeds for a\nkind that isn't quarantined. Fails with `invalid_argument` on `kind_id`, as\n`kind.describe` does, for a kind that no loaded pack has and no quarantine names. For a person only, like\n`plugin.enable`.",
+          "properties": {
+            "kind_id": {
+              "description": "The kind, `<pack>/<effect>`.",
+              "type": "string"
+            },
+            "type": {
+              "const": "effect.enable",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "kind_id"
+          ],
+          "type": "object"
+        },
+        {
           "description": "**Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy\nscreen: the engine refuses this with `unsupported` and covers nothing.",
           "properties": {
             "on": {
@@ -4577,6 +4595,45 @@ source: crates/jstream-protocol/src/fixtures.rs
             "state"
           ],
           "type": "object"
+        },
+        {
+          "description": "The program stage's GPU device was lost (0.62, #349): a GPU hang that the OS\nreset (Windows' TDR), a driver reset or a removed GPU. The engine opens a new\ndevice and the outputs repeat their last frame meanwhile, unless `recovering` is\n`false`. A loss is blamed on the effect-pack kinds drawn in the frames before it;\neach blamed kind is quarantined, its filters bypassed, until a person re-enables\nit (`effect.enable`). Runtime state: a client that misses it sees the quarantine\nin `kind.list`.",
+          "properties": {
+            "blamed": {
+              "default": [],
+              "description": "The effect-pack kinds drawn in the frames before the loss, ordered by ID:\nempty when none was, and the loss had another cause.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "cause": {
+              "description": "What the driver or the engine said about the loss.",
+              "type": "string"
+            },
+            "quarantined": {
+              "default": [],
+              "description": "The kinds this loss quarantined, ordered by ID: the blamed ones, or every kind\nof a pack blamed for a second loss in this run.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "recovering": {
+              "description": "Whether the engine is opening a new device. `false` when it gave up (too many\nlosses, or nothing it could switch to): the outputs that drew on it fail.",
+              "type": "boolean"
+            },
+            "type": {
+              "const": "gpu.device_lost",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "cause",
+            "recovering"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -5428,6 +5485,10 @@ source: crates/jstream-protocol/src/fixtures.rs
         "name": {
           "description": "Display name.",
           "type": "string"
+        },
+        "quarantined": {
+          "description": "An effect-pack kind the engine quarantined after a GPU device loss was blamed on\nit (0.62, `gpu.device_lost`): its filters are bypassed until a person re-enables\nit (`effect.enable`). Omitted when `false`.",
+          "type": "boolean"
         },
         "version": {
           "description": "The descriptor's version. Stored settings record the version they were written\nwith.",
@@ -8950,5 +9011,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.55"
+  "title": "JStream protocol 0.62"
 }

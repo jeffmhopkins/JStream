@@ -693,7 +693,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `plugin.install`, `plugin.grant` and `plugin.enable` install a WASM automation plugin
   with what a person grants it, change the grant and re-enable it; they are for a person,
   so no MCP tool, plugin or hotkey carries them. The event `plugin.state_changed` reports
-  a plugin enabled or disabled, with why the engine disabled it. A plugin calls the API
+  a plugin enabled or disabled, with why the engine disabled it. Likewise
+  `effect.enable` (0.62, #349) is for a person: it re-enables an effect-pack kind the
+  engine quarantined because a GPU device loss was blamed on it, which the event
+  `gpu.device_lost` reports and `kind.list` marks (`quarantined`). A plugin calls the API
   through a scoped `Control` that checks each call against its grant, using
   `jstream-protocol`'s table of every command's class (`read`, `edit`, `live`, `outputs`
   or never), and the hosts and files a call's settings name against the grant's hosts
@@ -872,7 +875,10 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   the `events` feed: YouTube is for people, through
   the UI ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md) §3). The same
   holds for the `plugin.*` ops and events: only a person installs or grants a plugin
-  (ADR-0069 G1).
+  (ADR-0069 G1). And for the `effect.*` ops: only a person re-enables an effect pack
+  quarantined after a GPU device loss
+  ([ADR-0087](adr/0087-effect-quarantine-after-gpu-device-loss.md) §4), though the
+  `gpu.device_lost` event that reports it reaches agents.
 - **Events** reach agents through the `events` tool, which returns the engine's events
   after a cursor from a bounded buffer and reports any it dropped
   ([ADR-0036](adr/0036-mcp-events-polling-tool.md)). The high-rate `stats.tick` is kept
@@ -1040,12 +1046,16 @@ context device fails its outputs at once instead
 ([jstream-core › Runtime](../crates/jstream-core/README.md#runtime)); the NV12 pass
 reports the loss as an error rather than panicking. The third loss within
 60 s fails the output instead. Each loss is logged and counted in the output's stats
+([jstream-core › Design](../crates/jstream-core/README.md#design)). Each loss is blamed
+on the effect-pack kinds the shot being drawn draws, which are quarantined (their
+filters bypassed, and the whole pack after a second loss blamed on one of its effects
+in a run) until a person re-enables them with `effect.enable`, and reported in the
+engine event `gpu.device_lost` (protocol 0.62). The quarantine is kept in the packs
+folder, across restarts and pack edits
 ([jstream-core › Design](../crates/jstream-core/README.md#design)). Not built yet: the
-engine event for a loss (a protocol change), attributing a loss to the effect pack that
-was drawing, quarantining that pack, and the GPU-time guard (timestamp queries that
-quarantine an effect whose pass runs over half the frame budget for 30 frames running,
-before Windows' TDR fires). The engine draws pack kinds now
-([jstream-core › Design](../crates/jstream-core/README.md#design)), so these can be built.
+GPU-time guard (timestamp queries that quarantine an effect whose pass runs over half
+the frame budget for 30 frames running, before Windows' TDR fires), and a forced TDR on
+Windows hardware, which only a hardware run can check.
 
 **Transitions** ([ADR-0029](adr/0029-transitions.md), with
 [ADR-0052](adr/0052-transition-mechanics-and-studio-preview.md)'s mechanics). A Move is not a texture blend:
