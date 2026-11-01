@@ -144,7 +144,9 @@ fn new_token() -> anyhow::Result<String> {
 /// Credential Manager, and RTMP(S) publishing on `output.start`, plus the virtual
 /// camera (`WindowsVcam`) unless `vcam` is false (`--no-vcam`). With the `cef` feature
 /// it also opens browser sources' pages, keeping CEF's cache and log under `data`
-/// (`browser::backend`). Elsewhere there are no backends yet.
+/// (`browser::backend`). Elsewhere there are no backends yet. Either way it starts the
+/// engine's stats heartbeat, and on Windows each `stats.tick` carries the process's
+/// CPU time.
 ///
 /// # Errors
 /// When the collection file can't be read, loaded or created, and on Windows when a
@@ -177,6 +179,10 @@ pub fn engine(
         let _ = (data, vcam, secrets);
         Arc::new(engine)
     };
+    // `stats.tick`'s load: the process's CPU time, and a tick a second while idle.
+    #[cfg(windows)]
+    engine.set_process_cpu(Arc::new(jstream_platform_windows::WindowsProcessCpu));
+    engine.start_stats_heartbeat();
     Ok(engine)
 }
 

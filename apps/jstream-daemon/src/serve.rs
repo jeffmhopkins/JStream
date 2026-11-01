@@ -35,7 +35,8 @@ use {
 /// opener that connects RTMP(S) on each `output.start`. On macOS it is live the same
 /// way on the backends built so far (`macos_backends`), with stream keys in the
 /// Keychain. Elsewhere there are no backends yet, so output actions only step the
-/// placeholder state machine.
+/// placeholder state machine. On every platform it starts the engine's stats heartbeat,
+/// and on Windows and macOS each `stats.tick` carries the process's CPU time.
 ///
 /// # Errors
 /// When the collection file can't be read, loaded or created, and on Windows and macOS,
@@ -96,6 +97,12 @@ pub fn engine(
     }
     #[cfg(windows)]
     scan_clap_plugins(&engine);
+    // `stats.tick`'s load: the process's CPU time, and a tick a second while idle.
+    #[cfg(windows)]
+    engine.set_process_cpu(Arc::new(jstream_platform_windows::WindowsProcessCpu));
+    #[cfg(target_os = "macos")]
+    engine.set_process_cpu(Arc::new(jstream_platform_macos::MacosProcessCpu));
+    engine.start_stats_heartbeat();
     Ok(engine)
 }
 

@@ -7,6 +7,7 @@
 
 #![forbid(unsafe_code)]
 
+mod activity;
 mod audio;
 mod command;
 mod encoder;
@@ -36,6 +37,7 @@ mod transition;
 mod version;
 mod youtube;
 
+pub use activity::{ActivityEntry, MAX_ACTIVITY_ENTRIES, MAX_ACTIVITY_SUMMARY_CHARS};
 pub use audio::{
     AudioFollow, BusInfo, BusMeter, BusMonitor, Loudness, MAX_BUSES, MAX_GAIN_DB,
     MAX_MONITOR_DEVICE_LEN, MIN_GAIN_DB, MonitorTap, SendInfo, SourceAudio, SourceMeter,
@@ -54,7 +56,7 @@ pub use envelope::{
     Response, ServerMessage, Welcome,
 };
 pub use error::{Blocker, EntityKind, ProtocolError, WireError};
-pub use event::{DropCounts, Event, OutputState};
+pub use event::{DropCounts, EngineLoad, Event, OutputState};
 pub use filter::{FilterChain, FilterChains, FilterInfo, FilterOwner, MAX_CHAIN_FILTERS};
 pub use finite::Finite32;
 pub use geometry::{
@@ -91,7 +93,7 @@ pub use plugin::{
 };
 pub use preview::{
     BINARY_HEADER_LEN, BINARY_VERSION, BinaryError, BinaryFrame, BinaryHeader, KeyframeGate,
-    PreviewCodec, PreviewSettings, StreamKind,
+    PreviewCodec, PreviewDraft, PreviewSettings, StreamKind,
 };
 pub use query::{
     CaptureTargetInfo, CaptureTargetKind, DeleteTarget, DeviceInfo, ItemInfo, MasterInfo,

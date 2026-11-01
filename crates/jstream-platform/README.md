@@ -37,6 +37,9 @@ Contents:
   is the one monotonic media clock of [ADR-0014](../../docs/adr/0014-media-clock.md)
   (QPC on Windows). Every timestamp a backend hands over (capture frames, audio packets,
   decoded frames) is already on it.
+- **Process CPU:** `ProcessCpu` (`Send + Sync`): the CPU time the process has used, on
+  every thread, for `stats.tick`'s load. The host hands one to the engine; the stats
+  threads call it about once a second, never a real-time thread.
 - **Frames:** `VideoSurface`, the frame type that crosses the seam: `Cpu`, a
   `VideoFrame` in system memory, or `Gpu`, a `GpuFrame` in a texture shared with the
   platform. It is `#[non_exhaustive]`.
@@ -88,7 +91,12 @@ Contents:
   decoded on the decoder side: opening a compressed format takes a `CaptureDecoder`
   (`Send`), which the capture thread calls with each `CompressedFrame` before the mailbox;
   a frame it rejects is dropped and the stream goes on. The engine gets one decoder per
-  stream from `Codecs::capture_decoder` (below).
+  stream from `Codecs::capture_decoder` (below). `VideoDevices::on_context`, a default
+  method like `Capture::on_context`, returns the backend on a `GpuContext`'s device,
+  whose streams deliver `Gpu` frames, or `None` (the default) when it has no GPU path.
+  That backend opens only the formats it can deliver there and is `Unsupported` for the
+  rest; the engine then opens the device on the backend itself, and never asks it for a
+  compressed format.
 - **Audio:** `AudioIo` (`Send + Sync`) lists devices and running processes (every
   process on Windows, only Core Audio's audio clients on macOS)
   (`AudioProcess`: ID, parent ID, executable name, for process loopback), says which
@@ -196,7 +204,8 @@ Contents:
   `VideoFrame`, `rgb_to_nv12_image` into an `Nv12Image`, NV12 laid out in one mapped
   buffer), and `even_size` crops an odd source. `yuv` turns a video capture device's
   raw frame bytes, rows `stride` bytes apart with the chroma planes after the luma, into
-  engine frames: `copy_planar` copies NV12 and I420, `copy_planes` copies them from one
+  engine frames: `copy_planar` copies NV12 and I420 (and a one-plane BGRA or RGBA
+  frame, V4L2's 32-bit RGB, row by row), `copy_planes` copies them from one
   buffer per plane, each with its own stride (V4L2's `NV12M` and `YUV420M`), and
   `yuy2_to_nv12` converts packed
   4:2:2, each chroma sample averaging the two rows of its block. A short buffer is an
@@ -225,7 +234,8 @@ Contents:
   apart; any other path is `Unsupported`, and nothing is read from disk; its `stats`
   count opens, seeks, frames and audio blocks),
   `MemoryKeyStore` (an in-memory `StreamKeyStore` that can be made to fail),
-  `MemoryTokenStore` (the same for `OAuthTokenStore`, apart from any key store) and
+  `MemoryTokenStore` (the same for `OAuthTokenStore`, apart from any key store),
+  `FakeCpu` (a `ProcessCpu` whose reading the test sets) and
   `fake::backends`. `plugin_host::fake::FakePluginHosts` (scans find the files a test
   adds; `refuse_starts` fails starts, `start_hung` starts hosts already hung, and
   `start_loading` starts hosts that don't get ready until `finish_loading`) runs each
@@ -399,8 +409,9 @@ the same reason.
 
 - **GPU frames.** Designed and typed in [GPU frames](#gpu-frames) above. Windows capture
   delivers them, the engine composites them, and Windows' H.264 encoder takes encode
-  targets. Capture and the encoders reach the context through default methods,
-  `Capture::on_context` and `Codecs::on_context`, so other backends are unchanged. The
+  targets. Capture, video devices and the encoders reach the context through default
+  methods, `Capture::on_context`, `VideoDevices::on_context` and `Codecs::on_context`,
+  so other backends are unchanged. The
   engine's render thread writes encode targets and pushes them to the encoders that
   take them. Open: the virtual camera taking them.
 - **Device formats.** `jstream-media`'s `ChannelLayout` has mono, stereo and 5.1 only.

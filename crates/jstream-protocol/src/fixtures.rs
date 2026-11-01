@@ -5,13 +5,14 @@
 //! fixture fails `fixtures_cover_every_variant_in_the_schema`, and through it the
 //! naming and classification checks see every variant.
 
+use crate::ActivityEntry;
 use crate::{
     Action, Batch, BlendMode, Blocker, Call, CallResult, Canvas, ClientId, ClientMessage, Command,
-    CommandClass, Crop, DeleteTarget, DropCounts, Edit, EntityKind, ErrorResponse, Event,
-    EventMessage, FilterChain, FilterChains, FilterId, FilterInfo, FilterOwner, Finite32, FitMode,
-    Hello, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, MasterInfo, OutputId,
-    OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query,
-    QueryResult, RecordContainer, Request, RequestId, Response, Rev, RtmpTarget, SceneId,
+    CommandClass, Crop, DeleteTarget, DropCounts, Edit, EngineLoad, EntityKind, ErrorResponse,
+    Event, EventMessage, FilterChain, FilterChains, FilterId, FilterInfo, FilterOwner, Finite32,
+    FitMode, Hello, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, MasterInfo,
+    OutputId, OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError,
+    Query, QueryResult, RecordContainer, Request, RequestId, Response, Rev, RtmpTarget, SceneId,
     SceneInfo, SceneRole, SceneSummary, SecretString, ServerMessage, Settings, Size, SourceId,
     SourceInfo, SourceKind, Vec2, Welcome, json_schema,
 };
@@ -40,7 +41,7 @@ use crate::{
 };
 use crate::{FolderId, FolderInfo, LabelId, LabelInfo, SceneMeta, SourceMeta};
 use crate::{GestureId, GestureInfo, LiveOutcome};
-use crate::{HistoryCall, HistoryDirection, HistoryOp, PreviewCodec};
+use crate::{HistoryCall, HistoryDirection, HistoryOp, PreviewCodec, PreviewDraft};
 use crate::{MixInput, MixResolution, VideoMix, VideoMixId, VideoMixInfo};
 use crate::{PluginClass, PluginDisabledReason, PluginGrant, PluginId, PluginState};
 use serde_json::{Value, json};
@@ -941,6 +942,7 @@ pub(crate) fn actions() -> Vec<Action> {
             fps: Some(30),
             codecs: vec![PreviewCodec::H264, PreviewCodec::Jpeg],
             scene_id: None,
+            source: None,
         },
         Action::PreviewUnsubscribe { channel: 1 },
         Action::SceneSwitch {
@@ -989,6 +991,22 @@ pub(crate) fn actions() -> Vec<Action> {
             fps: None,
             codecs: Vec::new(),
             scene_id: Some(SceneId::new("scn_2")),
+            source: None,
+        },
+        Action::PreviewSubscribe {
+            channel: 3,
+            max_width: Some(480),
+            max_height: Some(270),
+            fps: None,
+            codecs: Vec::new(),
+            scene_id: None,
+            source: Some(PreviewDraft {
+                kind: "webcam".into(),
+                settings: Settings(std::collections::BTreeMap::from([(
+                    "device".to_owned(),
+                    serde_json::json!("usb-cam-1"),
+                )])),
+            }),
         },
     ]
 }
@@ -1088,6 +1106,14 @@ pub(crate) fn queries() -> Vec<Query> {
             },
         },
         Query::DeviceList,
+        Query::ActivityList {
+            after_seq: None,
+            limit: None,
+        },
+        Query::ActivityList {
+            after_seq: Some(41),
+            limit: Some(20),
+        },
         Query::UiSettingsGet {
             key: "workspace.dock".into(),
         },
@@ -1263,6 +1289,14 @@ fn color_kind() -> KindDescriptor {
             ),
             param("any", ParamType::Source { media: None }, Value::Null),
             param("audio", ParamType::Bus, Value::Null),
+            param(
+                "window",
+                ParamType::CaptureTarget {
+                    kind: CaptureTargetKind::Window,
+                    max_len: 512,
+                },
+                json!(""),
+            ),
         ],
     }
 }
@@ -1772,11 +1806,28 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 last_used_at: 1_790_003_600,
             }],
         },
+        QueryResult::ActivityList {
+            now_ms: 1_790_000_120_000,
+            entries: vec![activity_entry(42, None), activity_entry(41, Some("rev_conflict"))],
+        },
         QueryResult::UiSettingsGet {
             key: "workspace.dock".into(),
             value: Some(serde_json::json!({"version": 1, "current": "Live"})),
         },
     ]
+}
+
+/// An agent's scene switch, or its failure.
+fn activity_entry(seq: u64, error: Option<&str>) -> ActivityEntry {
+    ActivityEntry {
+        seq,
+        time_ms: 1_790_000_000_000 + seq,
+        client_id: ClientId::new("client_3"),
+        client_name: "claude-desktop".into(),
+        call: "scene.switch".into(),
+        summary: "Switched to “Desktop + Cam”".into(),
+        error: error.map(str::to_owned),
+    }
 }
 
 pub(crate) fn events() -> Vec<Event> {
@@ -1871,6 +1922,12 @@ pub(crate) fn events() -> Vec<Event> {
             encode_blocks: 6,
             output_packets: 7,
         },
+        load: Some(EngineLoad {
+            elapsed_ms: 2_000,
+            program_frames: 120,
+            cpu_ms: Some(150),
+            cpus: 8,
+        }),
     });
     events.push(Event::LiveChanged {
         gesture_id: GestureId::new("drag_1"),

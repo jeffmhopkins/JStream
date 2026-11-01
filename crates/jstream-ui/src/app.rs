@@ -271,6 +271,7 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
     provide_context(Folds::restore());
     provide_context(LabelManager::new());
     provide_context(MixerOrientation::new());
+    provide_context(crate::canvas::taps::PreviewTaps::new());
     view! {
         <div class="shell">
             <Header info=info disconnect=disconnect />

@@ -54,6 +54,22 @@ fn block_on<F: std::future::Future>(future: F) -> F::Output {
     }
 }
 
+/// `events` with each `stats.tick`'s load left out, since its clock reading differs
+/// from run to run.
+fn unloaded(events: Vec<Event>) -> Vec<Event> {
+    events
+        .into_iter()
+        .map(|event| match event {
+            Event::StatsTick { seq, drops, .. } => Event::StatsTick {
+                seq,
+                drops,
+                load: None,
+            },
+            other => other,
+        })
+        .collect()
+}
+
 fn drain(events: &mut EventStream) -> Vec<Event> {
     let mut out = Vec::new();
     while let Poll::Ready(Some(event)) = events
@@ -200,21 +216,23 @@ fn overload_drops_and_counts() {
     let tick = Event::StatsTick {
         seq: 1,
         drops: expected,
+        load: None,
     };
-    assert_eq!(drain(&mut user_events), vec![tick.clone()]);
-    assert_eq!(drain(&mut agent_events), vec![tick]);
+    assert_eq!(unloaded(drain(&mut user_events)), vec![tick.clone()]);
+    assert_eq!(unloaded(drain(&mut agent_events)), vec![tick]);
 
     engine.emit_stats_tick();
     let again = Event::StatsTick {
         seq: 2,
         drops: expected,
+        load: None,
     };
     assert_eq!(
-        drain(&mut user_events),
+        unloaded(drain(&mut user_events)),
         vec![again.clone()],
         "a later tick carries the same running totals"
     );
-    assert_eq!(drain(&mut agent_events), vec![again]);
+    assert_eq!(unloaded(drain(&mut agent_events)), vec![again]);
 
     // The control plane still accepts a command. The tick did not stall it.
     let applied = block_on(user.call(Call::Batch(Batch::single(Edit::SceneCreate {

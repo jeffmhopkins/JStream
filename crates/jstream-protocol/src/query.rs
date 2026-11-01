@@ -1,5 +1,6 @@
 //! Queries: reads with no effect on state, and their results.
 
+use crate::activity::ActivityEntry;
 use crate::audio::{BusInfo, SendInfo, SourceAudio};
 use crate::command::{BlendMode, Crop, Edit, ItemTransform, SceneRole, SourceKind};
 use crate::encoder::{EncoderProfileInfo, EncoderSessionInfo};
@@ -175,6 +176,23 @@ pub enum Query {
     /// `unsupported`.
     #[serde(rename = "device.list")]
     DeviceList,
+    /// Lists the engine's recent activity (0.51, ADR-0083): what each client's batches,
+    /// undos, redos and actions did, newest first. The engine keeps the last 100
+    /// ([`MAX_ACTIVITY_ENTRIES`](crate::MAX_ACTIVITY_ENTRIES)), in memory, so a restarted
+    /// engine starts empty. No event announces a new entry until event subscriptions exist
+    /// (protocol open question 7): a client that shows the log asks again with
+    /// `after_seq`. Runtime state: the result carries no `rev`.
+    #[serde(rename = "activity.list")]
+    ActivityList {
+        /// Only entries with a greater `seq`. Omitted, the newest entries whatever their
+        /// number.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        after_seq: Option<u64>,
+        /// At most this many, the newest. Omitted, or above 100
+        /// ([`MAX_ACTIVITY_ENTRIES`](crate::MAX_ACTIVITY_ENTRIES)), 100.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        limit: Option<u32>,
+    },
     /// Reads a UI setting `ui_settings.set` kept (0.52, ADR-0084): the value under
     /// `key`, omitted when there is none. Not collection state, so no `rev`. Answered by
     /// the server that admits clients, like `device.list`: a `Control` with no server in
@@ -248,6 +266,7 @@ impl Query {
             Query::DeletePlan { .. } => "delete.plan",
             Query::CaptureTargets => "capture.targets",
             Query::DeviceList => "device.list",
+            Query::ActivityList { .. } => "activity.list",
             Query::UiSettingsGet { .. } => "ui_settings.get",
         }
     }
@@ -527,6 +546,16 @@ pub enum QueryResult {
         /// The paired devices, ordered by ID.
         devices: Vec<DeviceInfo>,
     },
+    /// The result of `activity.list` (0.51).
+    #[serde(rename = "activity.list")]
+    ActivityList {
+        /// The engine's clock now, in milliseconds since the Unix epoch (UTC), so a
+        /// client on another machine can say how long ago each entry was without
+        /// trusting its own clock.
+        now_ms: u64,
+        /// The entries, newest first.
+        entries: Vec<ActivityEntry>,
+    },
     /// The result of `ui_settings.get`. UI settings are not collection state, so it
     /// carries no `rev`.
     #[serde(rename = "ui_settings.get")]
@@ -566,6 +595,7 @@ impl QueryResult {
             QueryResult::SourceSizes { .. } => "source.sizes",
             QueryResult::CaptureTargets { .. } => "capture.targets",
             QueryResult::DeviceList { .. } => "device.list",
+            QueryResult::ActivityList { .. } => "activity.list",
             QueryResult::UiSettingsGet { .. } => "ui_settings.get",
         }
     }
@@ -613,6 +643,12 @@ pub enum CaptureTargetKind {
     Display,
     /// One top-level window, captured by a `window` source.
     Window,
+    /// A kind this version of the protocol doesn't know. Never sent; produced only when
+    /// parsing a target, or a `capture_target` parameter, from a newer server, so adding
+    /// a kind stays a minor change (since 0.50).
+    #[serde(other)]
+    #[schemars(skip)]
+    Unknown,
 }
 
 /// A size in whole pixels.

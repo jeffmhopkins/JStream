@@ -108,14 +108,20 @@ pub enum Event {
     /// previous tick. A client that misses one subtracts the last tick it did see.
     /// `seq` starts at 1 and increases by one per sample, so a gap means a missed tick
     /// and not a reset. The engine sends it when its control thread asks, about once a
-    /// second once the media pipeline is running. Until event subscriptions exist, every
-    /// client receives it.
+    /// second once the media pipeline is running, and about once a second while it is
+    /// idle when the host started the engine's heartbeat (0.48). Until event
+    /// subscriptions exist, every client receives it.
     #[serde(rename = "stats.tick")]
     StatsTick {
         /// Monotonic sample number, starting at 1.
         seq: u64,
         /// Running drop totals.
         drops: DropCounts,
+        /// The engine's load: how many frames the program drew and how much CPU time
+        /// the engine's process used, as running totals beside the time they were read
+        /// at (0.48). An older engine leaves it out.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        load: Option<EngineLoad>,
     },
     /// A gesture's live values changed (ADR-0032): the newest value of each parameter
     /// that changed since the gesture's last `live.changed`, as setter edits. The engine
@@ -244,6 +250,34 @@ impl Event {
     }
 }
 
+/// The engine's load at one `stats.tick` (0.48): running totals since the engine
+/// started, beside the engine time they were read at.
+///
+/// A client computes a rate from two ticks: the program's frame rate is the change in
+/// `program_frames` over the change in `elapsed_ms`, and the process's CPU use is the
+/// change in `cpu_ms` over the change in `elapsed_ms` times `cpus` (100% when every
+/// logical CPU is busy, as Windows' Task Manager counts it).
+///
+/// A missing field parses as 0 or `None`, so a field added later can be left out by an
+/// older sender (R-API-001). Unknown fields are ignored.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct EngineLoad {
+    /// Milliseconds since the engine started, on a monotonic clock, when the totals
+    /// were read.
+    pub elapsed_ms: u64,
+    /// Frames the program stage has drawn since the engine started. It grows only
+    /// while the program stage runs (while an output runs), at the canvas frame rate.
+    pub program_frames: u64,
+    /// CPU time the engine's process has used since it started, in milliseconds, on
+    /// every thread and in both user and kernel mode, or `None` where the host can't
+    /// read it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cpu_ms: Option<u64>,
+    /// The logical CPUs the process can run on, or 0 when unknown.
+    pub cpus: u32,
+}
+
 /// Running totals of frames and packets the pipeline has dropped since the engine
 /// started (R-RT-004).
 ///
@@ -335,6 +369,12 @@ mod tests {
                 encode_blocks: 6,
                 output_packets: 7,
             },
+            load: Some(super::EngineLoad {
+                elapsed_ms: 2_000,
+                program_frames: 120,
+                cpu_ms: Some(150),
+                cpus: 8,
+            }),
         };
         let value = serde_json::to_value(&event).expect("serializes");
         assert_eq!(
@@ -349,7 +389,8 @@ mod tests {
                     "encode_frames": 4,
                     "encode_blocks": 6,
                     "output_packets": 7,
-                }
+                },
+                "load": {"elapsed_ms": 2000, "program_frames": 120, "cpu_ms": 150, "cpus": 8}
             })
         );
         let parsed = serde_json::from_value::<Event>(value).expect("parses");
@@ -374,7 +415,37 @@ mod tests {
                     capture_frames: 2,
                     ..super::DropCounts::default()
                 },
+                load: None,
             }
+        );
+    }
+
+    /// A tick with a partial `load`, or one whose host can't read CPU time, parses, and
+    /// a load with no CPU time leaves `cpu_ms` out (R-API-001).
+    #[test]
+    fn stats_tick_load_fields_are_optional() {
+        let parsed = serde_json::from_value::<Event>(json!({
+            "type": "stats.tick",
+            "seq": 5,
+            "drops": {},
+            "load": {"elapsed_ms": 1000, "future": 1}
+        }))
+        .expect("parses");
+        let load = super::EngineLoad {
+            elapsed_ms: 1000,
+            ..super::EngineLoad::default()
+        };
+        assert_eq!(
+            parsed,
+            Event::StatsTick {
+                seq: 5,
+                drops: super::DropCounts::default(),
+                load: Some(load),
+            }
+        );
+        assert_eq!(
+            serde_json::to_value(load).expect("serializes"),
+            json!({"elapsed_ms": 1000, "program_frames": 0, "cpus": 0})
         );
     }
 }

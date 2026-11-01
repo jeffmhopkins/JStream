@@ -265,7 +265,10 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   (`device:<name>` for a paired device),
   the call and its edits by name, the output an action names, the `rev` before and
   after, and the result code. Never a call's arguments, so never a stream key
-  ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). When it would pass 8 MiB it becomes
+  ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). The engine also keeps the last 100
+  entries in memory, each with a sentence saying what it did, for `activity.list`
+  ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md)); those sentences
+  are not written to the file. When it would pass 8 MiB it becomes
   `audit.1.jsonl`, replacing the one before. Both files are created user-only (mode
   `0600` on Unix, a protected DACL for SYSTEM and the user on Windows), and so is each
   save of the collection file. A log that can't be opened is a startup failure (exit 1),
@@ -342,6 +345,10 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   Credential Manager (behind `jstream_crash::Redacting`, which the binary adds, so the
   library never sees it), and the tests (`live.rs`'s and `tests/e2e.rs`) the platform
   fakes, so the end-to-end test runs the daemon's wiring, not a copy of it.
+- **Engine load.** `serve.rs` starts the engine's stats heartbeat, so a client gets a
+  `stats.tick` about once a second while no output runs, and hands the engine the
+  process CPU reader on Windows (`WindowsProcessCpu`) and macOS (`MacosProcessCpu`),
+  for the ticks' `load` (protocol 0.48). Elsewhere the ticks leave `cpu_ms` out.
 - **Media Foundation check and delay-load.** The `windows` crate imports Media
   Foundation's DLLs as load-time imports, so on a Windows without Media Foundation
   the loader would refuse to start the binary, naming a DLL, before `main` runs.

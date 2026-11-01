@@ -286,8 +286,8 @@ source: crates/jstream-sources/tests/kinds.rs
     "params": [
       {
         "id": "target",
-        "type": "string",
-        "multiline": false,
+        "type": "capture_target",
+        "kind": "display",
         "max_len": 1024,
         "default": "",
         "label": "Display",
@@ -733,8 +733,8 @@ source: crates/jstream-sources/tests/kinds.rs
     "params": [
       {
         "id": "target",
-        "type": "string",
-        "multiline": false,
+        "type": "capture_target",
+        "kind": "window",
         "max_len": 1024,
         "default": "",
         "label": "Window",

@@ -92,6 +92,8 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("youtube.list_streams", N),
     ("youtube.stats", N),
     ("device.list", N),
+    // What other clients did, by name, is the user's to read, not a plugin's (ADR-0083).
+    ("activity.list", N),
     // The server answers it, and a UI's settings are the person's.
     ("ui_settings.get", N),
     // Edits.

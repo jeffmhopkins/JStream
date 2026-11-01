@@ -13,7 +13,9 @@ use crate::canvas::Canvas;
 use crate::dock::{Dock, PanelId, Target, Zone};
 use crate::pairing::Pairing;
 use crate::panels::mixer::MixerFlip;
-use crate::panels::{Filters, Inspector, Mixer, Outputs, Scenes, Sources, StudioMode, Transform};
+use crate::panels::{
+    AgentActivity, Filters, Inspector, Mixer, Outputs, Scenes, Sources, StudioMode, Transform,
+};
 use crate::ui_settings::{self, DOCK_KEY, FirstStep, Kept, Theirs};
 use leptos::html;
 use leptos::prelude::*;
@@ -220,11 +222,7 @@ fn panel_view(panel: PanelId) -> AnyView {
              can sign in to YouTube, which this build can't yet. The header counts dropped \
              frames.",
         ),
-        PanelId::Agent => waiting(
-            "Agent activity",
-            "Agent activity lists what agents connected to the engine changed. The engine \
-             doesn't keep that log yet.",
-        ),
+        PanelId::Agent => view! { <AgentActivity /> }.into_any(),
     }
 }
 

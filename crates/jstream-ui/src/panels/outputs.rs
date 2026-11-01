@@ -501,7 +501,7 @@ impl HealthReading {
     /// The reading in a line: the drops by stage, or that nothing was dropped.
     pub fn summary(&self) -> String {
         if !self.sampled {
-            return "No stats yet: the engine sends them while its pipeline runs.".into();
+            return "No stats yet.".into();
         }
         let d = self.drops;
         let parts: Vec<String> = [
@@ -685,7 +685,7 @@ pub fn Outputs() -> impl IntoView {
                             panel.reload();
                         }
                     }
-                    Event::StatsTick { seq, drops } => {
+                    Event::StatsTick { seq, drops, .. } => {
                         health.try_update(|health| health.observe(seq, drops));
                     }
                     _ => {}

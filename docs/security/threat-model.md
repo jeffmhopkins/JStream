@@ -336,7 +336,10 @@ injection), and so using its full access against the user.
 **Controls on main:** MCP goes through the same gate and token as the WebSocket API
 (over stdio, through `jstream-cli mcp`, it uses the CLI's token). The desktop app keeps
 MCP off. Tool arguments and results are not logged; the audit log records who changed
-what, without arguments. Stream keys are never in a result, and a retarget to another
+what, without arguments. Agents can read the last 100 entries with `activity.list`,
+each with a sentence that names objects and gives values but never settings, targets
+or keys ([ADR-0083](../adr/0083-activity-log-over-the-protocol.md)); WASM plugins can't.
+Stream keys are never in a result, and a retarget to another
 host removes the output's key rather than sending it there (#343).
 Third-party text is marked as data ([ADR-0059](../adr/0059-mcp-annotations-and-remote-text.md)):
 the server instructions and the `output` tool's description say that fields named

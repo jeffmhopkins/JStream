@@ -16,29 +16,47 @@
 //! device's frames from when it joined, so an output that joins a webcam the preview
 //! opened reports only the skips since, and a capture that stops and starts again doesn't
 //! count them twice.
+//!
+//! The program stage's backend on the GPU context is a second view of the same devices
+//! ([`VideoDevices::on_context`]): it opens a device that isn't open yet on the
+//! platform's GPU path, shares one open on the GPU path, and refuses one open on the CPU
+//! path (`Unsupported`), which the caller then shares through the CPU view. Only a capture on the context can read
+//! GPU frames; the preview's can't. So when a capture through the CPU view joins a device
+//! open on the GPU path, the device is moved to the CPU path in place: its GPU stream is
+//! closed and the device opened again on the CPU backend in the same format, under the
+//! device's lock, so every reader goes on reading the same device and only misses the
+//! frames of the move. It stays on the CPU path until it closes.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, TryLockError, Weak};
 
 use jstream_platform::{
-    CaptureDecoder, CaptureStats, CaptureStream, DeviceId, PlatformError, VideoDeviceFormat,
-    VideoDeviceInfo, VideoDevices, VideoSurface,
+    CaptureDecoder, CaptureStats, CaptureStream, DeviceId, GpuContext, PlatformError,
+    VideoDeviceFormat, VideoDeviceInfo, VideoDevices, VideoSurface,
 };
 
 use crate::lock;
 
+/// The devices open now, by ID; a reader holds its device strongly. Shared by the CPU
+/// view and the GPU one.
+type OpenDevices = Arc<Mutex<BTreeMap<DeviceId, Weak<Device>>>>;
+
 /// A video-device backend whose devices each open once, however many captures read them.
 pub(crate) struct SharedVideoDevices {
+    /// The platform's backend, on the CPU path.
     inner: Arc<dyn VideoDevices>,
-    /// The devices open now, by ID; a reader holds its device strongly.
-    open: Mutex<BTreeMap<DeviceId, Weak<Device>>>,
+    /// The platform's backend on the GPU context, in the view
+    /// [`on_context`](VideoDevices::on_context) returns; `None` in the CPU view.
+    gpu: Option<Arc<dyn VideoDevices>>,
+    open: OpenDevices,
 }
 
 impl SharedVideoDevices {
     pub(crate) fn new(inner: Arc<dyn VideoDevices>) -> Self {
         Self {
             inner,
-            open: Mutex::new(BTreeMap::new()),
+            gpu: None,
+            open: Arc::default(),
         }
     }
 }
@@ -53,7 +71,15 @@ impl VideoDevices for SharedVideoDevices {
     }
 
     /// Another reader of `device` when it is open and not lost, in the format it was
-    /// opened in (`format` and `decoder` are then unused); else opens it.
+    /// opened in (`format` and `decoder` are then unused), after moving it to the CPU
+    /// path when it is on the GPU path and this is the CPU view; else opens it, on the
+    /// GPU path in the GPU view.
+    ///
+    /// # Errors
+    /// The backend's, when it doesn't open; [`PlatformError::DeviceLost`] when a device
+    /// can't be opened again on the CPU path, as every reader then reports; and
+    /// [`PlatformError::Unsupported`] in the GPU view for a device open on the CPU path,
+    /// which the caller then opens through the CPU view.
     fn open(
         &self,
         device: &DeviceId,
@@ -63,7 +89,17 @@ impl VideoDevices for SharedVideoDevices {
         let mut open = lock(&self.open);
         open.retain(|_, weak| weak.strong_count() > 0);
         if let Some(shared) = open.get(device).and_then(Weak::upgrade) {
-            let state = lock(&shared.state);
+            let mut state = lock(&shared.state);
+            if state.lost.is_none() && state.on_gpu && self.gpu.is_none() {
+                move_to_cpu(self.inner.as_ref(), device, shared.format, &mut state)?;
+            }
+            if state.lost.is_none() && !state.on_gpu && self.gpu.is_some() {
+                // Its frames are CPU frames: the caller opens it through the CPU view,
+                // and shares it there.
+                return Err(PlatformError::Unsupported {
+                    what: format!("{device} on the GPU path: it is open on the CPU path"),
+                });
+            }
             if state.lost.is_none() {
                 if shared.format != *format {
                     tracing::debug!(
@@ -76,7 +112,7 @@ impl VideoDevices for SharedVideoDevices {
                 let seen = state.seq;
                 // Counted from now: the frames the device skipped before are not this
                 // reader's.
-                let base = state.stream.stats();
+                let base = sum(state.carried, state.stream.stats());
                 drop(state);
                 return Ok(Box::new(Reader {
                     device: shared,
@@ -86,12 +122,15 @@ impl VideoDevices for SharedVideoDevices {
                 }));
             }
         }
-        let stream = self.inner.open(device, format, decoder)?;
+        let backend = self.gpu.as_ref().unwrap_or(&self.inner);
+        let stream = backend.open(device, format, decoder)?;
         let base = stream.stats();
         let shared = Arc::new(Device {
             format: *format,
             state: Mutex::new(State {
                 stream,
+                on_gpu: self.gpu.is_some(),
+                carried: CaptureStats::default(),
                 seq: 0,
                 frame: None,
                 lost: None,
@@ -106,6 +145,71 @@ impl VideoDevices for SharedVideoDevices {
             stats: base,
         }))
     }
+
+    /// The GPU view of these devices: the same open devices, opening on the platform's
+    /// backend on `context` ([`VideoDevices::on_context`]). `None` when the platform's
+    /// backend has no GPU path.
+    fn on_context(
+        &self,
+        context: &GpuContext,
+    ) -> Result<Option<Arc<dyn VideoDevices>>, PlatformError> {
+        let Some(gpu) = self.inner.on_context(context)? else {
+            return Ok(None);
+        };
+        Ok(Some(Arc::new(Self {
+            inner: Arc::clone(&self.inner),
+            gpu: Some(gpu),
+            open: Arc::clone(&self.open),
+        })))
+    }
+}
+
+/// Moves a device open on the GPU path to the CPU path, under its lock: closes its GPU
+/// stream (the device opens once), then opens it on `cpu` in the same `format`. Its
+/// counters carry on from where the GPU stream's ended, and the frame waiting in its
+/// slot, a GPU frame, is dropped. A device that doesn't open again is lost
+/// ([`PlatformError::DeviceLost`]), for every reader.
+fn move_to_cpu(
+    cpu: &dyn VideoDevices,
+    device: &DeviceId,
+    format: VideoDeviceFormat,
+    state: &mut State,
+) -> Result<(), PlatformError> {
+    tracing::info!(%device, "a capture without the GPU context reads the device; moving it to the CPU path");
+    state.carried = state.stats;
+    state.frame = None;
+    state.on_gpu = false;
+    drop(std::mem::replace(&mut state.stream, Box::new(Closed)));
+    match cpu.open(device, &format, None) {
+        Ok(stream) => {
+            state.stream = stream;
+            Ok(())
+        }
+        // `DeviceLost`, which every reader reports, so each capture stops and is
+        // opened afresh later (`CaptureStream::latest`'s contract).
+        Err(err) => {
+            let lost = PlatformError::DeviceLost {
+                what: device.to_string(),
+                reason: format!("it did not open again on the CPU path: {err}"),
+            };
+            state.lost = Some(lost.clone());
+            Err(lost)
+        }
+    }
+}
+
+/// The stream of a device between closing on one path and opening on the other: it
+/// delivers nothing. Never read, since the device's lock is held throughout.
+struct Closed;
+
+impl CaptureStream for Closed {
+    fn latest(&mut self) -> Result<Option<VideoSurface>, PlatformError> {
+        Ok(None)
+    }
+
+    fn stats(&self) -> CaptureStats {
+        CaptureStats::default()
+    }
 }
 
 /// One open device and its readers' shared slot.
@@ -116,6 +220,11 @@ struct Device {
 
 struct State {
     stream: Box<dyn CaptureStream>,
+    /// Whether `stream` was opened on the GPU path.
+    on_gpu: bool,
+    /// The counters of the streams the device had before `stream`: the GPU stream, when
+    /// it moved to the CPU path.
+    carried: CaptureStats,
     /// The number of the newest frame the device delivered; 0 before the first.
     seq: u64,
     /// The newest frame, until every reader has taken it.
@@ -172,7 +281,7 @@ impl CaptureStream for Reader {
                 return Err(err);
             }
         }
-        state.stats = state.stream.stats();
+        state.stats = sum(state.carried, state.stream.stats());
         self.stats = state.stats;
         if self.seen == state.seq {
             return Ok(None);
@@ -203,13 +312,25 @@ impl CaptureStream for Reader {
     }
 }
 
+fn sum(a: CaptureStats, b: CaptureStats) -> CaptureStats {
+    CaptureStats {
+        frames_captured: a.frames_captured.saturating_add(b.frames_captured),
+        frames_skipped: a.frames_skipped.saturating_add(b.frames_skipped),
+        frames_undecodable: a.frames_undecodable.saturating_add(b.frames_undecodable),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::SharedVideoDevices;
     use jstream_media::Timebase;
     use jstream_platform::fake::{FAKE_WEBCAM, FakeClock, FakeVideoDevices};
-    use jstream_platform::{CaptureStats, DeviceId, PlatformError, VideoDevices};
+    use jstream_platform::{
+        CaptureDecoder, CaptureStats, CaptureStream, DeviceId, PlatformError, VideoDeviceFormat,
+        VideoDeviceInfo, VideoDevices,
+    };
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     fn setup() -> (FakeClock, FakeVideoDevices, SharedVideoDevices) {
         let clock = FakeClock::new(Timebase::MICROS);
@@ -285,5 +406,119 @@ mod tests {
         let lost_again = fake.open_streams();
         assert!(shared.open(&id, &format, None).is_err(), "unplugged");
         assert_eq!(fake.open_streams(), lost_again, "nothing shared or opened");
+    }
+
+    /// The fake devices on the GPU path: the same devices (a device open on either path
+    /// counts in `open_streams`), counting the opens asked of it.
+    struct OnGpu {
+        devices: FakeVideoDevices,
+        opens: AtomicUsize,
+    }
+
+    impl VideoDevices for OnGpu {
+        fn devices(&self) -> Result<Vec<VideoDeviceInfo>, PlatformError> {
+            self.devices.devices()
+        }
+        fn formats(&self, device: &DeviceId) -> Result<Vec<VideoDeviceFormat>, PlatformError> {
+            self.devices.formats(device)
+        }
+        fn open(
+            &self,
+            device: &DeviceId,
+            format: &VideoDeviceFormat,
+            decoder: Option<Box<dyn CaptureDecoder>>,
+        ) -> Result<Box<dyn CaptureStream>, PlatformError> {
+            self.opens.fetch_add(1, Ordering::Relaxed);
+            self.devices.open(device, format, decoder)
+        }
+    }
+
+    /// The CPU view `shared` and a GPU view of the same devices, opening on `gpu`.
+    fn gpu_view(shared: &SharedVideoDevices, gpu: &Arc<OnGpu>) -> SharedVideoDevices {
+        SharedVideoDevices {
+            inner: Arc::clone(&shared.inner),
+            gpu: Some(Arc::clone(gpu) as Arc<dyn VideoDevices>),
+            open: Arc::clone(&shared.open),
+        }
+    }
+
+    /// The GPU view opens a device on the GPU path, and shares one the CPU view opened.
+    /// A capture through the CPU view joining a device on the GPU path moves it to the
+    /// CPU path in place: one open at a time, the GPU reader reading on, and its counters
+    /// carrying on.
+    #[test]
+    fn a_cpu_reader_moves_a_device_on_the_gpu_path_to_the_cpu() {
+        let (clock, fake, shared) = setup();
+        let gpu = Arc::new(OnGpu {
+            devices: fake.clone(),
+            opens: AtomicUsize::new(0),
+        });
+        let on_gpu = gpu_view(&shared, &gpu);
+        let id = DeviceId::new(FAKE_WEBCAM);
+        let format = shared.formats(&id).expect("formats")[0];
+
+        let mut program = on_gpu.open(&id, &format, None).expect("opens on the GPU");
+        assert_eq!(gpu.opens.load(Ordering::Relaxed), 1);
+        for _ in 0..2 {
+            clock.advance(1);
+            assert!(program.latest().expect("reads").is_some());
+        }
+        let mut preview = shared.open(&id, &format, None).expect("moves and shares");
+        assert_eq!(fake.open_streams(), 1, "closed on the GPU before reopening");
+        assert_eq!(gpu.opens.load(Ordering::Relaxed), 1);
+        clock.advance(1);
+        assert!(program.latest().expect("reads on").is_some());
+        assert!(preview.latest().expect("reads").is_some());
+        assert_eq!(
+            program.stats().frames_captured,
+            3,
+            "counted across the move"
+        );
+        assert_eq!(preview.stats().frames_captured, 1);
+        // On the CPU path now: the GPU view refuses it, opening nothing, so the caller
+        // shares it through the CPU view.
+        let refused = |result: Result<_, PlatformError>| {
+            matches!(result, Err(PlatformError::Unsupported { .. }))
+        };
+        assert!(refused(on_gpu.open(&id, &format, None).map(drop)));
+        assert_eq!(gpu.opens.load(Ordering::Relaxed), 1);
+        assert_eq!(fake.open_streams(), 1);
+        drop((program, preview));
+        assert_eq!(fake.open_streams(), 0);
+
+        // Opened through the CPU view first, the GPU view refuses it likewise.
+        let first = shared.open(&id, &format, None).expect("opens");
+        assert!(refused(on_gpu.open(&id, &format, None).map(drop)));
+        assert_eq!(
+            gpu.opens.load(Ordering::Relaxed),
+            1,
+            "not opened on the GPU"
+        );
+        assert_eq!(fake.open_streams(), 1);
+        drop(first);
+    }
+
+    /// A device that doesn't open again on the CPU path is `DeviceLost` for every
+    /// reader, so each capture stops and opens it afresh later (B1), and the join that
+    /// moved it fails the same way.
+    #[test]
+    fn a_device_that_does_not_reopen_on_the_cpu_is_lost() {
+        let (_clock, fake, shared) = setup();
+        let gpu = Arc::new(OnGpu {
+            devices: fake.clone(),
+            opens: AtomicUsize::new(0),
+        });
+        let id = DeviceId::new(FAKE_WEBCAM);
+        let format = shared.formats(&id).expect("formats")[0];
+        let mut program = gpu_view(&shared, &gpu)
+            .open(&id, &format, None)
+            .expect("opens on the GPU");
+        fake.unplug(&id);
+        let lost = |result: Result<_, PlatformError>| {
+            matches!(result, Err(PlatformError::DeviceLost { .. }))
+        };
+        assert!(lost(shared.open(&id, &format, None).map(drop)));
+        assert_eq!(fake.open_streams(), 0, "the GPU stream closed");
+        assert!(lost(program.latest().map(drop)));
     }
 }

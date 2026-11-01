@@ -615,8 +615,8 @@ the server forbids `unsafe`, and the daemon links that crate anyway. No TLS crat
 7. **Backpressure.** Settled and built (see *Sessions*): each connection has a bounded
    event buffer, and on overflow the server drops the queued events and sends one
    `events.dropped` notice, so the engine is never slowed down by one client. What is
-   left open is tuning: whether 1024 events suits `stats.tick` (about once a second
-   while a pipeline runs) and `meters.tick` (about ten a second while the mixer runs,
+   left open is tuning: whether 1024 events suits `stats.tick` (about once a second,
+   while a pipeline runs or, with the engine's heartbeat, while idle) and `meters.tick` (about ten a second while the mixer runs,
    so 1024 events are under two minutes of them), or wants a byte limit or
    per-event-kind limits, such as keeping only the newest meter reading as
    `jstream-mcp` does.
