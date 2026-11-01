@@ -89,6 +89,22 @@ enum Shown {
     Ended(String),
 }
 
+/// Whether a subscribe for `channel` may still go out, with `open` the dialog's open
+/// channel now (`None` once it closed, or its component is gone). A close awaited
+/// before the subscribe lets the settings change again or the dialog close meanwhile:
+/// their unsubscribe of `channel` reaches the engine first and does nothing, so a
+/// subscribe sent after it would open a stream nobody closes.
+fn still_open(open: Option<u32>, channel: u32) -> bool {
+    open == Some(channel)
+}
+
+/// How the picture stands once a frame of its stream was drawn: a stream is live from
+/// its first picture. The screen's own first-picture call comes once, for the first
+/// stream, so a stream opened after a change of device needs this.
+fn after_picture(shown: &Shown) -> Option<Shown> {
+    (*shown == Shown::Starting).then_some(Shown::Live)
+}
+
 /// Calls `action` on `control`, if the session is still open.
 async fn act(control: &Weak<dyn Control>, action: Action) -> Option<Result<(), String>> {
     let control = control.upgrade()?;
@@ -185,10 +201,8 @@ pub fn DevicePreview(
                         shown.try_set(Shown::Ended(reason));
                         return;
                     }
-                    // The screen's own first-picture call comes once, for the first
-                    // stream: each later one is live from its first picture.
-                    if shown.try_get_untracked() == Some(Shown::Starting) {
-                        shown.try_set(Shown::Live);
+                    if let Some(next) = shown.try_get_untracked().as_ref().and_then(after_picture) {
+                        shown.try_set(next);
                     }
                     if h264.get() && screen.h264_failed() {
                         // Once, for JPEG: the channel is closed first so it can be
@@ -200,6 +214,9 @@ pub fn DevicePreview(
                         spawn_local(async move {
                             let close = Action::PreviewUnsubscribe { channel };
                             let _closed = act(&control, close).await;
+                            if !still_open(open.try_get_value().flatten(), channel) {
+                                return;
+                            }
                             let again = subscribe(channel, &kind_id, settings, false);
                             if let Some(Err(error)) = act(&control, again).await {
                                 shown.try_set(Shown::Ended(error));
@@ -214,6 +231,10 @@ pub fn DevicePreview(
                 if let Some(before) = before {
                     let _closed =
                         act(&control, Action::PreviewUnsubscribe { channel: before }).await;
+                    // Checked and sent with nothing between: `call` sends at once.
+                    if !still_open(open.try_get_value().flatten(), channel) {
+                        return;
+                    }
                 }
                 if let Some(Err(error)) = act(&control, open_now).await {
                     shown.try_set(Shown::Ended(error));
@@ -261,7 +282,7 @@ pub fn DevicePreview(
 
 #[cfg(test)]
 mod tests {
-    use super::{FPS, MAX, captured, hint, shows, subscribe};
+    use super::{FPS, MAX, Shown, after_picture, captured, hint, shows, still_open, subscribe};
     use jstream_control::protocol::{Action, PreviewCodec, PreviewDraft, Settings};
     use serde_json::json;
 
@@ -298,6 +319,27 @@ mod tests {
             hint("display", &Settings::new()),
             None,
             "the primary display"
+        );
+    }
+
+    #[test]
+    fn a_subscribe_waits_for_a_close_only_while_its_channel_is_still_open() {
+        assert!(still_open(Some(7), 7));
+        assert!(
+            !still_open(Some(8), 7),
+            "the settings changed again meanwhile"
+        );
+        assert!(!still_open(None, 7), "the dialog closed meanwhile");
+    }
+
+    #[test]
+    fn each_stream_goes_live_on_its_first_picture() {
+        assert_eq!(after_picture(&Shown::Starting), Some(Shown::Live));
+        assert_eq!(after_picture(&Shown::Live), None);
+        assert_eq!(
+            after_picture(&Shown::Ended("gone".into())),
+            None,
+            "an end stays"
         );
     }
 
