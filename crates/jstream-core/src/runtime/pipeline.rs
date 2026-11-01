@@ -1832,6 +1832,7 @@ pub(crate) fn launch(
     let output_fail = FailLine::new(fail_tx);
     let (done_tx, done_rx) = mpsc::channel::<()>();
     let output = spawn("jstream-output", {
+        let thread_output = output_id.clone();
         let stats = Arc::clone(&stats);
         let own = Arc::clone(&output_drops);
         let link = Arc::clone(&link_drops);
@@ -1843,6 +1844,7 @@ pub(crate) fn launch(
             // Dropped when this thread ends, even by a panic: `join_output` waits on it.
             let _done = done_tx;
             output_loop(OutputJob {
+                output_id: thread_output,
                 sink,
                 queues,
                 stats,
@@ -1947,10 +1949,13 @@ pub(crate) fn launch_vcam(
     })
 }
 
+/// Starts a pipeline thread under the caller's `tracing` dispatcher, so what it logs
+/// goes where the caller's does: the global one in a host, a test's own in a test.
 fn spawn(name: &str, body: impl FnOnce() + Send + 'static) -> Result<JoinHandle<()>, String> {
+    let dispatch = tracing::dispatcher::get_default(Clone::clone);
     thread::Builder::new()
         .name(name.into())
-        .spawn(body)
+        .spawn(move || tracing::dispatcher::with_default(&dispatch, body))
         .map_err(|err| format!("starting the {name} thread: {err}"))
 }
 
@@ -3446,6 +3451,8 @@ impl Queues {
 }
 
 struct OutputJob {
+    /// The output it runs, which a warning about its video encoder names.
+    output_id: OutputId,
     sink: Sink,
     queues: Arc<Queues>,
     stats: Arc<PipelineStats>,
@@ -3457,6 +3464,22 @@ struct OutputJob {
     fail: FailLine,
     /// Told once the sink has started, or has failed to and reported why.
     started: Sender<()>,
+}
+
+/// Logs a warning naming `output_id` when its video encoder opened as `opened` in
+/// hardware and now encodes in `now`'s software: a hardware encoder that refused its
+/// first frame under `prefer` and fell back (#443 case 3, #965). The fallback comes
+/// before the first packet, so the output thread checks once, on its first one; the
+/// platform's own warning gives the refusal.
+fn warn_fallback(output_id: &OutputId, opened: &CodecInfo, now: &CodecInfo) {
+    if opened.hardware && !now.hardware {
+        tracing::warn!(
+            output_id = %output_id,
+            hardware = %opened.name,
+            software = %now.name,
+            "the output's hardware video encoder refused its first frame; encoding in software"
+        );
+    }
 }
 
 /// Muxes both encoder streams and publishes or records them. A publish or write
@@ -3478,6 +3501,7 @@ struct OutputJob {
 /// is queued for it and finishes as soon as a pass finds nothing more.
 fn output_loop(job: OutputJob) {
     let OutputJob {
+        output_id,
         mut sink,
         queues,
         stats,
@@ -3498,6 +3522,8 @@ fn output_loop(job: OutputJob) {
     let _ = started.send(());
     let mut video_done = false;
     let mut audio_done = false;
+    // Whether this output has had a video packet, and so checked for a fallback.
+    let mut video_seen = false;
     let mut failed: Option<String> = None;
     let mut link = LinkState::Active;
     // Set when the loop first sees `stop`: when the drain gives up.
@@ -3532,7 +3558,13 @@ fn output_loop(job: OutputJob) {
         let mut got = false;
         if !video_done {
             // Bound first, so the lock is not held over the send.
-            let received = lock(&queues.video).recv_timeout(Duration::from_millis(2));
+            let video = lock(&queues.video);
+            let received = video.recv_timeout(Duration::from_millis(2));
+            if !video_seen && matches!(received, Ok(Some(_))) {
+                video_seen = true;
+                warn_fallback(&output_id, &video.info().codec, video.codec());
+            }
+            drop(video);
             match received {
                 Ok(Some(packet)) => {
                     got = true;
@@ -3879,6 +3911,37 @@ mod tests {
         profile.video.codec = VideoCodec::Unknown;
         assert!(video_config(size, &profile).is_err());
         assert!(stream_info(size, MediaTime::zero(Timebase::MICROS), &profile).is_err());
+    }
+
+    /// #965: an output whose hardware encoder fell back to software at its first frame
+    /// is named in one warning with both encoders; an encoder that stayed, or opened in
+    /// software, warns of nothing here.
+    #[test]
+    fn a_first_frame_fallback_warns_naming_the_output() {
+        use super::warn_fallback;
+        use jstream_platform::{CodecInfo, CodecRole};
+        let info = |name: &str, hardware| CodecInfo {
+            name: name.into(),
+            codec: Codec::H264,
+            role: CodecRole::VideoEncoder,
+            hardware,
+        };
+        let (hw, sw) = (info("HW", true), info("SW", false));
+        let output = OutputId::new("yt");
+        let ((), logged) = crate::tests::warnings(|| {
+            warn_fallback(&output, &hw, &sw);
+            warn_fallback(&output, &hw, &hw);
+            warn_fallback(&output, &sw, &sw);
+        });
+        assert_eq!(logged.len(), 1, "{logged:?}");
+        for part in [
+            "output_id=yt ",
+            "hardware=HW ",
+            "software=SW ",
+            "refused its first frame",
+        ] {
+            assert!(logged[0].contains(part), "{part}: {}", logged[0]);
+        }
     }
 
     /// The platform's encoder list decides which codec and hardware preference an

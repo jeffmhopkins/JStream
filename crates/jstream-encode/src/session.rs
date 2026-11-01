@@ -168,6 +168,11 @@ pub(crate) struct Shared {
 }
 
 impl Shared {
+    /// The codec encoding now: the one it fell back to, else the one opened.
+    pub(crate) fn codec(&self) -> &CodecInfo {
+        self.fallback.get().unwrap_or(&self.info.codec)
+    }
+
     fn new(info: StreamInfo) -> Arc<Self> {
         Arc::new(Self {
             info,
@@ -345,10 +350,7 @@ impl<D: Driver> Core<D> {
     }
 
     pub(crate) fn codec(&self) -> &CodecInfo {
-        self.shared
-            .fallback
-            .get()
-            .unwrap_or(&self.shared.info.codec)
+        self.shared.codec()
     }
 
     pub(crate) fn stats(&self) -> SessionStats {
