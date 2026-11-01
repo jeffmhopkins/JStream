@@ -636,7 +636,7 @@ stamp = { hash = "b3:b80936de0766bc8e", by = "agent:claude-labels", note = "Edit
 stamp = { hash = "b3:28a4754c96763ce5", by = "agent:claude", note = "Re-read after the merge of #899 (scenes carry labels, ADR-0078, protocol 0.45), which doesn't touch the privacy removal, and after moving its ADR-0027 citations to ADR-0080 (same decision numbers, ADR-0027 now superseded); the section holds." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/parity.rs"]
-stamp = { hash = "b3:a616c6316e4de343", by = "agent:blend-modes", note = "item.set_blend's description holds; 0.47 changes no command, only which blend modes the engine accepts (ADR-0082), recorded in the protocol README; examples/protocol snapshots changed only the version and BlendMode's doc; the mock takes every mode too." }
+stamp = { hash = "b3:44837ce4e035be47", by = "agent:claude-window-picker", note = "The parity fixture's display kind now describes target as capture_target of kind display, matching jstream-sources' descriptor, so core's parity_kinds_are_builtin holds again; core's kinds.snap changed the same way. No README text describes the parity kinds' parameter types." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/plugin.rs"]
 stamp = { hash = "b3:9f8743323ae8c4b6", by = "agent:claude", note = "Re-read the protocol section: the privacy screen bullet is now Privacy calls, deprecated (ADR-0080 §4): set refused unsupported and audited, get reads off, changed never sent, matching engine.rs, mock.rs and session.rs; the preview-stage sentence keeps no covering." }
@@ -3240,7 +3240,7 @@ stamp = { hash = "b3:b80936de0766bc8e", by = "agent:claude-labels", note = "Edit
 stamp = { hash = "b3:28a4754c96763ce5", by = "agent:claude", note = "Re-read after the merge of #899 (scenes carry labels, ADR-0078, protocol 0.45), which doesn't touch the privacy removal, and after moving its ADR-0027 citations to ADR-0080 (same decision numbers, ADR-0027 now superseded); the section holds." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/parity.rs"]
-stamp = { hash = "b3:a616c6316e4de343", by = "agent:blend-modes", note = "Opacity, blend and filters says modes other than normal were refused before 0.47 and are drawn from 0.47, with ADR-0082's colour spaces; the parity table dropped the multiply-refused case; snapshots changed only BlendMode's doc and the version; the fixtures' every-mode comment no longer says only normal is drawn." }
+stamp = { hash = "b3:44837ce4e035be47", by = "agent:claude-window-picker", note = "The parity fixture's display kind now describes target as capture_target of kind display, matching jstream-sources' descriptor, so core's parity_kinds_are_builtin holds again; core's kinds.snap changed the same way. No README text describes the parity kinds' parameter types." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/plugin.rs"]
 stamp = { hash = "b3:9f8743323ae8c4b6", by = "agent:claude", note = "Re-read Design: the 0.33 history notes the deprecation, privacy.get and privacy.changed entries say deprecated (always off, never sent), a Deprecated bullet says no minor is bumped since the wire is unchanged, and protocol.snap's descriptions match the doc comments." }
@@ -3339,7 +3339,7 @@ stamp = { hash = "b3:b80936de0766bc8e", by = "agent:claude-labels", note = "Re-r
 stamp = { hash = "b3:28a4754c96763ce5", by = "agent:claude", note = "Re-read after the merge of #899 (scenes carry labels, ADR-0078, protocol 0.45), which doesn't touch the privacy removal, and after moving its ADR-0027 citations to ADR-0080 (same decision numbers, ADR-0027 now superseded); the section holds." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/parity.rs"]
-stamp = { hash = "b3:a616c6316e4de343", by = "agent:blend-modes", note = "PROTOCOL_VERSION is 0.47 for drawn blend modes (no wire change, ADR-0082), followed by 0.46's entry; BlendMode's doc says every mode is drawn since 0.47; fixtures' comment updated." }
+stamp = { hash = "b3:44837ce4e035be47", by = "agent:claude-window-picker", note = "The parity fixture's display kind now describes target as capture_target of kind display, matching jstream-sources' descriptor, so core's parity_kinds_are_builtin holds again; core's kinds.snap changed the same way. No README text describes the parity kinds' parameter types." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/plugin.rs"]
 stamp = { hash = "b3:9f8743323ae8c4b6", by = "agent:claude", note = "Re-read Purpose: privacy.set, privacy.get and privacy.changed are marked deprecated in the lists, matching the doc comments in command.rs, query.rs, event.rs; plugin.rs keeps privacy.set never granted." }

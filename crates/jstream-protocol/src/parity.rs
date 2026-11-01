@@ -75,8 +75,8 @@ pub fn kinds() -> Vec<KindDescriptor> {
             params: vec![
                 ParamDescriptor {
                     id: "target".into(),
-                    ty: ParamType::String {
-                        multiline: false,
+                    ty: ParamType::CaptureTarget {
+                        kind: crate::CaptureTargetKind::Display,
                         max_len: 1024,
                     },
                     default: serde_json::Value::from(""),
