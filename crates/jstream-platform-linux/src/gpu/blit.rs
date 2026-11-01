@@ -63,7 +63,7 @@ pub(crate) struct Source<'a> {
     pub(crate) padded: bool,
 }
 
-/// One capture stream's copy pipeline and ring. Used by its PipeWire thread only.
+/// One capture stream's copy pipeline and ring. Used by its capture thread only.
 pub(crate) struct Ring {
     shared: Arc<Shared>,
     pipeline: wgpu::RenderPipeline,

@@ -18,11 +18,11 @@ use jstream_platform::media::Timebase;
 
 use super::abi::{
     BUF_TYPE_VIDEO_CAPTURE, BUF_TYPE_VIDEO_CAPTURE_MPLANE, Buffer, CAP_TIMEPERFRAME, Capability,
-    FIELD_NONE, FMT_FLAG_EMULATED, FRMIVAL_TYPE_DISCRETE, FRMSIZE_TYPE_DISCRETE, FmtDesc, Format,
-    FormatMplane, Fract, FrmIvalEnum, FrmSizeEnum, MAX_PLANES, MEMORY_MMAP, PixFormat,
-    PixFormatMplane, Plane, RequestBuffers, StreamParm, VIDIOC_DQBUF, VIDIOC_ENUM_FMT,
-    VIDIOC_ENUM_FRAMEINTERVALS, VIDIOC_ENUM_FRAMESIZES, VIDIOC_G_FMT, VIDIOC_G_PARM, VIDIOC_QBUF,
-    VIDIOC_QUERYBUF, VIDIOC_QUERYCAP, VIDIOC_REQBUFS, VIDIOC_S_FMT, VIDIOC_S_PARM,
+    ExportBuffer, FIELD_NONE, FMT_FLAG_EMULATED, FRMIVAL_TYPE_DISCRETE, FRMSIZE_TYPE_DISCRETE,
+    FmtDesc, Format, FormatMplane, Fract, FrmIvalEnum, FrmSizeEnum, MAX_PLANES, MEMORY_MMAP,
+    PixFormat, PixFormatMplane, Plane, RequestBuffers, StreamParm, VIDIOC_DQBUF, VIDIOC_ENUM_FMT,
+    VIDIOC_ENUM_FRAMEINTERVALS, VIDIOC_ENUM_FRAMESIZES, VIDIOC_EXPBUF, VIDIOC_G_FMT, VIDIOC_G_PARM,
+    VIDIOC_QBUF, VIDIOC_QUERYBUF, VIDIOC_QUERYCAP, VIDIOC_REQBUFS, VIDIOC_S_FMT, VIDIOC_S_PARM,
     VIDIOC_STREAMOFF, VIDIOC_STREAMON,
 };
 use super::format::{Enumerated, encoding, stepwise_sizes};
@@ -531,6 +531,9 @@ pub(crate) struct Filled<'a> {
     pub(crate) timestamp: super::abi::Timeval,
     /// Each plane's bytes (one, single-planar), from its data offset to its used size.
     pub(crate) planes: Vec<&'a [u8]>,
+    /// Each plane's data offset: where its bytes start in the plane's memory (always 0
+    /// single-planar). The GPU path imports each plane from its start.
+    pub(crate) offsets: Vec<u32>,
 }
 
 impl Streaming {
@@ -540,6 +543,42 @@ impl Streaming {
 
     pub(crate) fn what(&self) -> &str {
         &self.device.what
+    }
+
+    /// How many buffers the driver gave, and each one's planes.
+    pub(crate) fn buffer_planes(&self) -> Vec<usize> {
+        self.buffers.iter().map(Vec::len).collect()
+    }
+
+    /// Exports plane `plane` of buffer `index` as a DMA-BUF (`VIDIOC_EXPBUF`), read-only:
+    /// a new descriptor for the same memory, which stays valid however long it is held,
+    /// even after the stream is turned off.
+    ///
+    /// # Errors
+    /// [`PlatformError::Os`] when the driver can't export it (one whose buffers are not
+    /// in exportable memory refuses with `ENOTTY` or `EINVAL`).
+    pub(crate) fn export(&self, index: u32, plane: u32) -> Result<OwnedFd, PlatformError> {
+        let mut e = ExportBuffer {
+            type_: self.device.ty,
+            index,
+            plane,
+            flags: (libc::O_RDONLY | libc::O_CLOEXEC) as u32,
+            fd: -1,
+            ..ExportBuffer::default()
+        };
+        // SAFETY: `VIDIOC_EXPBUF` takes a `v4l2_exportbuffer`.
+        unsafe { self.device.ioctl(VIDIOC_EXPBUF, &mut e) }
+            .map_err(|err| os_error("VIDIOC_EXPBUF", &self.device.what, &err))?;
+        if e.fd < 0 {
+            return Err(PlatformError::Os {
+                call: "VIDIOC_EXPBUF",
+                code: None,
+                message: format!("{}: the driver gave no descriptor", self.device.what),
+            });
+        }
+        // SAFETY: a descriptor the driver just made for this call, which nothing else
+        // owns.
+        Ok(unsafe { OwnedFd::from_raw_fd(e.fd) })
     }
 
     /// Hands buffer `index` back to the driver.
@@ -568,27 +607,29 @@ impl Streaming {
                     self.device.what, b.index
                 ),
             })?;
-        let planes = if self.device.multi_planar() {
+        let (planes, offsets) = if self.device.multi_planar() {
             let n = (b.length as usize).min(MAX_PLANES);
             mapped
                 .iter()
                 .zip(&planes[..n])
                 .map(|(m, p)| {
                     let used = m.bytes(p.bytesused as usize);
-                    used.get(p.data_offset as usize..).unwrap_or_default()
+                    let bytes = used.get(p.data_offset as usize..).unwrap_or_default();
+                    (bytes, p.data_offset)
                 })
-                .collect()
+                .unzip()
         } else {
             mapped
                 .iter()
-                .map(|m| m.bytes(b.bytesused as usize))
-                .collect()
+                .map(|m| (m.bytes(b.bytesused as usize), 0))
+                .unzip()
         };
         Ok(Some(Filled {
             index: b.index,
             flags: b.flags,
             timestamp: b.timestamp,
             planes,
+            offsets,
         }))
     }
 }

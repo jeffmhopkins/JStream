@@ -51,6 +51,8 @@ fn rows<'a>(
 
 /// Copies a planar frame (`info.format` is NV12 or I420) out of `src`, whose luma rows are
 /// `stride` bytes apart, with the chroma planes after the luma plane (see the module doc).
+/// A one-plane format (`Bgra8`, `Rgba8`, as V4L2's 32-bit RGB formats deliver it) is its
+/// rows `stride` bytes apart, copied as they are.
 ///
 /// # Errors
 /// [`PlatformError::Os`] naming `call` when `src` is shorter than the format and stride
@@ -216,6 +218,20 @@ mod tests {
         assert_eq!(frame.row(1, 0), Some(&[10, 20, 30, 40][..]));
         assert_eq!(frame.info().pts, info(4, 2, PixelFormat::Nv12).pts);
         assert_eq!(frame.info().color.range, ColorRange::Full);
+    }
+
+    /// A one-plane RGB frame is copied row by row, its padding left behind.
+    #[test]
+    fn a_packed_rgb_frame_is_copied_without_row_padding() {
+        // 2x2 BGRA with a stride of 12.
+        let src = [
+            1, 2, 3, 4, 5, 6, 7, 8, 0, 0, 0, 0, //
+            9, 10, 11, 12, 13, 14, 15, 16,
+        ];
+        let frame = copy_planar(CALL, &src, 12, info(2, 2, PixelFormat::Bgra8)).expect("copy");
+        assert_eq!(frame.row(0, 0), Some(&[1, 2, 3, 4, 5, 6, 7, 8][..]));
+        assert_eq!(frame.row(0, 1), Some(&[9, 10, 11, 12, 13, 14, 15, 16][..]));
+        assert!(copy_planar(CALL, &src[..19], 12, info(2, 2, PixelFormat::Bgra8)).is_err());
     }
 
     #[test]

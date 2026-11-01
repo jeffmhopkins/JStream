@@ -7,6 +7,10 @@
 //!   `VK_EXT_image_drm_format_modifier`) where the adapter has it, and records which
 //!   DRM format modifiers it can import and sample for each format PipeWire offers
 //!   ([`dmabuf::importable_modifiers`]).
+//! - It also records which formats it imports in the `LINEAR` layout V4L2 buffers have
+//!   ([`dmabuf::importable_linear`]), for the webcams' GPU path (`V4l2Devices::on_context`,
+//!   `crate::v4l2`), which imports each driver buffer it exports the same way and copies
+//!   it into the same kind of ring.
 //! - Capture reaches the context through `PortalCapture::on_context`. Its PipeWire
 //!   stream offers those modifiers, imports each DMA-BUF it gets as a Vulkan image
 //!   ([`dmabuf::import`]), and copies it on the context's queue into a texture of its
@@ -65,6 +69,9 @@ pub(crate) struct Shared {
     /// For each format PipeWire may send, the modifiers this device can import as a
     /// single-plane DMA-BUF and sample. Empty without DMA-BUF import.
     pub(crate) modifiers: Vec<(SpaVideoFormat, Vec<u64>)>,
+    /// The formats this device can import a V4L2 buffer plane as, in the `LINEAR` layout
+    /// ([`dmabuf::importable_linear`]). Empty without DMA-BUF import.
+    pub(crate) linear: Vec<wgpu::TextureFormat>,
     /// The device's raw queue, to recognise it in [`FrameSync::stage`]. (Comparing
     /// `wgpu::Queue`s doesn't work: wgpu-core ids restart in every `Instance`.)
     raw_queue: u64,
@@ -82,6 +89,7 @@ impl std::fmt::Debug for Shared {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Shared")
             .field("modifiers", &self.modifiers)
+            .field("linear", &self.linear)
             .field("export", &self.export)
             .finish_non_exhaustive()
     }
@@ -211,10 +219,13 @@ impl GpuInterop for LinuxGpu {
             code: None,
             message: e.to_string(),
         })?;
-        let modifiers = if imports {
-            dmabuf::importable_modifiers(&adapter)
+        let (modifiers, linear) = if imports {
+            (
+                dmabuf::importable_modifiers(&adapter),
+                dmabuf::importable_linear(&adapter),
+            )
         } else {
-            Vec::new()
+            (Vec::new(), Vec::new())
         };
         let raw_queue = raw_queue(&queue).ok_or(PlatformError::Os {
             call: "wgpu::Queue::as_hal",
@@ -229,6 +240,7 @@ impl GpuInterop for LinuxGpu {
         let export = render_node.and_then(|node| export::Export::new(&device, node).ok());
         let shared = Arc::new(Shared {
             modifiers,
+            linear,
             raw_queue,
             export,
             device: device.clone(),
