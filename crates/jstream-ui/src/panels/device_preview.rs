@@ -78,6 +78,7 @@ pub fn subscribe(channel: u32, kind_id: &str, settings: Settings, h264: bool) ->
             kind: kind_id.to_owned(),
             settings,
         }),
+        source_id: None,
     }
 }
 
@@ -354,6 +355,7 @@ mod tests {
             codecs,
             scene_id,
             source,
+            source_id: None,
         } = subscribe(7, "webcam", draft.clone(), true)
         else {
             panic!("a subscribe");
