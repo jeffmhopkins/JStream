@@ -34,6 +34,11 @@ pub struct Collection {
     /// parent's, each with the keyframe's overrides applied: what it shows, so every
     /// panel reads it as it reads any scene ([`shown_items`]).
     pub scenes: Vec<SceneInfo>,
+    /// For each keyframe scene, the items of the groups in its parent's tree, at any
+    /// depth, each with the keyframe's overrides applied: what it shows of a group's
+    /// children, which it can override too (ADR-0024 §2, protocol 0.55). Keyed by the
+    /// keyframe; a keyframe whose parent places no group has none.
+    pub keyframe_children: HashMap<SceneId, Vec<ItemInfo>>,
     /// Every output, ordered by ID.
     pub outputs: Vec<OutputInfo>,
     /// Every audio bus, ordered by ID, the master among them: what a `bus` parameter
@@ -70,6 +75,16 @@ impl Collection {
                 ..
             } => {
                 let mut scenes = scenes;
+                let keyframe_children = scenes
+                    .iter()
+                    .filter_map(|keyframe| {
+                        let parent = scenes
+                            .iter()
+                            .find(|p| Some(&p.scene_id) == keyframe.variant_of.as_ref())?;
+                        let children = group_children(&scenes, &sources, parent, keyframe);
+                        (!children.is_empty()).then(|| (keyframe.scene_id.clone(), children))
+                    })
+                    .collect();
                 let shown: Vec<Option<Vec<ItemInfo>>> = scenes
                     .iter()
                     .map(|scene| {
@@ -89,6 +104,7 @@ impl Collection {
                     canvas,
                     sources,
                     scenes,
+                    keyframe_children,
                     outputs,
                     buses,
                     labels,
@@ -158,7 +174,8 @@ impl Collection {
     }
 
     /// The item as `scene_id` shows it, with that scene: in a keyframe scene, the
-    /// parent's item with the keyframe's overrides. Else, as [`Collection::item`] finds
+    /// parent's item with the keyframe's overrides, or a child of a group in its tree
+    /// with them ([`Collection::keyframe_child`]). Else, as [`Collection::item`] finds
     /// it.
     pub fn item_in(
         &self,
@@ -172,9 +189,19 @@ impl Collection {
                     .items
                     .iter()
                     .find(|i| &i.item_id == item_id)
+                    .or_else(|| self.keyframe_child(&scene.scene_id, item_id))
                     .map(|item| (scene, item))
             })
             .or_else(|| self.item(item_id))
+    }
+
+    /// A child of a group in keyframe scene `keyframe`'s tree, as the keyframe shows it:
+    /// with its overrides. `None` for any other item, or another scene.
+    pub fn keyframe_child(&self, keyframe: &SceneId, item_id: &ItemId) -> Option<&ItemInfo> {
+        self.keyframe_children
+            .get(keyframe)?
+            .iter()
+            .find(|i| &i.item_id == item_id)
     }
 
     /// The scene `scene_id` is a keyframe scene of, if it is one.
@@ -381,12 +408,16 @@ impl Selection {
                     .next()
                     .map(|s| s.scene_id.clone())
             });
-        // A keyframe scene shows its parent's items, so they are its items here.
+        // A keyframe scene shows its parent's items, so they are its items here, and so
+        // are the children of the groups in its tree, which it overrides too.
         let in_scene = |item_id: &&ItemId| {
             scene
                 .as_ref()
                 .and_then(|id| collection.scene(id))
-                .is_some_and(|s| s.items.iter().any(|i| &i.item_id == *item_id))
+                .is_some_and(|s| {
+                    s.items.iter().any(|i| &i.item_id == *item_id)
+                        || collection.keyframe_child(&s.scene_id, item_id).is_some()
+                })
         };
         let kept: Vec<ItemId> = self.items().filter(in_scene).cloned().collect();
         Selection {
@@ -412,6 +443,39 @@ pub fn scene_click(studio_mode: bool, scene_id: &SceneId) -> Action {
             preset_id: None,
         }
     }
+}
+
+/// The items of every group in `parent`'s tree (each `group` scene a `scene` source
+/// places, through groups only, at any depth, as the engine's tree is), each scene's in
+/// its order and each with `keyframe`'s overrides applied ([`shown_items`]).
+fn group_children(
+    scenes: &[SceneInfo],
+    sources: &[SourceInfo],
+    parent: &SceneInfo,
+    keyframe: &SceneInfo,
+) -> Vec<ItemInfo> {
+    let mut out = Vec::new();
+    let mut seen = vec![parent.scene_id.clone()];
+    let mut todo = vec![parent];
+    while let Some(scene) = todo.pop() {
+        for item in &scene.items {
+            let nested = sources.iter().find_map(|s| match &s.kind {
+                SourceKind::Scene { scene_id } if s.source_id == item.source_id => Some(scene_id),
+                _ => None,
+            });
+            let Some(group) = nested
+                .filter(|id| !seen.contains(id))
+                .and_then(|id| scenes.iter().find(|s| &s.scene_id == id))
+                .filter(|g| g.role == SceneRole::Group)
+            else {
+                continue;
+            };
+            seen.push(group.scene_id.clone());
+            out.extend(shown_items(&group.items, &keyframe.overrides));
+            todo.push(group);
+        }
+    }
+    out
 }
 
 /// The items a keyframe scene shows: its parent's, in their order, each with the fields
@@ -1253,6 +1317,113 @@ mod tests {
             vec![Edit::ItemClearOverride {
                 scene_id: k.clone(),
                 item_id: i1,
+                field: OverrideField::Visible,
+            }]
+        );
+    }
+
+    /// A keyframe shows the children of the groups in its parent's tree at its
+    /// overrides, through groups only, and keeps one selected (#846, protocol 0.55).
+    #[test]
+    fn keyframe_scenes_show_their_groups_children() {
+        let engine = MockEngine::new();
+        let session = now(Session::open(Rc::new(engine.connect())))
+            .unwrap_or_else(|e| panic!("hello failed: {e}"));
+        let scene = |id: &str, role: Option<SceneRole>| Edit::SceneCreate {
+            scene_id: id.into(),
+            name: id.to_uppercase(),
+            role,
+        };
+        let source = |id: &str, kind: SourceKind| Edit::SourceCreate {
+            source_id: id.into(),
+            name: id.into(),
+            kind,
+            settings: Settings::new(),
+            duplicated_from: None,
+        };
+        let item = |scene: &str, id: &str, source: &str| Edit::ItemAdd {
+            scene_id: scene.into(),
+            item_id: id.into(),
+            source_id: source.into(),
+            transform: None,
+            geometry: None,
+            opacity: None,
+            blend: None,
+        };
+        let nests = |id: &str| SourceKind::Scene {
+            scene_id: id.into(),
+        };
+        // Main places group G (which holds `c` and nests group H with `d`) and the plain
+        // scene S with `e`; K is Main's keyframe.
+        let edits = vec![
+            scene("main", None),
+            scene("g", Some(SceneRole::Group)),
+            scene("h", Some(SceneRole::Group)),
+            scene("s", None),
+            source(
+                "red",
+                SourceKind::Builtin {
+                    kind: "color".into(),
+                },
+            ),
+            source("n-g", nests("g")),
+            source("n-h", nests("h")),
+            source("n-s", nests("s")),
+            item("main", "ig", "n-g"),
+            item("main", "is", "n-s"),
+            item("g", "c", "red"),
+            item("g", "ih", "n-h"),
+            item("h", "d", "red"),
+            item("s", "e", "red"),
+            Edit::SceneCreateVariant {
+                scene_id: "k".into(),
+                variant_of: "main".into(),
+                name: "Keyframe 1".into(),
+            },
+            Edit::ItemSetVisible {
+                item_id: "d".into(),
+                scene_id: Some("k".into()),
+                visible: false,
+            },
+        ];
+        now(apply(&session, edits, None)).unwrap_or_else(|e| panic!("batch failed: {e}"));
+        let c = now(query(&session, Query::StateGet))
+            .ok()
+            .and_then(Collection::from_result)
+            .unwrap_or_else(|| panic!("no state"));
+        let k = SceneId::new("k");
+        let ids = |items: &[jstream_control::protocol::ItemInfo]| -> Vec<String> {
+            let mut ids: Vec<String> = items.iter().map(|i| i.item_id.to_string()).collect();
+            ids.sort();
+            ids
+        };
+        // Through the groups only: S isn't a group, so `e` isn't in the tree.
+        assert_eq!(
+            ids(c.keyframe_children.get(&k).map_or(&[][..], Vec::as_slice)),
+            ["c", "d", "ih"]
+        );
+        let d = ItemId::new("d");
+        let (shown, child) = c.item_in(Some(&k), &d).unwrap_or_else(|| panic!("no d"));
+        assert_eq!((shown.scene_id.as_str(), child.visible), ("k", false));
+        let (home, own) = c.item(&d).unwrap_or_else(|| panic!("no d"));
+        assert_eq!((home.scene_id.as_str(), own.visible), ("h", true));
+        assert!(c.keyframe_child(&k, &ItemId::new("e")).is_none());
+        assert!(c.keyframe_child(&SceneId::new("main"), &d).is_none());
+        // Selected in the keyframe, a group's child stays selected; `e` doesn't.
+        let selected = |item: &str| Selection {
+            scene: Some(k.clone()),
+            item: Some(ItemId::new(item)),
+            also: Vec::new(),
+        };
+        assert_eq!(selected("d").reconcile(&c, None), selected("d"));
+        assert_eq!(selected("e").reconcile(&c, None).item, None);
+        // Reset to the parent clears the child's override too.
+        let keyframe = c.scene(&k).unwrap_or_else(|| panic!("no k"));
+        assert_eq!(
+            reset_edits(keyframe),
+            vec![Edit::ItemClearOverride {
+                scene_id: k.clone(),
+                item_id: d,
                 field: OverrideField::Visible,
             }]
         );

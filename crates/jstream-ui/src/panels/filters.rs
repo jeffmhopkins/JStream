@@ -1381,16 +1381,22 @@ pub fn FilterSettings() -> impl IntoView {
     let close = move || dialogs.edit.set(None);
     move || {
         dialogs.edit.get().map(|target| {
-            // A filter removed elsewhere closes the dialog.
+            // A filter removed elsewhere closes the dialog. One just added may not be in
+            // the collection yet, as the batch's answer can come before the state that
+            // holds it: the dialog waits for it to show first.
             let present = {
                 let target = target.clone();
                 Memo::new(move |_| filter_of(studio, &target).is_some())
             };
+            let seen = StoredValue::new(false);
             move || {
                 if present.get() {
+                    seen.set_value(true);
                     Some(view! { <SettingsBody target=target.clone() close=close /> })
                 } else {
-                    request_animation_frame(close);
+                    if seen.get_value() {
+                        request_animation_frame(close);
+                    }
                     None
                 }
             }

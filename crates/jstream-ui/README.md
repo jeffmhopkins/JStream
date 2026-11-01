@@ -61,7 +61,9 @@ Contents ([Design](#design) explains the choices):
   share: the collection as `state.get` last reported it (`Collection`, with its buses
   for the bus picker, its transition presets, its hotkey bindings, its scene folders and
   the master stage's chains, and `chains` to read any owner's; a keyframe scene's items
-  are its parent's with its overrides applied, `shown_items`), the program and preview
+  are its parent's with its overrides applied, `shown_items`, and the children of the
+  groups in its tree likewise, `keyframe_children`, which `item_in` and the selection
+  count as its own), the program and preview
   scenes, whether studio mode is on (and `scene_click`, what a click on a scene sends
   in either mode), the `Selection`,
   each source's size (`Sizes`, from `source.sizes` and `source.size_changed`;
@@ -206,7 +208,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   own; it shows its parent's at its overrides, so selecting one lists and draws those,
   and its eye, the canvas, the Inspector's placement fields and the item menu's
   placement choices send placement edits addressed to it, which write its overrides
-  (ADR-0049). What would change the parent's items (Del, dragging rows, Add source,
+  (ADR-0049). The children of the groups in its tree (through groups only) list at its
+  overrides too: their eye writes its override, and a click selects one in the
+  keyframe, where the Inspector's placement fields write its override (#846, protocol
+  0.55); a plain nested scene's items still open their own scene. What would change the parent's items (Del, dragging rows, Add source,
   New group, layer order, the duplicates, Remove, the blend mode, the reference or clone
   switch) is off there. The
   sources list shows the selected scene's items with the top of the stack first, each
@@ -747,8 +752,8 @@ browser, and `mod.rs` is the component.
   outline. A keyframe scene shows its
   parent's items at its overrides under a banner, "◆ Keyframe of “<parent>”: only
   placement and visibility can change", and its edits are addressed to it, so they
-  write its overrides (ADR-0049). Its drags send no live values yet, though the engine
-  takes them on a keyframe scene (#846): the drop commits as usual.
+  write its overrides (ADR-0049). Its drags send the keyframe's live values, addressed
+  to it as the commit is, which the engine takes from protocol 0.53 (#846).
 - **The preview.** Under the boxes is the shown scene's picture, live: the program
   mix while the canvas shows the scene on program, so its transitions show, else that
   scene's own stream (`preview.subscribe`'s `scene_id`, CV-03). The canvas opens the
