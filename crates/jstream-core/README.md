@@ -1462,7 +1462,12 @@ projector of the source. `publish_render` plans each source a live stream shows
 (`PreviewHub::sources`) after the scenes, with `snapshot::plan_source`: on a copy of the
 collection, one scene of its own whose one item (each under an ID the collection
 doesn't hold, numbered when it holds the plain one) places the source over the whole canvas, planned as `plan_scene` plans a scene, so the
-source's own filters draw and no item's do. Its shots are kept beside the scenes'
+source's own filters draw and no item's do. The copy is kept per source with the
+revision it was made at (`SourceCopies`, `source_copies`), and made again only once the
+revision has moved on: the collection changes only through edits, which move it, so a
+re-plan with no edit (a new frame, an installed asset, a timed wake) copies nothing,
+and loading a collection file forgets every copy. A source no longer previewed lets its
+copy go at the next re-plan. Its shots are kept beside the scenes'
 (`source_shots`), replaced only when what they draw changed, and read by the preview
 thread alone, which captures what they show as it does a draft's. Like a scene stream
 it looks its source up quietly, so it never makes the source shown or heard, and a

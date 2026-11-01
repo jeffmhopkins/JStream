@@ -630,14 +630,17 @@ descriptors and the protocol. The kernels' cost in the mixer is measured in
   Filters change through the same queue. The snapshot ARCH gives each subsystem, for
   the rest of the audio graph (keys and their processing order), is still later.
 - **A panic in `on_packet` or `Mixer::poll`**
-  ([R-RT-006](../../docs/RULES.md#R-RT-006)). Nothing in this crate catches one or
-  mutes the bus. The test R-RT-006 names, `scenarios::rt_panic_is_reported`, doesn't
-  exist yet, so no test covers the audio path. Until it does, two thread boundaries do:
-  `InputProducer::on_packet` runs on the platform's audio thread, whose `catch_unwind`
-  (`guarded` in `jstream-platform-windows`) stops that stream and reports the panic to
-  the handler's `on_error` as `InvalidState`; and `Mixer::poll` runs on the engine
-  thread that calls it, which must catch a panic there, mute the bus and raise the
-  error event. `rt_panic_is_reported` lands with that engine thread.
+  ([R-RT-006](../../docs/RULES.md#R-RT-006)). Nothing in this crate catches one: the
+  thread boundaries that call it do. `InputProducer::on_packet` runs on the platform's
+  audio thread, whose `catch_unwind` (`guarded` in `jstream-platform-windows`) stops
+  that stream and reports the panic to the handler's `on_error` as `InvalidState`.
+  `Mixer::poll` runs on `jstream-core`'s mixer thread, whose `catch_unwind` wraps the
+  whole mix loop: a panic there is fatal, so the output settles `failed` (the error
+  event) and the pipeline is taken down, which silences every bus with the mixer.
+  `scenarios::rt_panic_is_reported` (in `jstream-core`) panics on the mixer thread as
+  it calls `Mixer::poll` and checks that both clients see `failed` and the engine
+  still runs a command. No test panics inside `Mixer::poll`'s body: it runs only this
+  crate's own filters, so nothing a test supplies can.
 - **The rest of the audio model** ([ADR-0028](../../docs/adr/0028-audio-model-v2.md)):
   sidechain keys in the mixer's chains (the compressor
   has one; the mixer needs the key's source processed first), running the true-peak and

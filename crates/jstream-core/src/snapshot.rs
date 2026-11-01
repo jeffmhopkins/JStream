@@ -732,18 +732,86 @@ pub(crate) fn plan_scene(
 const SOURCE_SCENE: &str = "jstream-source-preview";
 const SOURCE_ITEM: &str = "jstream-source-preview-item";
 
+/// The copies of the collection [`plan_source`] plans each previewed source on, one per
+/// source, each kept for the revision it was made at. The collection's state changes
+/// only through [`Graph::apply`], which moves the revision on, so a re-plan at the same
+/// revision (a new frame, an installed asset, a timed wake) reuses the copy instead of
+/// copying the whole collection again under the engine's lock. A collection replaced
+/// wholesale, not edited, is a new revision line: [`Self::clear`] forgets every copy.
+#[derive(Default)]
+pub(crate) struct SourceCopies {
+    copies: BTreeMap<SourceId, SourceCopy>,
+    /// How many copies have been made, for the tests to tell a reuse from a rebuild.
+    #[cfg(test)]
+    built: usize,
+}
+
+/// One source's copy: the revision of the collection it was made from, and the copy
+/// with the source's own scene added, or `None` when the copy refused that scene (it
+/// is not tried again at that revision).
+struct SourceCopy {
+    rev: Rev,
+    planned: Option<(Graph, SceneId)>,
+}
+
+impl SourceCopies {
+    /// Lets go of the copies of the sources not in `previewed`.
+    pub(crate) fn retain(&mut self, previewed: &BTreeSet<SourceId>) {
+        self.copies.retain(|id, _| previewed.contains(id));
+    }
+
+    /// Forgets every copy, for a collection replaced rather than edited, whose
+    /// revisions may repeat the old one's.
+    pub(crate) fn clear(&mut self) {
+        self.copies.clear();
+    }
+
+    /// The copy of `graph` for `source_id` at `graph`'s revision, made now if there is
+    /// none yet.
+    fn copy(&mut self, graph: &Graph, source_id: &SourceId) -> Option<(&Graph, &SceneId)> {
+        let rev = graph.rev();
+        let stale = self
+            .copies
+            .get(source_id)
+            .is_none_or(|copy| copy.rev != rev);
+        if stale {
+            #[cfg(test)]
+            {
+                self.built += 1;
+            }
+            let planned = source_copy(graph, source_id);
+            self.copies
+                .insert(source_id.clone(), SourceCopy { rev, planned });
+        }
+        self.copies
+            .get(source_id)
+            .and_then(|copy| copy.planned.as_ref())
+            .map(|(graph, scene_id)| (graph, scene_id))
+    }
+}
+
 /// Plans the source `source_id` alone, for a preview stream of it (a projector of the
 /// source): on a copy of `graph`, one scene of its own whose one item places the source
 /// over the whole canvas, as an item filling it would show it, so the source's own
 /// filters draw and no item's do. Like [`plan_scene`], nothing here reaches the
-/// collection or the program's plan. `None` when the copy refuses the scene, which a
-/// source the collection holds never makes it do.
+/// collection or the program's plan. The copy comes from `copies`, made again only when
+/// the collection's revision has moved on. `None` when the copy refuses the scene, which
+/// a source the collection holds never makes it do.
 pub(crate) fn plan_source(
+    copies: &mut SourceCopies,
     graph: &Graph,
     source_id: &SourceId,
     look: &mut LookUp<'_>,
     assets: &FilterAssets,
 ) -> Option<Planning> {
+    let (own, scene_id) = copies.copy(graph, source_id)?;
+    Some(plan_inner(own, Some(scene_id), None, look, assets, false))
+}
+
+/// A copy of `graph` with one scene added whose one item places `source_id` over the
+/// whole canvas, and that scene: the scene and item IDs each get a number added while
+/// the collection holds them.
+fn source_copy(graph: &Graph, source_id: &SourceId) -> Option<(Graph, SceneId)> {
     let canvas = graph.state().canvas();
     let geometry = ItemGeometry::covering_canvas(canvas.width, canvas.height).ok()?;
     let mut scene_id = SceneId::new(SOURCE_SCENE);
@@ -776,7 +844,7 @@ pub(crate) fn plan_source(
         },
     ];
     own.apply(&edits, None).ok()?;
-    Some(plan_inner(&own, Some(&scene_id), None, look, assets, false))
+    Some((own, scene_id))
 }
 
 /// [`plan_with`], drawing the scene each `scene` video mix shows when `mixes`.
@@ -3789,6 +3857,83 @@ pub(crate) mod tests {
         for mix in [None, Some("prog"), Some("prev"), Some("gone")] {
             assert_eq!(root(mix).as_deref(), Some("main"), "{mix:?}");
         }
+    }
+
+    /// A previewed source is planned on a copy of the collection made once per
+    /// revision: planning it again at the same revision reuses the copy, and an edit
+    /// makes a new one that shows the edit (#969 N2).
+    #[test]
+    fn a_source_preview_copies_the_collection_once_per_revision() {
+        use jstream_graph::Graph;
+        use jstream_protocol::{Edit, SourceKind};
+
+        let cam = SourceId::new("cam");
+        let mut graph = Graph::new().with_kinds(crate::kinds::builtin());
+        graph
+            .apply(
+                &[Edit::SourceCreate {
+                    source_id: cam.clone(),
+                    name: "Camera".into(),
+                    kind: SourceKind::Builtin {
+                        kind: "display".into(),
+                    },
+                    settings: Default::default(),
+                    duplicated_from: None,
+                }],
+                None,
+            )
+            .expect("edits");
+        let mut copies = super::SourceCopies::default();
+        let plan = |copies: &mut super::SourceCopies, graph: &Graph| {
+            super::plan_source(
+                copies,
+                graph,
+                &cam,
+                &mut |id| {
+                    Some(super::Look::Capture(CaptureKey::for_source(
+                        CaptureSpec::Display(None),
+                        id.clone(),
+                    )))
+                },
+                &crate::filter_assets::FilterAssets::default(),
+            )
+            .expect("the source is planned")
+            .shot
+        };
+        let first = plan(&mut copies, &graph);
+        assert_eq!(copies.built, 1);
+        assert_eq!(
+            first.program().map(SceneId::as_str),
+            Some(super::SOURCE_SCENE)
+        );
+        let again = plan(&mut copies, &graph);
+        assert_eq!(copies.built, 1, "the same revision reuses the copy");
+        assert_eq!(again, first);
+
+        graph
+            .apply(
+                &[Edit::CanvasSetSize {
+                    width: 640,
+                    height: 360,
+                }],
+                None,
+            )
+            .expect("canvas");
+        let resized = plan(&mut copies, &graph);
+        assert_eq!(copies.built, 2, "an edit makes a new copy");
+        assert_eq!((resized.canvas.width, resized.canvas.height), (640, 360));
+        let placed = resized
+            .placed(&SceneId::new(super::SOURCE_SCENE))
+            .expect("the source's scene");
+        assert_eq!(placed.len(), 1, "one item: {placed:?}");
+        let again = plan(&mut copies, &graph);
+        assert_eq!(copies.built, 2);
+        assert_eq!(again, resized);
+
+        // A source no longer previewed lets its copy go.
+        copies.retain(&BTreeSet::new());
+        plan(&mut copies, &graph);
+        assert_eq!(copies.built, 3);
     }
 
     /// A display or window that only a `scene` mix shows is among the shot's captures,
