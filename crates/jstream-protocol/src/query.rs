@@ -177,8 +177,8 @@ pub enum Query {
     #[serde(rename = "device.list")]
     DeviceList,
     /// Lists the engine's recent activity (0.51, ADR-0083): what each client's batches,
-    /// undos, redos and actions did, newest first. The engine keeps the last
-    /// [`MAX_ACTIVITY_ENTRIES`](crate::MAX_ACTIVITY_ENTRIES), in memory, so a restarted
+    /// undos, redos and actions did, newest first. The engine keeps the last 100
+    /// ([`MAX_ACTIVITY_ENTRIES`](crate::MAX_ACTIVITY_ENTRIES)), in memory, so a restarted
     /// engine starts empty. No event announces a new entry until event subscriptions exist
     /// (protocol open question 7): a client that shows the log asks again with
     /// `after_seq`. Runtime state: the result carries no `rev`.
@@ -188,8 +188,8 @@ pub enum Query {
         /// number.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         after_seq: Option<u64>,
-        /// At most this many, the newest. Omitted, or above
-        /// [`MAX_ACTIVITY_ENTRIES`](crate::MAX_ACTIVITY_ENTRIES), that many.
+        /// At most this many, the newest. Omitted, or above 100
+        /// ([`MAX_ACTIVITY_ENTRIES`](crate::MAX_ACTIVITY_ENTRIES)), 100.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         limit: Option<u32>,
     },

@@ -37,7 +37,7 @@ mod transition;
 mod version;
 mod youtube;
 
-pub use activity::{ActivityEntry, MAX_ACTIVITY_ENTRIES};
+pub use activity::{ActivityEntry, MAX_ACTIVITY_ENTRIES, MAX_ACTIVITY_SUMMARY_CHARS};
 pub use audio::{
     AudioFollow, BusInfo, BusMeter, BusMonitor, Loudness, MAX_BUSES, MAX_GAIN_DB,
     MAX_MONITOR_DEVICE_LEN, MIN_GAIN_DB, MonitorTap, SendInfo, SourceAudio, SourceMeter,

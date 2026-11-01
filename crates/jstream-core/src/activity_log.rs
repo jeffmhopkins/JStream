@@ -13,7 +13,7 @@ use crate::audit::AuditEntry;
 use jstream_graph::State;
 use jstream_protocol::{
     Action, ActivityEntry, Call, Edit, FilterOwner, Finite32, HistoryOp, ItemId, LiveOutcome,
-    MAX_ACTIVITY_ENTRIES, SceneId, SourceId,
+    MAX_ACTIVITY_ENTRIES, MAX_ACTIVITY_SUMMARY_CHARS, SceneId, SourceId,
 };
 use std::collections::VecDeque;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -37,7 +37,7 @@ impl Activity {
             client_id: entry.client_id.clone(),
             client_name: entry.client_name.clone(),
             call: entry.call.to_owned(),
-            summary: entry.summary.clone(),
+            summary: cut(&entry.summary),
             error: entry.error.map(str::to_owned),
         };
         if self.entries.len() >= MAX_ACTIVITY_ENTRIES as usize {
@@ -59,6 +59,17 @@ impl Activity {
             .take(limit)
             .cloned()
             .collect()
+    }
+}
+
+/// `summary` cut to [`MAX_ACTIVITY_SUMMARY_CHARS`], ending with `…` when it was cut, so a
+/// name an agent sent can't make the list large.
+fn cut(summary: &str) -> String {
+    match summary.char_indices().nth(MAX_ACTIVITY_SUMMARY_CHARS - 1) {
+        Some((end, _)) if summary[end..].chars().nth(1).is_some() => {
+            format!("{}…", &summary[..end])
+        }
+        _ => summary.to_owned(),
     }
 }
 
@@ -594,9 +605,11 @@ fn capitalize(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{Activity, change, decibels, describe_gesture, percent};
+    use super::{Activity, change, cut, decibels, describe_gesture, percent};
     use crate::audit::AuditEntry;
-    use jstream_protocol::{ClientId, Finite32, LiveOutcome, MAX_ACTIVITY_ENTRIES, Rev};
+    use jstream_protocol::{
+        ClientId, Finite32, LiveOutcome, MAX_ACTIVITY_ENTRIES, MAX_ACTIVITY_SUMMARY_CHARS, Rev,
+    };
     use std::time::{Duration, UNIX_EPOCH};
 
     fn entry(summary: &str) -> AuditEntry {
@@ -661,6 +674,16 @@ mod tests {
             activity.list(None, Some(10_000)).len(),
             MAX_ACTIVITY_ENTRIES as usize
         );
+    }
+
+    #[test]
+    fn a_long_sentence_is_cut_to_the_limit() {
+        let fits = "a".repeat(MAX_ACTIVITY_SUMMARY_CHARS);
+        assert_eq!(cut(&fits), fits);
+        let long = "é".repeat(MAX_ACTIVITY_SUMMARY_CHARS + 10);
+        let kept = cut(&long);
+        assert_eq!(kept.chars().count(), MAX_ACTIVITY_SUMMARY_CHARS);
+        assert!(kept.ends_with('…'));
     }
 
     #[test]

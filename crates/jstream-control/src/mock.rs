@@ -3130,6 +3130,20 @@ mod tests {
     }
 
     #[test]
+    fn activity_list_is_empty_with_the_hosts_clock() {
+        let (_engine, control) = parity_engine();
+        let asked = Query::ActivityList {
+            after_seq: None,
+            limit: None,
+        };
+        let Ok(QueryResult::ActivityList { now_ms, entries }) = query(&*control, asked) else {
+            panic!("an activity.list result");
+        };
+        assert!(entries.is_empty(), "the mock keeps no activity log");
+        assert!(now_ms > 0);
+    }
+
+    #[test]
     fn source_sizes_lists_every_source_without_a_size() {
         let (_engine, control) = parity_engine();
         let Ok(QueryResult::SourceSizes { sources }) = query(&*control, Query::SourceSizes) else {

@@ -6053,6 +6053,12 @@ pub(crate) fn check_secrets_are_redacted() {
             Query::OutputStatus {
                 output_id: OutputId::new("out_yt"),
             },
+            // The activity log's sentence names the action and the output, never the key
+            // (ADR-0083).
+            Query::ActivityList {
+                after_seq: None,
+                limit: None,
+            },
         ] {
             let result = query(&control, query_).expect("query");
             seen.push(serde_json::to_string(&result).expect("serializes"));

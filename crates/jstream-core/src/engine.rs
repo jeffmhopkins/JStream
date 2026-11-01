@@ -1015,6 +1015,11 @@ impl Engine {
             self.audit_gestures(ended, rev, &client_name);
             self.with_key_set(result)
         };
+        // Before the save, so a client that reads `activity.list` as soon as the call's
+        // events reach it finds the entry.
+        if let Some(pending) = audit {
+            self.record(pending.finish(client_id, request_id, &result));
+        }
         if matches!(
             result,
             Ok(CallResult::Batch { .. } | CallResult::History { .. })
@@ -1034,9 +1039,6 @@ impl Engine {
                 tracing::info!(output_id = %output_id, code = error.code(), "output action failed");
             }
             (Err(error), None) => tracing::debug!(code = error.code(), "call failed"),
-        }
-        if let Some(pending) = audit {
-            self.record(pending.finish(client_id, request_id, &result));
         }
         Executed::Ready(Box::new(result))
     }

@@ -636,7 +636,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "integer"
         },
         "summary": {
-          "description": "One English sentence saying what it did (\"Switched to “Desktop + Cam”\", \"Mic\ngain −1.5 → −3.0 dB\"), written from the collection just before the call ran.\nIt names objects and gives numeric, on/off and enum values only: never a\nsource's or filter's settings, an output's target, or a stream key.",
+          "description": "One English sentence saying what it did (\"Switched to “Desktop + Cam”\", \"Mic\ngain −1.5 → −3.0 dB\"), written from the collection just before the call ran.\nIt names objects and gives numeric, on/off and enum values only: never a\nsource's or filter's settings, an output's target, or a stream key. At most 256\ncharacters ([`MAX_ACTIVITY_SUMMARY_CHARS`]).",
           "type": "string"
         },
         "time_ms": {
@@ -6482,7 +6482,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Lists the engine's recent activity (0.51, ADR-0083): what each client's batches,\nundos, redos and actions did, newest first. The engine keeps the last\n[`MAX_ACTIVITY_ENTRIES`](crate::MAX_ACTIVITY_ENTRIES), in memory, so a restarted\nengine starts empty. No event announces a new entry until event subscriptions exist\n(protocol open question 7): a client that shows the log asks again with\n`after_seq`. Runtime state: the result carries no `rev`.",
+          "description": "Lists the engine's recent activity (0.51, ADR-0083): what each client's batches,\nundos, redos and actions did, newest first. The engine keeps the last 100\n([`MAX_ACTIVITY_ENTRIES`](crate::MAX_ACTIVITY_ENTRIES)), in memory, so a restarted\nengine starts empty. No event announces a new entry until event subscriptions exist\n(protocol open question 7): a client that shows the log asks again with\n`after_seq`. Runtime state: the result carries no `rev`.",
           "properties": {
             "after_seq": {
               "description": "Only entries with a greater `seq`. Omitted, the newest entries whatever their\nnumber.",
@@ -6494,7 +6494,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               ]
             },
             "limit": {
-              "description": "At most this many, the newest. Omitted, or above\n[`MAX_ACTIVITY_ENTRIES`](crate::MAX_ACTIVITY_ENTRIES), that many.",
+              "description": "At most this many, the newest. Omitted, or above 100\n([`MAX_ACTIVITY_ENTRIES`](crate::MAX_ACTIVITY_ENTRIES)), 100.",
               "format": "uint32",
               "minimum": 0,
               "type": [

@@ -2185,11 +2185,12 @@ the IDs.
 
 Every entry also carries a `summary`, one English sentence written from the
 collection under the same lock as the `rev` before, so a deleted object keeps its name
-and a gain, mute, opacity or visibility setter says what it changed from ("Mic gain
-−1.5 → −3.0 dB"); a batch is led by its delete, if any, else its first edit, "and N
+and a gain or opacity setter says what it changed from ("Mic gain −1.5 → −3.0 dB")
+while a mute or visibility setter says which way it set it ("Muted “Mic”"); a batch is led by its delete, if any, else its first edit, "and N
 more changes" ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md)). The
 sentence names objects and gives numeric, on/off and enum values only, never settings,
-targets or keys, and is not written to `audit.jsonl`. The engine keeps the last 100
+targets or keys, and is not written to `audit.jsonl`; the in-memory copy keeps at most
+256 characters of it. The engine keeps the last 100
 entries with their sentences in memory (`activity_log.rs`), whether or not the host gave
 a sink, and answers `activity.list` from them; a restarted engine starts empty. An edit
 or action the sentence table doesn't name reads as its command name.

@@ -43,13 +43,16 @@ gone once the batch applies; a deleted scene's name is gone too.
    audit file stays the durable record.
 2. **Each entry carries one English sentence the engine writes**, from the call and the
    collection as it stood just before the call ran, so a deleted object keeps its name
-   and a setter can say what it changed from. Gain, mute, opacity and visibility setters
-   give before and after values ("Mic gain −1.5 → −3.0 dB"); other edits name their verb
+   and a setter can say what it changed from. Gain and opacity setters give before and
+   after values ("Mic gain −1.5 → −3.0 dB"), and mute and visibility setters say which
+   way they set it ("Muted “Mic”", "Hid “Cam”"); other edits name their verb
    and target ("Renamed scene “Intro”"); a batch of several edits is led by its delete,
    if it has one, else by its first edit, with "and N more changes". The sentence names
    objects and states numeric, on/off and enum values only. It never holds a source's
    settings, an output's target, a stream key, a filter's settings or any other
-   free-form argument, so R-SEC-001 holds without a redaction list.
+   free-form argument, so R-SEC-001 holds without a redaction list. The list keeps at
+   most 256 characters of a sentence (and the audit log's 128 bytes of a client name), so
+   100 entries stay small.
 3. **The audit file is unchanged.** The sentence is not written to it; its lines keep
    their argument-free shape.
 4. **Protocol 0.51 adds** the `activity.list` query, which answers the newest entries
@@ -70,8 +73,9 @@ gone once the batch applies; a deleted scene's name is gone too.
    [ADR-0044](0044-pairing-remote-browsers.md)), newest first. The meta line is the
    client's name and the time since, in the prototype's mono style; a failed call adds
    its error code. While it is shown it reads `activity.list` when it opens, again with
-   `after_seq` after each `state.changed`, `studio.changed` and `output.state_changed`
-   (which most entries follow), and every 5 seconds, which catches failed calls and
+   `after_seq` after each `state.changed`, `studio.changed`, `output.state_changed` and
+   `live.ended` (which most entries follow) and after `events.dropped`, and every 5
+   seconds, which catches failed calls and
    actions that send no event.
 
 <a id="consequences"></a>

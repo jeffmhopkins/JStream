@@ -8,6 +8,10 @@ use serde::{Deserialize, Serialize};
 /// How many entries the engine keeps, and the most one `activity.list` answers.
 pub const MAX_ACTIVITY_ENTRIES: u32 = 100;
 
+/// The longest `summary` the engine keeps, in characters; a longer sentence is cut and
+/// ends with `…`.
+pub const MAX_ACTIVITY_SUMMARY_CHARS: usize = 256;
+
 /// One executed batch, undo, redo or action, or a gesture that ended without a commit:
 /// an entry of the engine's audit log, as `activity.list` answers it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -29,7 +33,8 @@ pub struct ActivityEntry {
     /// One English sentence saying what it did ("Switched to “Desktop + Cam”", "Mic
     /// gain −1.5 → −3.0 dB"), written from the collection just before the call ran.
     /// It names objects and gives numeric, on/off and enum values only: never a
-    /// source's or filter's settings, an output's target, or a stream key.
+    /// source's or filter's settings, an output's target, or a stream key. At most 256
+    /// characters ([`MAX_ACTIVITY_SUMMARY_CHARS`]).
     pub summary: String,
     /// The protocol error code when the call failed (`rev_conflict`). Omitted when it
     /// succeeded.
