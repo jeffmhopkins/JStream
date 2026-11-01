@@ -40,6 +40,8 @@ fn vk_texture_format(format: wgpu::TextureFormat) -> Option<vk::Format> {
     match format {
         wgpu::TextureFormat::Bgra8Unorm => Some(vk::Format::B8G8R8A8_UNORM),
         wgpu::TextureFormat::Rgba8Unorm => Some(vk::Format::R8G8B8A8_UNORM),
+        wgpu::TextureFormat::R8Unorm => Some(vk::Format::R8_UNORM),
+        wgpu::TextureFormat::Rg8Unorm => Some(vk::Format::R8G8_UNORM),
         _ => None,
     }
 }
@@ -48,10 +50,13 @@ fn vk_texture_format(format: wgpu::TextureFormat) -> Option<vk::Format> {
 /// of every V4L2 buffer.
 pub(crate) const MOD_LINEAR: u64 = 0;
 
-/// The formats a V4L2 buffer plane may be imported as.
-pub(crate) const LINEAR_CANDIDATES: [wgpu::TextureFormat; 2] = [
+/// The formats a V4L2 buffer plane may be imported as: the 32-bit RGB ones (and YUYV, as
+/// RGBA), and NV12's luma and chroma planes, each imported on its own.
+pub(crate) const LINEAR_CANDIDATES: [wgpu::TextureFormat; 4] = [
     wgpu::TextureFormat::Bgra8Unorm,
     wgpu::TextureFormat::Rgba8Unorm,
+    wgpu::TextureFormat::R8Unorm,
+    wgpu::TextureFormat::Rg8Unorm,
 ];
 
 /// Of [`LINEAR_CANDIDATES`], those the adapter can import in the [`MOD_LINEAR`] layout
@@ -297,7 +302,11 @@ mod tests {
             vk_texture_format(wgpu::TextureFormat::Bgra8Unorm),
             Some(Format::B8G8R8A8_UNORM)
         );
-        assert_eq!(vk_texture_format(wgpu::TextureFormat::R8Unorm), None);
+        assert_eq!(
+            vk_texture_format(wgpu::TextureFormat::Rg8Unorm),
+            Some(Format::R8G8_UNORM)
+        );
+        assert_eq!(vk_texture_format(wgpu::TextureFormat::Rgba16Float), None);
         assert_eq!(MOD_LINEAR, 0);
     }
 
