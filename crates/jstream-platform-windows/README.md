@@ -31,6 +31,8 @@ The code is ported from spikes S1 to S3. This first cut has:
   `jstream-platform` README proposes for every platform. A raw reading is converted with
   the formula WASAPI uses for `pu64QPCPosition`, so clock readings and packet times share
   one time line ([ADR-0014](../../docs/adr/0014-media-clock.md)). `now` never decreases.
+- **`WindowsProcessCpu`** (`ProcessCpu`): the process's kernel and user time from
+  `GetProcessTimes`, for `stats.tick`'s load.
 - **`WasapiAudio`** (`AudioIo`):
   - **Listing** the active capture and render endpoints, with the console-role default
     of each, and the running processes (a ToolHelp snapshot: each one's ID, its

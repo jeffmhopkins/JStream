@@ -528,7 +528,7 @@ fn write_file(path: &Path, devices: &BTreeMap<DeviceId, Device>) -> io::Result<(
 
 /// Opens a new user-only file at `path`, failing if anything is there: mode 0600 on
 /// Unix, a protected DACL for SYSTEM and the user on Windows.
-fn create_private(path: &Path) -> io::Result<fs::File> {
+pub(crate) fn create_private(path: &Path) -> io::Result<fs::File> {
     #[cfg(windows)]
     return jstream_platform_windows::create_private_file(path);
     #[cfg(not(windows))]

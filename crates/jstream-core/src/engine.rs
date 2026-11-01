@@ -7,9 +7,10 @@
 //! Device open and thread joins happen after it is released. Subscribers are woken only
 //! after the lock is released.
 
+use crate::activity_log::{self, Activity};
 use crate::audio::{AudioRouting, MixerHandles};
 use crate::audio_sources::AudioSources;
-use crate::audit::{self, Audit, AuditSink};
+use crate::audit::{self, Audit, AuditEntry, AuditSink};
 use crate::collection::{CollectionFile, CollectionFileError};
 use crate::drops::{self, DropLedger, DropSource, DropSourceId};
 use crate::events::{QueueRef, Subscribers, Subscription};
@@ -17,6 +18,7 @@ use crate::forget::ForgetSources;
 use crate::gesture::{Ended, Gestures};
 use crate::history::History;
 use crate::live::{Built, LiveHost, LiveSources, LoadedAsset};
+use crate::load::LoadMeter;
 use crate::lock;
 use crate::outputs::Outputs;
 use crate::plugins::kinds::{self as clap_kinds, ClapScan};
@@ -40,13 +42,14 @@ use jstream_audio::OutputTapId;
 use jstream_graph::Graph;
 use jstream_media::FrameSize;
 use jstream_platform::{
-    Backends, CaptureTarget, CaptureTargetInfo, GpuContext, PluginHosts, Secret, StreamKeyStore,
+    Backends, CaptureTarget, CaptureTargetInfo, GpuContext, PluginHosts, ProcessCpu, Secret,
+    StreamKeyStore,
 };
 use jstream_protocol::{
     Action, ActionResult, Batch, Call, CallResult, CaptureTargetKind, ClientId, DropCounts, Edit,
-    EncoderProfile, EncoderSessionInfo, EntityKind, Event, FilterChain, GestureId, HistoryCall,
-    HistoryDirection, IdempotencyKey, LiveOutcome, OutputId, OutputKind, OutputState, PixelSize,
-    PreviewSettings, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
+    EncoderProfile, EncoderSessionInfo, EngineLoad, EntityKind, Event, FilterChain, GestureId,
+    HistoryCall, HistoryDirection, IdempotencyKey, LiveOutcome, OutputId, OutputKind, OutputState,
+    PixelSize, PreviewSettings, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
     RtmpTarget, SceneId, SecretString, SourceId, SourceSize, TransitionPresetId, TransitionStarted,
     YoutubeAuth,
 };
@@ -111,6 +114,9 @@ struct Shared {
     youtube: Mutex<Option<Arc<Youtube>>>,
     /// The preview thread, which draws and encodes every session's preview streams.
     previews: PreviewHub,
+    /// When the engine started, the process CPU time and the idle heartbeat, for
+    /// `stats.tick`'s load. Its lock is its own, never taken with the collection's.
+    load: LoadMeter,
     /// The WASM automation plugins installed this run (ADR-0069). On its own lock,
     /// never taken with the collection lock held, nor while a plugin runs.
     #[cfg(feature = "wasm-plugins")]
@@ -164,6 +170,7 @@ impl Default for Engine {
                 audio_scopes,
                 youtube: Mutex::new(None),
                 previews: PreviewHub::default(),
+                load: LoadMeter::default(),
                 #[cfg(feature = "wasm-plugins")]
                 automation: crate::plugins::automation::Registry::default(),
             }),
@@ -294,7 +301,8 @@ impl Engine {
 
     /// Records every batch, undo, redo and action this engine executes in `sink`, after
     /// the call and with no engine lock held (see [`AuditSink`]). Without a sink nothing
-    /// is recorded. Every clone of the engine shares it.
+    /// is written to it; the in-memory activity log (`activity.list`, ADR-0083) keeps
+    /// the last entries either way. Every clone of the engine shares it.
     #[must_use]
     pub fn with_audit(self, sink: Arc<dyn AuditSink>) -> Self {
         self.shared.audit.set(sink);
@@ -564,6 +572,33 @@ impl Engine {
     /// with no sources: the tick then carries zeros.
     pub fn emit_stats_tick(&self) {
         emit_sampled(&self.shared, &self.drops);
+    }
+
+    /// Reads the process's CPU time from `cpu` for each `stats.tick`'s load from now
+    /// on (protocol 0.48). Without one a tick's `cpu_ms` is left out. The engine's
+    /// stats threads call it about once a second, outside the collection lock.
+    pub fn set_process_cpu(&self, cpu: Arc<dyn ProcessCpu>) {
+        self.shared.load.set_cpu(cpu);
+    }
+
+    /// Starts the engine's stats heartbeat: a `jstream-stats-idle` thread that emits a
+    /// `stats.tick` about once a second while no output runs, so a client sees the
+    /// engine's load while it is idle too (protocol 0.48). While the program stage runs,
+    /// its own sampler emits the ticks and the heartbeat stays quiet. A host calls it
+    /// once; later calls do nothing. The thread holds the engine weakly and ends once
+    /// the last engine handle is gone.
+    pub fn start_stats_heartbeat(&self) {
+        if !self.shared.load.claim_heartbeat() {
+            return;
+        }
+        let shared = Arc::downgrade(&self.shared);
+        let ledger = Arc::downgrade(&self.drops);
+        if let Err(err) = thread::Builder::new()
+            .name("jstream-stats-idle".into())
+            .spawn(move || stats_heartbeat(&shared, &ledger))
+        {
+            tracing::error!(error = %err, "stats heartbeat did not start");
+        }
     }
 
     /// The ledger the pipeline's [`DropGuard`](crate::drops::DropGuard) removes from.
@@ -847,16 +882,22 @@ impl Engine {
         if ended.is_empty() {
             return;
         }
-        let Some(sink) = self.shared.audit.sink() else {
-            return;
-        };
         for (request_id, ended) in ended {
-            sink.record(audit::gesture_entry(
+            self.record(audit::gesture_entry(
                 ended,
                 client_name.to_owned(),
                 request_id,
                 rev,
             ));
+        }
+    }
+
+    /// Records `entry`: it joins the activity log, then goes to the host's audit sink,
+    /// if any, with no lock held.
+    fn record(&self, entry: AuditEntry) {
+        lock(&self.shared.state).activity.push(&entry);
+        if let Some(sink) = self.shared.audit.sink() {
+            sink.record(entry);
         }
     }
 
@@ -888,16 +929,17 @@ impl Engine {
         state.graph.rev()
     }
 
-    /// What an audit entry needs before its call runs: the current `rev` and the
-    /// client's name from its latest `hello`.
-    fn audit_context(&self, client_id: &ClientId) -> (Rev, String) {
+    /// What an audit entry needs before `call` runs: the current `rev`, the client's
+    /// name from its latest `hello`, and the activity log's sentence for the call.
+    fn audit_context(&self, client_id: &ClientId, call: &Call) -> audit::Pending {
         let state = lock(&self.shared.state);
         let name = state
             .client_names
             .get(client_id)
             .cloned()
             .unwrap_or_default();
-        (state.graph.rev(), name)
+        let summary = activity_log::describe(call, state.graph.state());
+        audit::Pending::new(call, state.graph.rev(), name, summary)
     }
 
     /// Opens an event subscription: the stream, and the weak handle its session keeps
@@ -940,10 +982,7 @@ impl Engine {
             drop(_entered);
             return Executed::Pending(self.video_snapshot(), span);
         }
-        let audit = self.shared.audit.sink_for(&call).map(|sink| {
-            let (rev, client_name) = self.audit_context(client_id);
-            (sink, audit::Pending::new(&call, rev, client_name))
-        });
+        let audit = Audit::records(&call).then(|| self.audit_context(client_id, &call));
         let output = match &call {
             Call::Action {
                 action:
@@ -1009,6 +1048,12 @@ impl Engine {
             self.audit_gestures(ended, rev, &client_name);
             self.with_key_set(result)
         };
+        // Before the save, so a client that reads `activity.list` after the call's events
+        // usually finds the entry; one that reads faster than this finds it on its next
+        // read.
+        if let Some(pending) = audit {
+            self.record(pending.finish(client_id, request_id, &result));
+        }
         if matches!(
             result,
             Ok(CallResult::Batch { .. } | CallResult::History { .. })
@@ -1028,9 +1073,6 @@ impl Engine {
                 tracing::info!(output_id = %output_id, code = error.code(), "output action failed");
             }
             (Err(error), None) => tracing::debug!(code = error.code(), "call failed"),
-        }
-        if let Some((sink, pending)) = audit {
-            sink.record(pending.finish(client_id, request_id, &result));
         }
         Executed::Ready(Box::new(result))
     }
@@ -1150,9 +1192,16 @@ impl Engine {
                 fps,
                 codecs,
                 scene_id,
+                source,
             } => {
                 let settings = PreviewSettings::resolve(max_width, max_height, fps, &codecs)?;
-                let rev = {
+                if scene_id.is_some() && source.is_some() {
+                    return Err(ProtocolError::invalid_argument(
+                        "source",
+                        "a preview stream shows a scene or a source, not both",
+                    ));
+                }
+                let (rev, kinds, canvas) = {
                     let state = lock(&self.shared.state);
                     if let Some(scene_id) = &scene_id
                         && state.graph.state().scene(scene_id).is_none()
@@ -1162,7 +1211,17 @@ impl Engine {
                             id: scene_id.as_str().to_owned(),
                         });
                     }
-                    state.graph.rev()
+                    // Only the kinds and the canvas: the draft is planned unlocked.
+                    let kinds = source
+                        .as_ref()
+                        .map(|_| state.graph.kinds().cloned().collect::<Vec<_>>());
+                    (state.graph.rev(), kinds, state.graph.state().canvas())
+                };
+                let draft = match (&source, kinds) {
+                    (Some(source), Some(kinds)) => {
+                        Some(crate::preview::plan_draft(kinds, canvas, source)?)
+                    }
+                    _ => None,
                 };
                 let codecs = self.media.as_ref().and_then(|host| {
                     lock(&host.backends)
@@ -1179,6 +1238,7 @@ impl Engine {
                         codecs,
                         rev,
                         scene: scene_id.clone(),
+                        draft,
                     },
                 )?;
                 if scene_id.is_some() {
@@ -2411,16 +2471,37 @@ fn set_gpu(shared: &Shared, context: Option<&GpuContext>) {
 
 fn emit_sampled(shared: &Shared, ledger: &Mutex<DropLedger>) {
     let sampled = drops::lock_ledger(ledger).sample();
+    // Read before the collection lock: the CPU reader makes a system call.
+    let cpu = shared.load.cpu_time();
     let mut wake = Vec::new();
-    lock(&shared.state).emit_stats(sampled, &mut wake);
+    {
+        let mut state = lock(&shared.state);
+        let load = shared.load.load(state.render.drawn(), cpu);
+        state.emit_stats(sampled, load, &mut wake);
+    }
     for waker in wake {
         waker.wake();
+    }
+}
+
+/// The idle heartbeat ([`Engine::start_stats_heartbeat`]): about once a second, a
+/// `stats.tick` unless a program stage's sampler runs, until the engine is gone.
+fn stats_heartbeat(shared: &Weak<Shared>, ledger: &Weak<Mutex<DropLedger>>) {
+    loop {
+        thread::sleep(Duration::from_secs(1));
+        let (Some(shared), Some(ledger)) = (shared.upgrade(), ledger.upgrade()) else {
+            return;
+        };
+        if !shared.load.ticking() {
+            emit_sampled(&shared, &ledger);
+        }
     }
 }
 
 /// Wakes every 100 ms so a stop joins promptly, emits `meters.tick` on each wake, and
 /// `stats.tick` once those waits add up to a second.
 fn stats_ticker(shared: Arc<Shared>, ledger: Arc<Mutex<DropLedger>>, stop: Arc<AtomicBool>) {
+    shared.load.ticker_started();
     let mut waited_ms = 0u32;
     while !stop.load(Ordering::Relaxed) {
         thread::sleep(Duration::from_millis(100));
@@ -2437,6 +2518,7 @@ fn stats_ticker(shared: Arc<Shared>, ledger: Arc<Mutex<DropLedger>>, stop: Arc<A
         waited_ms = 0;
         emit_sampled(&shared, &ledger);
     }
+    shared.load.ticker_ended();
 }
 
 /// A frame size as the protocol reports it.
@@ -2507,6 +2589,9 @@ struct State {
     /// Every client's open live-value gestures (ADR-0032), and the committed values the
     /// render thread has not caught up with yet.
     gestures: Gestures,
+    /// The last entries of the audit log, with their sentences (ADR-0083), for
+    /// `activity.list`.
+    activity: Activity,
     /// Gestures cancelled or expired by the call running now, with its request, for the
     /// audit log once the lock is released.
     ended: Vec<(Option<RequestId>, Ended)>,
@@ -2869,7 +2954,9 @@ impl State {
                 }
                 return Ok(CallResult::action());
             }
-            other @ (Action::PairingStart | Action::DeviceRevoke { .. }) => {
+            other @ (Action::PairingStart
+            | Action::DeviceRevoke { .. }
+            | Action::UiSettingsSet { .. }) => {
                 return Err(served_by_the_server(other.name()));
             }
             // Built without the `wasm-plugins` feature, the engine can't run a plugin, so
@@ -2935,7 +3022,13 @@ impl State {
                     program_scene: self.studio.program().cloned(),
                     preview_scene: self.studio.preview().cloned(),
                 },
-                Query::DeviceList => return Err(served_by_the_server(query.name())),
+                Query::DeviceList | Query::UiSettingsGet { .. } => {
+                    return Err(served_by_the_server(query.name()));
+                }
+                Query::ActivityList { after_seq, limit } => QueryResult::ActivityList {
+                    now_ms: activity_log::unix_ms(std::time::SystemTime::now()),
+                    entries: self.activity.list(*after_seq, *limit),
+                },
                 Query::PrivacyGet => QueryResult::PrivacyGet { on: false },
                 Query::SourceSizes => QueryResult::SourceSizes {
                     sources: self
@@ -3318,12 +3411,13 @@ impl State {
         }
     }
 
-    fn emit_stats(&mut self, drops: DropCounts, wake: &mut Vec<Waker>) {
+    fn emit_stats(&mut self, drops: DropCounts, load: EngineLoad, wake: &mut Vec<Waker>) {
         self.stats_seq = self.stats_seq.saturating_add(1);
         self.subscribers.emit(
             &Event::StatsTick {
                 seq: self.stats_seq,
                 drops,
+                load: Some(load),
             },
             wake,
         );
@@ -3518,8 +3612,9 @@ fn capture_target_info(info: CaptureTargetInfo) -> Option<jstream_protocol::Capt
 
 /// A protocol variant added after this engine was written.
 /// `unsupported`, for the calls that concern the listener's credentials (`pairing.start`,
-/// `device.list`, `device.revoke`): the server in front of the engine answers them
-/// (ADR-0044), so one that reaches the engine came from a client with no server between.
+/// `device.list`, `device.revoke`) and the UI settings it keeps (`ui_settings.get`,
+/// `ui_settings.set`): the server in front of the engine answers them (ADR-0044,
+/// ADR-0084), so one that reaches the engine came from a client with no server between.
 fn served_by_the_server(call: &str) -> ProtocolError {
     ProtocolError::Unsupported { call: call.into() }
 }

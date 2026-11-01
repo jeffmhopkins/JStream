@@ -944,6 +944,7 @@ mod tests {
         assert_eq!(
             read_only,
             [
+                "activity",
                 "capture",
                 "delete",
                 "describe_api",

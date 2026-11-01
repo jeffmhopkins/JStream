@@ -9,6 +9,10 @@
 //!   sessions through it, the same calls work from the UI, the CLI and MCP agents (an
 //!   MCP agent sees them as the `pairing` and `device` tools). Like every call, they need
 //!   the handshake first (`handshake_required`).
+//! - **UI settings** (ADR-0084). `ui_settings.get` and `ui_settings.set` read and keep
+//!   the settings [`UiSettings`] holds for every client of this server, so they are
+//!   answered here too, with pairing off as well: the desktop app's webview keeps its
+//!   dock this way.
 //! - **Names.** A device's `hello` is sent on with `client_name` set to
 //!   `device:<name>`, so the engine's audit log names its calls that way whatever the
 //!   client calls itself.
@@ -22,6 +26,7 @@
 
 use crate::devices::{CODE_LIFETIME, Devices, Now};
 use crate::gate::Credential;
+use crate::ui_settings::{Refused, SetError, UiSettings};
 use jstream_control::{BinaryStream, BoxFuture, Control, ControlError, EventStream};
 use jstream_protocol::{
     Action, ActionResult, Call, CallResult, EntityKind, Hello, ProtocolError, Query, QueryResult,
@@ -41,6 +46,8 @@ pub(crate) struct Admitted {
     /// Whether the server answers the pairing and device calls (`ServerConfig::pairing`).
     /// Off, they reach `inner` like any other call.
     serves_devices: bool,
+    /// The UI settings the server keeps.
+    ui_settings: Arc<UiSettings>,
     /// Whether `hello` succeeded, which the calls answered here need too.
     greeted: AtomicBool,
     /// Numbers the requests answered here (`server_1`, ...).
@@ -54,6 +61,7 @@ impl Admitted {
         devices: Arc<Devices>,
         pairing_offered: bool,
         serves_devices: bool,
+        ui_settings: Arc<UiSettings>,
     ) -> Admitted {
         Admitted {
             inner,
@@ -61,12 +69,13 @@ impl Admitted {
             devices,
             pairing_offered,
             serves_devices,
+            ui_settings,
             greeted: AtomicBool::new(false),
             answered: AtomicU64::new(0),
         }
     }
 
-    /// The answer to a call the server serves ([`served_here`]).
+    /// The answer to a call the server serves ([`about_devices`], [`about_ui_settings`]).
     fn answer(&self, call: &Call) -> Result<CallResult, ProtocolError> {
         match call {
             Call::Action {
@@ -95,6 +104,32 @@ impl Admitted {
                     devices: self.devices.list(Now::current().unix),
                 },
             }),
+            Call::Action {
+                action: Action::UiSettingsSet { key, value },
+            } => match self.ui_settings.set(key, value.clone()) {
+                Ok(()) => Ok(CallResult::action()),
+                Err(SetError::Refused(refused)) => Err(invalid(refused)),
+                Err(SetError::Unsaved(error)) => {
+                    tracing::warn!(%key, %error, "a UI setting could not be saved");
+                    Err(ProtocolError::ActionFailed {
+                        reason: format!(
+                            "the setting is kept until the server stops, but the UI \
+                             settings file could not be written: {error}"
+                        ),
+                    })
+                }
+            },
+            Call::Query {
+                query: Query::UiSettingsGet { key },
+            } => {
+                let value = self.ui_settings.get(key).map_err(invalid)?;
+                Ok(CallResult::Query {
+                    result: QueryResult::UiSettingsGet {
+                        key: key.clone(),
+                        value,
+                    },
+                })
+            }
             _ => Err(ProtocolError::Internal {
                 reason: "a call the server doesn't serve reached it".into(),
             }),
@@ -125,15 +160,32 @@ impl Admitted {
     }
 }
 
-/// Whether the server answers `call` itself: `pairing.start`, `device.revoke` and
-/// `device.list`.
-fn served_here(call: &Call) -> bool {
+/// `invalid_argument` for a refused UI settings call.
+fn invalid(refused: Refused) -> ProtocolError {
+    ProtocolError::invalid_argument(refused.field, refused.problem)
+}
+
+/// Whether `call` is one about the paired devices the server answers itself:
+/// `pairing.start`, `device.revoke` and `device.list`.
+fn about_devices(call: &Call) -> bool {
     matches!(
         call,
         Call::Action {
             action: Action::PairingStart | Action::DeviceRevoke { .. }
         } | Call::Query {
             query: Query::DeviceList
+        }
+    )
+}
+
+/// Whether `call` reads or keeps a UI setting: `ui_settings.get` and `ui_settings.set`.
+fn about_ui_settings(call: &Call) -> bool {
+    matches!(
+        call,
+        Call::Action {
+            action: Action::UiSettingsSet { .. }
+        } | Call::Query {
+            query: Query::UiSettingsGet { .. }
         }
     )
 }
@@ -152,7 +204,8 @@ impl Control for Admitted {
     }
 
     fn call(&self, call: Call) -> BoxFuture<'_, Result<Response, ControlError>> {
-        if !self.serves_devices || !served_here(&call) {
+        let served_here = (self.serves_devices && about_devices(&call)) || about_ui_settings(&call);
+        if !served_here {
             return self.inner.call(call);
         }
         Box::pin(async move {
@@ -182,6 +235,7 @@ mod tests {
     use super::Admitted;
     use crate::devices::Devices;
     use crate::gate::Credential;
+    use crate::ui_settings::UiSettings;
     use jstream_control::{BoxFuture, Control, ControlError, EventStream, MockEngine};
     use jstream_protocol::{Action, Call, DeviceId, Hello, PROTOCOL_VERSION, Response, Welcome};
     use std::future::Future;
@@ -242,6 +296,7 @@ mod tests {
                 devices,
                 pairing_offered,
                 serves_devices,
+                Arc::new(UiSettings::load(None)),
             ),
             name,
         )
@@ -306,5 +361,47 @@ mod tests {
             let code = refused.err().and_then(|e| e.protocol().map(|p| p.code()));
             assert_eq!(code, Some("unsupported"));
         }
+    }
+
+    /// The server keeps UI settings with pairing off too, as the desktop app runs it,
+    /// and checks keys; the session behind never sees them.
+    #[test]
+    fn ui_settings_are_served_with_pairing_off() {
+        use jstream_protocol::{CallResult, Query, QueryResult};
+        let (session, _) = admitted_with(Credential::Control, true, false);
+        let get = || Call::Query {
+            query: Query::UiSettingsGet {
+                key: "workspace.dock".into(),
+            },
+        };
+        let early = block(session.call(get()));
+        let code = early.err().and_then(|e| e.protocol().map(|p| p.code()));
+        assert_eq!(code, Some("handshake_required"));
+        assert!(block(session.hello(hello())).is_ok());
+        let dock = serde_json::json!({"current": "Live"});
+        let set = block(session.call(Call::Action {
+            action: Action::UiSettingsSet {
+                key: "workspace.dock".into(),
+                value: Some(dock.clone()),
+            },
+        }));
+        assert!(set.is_ok(), "{set:?}");
+        match block(session.call(get())).map(|r| r.result) {
+            Ok(CallResult::Query {
+                result: QueryResult::UiSettingsGet { key, value },
+            }) => {
+                assert_eq!(key, "workspace.dock");
+                assert_eq!(value, Some(dock));
+            }
+            other => panic!("expected the dock back, got {other:?}"),
+        }
+        let refused = block(session.call(Call::Action {
+            action: Action::UiSettingsSet {
+                key: "Not a key".into(),
+                value: None,
+            },
+        }));
+        let code = refused.err().and_then(|e| e.protocol().map(|p| p.code()));
+        assert_eq!(code, Some("invalid_argument"));
     }
 }

@@ -10,6 +10,7 @@
 
 use crate::error::ProtocolError;
 use crate::id::Rev;
+use crate::settings::Settings;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -48,6 +49,20 @@ impl PreviewCodec {
             _ => None,
         }
     }
+}
+
+/// A source that is not in the collection, for `preview.subscribe`'s `source`: what a
+/// source of `kind` with `settings` would show, so a client can show a device while the
+/// user picks it, before the source is created or its settings are saved.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct PreviewDraft {
+    /// The source kind, as `kind.list` reports it. Only the capture kinds (`display`,
+    /// `window` and `webcam`) can be shown this way.
+    pub kind: String,
+    /// Its settings, checked as `source.create` checks them. Parameters left out, or
+    /// sent as `null`, take their defaults. Omitted means all defaults.
+    #[serde(default, skip_serializing_if = "Settings::is_empty")]
+    pub settings: Settings,
 }
 
 /// The settings of one preview stream, from `preview.subscribe`'s fields with their

@@ -21,6 +21,7 @@
 #![forbid(unsafe_code)]
 
 mod activity;
+mod activity_log;
 mod audio;
 mod audio_sources;
 mod audit;
@@ -36,6 +37,7 @@ mod gesture;
 mod history;
 mod kinds;
 mod live;
+mod load;
 mod outputs;
 mod plugins;
 mod preview;

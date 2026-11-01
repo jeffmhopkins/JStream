@@ -1978,12 +1978,13 @@ pub(crate) struct OpenedCapture {
 /// render thread starts what its snapshots capture ([`RenderCaptures`]).
 ///
 /// The GPU path needs the platform's GPU interop to open a device and the capture
-/// backend to deliver frames on it ([`Capture::on_context`]). Its streams' frames are
-/// textures the render thread samples where they are. When the interop has no device
-/// (the fakes, CI, a machine without one), the render thread opens its own and captures
-/// deliver CPU frames. When there is a device but the backend has no GPU path, or a GPU
-/// capture does not start, captures deliver CPU frames and the render thread still
-/// composites on the platform's device. Each fallback is logged.
+/// backend to deliver frames on it ([`Capture::on_context`]), and likewise the
+/// video-device backend for webcams and capture cards ([`VideoDevices::on_context`]).
+/// Their streams' frames are textures the render thread samples where they are. When the
+/// interop has no device (the fakes, CI, a machine without one), the render thread opens
+/// its own and captures deliver CPU frames. When there is a device but a backend has no
+/// GPU path, or a GPU capture does not start, captures deliver CPU frames and the render
+/// thread still composites on the platform's device. Each fallback is logged.
 pub(crate) fn open_capture(parts: &Parts) -> Result<OpenedCapture, String> {
     let context = match parts.gpu.open_device() {
         Ok(context) => Some(context),
@@ -1995,11 +1996,15 @@ pub(crate) fn open_capture(parts: &Parts) -> Result<OpenedCapture, String> {
     let gpu = context
         .as_ref()
         .and_then(|context| gpu_capture(parts.capture.as_ref(), context));
+    let gpu_devices = context
+        .as_ref()
+        .and_then(|context| gpu_video_devices(parts.video_devices.as_ref(), context));
     Ok(OpenedCapture {
         backends: captures::Backends {
             cpu: Arc::clone(&parts.capture),
             gpu,
             devices: Arc::clone(&parts.video_devices),
+            gpu_devices,
             codecs: Arc::clone(&parts.codecs),
         },
         context,
@@ -2016,6 +2021,24 @@ fn gpu_capture(capture: &dyn Capture, context: &GpuContext) -> Option<Arc<dyn Ca
         }
         Err(err) => {
             tracing::warn!(error = %err, "capture refused the GPU context; capturing CPU frames");
+            None
+        }
+    }
+}
+
+/// The video-device backend on `context`, or `None`, logged, when it has no GPU path.
+fn gpu_video_devices(
+    devices: &dyn VideoDevices,
+    context: &GpuContext,
+) -> Option<Arc<dyn VideoDevices>> {
+    match devices.on_context(context) {
+        Ok(Some(devices)) => Some(devices),
+        Ok(None) => {
+            tracing::info!("the video-device backend has no GPU path; webcams deliver CPU frames");
+            None
+        }
+        Err(err) => {
+            tracing::warn!(error = %err, "the video-device backend refused the GPU context; webcams deliver CPU frames");
             None
         }
     }
@@ -2734,6 +2757,7 @@ fn render_loop(job: RenderJob) {
             match tick {
                 Ok(Ok(freed)) => {
                     draw_errors = 0;
+                    reader.count_drawn();
                     let read = frames
                         .mixes
                         .iter()

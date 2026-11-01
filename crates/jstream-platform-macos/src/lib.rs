@@ -15,7 +15,8 @@
 //! VideoToolbox H.264 and HEVC decoder on CPU frames, its packets split by
 //! `split_access_unit` and its frames put in presentation order by `Reorder`, and
 //! local media files through AVFoundation's asset reader (`AvMediaDecoders`), with a
-//! stand-in for the GPU interop not built yet (`NoGpuInterop`). Layer 2, and one of the
+//! stand-in for the GPU interop not built yet (`NoGpuInterop`), and the process's CPU
+//! time (`MacosProcessCpu`). Layer 2, and one of the
 //! crates allowed `unsafe` (R-UNSAFE-001): every
 //! system call is wrapped here behind safe APIs.
 //!
@@ -42,6 +43,8 @@ mod keychain;
 mod media_file;
 #[cfg(target_os = "macos")]
 mod pixel_buffer;
+#[cfg(any(target_os = "macos", test))]
+mod process;
 mod unbuilt;
 mod version;
 mod video_device;
@@ -80,6 +83,8 @@ pub use keychain::MacosKeychain;
 pub use media_file::{
     AvReaderSettings, audio_layout, av_error_is_unsupported, av_reader_settings, bgra_to_rgba,
 };
+#[cfg(target_os = "macos")]
+pub use process::MacosProcessCpu;
 pub use unbuilt::NoGpuInterop;
 pub use version::{Arch, Feature, MacosVersion, SupportTier, check_floor, support_tier};
 #[cfg(target_os = "macos")]

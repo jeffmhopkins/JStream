@@ -34,10 +34,14 @@ Contents (a first cut; [Design](#design) explains the choices):
   types and a Content Security Policy.
 - **Configuration** (`config.rs`): `ServerConfig` (bind address, extra hosts and
   origins, connection limits, the ping interval and liveness timeout, the MCP switch and its limits, the UI directory, the
-  device file, the `tls` flag, the `pairing` switch) and `Token`, the control token.
+  device file, the UI settings file, the `tls` flag, the `pairing` switch) and `Token`,
+  the control token.
 - **Devices** (`devices.rs`): the paired devices, the open pairing code, and the device
   file that keeps the devices' token digests
   ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)).
+- **UI settings** (`ui_settings.rs`): the settings `ui_settings.set` keeps for every
+  client, such as the web UI's dock, and the file that keeps them
+  ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)).
 - **Pairing** (`pair.rs`): `POST /api/v1/pair` (`PAIR_PATH`), which trades the open code
   for a device token, or for the device cookie in a browser.
 - **Pairing page** (`pair_page.rs`, `pair.html`): `GET /pair` (`PAIR_PAGE_PATH`), the
@@ -297,6 +301,27 @@ its own from a short code instead of the control token.
 These three calls are answered by the server, not the engine
 ([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)): see *Sessions*.
 
+### UI settings
+
+[ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md) keeps the UI's own
+settings on the engine's machine, so the desktop app and every browser of one engine
+show the same workspace.
+
+- **The calls.** `ui_settings.set {key, value}` keeps any JSON value under a key, and a
+  `null` or missing value removes it; `ui_settings.get {key}` reads it back. The server
+  checks only the key's form (1 to 64 of `a`-`z`, `0`-`9`, `.`, `_`, `-`) and the
+  sizes (64 KiB of compact JSON per value, 64 keys), answering `invalid_argument`
+  otherwise. They are answered with `ServerConfig::pairing` off too, so the desktop
+  app's webview is served.
+- **The settings file.** With `ServerConfig::ui_settings_file` set (`jstream-daemon` and
+  `jstream-desktop` both set `ui-settings.json` in the data folder), the settings are
+  read when the server binds and the whole file is rewritten on every change, through a
+  temporary file and a rename, user-only like the device file; the file's folder is
+  created if missing. A file that can't be read or isn't a version 1 settings file is
+  logged at `warn` and replaced on the next change: the server still starts. A change
+  that can't be written answers `action_failed` and is kept in memory until the server
+  stops. Without a file, the settings last as long as the server.
+
 ### The pairing page and the device cookie
 
 [ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md) lets a
@@ -339,7 +364,8 @@ browser pair by itself and stay signed in. All of it exists only with
 Each accepted connection gets a fresh session from the `Connector`
 (`Arc<dyn Fn() -> Box<dyn Control>>`), dropped when the connection ends, wrapped in the
 server's own `Control` (`admitted.rs`), which answers `pairing.start`, `device.list` and
-`device.revoke` from the device store (after a successful `hello`, like any call),
+`device.revoke` from the device store and `ui_settings.get` and `ui_settings.set` from
+the UI settings (after a successful `hello`, like any call),
 renames a device's `hello` to `device:<name>`, and passes everything else through. The connection
 task speaks the envelope
 ([jstream-protocol › Design](../jstream-protocol/README.md#design)):
@@ -543,7 +569,7 @@ brings hyper, tower and `tokio-tungstenite` without TLS; tokio for the listener 
 connection tasks; `futures-util` to split the socket, run calls concurrently
 (`FuturesUnordered`) and box the writer's send in progress; `blake3` (the workspace's `pure` build, already used by `xtask`)
 for the token and device-token digests; `tracing` for the spans and events above; `jstream-mcp` for the
-MCP server behind `/mcp`; `serde_json` for the pairing exchange and the device file;
+MCP server behind `/mcp`; `serde_json` for the pairing exchange, the device file and the UI settings file;
 `getrandom` for MCP session IDs, pairing codes and device tokens, already in the tree through
 tungstenite's `rand` and used by `jstream-daemon` for its token; on Windows only,
 `jstream-platform-windows` for the device file's user-only DACL and its check (#344):
@@ -589,8 +615,8 @@ the server forbids `unsafe`, and the daemon links that crate anyway. No TLS crat
 7. **Backpressure.** Settled and built (see *Sessions*): each connection has a bounded
    event buffer, and on overflow the server drops the queued events and sends one
    `events.dropped` notice, so the engine is never slowed down by one client. What is
-   left open is tuning: whether 1024 events suits `stats.tick` (about once a second
-   while a pipeline runs) and `meters.tick` (about ten a second while the mixer runs,
+   left open is tuning: whether 1024 events suits `stats.tick` (about once a second,
+   while a pipeline runs or, with the engine's heartbeat, while idle) and `meters.tick` (about ten a second while the mixer runs,
    so 1024 events are under two minutes of them), or wants a byte limit or
    per-event-kind limits, such as keeping only the newest meter reading as
    `jstream-mcp` does.

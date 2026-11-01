@@ -80,6 +80,9 @@ pub(crate) struct RenderHub {
     live: ArcSwap<LiveParams>,
     /// The generation the render thread adopted last, or [`STOPPED`] / [`STARTING`].
     adopted: AtomicU64,
+    /// Ticks the render thread has composited since the engine started, across every
+    /// run of the program stage: `stats.tick`'s `program_frames`.
+    drawn: AtomicU64,
 }
 
 impl Default for RenderHub {
@@ -91,6 +94,7 @@ impl Default for RenderHub {
             }),
             live: ArcSwap::from_pointee(LiveParams::default()),
             adopted: AtomicU64::new(STOPPED),
+            drawn: AtomicU64::new(0),
         }
     }
 }
@@ -117,6 +121,11 @@ impl RenderHub {
     /// The current snapshot, for a reader that is not a real-time thread.
     pub(crate) fn load(&self) -> Arc<RenderSnapshot> {
         self.current.load_full()
+    }
+
+    /// Ticks the render thread has composited since the engine started.
+    pub(crate) fn drawn(&self) -> u64 {
+        self.drawn.load(Ordering::Relaxed)
     }
 
     /// The render generation published last.
@@ -230,6 +239,12 @@ impl RenderReader {
             .as_deref()
             .expect("invariant: adopt always stores live values");
         (snapshot, live)
+    }
+
+    /// Counts one composited tick in the hub's [`drawn`](RenderHub::drawn): one
+    /// relaxed atomic add, so it is fine on the render thread.
+    pub(crate) fn count_drawn(&self) {
+        self.hub.drawn.fetch_add(1, Ordering::Relaxed);
     }
 
     /// GPU images the render thread's cache let go of, freed on the collector thread.

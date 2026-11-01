@@ -35,7 +35,8 @@ use {
 /// opener that connects RTMP(S) on each `output.start`. On macOS it is live the same
 /// way on the backends built so far (`macos_backends`), with stream keys in the
 /// Keychain. Elsewhere there are no backends yet, so output actions only step the
-/// placeholder state machine.
+/// placeholder state machine. On every platform it starts the engine's stats heartbeat,
+/// and on Windows and macOS each `stats.tick` carries the process's CPU time.
 ///
 /// # Errors
 /// When the collection file can't be read, loaded or created, and on Windows and macOS,
@@ -96,6 +97,12 @@ pub fn engine(
     }
     #[cfg(windows)]
     scan_clap_plugins(&engine);
+    // `stats.tick`'s load: the process's CPU time, and a tick a second while idle.
+    #[cfg(windows)]
+    engine.set_process_cpu(Arc::new(jstream_platform_windows::WindowsProcessCpu));
+    #[cfg(target_os = "macos")]
+    engine.set_process_cpu(Arc::new(jstream_platform_macos::MacosProcessCpu));
+    engine.start_stats_heartbeat();
     Ok(engine)
 }
 
@@ -318,7 +325,8 @@ fn live_redacting(
 }
 
 /// Binds the server on `127.0.0.1:<port>`, serving `engine` behind `token` and the
-/// devices paired in `device_file` (ADR-0044; in memory without one), with MCP's
+/// devices paired in `device_file` (ADR-0044; in memory without one), keeping the UI
+/// settings in `ui_settings_file` (ADR-0084; in memory without one), with MCP's
 /// streamable-HTTP transport on, and the web UI's files from `ui_dir` when given. Each
 /// connection and each MCP session gets its own session (its own `client_id`); all of
 /// them share the engine.
@@ -327,6 +335,7 @@ pub async fn bind(
     port: u16,
     token: Token,
     device_file: Option<PathBuf>,
+    ui_settings_file: Option<PathBuf>,
     ui_dir: Option<&Path>,
 ) -> Result<Server, jstream_server::ServerError> {
     let connector: Connector = Arc::new(move || Box::new(engine.connect()));
@@ -334,6 +343,7 @@ pub async fn bind(
     config.bind = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
     config.mcp = true;
     config.device_file = device_file;
+    config.ui_settings_file = ui_settings_file;
     config.ui_dir = ui_dir.map(Path::to_path_buf);
     Server::bind(config, connector).await
 }
@@ -425,6 +435,7 @@ mod tests {
             .expect("an engine"),
             0,
             token,
+            None,
             None,
             None,
         )
@@ -521,6 +532,7 @@ mod tests {
             token.clone(),
             None,
             None,
+            None,
         )
         .await
         .expect("binds");
@@ -535,6 +547,7 @@ mod tests {
             .expect("an engine"),
             port,
             token,
+            None,
             None,
             None,
         )

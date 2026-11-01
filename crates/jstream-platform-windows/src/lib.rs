@@ -9,7 +9,7 @@
 //! both ends) with the plugin host's MMCSS registration (`ProAudioThread`),
 //! `check_media_foundation`, which reports a Windows N edition without Media Foundation,
 //! and user-only files for a host's secrets (`create_private_file`,
-//! `check_private_file`); packet video decoders follow. Layer 2, and one of the few crates allowed
+//! `check_private_file`), and the process's CPU time (`WindowsProcessCpu`); packet video decoders follow. Layer 2, and one of the few crates allowed
 //! `unsafe` (R-UNSAFE-001): every OS call is wrapped here behind safe APIs.
 //!
 //! The backends exist only on Windows. On other platforms the crate builds empty except
@@ -36,6 +36,8 @@ mod plugin_block;
 mod plugin_hosts;
 #[cfg(windows)]
 mod private_file;
+#[cfg(any(windows, test))]
+mod process;
 // Its owner and DACL rule is tested on every platform.
 #[cfg(any(windows, test))]
 mod security;
@@ -69,6 +71,8 @@ pub use plugin_block::{PluginBlock, ProAudioThread};
 pub use plugin_hosts::{PLUGIN_HOST_EXE, WindowsPluginHosts};
 #[cfg(windows)]
 pub use private_file::{check_private_file, create_private_file};
+#[cfg(windows)]
+pub use process::WindowsProcessCpu;
 #[cfg(windows)]
 pub use vcam::WindowsVcam;
 #[cfg(windows)]

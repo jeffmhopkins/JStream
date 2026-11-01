@@ -49,7 +49,8 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   `meterTicks` routes it too, passing everything on, and returns a function that
   sends the page a `meters.tick`, which the mock engine never sends, and re-sends it
   every 100 ms until the next one, as the engine's stream would, so the panel doesn't
-  blank the meters while a slow run is still asserting on them.
+  blank the meters while a slow run is still asserting on them. `statsTicks` sends
+  `stats.tick`s the same way, since the mock runs no pipeline.
   `sourceSizes` routes it to answer `source.sizes` with the sizes a test gives, since
   the mock makes no frames and reports none, and returns a function that sends the
   page a `source.size_changed`. `recordCalls` routes it too, passing everything on, and
@@ -104,6 +105,10 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   recording; clearing the key; deleting; editing the
   server URL and choosing an encoder profile, both read back by a fresh page; a second
   client sees outputs created, started and deleted.
+- **Header stats** (`header-stats.spec.js`): the readout shows the dropped count from
+  the first `stats.tick`, the CPU share ("<1%") from the second while the program draws
+  nothing, and "60 fps · 2 dropped · CPU 3%" once the load says it drew 60 frames in a
+  second.
 - **Docking** (`docking.spec.js`): the Editing layout's zones (Filters and Transform as
   tabs under the Inspector, Transitions as a tab beside Outputs), with empty zones hidden; the View
   menu hiding and adding a panel at the end of its home zone, and the layout marked
@@ -175,7 +180,16 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   button; Cancel and Escape drop
   a changed name, OK renames in one edit, and Enter with a blank name sends nothing.
   The mock describes no kinds, so the settings form and the draft patch are covered
-  natively.
+  natively. A video capture device created through Add source, with its descriptor
+  from `describeKinds`, opens the dialog with its live picture: a `preview.subscribe`
+  of the draft source on a channel from 2³¹ up, another on a new channel once the
+  Device field changes, closing the first with nothing saved, and an unsubscribe when
+  Cancel closes the dialog; a colour source shows no picture. The mock streams no
+  pictures, so what the picture draws is checked by hand.
+- **Capture targets** (`capture-targets.spec.js`): with the `window` kind described, a
+  new Window capture's Properties dialog lists the mock's one window by name and size
+  after None, and not its display; picking it and pressing OK is one edit, and the
+  dialog opened again shows that window.
 - **Inspector** (`inspector.spec.js`): the selected Backdrop's X, Y, W, H and Rotation;
   a new width with the W/H link on scales the height and the canvas readout follows,
   and with it off the other side stays; a stepper is one edit Ctrl+Z on the canvas

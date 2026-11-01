@@ -227,7 +227,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
 - the pairing calls (`pairing.start`, `device.list`, `device.revoke`) answered with
   `unsupported`, as the in-process engine answers them: only a server in front of a
   session serves them
-  ([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md));
+  ([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)), and the UI
+  settings calls (`ui_settings.get`, `ui_settings.set`) the same way
+  ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md));
 - `plugin.install` answered with `unsupported`, since the mock can't run a plugin, and
   `plugin.grant` and `plugin.enable` with `not_found` (entity `plugin`), as the engine
   answers them for a plugin that isn't installed: none ever is in the mock;
@@ -297,9 +299,11 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `transition.*`, `scene.set_transitions` and `item.set_transition` edits answer
   `internal`;
 - `capture.targets`, answered with one made-up 1920×1080 primary display whose ID is
-  `MOCK_DISPLAY`;
+  `MOCK_DISPLAY`, then one 1280×720 window, "Mock window", whose ID is `MOCK_WINDOW`;
 - `source.sizes`, answered with every source and no size, since the mock makes no
   frames, so it never sends `source.size_changed`;
+- `activity.list`, answered with no entries and the host's clock as `now_ms`: the mock
+  keeps no activity log ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md));
 - the deprecated privacy calls, as from the engine
   ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md) §4):
   `privacy.set` is refused with `unsupported`, `privacy.get` reads off, and no
@@ -399,7 +403,8 @@ the reason a session ended with, which it shares, are unit-tested natively
 ### Open questions
 
 1. **Backpressure.** The client's own event buffers are unbounded. `stats.tick` (protocol
-   0.6) is emitted about once a second while the pipeline runs, and a slow subscriber of
+   0.6) is emitted about once a second while the pipeline runs (and, since 0.48, while
+   idle too when the host started the engine's heartbeat), and a slow subscriber of
    it, or of meters, would grow without limit. Bounded buffers that
    drop the oldest events (a gap in `rev` already shows a missed `state.changed`) are
    the likely client-side answer

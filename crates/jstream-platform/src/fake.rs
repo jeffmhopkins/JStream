@@ -24,7 +24,7 @@ use crate::{
     CaptureDecoder, CaptureEncoding, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo,
     CodecInfo, CodecRole, Codecs, CompressedFrame, DeviceId, GpuContext, GpuFrame, GpuInterop,
     HardwarePreference, MediaAudioInfo, MediaClock, MediaDecoder, MediaDecoderConfig,
-    MediaDecoders, MediaInfo, MediaVideoInfo, OAuthTokenStore, PlatformError, Secret,
+    MediaDecoders, MediaInfo, MediaVideoInfo, OAuthTokenStore, PlatformError, ProcessCpu, Secret,
     StreamKeyStore, VcamFormat, VcamSink, VideoDecoder, VideoDecoderConfig, VideoDeviceFormat,
     VideoDeviceInfo, VideoDevices, VideoEncoder, VideoEncoderConfig, VideoSurface,
 };
@@ -1402,6 +1402,39 @@ impl VcamSink for FakeVcamSink {
 
 // ---------------------------------------------------------------------------------------
 // Stream keys
+
+/// A [`ProcessCpu`] whose CPU time the test sets. Clones share the same reading, so a
+/// test keeps one and moves it while the engine holds another. It starts at zero.
+#[derive(Clone, Debug)]
+pub struct FakeCpu {
+    nanos: Arc<Mutex<Option<u64>>>,
+}
+
+impl FakeCpu {
+    /// A reading of zero.
+    pub fn new() -> Self {
+        Self {
+            nanos: Arc::new(Mutex::new(Some(0))),
+        }
+    }
+
+    /// Sets the CPU time the next reading returns, or `None` for an OS that refuses.
+    pub fn set(&self, used: Option<std::time::Duration>) {
+        *lock(&self.nanos) = used.map(|d| u64::try_from(d.as_nanos()).unwrap_or(u64::MAX));
+    }
+}
+
+impl Default for FakeCpu {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ProcessCpu for FakeCpu {
+    fn cpu_time(&self) -> Option<std::time::Duration> {
+        (*lock(&self.nanos)).map(std::time::Duration::from_nanos)
+    }
+}
 
 /// An in-memory [`StreamKeyStore`]: what the OS credential store is to the engine, for
 /// tests. Clones share the same keys, so a test can keep one and check what the engine

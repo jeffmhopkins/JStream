@@ -75,7 +75,7 @@ target stays open to agents), and the `events` feed drops `youtube.*` and `plugi
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `video`, `video_mix` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
+| one per noun (`activity`, `audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `ui_settings`, `video`, `video_mix` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
 | `batch` | `edits`, `expected_rev`, `idempotency_key`, `ends_gesture`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |
@@ -128,6 +128,12 @@ The `pairing` and `device` tools (protocol 0.21) need no code here either: the s
 pair and revoke devices as any client can (ADR-0006), and gets `unsupported` from a
 session with no server in front. A `pairing.start` result carries the code, the one
 place it is sent ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
+
+The `ui_settings` tool (protocol 0.52) is the same:
+[ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)'s server answers it,
+so an agent can read or change the UI's kept settings, such as the web UI's dock, and
+gets `unsupported` from a session with no server in front. Being an action's tool, it is
+`destructiveHint`.
 
 ### MCP revisions
 
@@ -236,11 +242,12 @@ The `events` tool exposes the engine's events
 subscription into a buffer of the newest `BUFFER_CAPACITY` events (in `events.rs`),
 numbering them from 1 (`seq`), and parks until the subscription wakes it, so neither
 the buffer nor the `Control`'s own stream grows while the agent is idle. It keeps
-`stats.tick` out of the buffer: about one a second per running pipeline would push
+`stats.tick` out of the buffer: about one a second, from a running pipeline or the
+engine's idle heartbeat, would push
 `state.changed` and `output.state_changed` out within minutes (ADR-0036,
 Consequences). A tick carries running totals, so the feed keeps only the newest one,
 outside the buffer, and every read returns it as `stats`; an agent still sees the drop
-counts, as ADR-0006 requires. A tick takes no `seq`, so it leaves no gap and is not
+counts, as ADR-0006 requires, and since protocol 0.48 the engine's load. A tick takes no `seq`, so it leaves no gap and is not
 counted in `dropped`. `meters.tick`, about ten a second while the mixer runs, is kept
 the same way as `meters`: each one is a full reading of the levels. `live.changed`
 arrives up to 30 times a second per gesture while someone drags, so it would push other

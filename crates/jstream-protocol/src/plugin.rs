@@ -92,6 +92,10 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("youtube.list_streams", N),
     ("youtube.stats", N),
     ("device.list", N),
+    // What other clients did, by name, is the user's to read, not a plugin's (ADR-0083).
+    ("activity.list", N),
+    // The server answers it, and a UI's settings are the person's.
+    ("ui_settings.get", N),
     // Edits.
     ("scene.create", Class(E)),
     ("scene.rename", Class(E)),
@@ -181,6 +185,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("youtube.transition_broadcast", N),
     ("pairing.start", N),
     ("device.revoke", N),
+    ("ui_settings.set", N),
     // Needs a filesystem grant, like `video.snapshot`.
     ("preview.subscribe", N),
     // Not named in any class, so "never" until a PR places them.
