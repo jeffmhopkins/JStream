@@ -113,8 +113,8 @@ a stolen token, local denial of service.
   time. Tokens are 32 bytes from the OS random source. Header values are never logged.
 - The daemon binds `127.0.0.1` and has no flag to bind elsewhere. There is no TLS yet.
 - Limits: 4 MiB messages and MCP bodies (one over that and up to 16 MiB is read and
-  refused with `too_large`, one larger closes the connection or is `413`;
-  [ADR-0074](../adr/0074-too-large-requests.md)), 128 open TCP connections of any kind
+  refused with `too_large`, echoing at most a 256-byte `id`, one larger closes the
+  connection or is `413`; [ADR-0074](../adr/0074-too-large-requests.md)), 128 open TCP connections of any kind
   (authenticated or not), 32 WebSocket connections, 64 calls in flight per connection,
   16 MCP sessions, 10 s to send headers and finish the handshake, a bounded event
   outbox, and 45 s for a WebSocket client to answer the server's pings (sent every

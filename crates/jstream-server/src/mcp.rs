@@ -30,6 +30,7 @@
 //!   limit is `413`, refused from `Content-Length` before it is read when it declares one.
 
 use crate::devices::Now;
+use crate::envelope::{Envelope, Id};
 use crate::gate::{Credential, Refusal};
 use crate::listener::Accepted;
 use crate::{App, FRAME_LIMIT, REQUEST_LIMIT, ServerConfig};
@@ -409,14 +410,15 @@ const SERVER_ERROR: i64 = -32000;
 
 /// The answer to a body over [`REQUEST_LIMIT`] (ADR-0074 §5): `200` with a JSON-RPC error
 /// whose `data` is `{"code": "too_large", "size_bytes", "limit_bytes"}`. Only the body's
-/// `id` is read; the rest is skipped unparsed, so it is never handled, and whether it
-/// was a `tools/call` is unknown. `id` is `null` when none can be read.
+/// `id` is read ([`Envelope`]); the rest is skipped unparsed, so it is never handled,
+/// and whether it was a `tools/call` is unknown. `id` is `null` when none can be read,
+/// or when it is a string over [`MAX_ECHOED_ID`](crate::envelope::MAX_ECHOED_ID) bytes.
 fn over_request_limit(body: &[u8]) -> Response {
-    let id = serde_json::from_slice::<RpcId>(body)
-        .ok()
-        .and_then(|envelope| envelope.id)
-        .filter(|id| id.is_string() || id.is_number())
-        .unwrap_or(Value::Null);
+    let id = match Envelope::read(body).and_then(|envelope| envelope.id) {
+        Some(Id::String(id)) => Value::String(id),
+        Some(Id::Number(id)) => Value::Number(id),
+        None => Value::Null,
+    };
     let size = body.len();
     let answer = serde_json::json!({
         "jsonrpc": "2.0",
@@ -435,12 +437,6 @@ fn over_request_limit(body: &[u8]) -> Response {
         },
     });
     reply(Some(answer.to_string()))
-}
-
-/// Just the `id` of a JSON-RPC message; every other member is skipped unparsed.
-#[derive(serde::Deserialize)]
-struct RpcId {
-    id: Option<Value>,
 }
 
 fn bad_request(reason: String) -> Response {

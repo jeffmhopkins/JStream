@@ -26,6 +26,7 @@
 mod admitted;
 mod config;
 mod devices;
+mod envelope;
 mod error;
 mod gate;
 mod listener;

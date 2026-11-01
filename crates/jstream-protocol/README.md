@@ -338,7 +338,8 @@ front of the engine handles client messages of up to its request limit, which `w
 advertises as `max_request_bytes` (0.62; missing from an older server, which means
 4 MiB). A message over it, up to the server's higher frame limit, is refused with
 `too_large` (`size_bytes`, `limit_bytes`), answering the request's `id` when the server
-can read one: nothing in it is applied, and the connection stays open. A message over
+can read one, a string of at most 256 bytes (a longer one is answered with no `id`, as
+is a `malformed` message's): nothing in it is applied, and the connection stays open. A message over
 the frame limit closes the connection with close code 1009. A client splits work that
 doesn't fit, a batch of `state` writes one filter per batch, and reads server messages
 of at least the frame limit.
@@ -1454,7 +1455,7 @@ people and agents. Clients match on `code`, never on `message`.
 | `unsupported` | A valid call this implementation doesn't serve (the pairing calls without a server in front, 0.21; the `plugin.*` calls from an engine that hosts no plugins, 0.35; the deprecated `privacy.set`, [ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)) | `call` |
 | `forbidden` | A plugin's call is outside its grant, or is never granted to a plugin; it never reaches the engine (0.35) | `call`, `reason` |
 | `hardware_session_limit` | `output.start` couldn't open a hardware video encoder while other outputs held hardware sessions, so the hardware session limit is taken to be reached; there is no fallback to software (0.44, [ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md) §3) | `outputs` (the holders, sorted), `reason` (the encoder's refusal) |
-| `too_large` | The message was over the server's request limit (`Welcome.max_request_bytes`, 4 MiB); only its `id` was read, nothing was applied, and the connection stays open. Retrying won't help: split the work (0.62, [ADR-0074](../../docs/adr/0074-too-large-requests.md)) | `size_bytes`, `limit_bytes` |
+| `too_large` | The message was over the server's request limit (`Welcome.max_request_bytes`, 4 MiB); only its `id` was read (echoed when it is at most 256 bytes), nothing was applied, and the connection stays open. Retrying won't help: split the work (0.62, [ADR-0074](../../docs/adr/0074-too-large-requests.md)) | `size_bytes`, `limit_bytes` |
 | `internal` | An engine bug or unexpected condition; may be retried | `reason` |
 
 An error that isn't tied to a request (a failed handshake, or a message too broken to

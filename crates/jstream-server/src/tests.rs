@@ -777,6 +777,11 @@ fn a_message_over_the_request_limit_is_refused_and_the_connection_stays_open() {
     let big = request_text("big", call(&"n".repeat(crate::REQUEST_LIMIT + 1 - base)));
     assert_eq!(big.len(), crate::REQUEST_LIMIT + 1);
     expect_too_large(answer(&harness, &mut socket, &big), Some("big"), big.len());
+    // An `id` over 256 bytes isn't echoed (#981 review B1): a refused message leaves only
+    // a small answer behind.
+    let long_id = "i".repeat(crate::envelope::MAX_ECHOED_ID + 1);
+    let long = request_text(&long_id, call(&"n".repeat(crate::REQUEST_LIMIT)));
+    expect_too_large(exchange(&harness, &mut socket, &long), None, long.len());
     // Without a readable `id` (not a request) the error has none; a binary message over
     // the limit is refused the same way.
     let unnamed = "x".repeat(crate::REQUEST_LIMIT + 1);
@@ -2286,7 +2291,8 @@ fn mcp_sessions_end_and_unknown_ones_are_not_found() {
 }
 
 /// Malformed requests: a body that isn't declared JSON, an unsupported
-/// `MCP-Protocol-Version`, a body over 4 MiB, and a body that doesn't parse.
+/// `MCP-Protocol-Version`, a body over the 16 MiB frame limit, and a body that doesn't
+/// parse.
 #[test]
 fn mcp_refuses_malformed_requests() {
     let harness = start_with(&MockEngine::new(), mcp_on());
@@ -2309,9 +2315,9 @@ fn mcp_refuses_malformed_requests() {
     );
     assert_eq!(reply.status, 400);
     // A body declared over the 16 MiB frame limit is refused from its `Content-Length`,
-    // before it is
-    // read. Only the headers are sent: the server may close the connection as soon as it
-    // has answered, so writing the whole body could fail on the client's side.
+    // before it is read. Only the headers are sent: the server may close the connection
+    // as soon as it has answered, so writing the whole body could fail on the client's
+    // side.
     let addr = harness.authority.clone();
     let reply = harness.run(async {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};

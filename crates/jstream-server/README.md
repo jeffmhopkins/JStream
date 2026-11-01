@@ -389,8 +389,11 @@ task speaks the envelope
   as `max_request_bytes`) is handled as above. One over it and up to 16 MiB (the frame
   limit, `FRAME_LIMIT`) is read and refused with `too_large` (`size_bytes`,
   `limit_bytes`), with the request ID when the envelope's `id` is readable: only the
-  envelope is read, so the message never reaches the session and never counts as in
-  flight, and the connection stays open. One over the frame limit closes the connection
+  envelope's `type` and `id` are read (`envelope.rs`), and an `id` over 256 bytes
+  (`MAX_ECHOED_ID`) is not echoed, here or in a `malformed` error, so a queued answer
+  stays small whatever the message held. Nothing else of the message is built: it
+  never reaches the session and never counts as in flight, and the connection stays
+  open. One over the frame limit closes the connection
   with close code 1009 (message too big): nothing more of it is read, so the socket is
   held unread for the 2 s closing budget, for the client to take the close frame, and
   then dropped.
@@ -484,7 +487,7 @@ WebSocket API: browsers send `Origin` on a cross-origin `fetch`, and a `POST` ne
 | `POST` without `Mcp-Session-Id` | served by the one shared stateless server (MCP 2026-07-28 requests carry no session) |
 | `DELETE` with `Mcp-Session-Id` | ends that session: 204, or 404 if it is unknown |
 | `GET` | 405 with `Allow: POST, DELETE`: the server sends no server-initiated messages |
-| A body over the request limit, 4 MiB, and up to the frame limit, 16 MiB ([ADR-0074](../../docs/adr/0074-too-large-requests.md) §5) | 200 with a JSON-RPC error: code `-32000`, `data` `{"code": "too_large", "size_bytes", "limit_bytes"}`, and the body's `id` (`null` when none is readable). Only the `id` is read, so the body is never handled; clients match on `data.code`, not on the integer |
+| A body over the request limit, 4 MiB, and up to the frame limit, 16 MiB ([ADR-0074](../../docs/adr/0074-too-large-requests.md) §5) | 200 with a JSON-RPC error: code `-32000`, `data` `{"code": "too_large", "size_bytes", "limit_bytes"}`, and the body's `id` (`null` when none is readable, or when it is a string over 256 bytes). Only the `id` is read, so the body is never handled; clients match on `data.code`, not on the integer |
 | A body that isn't `Content-Type: application/json` / is over 16 MiB (refused from its `Content-Length` before it is read, when it declares one) / isn't UTF-8 | 415 / 413 / 400 |
 | `MCP-Protocol-Version` naming a revision `jstream-mcp` doesn't serve | 400 |
 

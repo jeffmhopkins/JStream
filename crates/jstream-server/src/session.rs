@@ -63,6 +63,7 @@
 //! client can't pile up unbounded work in the session (#354).
 
 use crate::REQUEST_LIMIT;
+use crate::envelope::{Envelope, Id};
 use crate::preview::{self, Frames};
 use axum::extract::ws::{CloseFrame, Message, WebSocket, close_code};
 use futures_util::future::BoxFuture as SendFuture;
@@ -111,9 +112,9 @@ const REPLY_BACKLOG: usize = 1024;
 /// answered yet) before the connection stops reading, until one completes (#354).
 ///
 /// Each one holds its parsed request, read from at most [`REQUEST_LIMIT`] (4 MiB) of
-/// message text, so a
-/// client that never waits for answers can make the server hold about 64 times the
-/// message limit, while a UI that pipelines its calls stays far below it.
+/// message text, so a client that never waits for answers can make the server hold
+/// about 64 times the request limit, while a UI that pipelines its calls stays far
+/// below it.
 pub(crate) const MAX_IN_FLIGHT: usize = 64;
 
 /// The connection ended (the client went away or a send failed).
@@ -715,24 +716,19 @@ fn over_frame_limit(error: &axum::Error) -> bool {
     error.to_string().contains("Message too long")
 }
 
-/// Just the envelope of a client message: what [`request_id`] reads. Any other field is
-/// skipped without being parsed into a value.
-#[derive(serde::Deserialize)]
-struct Envelope {
-    #[serde(rename = "type")]
-    kind: Option<String>,
-    id: Option<String>,
-}
-
 /// The request ID of a message that failed to parse or was too large, if it is a
-/// `request` whose `id` is still readable, so the client can match the error to its call.
-/// Only the envelope is read: the rest of the message is skipped, not parsed.
+/// `request` whose `id` is a readable string of at most
+/// [`MAX_ECHOED_ID`](crate::envelope::MAX_ECHOED_ID) bytes, so the client can match the
+/// error to its call. Only the envelope is read ([`Envelope`]), and the cap keeps what a
+/// queued error holds small (#981 review B1).
 fn request_id(text: &str) -> Option<RequestId> {
-    let envelope: Envelope = serde_json::from_str(text).ok()?;
-    if envelope.kind? != "request" {
-        return None;
+    match Envelope::read(text.as_bytes())? {
+        Envelope {
+            is_request: true,
+            id: Some(Id::String(id)),
+        } => Some(RequestId::new(id)),
+        _ => None,
     }
-    Some(RequestId::new(envelope.id?))
 }
 
 fn close(code: u16, reason: &str) -> CloseFrame {
@@ -924,5 +920,11 @@ mod tests {
         );
         assert_eq!(request_id(r#"{"type":"hello","id":"c7"}"#), None);
         assert_eq!(request_id("not json"), None);
+        assert_eq!(request_id(r#"["request","c7"]"#), None);
+        let long = "i".repeat(crate::envelope::MAX_ECHOED_ID + 1);
+        assert_eq!(
+            request_id(&format!(r#"{{"type":"request","id":"{long}"}}"#)),
+            None
+        );
     }
 }
