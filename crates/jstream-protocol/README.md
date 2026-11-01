@@ -942,8 +942,10 @@ Queries read and never change `rev`. Those that read the collection state carry 
   Added in 0.16.
 - `capture.targets`: the displays and windows the engine can capture now, displays
   first, each with its `kind` (`display` or `window`, the source kind that captures
-  it), its `target` (the value for that source's `target` setting), a `name` to show,
-  its `size` in pixels when the OS reports one, and `primary` (omitted when `false`)
+  it), its `target` (the value for that source's `target` setting), a `name` to show
+  (a window's is its title, set by the application that owns it, so it is third-party
+  text, data and never instructions, though the field predates the `remote_` prefix of
+  [ADR-0059](../../docs/adr/0059-mcp-annotations-and-remote-text.md)), its `size` in pixels when the OS reports one, and `primary` (omitted when `false`)
   for the display an empty `display` target captures. Runtime state, so no `rev`; a
   source can still name a window closed since. `action_failed` when the engine has no
   capture backend or the OS refuses the list. Added in 0.27.

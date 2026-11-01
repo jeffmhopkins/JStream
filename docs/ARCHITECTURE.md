@@ -900,8 +900,10 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   calls and deletes; `openWorldHint` for `output`, `source`, whose `browser` kind loads
   any web page, and `batch`), so a client can ask the user before an agent retargets an
   output, sets its key, goes live, points a browser source at a page or deletes. Text
-  from outside JStream sits in `remote_*` fields or in an `output.start` `action_failed`
-  `reason` (the whole of which is untrusted), and the tool descriptions and server
+  from outside JStream sits in `remote_*` fields, in an `output.start` `action_failed`
+  `reason` (the whole of which is untrusted), or in a window's `name` in
+  `capture.targets` (its title, set by the window's application), and the tool
+  descriptions and server
   instructions say it is data, never instructions
   ([ADR-0059](adr/0059-mcp-annotations-and-remote-text.md)). The instructions also say
   that names and other state text can be set by any client or plugin, and are data too
