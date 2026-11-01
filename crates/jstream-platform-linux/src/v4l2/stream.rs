@@ -1,8 +1,9 @@
 //! An open V4L2 capture: a thread of its own waits on the device, converts or decodes
-//! each filled buffer, hands it back to the driver, and puts the frame in the
-//! single-slot mailbox [`CaptureStream::latest`] reads (the same mailbox display capture
-//! uses). Dropping the stream wakes the thread through an `eventfd` and joins it, which
-//! turns the device's stream off and closes it.
+//! each filled buffer, or on the GPU path copies it on the GPU and waits for the copy
+//! (`super::gpu`), hands it back to the driver, and puts the frame in the single-slot
+//! mailbox [`CaptureStream::latest`] reads (the same mailbox display capture uses).
+//! Dropping the stream wakes the thread through an `eventfd` and joins it, which turns
+//! the device's stream off and closes it.
 
 use std::io;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
@@ -21,6 +22,7 @@ use jstream_platform::{
 use super::abi::BUF_FLAG_ERROR;
 use super::device::{Filled, Streaming};
 use super::format::{pts, raw_frame};
+use super::gpu::GpuDeliver;
 use crate::MonotonicClock;
 
 /// How the frames of the opened format become surfaces.
@@ -33,6 +35,8 @@ pub(crate) enum Deliver {
     },
     /// Handed to the engine's decoder.
     Decode(Box<dyn CaptureDecoder>),
+    /// Copied on the GPU, into a texture of the stream's own.
+    Gpu(GpuDeliver),
 }
 
 /// What the capture thread shares with the stream.
@@ -172,14 +176,24 @@ fn run(capture: &mut Capture, wake: i32, clock: &MonotonicClock, shared: &Shared
                 Ok(Some(filled)) => {
                     got = true;
                     let index = filled.index;
-                    let surface = frame(
+                    // The buffer goes back only once its frame is out of it: converted,
+                    // decoded, or its GPU copy done.
+                    let surface = match frame(
                         &filled,
                         &mut capture.deliver,
                         capture.size,
                         capture.color,
                         clock,
                         shared,
-                    );
+                    ) {
+                        Ok(surface) => surface,
+                        // The GPU may still read it, so it isn't queued again: the
+                        // stream ends, turned off as `capture` drops.
+                        Err(e) => {
+                            shared.fail(e);
+                            return;
+                        }
+                    };
                     if let Err(e) = capture.streaming.queue(index) {
                         shared.fail(e);
                         return;
@@ -210,8 +224,12 @@ fn run(capture: &mut Capture, wake: i32, clock: &MonotonicClock, shared: &Shared
 }
 
 /// The surface for one filled buffer, or `None` to drop it: one the driver marks as
-/// corrupt, a raw frame shorter than its format, or a compressed one the decoder
-/// rejects (counted).
+/// corrupt, a raw frame shorter than its format, a compressed one the decoder rejects
+/// (counted), or on the GPU path a buffer shorter than its planes or a copy with no free
+/// texture (both counted as skipped).
+///
+/// # Errors
+/// The GPU path's failure ([`GpuDeliver::frame`]): the stream ends.
 fn frame(
     filled: &Filled<'_>,
     deliver: &mut Deliver,
@@ -219,14 +237,14 @@ fn frame(
     color: ColorInfo,
     clock: &MonotonicClock,
     shared: &Shared,
-) -> Option<VideoSurface> {
+) -> Result<Option<VideoSurface>, PlatformError> {
     shared.captured.fetch_add(1, Ordering::Relaxed);
     let first = filled.planes.first().copied().unwrap_or_default();
     if filled.flags & BUF_FLAG_ERROR != 0 || first.is_empty() {
-        return None;
+        return Ok(None);
     }
     let pts = pts(filled.flags, filled.timestamp, clock.now());
-    match deliver {
+    Ok(match deliver {
         Deliver::Raw { encoding, strides } => {
             let info = VideoFrameInfo {
                 size,
@@ -251,7 +269,14 @@ fn frame(
             }
             decoded.ok()
         }
-    }
+        Deliver::Gpu(gpu) => {
+            let frame = gpu.frame(filled.index, &filled.planes, &filled.offsets, pts)?;
+            if frame.is_none() {
+                shared.skipped.fetch_add(1, Ordering::Relaxed);
+            }
+            frame.map(VideoSurface::Gpu)
+        }
+    })
 }
 
 impl CaptureStream for V4l2Stream {
@@ -306,8 +331,20 @@ mod tests {
 
     use super::super::abi::{BUF_FLAG_ERROR, BUF_FLAG_TIMESTAMP_MONOTONIC, Timeval};
     use super::super::device::Filled;
-    use super::{Deliver, Shared, frame};
+    use super::{Deliver, Shared};
     use crate::MonotonicClock;
+
+    /// [`super::frame`] on the CPU paths, which never fail.
+    fn frame(
+        filled: &Filled<'_>,
+        deliver: &mut Deliver,
+        size: FrameSize,
+        color: ColorInfo,
+        clock: &MonotonicClock,
+        shared: &Shared,
+    ) -> Option<VideoSurface> {
+        super::frame(filled, deliver, size, color, clock, shared).expect("no CPU path error")
+    }
 
     /// Decodes nothing: rejects frames starting with 0, and otherwise hands back a black
     /// frame of the size with the frame's `pts`.
@@ -338,6 +375,7 @@ mod tests {
             flags,
             timestamp,
             planes: vec![bytes],
+            offsets: vec![0],
         }
     }
 
@@ -442,6 +480,7 @@ mod tests {
             flags: 0,
             timestamp: Timeval::default(),
             planes: vec![&luma, &chroma],
+            offsets: vec![0, 0],
         };
         let out =
             frame(&two, &mut raw, size, ColorInfo::default(), &clock, &shared).expect("a frame");

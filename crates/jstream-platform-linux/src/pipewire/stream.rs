@@ -481,7 +481,7 @@ impl Callbacks {
             Entry::Vacant(v) => v.insert(
                 dmabuf::import(
                     &shared.device,
-                    format.format,
+                    dmabuf::texture_format(format.format),
                     (format.width, format.height),
                     modifier,
                     dmabuf::Plane {

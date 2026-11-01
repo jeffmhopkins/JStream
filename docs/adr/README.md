@@ -96,4 +96,6 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0080](0080-program-master-and-output-chains-v2.md) | Program master and per-output chains v2: no privacy screen | accepted | maintainer |  |
 | [ADR-0081](0081-effects-pair-by-their-look.md) | Items pair in a Move when their enabled effects look the same | accepted | agent |  |
 | [ADR-0082](0082-blend-modes-drawn.md) | Blend modes: how each is drawn, and in which colour space | accepted | agent |  |
+| [ADR-0083](0083-activity-log-over-the-protocol.md) | The activity log over the protocol | accepted | agent |  |
+| [ADR-0084](0084-ui-settings-kept-by-the-server.md) | The server keeps the UI's settings, so a layout follows the person | accepted | agent |  |
 <!-- @generated end adr-index -->

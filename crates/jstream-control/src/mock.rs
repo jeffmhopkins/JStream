@@ -10,8 +10,10 @@
 //! by one, `expected_rev` conflicts, idempotency keys, every query, the output and
 //! stream-key actions, `scene.switch`, `studio.set_preview` and the program and preview
 //! scenes they set (`studio.get`),
-//! `capture.targets` (one made-up primary display, [`MOCK_DISPLAY`]),
+//! `capture.targets` (one made-up primary display, [`MOCK_DISPLAY`], and one window,
+//! [`MOCK_WINDOW`]),
 //! `source.sizes` (every source without a size, since the mock makes no frames),
+//! `activity.list` (always empty: the mock keeps no activity log),
 //! `state.changed`, `studio.changed` and `output.state_changed` events, per-client undo
 //! and redo, and live-value gestures (`live.set`, `live.cancel`, `live.list`,
 //! `ends_gesture`, takeover and expiry). Each [`MockEngine::connect`] opens one client
@@ -290,17 +292,20 @@ struct State {
 }
 
 /// A parameter a live value overrides: an item's placement (`false`) or its crop
-/// (`true`). Ordered as the engine orders them, placements first, so `live.changed` and
+/// (`true`), as the item has it (`None`) or as a keyframe scene overrides it (#846).
+/// Ordered as the engine orders them, placements first, so `live.changed` and
 /// `live.list` list values in the same order.
-type Param = (bool, ItemId);
+type Param = (bool, Option<SceneId>, ItemId);
 
-/// The parameter `value` sets, if it is live-adjustable.
-fn param_of(value: &Edit) -> Option<Param> {
+/// The parameter `value` sets, if it is live-adjustable. `is_keyframe` says whether the
+/// scene it names is a keyframe scene, whose values are parameters of their own.
+fn param_of(value: &Edit, is_keyframe: impl Fn(&SceneId) -> bool) -> Option<Param> {
+    let keyframe = live_scene(value).filter(|id| is_keyframe(id)).cloned();
     match value {
         Edit::ItemSetTransform { item_id, .. } | Edit::ItemSetGeometry { item_id, .. } => {
-            Some((false, item_id.clone()))
+            Some((false, keyframe, item_id.clone()))
         }
-        Edit::ItemSetCrop { item_id, .. } => Some((true, item_id.clone())),
+        Edit::ItemSetCrop { item_id, .. } => Some((true, keyframe, item_id.clone())),
         _ => None,
     }
 }
@@ -308,6 +313,10 @@ fn param_of(value: &Edit) -> Option<Param> {
 /// The capture target ID of the one display the mock's `capture.targets` lists, a
 /// 1920×1080 primary display.
 pub const MOCK_DISPLAY: &str = "mock:display";
+
+/// The capture target ID of the one window the mock's `capture.targets` lists, titled
+/// "Mock window".
+pub const MOCK_WINDOW: &str = "mock:window";
 
 /// How many undo steps each client keeps unless [`MockEngine::with_history_limit`]
 /// says otherwise, as in the engine.
@@ -765,8 +774,8 @@ impl State {
     }
 
     /// What follows every applied batch, undo and redo: the outputs follow the
-    /// collection, live values on deleted items go, `state.changed` is emitted, and the
-    /// program scene is reconciled.
+    /// collection, live values on deleted items and keyframe scenes go, `state.changed`
+    /// is emitted, and the program scene is reconciled.
     fn changed(
         &mut self,
         client_id: &ClientId,
@@ -775,11 +784,14 @@ impl State {
         cause: Option<HistoryDirection>,
     ) {
         self.sync_outputs();
-        let items = &self.collection.items;
-        self.holders
-            .retain(|(_, item_id), _| items.contains_key(item_id));
+        let collection = &self.collection;
+        let exists = |(_, keyframe, item_id): &Param| {
+            collection.items.contains_key(item_id)
+                && keyframe.as_ref().is_none_or(|id| collection.is_variant(id))
+        };
+        self.holders.retain(|param, _| exists(param));
         for values in self.gestures.values_mut() {
-            values.retain(|(_, item_id), _| items.contains_key(item_id));
+            values.retain(|param, _| exists(param));
         }
         self.emit(Event::StateChanged {
             rev,
@@ -909,11 +921,13 @@ impl State {
                 self.keys.remove(&output_id);
                 return Ok(CallResult::action());
             }
-            // As the engine: the server in front answers the pairing calls (ADR-0044).
+            // As the engine: the server in front answers the pairing calls (ADR-0044) and
+            // keeps the UI settings (ADR-0084).
             // The mock runs no plugins (ADR-0069), so it installs none: it can't load a
             // module, and none is ever installed to grant or enable.
             other @ (Action::PairingStart
             | Action::DeviceRevoke { .. }
+            | Action::UiSettingsSet { .. }
             | Action::PluginInstall { .. }) => {
                 return Err(ProtocolError::Unsupported {
                     call: other.name().into(),
@@ -1073,16 +1087,28 @@ impl State {
                 video_mixes: self.collection.video_mix_infos(),
             },
             Query::CaptureTargets => QueryResult::CaptureTargets {
-                targets: vec![CaptureTargetInfo {
-                    kind: CaptureTargetKind::Display,
-                    target: MOCK_DISPLAY.into(),
-                    name: "Mock display".into(),
-                    size: Some(PixelSize {
-                        width: 1920,
-                        height: 1080,
-                    }),
-                    primary: true,
-                }],
+                targets: vec![
+                    CaptureTargetInfo {
+                        kind: CaptureTargetKind::Display,
+                        target: MOCK_DISPLAY.into(),
+                        name: "Mock display".into(),
+                        size: Some(PixelSize {
+                            width: 1920,
+                            height: 1080,
+                        }),
+                        primary: true,
+                    },
+                    CaptureTargetInfo {
+                        kind: CaptureTargetKind::Window,
+                        target: MOCK_WINDOW.into(),
+                        name: "Mock window".into(),
+                        size: Some(PixelSize {
+                            width: 1280,
+                            height: 720,
+                        }),
+                        primary: false,
+                    },
+                ],
             },
             Query::LiveList => QueryResult::LiveList {
                 gestures: self
@@ -1102,11 +1128,20 @@ impl State {
             },
             // The mock describes no kinds, so it lists none.
             Query::KindList => QueryResult::KindList { kinds: Vec::new() },
-            Query::DeviceList => {
+            Query::DeviceList | Query::UiSettingsGet { .. } => {
                 return Err(ProtocolError::Unsupported {
-                    call: "device.list".into(),
+                    call: query.name().into(),
                 });
             }
+            // The mock keeps no activity log (ADR-0083), so it lists none.
+            Query::ActivityList { .. } => QueryResult::ActivityList {
+                now_ms: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(0, |since| {
+                        u64::try_from(since.as_millis()).unwrap_or(u64::MAX)
+                    }),
+                entries: Vec::new(),
+            },
             other => return Err(unimplemented_by_mock(other.name())),
         };
         Ok(CallResult::Query { result })
@@ -1139,16 +1174,6 @@ impl State {
         if !self.gestures.contains_key(&key) && open >= MAX_GESTURES_PER_CLIENT {
             return Err(invalid("gesture_id".into(), "16 gestures are open"));
         }
-        // Live values on a keyframe scene wait on #702, after the gesture limit, as in the engine.
-        if let Some(at) = values.iter().position(|value| {
-            live_scene(value).is_some_and(|scene_id| self.collection.is_variant(scene_id))
-        }) {
-            return Err(invalid(
-                format!("values.{at}.scene_id"),
-                "live values on a keyframe scene are not supported yet (#702); send the value \
-                 in a batch",
-            ));
-        }
         let running = self.running();
         let mut check = self.collection.clone();
         for (at, value) in values.iter().enumerate() {
@@ -1172,7 +1197,7 @@ impl State {
         }
         let mut changed = BTreeMap::new();
         for value in values {
-            let Some(param) = param_of(&value) else {
+            let Some(param) = param_of(&value, |id| self.collection.is_variant(id)) else {
                 continue;
             };
             if let Some(holder) = self.holders.insert(param.clone(), key.clone())
@@ -3107,16 +3132,33 @@ mod tests {
     }
 
     #[test]
-    fn capture_targets_lists_one_primary_display() {
+    fn capture_targets_lists_one_primary_display_and_one_window() {
         let engine = MockEngine::new();
         let control = connected(&engine);
         let Ok(QueryResult::CaptureTargets { targets }) = query(&*control, Query::CaptureTargets)
         else {
             panic!("a capture.targets result");
         };
-        assert_eq!(targets.len(), 1);
+        assert_eq!(targets.len(), 2);
         assert_eq!(targets[0].target, super::MOCK_DISPLAY);
         assert!(targets[0].primary);
+        assert_eq!(targets[1].kind, crate::protocol::CaptureTargetKind::Window);
+        assert_eq!(targets[1].target, super::MOCK_WINDOW);
+        assert!(!targets[1].primary);
+    }
+
+    #[test]
+    fn activity_list_is_empty_with_the_hosts_clock() {
+        let (_engine, control) = parity_engine();
+        let asked = Query::ActivityList {
+            after_seq: None,
+            limit: None,
+        };
+        let Ok(QueryResult::ActivityList { now_ms, entries }) = query(&*control, asked) else {
+            panic!("an activity.list result");
+        };
+        assert!(entries.is_empty(), "the mock keeps no activity log");
+        assert!(now_ms > 0);
     }
 
     #[test]
@@ -4005,7 +4047,8 @@ mod tests {
         assert!(undo(&*control).is_ok());
         assert_eq!(state(&*control), before);
 
-        // `live.set` refuses a keyframe target, after the gesture limit as the engine does.
+        // `live.set` takes a keyframe target as a parameter of the keyframe's, apart from
+        // the item's own, as the engine does (#846).
         let crop = |scene: &str| Edit::ItemSetCrop {
             item_id: ItemId::new("i1"),
             scene_id: Some(SceneId::new(scene)),
@@ -4028,10 +4071,23 @@ mod tests {
             },
             Ok(other) => panic!("applied: {other:?}"),
         };
-        assert_eq!(field(live("g0", "k")), "values.0.scene_id");
-        for n in 0..16 {
+        assert!(live("g0", "k").is_ok());
+        for n in 1..16 {
             assert!(live(&format!("g{n}"), "a").is_ok());
         }
+        let Ok(QueryResult::LiveList { gestures }) = query(&*control, Query::LiveList) else {
+            panic!("not live.list");
+        };
+        let holding: Vec<_> = gestures
+            .iter()
+            .filter(|g| !g.values.is_empty())
+            .map(|g| g.gesture_id.to_string())
+            .collect();
+        assert_eq!(
+            holding,
+            ["g0", "g15"],
+            "the item's own is another parameter"
+        );
         assert_eq!(field(live("g16", "k")), "gesture_id");
 
         // Deleting the keyframe scene, then undoing, restores it with its override.

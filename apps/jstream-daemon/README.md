@@ -41,7 +41,8 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   file, the plugin folder and the placeholder outputs; on Windows a live one, through `live.rs`, that scans
   the CLAP plugins, and with the `cef` feature also opens browser sources, and on
   macOS a live one on the macOS backends built so far, [Design](#design)), installs the signal handlers that stop it, then binds the server
-  with MCP on and, with `--ui-dir`, the web UI's files.
+  with MCP on, the UI settings file in the data directory and, with `--ui-dir`, the web
+  UI's files.
 - **Media Foundation check** (`main.rs`, `components.rs`, Windows only): exits with
   advice when Windows lacks Media Foundation or its AAC encoder, as N editions do
   ([Design](#design)).
@@ -145,6 +146,12 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   permission; on Windows, another owner or a DACL entry letting anyone but the user,
   SYSTEM or Administrators in), is a startup failure (exit 1). A device token works only while the daemon listens on
   `127.0.0.1`, which it always does for now.
+- **UI settings.** What the web UI keeps on the engine, its dock and saved layouts, is
+  in `ui-settings.json` in the platform data directory, the desktop app's file too, so a
+  browser and the desktop app show the same workspace
+  ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)). It is created at
+  the first change; one that can't be read is logged and replaced on the next change,
+  never a startup failure. Deleting it resets the layout to Editing.
 - **Output.** On stdout: `token file: <path> (created, new token)` or
   `… (existing token)`, then `mcp endpoint: http://127.0.0.1:<port>/mcp` (point an MCP
   client there, with the token as `Authorization: Bearer <token>`), then
@@ -258,7 +265,10 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   (`device:<name>` for a paired device),
   the call and its edits by name, the output an action names, the `rev` before and
   after, and the result code. Never a call's arguments, so never a stream key
-  ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). When it would pass 8 MiB it becomes
+  ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). The engine also keeps the last 100
+  entries in memory, each with a sentence saying what it did, for `activity.list`
+  ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md)); those sentences
+  are not written to the file. When it would pass 8 MiB it becomes
   `audit.1.jsonl`, replacing the one before. Both files are created user-only (mode
   `0600` on Unix, a protected DACL for SYSTEM and the user on Windows), and so is each
   save of the collection file. A log that can't be opened is a startup failure (exit 1),
@@ -335,6 +345,10 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   Credential Manager (behind `jstream_crash::Redacting`, which the binary adds, so the
   library never sees it), and the tests (`live.rs`'s and `tests/e2e.rs`) the platform
   fakes, so the end-to-end test runs the daemon's wiring, not a copy of it.
+- **Engine load.** `serve.rs` starts the engine's stats heartbeat, so a client gets a
+  `stats.tick` about once a second while no output runs, and hands the engine the
+  process CPU reader on Windows (`WindowsProcessCpu`) and macOS (`MacosProcessCpu`),
+  for the ticks' `load` (protocol 0.48). Elsewhere the ticks leave `cpu_ms` out.
 - **Media Foundation check and delay-load.** The `windows` crate imports Media
   Foundation's DLLs as load-time imports, so on a Windows without Media Foundation
   the loader would refuse to start the binary, naming a DLL, before `main` runs.
@@ -463,6 +477,13 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   every credential. The server owns the file: it loads it at bind, writes it, and keeps
   only BLAKE3 digests in it
   ([jstream-server › Design](../../crates/jstream-server/README.md#design)).
+- **The UI settings file** (`main.rs`, `serve.rs`). The daemon names
+  `ServerConfig::ui_settings_file` as `ui-settings.json` in the data directory
+  (`jstream_platform::paths::UI_SETTINGS_FILE`), the file the desktop app names too, so
+  a browser of the daemon and the desktop app show the same workspace
+  ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)). With no data
+  directory the settings live in memory. The server owns the file, as it owns the device
+  file.
 - **The token** ([ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence): a random
   token in a user-only file). New tokens are 32 bytes from the OS's random source
   (`getrandom`), written as 64 lowercase hex characters, so they fit an `Authorization`

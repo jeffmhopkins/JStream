@@ -121,11 +121,14 @@ a stolen token, local denial of service.
   of them can't fill the log (#354).
 - On Unix the token file is created `0600` and refused if group or others can read it.
   On Windows (#548) the daemon's token, devices and log files, the desktop app's log file
-  (#780), and the daemon's and the desktop app's crash reports (#656), are created with a protected DACL for SYSTEM and the user
+  (#780), the daemon's and the desktop app's crash reports (#656), and the UI settings
+  file both write (ADR-0084), are created with a protected DACL for SYSTEM and the user
   in the same `CreateFileW` call (`jstream_platform_windows::create_private_file`), so
   they never carry their folder's inherited entries. An existing token or devices file
   is refused unless its owner is the user, SYSTEM or Administrators and its DACL grants
   no one else more than reading its descriptor or attributes (`check_private_file`).
+  The UI settings file holds no secret (layouts), so an existing one is read without
+  that check; it is still rewritten user-only (`0600` on Unix).
   The daemon's log files and the crash reports are always new files, and the desktop
   app deletes its old log file and creates a new one at each start (`0600` on Unix), so
   nothing existing is checked.
@@ -333,7 +336,10 @@ injection), and so using its full access against the user.
 **Controls on main:** MCP goes through the same gate and token as the WebSocket API
 (over stdio, through `jstream-cli mcp`, it uses the CLI's token). The desktop app keeps
 MCP off. Tool arguments and results are not logged; the audit log records who changed
-what, without arguments. Stream keys are never in a result, and a retarget to another
+what, without arguments. Agents can read the last 100 entries with `activity.list`,
+each with a sentence that names objects and gives values but never settings, targets
+or keys ([ADR-0083](../adr/0083-activity-log-over-the-protocol.md)); WASM plugins can't.
+Stream keys are never in a result, and a retarget to another
 host removes the output's key rather than sending it there (#343).
 Third-party text is marked as data ([ADR-0059](../adr/0059-mcp-annotations-and-remote-text.md)):
 the server instructions and the `output` tool's description say that fields named

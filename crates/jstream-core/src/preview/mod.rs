@@ -54,7 +54,10 @@
 //! frames until a keyframe finds room, which the hub then forces. A stream whose reader
 //! has no room is not drawn at all.
 
+mod draft;
 mod jpeg;
+
+pub(crate) use draft::plan as plan_draft;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::panic::{self, AssertUnwindSafe};
@@ -272,6 +275,9 @@ pub(crate) struct Opening {
     pub(crate) rev: Rev,
     /// The scene the stream shows, or `None` for the program mix.
     pub(crate) scene: Option<SceneId>,
+    /// What a stream of a source the collection doesn't hold draws ([`plan_draft`]),
+    /// in place of the program mix or a scene.
+    pub(crate) draft: Option<Arc<RenderSnapshot>>,
 }
 
 /// One session's binary channel and preview streams.
@@ -329,6 +335,7 @@ impl SessionPreviews {
             codec,
             settings,
             scene: opening.scene,
+            draft: opening.draft,
             codecs: opening.codecs,
             sink,
             keyframe: AtomicBool::new(true),
@@ -410,6 +417,8 @@ pub(crate) struct PreviewStream {
     settings: PreviewSettings,
     /// The scene it shows, or `None` for the program mix.
     scene: Option<SceneId>,
+    /// The draft source it shows instead, planned once at the subscription.
+    draft: Option<Arc<RenderSnapshot>>,
     /// The platform's encoders, when the engine has backends.
     codecs: Option<Arc<dyn Codecs>>,
     sink: Sink,
@@ -587,6 +596,7 @@ impl PreviewCapture {
                 cpu: Arc::clone(&self.capture),
                 gpu: None,
                 devices: Arc::clone(&self.devices),
+                gpu_devices: None,
                 codecs: Arc::clone(&self.codecs),
             },
             self.clock,
@@ -739,8 +749,14 @@ fn run(
         // A closed stream's encoder is dropped (and its thread joined) here.
         works.retain(|id, _| streams.iter().any(|stream| stream.id == *id));
         // The program's captures only while a stream shows the program.
-        let shows_program = streams.iter().any(|stream| stream.scene.is_none());
-        captures.tick((shows_program.then_some(&program), &scenes), at);
+        let shows_program = streams
+            .iter()
+            .any(|stream| stream.scene.is_none() && stream.draft.is_none());
+        let drafts: Vec<Arc<RenderSnapshot>> = streams
+            .iter()
+            .filter_map(|stream| stream.draft.clone())
+            .collect();
+        captures.tick((shows_program.then_some(&program), &scenes, &drafts), at);
         let shown: &dyn Captures = match &captures.running {
             Some(running) => running,
             None => &NoCaptures,
@@ -749,9 +765,10 @@ fn run(
             let work = works
                 .entry(stream.id)
                 .or_insert_with(|| Work::new(stream, now));
-            let snapshot = match &stream.scene {
-                None => &program,
-                Some(scene_id) => match scenes.get(scene_id) {
+            let snapshot = match (&stream.draft, &stream.scene) {
+                (Some(draft), _) => draft,
+                (None, None) => &program,
+                (None, Some(scene_id)) => match scenes.get(scene_id) {
                     Some(snapshot) => snapshot,
                     // Not planned yet: the engine re-plans once the stream is open.
                     None => {
@@ -782,6 +799,7 @@ fn run(
             }
         }
         drop(streams);
+        drop(drafts);
         drop(program);
         drop(scenes);
         drop(live);
@@ -795,9 +813,9 @@ fn run(
     }
 }
 
-/// The displays, windows and video devices the hub captures: what the program mix and
-/// the scenes with a stream show of them, on a `jstream-capture` thread started the first time one is
-/// shown.
+/// The displays, windows and video devices the hub captures: what the program mix, the
+/// scenes with a stream and the drafts with a stream show of them, on a `jstream-capture`
+/// thread started the first time one is shown.
 struct HubCaptures<'a> {
     /// `None` when the engine has no backends, or the thread could not be started:
     /// nothing is captured.
@@ -805,22 +823,40 @@ struct HubCaptures<'a> {
     running: Option<RenderCaptures>,
     /// What the snapshots `of` show: their displays, windows and video devices.
     wanted: BTreeSet<CaptureKey>,
-    of: Option<(Option<Arc<RenderSnapshot>>, Scenes)>,
+    of: Option<Shown>,
 }
 
 /// The scenes' snapshots, as [`Current::scenes`] holds them.
 type Scenes = Arc<BTreeMap<SceneId, Arc<RenderSnapshot>>>;
 
+/// The snapshots [`HubCaptures::wanted`] was read from: the program's (while a stream
+/// shows it), the scenes' and the drafts'.
+type Shown = (
+    Option<Arc<RenderSnapshot>>,
+    Scenes,
+    Vec<Arc<RenderSnapshot>>,
+);
+
 impl HubCaptures<'_> {
     /// Starts and stops captures to follow the program's snapshot (`None` while no
-    /// stream shows the program) and the scenes', and reads their latest frames. Never
-    /// waits.
-    fn tick(&mut self, (program, scenes): (Option<&Arc<RenderSnapshot>>, &Scenes), now: MediaTime) {
+    /// stream shows the program), the scenes' and the drafts', and reads their latest
+    /// frames. Never waits.
+    fn tick(
+        &mut self,
+        (program, scenes, drafts): (
+            Option<&Arc<RenderSnapshot>>,
+            &Scenes,
+            &[Arc<RenderSnapshot>],
+        ),
+        now: MediaTime,
+    ) {
         let Some(capture) = self.capture else {
             return;
         };
-        let same = self.of.as_ref().is_some_and(|(p, s)| {
+        let same = self.of.as_ref().is_some_and(|(p, s, d)| {
             Arc::ptr_eq(s, scenes)
+                && d.len() == drafts.len()
+                && d.iter().zip(drafts).all(|(a, b)| Arc::ptr_eq(a, b))
                 && match (p, program) {
                     (Some(p), Some(program)) => Arc::ptr_eq(p, program),
                     (None, None) => true,
@@ -831,10 +867,11 @@ impl HubCaptures<'_> {
             self.wanted = program
                 .into_iter()
                 .chain(scenes.values())
+                .chain(drafts)
                 .flat_map(|snapshot| snapshot.shot().captures())
                 .cloned()
                 .collect();
-            self.of = Some((program.cloned(), Arc::clone(scenes)));
+            self.of = Some((program.cloned(), Arc::clone(scenes), drafts.to_vec()));
         }
         if self.running.is_none() && !self.wanted.is_empty() {
             match capture.spawn() {

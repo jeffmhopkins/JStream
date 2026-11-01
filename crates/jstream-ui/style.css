@@ -1223,6 +1223,10 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .props-side-note { font-size: 11px; color: var(--dim); }
 .props-side-foot { margin: auto 0 0; font-size: 11px; color: var(--dim); }
 .props-add-filter { align-self: flex-start; }
+/* The live picture of the display, window or webcam being picked, above the name. */
+.props-preview { position: relative; aspect-ratio: 16 / 9; margin-bottom: 12px; background: #000; border: 1px solid var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.props-preview canvas { display: block; width: 100%; height: 100%; object-fit: contain; }
+.props-preview-note { position: absolute; margin: 0; padding: 0 12px; text-align: center; font-size: 12px; color: var(--muted); }
 .modal-footer .props-defaults { margin-right: auto; }
 
 /* Filters (spec-panels.md 5, spec-workspace.md 6.2.6 to 6.4): the panel's header, the
@@ -1484,3 +1488,10 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Agent activity (AG-01): newest first, a mono meta line over the engine's sentence. */
+.agent-activity .problem { margin: 0; }
+.activity-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.activity-log li { display: flex; flex-direction: column; gap: 2px; }
+.activity-meta { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; color: var(--dim); }
+.activity-log li.failed .activity-meta { color: var(--problem); }

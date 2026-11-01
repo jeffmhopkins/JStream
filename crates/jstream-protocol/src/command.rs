@@ -25,7 +25,7 @@ use crate::mix::VideoMix;
 use crate::organise::{SceneMeta, SourceMeta};
 use crate::output::{OutputKind, RtmpTarget, SecretString};
 use crate::plugin::PluginGrant;
-use crate::preview::PreviewCodec;
+use crate::preview::{PreviewCodec, PreviewDraft};
 use crate::settings::Settings;
 use crate::transition::{Easing, ItemTransition};
 use crate::youtube::{BroadcastPrivacy, BroadcastTransition};
@@ -1097,11 +1097,14 @@ pub enum Action {
     /// the same parameter, and takes the parameter over from any other gesture that held
     /// it. Values are validated as a batch's edits are (`not_found`, `invalid_argument`
     /// with the field `values.<n>.<field>`); a value that is not a live-adjustable
-    /// setter (`item.set_transform`, `item.set_geometry`, `item.set_crop`), a value whose
-    /// `scene_id` names a keyframe scene (until #702), an empty or over-256 list, and a
-    /// 17th open gesture are `invalid_argument`. Nothing in a
-    /// rejected message is applied. The gesture ends with a batch carrying
-    /// `ends_gesture`, with `live.cancel`, or when its client's session ends.
+    /// setter (`item.set_transform`, `item.set_geometry`, `item.set_crop`), an empty or
+    /// over-256 list, and a 17th open gesture are `invalid_argument`. Nothing in a
+    /// rejected message is applied. A value whose `scene_id` names a keyframe scene is,
+    /// since 0.53 (refused before), that keyframe's parameter, apart from the item's
+    /// own: it shows only where the keyframe draws the item, and the item's own value
+    /// shows there only in a field the keyframe doesn't override. The gesture ends with
+    /// a batch carrying `ends_gesture`, with `live.cancel`, or when its client's session
+    /// ends.
     #[serde(rename = "live.set")]
     LiveSet {
         /// The gesture, chosen by the client and unique among its open gestures.
@@ -1201,10 +1204,19 @@ pub enum Action {
     /// session's end, or an end frame (the engine could not go on, or the scene was
     /// deleted; the frame says why).
     ///
+    /// With `source`, the stream shows that source alone, fitted into the canvas as an
+    /// item filling it would show it, with no filters: what a display, window or webcam
+    /// source would capture, before it exists or before its new settings are saved (the
+    /// Properties dialog's picture). The engine opens the capture for the stream alone;
+    /// a webcam or capture card already open is shared, not opened twice. The canvas
+    /// size is the one at the subscription: subscribe again for other settings.
+    ///
     /// Fails with `invalid_argument` for a field out of range (`max_width` 16 to 1920,
     /// default 640; `max_height` 16 to 1080, default 360; `fps` 1 to 30, default 15), a
-    /// codec named twice, a `channel` this session already has open (`channel`), or a
-    /// seventeenth open stream; with `not_found` for a `scene_id` the collection doesn't
+    /// codec named twice, a `channel` this session already has open (`channel`), a
+    /// seventeenth open stream, both `scene_id` and `source` (`source`), or a `source`
+    /// whose kind is not a capture kind or whose settings its kind refuses
+    /// (`source.kind`, `source.settings.<param>`); with `not_found` for a `scene_id` the collection doesn't
     /// have; and with `action_failed` when the session cannot receive binary frames (an
     /// MCP session) or none of `codecs` can be encoded here.
     #[serde(rename = "preview.subscribe")]
@@ -1229,6 +1241,10 @@ pub enum Action {
         /// The scene to show. Omitted for the program mix.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         scene_id: Option<SceneId>,
+        /// A source to show alone instead, one the collection doesn't hold (since 0.49).
+        /// Omitted for the program mix or `scene_id`'s scene.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source: Option<PreviewDraft>,
     },
     /// Closes one of this session's preview streams. No end frame follows; frames
     /// already sent may still arrive. Succeeds for a channel that is not open.
@@ -1285,6 +1301,26 @@ pub enum Action {
     DeviceRevoke {
         /// The device to revoke, as `device.list` reports it.
         device_id: DeviceId,
+    },
+    /// Keeps a UI setting on the engine's machine (0.52, ADR-0084): an opaque JSON value
+    /// the UI owns, under `key` (the web UI keeps its dock under `workspace.dock`), so
+    /// every client of the engine, the desktop app and each browser, reads the same one
+    /// back with `ui_settings.get`. A `value` of `null`, or none, removes the key. Not
+    /// collection state: it changes no `rev`, is never undone, emits no event, and is
+    /// kept across restarts in the data folder (ADR-0020), whatever collection is open.
+    /// Answered by the server that admits clients, not the engine: a `Control` with no
+    /// server in front fails with `unsupported`. Fails with `invalid_argument` on `key`
+    /// for a key that isn't 1 to 64 of `a`-`z`, `0`-`9`, `.`, `_` and `-`, on `value`
+    /// for a value over 64 KiB as compact JSON, and on `key` for a 65th key;
+    /// `action_failed` when the settings file can't be written (the value is then kept
+    /// until the server stops).
+    #[serde(rename = "ui_settings.set")]
+    UiSettingsSet {
+        /// The setting's key.
+        key: String,
+        /// Its new value, any JSON; `null` or none removes the key.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        value: Option<serde_json::Value>,
     },
     /// Installs a WASM automation plugin from the package at `path` on the engine's
     /// machine, with what the person granted it after seeing its manifest (0.35,
@@ -1358,6 +1394,7 @@ impl Action {
             Action::SceneSwitch { .. } => "scene.switch",
             Action::PairingStart => "pairing.start",
             Action::DeviceRevoke { .. } => "device.revoke",
+            Action::UiSettingsSet { .. } => "ui_settings.set",
             Action::StudioSetPreview { .. } => "studio.set_preview",
             Action::PrivacySet { .. } => "privacy.set",
             Action::PluginInstall { .. } => "plugin.install",
@@ -1403,6 +1440,7 @@ impl Action {
             | Action::PreviewUnsubscribe { .. }
             | Action::PairingStart
             | Action::DeviceRevoke { .. }
+            | Action::UiSettingsSet { .. }
             | Action::PrivacySet { .. }
             | Action::PluginInstall { .. }
             | Action::PluginGrant { .. }
@@ -1436,6 +1474,11 @@ impl Action {
                 "type",
                 "a pairing or device action can't be bound: the server answers it for the \
                  client that asks",
+            )),
+            Action::UiSettingsSet { .. } => Some((
+                "type",
+                "`ui_settings.set` can't be bound: the server answers it, and a UI keeps \
+                 its own settings",
             )),
             Action::PluginInstall { .. }
             | Action::PluginGrant { .. }

@@ -1,5 +1,6 @@
 //! The header bar along the top of the shell (docs/UI-FEATURES.md#header): the brand,
-//! the File, Edit, View and Layout menus, the dropped-frames readout, Studio mode,
+//! the File, Edit, View and Layout menus, the stats readout (frame rate, dropped frames
+//! and CPU), Studio mode,
 //! Record, and Go Live / End stream. The View and Layout menus change the workspace's
 //! dock (`workspace.rs`), and the View menu opens the program and multiview projectors
 //! (`projector.rs`). It keeps its own copy of the outputs, like the outputs panel does, and reports
@@ -19,7 +20,7 @@ use crate::projector::{self, Request, Target};
 use crate::store::Studio;
 use crate::workspace::DockState;
 use futures_util::StreamExt;
-use jstream_control::protocol::{DropCounts, Event, HistoryOp, OutputId, OutputKind};
+use jstream_control::protocol::{DropCounts, EngineLoad, Event, HistoryOp, OutputId, OutputKind};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos::wasm_bindgen::JsCast;
@@ -94,6 +95,77 @@ impl Dropped {
         self.base
             .map(|(base, _, last)| frames(last).saturating_sub(frames(base)))
     }
+}
+
+/// The program's frame rate and the engine's CPU use over the last `stats.tick`
+/// interval, from the two ticks' loads (protocol 0.48).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Load {
+    /// The last tick's `seq` and load.
+    last: Option<(u64, EngineLoad)>,
+    /// Frames a second the program drew, rounded, or `None` while it drew none.
+    fps: Option<u64>,
+    /// The share of every logical CPU the engine's process used, in tenths of a
+    /// percent, or `None` when the engine doesn't read it.
+    cpu: Option<u64>,
+}
+
+impl Load {
+    /// Takes one `stats.tick`'s load. A tick without one (an engine before 0.48)
+    /// clears the readout. A `seq` that doesn't increase, or a clock or total that went
+    /// back, means the engine restarted: the next tick gives the next rates.
+    pub fn observe(&mut self, seq: u64, load: Option<EngineLoad>) {
+        let Some(now) = load else {
+            *self = Self::default();
+            return;
+        };
+        (self.fps, self.cpu) = match self.last {
+            Some((last_seq, before))
+                if seq > last_seq
+                    && now.elapsed_ms > before.elapsed_ms
+                    && now.program_frames >= before.program_frames =>
+            {
+                rates(before, now)
+            }
+            _ => (None, None),
+        };
+        self.last = Some((seq, now));
+    }
+
+    /// "60 fps", while the program draws.
+    pub fn fps(&self) -> Option<String> {
+        self.fps.map(|fps| format!("{fps} fps"))
+    }
+
+    /// "CPU 3%", or "CPU <1%" for a share below half a percent, none at all included:
+    /// Windows counts CPU time in clock ticks, so an idle second can read as 0 ms.
+    pub fn cpu(&self) -> Option<String> {
+        self.cpu.map(|tenths| match tenths {
+            0..=4 => "CPU <1%".to_owned(),
+            _ => format!("CPU {}%", rounded(tenths, 10)),
+        })
+    }
+}
+
+/// The frame rate and CPU share between two loads, `before` strictly earlier, in
+/// whole frames a second and tenths of a percent.
+fn rates(before: EngineLoad, now: EngineLoad) -> (Option<u64>, Option<u64>) {
+    let ms = now.elapsed_ms - before.elapsed_ms;
+    let frames = now.program_frames - before.program_frames;
+    let fps = (frames > 0).then(|| rounded(frames.saturating_mul(1_000), ms));
+    let cpu = match (before.cpu_ms, now.cpu_ms) {
+        (Some(before_ms), Some(now_ms)) if now_ms >= before_ms && now.cpus > 0 => Some(rounded(
+            (now_ms - before_ms).saturating_mul(1_000),
+            ms.saturating_mul(u64::from(now.cpus)),
+        )),
+        _ => None,
+    };
+    (fps, cpu)
+}
+
+/// `n / d` rounded to the nearest whole number, `d` above zero.
+fn rounded(n: u64, d: u64) -> u64 {
+    n.saturating_add(d / 2) / d
 }
 
 /// The video frames among `drops`: captured, rendered and encoded frames.
@@ -226,6 +298,7 @@ pub fn Header(
     let studio = expect_context::<Studio>();
     let rows = RwSignal::new(Vec::<OutputRow>::new());
     let dropped = RwSignal::new(Dropped::default());
+    let engine_load = RwSignal::new(Load::default());
     let open = RwSignal::new(None::<Menu>);
     let loads = StoredValue::new(0_u64);
     let disconnect = StoredValue::new_local(disconnect);
@@ -286,8 +359,14 @@ pub fn Header(
                             reload();
                         }
                     }
-                    Event::StatsTick { seq, drops, .. } => {
+                    Event::StatsTick {
+                        seq,
+                        drops,
+                        load: now,
+                        ..
+                    } => {
                         dropped.try_update(|d| d.observe(seq, drops));
+                        engine_load.try_update(|l| l.observe(seq, now));
                     }
                     _ => {}
                 }
@@ -598,8 +677,16 @@ pub fn Header(
                 </div>
             })}
             <span class="spacer"></span>
-            <span class="readout" title="Video frames dropped since this page connected">
-                {move || dropped.with(|d| d.frames()).map(|n| format!("{n} dropped"))}
+            <span
+                class="readout"
+                title="The program's frame rate while an output runs, video frames dropped \
+                       since this page connected, and the share of all CPUs JStream uses"
+            >
+                {move || {
+                    let (fps, cpu) = engine_load.with(|l| (l.fps(), l.cpu()));
+                    let dropped = dropped.with(|d| d.frames()).map(|n| format!("{n} dropped"));
+                    [fps, dropped, cpu].into_iter().flatten().collect::<Vec<_>>().join(" · ")
+                }}
             </span>
             <button
                 class="header-button studio-mode"
@@ -745,6 +832,39 @@ mod tests {
         let bar = Menu::bar(false);
         assert_eq!(Menu::Edit.beside(bar, 1), Menu::File);
         assert_eq!(Menu::File.beside(bar, -1), Menu::Edit);
+    }
+
+    #[test]
+    fn the_load_gives_the_frame_rate_and_cpu_between_two_ticks() {
+        let at = |elapsed_ms, program_frames, cpu_ms| EngineLoad {
+            elapsed_ms,
+            program_frames,
+            cpu_ms,
+            cpus: 4,
+        };
+        let mut l = Load::default();
+        l.observe(1, Some(at(1_000, 0, Some(100))));
+        assert_eq!((l.fps(), l.cpu()), (None, None), "one tick has no rate");
+        // 60 frames and 120 ms of CPU over a second on 4 CPUs.
+        l.observe(2, Some(at(2_000, 60, Some(220))));
+        assert_eq!(l.fps().as_deref(), Some("60 fps"));
+        assert_eq!(l.cpu().as_deref(), Some("CPU 3%"));
+        // Idle: no frames drawn, a little CPU, and a host that reads none.
+        l.observe(3, Some(at(3_000, 60, Some(230))));
+        assert_eq!((l.fps(), l.cpu().as_deref()), (None, Some("CPU <1%")));
+        // No CPU time at all over the interval still reads "<1%", never "0%".
+        l.observe(4, Some(at(4_000, 60, Some(230))));
+        assert_eq!(l.cpu().as_deref(), Some("CPU <1%"));
+        l.observe(5, Some(at(5_000, 60, None)));
+        assert_eq!(l.cpu(), None);
+        // A missed tick still gives the average over the gap.
+        l.observe(7, Some(at(7_000, 120, None)));
+        assert_eq!(l.fps().as_deref(), Some("30 fps"));
+        // An engine restart, or one without a load, clears the readout.
+        l.observe(1, Some(at(10, 0, Some(1))));
+        assert_eq!((l.fps(), l.cpu()), (None, None));
+        l.observe(2, None);
+        assert_eq!(l, Load::default());
     }
 
     #[test]

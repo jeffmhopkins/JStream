@@ -5,6 +5,59 @@ source: crates/jstream-mcp/src/tests.rs
   "tools": [
     {
       "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Runs one `activity` operation: set `op.type` to one of `activity.list` (query). A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "description": "The `activity` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Lists the engine's recent activity (0.51, ADR-0083): what each client's batches,\nundos, redos and actions did, newest first. The engine keeps the last 100\n([`MAX_ACTIVITY_ENTRIES`](crate::MAX_ACTIVITY_ENTRIES)), in memory, so a restarted\nengine starts empty. No event announces a new entry until event subscriptions exist\n(protocol open question 7): a client that shows the log asks again with\n`after_seq`. Runtime state: the result carries no `rev`.",
+                "properties": {
+                  "after_seq": {
+                    "description": "Only entries with a greater `seq`. Omitted, the newest entries whatever their\nnumber.",
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "limit": {
+                    "description": "At most this many, the newest. Omitted, or above 100\n([`MAX_ACTIVITY_ENTRIES`](crate::MAX_ACTIVITY_ENTRIES)), 100.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "activity.list",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "activity"
+    },
+    {
+      "annotations": {
         "destructiveHint": true,
         "idempotentHint": false,
         "openWorldHint": false,
@@ -131,7 +184,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Opens the gesture `gesture_id` if it is new, and sets its live values (ADR-0032):\neach overrides one parameter of the collection on output, from the next render\ntick, without changing `rev`. A value replaces the gesture's previous value for\nthe same parameter, and takes the parameter over from any other gesture that held\nit. Values are validated as a batch's edits are (`not_found`, `invalid_argument`\nwith the field `values.<n>.<field>`); a value that is not a live-adjustable\nsetter (`item.set_transform`, `item.set_geometry`, `item.set_crop`), a value whose\n`scene_id` names a keyframe scene (until #702), an empty or over-256 list, and a\n17th open gesture are `invalid_argument`. Nothing in a\nrejected message is applied. The gesture ends with a batch carrying\n`ends_gesture`, with `live.cancel`, or when its client's session ends.",
+                "description": "Opens the gesture `gesture_id` if it is new, and sets its live values (ADR-0032):\neach overrides one parameter of the collection on output, from the next render\ntick, without changing `rev`. A value replaces the gesture's previous value for\nthe same parameter, and takes the parameter over from any other gesture that held\nit. Values are validated as a batch's edits are (`not_found`, `invalid_argument`\nwith the field `values.<n>.<field>`); a value that is not a live-adjustable\nsetter (`item.set_transform`, `item.set_geometry`, `item.set_crop`), an empty or\nover-256 list, and a 17th open gesture are `invalid_argument`. Nothing in a\nrejected message is applied. A value whose `scene_id` names a keyframe scene is,\nsince 0.53 (refused before), that keyframe's parameter, apart from the item's\nown: it shows only where the keyframe draws the item, and the item's own value\nshows there only in a field the keyframe doesn't override. The gesture ends with\na batch carrying `ends_gesture`, with `live.cancel`, or when its client's session\nends.",
                 "properties": {
                   "gesture_id": {
                     "$ref": "#/$defs/GestureId",
@@ -301,7 +354,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Opens a preview stream of the program mix, or of the scene `scene_id`, for this\nsession: low-resolution pictures sent as binary frames on `channel`, only to this\nsession (ADR-0045). The picture is the canvas scaled down to fit `max_width` ×\n`max_height`, with even sides; it follows the canvas when that changes. A picture\nis sent when what the stream shows changes, at most `fps` times a second, and at\nleast once every 2 s (a keyframe), so a client that lost frames recovers. The\nengine picks the first of `codecs` it can encode, and every frame names its codec.\nThe stream shows the mix before any master stage. A scene's stream shows the\nscene alone, as program would show it with no transition running, and never makes\na source shown or heard (ADR-0028). It lasts until `preview.unsubscribe`, the\nsession's end, or an end frame (the engine could not go on, or the scene was\ndeleted; the frame says why).\n\nFails with `invalid_argument` for a field out of range (`max_width` 16 to 1920,\ndefault 640; `max_height` 16 to 1080, default 360; `fps` 1 to 30, default 15), a\ncodec named twice, a `channel` this session already has open (`channel`), or a\nseventeenth open stream; with `not_found` for a `scene_id` the collection doesn't\nhave; and with `action_failed` when the session cannot receive binary frames (an\nMCP session) or none of `codecs` can be encoded here.",
+                "description": "Opens a preview stream of the program mix, or of the scene `scene_id`, for this\nsession: low-resolution pictures sent as binary frames on `channel`, only to this\nsession (ADR-0045). The picture is the canvas scaled down to fit `max_width` ×\n`max_height`, with even sides; it follows the canvas when that changes. A picture\nis sent when what the stream shows changes, at most `fps` times a second, and at\nleast once every 2 s (a keyframe), so a client that lost frames recovers. The\nengine picks the first of `codecs` it can encode, and every frame names its codec.\nThe stream shows the mix before any master stage. A scene's stream shows the\nscene alone, as program would show it with no transition running, and never makes\na source shown or heard (ADR-0028). It lasts until `preview.unsubscribe`, the\nsession's end, or an end frame (the engine could not go on, or the scene was\ndeleted; the frame says why).\n\nWith `source`, the stream shows that source alone, fitted into the canvas as an\nitem filling it would show it, with no filters: what a display, window or webcam\nsource would capture, before it exists or before its new settings are saved (the\nProperties dialog's picture). The engine opens the capture for the stream alone;\na webcam or capture card already open is shared, not opened twice. The canvas\nsize is the one at the subscription: subscribe again for other settings.\n\nFails with `invalid_argument` for a field out of range (`max_width` 16 to 1920,\ndefault 640; `max_height` 16 to 1080, default 360; `fps` 1 to 30, default 15), a\ncodec named twice, a `channel` this session already has open (`channel`), a\nseventeenth open stream, both `scene_id` and `source` (`source`), or a `source`\nwhose kind is not a capture kind or whose settings its kind refuses\n(`source.kind`, `source.settings.<param>`); with `not_found` for a `scene_id` the collection doesn't\nhave; and with `action_failed` when the session cannot receive binary frames (an\nMCP session) or none of `codecs` can be encoded here.",
                 "properties": {
                   "channel": {
                     "description": "The number this stream's binary frames carry, chosen by the client. Not an\nID: it only tells this session's streams apart, and can be reused once the\nstream has ended.",
@@ -353,6 +406,17 @@ source: crates/jstream-mcp/src/tests.rs
                       }
                     ],
                     "description": "The scene to show. Omitted for the program mix."
+                  },
+                  "source": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/PreviewDraft"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A source to show alone instead, one the collection doesn't hold (since 0.49).\nOmitted for the program mix or `scene_id`'s scene."
                   },
                   "type": {
                     "const": "preview.subscribe",
@@ -460,6 +524,27 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "device_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Keeps a UI setting on the engine's machine (0.52, ADR-0084): an opaque JSON value\nthe UI owns, under `key` (the web UI keeps its dock under `workspace.dock`), so\nevery client of the engine, the desktop app and each browser, reads the same one\nback with `ui_settings.get`. A `value` of `null`, or none, removes the key. Not\ncollection state: it changes no `rev`, is never undone, emits no event, and is\nkept across restarts in the data folder (ADR-0020), whatever collection is open.\nAnswered by the server that admits clients, not the engine: a `Control` with no\nserver in front fails with `unsupported`. Fails with `invalid_argument` on `key`\nfor a key that isn't 1 to 64 of `a`-`z`, `0`-`9`, `.`, `_` and `-`, on `value`\nfor a value over 64 KiB as compact JSON, and on `key` for a 65th key;\n`action_failed` when the settings file can't be written (the value is then kept\nuntil the server stops).",
+                "properties": {
+                  "key": {
+                    "description": "The setting's key.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "ui_settings.set",
+                    "type": "string"
+                  },
+                  "value": {
+                    "description": "Its new value, any JSON; `null` or none removes the key."
+                  }
+                },
+                "required": [
+                  "type",
+                  "key"
                 ],
                 "type": "object"
               },
@@ -3346,6 +3431,23 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "string"
               }
             ]
+          },
+          "PreviewDraft": {
+            "description": "A source that is not in the collection, for `preview.subscribe`'s `source`: what a\nsource of `kind` with `settings` would show, so a client can show a device while the\nuser picks it, before the source is created or its settings are saved.",
+            "properties": {
+              "kind": {
+                "description": "The source kind, as `kind.list` reports it. Only the capture kinds (`display`,\n`window` and `webcam`) can be shown this way.",
+                "type": "string"
+              },
+              "settings": {
+                "$ref": "#/$defs/Settings",
+                "description": "Its settings, checked as `source.create` checks them. Parameters left out, or\nsent as `null`, take their defaults. Omitted means all defaults."
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
           },
           "RateControl": {
             "description": "How a video encoder spends bits. Serialized with an internal `type` tag.",
@@ -5374,7 +5476,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Opens the gesture `gesture_id` if it is new, and sets its live values (ADR-0032):\neach overrides one parameter of the collection on output, from the next render\ntick, without changing `rev`. A value replaces the gesture's previous value for\nthe same parameter, and takes the parameter over from any other gesture that held\nit. Values are validated as a batch's edits are (`not_found`, `invalid_argument`\nwith the field `values.<n>.<field>`); a value that is not a live-adjustable\nsetter (`item.set_transform`, `item.set_geometry`, `item.set_crop`), a value whose\n`scene_id` names a keyframe scene (until #702), an empty or over-256 list, and a\n17th open gesture are `invalid_argument`. Nothing in a\nrejected message is applied. The gesture ends with a batch carrying\n`ends_gesture`, with `live.cancel`, or when its client's session ends.",
+                "description": "Opens the gesture `gesture_id` if it is new, and sets its live values (ADR-0032):\neach overrides one parameter of the collection on output, from the next render\ntick, without changing `rev`. A value replaces the gesture's previous value for\nthe same parameter, and takes the parameter over from any other gesture that held\nit. Values are validated as a batch's edits are (`not_found`, `invalid_argument`\nwith the field `values.<n>.<field>`); a value that is not a live-adjustable\nsetter (`item.set_transform`, `item.set_geometry`, `item.set_crop`), an empty or\nover-256 list, and a 17th open gesture are `invalid_argument`. Nothing in a\nrejected message is applied. A value whose `scene_id` names a keyframe scene is,\nsince 0.53 (refused before), that keyframe's parameter, apart from the item's\nown: it shows only where the keyframe draws the item, and the item's own value\nshows there only in a field the keyframe doesn't override. The gesture ends with\na batch carrying `ends_gesture`, with `live.cancel`, or when its client's session\nends.",
                 "properties": {
                   "gesture_id": {
                     "$ref": "#/$defs/GestureId",
@@ -5544,7 +5646,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Opens a preview stream of the program mix, or of the scene `scene_id`, for this\nsession: low-resolution pictures sent as binary frames on `channel`, only to this\nsession (ADR-0045). The picture is the canvas scaled down to fit `max_width` ×\n`max_height`, with even sides; it follows the canvas when that changes. A picture\nis sent when what the stream shows changes, at most `fps` times a second, and at\nleast once every 2 s (a keyframe), so a client that lost frames recovers. The\nengine picks the first of `codecs` it can encode, and every frame names its codec.\nThe stream shows the mix before any master stage. A scene's stream shows the\nscene alone, as program would show it with no transition running, and never makes\na source shown or heard (ADR-0028). It lasts until `preview.unsubscribe`, the\nsession's end, or an end frame (the engine could not go on, or the scene was\ndeleted; the frame says why).\n\nFails with `invalid_argument` for a field out of range (`max_width` 16 to 1920,\ndefault 640; `max_height` 16 to 1080, default 360; `fps` 1 to 30, default 15), a\ncodec named twice, a `channel` this session already has open (`channel`), or a\nseventeenth open stream; with `not_found` for a `scene_id` the collection doesn't\nhave; and with `action_failed` when the session cannot receive binary frames (an\nMCP session) or none of `codecs` can be encoded here.",
+                "description": "Opens a preview stream of the program mix, or of the scene `scene_id`, for this\nsession: low-resolution pictures sent as binary frames on `channel`, only to this\nsession (ADR-0045). The picture is the canvas scaled down to fit `max_width` ×\n`max_height`, with even sides; it follows the canvas when that changes. A picture\nis sent when what the stream shows changes, at most `fps` times a second, and at\nleast once every 2 s (a keyframe), so a client that lost frames recovers. The\nengine picks the first of `codecs` it can encode, and every frame names its codec.\nThe stream shows the mix before any master stage. A scene's stream shows the\nscene alone, as program would show it with no transition running, and never makes\na source shown or heard (ADR-0028). It lasts until `preview.unsubscribe`, the\nsession's end, or an end frame (the engine could not go on, or the scene was\ndeleted; the frame says why).\n\nWith `source`, the stream shows that source alone, fitted into the canvas as an\nitem filling it would show it, with no filters: what a display, window or webcam\nsource would capture, before it exists or before its new settings are saved (the\nProperties dialog's picture). The engine opens the capture for the stream alone;\na webcam or capture card already open is shared, not opened twice. The canvas\nsize is the one at the subscription: subscribe again for other settings.\n\nFails with `invalid_argument` for a field out of range (`max_width` 16 to 1920,\ndefault 640; `max_height` 16 to 1080, default 360; `fps` 1 to 30, default 15), a\ncodec named twice, a `channel` this session already has open (`channel`), a\nseventeenth open stream, both `scene_id` and `source` (`source`), or a `source`\nwhose kind is not a capture kind or whose settings its kind refuses\n(`source.kind`, `source.settings.<param>`); with `not_found` for a `scene_id` the collection doesn't\nhave; and with `action_failed` when the session cannot receive binary frames (an\nMCP session) or none of `codecs` can be encoded here.",
                 "properties": {
                   "channel": {
                     "description": "The number this stream's binary frames carry, chosen by the client. Not an\nID: it only tells this session's streams apart, and can be reused once the\nstream has ended.",
@@ -5596,6 +5698,17 @@ source: crates/jstream-mcp/src/tests.rs
                       }
                     ],
                     "description": "The scene to show. Omitted for the program mix."
+                  },
+                  "source": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/PreviewDraft"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A source to show alone instead, one the collection doesn't hold (since 0.49).\nOmitted for the program mix or `scene_id`'s scene."
                   },
                   "type": {
                     "const": "preview.subscribe",
@@ -5703,6 +5816,27 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "device_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Keeps a UI setting on the engine's machine (0.52, ADR-0084): an opaque JSON value\nthe UI owns, under `key` (the web UI keeps its dock under `workspace.dock`), so\nevery client of the engine, the desktop app and each browser, reads the same one\nback with `ui_settings.get`. A `value` of `null`, or none, removes the key. Not\ncollection state: it changes no `rev`, is never undone, emits no event, and is\nkept across restarts in the data folder (ADR-0020), whatever collection is open.\nAnswered by the server that admits clients, not the engine: a `Control` with no\nserver in front fails with `unsupported`. Fails with `invalid_argument` on `key`\nfor a key that isn't 1 to 64 of `a`-`z`, `0`-`9`, `.`, `_` and `-`, on `value`\nfor a value over 64 KiB as compact JSON, and on `key` for a 65th key;\n`action_failed` when the settings file can't be written (the value is then kept\nuntil the server stops).",
+                "properties": {
+                  "key": {
+                    "description": "The setting's key.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "ui_settings.set",
+                    "type": "string"
+                  },
+                  "value": {
+                    "description": "Its new value, any JSON; `null` or none removes the key."
+                  }
+                },
+                "required": [
+                  "type",
+                  "key"
                 ],
                 "type": "object"
               },
@@ -8589,6 +8723,23 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "string"
               }
             ]
+          },
+          "PreviewDraft": {
+            "description": "A source that is not in the collection, for `preview.subscribe`'s `source`: what a\nsource of `kind` with `settings` would show, so a client can show a device while the\nuser picks it, before the source is created or its settings are saved.",
+            "properties": {
+              "kind": {
+                "description": "The source kind, as `kind.list` reports it. Only the capture kinds (`display`,\n`window` and `webcam`) can be shown this way.",
+                "type": "string"
+              },
+              "settings": {
+                "$ref": "#/$defs/Settings",
+                "description": "Its settings, checked as `source.create` checks them. Parameters left out, or\nsent as `null`, take their defaults. Omitted means all defaults."
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
           },
           "RateControl": {
             "description": "How a video encoder spends bits. Serialized with an internal `type` tag.",
@@ -10184,7 +10335,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Opens the gesture `gesture_id` if it is new, and sets its live values (ADR-0032):\neach overrides one parameter of the collection on output, from the next render\ntick, without changing `rev`. A value replaces the gesture's previous value for\nthe same parameter, and takes the parameter over from any other gesture that held\nit. Values are validated as a batch's edits are (`not_found`, `invalid_argument`\nwith the field `values.<n>.<field>`); a value that is not a live-adjustable\nsetter (`item.set_transform`, `item.set_geometry`, `item.set_crop`), a value whose\n`scene_id` names a keyframe scene (until #702), an empty or over-256 list, and a\n17th open gesture are `invalid_argument`. Nothing in a\nrejected message is applied. The gesture ends with a batch carrying\n`ends_gesture`, with `live.cancel`, or when its client's session ends.",
+                "description": "Opens the gesture `gesture_id` if it is new, and sets its live values (ADR-0032):\neach overrides one parameter of the collection on output, from the next render\ntick, without changing `rev`. A value replaces the gesture's previous value for\nthe same parameter, and takes the parameter over from any other gesture that held\nit. Values are validated as a batch's edits are (`not_found`, `invalid_argument`\nwith the field `values.<n>.<field>`); a value that is not a live-adjustable\nsetter (`item.set_transform`, `item.set_geometry`, `item.set_crop`), an empty or\nover-256 list, and a 17th open gesture are `invalid_argument`. Nothing in a\nrejected message is applied. A value whose `scene_id` names a keyframe scene is,\nsince 0.53 (refused before), that keyframe's parameter, apart from the item's\nown: it shows only where the keyframe draws the item, and the item's own value\nshows there only in a field the keyframe doesn't override. The gesture ends with\na batch carrying `ends_gesture`, with `live.cancel`, or when its client's session\nends.",
                 "properties": {
                   "gesture_id": {
                     "$ref": "#/$defs/GestureId",
@@ -10354,7 +10505,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Opens a preview stream of the program mix, or of the scene `scene_id`, for this\nsession: low-resolution pictures sent as binary frames on `channel`, only to this\nsession (ADR-0045). The picture is the canvas scaled down to fit `max_width` ×\n`max_height`, with even sides; it follows the canvas when that changes. A picture\nis sent when what the stream shows changes, at most `fps` times a second, and at\nleast once every 2 s (a keyframe), so a client that lost frames recovers. The\nengine picks the first of `codecs` it can encode, and every frame names its codec.\nThe stream shows the mix before any master stage. A scene's stream shows the\nscene alone, as program would show it with no transition running, and never makes\na source shown or heard (ADR-0028). It lasts until `preview.unsubscribe`, the\nsession's end, or an end frame (the engine could not go on, or the scene was\ndeleted; the frame says why).\n\nFails with `invalid_argument` for a field out of range (`max_width` 16 to 1920,\ndefault 640; `max_height` 16 to 1080, default 360; `fps` 1 to 30, default 15), a\ncodec named twice, a `channel` this session already has open (`channel`), or a\nseventeenth open stream; with `not_found` for a `scene_id` the collection doesn't\nhave; and with `action_failed` when the session cannot receive binary frames (an\nMCP session) or none of `codecs` can be encoded here.",
+                "description": "Opens a preview stream of the program mix, or of the scene `scene_id`, for this\nsession: low-resolution pictures sent as binary frames on `channel`, only to this\nsession (ADR-0045). The picture is the canvas scaled down to fit `max_width` ×\n`max_height`, with even sides; it follows the canvas when that changes. A picture\nis sent when what the stream shows changes, at most `fps` times a second, and at\nleast once every 2 s (a keyframe), so a client that lost frames recovers. The\nengine picks the first of `codecs` it can encode, and every frame names its codec.\nThe stream shows the mix before any master stage. A scene's stream shows the\nscene alone, as program would show it with no transition running, and never makes\na source shown or heard (ADR-0028). It lasts until `preview.unsubscribe`, the\nsession's end, or an end frame (the engine could not go on, or the scene was\ndeleted; the frame says why).\n\nWith `source`, the stream shows that source alone, fitted into the canvas as an\nitem filling it would show it, with no filters: what a display, window or webcam\nsource would capture, before it exists or before its new settings are saved (the\nProperties dialog's picture). The engine opens the capture for the stream alone;\na webcam or capture card already open is shared, not opened twice. The canvas\nsize is the one at the subscription: subscribe again for other settings.\n\nFails with `invalid_argument` for a field out of range (`max_width` 16 to 1920,\ndefault 640; `max_height` 16 to 1080, default 360; `fps` 1 to 30, default 15), a\ncodec named twice, a `channel` this session already has open (`channel`), a\nseventeenth open stream, both `scene_id` and `source` (`source`), or a `source`\nwhose kind is not a capture kind or whose settings its kind refuses\n(`source.kind`, `source.settings.<param>`); with `not_found` for a `scene_id` the collection doesn't\nhave; and with `action_failed` when the session cannot receive binary frames (an\nMCP session) or none of `codecs` can be encoded here.",
                 "properties": {
                   "channel": {
                     "description": "The number this stream's binary frames carry, chosen by the client. Not an\nID: it only tells this session's streams apart, and can be reused once the\nstream has ended.",
@@ -10406,6 +10557,17 @@ source: crates/jstream-mcp/src/tests.rs
                       }
                     ],
                     "description": "The scene to show. Omitted for the program mix."
+                  },
+                  "source": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/PreviewDraft"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A source to show alone instead, one the collection doesn't hold (since 0.49).\nOmitted for the program mix or `scene_id`'s scene."
                   },
                   "type": {
                     "const": "preview.subscribe",
@@ -10513,6 +10675,27 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "device_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Keeps a UI setting on the engine's machine (0.52, ADR-0084): an opaque JSON value\nthe UI owns, under `key` (the web UI keeps its dock under `workspace.dock`), so\nevery client of the engine, the desktop app and each browser, reads the same one\nback with `ui_settings.get`. A `value` of `null`, or none, removes the key. Not\ncollection state: it changes no `rev`, is never undone, emits no event, and is\nkept across restarts in the data folder (ADR-0020), whatever collection is open.\nAnswered by the server that admits clients, not the engine: a `Control` with no\nserver in front fails with `unsupported`. Fails with `invalid_argument` on `key`\nfor a key that isn't 1 to 64 of `a`-`z`, `0`-`9`, `.`, `_` and `-`, on `value`\nfor a value over 64 KiB as compact JSON, and on `key` for a 65th key;\n`action_failed` when the settings file can't be written (the value is then kept\nuntil the server stops).",
+                "properties": {
+                  "key": {
+                    "description": "The setting's key.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "ui_settings.set",
+                    "type": "string"
+                  },
+                  "value": {
+                    "description": "Its new value, any JSON; `null` or none removes the key."
+                  }
+                },
+                "required": [
+                  "type",
+                  "key"
                 ],
                 "type": "object"
               },
@@ -13396,6 +13579,23 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "PreviewDraft": {
+            "description": "A source that is not in the collection, for `preview.subscribe`'s `source`: what a\nsource of `kind` with `settings` would show, so a client can show a device while the\nuser picks it, before the source is created or its settings are saved.",
+            "properties": {
+              "kind": {
+                "description": "The source kind, as `kind.list` reports it. Only the capture kinds (`display`,\n`window` and `webcam`) can be shown this way.",
+                "type": "string"
+              },
+              "settings": {
+                "$ref": "#/$defs/Settings",
+                "description": "Its settings, checked as `source.create` checks them. Parameters left out, or\nsent as `null`, take their defaults. Omitted means all defaults."
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
           "RateControl": {
             "description": "How a video encoder spends bits. Serialized with an internal `type` tag.",
             "oneOf": [
@@ -13728,7 +13928,7 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "The `live` operation, tagged by `type`.",
             "oneOf": [
               {
-                "description": "Opens the gesture `gesture_id` if it is new, and sets its live values (ADR-0032):\neach overrides one parameter of the collection on output, from the next render\ntick, without changing `rev`. A value replaces the gesture's previous value for\nthe same parameter, and takes the parameter over from any other gesture that held\nit. Values are validated as a batch's edits are (`not_found`, `invalid_argument`\nwith the field `values.<n>.<field>`); a value that is not a live-adjustable\nsetter (`item.set_transform`, `item.set_geometry`, `item.set_crop`), a value whose\n`scene_id` names a keyframe scene (until #702), an empty or over-256 list, and a\n17th open gesture are `invalid_argument`. Nothing in a\nrejected message is applied. The gesture ends with a batch carrying\n`ends_gesture`, with `live.cancel`, or when its client's session ends.",
+                "description": "Opens the gesture `gesture_id` if it is new, and sets its live values (ADR-0032):\neach overrides one parameter of the collection on output, from the next render\ntick, without changing `rev`. A value replaces the gesture's previous value for\nthe same parameter, and takes the parameter over from any other gesture that held\nit. Values are validated as a batch's edits are (`not_found`, `invalid_argument`\nwith the field `values.<n>.<field>`); a value that is not a live-adjustable\nsetter (`item.set_transform`, `item.set_geometry`, `item.set_crop`), an empty or\nover-256 list, and a 17th open gesture are `invalid_argument`. Nothing in a\nrejected message is applied. A value whose `scene_id` names a keyframe scene is,\nsince 0.53 (refused before), that keyframe's parameter, apart from the item's\nown: it shows only where the keyframe draws the item, and the item's own value\nshows there only in a field the keyframe doesn't override. The gesture ends with\na batch carrying `ends_gesture`, with `live.cancel`, or when its client's session\nends.",
                 "properties": {
                   "gesture_id": {
                     "$ref": "#/$defs/GestureId",
@@ -14273,9 +14473,31 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "PreviewDraft": {
+            "description": "A source that is not in the collection, for `preview.subscribe`'s `source`: what a\nsource of `kind` with `settings` would show, so a client can show a device while the\nuser picks it, before the source is created or its settings are saved.",
+            "properties": {
+              "kind": {
+                "description": "The source kind, as `kind.list` reports it. Only the capture kinds (`display`,\n`window` and `webcam`) can be shown this way.",
+                "type": "string"
+              },
+              "settings": {
+                "$ref": "#/$defs/Settings",
+                "description": "Its settings, checked as `source.create` checks them. Parameters left out, or\nsent as `null`, take their defaults. Omitted means all defaults."
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
           "SceneId": {
             "description": "A scene in the collection.",
             "type": "string"
+          },
+          "Settings": {
+            "additionalProperties": true,
+            "description": "A source's (or later a filter's) settings: parameter ID to value.\n\nThe values follow the kind's descriptor (`kind.describe`). The engine validates every\nedit against it and stores the complete map, so a reported map holds every parameter\nof the kind.",
+            "type": "object"
           }
         },
         "additionalProperties": false,
@@ -14284,7 +14506,7 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "The `preview` operation, tagged by `type`.",
             "oneOf": [
               {
-                "description": "Opens a preview stream of the program mix, or of the scene `scene_id`, for this\nsession: low-resolution pictures sent as binary frames on `channel`, only to this\nsession (ADR-0045). The picture is the canvas scaled down to fit `max_width` ×\n`max_height`, with even sides; it follows the canvas when that changes. A picture\nis sent when what the stream shows changes, at most `fps` times a second, and at\nleast once every 2 s (a keyframe), so a client that lost frames recovers. The\nengine picks the first of `codecs` it can encode, and every frame names its codec.\nThe stream shows the mix before any master stage. A scene's stream shows the\nscene alone, as program would show it with no transition running, and never makes\na source shown or heard (ADR-0028). It lasts until `preview.unsubscribe`, the\nsession's end, or an end frame (the engine could not go on, or the scene was\ndeleted; the frame says why).\n\nFails with `invalid_argument` for a field out of range (`max_width` 16 to 1920,\ndefault 640; `max_height` 16 to 1080, default 360; `fps` 1 to 30, default 15), a\ncodec named twice, a `channel` this session already has open (`channel`), or a\nseventeenth open stream; with `not_found` for a `scene_id` the collection doesn't\nhave; and with `action_failed` when the session cannot receive binary frames (an\nMCP session) or none of `codecs` can be encoded here.",
+                "description": "Opens a preview stream of the program mix, or of the scene `scene_id`, for this\nsession: low-resolution pictures sent as binary frames on `channel`, only to this\nsession (ADR-0045). The picture is the canvas scaled down to fit `max_width` ×\n`max_height`, with even sides; it follows the canvas when that changes. A picture\nis sent when what the stream shows changes, at most `fps` times a second, and at\nleast once every 2 s (a keyframe), so a client that lost frames recovers. The\nengine picks the first of `codecs` it can encode, and every frame names its codec.\nThe stream shows the mix before any master stage. A scene's stream shows the\nscene alone, as program would show it with no transition running, and never makes\na source shown or heard (ADR-0028). It lasts until `preview.unsubscribe`, the\nsession's end, or an end frame (the engine could not go on, or the scene was\ndeleted; the frame says why).\n\nWith `source`, the stream shows that source alone, fitted into the canvas as an\nitem filling it would show it, with no filters: what a display, window or webcam\nsource would capture, before it exists or before its new settings are saved (the\nProperties dialog's picture). The engine opens the capture for the stream alone;\na webcam or capture card already open is shared, not opened twice. The canvas\nsize is the one at the subscription: subscribe again for other settings.\n\nFails with `invalid_argument` for a field out of range (`max_width` 16 to 1920,\ndefault 640; `max_height` 16 to 1080, default 360; `fps` 1 to 30, default 15), a\ncodec named twice, a `channel` this session already has open (`channel`), a\nseventeenth open stream, both `scene_id` and `source` (`source`), or a `source`\nwhose kind is not a capture kind or whose settings its kind refuses\n(`source.kind`, `source.settings.<param>`); with `not_found` for a `scene_id` the collection doesn't\nhave; and with `action_failed` when the session cannot receive binary frames (an\nMCP session) or none of `codecs` can be encoded here.",
                 "properties": {
                   "channel": {
                     "description": "The number this stream's binary frames carry, chosen by the client. Not an\nID: it only tells this session's streams apart, and can be reused once the\nstream has ended.",
@@ -14336,6 +14558,17 @@ source: crates/jstream-mcp/src/tests.rs
                       }
                     ],
                     "description": "The scene to show. Omitted for the program mix."
+                  },
+                  "source": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/PreviewDraft"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A source to show alone instead, one the collection doesn't hold (since 0.49).\nOmitted for the program mix or `scene_id`'s scene."
                   },
                   "type": {
                     "const": "preview.subscribe",
@@ -15601,6 +15834,69 @@ source: crates/jstream-mcp/src/tests.rs
         "type": "object"
       },
       "name": "transition"
+    },
+    {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Runs one `ui_settings` operation: set `op.type` to one of `ui_settings.set` (action), `ui_settings.get` (query). An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "description": "The `ui_settings` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Keeps a UI setting on the engine's machine (0.52, ADR-0084): an opaque JSON value\nthe UI owns, under `key` (the web UI keeps its dock under `workspace.dock`), so\nevery client of the engine, the desktop app and each browser, reads the same one\nback with `ui_settings.get`. A `value` of `null`, or none, removes the key. Not\ncollection state: it changes no `rev`, is never undone, emits no event, and is\nkept across restarts in the data folder (ADR-0020), whatever collection is open.\nAnswered by the server that admits clients, not the engine: a `Control` with no\nserver in front fails with `unsupported`. Fails with `invalid_argument` on `key`\nfor a key that isn't 1 to 64 of `a`-`z`, `0`-`9`, `.`, `_` and `-`, on `value`\nfor a value over 64 KiB as compact JSON, and on `key` for a 65th key;\n`action_failed` when the settings file can't be written (the value is then kept\nuntil the server stops).",
+                "properties": {
+                  "key": {
+                    "description": "The setting's key.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "ui_settings.set",
+                    "type": "string"
+                  },
+                  "value": {
+                    "description": "Its new value, any JSON; `null` or none removes the key."
+                  }
+                },
+                "required": [
+                  "type",
+                  "key"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Reads a UI setting `ui_settings.set` kept (0.52, ADR-0084): the value under\n`key`, omitted when there is none. Not collection state, so no `rev`. Answered by\nthe server that admits clients, like `device.list`: a `Control` with no server in\nfront fails with `unsupported`. Fails with `invalid_argument` on `key` for a key\n`ui_settings.set` would refuse.",
+                "properties": {
+                  "key": {
+                    "description": "The setting's key.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "ui_settings.get",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "key"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "ui_settings"
     },
     {
       "annotations": {

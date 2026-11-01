@@ -33,7 +33,8 @@ state machine. Contents:
   `Engine::new()`, `with_output(id)`, `with_backends`, `with_publish`,
   `with_publish_opener`, `with_key_store`, `with_youtube`, `with_audit`,
   `with_history_limit`, `with_browser` (the browser engine `browser` sources and their
-  `youtube_chat` preset open pages in) and `with_collection_file`; `open_plugin_dir`
+  `youtube_chat` preset open pages in) and `with_collection_file`; `set_process_cpu`
+  and `start_stats_heartbeat` (`stats.tick`'s load, below); `open_plugin_dir`
   (where installed WASM plugins are saved, ADR-0076), called once the engine is built;
   `scan_clap_plugins` adds the CLAP filter kinds;
   `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
@@ -76,6 +77,10 @@ state machine. Contents:
   the `AuditSink` the host injects with `with_audit` (none by default). `AuditMemory`
   keeps entries in memory; `AuditFile` writes them as JSON lines to a size-capped
   `audit.jsonl` from its own writer thread (see *Audit log* in [Design](#design)).
+- **Activity log** (`activity_log.rs`): the last 100 audit entries with a sentence for
+  each, kept whether or not the host gave a sink, for `activity.list`
+  ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md); see *Audit log*
+  in [Design](#design)).
 - **Collection file** (`collection.rs`): loads the collection from the file the host
   names with `with_collection_file` (or creates it, with the four sample labels,
   `Graph::with_sample_labels`, at the same `rev`), and saves it atomically after every
@@ -197,7 +202,7 @@ state machine. Contents:
   `scene.switch` and `studio.set_preview` set and `studio.get` reads
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)).
 - **Preview** (`preview/`): `preview.subscribe` and `preview.unsubscribe`, the program
-  mix or one scene as small pictures sent to the session that asked as binary frames
+  mix, one scene or a draft source the collection doesn't hold as small pictures sent to the session that asked as binary frames
   (`Control::binary`), in H.264 on a software `jstream-encode` session when the
   platform has an encoder and in JPEG otherwise (`preview/jpeg.rs`, a baseline
   encoder of its own), drawn on the engine's `jstream-preview` thread with its own
@@ -274,6 +279,11 @@ state machine. Contents:
   the publish link's, and a sampler thread
   emits a tick about once a second until the last output stops. The same thread emits
   `meters.tick` about ten times a second.
+- **Engine load** (`load.rs`): what a `stats.tick`'s `load` reads besides the render
+  hub's frame count: when the engine started, the process CPU time from the host's
+  `ProcessCpu` (`Engine::set_process_cpu`), and the idle heartbeat
+  (`Engine::start_stats_heartbeat`), which ticks while no output runs (*Engine load*
+  below).
 - **Tests** (`tests.rs`, `src/tests/history.rs`, `src/tests/live_values.rs`,
   `src/tests/audio.rs`, `src/tests/audio_routing.rs`, `src/tests/sources.rs`,
   `src/tests/transitions.rs`, `tests/mcp.rs`,
@@ -305,11 +315,19 @@ state machine. Contents:
   or the output stops, closed when unplugged with the output staying up, and shared
   with a preview stream that showed it first (`src/tests/cpu_pipeline/captures.rs`),
   one open of a device shared by two readers, each taking each frame once, closed
-  with its last reader, a reader that joins counting frames from then on, and a lost
-  device failing every reader and not shared again (`runtime/devices.rs`), the format a webcam opens in, with and
-  without an MJPEG decoder, its frames, decoded or not, read as RGBA, and a webcam
-  left running, and not opened twice, when the GPU path is left (`runtime/captures.rs`), which capture path an output takes and each
-  fallback, an output compositing GPU capture frames (opaque, whatever alpha the
+  with its last reader, a reader that joins counting frames from then on, a lost
+  device failing every reader and not shared again, a device the GPU view opened moved
+  to the CPU path in place when a CPU reader joins, its counters carried on, and
+  `DeviceLost` for every reader when it doesn't open again there, and one open on the
+  CPU path refused by the GPU view (`runtime/devices.rs`), the format a webcam opens in, with and
+  without an MJPEG decoder, its frames, decoded or not, read as RGBA, a webcam
+  opening on the video-device backend's GPU path in an uncompressed format, MJPEG and a
+  refused format on the CPU path, a webcam on the CPU path left running, and not opened
+  twice, when the GPU path is left, and one on the GPU path, running or still starting,
+  moved to the CPU path, closed before it opens again (`runtime/captures.rs`), which
+  capture path an output takes and each
+  fallback, the video-device backend asked onto the platform's device and
+  `SharedVideoDevices` passing that through, an output compositing GPU capture frames (opaque, whatever alpha the
   texture holds), a browser page painting on
   the stage's context, composited as premultiplied red and given back the device when
   the stage stops, an output leaving the GPU path mid-run when every GPU frame
@@ -408,7 +426,11 @@ state machine. Contents:
   off program shown and followed, then no longer planned once closed or once its
   session ends, a scene the collection doesn't have refused, a deleted scene's stream
   ended, its display drawn from the preview's own capture, and nothing captured for it
-  by the program stage), the
+  by the program stage; a draft source's stream: a webcam not in the collection drawn
+  from the preview's capture and closed with the stream, the collection untouched, a
+  draft of the program's webcam sharing its one open beside a draft display, and a
+  kind that captures nothing, an unknown kind, a refused setting and a scene with a
+  source refused), the
   collection file (`src/tests/collection.rs`: created when missing with the sample
   labels at `rev` 0, batches, an undo
   and a redo each saved, a saved collection loaded by a new engine with its `rev` and
@@ -424,7 +446,9 @@ state machine. Contents:
   parent's items with its overrides and following the parent, a `move` between a parent
   and its variant pairing by item where pairing by source would cross, and the
   overrides a batch drops reported and restored by undo, with a no-op clear that is no
-  undo step, and a live value on a keyframe scene refused; `transition.rs` pairs a source placed twice by item), YouTube on `jstream-youtube`'s `FakeTransport` and fixtures
+  undo step, and a live value on a keyframe scene shown only where the keyframe draws the
+  item, the parent's own showing there through fields it doesn't override, committed as
+  its override and dropped with the keyframe; `transition.rs` pairs a source placed twice by item), YouTube on `jstream-youtube`'s `FakeTransport` and fixtures
   (`src/tests/youtube.rs`: sign-in through a real loopback redirect, sign-out, the
   broadcast actions and lists, quota and refused tokens, a `youtube` output
   publishing to its broadcast's ingest on the CPU stand-in, with the key and tokens in
@@ -503,6 +527,10 @@ WebSocket API does, minus serialization:
   they never reach the engine, so the audit log doesn't record them; the server logs
   them. A device's `hello` reaches the engine as `device:<name>`, so the audit
   log names it.
+- `ui_settings.get` and `ui_settings.set` fail with `unsupported` the same way: the
+  server in front keeps the UI's settings
+  ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)), so behind a
+  server they never reach the engine either.
 - `plugin.install`, `plugin.grant` and `plugin.enable` run with no engine lock held
   (see *WASM plugins*). Built without the `wasm-plugins` feature, the engine answers
   `plugin.install` with `unsupported` and the other two with `not_found`, since nothing
@@ -621,7 +649,7 @@ The engine's answers are the mock's for the differential script: `tests.rs` runs
 script of calls against both and compares results, error codes and fields, and events.
 That script does not call `video.snapshot`. The mock has no compositor and answers it
 with `internal`, so the two are not compared. Nor does it call `capture.targets`,
-which the mock answers with a made-up display. It does send the folder, label and
+which the mock answers with a made-up display and window. It does send the folder, label and
 metadata edits ([ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4): each
 refusal (a scene's missing label too), the in-use deletes, the reads, undo and redo,
 and a filed, labelled scene's and a labelled source's delete, which the test checks applies, undone with their metadata;
@@ -693,21 +721,27 @@ Live values ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)) live in
 `gesture.rs`'s table, under the collection lock, and reach the render thread through
 the render parameter channel, never through the collection:
 - **`live.set`** checks the message's shape (1 to 256 values, each a live-adjustable
-  setter, room for a new gesture among the client's 16), refuses a value whose
-  `scene_id` names a keyframe scene (`values.<n>.scene_id`: the parameters are per
-  item, so it would move the parent's item wherever it is drawn; #702 builds them),
+  setter, room for a new gesture among the client's 16),
   then applies the values to a copy of the graph exactly as a batch would, naming a failure `values.<n>.<field>`.
   The copy is thrown away: `rev`, the undo history, the collection file and every
   collection read stay as they were. The values go into the gesture, each taking its
   parameter (an item's placement, set by `item.set_transform` or `item.set_geometry`,
   or its crop) from any gesture that held it, and the table is published on the
   channel (`RenderHub::publish_live`, a `LiveParams` of per-item overrides, swapped
-  with `arc-swap` only when it changed).
+  with `arc-swap` only when it changed). A value whose `scene_id` names a keyframe
+  scene is a parameter of its own, the keyframe's field of the item (protocol 0.53,
+  #846), so a
+  gesture on the parent's item and one on the keyframe's can both be open. A batch
+  that deletes an item, or a keyframe scene, drops the live values addressed to it.
 - **The channel.** The render thread reads it after it adopts the snapshot on every
   tick, with a pointer compare, and hands a replaced one to the collector
   (`RenderReader::adopt`, R-RT-003). `compose` applies an item's live placement and
   crop wherever the item is drawn, nested passes included, with no new snapshot and
-  no allocation. A running transition's tracks are the exception: they move between
+  no allocation. Each layer a keyframe scene draws carries the keyframe and which of
+  the item's geometry and crop it overrides (`Through`): there the keyframe's own live
+  value wins, then the item's own in a field the keyframe doesn't override (it follows
+  the parent there, ADR-0049 §1), then the shot's. A keyframe's live value shows
+  nowhere else. A running transition's tracks are the exception: they move between
   the items as the collection holds them, so a live value on a program item shows once
   the transition ends. `video.snapshot` and the preview thread read the channel with the
   snapshot under the lock, so a snapshot or a preview picture shows an open gesture as
@@ -1334,6 +1368,21 @@ stream waits. A scene the collection doesn't have is `not_found`, and when a sce
 streams is deleted the re-plan ends them with the end frame "the scene was deleted"
 (`PreviewHub::end_scene`).
 
+A stream with a `source` shows a source the collection doesn't hold (0.49): the
+Properties dialog's picture of the display, window or webcam being picked, before the
+source exists or its new settings are saved (`preview/draft.rs`). `preview.subscribe`
+reads the kinds and the canvas under the lock and plans the draft once, after it, on a
+collection of its own: the one source, checked as `source.create` checks it (a refused
+setting is `invalid_argument` naming `source.settings.<param>`), and one scene whose
+item covers the canvas. Only a kind whose source captures something can be drawn this
+way, so any other is `invalid_argument` naming `source.kind`, as is a request with a
+`scene_id` too (naming `source`). The draft's snapshot lives on its stream and is never
+re-planned: it keeps the canvas size it was planned at, and a client subscribes again
+for other settings. The preview thread captures what it shows like a scene's, beside
+the program's and the scenes' captures, and a draft stream doesn't count as showing the
+program; nothing reaches the engine's collection, plan or sources, so a draft is
+never shown on program, heard or listed.
+
 The codec is picked when the client subscribes: the first of its `codecs` the engine
 can encode, H.264 when `codecs.list()` names an H.264 encoder (only with backends) and
 JPEG always. One `jstream-preview` thread per engine, started by the first stream and
@@ -1378,7 +1427,16 @@ and reads nothing when the other reader holds it, so the render thread never wai
 the preview thread; the frame is still there on its next tick. The device closes with
 its last reader, and once it is lost every reader reports it and the next open opens it
 afresh. Each reader's `stats` count from when it joined, so an output that joins a
-webcam the preview opened reports only its own frames and drops in `stats.tick`. While
+webcam the preview opened reports only its own frames and drops in `stats.tick`. The
+program stage on the GPU context opens through a second view of the same devices
+(`VideoDevices::on_context`), which opens a device that isn't open yet on the
+platform's GPU path, shares one open on the GPU path, and refuses one open on the CPU
+path, which the program then shares through the CPU view, on CPU frames. The preview can't read GPU frames, so when it joins a
+device open on the GPU path, the device is closed there and opened again on the CPU
+backend in the same format, under its lock: the program's reader reads on, its
+counters carried over, missing only the frames of the move, and the device stays on
+the CPU path until it closes. One that doesn't open again is lost (`DeviceLost`) for
+both, so each capture stops and opens it afresh later. While
 the program stage reads a device the preview also shows, the reader that is not last
 copies each frame; a run on a capture card at 1080p60 has not measured that copy. `video.snapshot` still draws every capture as nothing. A `scene.switch` republishes the render
 snapshot, so the preview shows the transition onto the new program scene, then the
@@ -1452,6 +1510,24 @@ The capture cell is a [`DropSnapshot`](src/drops.rs) (atomics only,
 and their sources load the counters those handles expose. `drops` runs on the sampler
 thread and must not call back into the engine. The fake capture generates a frame when
 it is read, so it does not simulate mailbox skips.
+
+### Engine load (`stats.tick`'s `load`)
+
+Each tick also carries the engine's load (protocol 0.48; `load.rs`): the milliseconds
+since the engine started, the program frames drawn so far, the process's CPU time and
+the logical CPUs. The render thread counts each tick it composites into the
+[`RenderHub`](src/runtime/render.rs) (one relaxed atomic add, R-RT-003), across every
+run of the program stage, so the total only grows and stops while no output runs. A
+skipped tick is not a frame. The CPU time comes from the
+[`ProcessCpu`](../jstream-platform/src/process.rs) the host hands
+[`Engine::set_process_cpu`](src/engine.rs); the sampler reads it before it takes the
+collection lock. Without one, `cpu_ms` is left out.
+
+While no output runs there is no sampler, so a host that wants ticks while idle calls
+[`Engine::start_stats_heartbeat`](src/engine.rs): a `jstream-stats-idle` thread that
+holds the engine weakly and emits a tick about once a second while no program stage's
+`jstream-stats` thread runs, ending once the last engine handle is gone. The daemon and
+the desktop app start it; tests and an embedding host call `emit_stats_tick` as before.
 
 ### Audio routing (`meters.tick`)
 
@@ -2184,6 +2260,18 @@ client the server maps its own wire ID to it, so the entry can't yet be matched 
 ID the client sent. The engine keeps each client's name for its lifetime, as it keeps
 the IDs.
 
+Every entry also carries a `summary`, one English sentence written from the
+collection under the same lock as the `rev` before, so a deleted object keeps its name
+and a gain or opacity setter says what it changed from ("Mic gain −1.5 → −3.0 dB")
+while a mute or visibility setter says which way it set it ("Muted “Mic”"); a batch is led by its delete, if any, else its first edit, "and N
+more changes" ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md)). The
+sentence names objects and gives numeric, on/off and enum values only, never settings,
+targets or keys, and is not written to `audit.jsonl`; the in-memory copy keeps at most
+256 characters of it. The engine keeps the last 100
+entries with their sentences in memory (`activity_log.rs`), whether or not the host gave
+a sink, and answers `activity.list` from them; a restarted engine starts empty. An edit
+or action the sentence table doesn't name reads as its command name.
+
 Live values are logged once per gesture, never per `live.set`
 ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): `live.set` and `live.cancel`
 get no entry of their own. A committed gesture's entry is its batch's. A gesture that
@@ -2323,7 +2411,15 @@ platform's `GpuInterop` for its device. With one, the render thread's compositor
 `GpuContext`, and the capture backend is asked for a copy of itself on the context
 (`Capture::on_context`); a capture started from that copy delivers `GpuFrame`s, which
 the render thread samples where they are, with no CPU copy, and counts
-(`OutputStats::gpu_captures`). Each fallback is logged and keeps the output running on
+(`OutputStats::gpu_captures`). The video-device backend is asked the same
+(`VideoDevices::on_context`): a webcam or capture card opens in its uncompressed format on
+that copy, and on the CPU backend in the same format when the copy refuses it; MJPEG
+always opens on the CPU backend, which decodes it there. A device opens once, shared
+with the preview (`runtime/devices.rs`), and the preview reads only CPU frames: when it
+joins a device open on the GPU path, the device is closed there and opened again on the
+CPU backend in the same format, in place, so the program's capture reads on. A device
+the preview has open already, on the CPU path, is refused by the GPU view and shared
+through the CPU backend, on CPU frames. Each fallback is logged and keeps the output running on
 CPU frames: no device (the fakes, CI, a machine without interop; the compositor then
 opens its own device, hardware adapter first with the software one as the fallback), a
 backend with no GPU path or one that refuses the context, and a GPU capture that does not start (that capture then runs on
@@ -2339,10 +2435,13 @@ a row on the context, a third of a second, the render thread leaves it once. A
 takes the collection lock) and opens the compositor on a device of its own, while the
 render thread keeps repeating the last frames and adopting snapshots. Then the render
 thread lets go of the frames it holds on the context's device, has the `jstream-capture` thread drop its GPU
-backend and start every display and window capture again on the CPU path (a start asked
+backends and start every display and window capture again on the CPU path (a start asked
 for before is stopped when it comes back), and takes the new compositor. A webcam or
-capture card is on the CPU path already, so it keeps running and keeps its frame, and
-one still starting takes the stream it asked for: most devices open only once (#734). Until the re-planned snapshot
+capture card on the GPU path is stopped and started again on the CPU path, the stop
+first, so the device is closed before it opens again. One on the CPU path keeps running
+and keeps its frame, and one still starting takes the stream it asked for: most devices
+open only once (#734). If that stream is on the GPU path, it is stopped and started
+again on the CPU path. Until the re-planned snapshot
 arrives, the pages' frames, carrying the context's key, draw nothing on it. The fallback
 is logged as a warning and counted (`OutputStats::gpu_fallbacks`). The output fails at
 once if the compositor can't open on its own device, the fallback panics, or it isn't
@@ -2413,8 +2512,10 @@ sends and allocates nothing. A capture restarting after a failure or a move off 
 path keeps the size it had until a frame says otherwise. The primary display is looked up when its
 capture starts. A webcam or capture card is opened on the backends' `VideoDevices`
 (shared with the preview thread's captures, `SharedVideoDevices`; see *Preview streams*
-in Design), on
-the CPU path, in the format `device_format` picks from those it lists: frames that arrive
+in Design), in the format `device_format` picks from those it lists: on the backend's
+GPU view (`VideoDevices::on_context`) when there is one and it takes that uncompressed
+format, else on the CPU path; MJPEG always on the CPU path (see *Capture path*). The
+candidates are frames that arrive
 uncompressed as RGBA, BGRA or NV12 (YUY2 is delivered as NV12), the largest of at most
 1920x1080 (else the smallest), then the fastest. An empty `device` is the first device
 listed, looked up when it starts. MJPEG is a candidate when the device offers it and the
@@ -2467,7 +2568,8 @@ output stops, and `meters.tick` about ten times a second. The stage also starts
 render thread sends under the collection lock and announces the sources it changes
 (`source.size_changed`, *Source sizes* in [Design](#design)), and when the render thread
 lets go of its captures it forgets them all and ends. `Program`'s drop joins it after
-the render thread. The render loop publishes capture mailbox skips and the frames an encode ring drops
+the render thread. The render loop counts each tick it composites into the render hub
+(`stats.tick`'s `program_frames`), and publishes capture mailbox skips and the frames an encode ring drops
 (`encode_frames`), and a tick that falls a
 whole period behind the clock skips to the current tick and counts the skipped ones in
 `render_ticks`. None of those threads lock the collection: the render thread reads the

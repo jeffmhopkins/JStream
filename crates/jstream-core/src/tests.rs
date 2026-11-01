@@ -3,6 +3,7 @@
 //! fixture), events, the placeholder outputs, and a differential run against
 //! `jstream-control`'s mock engine.
 
+mod activity;
 mod audio;
 mod audio_routing;
 #[cfg(feature = "wasm-plugins")]
@@ -66,6 +67,25 @@ fn drain(events: &mut EventStream) -> Vec<Event> {
         out.push(event);
     }
     out
+}
+
+/// `events` with each `stats.tick`'s load left out, since its clock reading differs
+/// from run to run.
+fn unloaded(events: Vec<Event>) -> Vec<Event> {
+    events
+        .into_iter()
+        .map(|event| match event {
+            Event::StatsTick {
+                seq, drops, chains, ..
+            } => Event::StatsTick {
+                seq,
+                drops,
+                load: None,
+                chains,
+            },
+            other => other,
+        })
+        .collect()
 }
 
 fn hello() -> Hello {
@@ -1528,7 +1548,7 @@ fn keyframe_script() -> Vec<Call> {
             visible: false,
         }),
         delete("kp"),
-        // A live value on a keyframe waits on #702.
+        // A live value on a keyframe is the keyframe's own parameter (#846).
         live("gk", vec![crop("kk", 4)]),
         one(clear(OverrideField::Visible)),
         read(Query::StateGet),
@@ -2983,7 +3003,7 @@ fn a_removed_drop_source_keeps_its_total() {
 
     engine.emit_stats_tick();
     assert_eq!(
-        drain(&mut events),
+        unloaded(drain(&mut events)),
         vec![Event::StatsTick {
             seq: 1,
             drops: DropCounts {
@@ -2991,6 +3011,7 @@ fn a_removed_drop_source_keeps_its_total() {
                 render_ticks: 2,
                 ..DropCounts::default()
             },
+            load: None,
             chains: Some(ChainCost::default()),
         }]
     );
@@ -3004,7 +3025,7 @@ fn a_removed_drop_source_keeps_its_total() {
     });
     engine.emit_stats_tick();
     assert_eq!(
-        drain(&mut events),
+        unloaded(drain(&mut events)),
         vec![Event::StatsTick {
             seq: 2,
             drops: DropCounts {
@@ -3012,6 +3033,7 @@ fn a_removed_drop_source_keeps_its_total() {
                 render_ticks: 4,
                 ..DropCounts::default()
             },
+            load: None,
             chains: Some(ChainCost::default()),
         }],
         "the removed source stays at the total it had when it was removed"
@@ -3020,7 +3042,7 @@ fn a_removed_drop_source_keeps_its_total() {
     engine.remove_drop_source(id);
     engine.emit_stats_tick();
     assert_eq!(
-        drain(&mut events),
+        unloaded(drain(&mut events)),
         vec![Event::StatsTick {
             seq: 3,
             drops: DropCounts {
@@ -3028,9 +3050,68 @@ fn a_removed_drop_source_keeps_its_total() {
                 render_ticks: 4,
                 ..DropCounts::default()
             },
+            load: None,
             chains: Some(ChainCost::default()),
         }],
         "removing an unknown source changes nothing"
+    );
+}
+
+/// Each `stats.tick` carries the engine's load: the host's CPU reading in whole
+/// milliseconds, no program frames while nothing runs, and a clock that never goes back.
+#[test]
+fn a_stats_tick_carries_the_engines_load() {
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let mut events = control.events();
+    let load = |events: Vec<Event>| match events.as_slice() {
+        [Event::StatsTick { load, .. }] => load.expect("a load"),
+        other => panic!("not one stats.tick: {other:?}"),
+    };
+
+    engine.emit_stats_tick();
+    let first = load(drain(&mut events));
+    assert_eq!(first.cpu_ms, None, "no CPU reader yet");
+    assert_eq!(first.program_frames, 0);
+    assert!(first.cpus >= 1);
+
+    let cpu = jstream_platform::fake::FakeCpu::new();
+    engine.set_process_cpu(Arc::new(cpu.clone()));
+    cpu.set(Some(std::time::Duration::from_micros(250_700)));
+    engine.emit_stats_tick();
+    let second = load(drain(&mut events));
+    assert_eq!(second.cpu_ms, Some(250));
+    assert!(second.elapsed_ms >= first.elapsed_ms);
+}
+
+/// The heartbeat a host starts emits `stats.tick` while no output runs, and a second
+/// start adds no second heartbeat.
+#[test]
+fn the_heartbeat_ticks_while_the_engine_is_idle() {
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let mut events = control.events();
+    engine.start_stats_heartbeat();
+    engine.start_stats_heartbeat();
+    let mut seqs = Vec::new();
+    // About a second apart, so two arrive well within the bound.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while seqs.len() < 2 && std::time::Instant::now() < deadline {
+        seqs.extend(
+            drain(&mut events)
+                .into_iter()
+                .filter_map(|event| match event {
+                    Event::StatsTick { seq, load, .. } => load.map(|_| seq),
+                    _ => None,
+                }),
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert!(seqs.len() >= 2, "no heartbeat ticks: {seqs:?}");
+    assert_eq!(
+        seqs[..2],
+        [1, 2],
+        "one heartbeat, numbering its ticks in order"
     );
 }
 
@@ -3916,14 +3997,18 @@ mod cpu_pipeline {
         );
 
         engine.emit_stats_tick();
-        let render_ticks = drain(&mut events)
+        let tick = drain(&mut events)
             .into_iter()
             .filter_map(|event| match event {
-                Event::StatsTick { drops, .. } => Some(drops.render_ticks),
+                Event::StatsTick { drops, load, .. } => Some((drops.render_ticks, load)),
                 _ => None,
             })
             .next_back();
-        assert_eq!(render_ticks, Some(9));
+        let (render_ticks, load) = tick.expect("a stats.tick");
+        assert_eq!(render_ticks, 9);
+        // Two ticks drawn, and the nine skipped ones not counted as frames.
+        let frames = load.expect("the engine's load").program_frames;
+        assert_eq!(frames, 2, "the nine skipped ticks are not frames");
         block_on(control.call(output_call("yt", false))).expect("output.stop");
     }
 
@@ -6093,6 +6178,12 @@ pub(crate) fn check_secrets_are_redacted() {
             Query::OutputList,
             Query::OutputStatus {
                 output_id: OutputId::new("out_yt"),
+            },
+            // The activity log's sentence names the action and the output, never the key
+            // (ADR-0083).
+            Query::ActivityList {
+                after_seq: None,
+                limit: None,
             },
         ] {
             let result = query(&control, query_).expect("query");

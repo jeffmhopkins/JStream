@@ -37,6 +37,7 @@ mod session;
 #[cfg(test)]
 mod tests;
 mod ui;
+mod ui_settings;
 
 pub use config::{ServerConfig, Token};
 pub use error::ServerError;
@@ -66,6 +67,7 @@ use tokio::net::TcpListener;
 use tokio::sync::{Semaphore, watch};
 use tracing::Instrument;
 use ui::Ui;
+use ui_settings::UiSettings;
 
 /// Opens one `Control` session for each accepted connection. A connection's session is
 /// dropped when it closes.
@@ -111,6 +113,8 @@ struct App {
     tls: bool,
     /// Whether the server pairs devices at all (`ServerConfig::pairing`).
     pairing: bool,
+    /// The UI settings it keeps for its clients (ADR-0084).
+    ui_settings: Arc<UiSettings>,
 }
 
 impl App {
@@ -122,6 +126,7 @@ impl App {
             Arc::clone(&self.devices),
             self.pairing_offered,
             self.pairing,
+            Arc::clone(&self.ui_settings),
         ))
     }
 }
@@ -138,6 +143,7 @@ impl Server {
         gate::check_extra_hosts(&config.extra_hosts)?;
         let ui = config.ui_dir.as_deref().map(Ui::new).transpose()?;
         let devices = Arc::new(Devices::load(config.device_file.clone())?);
+        let ui_settings = Arc::new(UiSettings::load(config.ui_settings_file.clone()));
         let bind_error = |source| ServerError::Bind {
             addr: config.bind,
             source,
@@ -165,6 +171,7 @@ impl Server {
             pairing_offered: local_addr.ip().is_loopback() || config.tls,
             tls: config.tls,
             pairing: config.pairing,
+            ui_settings,
         });
         Ok(Server {
             listener,

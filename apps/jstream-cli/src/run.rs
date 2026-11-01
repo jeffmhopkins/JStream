@@ -813,8 +813,10 @@ fn write_event(out: &mut dyn Write, event: &Event, json: bool) -> Result<bool, C
         Event::EventsDropped { count } => {
             writeln!(out, "events.dropped {count}")?;
         }
-        Event::StatsTick { seq, drops, .. } => {
-            writeln!(
+        Event::StatsTick {
+            seq, drops, load, ..
+        } => {
+            write!(
                 out,
                 "stats.tick seq {seq} capture_frames {} audio_frames {} render_ticks {} \
                  encode_frames {} encode_blocks {} output_packets {}",
@@ -825,6 +827,17 @@ fn write_event(out: &mut dyn Write, event: &Event, json: bool) -> Result<bool, C
                 drops.encode_blocks,
                 drops.output_packets,
             )?;
+            if let Some(load) = load {
+                write!(
+                    out,
+                    " elapsed_ms {} program_frames {} cpus {}",
+                    load.elapsed_ms, load.program_frames, load.cpus
+                )?;
+                if let Some(cpu_ms) = load.cpu_ms {
+                    write!(out, " cpu_ms {cpu_ms}")?;
+                }
+            }
+            writeln!(out)?;
         }
         Event::LiveChanged {
             gesture_id,

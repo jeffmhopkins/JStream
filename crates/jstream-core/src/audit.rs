@@ -70,6 +70,10 @@ pub struct AuditEntry {
     /// A batch whose idempotency key this client had already used: it got the `rev` it
     /// produced the first time, and nothing was applied again.
     pub replayed: bool,
+    /// One English sentence saying what the call did, for the activity log (ADR-0083):
+    /// names and numeric, on/off or enum values only. Not written to the audit file,
+    /// whose lines keep to names, IDs, revisions and error codes.
+    pub summary: String,
 }
 
 impl AuditEntry {
@@ -130,7 +134,8 @@ impl AuditEntry {
 }
 
 /// Where the engine sends its audit entries. The host injects one with
-/// [`Engine::with_audit`](crate::Engine::with_audit); without one, nothing is recorded.
+/// [`Engine::with_audit`](crate::Engine::with_audit); without one, nothing is recorded
+/// beyond the in-memory activity log (ADR-0083).
 ///
 /// `record` is called on the thread that executed the call, with no engine lock held.
 /// It must return quickly and must not call back into the engine.
@@ -340,7 +345,8 @@ fn dropped_line(time: SystemTime, dropped: u64) -> String {
 }
 
 /// The engine's side: the sink, if any, behind a lock taken only to clone it, so a sink
-/// is never called under an engine lock.
+/// is never called under an engine lock. Whether or not there is one, every entry also
+/// goes to the activity log (ADR-0083).
 #[derive(Default)]
 pub(crate) struct Audit {
     sink: Mutex<Option<Arc<dyn AuditSink>>>,
@@ -351,16 +357,15 @@ impl Audit {
         *lock(&self.sink) = Some(sink);
     }
 
-    /// The sink, if `call` is one the log records (a batch, an undo or redo, or an
-    /// action other than `live.set` and `live.cancel`, whose gestures are logged when
-    /// they end) and the host gave one.
-    pub(crate) fn sink_for(&self, call: &Call) -> Option<Arc<dyn AuditSink>> {
+    /// Whether `call` is one the log records: a batch, an undo or redo, or an action
+    /// other than `live.set` and `live.cancel`, whose gestures are logged when they end.
+    pub(crate) fn records(call: &Call) -> bool {
         match call {
             Call::Action {
                 action: Action::LiveSet { .. } | Action::LiveCancel { .. },
-            } => None,
-            Call::Batch(_) | Call::History(_) | Call::Action { .. } => self.sink(),
-            _ => None,
+            } => false,
+            Call::Batch(_) | Call::History(_) | Call::Action { .. } => true,
+            _ => false,
         }
     }
 
@@ -380,6 +385,7 @@ pub(crate) fn gesture_entry(
 ) -> AuditEntry {
     AuditEntry {
         time: SystemTime::now(),
+        summary: crate::activity_log::describe_gesture(ended.outcome, &ended.edits),
         client_id: ended.client_id,
         client_name,
         request_id,
@@ -416,13 +422,16 @@ pub(crate) struct Pending {
     output_id: Option<OutputId>,
     scene_id: Option<SceneId>,
     rev_before: Rev,
+    summary: String,
 }
 
 impl Pending {
     /// `rev_before` is read just before the call runs. Another client's batch can land
     /// between that read and the call, so for an applied batch the entry uses the
     /// batch's own `rev` minus one instead.
-    pub(crate) fn new(call: &Call, rev_before: Rev, client_name: String) -> Self {
+    /// `summary` is the activity log's sentence, written from the collection as it
+    /// stood at that read.
+    pub(crate) fn new(call: &Call, rev_before: Rev, client_name: String, summary: String) -> Self {
         let (name, edits, output_id, scene_id) = match call {
             Call::Batch(batch) => (
                 "batch",
@@ -446,6 +455,7 @@ impl Pending {
             output_id,
             scene_id,
             rev_before,
+            summary,
         }
     }
 
@@ -485,6 +495,7 @@ impl Pending {
             rev_after,
             error: result.as_ref().err().map(ProtocolError::code),
             replayed,
+            summary: self.summary,
         }
     }
 }
@@ -587,6 +598,7 @@ mod tests {
             outcome: None,
             rev_before: Rev(n),
             rev_after: Rev(n),
+            summary: "Set the stream key of output “out_yt”".to_owned(),
             error: None,
             replayed: false,
         }

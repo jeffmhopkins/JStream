@@ -4,8 +4,8 @@
 //! edit, and undo and redo (ADR-0032) from the keyboard. The scene and the selected item
 //! are the shared [`Studio`] selection, so the canvas, the sources list and the
 //! properties form show the same ones. A keyframe scene shows its parent's items at its
-//! overrides under the keyframe banner, and its drags commit without live values, which
-//! the engine doesn't take there yet (#702); Ctrl+D, Ctrl+V and Del, which would change
+//! overrides under the keyframe banner, and its drags commit without live values: the
+//! engine takes them there (#846), but the canvas doesn't send them yet; Ctrl+D, Ctrl+V and Del, which would change
 //! the parent's items, do nothing there. Ctrl+C and Ctrl+V copy and paste items
 //! (`clipboard`).
 //!
@@ -24,6 +24,7 @@ pub mod model;
 pub mod preview;
 pub mod screen;
 pub mod snap;
+pub mod taps;
 pub mod transform;
 
 use crate::app::SessionContext;
@@ -255,8 +256,10 @@ pub fn Canvas() -> impl IntoView {
     };
 
     // The live preview: once the `<canvas>` is in the page, open the session's binary
-    // channel and one preview stream on it, and draw its frames.
+    // channel and one preview stream on it, and draw its frames. Frames of a dialog's
+    // own picture go to its tap.
     let stream = StoredValue::new_local(None::<preview::Stream>);
+    let taps = use_context::<taps::PreviewTaps>();
     {
         let alive = Arc::clone(&alive);
         screen.on_load(move |element| {
@@ -278,7 +281,7 @@ pub fn Canvas() -> impl IntoView {
             stream.set_value(Some(first));
             spawn_local(run_preview(
                 frames,
-                control,
+                (control, taps),
                 screen::Screen::new(element, move || {
                     // Shown once the first picture is drawn, unless the stream has
                     // already ended.
@@ -506,8 +509,8 @@ pub fn Canvas() -> impl IntoView {
             Action::Group(gesture) => Some(Active::Group(gesture.kind)),
             Action::Marquee { .. } => None,
         });
-        // A box drag opens a gesture, so the output follows it before the drop. Live
-        // values on a keyframe scene wait on #702, so its drags only commit.
+        // A box drag opens a gesture, so the output follows it before the drop. A drag on
+        // a keyframe scene sends no live values yet (#846), so it only commits.
         let gesture = match (&action, session, current.scene.as_ref()) {
             (
                 Action::One { .. } | Action::Crop { .. } | Action::Group(_),
@@ -1708,12 +1711,16 @@ fn describe(error: &CanvasError) -> String {
 }
 
 /// Runs the canvas's preview stream: subscribes, then draws each frame of the current
-/// stream's channel until the session, the stream or the canvas ends. When the
+/// stream's channel until the session, the stream or the canvas ends, handing each
+/// frame of another channel to its tap ([`taps`]). When the
 /// browser's H.264 decoder fails, it subscribes again for JPEG only. Another scene
 /// shown opens a new stream (the canvas's effect does), whose frames it then draws.
 async fn run_preview(
     mut frames: jstream_control::BinaryStream,
-    control: std::rc::Weak<dyn jstream_control::Control>,
+    (control, taps): (
+        std::rc::Weak<dyn jstream_control::Control>,
+        Option<taps::PreviewTaps>,
+    ),
     screen: Option<screen::Screen>,
     stream: StoredValue<Option<preview::Stream>, LocalStorage>,
     state: RwSignal<PreviewState>,
@@ -1742,9 +1749,9 @@ async fn run_preview(
     let Some(first) = current() else { return };
     match subscribe(first.subscribe()).await {
         Some(Ok(_)) => {}
+        // The canvas shows why; the channel is still read, for the taps' frames.
         Some(Err(error)) => {
             state.try_set(PreviewState::Unavailable(error.to_string()));
-            return;
         }
         None => return,
     }
@@ -1754,8 +1761,11 @@ async fn run_preview(
         }
         let header = frame.header;
         let Some(now) = current() else { return };
-        // A late frame of a stream already closed.
+        // A tap's frame, or a late frame of a stream already closed.
         if header.channel != now.channel {
+            if let Some(taps) = taps.and_then(|taps| taps.get()) {
+                taps.deliver(&frame);
+            }
             continue;
         }
         if header.end {

@@ -53,6 +53,7 @@ pub fn subscribe(width: f32, height: f32, pixel_ratio: f32, h264: bool) -> Actio
         fps: Some(FPS),
         codecs,
         scene_id: None,
+        source: None,
     }
 }
 
@@ -113,6 +114,7 @@ impl Stream {
                 fps,
                 codecs,
                 scene_id: self.scene.clone(),
+                source: None,
             },
             other => other,
         }
@@ -407,6 +409,7 @@ mod tests {
             fps,
             codecs,
             scene_id,
+            ..
         } = subscribe(800.0, 450.0, 2.0, true)
         else {
             panic!("a subscribe");

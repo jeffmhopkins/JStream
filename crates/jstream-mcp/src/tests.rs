@@ -215,6 +215,7 @@ fn handshake_list_and_call_round_trip() {
     assert_eq!(
         names,
         [
+            "activity",
             "audio",
             "batch",
             "bus",
@@ -242,6 +243,7 @@ fn handshake_list_and_call_round_trip() {
             "state",
             "studio",
             "transition",
+            "ui_settings",
             "video",
             "video_mix"
         ]
@@ -423,7 +425,7 @@ fn stateless_requests_round_trip() {
 
     let listed = f.modern("tools/list", json!({}));
     assert_eq!(listed["result"]["resultType"], "complete");
-    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(29));
+    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(31));
     assert!(listed["result"]["ttlMs"].as_u64().is_some());
 
     let called = f.modern(
@@ -834,6 +836,7 @@ fn stats_ticks_are_not_buffered_and_evict_nothing() {
     let tick = |seq| Event::StatsTick {
         seq,
         drops: DropCounts::default(),
+        load: None,
         chains: None,
     };
     let ticks = 2 * crate::events::BUFFER_CAPACITY as u64;

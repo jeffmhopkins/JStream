@@ -31,9 +31,10 @@ Contents ([Design](#design) explains the choices):
   session.
 - **Header** (`header.rs`): `Header`, the bar along the top: the brand, the File menu
   (the connection's details and Disconnect), the Edit menu (Undo, Redo), the View menu
-  (show or hide each panel, and open the program or multiview projector) and the Layout menu (saved layouts), the frames dropped
-  since the page connected, Studio mode (kept in the browser's storage), Record, and Go
-  Live / End stream. `RecordButton` and `Dropped` are its logic, tested natively.
+  (show or hide each panel, and open the program or multiview projector) and the Layout menu (saved layouts), the stats
+  readout (the program's frame rate, the frames dropped since the page connected and the
+  engine's CPU use), Studio mode (kept in the browser's storage), Record, and Go
+  Live / End stream. `RecordButton`, `Dropped` and `Load` are its logic, tested natively.
 - **Dock** (`dock.rs`): `Dock`, the model of which panel sits where: eight `Zone`s
   around the canvas, each holding `Group`s of tabbed `PanelId`s, the zones' sizes, and
   the saved layouts (`Layout`, with Editing and Live built in). Every change goes
@@ -94,7 +95,9 @@ Contents ([Design](#design) explains the choices):
   properties form inside it (`properties.rs`), the Add source dialog (`add_source.rs`:
   `AddSource` and the `AddSourceDialog` context that opens it, with its type list and
   the edits it sends, tested natively), the Properties dialog (`source_properties.rs`:
-  `SourceProperties` and the `PropertiesDialog` context that opens it), the scene
+  `SourceProperties` and the `PropertiesDialog` context that opens it, with its live
+  picture of a capture source in `device_preview.rs`, whose request and what it follows
+  are tested natively), the scene
   Properties dialog (`scene_properties.rs`: `SceneProperties` and the `SceneDialog`
   context that opens it, with the edits OK sends and the hotkey chords tested
   natively), the Filters
@@ -383,8 +386,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   select (of the scenes, the other sources, or the buses, with None for `null`, which
   for a `waveform`'s or `spectrum`'s `audio` is the program mix; a source reference
   restricted to audio, such as their `audio_source`, offers only the sources that
-  report audio settings, less `scene` sources, as the engine accepts no other) per
-  parameter type, in the descriptor's order, grouped by `group`, advanced
+  report audio settings, less `scene` sources, as the engine accepts no other), or capture
+  target list per parameter type. A `capture_target` (a `display` or `window` source's
+  `target`) lists the targets of its kind that `capture.targets` reports, each by name
+  and size, after "Primary display" or "None" for the empty value, and a target the
+  source names that isn't listed now (a closed window) as "Window not open (<ID>)". It
+  asks again each time the field gets focus, so a window opened since shows up; until
+  the first list arrives, or while the engine can't list targets, it is the ID as text,
+  and a failed refresh keeps the last list. Fields
+  come in the descriptor's order, grouped by `group`, advanced
   ones collapsed, and hidden while their `visible_if` doesn't hold. A type this UI
   doesn't know is shown read-only. A change is checked with the descriptor's own check,
   then sent as a one-parameter `source.set_settings` patch, and Reset sends `null` for
@@ -401,7 +411,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   field blurs it before pressing OK, so the field's `change` reaches the draft first.
   The filter chains are the Filters panel's rows (below), which apply at once. A double click on
   an item and Properties… in the item menus open it for the item's source; a nested
-  scene's item opens the scene's Properties dialog instead.
+  scene's item opens the scene's Properties dialog instead. A display, window or webcam
+  source shows a live picture above the name (`device_preview.rs`, DL-02): a
+  `preview.subscribe` stream of the draft source (`source`, 0.49, small at 15 fps) on a
+  channel from the canvas's taps (`canvas/taps.rs`, numbered from 2³¹ so none is the
+  canvas's), drawn by the canvas's `Screen`. It follows the settings the capture reads
+  (a webcam's `device`, a display's or window's `target` and `show_cursor`): a change
+  closes the stream and opens the next on a new channel, and closing the dialog closes
+  it. A window source with no window picked says to pick one; an engine that refuses or
+  ends the stream shows why.
 - **The scene Properties dialog** (`scene_properties.rs`) opens from a double click on a
   scene row, the row menu's Properties…, the canvas margin's Scene properties… and a
   nested scene's item. It edits a draft of the name, Transition in and out and the
@@ -466,9 +484,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Scene objects (`Sources`), the Inspector (`Inspector`, with `Pairing` under it), the
   Transform, Filters, Live chat, Stream stats, Audio mixer, Outputs, Agent activity and
   Transitions (`StudioMode`); `panel_view` maps each to its component, and a new panel
-  adds a `PanelId` and a line there. Live chat, Stream stats and Agent activity wait on
-  the engine (YouTube sign-in, an agent audit log), so they say what they wait on and
-  none is in a built-in layout. The
+  adds a `PanelId` and a line there. Live chat and Stream stats wait on the engine
+  (YouTube sign-in), so they say what they wait on and neither is in a built-in layout.
+  Agent activity (`panels/agent.rs`) lists what agents did from the engine's
+  `activity.list` ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md)),
+  leaving out JStream's own UIs, and asks again after each `state.changed`,
+  `studio.changed`, `output.state_changed`, `live.ended` and `events.dropped`, and every
+  5 seconds; the
+  Live layout shows it as a second tab beside Outputs. The
   panels' own `h2` headings are hidden, since the tab is the title. Narrow windows
   stack the zones, without splitters.
   - Each group keeps every tab's panel mounted and hides the inactive ones, so a tab
@@ -485,17 +508,35 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
     unlike `style` attributes. After every dock change the workspace fires a window
     `resize`, which the canvas measures itself on.
   - The dock is kept in the browser's storage (`jstream.dock`) after every change and
-    read back when the workspace opens; a stored dock that doesn't parse is ignored. So
-    a layout lasts per browser, not per engine, until the engine stores UI settings
-    (decision register D35).
+    read back when the workspace opens; a stored dock that doesn't parse is ignored.
+  - It is also kept in the engine's UI settings under `workspace.dock`
+    (`ui_settings.rs`, [ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)),
+    so the desktop app and every browser of one engine show the same layout. When the
+    workspace opens it shows the browser's copy, then reads the server's
+    (`ui_settings.get`), and `ui_settings::first_step` decides what happens next. The
+    browser also keeps the dock it last read from or sent to the server
+    (`jstream.dock.shared`), so it knows when its own copy holds a change the server
+    never got (the page closed within the send delay, or the server couldn't be
+    reached): that copy is sent. Otherwise the server's dock is shown, or the browser's
+    is sent when the server keeps none. A dock this UI can't read is left alone until
+    the person changes theirs, so an older UI never overwrites a newer one's just by
+    opening. Nothing is sent before that answer. After that each change is sent
+    (`ui_settings.set`) once the dock has stayed the same for 500 ms, since a splitter
+    drag changes it on every move, and a dock just read from the server isn't sent back.
+    A session with no server in front answers `unsupported`, and the browser alone keeps
+    the dock. Another open client picks up a change the next time its workspace opens.
 - **The header** keeps its own copy of the outputs, as the outputs panel does (both
   re-read on `state.changed` and `events.dropped` and follow `output.state_changed`),
   plus `Studio::keys_changed`, which the panel bumps after a stream key is set or
   cleared, since no event reports that. Go Live and End stream are described under
   Outputs. Record starts every stopped or failed recording output and, while any runs,
   becomes "Stop recording", which stops them; with no recording output it is disabled.
-  The dropped readout counts captured, rendered and encoded frames dropped since the
-  first `stats.tick` this page saw, starting over when the engine restarts. Undo and
+  The stats readout reads "60 fps · 0 dropped · CPU 3%" from `stats.tick`. The dropped
+  count is captured, rendered and encoded frames dropped since the first tick this page
+  saw, starting over when the engine restarts. The frame rate and CPU (`Load`) come from
+  the last two ticks' `load` (protocol 0.48): program frames over the elapsed time,
+  shown only while the program drew some, and CPU time over the elapsed time and the
+  logical CPUs, "<1%" below half a percent, left out when the engine reads none. Undo and
   Redo in the Edit menu call `history.undo` and `history.redo`, like the canvas's
   buttons. A failed call shows in the shell's problem bar. The menus close on Escape
   or on a press anywhere outside them.
@@ -698,13 +739,14 @@ browser, and `mod.rs` is the component.
   outline. A keyframe scene shows its
   parent's items at its overrides under a banner, "◆ Keyframe of “<parent>”: only
   placement and visibility can change", and its edits are addressed to it, so they
-  write its overrides (ADR-0049). Its drags send no live values, which the engine
-  doesn't take on a keyframe scene yet (#702): the drop commits as usual.
+  write its overrides (ADR-0049). Its drags send no live values yet, though the engine
+  takes them on a keyframe scene (#846): the drop commits as usual.
 - **The preview.** Under the boxes is the shown scene's picture, live: the program
   mix while the canvas shows the scene on program, so its transitions show, else that
   scene's own stream (`preview.subscribe`'s `scene_id`, CV-03). The canvas opens the
   session's binary channel (`Control::binary`; a session has one, so the canvas is
-  its only reader) and one `preview.subscribe` stream on it, at 30 fps and as
+  its only reader, and hands each frame of another channel to that channel's tap,
+  `taps.rs`, the Properties dialog's picture) and one `preview.subscribe` stream on it, at 30 fps and as
   sharp as the stage (its size in device pixels, kept between 320×180 and 1280×720).
   It asks for H.264 first when the browser has WebCodecs' `VideoDecoder`, then JPEG.
   H.264 frames go to a `VideoDecoder` configured from the SPS in each keyframe
@@ -714,7 +756,7 @@ browser, and `mod.rs` is the component.
   is never lost. Each decoded picture is drawn into a `<canvas>` placed with the
   canvas's own fit, so the picture lies exactly under the boxes. If the decoder fails, the canvas closes the stream and subscribes
   again for JPEG only. If the engine refuses or ends the stream, the background says
-  why. Showing another scene closes the stream and opens that scene's on the next
+  why, and the channel is still read for the taps. Showing another scene closes the stream and opens that scene's on the next
   channel number, so a late frame of the old stream is never drawn; until the new
   stream's first frame, the background says the preview is starting. WebCodecs is reached through `js_sys::Reflect`, because `web-sys` has it only
   behind the `web_sys_unstable_apis` build flag. A drag's live values (below) reach

@@ -137,7 +137,7 @@ test('the Layout menu switches to Live and resets to Editing', async ({ page, da
   await expect(menu.getByRole('menuitem', { name: /Editing/ })).toContainText('current');
   await menu.getByRole('menuitem', { name: 'Live' }).click();
   await expect(zone(page, 'Dock below the canvas').getByRole('tab')).toHaveText(['Audio mixer', 'Transitions']);
-  await expect(zone(page, 'Right sidebar').getByRole('tab')).toHaveText(['Outputs']);
+  await expect(zone(page, 'Right sidebar').getByRole('tab')).toHaveText(['Outputs', 'Agent activity']);
   await expect(zone(page, 'Bottom dock')).toBeHidden();
 
   await openMenu(page, 'Layout');

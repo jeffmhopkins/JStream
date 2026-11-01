@@ -1411,11 +1411,14 @@ mod tests {
             jstream_protocol::Size::try_new(480.0, 270.0).expect("positive"),
         )
         .expect("valid");
-        let live = LiveParams::from_values(&[Edit::ItemSetGeometry {
-            scene_id: None,
-            item_id: ItemId::new("cam"),
-            geometry: half,
-        }]);
+        let live = LiveParams::from_values([(
+            None,
+            &Edit::ItemSetGeometry {
+                scene_id: None,
+                item_id: ItemId::new("cam"),
+                geometry: half,
+            },
+        )]);
         let pixels = draw_points(
             &mut compositor,
             (&mut cache, &mut chains),

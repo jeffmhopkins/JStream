@@ -95,10 +95,10 @@ matter.
 | D32 | Image, GIF and font decoding vs ADR-0003's "OS codecs only" | ambiguity in ADR-0003 | M | now (image source is M1b) |
 | D33 | Continuous edits: scrubbing, drags, live dialogs with Cancel; undo granularity | gap (protocol OQ 4) | A | **now** |
 | D34 | Multi-client: selection, presence, conflicting edits | partly covered (ADR-0013) | A | pre-M2 |
-| D35 | Workspace layout persistence: client side or server side | gap | A | pre-M2 |
+| D35 | Workspace layout persistence: client side or server side | decided ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)) | A | pre-M2 |
 | D36 | Preview streams for any target, pop-outs, projectors, multiview | partly covered (ADR-0002) | A (projector host: M) | pre-M2 (stream shape now) |
 | D37 | Item geometry for the canvas overlay: source sizes as runtime state | gap | A | now |
-| D38 | Audit log over the protocol (Agent activity panel) | gap | A | pre-M2 |
+| D38 | Audit log over the protocol (Agent activity panel) | decided ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md)) | A | pre-M2 |
 | D39 | Header and stream stats; event subscriptions | partly covered (`stats.tick`) | A | M1d |
 | D40 | YouTube chat: send as channel, feature on stream, audience stats | gap beyond ADR-0009 | **M** | later (M3) |
 | D41 | Go Live and broadcast creation | covered (ADR-0009) | — | M3 |
@@ -1547,10 +1547,13 @@ to 'Desktop + Cam'" and "Mic gain −1.5 → −3.0 dB" (`P:715-720`). It is in 
 Live layout (`D:1186`).
 
 **Today.** ADR-0006 and ARCH › MCP: every agent action goes to the audit log, with the
-client's name. The core README says the audit log is an M1b item. There is no protocol
-access to it.
+client's name. Since protocol 0.51 the engine keeps the last 100 entries in memory with
+a sentence for each, and `activity.list` reads them
+([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md)).
 
-**Status.** Gap. R-ARCH-001 requires it to be in the protocol for the UI to show it.
+**Status.** Decided ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md)).
+`activity.list { after_seq, limit }` replaces the `audit.list` and `audit.appended` sketch
+below; the event waits for event subscriptions, and the UI asks again with `after_seq`.
 
 **Consequences.** Query `audit.list { since, limit, client? }` and event
 `audit.appended`, with human-readable summaries computed by the engine. "Gain −1.5 →
