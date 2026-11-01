@@ -727,7 +727,7 @@ impl Program {
                 })?;
             if config.hardware == HardwarePreference::Prefer && !video.info().codec.hardware {
                 tracing::warn!(
-                    output = %output,
+                    output_id = %output,
                     encoder = %video.info().codec.name,
                     reason = %why_software(self.codecs.as_ref(), config.codec),
                     "the output's video encoder prefers hardware but opened in software"

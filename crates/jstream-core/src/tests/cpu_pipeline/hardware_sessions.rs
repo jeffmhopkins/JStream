@@ -567,7 +567,7 @@ fn a_refused_prefer_warns_naming_the_output() {
     let warned = software_warnings(&logged);
     assert_eq!(warned.len(), 2, "one per new session: {logged:?}");
     for (line, output) in warned.iter().zip(["yt", "rec"]) {
-        assert!(line.contains(&format!("output={output} ")), "{line}");
+        assert!(line.contains(&format!("output_id={output} ")), "{line}");
         assert!(
             line.contains("the hardware H.264 encoder refused the session"),
             "{line}"
@@ -588,7 +588,7 @@ fn an_absent_hardware_encoder_warns_naming_the_output() {
     both.rec.clone().expect("rec on software");
     let warned = software_warnings(&logged);
     assert_eq!(warned.len(), 2, "{logged:?}");
-    assert!(warned[0].contains("output=yt "), "{}", warned[0]);
+    assert!(warned[0].contains("output_id=yt "), "{}", warned[0]);
     assert!(
         warned[0].contains("this machine has no hardware H.264 encoder"),
         "{}",
@@ -607,6 +607,7 @@ fn hardware_or_avoid_warns_of_nothing() {
         )
     });
     both.rec.clone().expect("rec on avoid");
+    assert_eq!(both.status("yt").1, Some(true), "yt opened hardware");
     assert_eq!(both.status("rec").1, Some(false));
     assert!(software_warnings(&logged).is_empty(), "{logged:?}");
 }
