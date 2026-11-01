@@ -55,6 +55,8 @@ pub(crate) enum GpuLayout {
     Bgra,
     /// One plane of 4-byte pixels, R, G, B, A (or padding) in memory, likewise.
     Rgba,
+    /// One plane of packed 4:2:2, `Y0 U Y1 V` per two pixels, converted to R'G'B'.
+    Yuyv,
 }
 
 /// The [`GpuLayout`] of a V4L2 pixel format.
@@ -62,6 +64,7 @@ pub(crate) fn gpu_layout(fourcc: u32) -> Option<GpuLayout> {
     match fourcc {
         PIX_FMT_ABGR32 | PIX_FMT_XBGR32 => Some(GpuLayout::Bgra),
         PIX_FMT_RGBA32 | PIX_FMT_RGBX32 => Some(GpuLayout::Rgba),
+        PIX_FMT_YUYV => Some(GpuLayout::Yuyv),
         _ => None,
     }
 }
@@ -417,14 +420,15 @@ mod tests {
         assert_eq!(encoding(fourcc(b"BA24")), None);
     }
 
-    /// The GPU path takes the 32-bit RGB formats, in their byte order; the others open on
-    /// the CPU path.
+    /// The GPU path takes the 32-bit RGB formats, in their byte order, and YUYV; the
+    /// others open on the CPU path.
     #[test]
     fn the_gpu_path_takes_the_rgb_formats() {
         assert_eq!(gpu_layout(PIX_FMT_ABGR32), Some(GpuLayout::Bgra));
         assert_eq!(gpu_layout(PIX_FMT_XBGR32), Some(GpuLayout::Bgra));
         assert_eq!(gpu_layout(PIX_FMT_RGBA32), Some(GpuLayout::Rgba));
         assert_eq!(gpu_layout(PIX_FMT_RGBX32), Some(GpuLayout::Rgba));
+        assert_eq!(gpu_layout(PIX_FMT_YUYV), Some(GpuLayout::Yuyv));
         for cpu in [PIX_FMT_MJPEG, PIX_FMT_YUV420, PIX_FMT_YUV420M] {
             assert_eq!(gpu_layout(cpu), None);
         }
