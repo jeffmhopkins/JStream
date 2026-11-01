@@ -147,7 +147,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Events** (`event.rs`): `state.changed`, `output.state_changed`, `studio.changed`
   (program, preview and the transition a switch started), `privacy.changed` (deprecated),
   `source.size_changed`, `events.dropped`,
-  `stats.tick`, `meters.tick`, `youtube.status_changed`, `youtube.health_changed`,
+  `stats.tick` (with `DropCounts` and `EngineLoad`), `meters.tick`,
+  `youtube.status_changed`, `youtube.health_changed`,
   `youtube.stats`, `live.changed`, `live.ended` and `plugin.state_changed`.
 - **Plugins** (`plugin.rs`, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)): `PluginClass` (`read`,
   `edit`, `live`, `outputs`), `PLUGIN_SCOPES`, the table that places every command in
@@ -159,7 +160,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `plugin_may_bind`, `PluginState` and `PluginDisabledReason` ([Plugins](#design)).
 - **Preview streams** (`preview.rs`, [ADR-0045](../../docs/adr/0045-leptos-web-ui.md)):
   `PreviewCodec` (`h264`, `jpeg`), `PreviewSettings` (`preview.subscribe`'s fields with
-  their defaults and range checks, which the engine applies), and the binary
+  their defaults and range checks, which the engine applies), `PreviewDraft` (its
+  `source`, a draft source the collection doesn't hold), and the binary
   frame: `BinaryFrame`, its fixed `BinaryHeader` with `StreamKind`, the byte layout's
   `to_bytes`/`parse` and `BinaryError`, and `KeyframeGate`, the drop rule every hop that
   queues frames applies ([Binary streams](#design)).
@@ -185,8 +187,11 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   negative scale is not refused: `from_legacy` returns the drawn outline with the
   reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.50 because 0.50 added the
   `capture_target` parameter type, which a `display` or `window` source's `target` has, so
-  a UI can offer what `capture.targets` lists ([Kinds](#design)); 0.47 made the engine
-  draw, and so accept, every blend mode
+  a UI can offer what `capture.targets` lists ([Kinds](#design)); 0.49 made
+  `preview.subscribe` take a `source`, a draft source the collection doesn't hold
+  (`PreviewDraft`, [Binary streams](#design)); 0.48 added `stats.tick`'s `load`, the
+  engine's frame and CPU totals (`EngineLoad`); 0.47 made the engine draw, and so
+  accept, every blend mode
   ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md); no wire change); 0.46 added
   `preview.subscribe`'s `scene_id`, a preview stream of any scene, and its 16 streams a
   session ([Binary streams](#design)); 0.45 made scenes
@@ -1181,7 +1186,7 @@ After `welcome`, the server pushes every event to every client.
   ([jstream-server › Design](../jstream-server/README.md#design)). Answers are never
   dropped. The client re-reads what it shows with `state.get`, which carries `rev`.
   Added in 0.4.
-- `stats.tick {seq, drops}` is one sample of the pipeline's drop counters
+- `stats.tick {seq, drops, load}` is one sample of the pipeline's drop counters
   ([R-RT-004](../../docs/RULES.md#R-RT-004)). `drops` is a running total since the
   engine started, not a delta, so a client that misses a tick subtracts the last one
   it did see. The fields are `capture_frames` (frames a capture mailbox replaced
@@ -1194,8 +1199,17 @@ After `welcome`, the server pushes every event to every client.
   drop. A counter missing from `drops` parses as 0 (`DropCounts` is
   `#[serde(default)]`), so a counter added later is an optional field (minor). `seq`
   starts at 1 and increases by one each sample. While an output is
-  running, the pipeline's `jstream-stats` thread emits a tick about once a second;
-  an idle engine emits none. A render tick that falls a whole period or more behind
+  running, the pipeline's `jstream-stats` thread emits a tick about once a second.
+  While none runs, an engine emits none unless its host started the heartbeat, which
+  the daemon and the desktop app do (0.48): it then ticks about once a second as well.
+  Since 0.48 a tick carries `load` (`EngineLoad`), running totals beside the engine
+  time they were read at: `elapsed_ms` since the engine started, `program_frames` the
+  program stage has drawn (it grows only while an output runs), `cpu_ms` of CPU time
+  the engine's process has used on every thread (left out where the host can't read
+  it; the daemon reads it on Windows and macOS) and `cpus`, the logical CPUs. A client
+  takes two ticks for a rate: frames over the elapsed time for the frame rate, and CPU
+  time over the elapsed time times `cpus` for the share of every CPU. An older engine
+  leaves `load` out, and a missing field in it parses as 0 or absent. A render tick that falls a whole period or more behind
   the clock is skipped rather than drawn late, and counted in `render_ticks`. Until
   [open question 7](#open-questions) every client receives it. Added in 0.6. A late plugin block is an audio drop in
   `audio_frames` once the mixer counts it
@@ -1541,8 +1555,9 @@ the JSON text messages of the same connection (0.20,
 `meters.tick` event; a binary meter stream would be another kind of the same frame.
 
 - **Opening and closing.** `preview.subscribe {channel, max_width?, max_height?, fps?,
-  codecs?, scene_id?}` is an action: it opens a stream of the program mix, or of the
-  scene `scene_id` (0.46), for the calling session only, tagged with the `channel`
+  codecs?, scene_id?, source?}` is an action: it opens a stream of the program mix, of
+  the scene `scene_id` (0.46), or of the draft source `source` (0.49), for the calling
+  session only, tagged with the `channel`
   number the client chose (a `u32`, not an ID: it only tells the session's streams
   apart in the frame header). The picture is the canvas scaled down to fit
   `max_width` × `max_height` (default 640 × 360, at most 1920 × 1080) with even sides,
@@ -1560,10 +1575,22 @@ the JSON text messages of the same connection (0.20,
   it with no transition running, whether or not it is on program: what the UI's
   pop-out and projector windows and its multiview show. It never makes a source shown
   or heard ([ADR-0028](../../docs/adr/0028-audio-model-v2.md)), and the program stage
-  never draws it, so it costs an output nothing; like every preview it draws a
-  `display` or `window` source as nothing. A scene the collection doesn't have fails
-  with `not_found`; a scene deleted while its stream is open ends the stream with an
-  end frame.
+  never draws it, so it costs an output nothing; the engine captures the displays,
+  windows and webcams it shows for the preview itself. A scene the collection doesn't
+  have fails with `not_found`; a scene deleted while its stream is open ends the stream
+  with an end frame.
+- **Draft sources.** A `source` stream (`PreviewDraft {kind, settings?}`, 0.49) shows a
+  source the collection doesn't hold, alone, as an item covering the canvas would show
+  it and with no filters: what a `display`, `window` or `webcam` source with those
+  settings captures, so a client shows the device being picked before the source is
+  created or its new settings are saved (the UI's Properties dialog). The settings are
+  checked as `source.create` checks them; a refused one fails with `invalid_argument`
+  naming `source.settings.<param>`, a kind that isn't a capture kind or that the engine
+  doesn't have names `source.kind`, and a request with both `scene_id` and `source`
+  names `source`. The stream keeps the canvas size it was opened at: a client
+  subscribes again for other settings. A webcam or capture card already open is shared,
+  not opened twice. Nothing reaches the collection: no `rev` changes and no event goes
+  out.
 - **The frame.** A fixed 32-byte little-endian header, then the payload:
 
   | Offset | Size | Field |

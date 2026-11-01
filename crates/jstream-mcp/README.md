@@ -236,11 +236,12 @@ The `events` tool exposes the engine's events
 subscription into a buffer of the newest `BUFFER_CAPACITY` events (in `events.rs`),
 numbering them from 1 (`seq`), and parks until the subscription wakes it, so neither
 the buffer nor the `Control`'s own stream grows while the agent is idle. It keeps
-`stats.tick` out of the buffer: about one a second per running pipeline would push
+`stats.tick` out of the buffer: about one a second, from a running pipeline or the
+engine's idle heartbeat, would push
 `state.changed` and `output.state_changed` out within minutes (ADR-0036,
 Consequences). A tick carries running totals, so the feed keeps only the newest one,
 outside the buffer, and every read returns it as `stats`; an agent still sees the drop
-counts, as ADR-0006 requires. A tick takes no `seq`, so it leaves no gap and is not
+counts, as ADR-0006 requires, and since protocol 0.48 the engine's load. A tick takes no `seq`, so it leaves no gap and is not
 counted in `dropped`. `meters.tick`, about ten a second while the mixer runs, is kept
 the same way as `meters`: each one is a full reading of the levels. `live.changed`
 arrives up to 30 times a second per gesture while someone drags, so it would push other

@@ -399,7 +399,8 @@ the reason a session ended with, which it shares, are unit-tested natively
 ### Open questions
 
 1. **Backpressure.** The client's own event buffers are unbounded. `stats.tick` (protocol
-   0.6) is emitted about once a second while the pipeline runs, and a slow subscriber of
+   0.6) is emitted about once a second while the pipeline runs (and, since 0.48, while
+   idle too when the host started the engine's heartbeat), and a slow subscriber of
    it, or of meters, would grow without limit. Bounded buffers that
    drop the oldest events (a gap in `rev` already shows a missed `state.changed`) are
    the likely client-side answer

@@ -37,6 +37,9 @@ Contents:
   is the one monotonic media clock of [ADR-0014](../../docs/adr/0014-media-clock.md)
   (QPC on Windows). Every timestamp a backend hands over (capture frames, audio packets,
   decoded frames) is already on it.
+- **Process CPU:** `ProcessCpu` (`Send + Sync`): the CPU time the process has used, on
+  every thread, for `stats.tick`'s load. The host hands one to the engine; the stats
+  threads call it about once a second, never a real-time thread.
 - **Frames:** `VideoSurface`, the frame type that crosses the seam: `Cpu`, a
   `VideoFrame` in system memory, or `Gpu`, a `GpuFrame` in a texture shared with the
   platform. It is `#[non_exhaustive]`.
@@ -199,7 +202,8 @@ Contents:
   `VideoFrame`, `rgb_to_nv12_image` into an `Nv12Image`, NV12 laid out in one mapped
   buffer), and `even_size` crops an odd source. `yuv` turns a video capture device's
   raw frame bytes, rows `stride` bytes apart with the chroma planes after the luma, into
-  engine frames: `copy_planar` copies NV12 and I420, `copy_planes` copies them from one
+  engine frames: `copy_planar` copies NV12 and I420 (and a one-plane BGRA or RGBA
+  frame, V4L2's 32-bit RGB, row by row), `copy_planes` copies them from one
   buffer per plane, each with its own stride (V4L2's `NV12M` and `YUV420M`), and
   `yuy2_to_nv12` converts packed
   4:2:2, each chroma sample averaging the two rows of its block. A short buffer is an
@@ -228,7 +232,8 @@ Contents:
   apart; any other path is `Unsupported`, and nothing is read from disk; its `stats`
   count opens, seeks, frames and audio blocks),
   `MemoryKeyStore` (an in-memory `StreamKeyStore` that can be made to fail),
-  `MemoryTokenStore` (the same for `OAuthTokenStore`, apart from any key store) and
+  `MemoryTokenStore` (the same for `OAuthTokenStore`, apart from any key store),
+  `FakeCpu` (a `ProcessCpu` whose reading the test sets) and
   `fake::backends`. `plugin_host::fake::FakePluginHosts` (scans find the files a test
   adds; `refuse_starts` fails starts, `start_hung` starts hosts already hung, and
   `start_loading` starts hosts that don't get ready until `finish_loading`) runs each

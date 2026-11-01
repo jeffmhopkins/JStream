@@ -2757,6 +2757,7 @@ fn render_loop(job: RenderJob) {
             match tick {
                 Ok(Ok(freed)) => {
                     draw_errors = 0;
+                    reader.count_drawn();
                     let read = frames
                         .mixes
                         .iter()

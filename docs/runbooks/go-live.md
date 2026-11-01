@@ -73,10 +73,12 @@ $cli = 'target\release\jstream-cli.exe'
    `warning: plain rtmp://`, the key will cross the network unencrypted: use the
    service's `rtmps://` server URL if it has one.
 4. **Watch the events** in a second terminal before going live:
-   `& $cli --url ws://127.0.0.1:4460 events`. While the output runs, a `stats.tick` line
-   comes about once a second. Its counters are running totals of dropped frames and
-   packets since the daemon started, so all zeros is healthy. A counter that keeps
-   climbing is worth an issue. While the program runs, `meters.tick` lines, the audio
+   `& $cli --url ws://127.0.0.1:4460 events`. A `stats.tick` line comes about once a
+   second, before and while the output runs. Its counters are running totals of dropped
+   frames and packets since the daemon started, so all zeros is healthy. A counter that
+   keeps climbing is worth an issue. The line ends with the engine's load:
+   `program_frames` grows by about 30 a second while live, and `cpu_ms` is the CPU time
+   JStream has used. While the program runs, `meters.tick` lines, the audio
    levels, come about ten a second as well.
 5. **Go live:** the `output` tool with `{"op": {"type": "output.start", "output_id":
    "live"}}`, or `& $cli --url ws://127.0.0.1:4460 output start live`.

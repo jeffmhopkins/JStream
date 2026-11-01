@@ -7,11 +7,11 @@
 
 use crate::{
     Action, Batch, BlendMode, Blocker, Call, CallResult, Canvas, ClientId, ClientMessage, Command,
-    CommandClass, Crop, DeleteTarget, DropCounts, Edit, EntityKind, ErrorResponse, Event,
-    EventMessage, FilterChain, FilterChains, FilterId, FilterInfo, FilterOwner, Finite32, FitMode,
-    Hello, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, MasterInfo, OutputId,
-    OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query,
-    QueryResult, RecordContainer, Request, RequestId, Response, Rev, RtmpTarget, SceneId,
+    CommandClass, Crop, DeleteTarget, DropCounts, Edit, EngineLoad, EntityKind, ErrorResponse,
+    Event, EventMessage, FilterChain, FilterChains, FilterId, FilterInfo, FilterOwner, Finite32,
+    FitMode, Hello, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, MasterInfo,
+    OutputId, OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError,
+    Query, QueryResult, RecordContainer, Request, RequestId, Response, Rev, RtmpTarget, SceneId,
     SceneInfo, SceneRole, SceneSummary, SecretString, ServerMessage, Settings, Size, SourceId,
     SourceInfo, SourceKind, Vec2, Welcome, json_schema,
 };
@@ -40,7 +40,7 @@ use crate::{
 };
 use crate::{FolderId, FolderInfo, LabelId, LabelInfo, SceneMeta, SourceMeta};
 use crate::{GestureId, GestureInfo, LiveOutcome};
-use crate::{HistoryCall, HistoryDirection, HistoryOp, PreviewCodec};
+use crate::{HistoryCall, HistoryDirection, HistoryOp, PreviewCodec, PreviewDraft};
 use crate::{MixInput, MixResolution, VideoMix, VideoMixId, VideoMixInfo};
 use crate::{PluginClass, PluginDisabledReason, PluginGrant, PluginId, PluginState};
 use serde_json::{Value, json};
@@ -941,6 +941,7 @@ pub(crate) fn actions() -> Vec<Action> {
             fps: Some(30),
             codecs: vec![PreviewCodec::H264, PreviewCodec::Jpeg],
             scene_id: None,
+            source: None,
         },
         Action::PreviewUnsubscribe { channel: 1 },
         Action::SceneSwitch {
@@ -985,6 +986,22 @@ pub(crate) fn actions() -> Vec<Action> {
             fps: None,
             codecs: Vec::new(),
             scene_id: Some(SceneId::new("scn_2")),
+            source: None,
+        },
+        Action::PreviewSubscribe {
+            channel: 3,
+            max_width: Some(480),
+            max_height: Some(270),
+            fps: None,
+            codecs: Vec::new(),
+            scene_id: None,
+            source: Some(PreviewDraft {
+                kind: "webcam".into(),
+                settings: Settings(std::collections::BTreeMap::from([(
+                    "device".to_owned(),
+                    serde_json::json!("usb-cam-1"),
+                )])),
+            }),
         },
     ]
 }
@@ -1868,6 +1885,12 @@ pub(crate) fn events() -> Vec<Event> {
             encode_blocks: 6,
             output_packets: 7,
         },
+        load: Some(EngineLoad {
+            elapsed_ms: 2_000,
+            program_frames: 120,
+            cpu_ms: Some(150),
+            cpus: 8,
+        }),
     });
     events.push(Event::LiveChanged {
         gesture_id: GestureId::new("drag_1"),

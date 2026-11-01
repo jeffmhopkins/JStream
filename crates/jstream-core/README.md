@@ -33,7 +33,8 @@ state machine. Contents:
   `Engine::new()`, `with_output(id)`, `with_backends`, `with_publish`,
   `with_publish_opener`, `with_key_store`, `with_youtube`, `with_audit`,
   `with_history_limit`, `with_browser` (the browser engine `browser` sources and their
-  `youtube_chat` preset open pages in) and `with_collection_file`; `open_plugin_dir`
+  `youtube_chat` preset open pages in) and `with_collection_file`; `set_process_cpu`
+  and `start_stats_heartbeat` (`stats.tick`'s load, below); `open_plugin_dir`
   (where installed WASM plugins are saved, ADR-0076), called once the engine is built;
   `scan_clap_plugins` adds the CLAP filter kinds;
   `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
@@ -196,7 +197,7 @@ state machine. Contents:
   `scene.switch` and `studio.set_preview` set and `studio.get` reads
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)).
 - **Preview** (`preview/`): `preview.subscribe` and `preview.unsubscribe`, the program
-  mix or one scene as small pictures sent to the session that asked as binary frames
+  mix, one scene or a draft source the collection doesn't hold as small pictures sent to the session that asked as binary frames
   (`Control::binary`), in H.264 on a software `jstream-encode` session when the
   platform has an encoder and in JPEG otherwise (`preview/jpeg.rs`, a baseline
   encoder of its own), drawn on the engine's `jstream-preview` thread with its own
@@ -273,6 +274,11 @@ state machine. Contents:
   the publish link's, and a sampler thread
   emits a tick about once a second until the last output stops. The same thread emits
   `meters.tick` about ten times a second.
+- **Engine load** (`load.rs`): what a `stats.tick`'s `load` reads besides the render
+  hub's frame count: when the engine started, the process CPU time from the host's
+  `ProcessCpu` (`Engine::set_process_cpu`), and the idle heartbeat
+  (`Engine::start_stats_heartbeat`), which ticks while no output runs (*Engine load*
+  below).
 - **Tests** (`tests.rs`, `src/tests/history.rs`, `src/tests/live_values.rs`,
   `src/tests/audio.rs`, `src/tests/audio_routing.rs`, `src/tests/sources.rs`,
   `src/tests/transitions.rs`, `tests/mcp.rs`,
@@ -415,7 +421,11 @@ state machine. Contents:
   off program shown and followed, then no longer planned once closed or once its
   session ends, a scene the collection doesn't have refused, a deleted scene's stream
   ended, its display drawn from the preview's own capture, and nothing captured for it
-  by the program stage), the
+  by the program stage; a draft source's stream: a webcam not in the collection drawn
+  from the preview's capture and closed with the stream, the collection untouched, a
+  draft of the program's webcam sharing its one open beside a draft display, and a
+  kind that captures nothing, an unknown kind, a refused setting and a scene with a
+  source refused), the
   collection file (`src/tests/collection.rs`: created when missing with the sample
   labels at `rev` 0, batches, an undo
   and a redo each saved, a saved collection loaded by a new engine with its `rev` and
@@ -1337,6 +1347,21 @@ stream waits. A scene the collection doesn't have is `not_found`, and when a sce
 streams is deleted the re-plan ends them with the end frame "the scene was deleted"
 (`PreviewHub::end_scene`).
 
+A stream with a `source` shows a source the collection doesn't hold (0.49): the
+Properties dialog's picture of the display, window or webcam being picked, before the
+source exists or its new settings are saved (`preview/draft.rs`). `preview.subscribe`
+reads the kinds and the canvas under the lock and plans the draft once, after it, on a
+collection of its own: the one source, checked as `source.create` checks it (a refused
+setting is `invalid_argument` naming `source.settings.<param>`), and one scene whose
+item covers the canvas. Only a kind whose source captures something can be drawn this
+way, so any other is `invalid_argument` naming `source.kind`, as is a request with a
+`scene_id` too (naming `source`). The draft's snapshot lives on its stream and is never
+re-planned: it keeps the canvas size it was planned at, and a client subscribes again
+for other settings. The preview thread captures what it shows like a scene's, beside
+the program's and the scenes' captures, and a draft stream doesn't count as showing the
+program; nothing reaches the engine's collection, plan or sources, so a draft is
+never shown on program, heard or listed.
+
 The codec is picked when the client subscribes: the first of its `codecs` the engine
 can encode, H.264 when `codecs.list()` names an H.264 encoder (only with backends) and
 JPEG always. One `jstream-preview` thread per engine, started by the first stream and
@@ -1464,6 +1489,24 @@ The capture cell is a [`DropSnapshot`](src/drops.rs) (atomics only,
 and their sources load the counters those handles expose. `drops` runs on the sampler
 thread and must not call back into the engine. The fake capture generates a frame when
 it is read, so it does not simulate mailbox skips.
+
+### Engine load (`stats.tick`'s `load`)
+
+Each tick also carries the engine's load (protocol 0.48; `load.rs`): the milliseconds
+since the engine started, the program frames drawn so far, the process's CPU time and
+the logical CPUs. The render thread counts each tick it composites into the
+[`RenderHub`](src/runtime/render.rs) (one relaxed atomic add, R-RT-003), across every
+run of the program stage, so the total only grows and stops while no output runs. A
+skipped tick is not a frame. The CPU time comes from the
+[`ProcessCpu`](../jstream-platform/src/process.rs) the host hands
+[`Engine::set_process_cpu`](src/engine.rs); the sampler reads it before it takes the
+collection lock. Without one, `cpu_ms` is left out.
+
+While no output runs there is no sampler, so a host that wants ticks while idle calls
+[`Engine::start_stats_heartbeat`](src/engine.rs): a `jstream-stats-idle` thread that
+holds the engine weakly and emits a tick about once a second while no program stage's
+`jstream-stats` thread runs, ending once the last engine handle is gone. The daemon and
+the desktop app start it; tests and an embedding host call `emit_stats_tick` as before.
 
 ### Audio routing (`meters.tick`)
 
@@ -2492,7 +2535,8 @@ output stops, and `meters.tick` about ten times a second. The stage also starts
 render thread sends under the collection lock and announces the sources it changes
 (`source.size_changed`, *Source sizes* in [Design](#design)), and when the render thread
 lets go of its captures it forgets them all and ends. `Program`'s drop joins it after
-the render thread. The render loop publishes capture mailbox skips and the frames an encode ring drops
+the render thread. The render loop counts each tick it composites into the render hub
+(`stats.tick`'s `program_frames`), and publishes capture mailbox skips and the frames an encode ring drops
 (`encode_frames`), and a tick that falls a
 whole period behind the clock skips to the current tick and counts the skipped ones in
 `render_ticks`. None of those threads lock the collection: the render thread reads the
