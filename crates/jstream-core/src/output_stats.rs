@@ -1,4 +1,4 @@
-//! Each running output's live stats for `stats.tick` (protocol 0.58): what it has sent
+//! Each running output's live stats for `stats.tick` (protocol 0.57): what it has sent
 //! and lost since its start, its bitrate over the last tick, and its health.
 //!
 //! The output thread counts what it hands its muxer into [`SentCounters`], and the

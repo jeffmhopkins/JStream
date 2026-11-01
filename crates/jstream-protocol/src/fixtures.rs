@@ -944,6 +944,7 @@ pub(crate) fn actions() -> Vec<Action> {
             codecs: vec![PreviewCodec::H264, PreviewCodec::Jpeg],
             scene_id: None,
             source: None,
+            source_id: None,
         },
         Action::PreviewUnsubscribe { channel: 1 },
         Action::SceneSwitch {
@@ -993,6 +994,7 @@ pub(crate) fn actions() -> Vec<Action> {
             codecs: Vec::new(),
             scene_id: Some(SceneId::new("scn_2")),
             source: None,
+            source_id: None,
         },
         Action::PreviewSubscribe {
             channel: 3,
@@ -1008,6 +1010,17 @@ pub(crate) fn actions() -> Vec<Action> {
                     serde_json::json!("usb-cam-1"),
                 )])),
             }),
+            source_id: None,
+        },
+        Action::PreviewSubscribe {
+            channel: 4,
+            max_width: None,
+            max_height: None,
+            fps: None,
+            codecs: Vec::new(),
+            scene_id: None,
+            source: None,
+            source_id: Some(SourceId::new("src_cam")),
         },
     ]
 }

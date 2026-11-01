@@ -47,9 +47,9 @@ Contents ([Design](#design) explains the choices):
   `DockState`, the dock as context, which the header's menus change; and `restore`,
   the dock the browser kept.
 - **Projectors** (`projector.rs`): `Projector`, the page a projector window shows (the
-  program, one scene or a multiview, filling the window), `Request` (what a projector
-  page's query asks for, and its window name), `open` and `pop_out` (a scene's Pop out
-  submenu), which open one, and `subscribe` and `multiview_scenes`, its logic, tested
+  program, one scene, one source alone or a multiview, filling the window), `Request`
+  (what a projector page's query asks for, and its window name), `open`, `pop_out` (a
+  scene's Pop out submenu) and `pop_out_source` (an object's), which open one, and `subscribe` and `multiview_scenes`, its logic, tested
   natively.
 - **Host detection** (`host.rs`): `desktop()`, the engine URL and token the desktop
   app hands the page through the `__JSTREAM_DESKTOP__` global, if the page runs there,
@@ -328,15 +328,17 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   call's does.
 - **Projectors** (`projector.rs`, [UI features › DL-07](../../docs/UI-FEATURES.md#dialogs)).
   A scene's Pop out submenu (on its row, on the canvas margin for the scene it shows,
-  and on a nested scene's item) and the View menu's Projectors group open a projector:
+  and on a nested scene's item), any other single object's (Source in a window or full
+  screen, its source alone with its own filters) and the View menu's Projectors group
+  open a projector:
   this same page, opened with `window.open` under one window name per target so asking
-  again brings that window back, with a query (`?projector=program`, `multiview` or
-  `scene:<percent-encoded ID>`, then `&full=1` for full screen) that `App` reads before
+  again brings that window back, with a query (`?projector=program`, `multiview`,
+  `scene:<percent-encoded ID>` or `source:<percent-encoded ID>`, then `&full=1` for full screen) that `App` reads before
   anything else. Such a page connects as the desktop app's page does, or in a browser
   at once with the credentials the browser already sends (the connect form if they
   aren't enough), keeps `Studio` current like the workspace, and shows `Projector`
   instead of the shell. Every picture on it is a preview stream (`preview.subscribe`,
-  with `scene_id` for a scene) on the session's one binary channel, which `Channels`
+  with `scene_id` for a scene and `source_id` for a source alone, 0.56) on the session's one binary channel, which `Channels`
   reads and hands out by channel number, each picture taking a number never used
   before on the page; a picture falls back to JPEG as the canvas does, says why when its
   stream ends (a deleted scene), and unsubscribes when it goes. One picture asks for the
@@ -508,7 +510,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   adds a `PanelId` and a line there. Live chat waits on the engine (YouTube sign-in),
   so it says what it waits on and is in no built-in layout. Stream stats
   (`panels/stats.rs`) shows one output's live stats from `stats.tick`'s `outputs`
-  (protocol 0.58): the output picked in its menu, else the first running stream, the
+  (protocol 0.57): the output picked in its menu, else the first running stream, the
   first running output, then the first stream. It reads the outputs and profiles as
   the Outputs panel does, keeps the last 120 `kbps` readings of each listed output for
   the bitrate chart (an output a tick leaves out, or whose uptime went down, starts

@@ -1070,11 +1070,12 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
         let id = primary.clone();
         Entry::item("Edit filters…", move || cx.filters(id.clone()))
     };
-    // A nested scene pops out as a scene; a source alone has no preview stream.
+    // A nested scene pops out as a scene, any other source alone (0.56).
     let pop_out = match (many, &facts.kind) {
         (false, SourceKind::Scene { scene_id }) => {
             crate::projector::pop_out(cx.studio, Some(scene_id.clone()))
         }
+        (false, _) => crate::projector::pop_out_source(cx.studio, facts.source_id.clone()),
         _ => crate::projector::pop_out(cx.studio, None),
     };
     let labels = labels_entry(cx, &facts.source_id);

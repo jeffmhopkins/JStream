@@ -129,7 +129,7 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         chains: Option<ChainCost>,
         /// Each running output's live stats, by output ID: what it has sent and lost
-        /// since it started, its bitrate over the last tick and its health (0.58).
+        /// since it started, its bitrate over the last tick and its health (0.57).
         /// Empty, and left out, while no output runs or on an engine with no media
         /// backends; an older engine leaves it out too.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -328,7 +328,7 @@ pub struct ChainCost {
     pub layer_bytes: u64,
 }
 
-/// One running output's live stats in a `stats.tick` (0.58): what it has sent and lost
+/// One running output's live stats in a `stats.tick` (0.57): what it has sent and lost
 /// since its `output.start`, its bitrate and its health.
 ///
 /// The counts are running totals for this run of the output: they start at 0 on each

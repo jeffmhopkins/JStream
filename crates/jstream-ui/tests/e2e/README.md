@@ -328,7 +328,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 - **Projectors** (`projectors.spec.js`): the View menu's Program in a window opens a
   page of its own at `?projector=program`, titled for it, with one picture and the
   toast on the workspace, and Escape closes it; Intro's row's Pop out submenu offers the
-  scene in a window or full screen and opens `?projector=scene:intro`; Program full
+  scene in a window or full screen and opens `?projector=scene:intro`; Backdrop's
+  object row's Pop out offers Source in a window or full screen and opens a
+  `?projector=source:` page titled "Source: Backdrop"; Program full
   screen opens `&full=1` and, in a browser, says to double-click it; the multiview shows
   program captioned with Main, no preview outside studio mode, and Intro and Main below
   it, Main framed as on program, and turns to studio mode when the workspace does. The mock engine sends no preview streams, so no test

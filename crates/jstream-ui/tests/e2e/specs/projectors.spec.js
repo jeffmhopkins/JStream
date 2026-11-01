@@ -1,5 +1,5 @@
-// Projector windows: the View menu opens the program and the multiview, and a scene's
-// Pop out submenu opens that scene, each as a page of its own that connects with the
+// Projector windows: the View menu opens the program and the multiview, a scene's Pop
+// out submenu opens that scene, and an object's opens its source alone, each as a page of its own that connects with the
 // browser's credentials and fills its window; Escape closes one. The mock engine sends no
 // preview streams, so a picture shows why instead; the frames themselves are covered by
 // the engine's tests.
@@ -49,6 +49,17 @@ test('a scene pops out from its row', async ({ page, daemon }) => {
   const popup = await opened(page, () => sub.getByRole('menuitem', { name: 'Scene in a window' }).click());
   expect(new URL(popup.url()).search).toBe('?projector=scene:intro');
   await expect(popup).toHaveTitle('Scene: Intro · JStream projector');
+});
+
+test('an object pops out its source alone', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  await page.locator('.sources-panel li.row').filter({ hasText: 'Backdrop' }).click({ button: 'right' });
+  await menu(page).getByRole('menuitem', { name: 'Pop out' }).hover();
+  const sub = page.locator('.context-menu.submenu');
+  await expect(sub.locator('.ctx-label')).toHaveText(['Source in a window', 'Source full screen']);
+  const popup = await opened(page, () => sub.getByRole('menuitem', { name: 'Source in a window' }).click());
+  expect(new URL(popup.url()).search).toMatch(/^\?projector=source:/);
+  await expect(popup).toHaveTitle('Source: Backdrop · JStream projector');
 });
 
 test('a full-screen projector in a browser says how to fill the screen', async ({ page, daemon }) => {

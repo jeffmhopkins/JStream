@@ -1012,7 +1012,7 @@ fn events_golden_dropped_notice() {
          elapsed_ms 2000 program_frames 60 cpus 8 cpu_ms 40\n"
     );
 
-    // Then each running output's stats (protocol 0.58).
+    // Then each running output's stats (protocol 0.57).
     let events = control.events();
     engine.emit(Event::StatsTick {
         seq: 4,

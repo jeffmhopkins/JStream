@@ -1,5 +1,5 @@
 //! The Stream stats panel (ST-01, spec-panels.md 6): one output's live stats from
-//! `stats.tick`'s `outputs` (protocol 0.58). The status line has the LIVE or READY pill,
+//! `stats.tick`'s `outputs` (protocol 0.57). The status line has the LIVE or READY pill,
 //! the output and its uptime; under it the bitrate and the dropped frames, the health the
 //! engine works out, a two-minute bitrate chart kept here, and the output's details.
 //!

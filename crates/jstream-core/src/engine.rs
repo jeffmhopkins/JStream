@@ -119,7 +119,7 @@ struct Shared {
     /// `stats.tick`'s load. Its lock is its own, never taken with the collection's.
     load: LoadMeter,
     /// Each running output's live stats meter, for `stats.tick`'s `outputs` (protocol
-    /// 0.58). Its lock is its own: the stats thread takes it before the collection
+    /// 0.57). Its lock is its own: the stats thread takes it before the collection
     /// lock, never with it.
     output_meters: Arc<Mutex<OutputMeters>>,
     /// The WASM automation plugins installed this run (ADR-0069). On its own lock,
@@ -645,7 +645,7 @@ impl Engine {
     }
 
     /// Meters `output_id`'s run, which began at `started`, in each `stats.tick` until
-    /// the returned guard drops (protocol 0.58).
+    /// the returned guard drops (protocol 0.57).
     pub(crate) fn add_output_meter(
         &self,
         output_id: OutputId,
@@ -1248,8 +1248,17 @@ impl Engine {
                 codecs,
                 scene_id,
                 source,
+                source_id,
             } => {
                 let settings = PreviewSettings::resolve(max_width, max_height, fps, &codecs)?;
+                // `source_id` first, so the error names the later field however many
+                // of the three are given.
+                if source_id.is_some() && (scene_id.is_some() || source.is_some()) {
+                    return Err(ProtocolError::invalid_argument(
+                        "source_id",
+                        "a preview stream shows one scene or one source, not both",
+                    ));
+                }
                 if scene_id.is_some() && source.is_some() {
                     return Err(ProtocolError::invalid_argument(
                         "source",
@@ -1264,6 +1273,14 @@ impl Engine {
                         return Err(ProtocolError::NotFound {
                             entity: EntityKind::Scene,
                             id: scene_id.as_str().to_owned(),
+                        });
+                    }
+                    if let Some(source_id) = &source_id
+                        && state.graph.state().source(source_id).is_none()
+                    {
+                        return Err(ProtocolError::NotFound {
+                            entity: EntityKind::Source,
+                            id: source_id.as_str().to_owned(),
                         });
                     }
                     // Only the kinds and the canvas: the draft is planned unlocked.
@@ -1293,18 +1310,20 @@ impl Engine {
                         codecs,
                         rev,
                         scene: scene_id.clone(),
+                        source_id: source_id.clone(),
                         draft,
                     },
                 )?;
-                if scene_id.is_some() {
-                    // Plans the scene, which the stream waits for.
+                if scene_id.is_some() || source_id.is_some() {
+                    // Plans the scene or the source, which the stream waits for.
                     self.shared.replan_and_sync();
                 }
                 Ok(CallResult::Action { result: None })
             }
             Action::PreviewUnsubscribe { channel } => {
                 if previews.unsubscribe(channel) {
-                    // Stops planning the scene, unless another stream shows it.
+                    // Stops planning the scene or the source, unless another stream
+                    // shows it.
                     self.shared.replan_and_sync();
                 }
                 Ok(CallResult::Action { result: None })
@@ -1536,7 +1555,7 @@ impl Engine {
     }
 
     fn start_pipeline(&self, output_id: OutputId) -> Result<CallResult, ProtocolError> {
-        // Where the output's uptime in `stats.tick` counts from (protocol 0.58).
+        // Where the output's uptime in `stats.tick` counts from (protocol 0.57).
         let started = Instant::now();
         let Some(host) = &self.media else {
             return Err(not_implemented("output.start"));
@@ -2029,6 +2048,16 @@ impl Engine {
     pub(crate) fn previewed_scenes(&self) -> Vec<SceneId> {
         lock(&self.shared.state)
             .scene_shots
+            .keys()
+            .cloned()
+            .collect()
+    }
+
+    /// The sources planned alone for preview streams, for tests.
+    #[cfg(test)]
+    pub(crate) fn previewed_sources(&self) -> Vec<SourceId> {
+        lock(&self.shared.state)
+            .source_shots
             .keys()
             .cloned()
             .collect()
@@ -2644,6 +2673,9 @@ struct State {
     /// What each scene with an open preview stream draws, planned with the program mix
     /// and replaced only when what it draws changed: read by the preview thread alone.
     scene_shots: Arc<BTreeMap<SceneId, Arc<RenderSnapshot>>>,
+    /// What each source with an open preview stream draws alone, planned and replaced
+    /// as `scene_shots` are: read by the preview thread alone.
+    source_shots: Arc<BTreeMap<SourceId, Arc<RenderSnapshot>>>,
     /// How many `stats.tick` events this engine has emitted. The next one uses this plus one.
     stats_seq: u64,
     /// Every client's open live-value gestures (ADR-0032), and the committed values the
@@ -3271,6 +3303,7 @@ impl State {
             render,
             studio,
             scene_shots,
+            source_shots,
             shared,
             ..
         } = self;
@@ -3330,6 +3363,40 @@ impl State {
                 .all(|((a, x), (b, y))| a == b && Arc::ptr_eq(x, y));
         if !same {
             *scene_shots = Arc::new(shots);
+        }
+        // Each previewed source alone, after the program's plan too.
+        let mut shots = BTreeMap::new();
+        for source_id in previews.iter().flat_map(|shared| shared.previews.sources()) {
+            if graph.state().source(&source_id).is_none() {
+                if let Some(shared) = &previews {
+                    shared
+                        .previews
+                        .end_source(&source_id, graph.rev(), "the source was deleted");
+                }
+                continue;
+            }
+            let Some(source) = snapshot::plan_source(
+                graph,
+                &source_id,
+                &mut |id| match frames.get(id) {
+                    Some(frame) => Some(Look::Frame(frame.clone(), None)),
+                    None => live.look_quiet(id, now, frame_versions),
+                },
+                &assets,
+            ) else {
+                continue;
+            };
+            wake = snapshot::earliest(wake, source.wake);
+            let shot = RenderSnapshot::following(source_shots.get(&source_id), source.shot);
+            shots.insert(source_id, shot);
+        }
+        let same = shots.len() == source_shots.len()
+            && shots
+                .iter()
+                .zip(source_shots.iter())
+                .all(|((a, x), (b, y))| a == b && Arc::ptr_eq(x, y));
+        if !same {
+            *source_shots = Arc::new(shots);
         }
         live.wake_at(wake);
         planning.end_ms
@@ -3504,6 +3571,7 @@ impl PreviewSource for Shared {
         Current {
             program: state.render.load(),
             scenes: Arc::clone(&state.scene_shots),
+            sources: Arc::clone(&state.source_shots),
             live: state.render.load_live(),
             rev: state.graph.rev(),
             at: state.live.now(),
