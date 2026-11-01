@@ -4,7 +4,8 @@
 //! software. `avoid` still opens software, and with no hardware session open `prefer`
 //! falls back as before. A codec the machine lists no hardware encoder for isn't held
 //! to `require`, so its failure stays `action_failed`. An output that is stopping still
-//! holds its hardware session until it closes (#834).
+//! holds its hardware session until it closes (#834). A new session that `prefer` opens
+//! in software logs a warning naming the output and why (#443 case 1).
 
 use super::super::{batch, block_on, connected, edits, output_call};
 use super::{TempDir, encoder_status, fakes, streaming_and_recording};
@@ -21,6 +22,7 @@ use jstream_protocol::{
     Edit, EncoderProfile, EncoderProfileId, HardwarePreference as ProfileHardware, OutputId,
     OutputKind, OutputState, ProtocolError, RateControl, RecordContainer, VideoCodec,
 };
+use std::fmt;
 use std::sync::Arc;
 use std::sync::Condvar;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -37,6 +39,8 @@ struct LimitedHardware {
     asked: Arc<std::sync::Mutex<Vec<HardwarePreference>>>,
     /// Holds a hardware session's close while a test says so.
     linger: Arc<Linger>,
+    /// Whether `list` names the hardware encoder. A machine with none lists none.
+    listed: bool,
 }
 
 /// Keeps a closing hardware session open while held, as a teardown still releasing
@@ -91,6 +95,15 @@ impl LimitedHardware {
             open: Arc::new(AtomicUsize::new(0)),
             asked: Arc::default(),
             linger: Arc::default(),
+            listed: true,
+        }
+    }
+
+    /// A machine with no hardware encoder: it lists none and opens none.
+    fn absent() -> Self {
+        Self {
+            listed: false,
+            ..Self::new(0)
         }
     }
 }
@@ -135,6 +148,9 @@ impl VideoEncoder for HardwareVideo {
 impl Codecs for LimitedHardware {
     fn list(&self) -> Result<Vec<CodecInfo>, PlatformError> {
         let mut list = FakeCodecs.list()?;
+        if !self.listed {
+            return Ok(list);
+        }
         let mut hardware = list
             .first()
             .cloned()
@@ -477,4 +493,120 @@ fn a_stopping_holder_still_holds_its_hardware_session() {
     assert_eq!(encoder_status(&control, "yt").0, OutputState::Stopped);
     assert_eq!(encoder_status(&control, "rec2").0, OutputState::Failed);
     let _ = block_on(control.call(output_call("rec", false)));
+}
+
+/// The warnings logged while `run` runs on this thread, each as its message and fields.
+fn warnings<T>(run: impl FnOnce() -> T) -> (T, Vec<String>) {
+    use tracing::field::{Field, Visit};
+    use tracing::span::{Attributes, Id, Record};
+    use tracing::{Event, Level, Metadata, Subscriber};
+
+    #[derive(Clone, Default)]
+    struct Warnings(Arc<std::sync::Mutex<Vec<String>>>);
+
+    struct Text<'a>(&'a mut String);
+
+    impl Visit for Text<'_> {
+        fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
+            self.0.push_str(&format!("{}={value:?} ", field.name()));
+        }
+    }
+
+    impl Subscriber for Warnings {
+        fn enabled(&self, metadata: &Metadata<'_>) -> bool {
+            *metadata.level() == Level::WARN
+        }
+        fn new_span(&self, _: &Attributes<'_>) -> Id {
+            Id::from_u64(1)
+        }
+        fn record(&self, _: &Id, _: &Record<'_>) {}
+        fn record_follows_from(&self, _: &Id, _: &Id) {}
+        fn event(&self, event: &Event<'_>) {
+            let mut text = String::new();
+            event.record(&mut Text(&mut text));
+            self.0
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .push(text);
+        }
+        fn enter(&self, _: &Id) {}
+        fn exit(&self, _: &Id) {}
+    }
+
+    let logged = Warnings::default();
+    let out = tracing::subscriber::with_default(logged.clone(), run);
+    let logged = logged
+        .0
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone();
+    (out, logged)
+}
+
+/// The warnings among `logged` that say a `prefer` encoder opened in software.
+fn software_warnings(logged: &[String]) -> Vec<&String> {
+    logged
+        .iter()
+        .filter(|line| line.contains("prefers hardware but opened in software"))
+        .collect()
+}
+
+/// `prefer` with a hardware encoder listed but refusing at configure opens in software,
+/// and logs one warning per new session naming its output and that hardware refused
+/// (#443 case 1).
+#[test]
+fn a_refused_prefer_warns_naming_the_output() {
+    let (both, logged) = warnings(|| {
+        start_both(
+            "hw-warn-refused",
+            LimitedHardware::new(0),
+            ProfileHardware::Prefer,
+        )
+    });
+    both.rec.clone().expect("rec on software");
+    let warned = software_warnings(&logged);
+    assert_eq!(warned.len(), 2, "one per new session: {logged:?}");
+    for (line, output) in warned.iter().zip(["yt", "rec"]) {
+        assert!(line.contains(&format!("output={output} ")), "{line}");
+        assert!(
+            line.contains("the hardware H.264 encoder refused the session"),
+            "{line}"
+        );
+    }
+}
+
+/// `prefer` on a machine with no hardware encoder warns with that reason.
+#[test]
+fn an_absent_hardware_encoder_warns_naming_the_output() {
+    let (both, logged) = warnings(|| {
+        start_both(
+            "hw-warn-absent",
+            LimitedHardware::absent(),
+            ProfileHardware::Prefer,
+        )
+    });
+    both.rec.clone().expect("rec on software");
+    let warned = software_warnings(&logged);
+    assert_eq!(warned.len(), 2, "{logged:?}");
+    assert!(warned[0].contains("output=yt "), "{}", warned[0]);
+    assert!(
+        warned[0].contains("this machine has no hardware H.264 encoder"),
+        "{}",
+        warned[0]
+    );
+}
+
+/// Hardware opened, or software chosen with `avoid`, warns of nothing.
+#[test]
+fn hardware_or_avoid_warns_of_nothing() {
+    let (both, logged) = warnings(|| {
+        start_both(
+            "hw-warn-avoid",
+            LimitedHardware::new(1),
+            ProfileHardware::Avoid,
+        )
+    });
+    both.rec.clone().expect("rec on avoid");
+    assert_eq!(both.status("rec").1, Some(false));
+    assert!(software_warnings(&logged).is_empty(), "{logged:?}");
 }

@@ -57,8 +57,8 @@ use jstream_media::{
 };
 use jstream_platform::wgpu;
 use jstream_platform::{
-    AudioEncoderConfig, AudioIo, Backends, Capture, CodecRole, Codecs, GpuContext, GpuFrame,
-    GpuInterop, HardwarePreference, MediaClock, RateControl, VcamFormat, VideoDevices,
+    AudioEncoderConfig, AudioIo, Backends, Capture, CodecInfo, CodecRole, Codecs, GpuContext,
+    GpuFrame, GpuInterop, HardwarePreference, MediaClock, RateControl, VcamFormat, VideoDevices,
     VideoEncoderConfig, VideoSurface,
 };
 use jstream_protocol::{
@@ -688,11 +688,14 @@ impl Program {
     /// The encoder sessions for `key`: the open ones, or new ones not yet fed. Call
     /// [`attach`](Self::attach) once the output has subscribed, so a new session's
     /// first packets go to it. While `hardware_held` names outputs, a new video session
-    /// opens as [`while_hardware_held`] says, and its refusal is the session limit.
+    /// opens as [`while_hardware_held`] says, and its refusal is the session limit. A
+    /// new session that `prefer` opens on software is logged as a warning naming
+    /// `output`, the output it opens for, and why (#443 case 1).
     fn encoders(
         &self,
         engine: &Engine,
         key: EncodeKey,
+        output: &OutputId,
         hardware_held: &[OutputId],
     ) -> Result<Arc<Encoders>, StartError> {
         lock(&self.sessions).get_or_open(key.clone(), || {
@@ -722,6 +725,14 @@ impl Program {
                         StartError::Failed(reason)
                     }
                 })?;
+            if config.hardware == HardwarePreference::Prefer && !video.info().codec.hardware {
+                tracing::warn!(
+                    output = %output,
+                    encoder = %video.info().codec.name,
+                    reason = %why_software(self.codecs.as_ref(), config.codec),
+                    "the output's video encoder prefers hardware but opened in software"
+                );
+            }
             let video = Arc::new(video);
             if *video.path() != VideoPath::Gpu {
                 claim = None;
@@ -1766,7 +1777,7 @@ pub(crate) fn launch(
         own_audio,
         hardware_held,
     } = encode;
-    let encoders = program.encoders(engine, key, &hardware_held)?;
+    let encoders = program.encoders(engine, key, &output_id, &hardware_held)?;
     let origin = program.origin()?;
     let own_audio = if own_audio {
         let (tap, release) = engine.add_output_tap(&output_id)?;
@@ -2098,11 +2109,32 @@ fn video_open_failure(
 /// Whether `codecs` lists a hardware encoder for `codec`, or can't list its encoders:
 /// only then can a held hardware session be what refuses a new one.
 fn hardware_listed(codecs: &dyn Codecs, codec: Codec) -> bool {
-    codecs.list().map_or(true, |list| {
-        list.iter().any(|info| {
-            info.role == CodecRole::VideoEncoder && info.codec == codec && info.hardware
-        })
-    })
+    codecs
+        .list()
+        .map_or(true, |list| lists_hardware(&list, codec))
+}
+
+/// Whether `list` has a hardware video encoder for `codec`.
+fn lists_hardware(list: &[CodecInfo], codec: Codec) -> bool {
+    list.iter()
+        .any(|info| info.role == CodecRole::VideoEncoder && info.codec == codec && info.hardware)
+}
+
+/// Why a session that prefers hardware for `codec` opened in software, from the
+/// encoders `codecs` lists: the machine lists none, or one is listed but refused the
+/// session (its settings, or a session limit outside this engine), or the platform
+/// can't list them.
+fn why_software(codecs: &dyn Codecs, codec: Codec) -> String {
+    let name = codec_name(codec);
+    match codecs.list() {
+        Ok(list) if lists_hardware(&list, codec) => {
+            format!("the hardware {name} encoder refused the session")
+        }
+        Ok(_) => format!("this machine has no hardware {name} encoder"),
+        Err(err) => {
+            format!("no hardware {name} encoder opened, and the encoders can't be listed: {err}")
+        }
+    }
 }
 
 /// Why `codecs` can't encode `config`'s codec with its hardware preference, from the

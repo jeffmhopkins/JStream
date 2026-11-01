@@ -222,7 +222,9 @@ The code is ported from spikes S1 to S3. This first cut has:
   - **Video encoders, both paths:**
     - **Choosing an encoder** on the CPU path: hardware encoder MFTs come first, then the
       OS software encoder (H.264 only), following `HardwarePreference`. The first one that accepts the
-      media types wins, and `CodecInfo::hardware` says which kind it was.
+      media types wins, and `CodecInfo::hardware` says which kind it was. When
+      `Prefer` ends on the software MFT this way, `jstream-core` logs a warning naming
+      the output and why (#443 case 1), so this crate logs nothing for it.
     - **First-frame fallback** (#443): with `Prefer`, a hardware encoder on the CPU path
       that refuses the first frame at `ProcessInput` is replaced by the software MFT,
       which gets that frame (`FirstFrameFallback`, `codec/fallback.rs`). No packet has
