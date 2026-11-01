@@ -86,7 +86,9 @@ stamped on the clock, and no device is the master.
   and block size (`mixer_rate` and `mixer_block_frames` on each of those handles) and
   its host ready, with one filter on it at a time. On the master chain the plugin runs
   on the master bus's copy only, and every other bus's copy delays its dry signal by
-  the filter's latency instead (see [Master chain and output taps](#realtime)).
+  the filter's latency instead, until outputs take other buses
+  ([ADR-0086](../../docs/adr/0086-master-clap-filter-one-host-per-output-bus.md); see
+  [Master chain and output taps](#realtime)).
   `Mixer::latency_frames` is the
   chains' latency the mixer compensates, and each block's `pts` is its first frame minus
   it, the master chain's included.
@@ -430,8 +432,10 @@ master chain is the exception to one copy per bus: its host takes one chain's bl
 instance), so the plugin runs on the master bus's copy, and every other bus's copy,
 one added later included, holds a stand-in that delays its dry signal by the filter's
 latency, so the master chain's latency stays the same on every bus. The engine taps
-only the master bus, so every output hears the plugin; #922 tracks outputs that will
-take other buses.
+only the master bus, so every output hears the plugin. Once outputs take other buses,
+each bus that feeds one gets its own host instead
+([ADR-0086](../../docs/adr/0086-master-clap-filter-one-host-per-output-bus.md), not
+built yet, #922).
 
 **Adding and removing inputs and buses** (`cmd.rs`, `retire.rs`). The control thread
 allocates the ring and the producer (or a bus's shared state) and sends them on a
