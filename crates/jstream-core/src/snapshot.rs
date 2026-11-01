@@ -1066,7 +1066,7 @@ impl<'a> Planner<'a, '_> {
                 None => {}
             }
         }
-        // The layer each such group was planned with on the new side, its chain and its
+        // The layers either side planned each such group with, their chains and its
         // item's effects are no longer shown: they no longer run each frame, unless
         // another track reads them.
         if redrawn {
