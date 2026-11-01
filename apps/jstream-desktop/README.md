@@ -107,7 +107,7 @@ folder, and its log `logs\cef.log`.
 - **The workspace layout** (the dock and saved layouts) is kept in `ui-settings.json` in
   the data folder, the file the daemon keeps it in too, so the window and a browser of
   the daemon show the same layout
-  ([ADR-0083](../../docs/adr/0083-ui-settings-kept-by-the-server.md)).
+  ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)).
 - **Logs.** `logs\jstream-desktop.log` in the data folder, replaced at each start by a
   new, user-only file (a protected DACL for SYSTEM and the user on Windows, mode `0600`
   on Unix, in a folder created `0700`, #780) and capped at 10 MiB, filtered by `RUST_LOG` (default `info`). A debug build also logs to
@@ -146,7 +146,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md)). The
   server still answers `ui_settings.get` and `ui_settings.set`, keeping them in the data
   folder's `ui-settings.json` (`Host::start`'s `ui_settings`,
-  [ADR-0083](../../docs/adr/0083-ui-settings-kept-by-the-server.md)). On Windows the engine is live with the same wiring as the daemon (OS backends,
+  [ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)). On Windows the engine is live with the same wiring as the daemon (OS backends,
   keys in Credential Manager, an RTMP(S) publish opener); elsewhere it has no backends.
   When the app exits, the server closes its connections and the engine stops.
 - **The UI is read at run time.** The app registers its own URL scheme, `jstream`, and

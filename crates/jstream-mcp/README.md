@@ -129,8 +129,8 @@ pair and revoke devices as any client can (ADR-0006), and gets `unsupported` fro
 session with no server in front. A `pairing.start` result carries the code, the one
 place it is sent ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 
-The `ui_settings` tool (protocol 0.51) is the same:
-[ADR-0083](../../docs/adr/0083-ui-settings-kept-by-the-server.md)'s server answers it,
+The `ui_settings` tool (protocol 0.52) is the same:
+[ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)'s server answers it,
 so an agent can read or change the UI's kept settings, such as the web UI's dock, and
 gets `unsupported` from a session with no server in front. Being an action's tool, it is
 `destructiveHint`.

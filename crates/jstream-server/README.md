@@ -41,7 +41,7 @@ Contents (a first cut; [Design](#design) explains the choices):
   ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)).
 - **UI settings** (`ui_settings.rs`): the settings `ui_settings.set` keeps for every
   client, such as the web UI's dock, and the file that keeps them
-  ([ADR-0083](../../docs/adr/0083-ui-settings-kept-by-the-server.md)).
+  ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)).
 - **Pairing** (`pair.rs`): `POST /api/v1/pair` (`PAIR_PATH`), which trades the open code
   for a device token, or for the device cookie in a browser.
 - **Pairing page** (`pair_page.rs`, `pair.html`): `GET /pair` (`PAIR_PAGE_PATH`), the
@@ -303,7 +303,7 @@ These three calls are answered by the server, not the engine
 
 ### UI settings
 
-[ADR-0083](../../docs/adr/0083-ui-settings-kept-by-the-server.md) keeps the UI's own
+[ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md) keeps the UI's own
 settings on the engine's machine, so the desktop app and every browser of one engine
 show the same workspace.
 

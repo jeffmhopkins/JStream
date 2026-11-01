@@ -3,7 +3,7 @@
 //! zones, dragged by their tabs to another group, half or zone, resized with the
 //! splitters and dividers, collapsed by their title and closed with a second click on
 //! their ×. The dock is kept in the browser's storage, so the layout survives a reload,
-//! and in the engine's UI settings (ADR-0083), so the desktop app and every browser of
+//! and in the engine's UI settings (ADR-0084), so the desktop app and every browser of
 //! one engine show the same layout.
 //!
 //! Docs: docs/UI-FEATURES.md#docking, crates/jstream-ui/README.md#design
@@ -67,7 +67,7 @@ enum Shared {
     No,
 }
 
-/// Shares `dock` through the engine's UI settings (ADR-0083) while the workspace is
+/// Shares `dock` through the engine's UI settings (ADR-0084) while the workspace is
 /// shown: reads the dock the server keeps and shows it, or sends this browser's when
 /// the server keeps none yet, then sends each change once the dock has stayed the same
 /// for [`SHARE_AFTER`].

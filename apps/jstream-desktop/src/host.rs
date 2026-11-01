@@ -42,7 +42,7 @@ pub struct Host {
 
 impl Host {
     /// Serves `engine` on `127.0.0.1` with a new token, accepting pages from `origin`,
-    /// and keeps the UI settings in `ui_settings` (ADR-0083; in memory without one).
+    /// and keeps the UI settings in `ui_settings` (ADR-0084; in memory without one).
     ///
     /// # Errors
     /// When the runtime can't start, the OS has no randomness for the token, or the

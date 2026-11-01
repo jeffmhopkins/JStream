@@ -487,7 +487,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   - The dock is kept in the browser's storage (`jstream.dock`) after every change and
     read back when the workspace opens; a stored dock that doesn't parse is ignored.
   - It is also kept in the engine's UI settings under `workspace.dock`
-    (`ui_settings.rs`, [ADR-0083](../../docs/adr/0083-ui-settings-kept-by-the-server.md)),
+    (`ui_settings.rs`, [ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)),
     so the desktop app and every browser of one engine show the same layout. When the
     workspace opens it shows the browser's copy, then reads the server's
     (`ui_settings.get`) and shows that instead; when the server keeps none yet, or one

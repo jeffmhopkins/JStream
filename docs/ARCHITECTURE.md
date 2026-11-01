@@ -683,7 +683,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   whom a listener admits, so `jstream-server` answers them, and a session with no server
   in front, or one whose server pairs nothing (the desktop app's), answers `unsupported`
   ([ADR-0057](adr/0057-server-answers-credential-calls.md)).
-- **UI settings** (protocol 0.51, [ADR-0083](adr/0083-ui-settings-kept-by-the-server.md)):
+- **UI settings** (protocol 0.52, [ADR-0084](adr/0084-ui-settings-kept-by-the-server.md)):
   the action `ui_settings.set` keeps an opaque JSON value under a key and the query
   `ui_settings.get` reads it back, so the web UI's dock follows the person from the
   desktop app to a browser. Not collection state (no `rev`, undo or event).
@@ -1195,7 +1195,7 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   when it binds and replaces it atomically after every change; the desktop app and the
   daemon name the same file, so both show the same workspace. A file it can't read is
   logged and replaced on the next change
-  ([ADR-0083](adr/0083-ui-settings-kept-by-the-server.md)).
+  ([ADR-0084](adr/0084-ui-settings-kept-by-the-server.md)).
 - **App settings:** `jstream.toml` in the platform config directory.
 - **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store. On
   Linux, where no Secret Service is reachable, they are kept in a `0600` `secrets` file

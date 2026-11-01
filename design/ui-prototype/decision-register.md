@@ -95,7 +95,7 @@ matter.
 | D32 | Image, GIF and font decoding vs ADR-0003's "OS codecs only" | ambiguity in ADR-0003 | M | now (image source is M1b) |
 | D33 | Continuous edits: scrubbing, drags, live dialogs with Cancel; undo granularity | gap (protocol OQ 4) | A | **now** |
 | D34 | Multi-client: selection, presence, conflicting edits | partly covered (ADR-0013) | A | pre-M2 |
-| D35 | Workspace layout persistence: client side or server side | decided ([ADR-0083](../../docs/adr/0083-ui-settings-kept-by-the-server.md)) | A | pre-M2 |
+| D35 | Workspace layout persistence: client side or server side | decided ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)) | A | pre-M2 |
 | D36 | Preview streams for any target, pop-outs, projectors, multiview | partly covered (ADR-0002) | A (projector host: M) | pre-M2 (stream shape now) |
 | D37 | Item geometry for the canvas overlay: source sizes as runtime state | gap | A | now |
 | D38 | Audit log over the protocol (Agent activity panel) | gap | A | pre-M2 |

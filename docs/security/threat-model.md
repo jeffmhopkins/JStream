@@ -122,7 +122,7 @@ a stolen token, local denial of service.
 - On Unix the token file is created `0600` and refused if group or others can read it.
   On Windows (#548) the daemon's token, devices and log files, the desktop app's log file
   (#780), the daemon's and the desktop app's crash reports (#656), and the UI settings
-  file both write (ADR-0083), are created with a protected DACL for SYSTEM and the user
+  file both write (ADR-0084), are created with a protected DACL for SYSTEM and the user
   in the same `CreateFileW` call (`jstream_platform_windows::create_private_file`), so
   they never carry their folder's inherited entries. An existing token or devices file
   is refused unless its owner is the user, SYSTEM or Administrators and its DACL grants

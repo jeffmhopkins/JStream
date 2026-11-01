@@ -1,4 +1,4 @@
-//! The UI settings the server keeps for its clients (ADR-0083): `ui_settings.get` and
+//! The UI settings the server keeps for its clients (ADR-0084): `ui_settings.get` and
 //! `ui_settings.set`, so the desktop app and every browser of one engine show the same
 //! workspace.
 //!

@@ -9,7 +9,7 @@
 //!   sessions through it, the same calls work from the UI, the CLI and MCP agents (an
 //!   MCP agent sees them as the `pairing` and `device` tools). Like every call, they need
 //!   the handshake first (`handshake_required`).
-//! - **UI settings** (ADR-0083). `ui_settings.get` and `ui_settings.set` read and keep
+//! - **UI settings** (ADR-0084). `ui_settings.get` and `ui_settings.set` read and keep
 //!   the settings [`UiSettings`] holds for every client of this server, so they are
 //!   answered here too, with pairing off as well: the desktop app's webview keeps its
 //!   dock this way.

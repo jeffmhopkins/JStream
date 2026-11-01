@@ -3532,7 +3532,7 @@ fn capture_target_info(info: CaptureTargetInfo) -> Option<jstream_protocol::Capt
 /// `unsupported`, for the calls that concern the listener's credentials (`pairing.start`,
 /// `device.list`, `device.revoke`) and the UI settings it keeps (`ui_settings.get`,
 /// `ui_settings.set`): the server in front of the engine answers them (ADR-0044,
-/// ADR-0083), so one that reaches the engine came from a client with no server between.
+/// ADR-0084), so one that reaches the engine came from a client with no server between.
 fn served_by_the_server(call: &str) -> ProtocolError {
     ProtocolError::Unsupported { call: call.into() }
 }

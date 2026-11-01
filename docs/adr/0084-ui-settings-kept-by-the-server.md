@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0083"
+id = "ADR-0084"
 title = "The server keeps the UI's settings, so a layout follows the person"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0083: The server keeps the UI's settings, so a layout follows the person
+# ADR-0084: The server keeps the UI's settings, so a layout follows the person
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted
@@ -29,7 +29,7 @@ architecture, so agent tier ([R-GOV-005](../RULES.md#R-GOV-005)).
 ## Decision
 - **Two calls, answered by the server.** `ui_settings.set {key, value}` (an action) keeps
   any JSON value under a key, and a `null` value removes it; `ui_settings.get {key}` (a
-  query) reads it back, omitting `value` when there is none. They ship in protocol 0.51,
+  query) reads it back, omitting `value` when there is none. They ship in protocol 0.52,
   an additive minor ([R-API-001](../RULES.md#R-API-001)). `jstream-server`'s session
   wrapper answers them, as it answers the device calls
   ([ADR-0057](0057-server-answers-credential-calls.md)), with pairing off too, so the

@@ -229,7 +229,7 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   session serves them
   ([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)), and the UI
   settings calls (`ui_settings.get`, `ui_settings.set`) the same way
-  ([ADR-0083](../../docs/adr/0083-ui-settings-kept-by-the-server.md));
+  ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md));
 - `plugin.install` answered with `unsupported`, since the mock can't run a plugin, and
   `plugin.grant` and `plugin.enable` with `not_found` (entity `plugin`), as the engine
   answers them for a plugin that isn't installed: none ever is in the mock;

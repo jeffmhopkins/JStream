@@ -149,7 +149,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 - **UI settings.** What the web UI keeps on the engine, its dock and saved layouts, is
   in `ui-settings.json` in the platform data directory, the desktop app's file too, so a
   browser and the desktop app show the same workspace
-  ([ADR-0083](../../docs/adr/0083-ui-settings-kept-by-the-server.md)). It is created at
+  ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)). It is created at
   the first change; one that can't be read is logged and replaced on the next change,
   never a startup failure. Deleting it resets the layout to Editing.
 - **Output.** On stdout: `token file: <path> (created, new token)` or
@@ -474,7 +474,7 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   `ServerConfig::ui_settings_file` as `ui-settings.json` in the data directory
   (`jstream_platform::paths::UI_SETTINGS_FILE`), the file the desktop app names too, so
   a browser of the daemon and the desktop app show the same workspace
-  ([ADR-0083](../../docs/adr/0083-ui-settings-kept-by-the-server.md)). With no data
+  ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)). With no data
   directory the settings live in memory. The server owns the file, as it owns the device
   file.
 - **The token** ([ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence): a random

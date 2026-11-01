@@ -160,7 +160,7 @@ pub struct ServerConfig {
     /// and rewritten user-only on every change. [`ServerConfig::new`] leaves it unset:
     /// devices then live in memory and are gone when the server stops.
     pub device_file: Option<PathBuf>,
-    /// The file that keeps the UI settings `ui_settings.set` stores (ADR-0083), such as
+    /// The file that keeps the UI settings `ui_settings.set` stores (ADR-0084), such as
     /// the web UI's dock, so every client of the engine shows the same workspace. Read
     /// when the server binds (a missing file means no settings; one that can't be read
     /// is logged and replaced on the next change), and rewritten user-only on every

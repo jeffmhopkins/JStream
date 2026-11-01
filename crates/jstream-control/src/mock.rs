@@ -910,7 +910,7 @@ impl State {
                 return Ok(CallResult::action());
             }
             // As the engine: the server in front answers the pairing calls (ADR-0044) and
-            // keeps the UI settings (ADR-0083).
+            // keeps the UI settings (ADR-0084).
             // The mock runs no plugins (ADR-0069), so it installs none: it can't load a
             // module, and none is ever installed to grant or enable.
             other @ (Action::PairingStart

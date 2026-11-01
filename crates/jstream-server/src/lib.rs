@@ -113,7 +113,7 @@ struct App {
     tls: bool,
     /// Whether the server pairs devices at all (`ServerConfig::pairing`).
     pairing: bool,
-    /// The UI settings it keeps for its clients (ADR-0083).
+    /// The UI settings it keeps for its clients (ADR-0084).
     ui_settings: Arc<UiSettings>,
 }
 

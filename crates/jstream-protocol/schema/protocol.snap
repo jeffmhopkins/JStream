@@ -417,7 +417,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Keeps a UI setting on the engine's machine (0.51, ADR-0083): an opaque JSON value\nthe UI owns, under `key` (the web UI keeps its dock under `workspace.dock`), so\nevery client of the engine, the desktop app and each browser, reads the same one\nback with `ui_settings.get`. A `value` of `null`, or none, removes the key. Not\ncollection state: it changes no `rev`, is never undone, emits no event, and is\nkept across restarts in the data folder (ADR-0020), whatever collection is open.\nAnswered by the server that admits clients, not the engine: a `Control` with no\nserver in front fails with `unsupported`. Fails with `invalid_argument` on `key`\nfor a key that isn't 1 to 64 of `a`-`z`, `0`-`9`, `.`, `_` and `-`, on `value`\nfor a value over 64 KiB as compact JSON, and on `key` for a 65th key;\n`action_failed` when the settings file can't be written (the value is then kept\nuntil the server stops).",
+          "description": "Keeps a UI setting on the engine's machine (0.52, ADR-0084): an opaque JSON value\nthe UI owns, under `key` (the web UI keeps its dock under `workspace.dock`), so\nevery client of the engine, the desktop app and each browser, reads the same one\nback with `ui_settings.get`. A `value` of `null`, or none, removes the key. Not\ncollection state: it changes no `rev`, is never undone, emits no event, and is\nkept across restarts in the data folder (ADR-0020), whatever collection is open.\nAnswered by the server that admits clients, not the engine: a `Control` with no\nserver in front fails with `unsupported`. Fails with `invalid_argument` on `key`\nfor a key that isn't 1 to 64 of `a`-`z`, `0`-`9`, `.`, `_` and `-`, on `value`\nfor a value over 64 KiB as compact JSON, and on `key` for a 65th key;\n`action_failed` when the settings file can't be written (the value is then kept\nuntil the server stops).",
           "properties": {
             "key": {
               "description": "The setting's key.",
@@ -6454,7 +6454,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Reads a UI setting `ui_settings.set` kept (0.51, ADR-0083): the value under\n`key`, omitted when there is none. Not collection state, so no `rev`. Answered by\nthe server that admits clients, like `device.list`: a `Control` with no server in\nfront fails with `unsupported`. Fails with `invalid_argument` on `key` for a key\n`ui_settings.set` would refuse.",
+          "description": "Reads a UI setting `ui_settings.set` kept (0.52, ADR-0084): the value under\n`key`, omitted when there is none. Not collection state, so no `rev`. Answered by\nthe server that admits clients, like `device.list`: a `Control` with no server in\nfront fails with `unsupported`. Fails with `invalid_argument` on `key` for a key\n`ui_settings.set` would refuse.",
           "properties": {
             "key": {
               "description": "The setting's key.",
@@ -8676,5 +8676,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.51"
+  "title": "JStream protocol 0.52"
 }

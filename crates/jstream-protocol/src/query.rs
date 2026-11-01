@@ -175,7 +175,7 @@ pub enum Query {
     /// `unsupported`.
     #[serde(rename = "device.list")]
     DeviceList,
-    /// Reads a UI setting `ui_settings.set` kept (0.51, ADR-0083): the value under
+    /// Reads a UI setting `ui_settings.set` kept (0.52, ADR-0084): the value under
     /// `key`, omitted when there is none. Not collection state, so no `rev`. Answered by
     /// the server that admits clients, like `device.list`: a `Control` with no server in
     /// front fails with `unsupported`. Fails with `invalid_argument` on `key` for a key

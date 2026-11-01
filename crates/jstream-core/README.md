@@ -504,7 +504,7 @@ WebSocket API does, minus serialization:
   log names it.
 - `ui_settings.get` and `ui_settings.set` fail with `unsupported` the same way: the
   server in front keeps the UI's settings
-  ([ADR-0083](../../docs/adr/0083-ui-settings-kept-by-the-server.md)), so behind a
+  ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)), so behind a
   server they never reach the engine either.
 - `plugin.install`, `plugin.grant` and `plugin.enable` run with no engine lock held
   (see *WASM plugins*). Built without the `wasm-plugins` feature, the engine answers

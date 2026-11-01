@@ -279,7 +279,7 @@ fn run(mut options: Options) -> Result<(), Failure> {
         let ui_dir = options.ui_dir.as_deref().map(Path::new);
         let device_file = token::device_file(&path);
         // In the data folder, where the desktop app keeps them too, so both show the
-        // same workspace (ADR-0083).
+        // same workspace (ADR-0084).
         let ui_settings = jstream_platform::paths::data_dir()
             .map(|dir| dir.join(jstream_platform::paths::UI_SETTINGS_FILE));
         let server = serve::bind(

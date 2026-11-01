@@ -319,7 +319,7 @@ fn live_redacting(
 
 /// Binds the server on `127.0.0.1:<port>`, serving `engine` behind `token` and the
 /// devices paired in `device_file` (ADR-0044; in memory without one), keeping the UI
-/// settings in `ui_settings_file` (ADR-0083; in memory without one), with MCP's
+/// settings in `ui_settings_file` (ADR-0084; in memory without one), with MCP's
 /// streamable-HTTP transport on, and the web UI's files from `ui_dir` when given. Each
 /// connection and each MCP session gets its own session (its own `client_id`); all of
 /// them share the engine.

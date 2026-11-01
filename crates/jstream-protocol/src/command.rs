@@ -1286,7 +1286,7 @@ pub enum Action {
         /// The device to revoke, as `device.list` reports it.
         device_id: DeviceId,
     },
-    /// Keeps a UI setting on the engine's machine (0.51, ADR-0083): an opaque JSON value
+    /// Keeps a UI setting on the engine's machine (0.52, ADR-0084): an opaque JSON value
     /// the UI owns, under `key` (the web UI keeps its dock under `workspace.dock`), so
     /// every client of the engine, the desktop app and each browser, reads the same one
     /// back with `ui_settings.get`. A `value` of `null`, or none, removes the key. Not

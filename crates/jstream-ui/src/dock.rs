@@ -692,7 +692,7 @@ impl Dock {
     }
 
     /// The dock as a JSON value, for the browser's storage and the engine's UI settings
-    /// (ADR-0083).
+    /// (ADR-0084).
     pub fn to_value(&self) -> Value {
         json!({
             "version": 1,

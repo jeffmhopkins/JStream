@@ -1,5 +1,5 @@
 //! The UI settings the engine's server keeps for every client (`ui_settings.get` and
-//! `ui_settings.set`, ADR-0083), so the workspace follows the person from the desktop app
+//! `ui_settings.set`, ADR-0084), so the workspace follows the person from the desktop app
 //! to a browser. The UI owns each value's shape; the server only stores it. A session
 //! with no server in front answers `unsupported`, and the UI then keeps its settings in
 //! the browser alone.

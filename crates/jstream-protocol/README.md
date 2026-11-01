@@ -935,7 +935,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   its `device_id`, `name`, and when it was paired and last used (Unix seconds). Not
   collection state, so no `rev`. Added in 0.21 (see *Pairing* below).
 - `ui_settings.get {key}`: the UI setting kept under `key`, or no `value` when there is
-  none. Not collection state, so no `rev`. Added in 0.51 (see *UI settings* below).
+  none. Not collection state, so no `rev`. Added in 0.52 (see *UI settings* below).
 - `delete.plan {target}`: the batch that deletes a scene, source or bus (`target` is
   `{"type":"scene","scene_id":…}`, `{"type":"source","source_id":…}` or, since 0.24,
   `{"type":"bus","bus_id":…}`), or a folder or label (`{"type":"folder","folder_id":…}`,
@@ -983,7 +983,7 @@ in front of the engine answers them
 server in front answers `unsupported`. The code is a `SecretString`: it never prints,
 and nothing but this answer carries it ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 
-**UI settings** (0.51, [ADR-0083](../../docs/adr/0083-ui-settings-kept-by-the-server.md)).
+**UI settings** (0.52, [ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)).
 `ui_settings.set {key, value}` keeps any JSON value under a key, and a `null` or missing
 `value` removes the key; `ui_settings.get {key}` reads it back. A UI owns each value's
 shape: the web UI keeps its dock under `workspace.dock`, so the desktop app and every
