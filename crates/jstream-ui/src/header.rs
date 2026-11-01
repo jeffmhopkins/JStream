@@ -137,10 +137,11 @@ impl Load {
         self.fps.map(|fps| format!("{fps} fps"))
     }
 
-    /// "CPU 3%", or "CPU <1%" for a share that rounds to nothing.
+    /// "CPU 3%", or "CPU <1%" for a share below half a percent, none at all included:
+    /// Windows counts CPU time in clock ticks, so an idle second can read as 0 ms.
     pub fn cpu(&self) -> Option<String> {
         self.cpu.map(|tenths| match tenths {
-            1..=4 => "CPU <1%".to_owned(),
+            0..=4 => "CPU <1%".to_owned(),
             _ => format!("CPU {}%", rounded(tenths, 10)),
         })
     }
@@ -850,10 +851,13 @@ mod tests {
         // Idle: no frames drawn, a little CPU, and a host that reads none.
         l.observe(3, Some(at(3_000, 60, Some(230))));
         assert_eq!((l.fps(), l.cpu().as_deref()), (None, Some("CPU <1%")));
-        l.observe(4, Some(at(4_000, 60, None)));
+        // No CPU time at all over the interval still reads "<1%", never "0%".
+        l.observe(4, Some(at(4_000, 60, Some(230))));
+        assert_eq!(l.cpu().as_deref(), Some("CPU <1%"));
+        l.observe(5, Some(at(5_000, 60, None)));
         assert_eq!(l.cpu(), None);
         // A missed tick still gives the average over the gap.
-        l.observe(6, Some(at(6_000, 120, None)));
+        l.observe(7, Some(at(7_000, 120, None)));
         assert_eq!(l.fps().as_deref(), Some("30 fps"));
         // An engine restart, or one without a load, clears the readout.
         l.observe(1, Some(at(10, 0, Some(1))));

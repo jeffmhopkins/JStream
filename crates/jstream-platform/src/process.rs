@@ -5,7 +5,7 @@ use std::time::Duration;
 /// Reads the CPU time the current process has used.
 ///
 /// A platform crate implements it on the OS's process accounting (on Windows
-/// `GetProcessTimes`, on macOS and Linux `getrusage`), and the host hands it to the
+/// `GetProcessTimes`, on macOS `getrusage`; Linux has none yet), and the host hands it to the
 /// engine. The engine's stats thread calls it about once a second, never a real-time
 /// thread, so it may make a system call.
 pub trait ProcessCpu: Send + Sync {
