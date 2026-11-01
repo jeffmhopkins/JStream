@@ -2,9 +2,11 @@
 // with the diamond and the canvas banner, its eye and box fields write the keyframe's
 // overrides and leave Main's item alone, Reset to “Main” clears them, the canvas's
 // Ctrl+D and Del change nothing there, Switch to it puts it on program and Delete
-// keyframe removes it; the Inspector's Hotkey row binds F1 to
+// keyframe removes it; a drag on the keyframe's canvas sends the keyframe's live values
+// and commits its override; a group's children list at the keyframe's overrides, whose
+// eye and box fields write them there (#846); the Inspector's Hotkey row binds F1 to
 // a scene, F1 then puts that scene on program, and the chip's × unbinds it.
-import { test, expect, connect, rev } from '../fixtures.js';
+import { test, expect, connect, openAddSource, recordCalls, rev } from '../fixtures.js';
 
 function menu(page) {
   return page.getByRole('menu', { name: 'Context menu' });
@@ -119,6 +121,114 @@ test('a keyframe nests under its scene and overrides only its own placements', a
   await expect(keyframe).toHaveCount(0);
   await expect(scene(page, 'Main')).toHaveClass(/selected/);
   await expect(scene(page, 'Main').getByRole('button', { name: 'Keyframes' })).toHaveCount(0);
+});
+
+test('a drag on a keyframe sends the keyframe\'s live values and commits its override', async ({ page, daemon }) => {
+  const calls = await recordCalls(page);
+  await connect(page, daemon);
+  await choose(page, 'Main', 'New keyframe');
+  await expect(page.locator('.keyframe-banner')).toBeVisible();
+  const start = await rev(page);
+  const from = await onScreen(page, 960, 540);
+  await page.keyboard.down('Control');
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(from.x + 60, from.y + 40, { steps: 4 });
+  await page.mouse.move(from.x + 120, from.y + 80, { steps: 4 });
+  await expect.poll(() => calls.sent('live.set').length).toBeGreaterThan(0);
+  expect(await rev(page)).toBe(start);
+  await page.mouse.up();
+  await page.keyboard.up('Control');
+  await expect.poll(() => rev(page)).toBe(start + 1);
+
+  // The live values and the commit both name the keyframe, not Main.
+  const variant = calls.sent('scene.create_variant').at(-1);
+  const commit = calls.sent('item.set_geometry').at(-1);
+  const keyframeId = commit.scene_id;
+  expect(keyframeId).toBe(variant.scene_id);
+  expect(keyframeId).not.toBe(variant.variant_of);
+  const live = calls.sent('live.set').flatMap((a) => a.values);
+  expect(live.length).toBeGreaterThan(0);
+  expect(live.every((v) => v.scene_id === keyframeId)).toBe(true);
+  await backdrop(page).locator('.row-main').click();
+  await expect(field(page, 'X')).not.toHaveValue('640');
+  // Main's own item didn't move.
+  await scene(page, 'Main').locator('.row-main').click();
+  await backdrop(page).locator('.row-main').click();
+  await expect(field(page, 'X')).toHaveValue('640');
+});
+
+test('a keyframe overrides a group\'s children from their rows and the Inspector', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  // Group the Backdrop and a second colour in Main.
+  const dialog = await openAddSource(page);
+  await dialog.getByRole('option', { name: 'Color' }).click();
+  await dialog.getByRole('button', { name: 'Add', exact: true }).click();
+  const rows = page.locator('.sources-panel li.row');
+  await expect(rows).toHaveCount(2);
+  await rows.first().locator('.row-main').click();
+  await rows.last().locator('.row-main').click({ modifiers: ['Shift'] });
+  await rows.first().click({ button: 'right' });
+  await menu(page).getByRole('menuitem', { name: 'Group selection' }).click();
+  await expect(rows).toHaveCount(1);
+
+  await choose(page, 'Main', 'New keyframe');
+  await expect(page.locator('.keyframe-banner')).toBeVisible();
+  await rows.first().getByRole('button', { name: 'Expand Group 1' }).click();
+  await expect(rows).toHaveCount(3);
+
+  // The eye on a child writes the keyframe's override: hidden here, not in Main.
+  const child = rows.nth(1);
+  const start = await rev(page);
+  await child.hover();
+  await child.getByRole('button', { name: 'Show or hide Backdrop' }).click();
+  await expect(child).toHaveClass(/hidden/);
+  expect(await rev(page)).toBe(start + 1);
+
+  // A click selects it in the keyframe, whose Inspector writes its box there.
+  await child.locator('.row-main').click();
+  await expect(page.locator('.keyframe-banner')).toBeVisible();
+  await expect(scene(page, 'Keyframe 1')).toHaveClass(/selected/);
+  await expect(child).toHaveClass(/selected/);
+  await expect(inspector(page).locator('.keyframe-note')).toBeVisible();
+  const own = await field(page, 'X').inputValue();
+  await field(page, 'X').fill('100');
+  await field(page, 'X').press('Enter');
+  await expect.poll(() => rev(page)).toBe(start + 2);
+  await expect(field(page, 'X')).toHaveValue('100');
+
+  // A crop written there too.
+  await field(page, 'Left').fill('24');
+  await field(page, 'Left').press('Enter');
+  await expect.poll(() => rev(page)).toBe(start + 3);
+  await expect(field(page, 'Left')).toHaveValue('24');
+
+  // Its menu is the keyframe's: what would change Main's items is off, Crop too (the
+  // canvas has no box for it), and Clear crop clears the keyframe's crop.
+  await child.locator('.row-main').click({ button: 'right' });
+  await expect(menu(page).getByRole('menuitem', { name: 'Remove from scene' })).toBeDisabled();
+  await expect(menu(page).getByRole('menuitem', { name: 'Bring to front' })).toBeDisabled();
+  await expect(menu(page).getByRole('menuitem', { name: 'Crop C', exact: true })).toBeDisabled();
+  await menu(page).getByRole('menuitem', { name: 'Clear crop' }).click();
+  await expect.poll(() => rev(page)).toBe(start + 4);
+  await expect(field(page, 'Left')).toHaveValue('0');
+  await expect(scene(page, 'Keyframe 1')).toHaveClass(/selected/);
+
+  // In Main the group's child is as it was.
+  await scene(page, 'Main').locator('.row-main').click();
+  await expect(page.locator('.keyframe-banner')).toHaveCount(0);
+  await expect(rows).toHaveCount(3);
+  await expect(rows.nth(1)).not.toHaveClass(/hidden/);
+  // There a click opens the group's own scene, with the child at its own box.
+  await rows.nth(1).locator('.row-main').click();
+  await expect(page.locator('.sources-panel .tree-caption')).toHaveText('In “Group 1”, top to bottom');
+  await expect(field(page, 'X')).toHaveValue(own);
+
+  // Reset to “Main” clears the child's overrides too.
+  await choose(page, 'Keyframe 1', 'Reset to “Main”');
+  await scene(page, 'Keyframe 1').locator('.row-main').click();
+  await expect(rows).toHaveCount(3);
+  await expect(rows.nth(1)).not.toHaveClass(/hidden/);
 });
 
 test('a scene hotkey bound in the Inspector switches to its scene', async ({ page, context, daemon }) => {
