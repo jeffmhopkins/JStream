@@ -1240,13 +1240,21 @@ pub enum Action {
     /// a webcam or capture card already open is shared, not opened twice. The canvas
     /// size is the one at the subscription: subscribe again for other settings.
     ///
+    /// With `source_id`, the stream shows that source of the collection alone, fitted
+    /// into the canvas as an item filling it would show it, with the source's own
+    /// filters and none of an item's: a projector of the source. It follows the
+    /// source's settings and filters as they change, and the canvas too. Like a scene's
+    /// stream it never makes the source shown or heard. It ends, with an end frame, when
+    /// the source is deleted.
+    ///
     /// Fails with `invalid_argument` for a field out of range (`max_width` 16 to 1920,
     /// default 640; `max_height` 16 to 1080, default 360; `fps` 1 to 30, default 15), a
     /// codec named twice, a `channel` this session already has open (`channel`), a
-    /// seventeenth open stream, both `scene_id` and `source` (`source`), or a `source`
+    /// seventeenth open stream, more than one of `scene_id`, `source` and `source_id` (the
+    /// later field), or a `source`
     /// whose kind is not a capture kind or whose settings its kind refuses
-    /// (`source.kind`, `source.settings.<param>`); with `not_found` for a `scene_id` the collection doesn't
-    /// have; and with `action_failed` when the session cannot receive binary frames (an
+    /// (`source.kind`, `source.settings.<param>`); with `not_found` for a `scene_id` or a
+    /// `source_id` the collection doesn't have; and with `action_failed` when the session cannot receive binary frames (an
     /// MCP session) or none of `codecs` can be encoded here.
     #[serde(rename = "preview.subscribe")]
     PreviewSubscribe {
@@ -1274,6 +1282,10 @@ pub enum Action {
         /// Omitted for the program mix or `scene_id`'s scene.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         source: Option<PreviewDraft>,
+        /// A source of the collection to show alone (since 0.56), as a projector of it
+        /// does. Omitted for the program mix, `scene_id`'s scene or `source`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source_id: Option<SourceId>,
     },
     /// Closes one of this session's preview streams. No end frame follows; frames
     /// already sent may still arrive. Succeeds for a channel that is not open.

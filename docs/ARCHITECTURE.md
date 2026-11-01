@@ -696,8 +696,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   no server in front answers `unsupported`.
 - **Plugins** (protocol 0.35, [ADR-0069](adr/0069-wasm-plugin-limits-and-capabilities.md)): the actions
   `plugin.install`, `plugin.grant` and `plugin.enable` install a WASM automation plugin
-  with what a person grants it, change the grant and re-enable it; they are for a person,
-  so no MCP tool, plugin or hotkey carries them. The event `plugin.state_changed` reports
+  with what a person grants it, change the grant and re-enable it, and the query
+  `plugin.list` (0.58) lists the installed plugins with what each manifest asks for and
+  what was granted; they are for a person, so no MCP tool, plugin or hotkey carries
+  them. The event `plugin.state_changed` reports
   a plugin enabled or disabled, with why the engine disabled it. A plugin calls the API
   through a scoped `Control` that checks each call against its grant, using
   `jstream-protocol`'s table of every command's class (`read`, `edit`, `live`, `outputs`
@@ -772,14 +774,17 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `activity.list` (protocol 0.51) → the engine's last 100 audit entries, each with a
   sentence saying what it did ([ADR-0083](adr/0083-activity-log-over-the-protocol.md));
   audio levels are the `meters.tick` event, not a query).
-- **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops, load, chains}`, `meters.tick`,
+- **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops, load, chains, outputs}`, `meters.tick`,
   `source.size_changed` (protocol 0.40), …).
   `stats.tick` (protocol 0.6) carries the pipeline's running drop totals
   ([R-RT-004](RULES.md#R-RT-004)) and, since 0.48, the engine's load (program frames
   drawn and process CPU time, from which a client derives the frame rate and CPU use;
   the daemon and the desktop app also tick about once a second while idle); since 0.54
   it also carries what scene filter chains and item effects add to each frame
-  ([ADR-0065](adr/0065-scene-chains-and-item-effects.md) §7). `meters.tick` (protocol 0.19, about ten a second
+  ([ADR-0065](adr/0065-scene-chains-and-item-effects.md) §7); since 0.57 it lists each
+  running output's live stats: its uptime, the bytes and video frames it sent, its bitrate
+  over the last tick, what it dropped this run, and a health the engine works out over
+  the last ten seconds. `meters.tick` (protocol 0.19, about ten a second
   while the mixer runs) carries every source's and bus's levels and the master's loudness,
   which `audio.reset_loudness` restarts; the fields are in
   [jstream-protocol › Design](../crates/jstream-protocol/README.md#design).
@@ -815,8 +820,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `label.delete` refused because a scene or folder is in the folder or a source carries
   the label.
 - **Binary streams** (WebSocket binary frames, protocol 0.20): preview video.
-  `preview.subscribe` opens a stream of the program mix, or of any one scene (0.46,
-  `scene_id`: the UI's projector windows and multiview), for the calling session,
+  `preview.subscribe` opens a stream of the program mix, of any one scene (0.46,
+  `scene_id`: the UI's projector windows and multiview), or of one source alone (0.56,
+  `source_id`: the UI's projector of a source), for the calling session,
   scaled down, at most `fps` pictures a second and only when the mix changes (as it
   does throughout a running transition), in H.264
   when the platform has an encoder and JPEG otherwise; `preview.unsubscribe` or the
@@ -890,7 +896,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 760 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 764 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking

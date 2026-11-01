@@ -20,6 +20,7 @@ use crate::history::History;
 use crate::live::{Built, LiveHost, LiveSources, LoadedAsset};
 use crate::load::LoadMeter;
 use crate::lock;
+use crate::output_stats::{MeterGuard, OutputMeters, ReadSample};
 use crate::outputs::Outputs;
 use crate::plugins::kinds::{self as clap_kinds, ClapScan};
 use crate::preview::{
@@ -48,10 +49,10 @@ use jstream_platform::{
 use jstream_protocol::{
     Action, ActionResult, Batch, Call, CallResult, CaptureTargetKind, ClientId, DropCounts, Edit,
     EncoderProfile, EncoderSessionInfo, EngineLoad, EntityKind, Event, FilterChain, GestureId,
-    HistoryCall, HistoryDirection, IdempotencyKey, LiveOutcome, OutputId, OutputKind, OutputState,
-    PixelSize, PreviewSettings, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
-    RtmpTarget, SceneId, SecretString, SourceId, SourceSize, TransitionPresetId, TransitionStarted,
-    YoutubeAuth,
+    HistoryCall, HistoryDirection, IdempotencyKey, LiveOutcome, OutputHealth, OutputId, OutputKind,
+    OutputState, OutputStatsInfo, PixelSize, PreviewSettings, ProtocolError, Query, QueryResult,
+    RecordContainer, RequestId, Rev, RtmpTarget, SceneId, SecretString, SourceId, SourceSize,
+    TransitionPresetId, TransitionStarted, YoutubeAuth,
 };
 use jstream_sources::AudioScopes;
 use std::collections::{BTreeMap, BTreeSet};
@@ -117,6 +118,10 @@ struct Shared {
     /// When the engine started, the process CPU time and the idle heartbeat, for
     /// `stats.tick`'s load. Its lock is its own, never taken with the collection's.
     load: LoadMeter,
+    /// Each running output's live stats meter, for `stats.tick`'s `outputs` (protocol
+    /// 0.57). Its lock is its own: the stats thread takes it before the collection
+    /// lock, never with it.
+    output_meters: Arc<Mutex<OutputMeters>>,
     /// The WASM automation plugins installed this run (ADR-0069). On its own lock,
     /// never taken with the collection lock held, nor while a plugin runs.
     #[cfg(feature = "wasm-plugins")]
@@ -171,6 +176,7 @@ impl Default for Engine {
                 youtube: Mutex::new(None),
                 previews: PreviewHub::default(),
                 load: LoadMeter::default(),
+                output_meters: Arc::default(),
                 #[cfg(feature = "wasm-plugins")]
                 automation: crate::plugins::automation::Registry::default(),
             }),
@@ -636,6 +642,18 @@ impl Engine {
         {
             tracing::error!(error = %err, "stats heartbeat did not start");
         }
+    }
+
+    /// Meters `output_id`'s run, which began at `started`, in each `stats.tick` until
+    /// the returned guard drops (protocol 0.57).
+    pub(crate) fn add_output_meter(
+        &self,
+        output_id: OutputId,
+        started: Instant,
+        read: ReadSample,
+    ) -> MeterGuard {
+        let id = lock(&self.shared.output_meters).add(output_id, started, read);
+        MeterGuard::new(Arc::clone(&self.shared.output_meters), id)
     }
 
     /// The ledger the pipeline's [`DropGuard`](crate::drops::DropGuard) removes from.
@@ -1114,13 +1132,20 @@ impl Engine {
         Executed::Ready(Box::new(result))
     }
 
-    /// `plugin.install`, `plugin.grant` and `plugin.enable`, or `None` for any other call
+    /// `plugin.install`, `plugin.grant`, `plugin.enable` and `plugin.list`, or `None` for any other call
     /// or without the `wasm-plugins` feature. They run with no engine lock held: a plugin
     /// loads, and may call back into the engine, while its install waits.
     #[cfg(feature = "wasm-plugins")]
     fn plugin_call(&self, call: &Call) -> Option<Result<CallResult, ProtocolError>> {
         match call {
             Call::Action { action } => crate::plugins::automation::action(self, action),
+            Call::Query {
+                query: Query::PluginList,
+            } => Some(Ok(CallResult::Query {
+                result: QueryResult::PluginList {
+                    plugins: crate::plugins::automation::list(self),
+                },
+            })),
             _ => None,
         }
     }
@@ -1230,8 +1255,17 @@ impl Engine {
                 codecs,
                 scene_id,
                 source,
+                source_id,
             } => {
                 let settings = PreviewSettings::resolve(max_width, max_height, fps, &codecs)?;
+                // `source_id` first, so the error names the later field however many
+                // of the three are given.
+                if source_id.is_some() && (scene_id.is_some() || source.is_some()) {
+                    return Err(ProtocolError::invalid_argument(
+                        "source_id",
+                        "a preview stream shows one scene or one source, not both",
+                    ));
+                }
                 if scene_id.is_some() && source.is_some() {
                     return Err(ProtocolError::invalid_argument(
                         "source",
@@ -1246,6 +1280,14 @@ impl Engine {
                         return Err(ProtocolError::NotFound {
                             entity: EntityKind::Scene,
                             id: scene_id.as_str().to_owned(),
+                        });
+                    }
+                    if let Some(source_id) = &source_id
+                        && state.graph.state().source(source_id).is_none()
+                    {
+                        return Err(ProtocolError::NotFound {
+                            entity: EntityKind::Source,
+                            id: source_id.as_str().to_owned(),
                         });
                     }
                     // Only the kinds and the canvas: the draft is planned unlocked.
@@ -1275,18 +1317,20 @@ impl Engine {
                         codecs,
                         rev,
                         scene: scene_id.clone(),
+                        source_id: source_id.clone(),
                         draft,
                     },
                 )?;
-                if scene_id.is_some() {
-                    // Plans the scene, which the stream waits for.
+                if scene_id.is_some() || source_id.is_some() {
+                    // Plans the scene or the source, which the stream waits for.
                     self.shared.replan_and_sync();
                 }
                 Ok(CallResult::Action { result: None })
             }
             Action::PreviewUnsubscribe { channel } => {
                 if previews.unsubscribe(channel) {
-                    // Stops planning the scene, unless another stream shows it.
+                    // Stops planning the scene or the source, unless another stream
+                    // shows it.
                     self.shared.replan_and_sync();
                 }
                 Ok(CallResult::Action { result: None })
@@ -1518,6 +1562,8 @@ impl Engine {
     }
 
     fn start_pipeline(&self, output_id: OutputId) -> Result<CallResult, ProtocolError> {
+        // Where the output's uptime in `stats.tick` counts from (protocol 0.57).
+        let started = Instant::now();
         let Some(host) = &self.media else {
             return Err(not_implemented("output.start"));
         };
@@ -1712,6 +1758,7 @@ impl Engine {
                                 key,
                                 own_audio,
                                 hardware_held,
+                                started,
                             },
                             destination,
                             output_id.clone(),
@@ -2008,6 +2055,16 @@ impl Engine {
     pub(crate) fn previewed_scenes(&self) -> Vec<SceneId> {
         lock(&self.shared.state)
             .scene_shots
+            .keys()
+            .cloned()
+            .collect()
+    }
+
+    /// The sources planned alone for preview streams, for tests.
+    #[cfg(test)]
+    pub(crate) fn previewed_sources(&self) -> Vec<SourceId> {
+        lock(&self.shared.state)
+            .source_shots
             .keys()
             .cloned()
             .collect()
@@ -2522,11 +2579,13 @@ fn emit_sampled(shared: &Shared, ledger: &Mutex<DropLedger>) {
     let sampled = drops::lock_ledger(ledger).sample();
     // Read before the collection lock: the CPU reader makes a system call.
     let cpu = shared.load.cpu_time();
+    // And the outputs' meters, whose lock is never taken with the collection's.
+    let outputs = lock(&shared.output_meters).sample(Instant::now());
     let mut wake = Vec::new();
     {
         let mut state = lock(&shared.state);
         let load = shared.load.load(state.render.drawn(), cpu);
-        state.emit_stats(sampled, load, &mut wake);
+        state.emit_stats(sampled, load, outputs, &mut wake);
     }
     for waker in wake {
         waker.wake();
@@ -2633,6 +2692,9 @@ struct State {
     /// What each scene with an open preview stream draws, planned with the program mix
     /// and replaced only when what it draws changed: read by the preview thread alone.
     scene_shots: Arc<BTreeMap<SceneId, Arc<RenderSnapshot>>>,
+    /// What each source with an open preview stream draws alone, planned and replaced
+    /// as `scene_shots` are: read by the preview thread alone.
+    source_shots: Arc<BTreeMap<SourceId, Arc<RenderSnapshot>>>,
     /// How many `stats.tick` events this engine has emitted. The next one uses this plus one.
     stats_seq: u64,
     /// Every client's open live-value gestures (ADR-0032), and the committed values the
@@ -3074,6 +3136,11 @@ impl State {
                 Query::DeviceList | Query::UiSettingsGet { .. } => {
                     return Err(served_by_the_server(query.name()));
                 }
+                // Built without the `wasm-plugins` feature, no plugin is ever installed.
+                // With it, `Engine::execute` answers it before taking the collection lock.
+                Query::PluginList => QueryResult::PluginList {
+                    plugins: Vec::new(),
+                },
                 Query::ActivityList { after_seq, limit } => QueryResult::ActivityList {
                     now_ms: activity_log::unix_ms(std::time::SystemTime::now()),
                     entries: self.activity.list(*after_seq, *limit),
@@ -3260,6 +3327,7 @@ impl State {
             render,
             studio,
             scene_shots,
+            source_shots,
             shared,
             ..
         } = self;
@@ -3319,6 +3387,40 @@ impl State {
                 .all(|((a, x), (b, y))| a == b && Arc::ptr_eq(x, y));
         if !same {
             *scene_shots = Arc::new(shots);
+        }
+        // Each previewed source alone, after the program's plan too.
+        let mut shots = BTreeMap::new();
+        for source_id in previews.iter().flat_map(|shared| shared.previews.sources()) {
+            if graph.state().source(&source_id).is_none() {
+                if let Some(shared) = &previews {
+                    shared
+                        .previews
+                        .end_source(&source_id, graph.rev(), "the source was deleted");
+                }
+                continue;
+            }
+            let Some(source) = snapshot::plan_source(
+                graph,
+                &source_id,
+                &mut |id| match frames.get(id) {
+                    Some(frame) => Some(Look::Frame(frame.clone(), None)),
+                    None => live.look_quiet(id, now, frame_versions),
+                },
+                &assets,
+            ) else {
+                continue;
+            };
+            wake = snapshot::earliest(wake, source.wake);
+            let shot = RenderSnapshot::following(source_shots.get(&source_id), source.shot);
+            shots.insert(source_id, shot);
+        }
+        let same = shots.len() == source_shots.len()
+            && shots
+                .iter()
+                .zip(source_shots.iter())
+                .all(|((a, x), (b, y))| a == b && Arc::ptr_eq(x, y));
+        if !same {
+            *source_shots = Arc::new(shots);
         }
         live.wake_at(wake);
         planning.end_ms
@@ -3460,7 +3562,19 @@ impl State {
         }
     }
 
-    fn emit_stats(&mut self, drops: DropCounts, load: EngineLoad, wake: &mut Vec<Waker>) {
+    fn emit_stats(
+        &mut self,
+        drops: DropCounts,
+        load: EngineLoad,
+        mut outputs: Vec<OutputStatsInfo>,
+        wake: &mut Vec<Waker>,
+    ) {
+        // A live link that is down makes its output poor, whatever it lost.
+        for output in &mut outputs {
+            if self.outputs.state(&output.output_id) == Ok(OutputState::Reconnecting) {
+                output.health = OutputHealth::Poor;
+            }
+        }
         self.stats_seq = self.stats_seq.saturating_add(1);
         self.subscribers.emit(
             &Event::StatsTick {
@@ -3468,6 +3582,7 @@ impl State {
                 drops,
                 load: Some(load),
                 chains: Some(self.render.load().shot().chain_cost()),
+                outputs,
             },
             wake,
         );
@@ -3480,6 +3595,7 @@ impl PreviewSource for Shared {
         Current {
             program: state.render.load(),
             scenes: Arc::clone(&state.scene_shots),
+            sources: Arc::clone(&state.source_shots),
             live: state.render.load_live(),
             rev: state.graph.rev(),
             at: state.live.now(),

@@ -35,6 +35,7 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"request","id":"r36","call":{"kind":"action","action":{"type":"privacy.set","on":true}}}
 {"type":"request","id":"r37","call":{"kind":"action","action":{"type":"preview.subscribe","channel":2,"scene_id":"scn_2"}}}
 {"type":"request","id":"r38","call":{"kind":"action","action":{"type":"preview.subscribe","channel":3,"max_width":480,"max_height":270,"source":{"kind":"webcam","settings":{"device":"usb-cam-1"}}}}}
+{"type":"request","id":"r39","call":{"kind":"action","action":{"type":"preview.subscribe","channel":4,"source_id":"src_cam"}}}
 {"type":"request","id":"r20","call":{"kind":"query","query":{"type":"scene.list"}}}
 {"type":"request","id":"r21","call":{"kind":"query","query":{"type":"output.status","output_id":"out_yt"}}}
 {"type":"request","id":"r22","call":{"kind":"query","query":{"type":"source.list"}}}
@@ -66,8 +67,9 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"request","id":"r48","call":{"kind":"query","query":{"type":"activity.list"}}}
 {"type":"request","id":"r49","call":{"kind":"query","query":{"type":"activity.list","after_seq":41,"limit":20}}}
 {"type":"request","id":"r50","call":{"kind":"query","query":{"type":"ui_settings.get","key":"workspace.dock"}}}
-{"type":"request","id":"r51","call":{"kind":"query","query":{"type":"youtube.stats"}}}
-{"type":"request","id":"r52","call":{"kind":"query","query":{"type":"source.sizes"}}}
+{"type":"request","id":"r51","call":{"kind":"query","query":{"type":"plugin.list"}}}
+{"type":"request","id":"r52","call":{"kind":"query","query":{"type":"youtube.stats"}}}
+{"type":"request","id":"r53","call":{"kind":"query","query":{"type":"source.sizes"}}}
 {"type":"request","id":"r30","call":{"kind":"history","op":{"type":"history.undo"}}}
 {"type":"request","id":"r31","call":{"kind":"history","op":{"type":"history.redo"},"expected_rev":15,"idempotency_key":"k-2"}}
 # server -> client
@@ -111,6 +113,7 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"response","id":"r20","result":{"kind":"query","result":{"type":"device.list","devices":[{"device_id":"dev_1","name":"Tablet","paired_at":1790000000,"last_used_at":1790003600}]}}}
 {"type":"response","id":"r20","result":{"kind":"query","result":{"type":"activity.list","now_ms":1790000120000,"entries":[{"seq":42,"time_ms":1790000000042,"client_id":"client_3","client_name":"claude-desktop","call":"scene.switch","summary":"Switched to “Desktop + Cam”"},{"seq":41,"time_ms":1790000000041,"client_id":"client_3","client_name":"claude-desktop","call":"scene.switch","summary":"Switched to “Desktop + Cam”","error":"rev_conflict"}]}}}
 {"type":"response","id":"r20","result":{"kind":"query","result":{"type":"ui_settings.get","key":"workspace.dock","value":{"current":"Live","version":1}}}}
+{"type":"response","id":"r20","result":{"kind":"query","result":{"type":"plugin.list","plugins":[{"plugin_id":"chat_switcher","state":"enabled","remote_name":"Chat switcher","path":"/home/me/plugins/chat-switcher","request":{"classes":["live"],"hosts":["https://api.example.com:443"]},"grant":{"classes":["live"]}},{"plugin_id":"scene_timer","state":"disabled","reason":"needs_grant","path":"/home/me/plugins/scene-timer","request":{"classes":["edit","live"],"folders":true},"grant":{}}]}}}
 {"type":"error","id":"r1","error":{"code":"unsupported_version","client":{"major":9,"minor":0},"server":{"major":0,"minor":59},"message":"protocol version 9.0 is not supported; this server speaks 0.59"}}
 {"type":"error","id":"r1","error":{"code":"handshake_required","message":"send `hello` before any request"}}
 {"type":"error","id":"r1","error":{"code":"malformed","reason":"missing field `id`","message":"malformed message: missing field `id`"}}
@@ -167,7 +170,7 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"event","event":{"type":"plugin.state_changed","plugin_id":"plg_1","state":"disabled","reason":"memory_limit"}}
 {"type":"event","event":{"type":"plugin.state_changed","plugin_id":"plg_1","state":"disabled","reason":"trap"}}
 {"type":"event","event":{"type":"plugin.state_changed","plugin_id":"plg_1","state":"disabled","reason":"needs_grant"}}
-{"type":"event","event":{"type":"stats.tick","seq":4,"drops":{"capture_frames":2,"audio_frames":5,"render_ticks":1,"encode_frames":4,"encode_blocks":6,"output_packets":7},"load":{"elapsed_ms":2000,"program_frames":120,"cpu_ms":150,"cpus":8},"chains":{"scene_chains":1,"scene_layers":2,"scene_passes":2,"item_effects":1,"item_layers":3,"item_passes":3,"layer_bytes":99532800}}}
+{"type":"event","event":{"type":"stats.tick","seq":4,"drops":{"capture_frames":2,"audio_frames":5,"render_ticks":1,"encode_frames":4,"encode_blocks":6,"output_packets":7},"load":{"elapsed_ms":2000,"program_frames":120,"cpu_ms":150,"cpus":8},"chains":{"scene_chains":1,"scene_layers":2,"scene_passes":2,"item_effects":1,"item_layers":3,"item_passes":3,"layer_bytes":99532800},"outputs":[{"output_id":"out_1","uptime_ms":61000,"bytes":45750000,"frames":3660,"kbps":6000,"dropped_frames":3,"dropped_packets":1,"health":"fair"},{"output_id":"out_2","uptime_ms":400,"bytes":0,"frames":0,"kbps":0,"dropped_frames":0,"dropped_packets":0,"health":"waiting"},{"output_id":"out_3","uptime_ms":3600000,"bytes":2700000000,"frames":216000,"kbps":6010,"dropped_frames":0,"dropped_packets":0,"health":"good"},{"output_id":"out_4","uptime_ms":90000,"bytes":60000000,"frames":5100,"kbps":0,"dropped_frames":260,"dropped_packets":41,"health":"poor"}]}}
 {"type":"event","event":{"type":"live.changed","gesture_id":"drag_1","client_id":"cli_7","values":[{"type":"item.set_geometry","item_id":"itm_1","geometry":{"center":{"x":1600.0,"y":900.0},"size":{"width":480.0,"height":270.0},"fit_mode":"fit","rotation_deg":0.0,"tilt_deg":0.0,"turn_deg":0.0,"depth_px":0.0}},{"type":"item.set_crop","item_id":"itm_2","crop":{"left":4,"top":0,"right":4,"bottom":0}}]}}
 {"type":"event","event":{"type":"live.ended","gesture_id":"drag_1","client_id":"cli_7","outcome":"committed","rev":17}}
 {"type":"event","event":{"type":"live.ended","gesture_id":"drag_2","client_id":"cli_8","outcome":"cancelled"}}

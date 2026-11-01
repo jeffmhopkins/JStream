@@ -162,7 +162,8 @@ state machine. Contents:
   [ADR-0076](../../docs/adr/0076-saved-wasm-plugins-and-manifest-requests.md)):
   `plugin.install` loads a package's module on `jstream-plugin-wasm`'s host,
   `plugin.grant` replaces what it may do, never past what its manifest asks for, and
-  `plugin.enable` loads it again after the engine disabled it. With a plugin folder
+  `plugin.enable` loads it again after the engine disabled it, and `plugin.list` lists
+  them. With a plugin folder
   (`open_plugin_dir`), the installed plugins and their grants are saved in its
   `plugins.json` and loaded again at the next start. See *WASM plugins* under Design.
 - **Live sources** (`live.rs`): a running `jstream-sources` source for every source
@@ -226,7 +227,8 @@ state machine. Contents:
   `scene.switch` and `studio.set_preview` set and `studio.get` reads
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)).
 - **Preview** (`preview/`): `preview.subscribe` and `preview.unsubscribe`, the program
-  mix, one scene or a draft source the collection doesn't hold as small pictures sent to the session that asked as binary frames
+  mix, one scene, one of the collection's sources alone (`snapshot::plan_source`) or a
+  draft source the collection doesn't hold as small pictures sent to the session that asked as binary frames
   (`Control::binary`), in H.264 on a software `jstream-encode` session when the
   platform has an encoder and in JPEG otherwise (`preview/jpeg.rs`, a baseline
   encoder of its own), drawn on the engine's `jstream-preview` thread with its own
@@ -307,6 +309,9 @@ state machine. Contents:
   the publish link's, and a sampler thread
   emits a tick about once a second until the last output stops. The same thread emits
   `meters.tick` about ten times a second.
+- **Output stats** (`output_stats.rs`): each running output's meter for `stats.tick`'s
+  `outputs` (protocol 0.57). `output.start` registers one per output once it runs (not
+  for a virtual camera yet), and the stop removes it (*Output stats* below).
 - **Engine load** (`load.rs`): what a `stats.tick`'s `load` reads besides the render
   hub's frame count: when the engine started, the process CPU time from the host's
   `ProcessCpu` (`Engine::set_process_cpu`), and the idle heartbeat
@@ -402,7 +407,9 @@ state machine. Contents:
   virtual camera publishing the program as BGRA at the canvas size (fitted into a canvas of another size, started again after a stop, running beside
   a stream, refused without a camera in the backends or while another output uses
   it, a refused start keeping the sink, a failed publish failing only that output), a render panic failing both outputs, overload drops from a
-  fake encoder and the mixer reported in `stats.tick`, render and mixer panics
+  fake encoder and the mixer reported in `stats.tick`, a running output listed in each
+  `stats.tick` with what it sent and left out once stopped, a lost link making it
+  `poor` and its bytes stop counting, render and mixer panics
   reported as `failed` on the CPU stand-in (`tests/scenarios.rs` reaches it through
   the hidden `Engine::with_cpu_compositor`), audio sources becoming mixer inputs on the CPU
   stand-in (`src/tests/audio.rs`: the defaults while there is none, sources added and
@@ -1455,6 +1462,20 @@ the program's and the scenes' captures, and a draft stream doesn't count as show
 program; nothing reaches the engine's collection, plan or sources, so a draft is
 never shown on program, heard or listed.
 
+A stream with a `source_id` shows one of the collection's sources alone (0.56): a
+projector of the source. `publish_render` plans each source a live stream shows
+(`PreviewHub::sources`) after the scenes, with `snapshot::plan_source`: on a copy of the
+collection, one scene of its own whose one item (each under an ID the collection
+doesn't hold, numbered when it holds the plain one) places the source over the whole canvas, planned as `plan_scene` plans a scene, so the
+source's own filters draw and no item's do. Its shots are kept beside the scenes'
+(`source_shots`), replaced only when what they draw changed, and read by the preview
+thread alone, which captures what they show as it does a draft's. Like a scene stream
+it looks its source up quietly, so it never makes the source shown or heard, and a
+subscription or unsubscription re-plans at once. A source the collection doesn't have
+is `not_found`, a request with `scene_id` or `source` too (or both) is
+`invalid_argument` naming `source_id`, checked before the two of them, and a deleted source's streams end with "the source was deleted"
+(`PreviewHub::end_source`).
+
 The codec is picked when the client subscribes: the first of its `codecs` the engine
 can encode, H.264 when `codecs.list()` names an H.264 encoder (only with backends) and
 JPEG always. One `jstream-preview` thread per engine, started by the first stream and
@@ -1600,6 +1621,29 @@ While no output runs there is no sampler, so a host that wants ticks while idle 
 holds the engine weakly and emits a tick about once a second while no program stage's
 `jstream-stats` thread runs, ending once the last engine handle is gone. The daemon and
 the desktop app start it; tests and an embedding host call `emit_stats_tick` as before.
+
+### Output stats (`stats.tick`'s `outputs`)
+
+Each tick also lists every running output's live stats (protocol 0.57;
+`output_stats.rs`). The output thread counts each packet the muxer takes while the
+publish link is up into its `SentCounters` (two relaxed atomic adds: the bytes, and a
+frame for video), so a link that is down sends nothing and its tags count as the
+link's drops instead. `output.start` registers an `OutputMeter` for the run once it is
+armed, with its uptime counted from when the engine received the `output.start`
+(before the start waits for an earlier one, opens the destination and starts the
+program stage), whose read gathers those counts with the output's drops: its video encode
+session's queue-full and busy drops counted from when the meter was armed (a shared
+session may have dropped frames for an earlier output), and the video subscriber's
+losses, for `dropped_frames`; the audio subscriber's losses, the output thread's own
+drops and the publish link's, for `dropped_packets`. The meters are on their own lock,
+which the stats thread takes after the drop ledger and before the collection lock, and
+never with it. Each meter keeps the samples of the last ten seconds: `kbps` is the
+bytes since the previous sample over the time between them, and `health` compares the
+newest sample with the one at the window's start (`waiting` until a video frame was
+sent, `good` with nothing new lost, `poor` with 2% or more of the video frames lost,
+`fair` otherwise). Under the collection lock the engine then makes an output that is
+`reconnecting` `poor`. The stop drops the meter with the output's drop guard, so the
+next tick leaves the output out. A virtual camera output has no meter yet.
 
 ### Audio routing (`meters.tick`)
 
@@ -2250,10 +2294,17 @@ The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in proc
   `error`, and the next change saves again. A file that can't be read, or of a version
   it doesn't know, is logged at `error` and left as it is, and nothing is loaded or saved
   that run. Without a plugin folder, the installed plugins last for the run.
+- **Listing.** `plugin.list` (`automation::list`) answers from the registry with no
+  collection lock held: each plugin's state and reason, its manifest's name, its
+  package path, what its manifest asks for as last read (`Request`, as `PluginRequest`)
+  and its grant. A plugin being installed, or started with the saved plugins, is listed
+  as enabled; one being enabled keeps the reason it was disabled for until it loads
+  (`Run::Starting` holds it). Built without `wasm-plugins`, the engine lists none, from
+  the collection's query match (`plugin_list_is_empty_until_a_plugin_is_installed`).
 - **Not yet:** a private data folder per plugin, deferred until the file imports a plugin
-  would need to use it are designed (ADR-0076); a query that lists the installed plugins;
-  a way to remove one (no `plugin.uninstall` yet, so an unwanted plugin stays saved,
-  disabled, until `plugins.json` is edited); and the UI's grant flow.
+  would need to use it are designed (ADR-0076); and a way to remove one (no
+  `plugin.uninstall` yet, so an unwanted plugin stays saved, disabled, until
+  `plugins.json` is edited).
 
 ### Locking
 
