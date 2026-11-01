@@ -210,8 +210,11 @@ state machine. Contents:
   scene of its own (`inner_id`, a control character and the track's index; a
   collection scene with that ID draws the group as it is) whose layers carry their
   track and the transition's start, sampled when the pass is drawn, through the
-  group's chain and its item's effects. A switch mid-Move holds the children where
-  they are on screen and moves them on from there. `Shot::chain_cost` is what its
+  group's chain and its item's effects. The layers either side planned for the group,
+  with their chains and boxes, are then left out of the shot unless another track
+  reads them (`Shot::keep_read`), so they don't run each frame. A switch mid-Move
+  holds the children where they are on screen and moves them on from there.
+  `Shot::chain_cost` is what its
   scene chains and item effects add to each frame, for `stats.tick`'s `chains`.
 - **Studio** (`studio.rs`): which scene is on program and which on preview, and the
   transition running onto program, runtime state under the collection lock that
@@ -849,8 +852,9 @@ when its item covers the canvas exactly (an identity placement, no crop, not rot
 and is opaque, so a scene shown at another size or faded moves as one image
 (ADR-0052 §2). Within a family, such a group carries its children's own tracks,
 planned by item between its two sides with the group item's timing, which the pass
-that draws its layer samples at the frame's time (ADR-0049 §3); a switch mid-Move
-holds them where `on_screen` finds them. Stagger delays only
+that draws its layer samples at the frame's time (ADR-0049 §3), and the layers the
+two sides planned for it, with their chains and boxes, are dropped when no track reads
+them; a switch mid-Move holds them where `on_screen` finds them. Stagger delays only
 the incoming items (§3). Audio does not follow a transition
 yet (D29).
 
