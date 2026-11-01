@@ -306,15 +306,17 @@ state machine. Contents:
   one open of a device shared by two readers, each taking each frame once, closed
   with its last reader, a reader that joins counting frames from then on, a lost
   device failing every reader and not shared again, a device the GPU view opened moved
-  to the CPU path in place when a CPU reader joins, its counters carried on, and lost
-  when it doesn't open again there (`runtime/devices.rs`), the format a webcam opens in, with and
+  to the CPU path in place when a CPU reader joins, its counters carried on, and
+  `DeviceLost` for every reader when it doesn't open again there, and one open on the
+  CPU path refused by the GPU view (`runtime/devices.rs`), the format a webcam opens in, with and
   without an MJPEG decoder, its frames, decoded or not, read as RGBA, a webcam
   opening on the video-device backend's GPU path in an uncompressed format, MJPEG and a
   refused format on the CPU path, a webcam on the CPU path left running, and not opened
   twice, when the GPU path is left, and one on the GPU path, running or still starting,
   moved to the CPU path, closed before it opens again (`runtime/captures.rs`), which
   capture path an output takes and each
-  fallback, the video-device backend asked onto the platform's device, an output compositing GPU capture frames (opaque, whatever alpha the
+  fallback, the video-device backend asked onto the platform's device and
+  `SharedVideoDevices` passing that through, an output compositing GPU capture frames (opaque, whatever alpha the
   texture holds), a browser page painting on
   the stage's context, composited as premultiplied red and given back the device when
   the stage stops, an output leaving the GPU path mid-run when every GPU frame
