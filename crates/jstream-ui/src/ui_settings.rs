@@ -227,6 +227,12 @@ mod tests {
             first_step(Theirs::Readable(&b), &a, Some(&a)),
             FirstStep::Adopt
         );
+        // An unsent change wins even over another device's newer dock.
+        let c = json!({"version": 1, "current": "My layout 1"});
+        assert_eq!(
+            first_step(Theirs::Readable(&b), &c, Some(&a)),
+            FirstStep::Send
+        );
         // A browser that never shared takes the server's.
         assert_eq!(first_step(Theirs::Readable(&b), &a, None), FirstStep::Adopt);
         // The same on both sides: nothing to do.

@@ -76,3 +76,7 @@ architecture, so agent tier ([R-GOV-005](../RULES.md#R-GOV-005)).
   store under their own keys without a protocol change.
 - A UI that changes its dock's shape must still read the old one, or fall back to its
   defaults, as it does for the browser's copy today.
+- A change kept back by a closed page or an unreachable server is sent on the next load,
+  and wins over a change another client made since. A browser that has never shared a
+  dock takes the server's at its first answer, so a change it made before that answer
+  arrived is replaced: a known gap, small because the first answer comes at load.
