@@ -278,13 +278,12 @@ It has:
   queue: RGB copied and made opaque, YUYV converted to R'G'B' with the frame's matrix
   and range as the engine's CPU path converts NV12 (each pixel its own luma and its
   pair's chroma, limited range scaled to full). It waits for that draw before it hands
-  the buffer back with
-  `VIDIOC_QBUF`, so the driver never writes into a frame the GPU still reads. The ring
-  texture is the `Gpu` frame. Other formats, compressed ones, and a device whose
-  buffers don't export or import, are `Unsupported` there, which the engine opens on
-  the CPU path. A buffer that can't be read on the GPU (one whose data doesn't start at
-  its memory's start) or a copy that fails or isn't done within a second ends the
-  stream as `DeviceLost`, without handing that buffer back, and the backend on that
+  the buffer back with `VIDIOC_QBUF`, so the driver never writes into a frame the GPU
+  still reads. The ring texture is the `Gpu` frame. Other formats and compressed ones
+  are `Unsupported` there, and a device whose buffers don't export or import fails the
+  open with the OS error; either way the engine opens it on the CPU path. A buffer that
+  can't be read on the GPU (one whose data doesn't start at its memory's start) or a
+  draw that fails or isn't done within a second ends the stream as `DeviceLost`, without handing that buffer back, and the backend on that
   context then refuses every format, so the engine's retry opens the device on the CPU
   path.
 - **`LinuxBackends`**: the backend set, ADR-0060 §4's choice made once when it is built
