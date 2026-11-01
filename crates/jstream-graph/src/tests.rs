@@ -4206,6 +4206,96 @@ fn deleting_a_bus_takes_its_sends_and_undoes_exactly() {
     );
 }
 
+/// An output carries one bus (0.61): the edit sets it and undoes exactly, an output's
+/// delete gives it back, and a bus an output carries blocks its delete until
+/// `delete.plan` moves the output to the master.
+#[test]
+fn an_output_carries_a_bus_that_blocks_its_delete() {
+    let mut graph = fixture();
+    let vod = BusId::new("vod");
+    let yt = OutputId::new("yt");
+    apply_ok(
+        &mut graph,
+        vec![
+            output_create("yt", "rtmp://live.example.com/app"),
+            Edit::BusCreate {
+                bus_id: vod.clone(),
+                name: "VOD".into(),
+            },
+        ],
+    );
+    let bus_of = |graph: &Graph| graph.state().output(&yt).map(|o| o.audio_bus().clone());
+    assert_eq!(bus_of(&graph), Some(BusId::master()));
+    let applied = apply_ok(
+        &mut graph,
+        vec![Edit::OutputSetAudioBuses {
+            output_id: yt.clone(),
+            audio_buses: vec![vod.clone()],
+        }],
+    );
+    assert_eq!(bus_of(&graph), Some(vod.clone()));
+    assert_eq!(
+        applied.inverse.edits,
+        vec![Edit::OutputSetAudioBuses {
+            output_id: yt.clone(),
+            audio_buses: vec![BusId::master()],
+        }]
+    );
+    assert_eq!(
+        graph.state().output(&yt).map(|o| o.to_info().audio_buses),
+        Some(vec![vod.clone()])
+    );
+
+    let error = apply_err(
+        &mut graph,
+        vec![Edit::BusDelete {
+            bus_id: vod.clone(),
+        }],
+    );
+    let ProtocolError::InvalidArgument { blockers, .. } = error else {
+        panic!("not blocked: {error:?}");
+    };
+    assert_eq!(
+        blockers,
+        vec![jstream_protocol::Blocker {
+            entity: EntityKind::Output,
+            id: "yt".into(),
+            field: "audio_buses".into(),
+        }]
+    );
+    let plan = graph.delete_plan(&jstream_protocol::DeleteTarget::Bus {
+        bus_id: vod.clone(),
+    });
+    let Ok(QueryResult::DeletePlan { edits, .. }) = plan else {
+        panic!("no plan: {plan:?}");
+    };
+    assert_eq!(
+        edits,
+        vec![
+            Edit::OutputSetAudioBuses {
+                output_id: yt.clone(),
+                audio_buses: vec![BusId::master()],
+            },
+            Edit::BusDelete {
+                bus_id: vod.clone()
+            },
+        ]
+    );
+
+    let applied = apply_ok(
+        &mut graph,
+        vec![Edit::OutputDelete {
+            output_id: yt.clone(),
+        }],
+    );
+    assert!(applied.inverse.edits.contains(&Edit::OutputSetAudioBuses {
+        output_id: yt.clone(),
+        audio_buses: vec![vod.clone()],
+    }));
+    apply_ok(&mut graph, applied.inverse.edits);
+    assert_eq!(bus_of(&graph), Some(vod));
+}
+
 /// A bus's monitor (0.42) is set, changed and taken away, each undone exactly; a
 /// deleted bus's inverse gives its monitor back; `BusMonitor::problem` refuses a bad
 /// one on `monitor.<field>`.
