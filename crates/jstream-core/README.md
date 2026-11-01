@@ -144,9 +144,10 @@ state machine. Contents:
     `jstream-audio-sources` thread owns it (`filters::ClapHosts`), and the routing puts
     the filter on its host's block once that is ready (see *Audio routing*): on the
     master bus's copy of the mixer's master chain, every other bus's copy delaying its
-    dry signal by the same latency. A collection holding one loads before the scan
-    describes its kind (the graph keeps such a filter verbatim), and the filter is
-    bypassed until then.
+    dry signal by the same latency (until outputs take other buses: then each bus that
+    feeds one gets its own host, ADR-0086, not built yet). A collection holding one
+    loads before the scan describes its kind (the graph keeps such a filter verbatim),
+    and the filter is bypassed until then.
   - **Not yet:** writing the plugin's own parameter changes and saved state back to the
     filter's settings (the supervisor keeps the state for its restarts only, so a new
     host after an engine restart starts from the plugin's defaults and the filter's
