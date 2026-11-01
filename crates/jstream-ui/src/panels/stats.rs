@@ -155,10 +155,14 @@ pub fn profile_of<'a>(
         .map_or(&EncoderProfile::DEFAULT, |p| &p.profile)
 }
 
-/// The video bitrate an output aims for, in kbps, if its rate control says.
+/// The bitrate an output aims for, in kbps: its video rate control's target plus its
+/// audio bitrate, since `kbps` counts both. `None` when the video rate control is one
+/// this page doesn't know.
 pub fn target_kbps(profile: &EncoderProfile) -> Option<u32> {
     match profile.video.rate_control {
-        RateControl::Cbr { kbps } | RateControl::Vbr { kbps, .. } => Some(kbps),
+        RateControl::Cbr { kbps } | RateControl::Vbr { kbps, .. } => {
+            Some(kbps.saturating_add(profile.audio.kbps))
+        }
         _ => None,
     }
 }
@@ -387,7 +391,7 @@ pub fn StreamStats() -> impl IntoView {
                     x2=CHART_W
                     y1=y.clone()
                     y2=y
-                    stroke="#3A3F48"
+                    class="target"
                     stroke-dasharray="3 3"
                     vector-effect="non-scaling-stroke"
                 />
@@ -411,13 +415,13 @@ pub fn StreamStats() -> impl IntoView {
                     x2=CHART_W
                     y1=CHART_H
                     y2=CHART_H
-                    stroke="#2E333B"
+                    class="baseline"
                     vector-effect="non-scaling-stroke"
                 />
                 <polyline
                     points=points
+                    class="line"
                     fill="none"
-                    stroke="#4C8DFF"
                     stroke-width="2"
                     vector-effect="non-scaling-stroke"
                 />
@@ -571,7 +575,7 @@ pub fn StreamStats() -> impl IntoView {
 mod tests {
     use super::{
         Readings, audio_line, bytes, chart_points, chart_range, dropped_share, health_text, mbps,
-        shown_output, uptime, video_line,
+        shown_output, target_kbps, uptime, video_line,
     };
     use crate::panels::outputs::OutputRow;
     use jstream_control::protocol::{
@@ -689,6 +693,8 @@ mod tests {
         assert_eq!(health_text(None).0, "Waiting");
 
         let mut profile = EncoderProfile::DEFAULT;
+        // Video and audio, as `kbps` counts both.
+        assert_eq!(target_kbps(&profile), Some(2660));
         assert_eq!(video_line(&profile), "H.264 · 2500 kbps CBR");
         assert_eq!(audio_line(&profile), "AAC · 160 kbps");
         profile.video.codec = VideoCodec::Av1;

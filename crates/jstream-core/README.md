@@ -1588,7 +1588,9 @@ Each tick also lists every running output's live stats (protocol 0.58;
 publish link is up into its `SentCounters` (two relaxed atomic adds: the bytes, and a
 frame for video), so a link that is down sends nothing and its tags count as the
 link's drops instead. `output.start` registers an `OutputMeter` for the run once it is
-armed, whose read gathers those counts with the output's drops: its video encode
+armed, with its uptime counted from when the engine received the `output.start`
+(before the start waits for an earlier one, opens the destination and starts the
+program stage), whose read gathers those counts with the output's drops: its video encode
 session's queue-full and busy drops counted from when the meter was armed (a shared
 session may have dropped frames for an earlier output), and the video subscriber's
 losses, for `dropped_frames`; the audio subscriber's losses, the output thread's own

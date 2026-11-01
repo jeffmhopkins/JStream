@@ -1284,7 +1284,8 @@ After `welcome`, the server pushes every event to every client.
   out, and a count missing from it parses as 0. `chains` was added in 0.54. Since 0.58
   a tick also lists each running output in `outputs` (`OutputStatsInfo`, ordered by
   ID; left out while none runs, and on an engine with no media backends): `uptime_ms`
-  since its `output.start` began, `bytes` and `frames` (the encoded bytes and video
+  since the engine received its `output.start` (opening the destination and
+  starting the pipeline included), `bytes` and `frames` (the encoded bytes and video
   frames it handed its muxer this run while its link was up), `kbps` over the
   interval since the engine's previous sample, `dropped_frames` (video frames its
   encoder dropped since it started, plus encoded frames it fell behind on; a shared

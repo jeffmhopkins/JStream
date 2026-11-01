@@ -41,11 +41,11 @@ test('the panel follows a running output from its ticks', async ({ page, daemon 
     drops: {},
     outputs: [{ output_id: 'output-1', ...fields }],
   });
-  output(1, { uptime_ms: 3_723_000, bytes: 45_750_000, frames: 3_660, kbps: 2_480, health: 'good' });
+  output(1, { uptime_ms: 3_723_000, bytes: 45_750_000, frames: 3_660, kbps: 2_650, health: 'good' });
   await expect(stats.locator('.stats-uptime')).toHaveText('01:02:03');
   const tiles = stats.locator('.stats-tile');
-  await expect(tiles.nth(0)).toContainText('2.48 Mbps');
-  await expect(tiles.nth(0)).toContainText('target 2.50 Mbps');
+  await expect(tiles.nth(0)).toContainText('2.65 Mbps');
+  await expect(tiles.nth(0)).toContainText('target 2.66 Mbps');
   await expect(tiles.nth(1)).toContainText('0.00% this run');
   await expect(stats.locator('.stats-health')).toContainText('Stream health: Excellent');
   await expect(stats.locator('.stats-chart polyline')).toHaveCount(1);

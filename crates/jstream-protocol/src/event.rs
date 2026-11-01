@@ -343,8 +343,9 @@ pub struct ChainCost {
 pub struct OutputStatsInfo {
     /// The output.
     pub output_id: OutputId,
-    /// Milliseconds since `output.start` began this run, on the engine's monotonic
-    /// clock. It keeps counting while the output reconnects.
+    /// Milliseconds since the engine received this run's `output.start`, on its
+    /// monotonic clock: it includes opening the destination and starting the pipeline.
+    /// It keeps counting while the output reconnects.
     #[serde(default)]
     pub uptime_ms: u64,
     /// Encoded bytes, video and audio, the output has handed to its muxer this run,

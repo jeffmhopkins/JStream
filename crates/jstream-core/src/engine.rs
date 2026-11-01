@@ -1499,6 +1499,8 @@ impl Engine {
     }
 
     fn start_pipeline(&self, output_id: OutputId) -> Result<CallResult, ProtocolError> {
+        // Where the output's uptime in `stats.tick` counts from (protocol 0.58).
+        let started = Instant::now();
         let Some(host) = &self.media else {
             return Err(not_implemented("output.start"));
         };
@@ -1693,6 +1695,7 @@ impl Engine {
                                 key,
                                 own_audio,
                                 hardware_held,
+                                started,
                             },
                             destination,
                             output_id.clone(),

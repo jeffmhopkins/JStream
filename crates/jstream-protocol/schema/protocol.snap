@@ -5876,7 +5876,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         "uptime_ms": {
           "default": 0,
-          "description": "Milliseconds since `output.start` began this run, on the engine's monotonic\nclock. It keeps counting while the output reconnects.",
+          "description": "Milliseconds since the engine received this run's `output.start`, on its\nmonotonic clock: it includes opening the destination and starting the pipeline.\nIt keeps counting while the output reconnects.",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"

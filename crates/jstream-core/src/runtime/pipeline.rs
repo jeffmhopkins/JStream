@@ -552,6 +552,9 @@ pub(crate) struct OutputEncode {
     /// one, a new video session opens with `require`, and a refused open is the
     /// hardware session limit (ADR-0080 §3, #443), not a fallback to software.
     pub(crate) hardware_held: Vec<OutputId>,
+    /// When its `output.start` call began, before any wait for an earlier start, the
+    /// destination's open and the program stage's launch: where its uptime counts from.
+    pub(crate) started: Instant,
 }
 
 /// Why an output could not start.
@@ -1140,7 +1143,7 @@ pub(crate) struct Running {
     drop_guard: Option<DropGuard>,
     /// What the output thread has handed its muxer this run, for `stats.tick`.
     sent: Arc<SentCounters>,
-    /// When this run's start began, for its uptime.
+    /// When this run's `output.start` call began, for its uptime.
     started: Instant,
     /// Its meter in each `stats.tick`'s `outputs`, removed with the drop guard.
     meter: Option<MeterGuard>,
@@ -1827,7 +1830,6 @@ pub(crate) fn launch(
     generation: u64,
     fail_tx: Sender<PipelineEvent>,
 ) -> Result<Running, StartError> {
-    let started = Instant::now();
     let registration = program
         .failures
         .add(output_id.clone(), generation, fail_tx.clone());
@@ -1835,6 +1837,7 @@ pub(crate) fn launch(
         key,
         own_audio,
         hardware_held,
+        started,
     } = encode;
     let encoders = program.encoders(engine, key, &output_id, &hardware_held)?;
     let origin = program.origin()?;
