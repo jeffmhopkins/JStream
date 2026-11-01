@@ -51,7 +51,8 @@ impl CaptureOptions {
 pub struct CaptureTargetInfo {
     /// The target, to pass to [`Capture::start`].
     pub target: CaptureTarget,
-    /// A human-readable name: the display's name or the window's title.
+    /// A human-readable name: the display's name, or the window's title (on macOS, its
+    /// application's name when it has no usable title).
     pub name: String,
     /// The current size, when the backend knows it without starting a capture.
     pub size: Option<FrameSize>,
