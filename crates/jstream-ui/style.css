@@ -1237,8 +1237,10 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .filters-head .icon { flex: 0 0 auto; color: var(--muted); margin-top: 1px; }
 .filters-titles { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .filters-title { font-size: 14px; font-weight: 600; color: var(--text); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.filters-note { font-size: 11px; color: var(--muted); }
+.filters-note, .filters-effects-note { font-size: 11px; color: var(--muted); }
 .filters-later { margin: 0; font-size: 11px; color: var(--dim); }
+.filters-effects { display: flex; flex-direction: column; gap: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.filters-subtitle { font-size: 13px; font-weight: 600; color: var(--text); }
 .filters-add { align-self: flex-start; padding: 6px 12px; background: var(--menu); border: 1px solid var(--border); border-radius: 6px; color: var(--text); }
 .filter-chains { display: flex; flex-direction: column; gap: 12px; }
 .filter-chain-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; color: var(--text-soft); }

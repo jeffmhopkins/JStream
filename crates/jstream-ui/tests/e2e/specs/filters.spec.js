@@ -10,6 +10,11 @@ function panel(page) {
   return page.locator('.filters-panel');
 }
 
+/** The source's chains in the panel, not the item's effects under them. */
+function sourceChains(page) {
+  return page.locator('.filters-panel > .filter-chains .filter-chain');
+}
+
 /** The video chain's rows in `scope`. */
 function videoRows(scope) {
   return scope.getByRole('list', { name: 'Video filters' }).getByRole('listitem');
@@ -34,9 +39,9 @@ test('the panel lists the chains, and rows turn filters on, reorder and remove t
   await selectBackdrop(page);
   await expect(panel(page).locator('.filters-title')).toHaveText('Backdrop');
   await expect(panel(page).locator('.filters-note')).toHaveText('Applies everywhere this source appears, top to bottom.');
-  // A colour has a picture and no sound: one chain.
-  await expect(panel(page).locator('.filter-chain')).toHaveCount(1);
-  await expect(panel(page).locator('.filter-chain-count')).toHaveText('2 filters');
+  // A colour has a picture and no sound: one chain, then the item's effects (effects.spec.js).
+  await expect(sourceChains(page)).toHaveCount(1);
+  await expect(sourceChains(page).locator('.filter-chain-count')).toHaveText('2 filters');
   const rows = videoRows(panel(page));
   await expect(rows.locator('.filter-name')).toHaveText(['Sharpen', 'Blur']);
   await expect(rows.nth(1)).toHaveClass(/\boff\b/);
@@ -62,7 +67,7 @@ test('the panel lists the chains, and rows turn filters on, reorder and remove t
   await rows.nth(1).hover();
   await panel(page).getByRole('button', { name: 'Remove Sharpen' }).click();
   await expect(rows.locator('.filter-name')).toHaveText(['Blur']);
-  await expect(panel(page).locator('.filter-chain-count')).toHaveText('1 filter');
+  await expect(sourceChains(page).locator('.filter-chain-count')).toHaveText('1 filter');
 });
 
 test('Edit filters… selects the item and shows the Filters panel', async ({ page, daemon }) => {

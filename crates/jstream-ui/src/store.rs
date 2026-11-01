@@ -18,6 +18,7 @@ use jstream_control::protocol::{
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 /// The collection state at one revision, as `state.get` reports it.
@@ -116,13 +117,27 @@ impl Collection {
         self.outputs.iter().find(|o| &o.output_id == output_id)
     }
 
-    /// The chains `owner` has, or `None` if it doesn't exist or reports none (an item).
-    pub fn chains(&self, owner: &FilterOwner) -> Option<&FilterChains> {
+    /// The chains `owner` has, or `None` if it doesn't exist. An item's effects are its
+    /// video chain (ADR-0065 §4), so they come back as a copy; every other owner's are
+    /// borrowed.
+    pub fn chains(&self, owner: &FilterOwner) -> Option<Cow<'_, FilterChains>> {
         match owner {
-            FilterOwner::Source { source_id } => self.source(source_id).map(|s| &s.filters),
-            FilterOwner::Master => Some(&self.master),
-            FilterOwner::Output { output_id } => self.output(output_id).map(|o| &o.filters),
-            FilterOwner::Scene { scene_id } => self.scene(scene_id).map(|s| &s.filters),
+            FilterOwner::Source { source_id } => {
+                self.source(source_id).map(|s| Cow::Borrowed(&s.filters))
+            }
+            FilterOwner::Master => Some(Cow::Borrowed(&self.master)),
+            FilterOwner::Output { output_id } => {
+                self.output(output_id).map(|o| Cow::Borrowed(&o.filters))
+            }
+            FilterOwner::Scene { scene_id } => {
+                self.scene(scene_id).map(|s| Cow::Borrowed(&s.filters))
+            }
+            FilterOwner::Item { item_id } => self.item(item_id).map(|(_, item)| {
+                Cow::Owned(FilterChains {
+                    video: item.effects.clone(),
+                    audio: Vec::new(),
+                })
+            }),
             _ => None,
         }
     }
