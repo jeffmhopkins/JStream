@@ -4206,7 +4206,7 @@ fn deleting_a_bus_takes_its_sends_and_undoes_exactly() {
     );
 }
 
-/// An output carries one bus (0.60): the edit sets it and undoes exactly, an output's
+/// An output carries one bus (0.59): the edit sets it and undoes exactly, an output's
 /// delete gives it back, and a bus an output carries blocks its delete until
 /// `delete.plan` moves the output to the master, which a running output refuses.
 #[test]

@@ -618,7 +618,7 @@ pub enum Edit {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         mix_id: Option<VideoMixId>,
     },
-    /// Chooses the buses whose audio an output carries (since 0.60), one per audio
+    /// Chooses the buses whose audio an output carries (since 0.59), one per audio
     /// track, in track order. Every output writes one audio track for now, so the list
     /// holds exactly one bus; any other length is `invalid_argument` on `audio_buses`,
     /// as is an output with no audio (a virtual camera). Each bus must exist, else
@@ -958,7 +958,7 @@ pub enum Edit {
     },
     /// Deletes a bus and every send into it. The master bus can't be deleted
     /// (`invalid_argument`), nor (since 0.24) a bus a source's settings refer to, nor
-    /// (since 0.60) a bus an output carries: that `invalid_argument` lists the
+    /// (since 0.59) a bus an output carries: that `invalid_argument` lists the
     /// `blockers`, and `delete.plan` clears them, moving such an output to the master
     /// bus. Inverse: `bus.create` with its name, `bus.set_fader` if
     /// its fader or mute were not the defaults, `bus.set_monitor` if it had a monitor

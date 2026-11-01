@@ -231,11 +231,11 @@ pub struct OutputInfo {
     /// at the engine's canvas size and base rate, as from a server older than 0.28.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub video_mix: Option<VideoMixId>,
-    /// The buses whose audio it carries (`output.set_audio_buses`, since 0.60), one per
+    /// The buses whose audio it carries (`output.set_audio_buses`, since 0.59), one per
     /// audio track, in track order: for now always one, as every output writes one
     /// audio track. The master stage's audio chain runs on each of them before the
     /// output's own chain (ADR-0080 §1). Absent means `["master"]`, as from a server
-    /// older than 0.60; a virtual camera, which has no audio, always reports that.
+    /// older than 0.59; a virtual camera, which has no audio, always reports that.
     #[serde(default = "master_only", skip_serializing_if = "is_master_only")]
     pub audio_buses: Vec<BusId>,
 }

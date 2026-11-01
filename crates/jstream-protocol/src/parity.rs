@@ -405,7 +405,7 @@ pub fn collection() -> Batch {
                 bus_id: BusId::new("drums"),
                 monitor: Some(BusMonitor::default()),
             },
-            // An output carries a bus (0.60), and moves off it before it is deleted.
+            // An output carries a bus (0.59), and moves off it before it is deleted.
             Edit::OutputSetAudioBuses {
                 output_id: OutputId::new("rec"),
                 audio_buses: vec![BusId::new("drums")],
@@ -1531,7 +1531,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 id: "ghost".into(),
             },
         ),
-        // An output's audio buses (0.60): one bus that exists, on an output with audio.
+        // An output's audio buses (0.59): one bus that exists, on an output with audio.
         (
             Batch::single(Edit::OutputSetAudioBuses {
                 output_id: OutputId::new("tw"),

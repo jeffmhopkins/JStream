@@ -1688,7 +1688,7 @@ brings the mixer in line with the collection under the collection lock:
 
 An output whose audio chain holds a filter, even a disabled one
 ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), or that
-carries a bus other than the master (`output.set_audio_buses`, protocol 0.60), gets an
+carries a bus other than the master (`output.set_audio_buses`, protocol 0.59), gets an
 output tap on its bus when it starts (`Engine::add_output_tap`), and its own audio
 encode fed from the tap's blocks, stamped earlier by its chain's latency. The graph
 refuses to move a running output to another bus, so the bus its tap reads can't be

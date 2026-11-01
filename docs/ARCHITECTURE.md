@@ -637,8 +637,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   points an output at one or back at the program (protocol 0.28). A mix an output shows
   can't be deleted, and a mix showing a scene blocks that scene's delete.
   `output.set_audio_buses` chooses the bus an output carries, one per audio track and
-  one track so far (protocol 0.60); an output carrying a bus blocks its delete, and
-  `delete.plan` moves it to the master.
+  one track so far (protocol 0.59); an output carrying a bus blocks its delete, and
+  `delete.plan` moves it to the master, which is refused while the output runs.
   `item.set_opacity` and `item.set_blend` set a placement's opacity and blend mode
   (`item.add` takes both too), and `filter.add`, `filter.remove`, `filter.set_enabled`,
   `filter.set_settings` and `filter.reorder` edit the filter chains of a source, the
