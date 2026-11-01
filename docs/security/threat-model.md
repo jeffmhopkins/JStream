@@ -49,7 +49,7 @@ No telemetry leaves the machine, and logs and crash reports stay local
 | A page shown by a browser source | Arbitrary HTML and JavaScript, rendered by the engine's own helper | Yes: untrusted content ([ADR-0021](../adr/0021-browser-source.md)) |
 | A crafted file | A collection file, image, font or media file someone shares | Yes: parsing must not crash the engine or reach outside its asset roots |
 | A hostile streaming server or network | Controls the RTMP(S) or YouTube endpoint's replies | Yes: TLS is verified; its text is untrusted |
-| Text an MCP agent reads | Source names, chat (later), server error text | Yes: it may carry instructions (prompt injection) |
+| Text an MCP agent reads | Source names, window titles and application names (`capture.targets`, [ADR-0085](../adr/0085-capture-target-names-marked-as-remote-text.md)), chat (later), server error text | Yes: it may carry instructions (prompt injection) |
 | A WASM plugin | Code the user installed | Yes: sandboxed by default ([R-SEC-003](../RULES.md#R-SEC-003)) |
 | A CLAP plugin or WGSL effect pack | Native code, or GPU code, the user installed | Partly: CLAP gets crash isolation, not a security sandbox ([ADR-0035](../adr/0035-clap-plugins-out-of-process.md)); WGSL is validated, not bounded |
 | Another process of the same user | Everything the user can do | No: it can read the token file and the credential store anyway |
