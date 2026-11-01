@@ -48,7 +48,9 @@ so that ADR-0080 §1 holds for CLAP filters too. The rest of both ADRs stands.
    settings. Each host keeps its own processing state, so a stateful plugin, such as a
    compressor, acts on each bus on its own.
 3. **No stand-in once built.** The delayed-dry stand-in on non-master buses goes away
-   with this: no bus that feeds an output runs a master chain without the plugin.
+   with this: no bus that feeds an output holds a stand-in in place of its own host.
+   Each host still bypasses with the same latency while it starts or restarts, as
+   ADR-0035's supervisor has it.
 4. **Built with multi-bus outputs.** This is built in the same work that lets an output
    take buses other than the master. Until then nothing changes: the engine taps only
    the master bus, the plugin runs on the master bus's copy, and the other copies keep the
