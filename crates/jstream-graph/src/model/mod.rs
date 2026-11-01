@@ -58,7 +58,8 @@
 //!   label a source carries exists (ADR-0024 §3 and §4).
 //! - A keyframe scene's (a variant's, ADR-0024 §2) `variant_of` names an existing scene
 //!   that is not a variant. A variant has no items, no folder and the role `scene`, and
-//!   each of its overrides names an item of its parent's own and sets at least one
+//!   each of its overrides names an item in its parent's tree ([`State::tree_items`]:
+//!   the parent's own, or a child of a group placed in it, at any depth) and sets at least one
 //!   field, each valid as the item's own would be: a geometry placement, an opacity
 //!   in [0, 1]. The variant depends on its parent, so the cycle check counts that edge.
 //!
@@ -386,10 +387,17 @@ impl State {
         let Some(parent) = scene.variant_of.as_ref().and_then(|id| self.scene(id)) else {
             return scene.items.iter().map(Cow::Borrowed).collect();
         };
-        parent
+        Self::items_through(parent, scene)
+    }
+
+    /// The items of `scene` as the keyframe scene `keyframe` shows them: the parent's
+    /// own, or a group's in its tree (ADR-0024 §2, ADR-0040 §2), each at its effective
+    /// values.
+    pub fn items_through<'a>(scene: &'a Scene, keyframe: &'a Scene) -> Vec<Cow<'a, Item>> {
+        scene
             .items
             .iter()
-            .map(|item| match scene.overrides.get(&item.id) {
+            .map(|item| match keyframe.overrides.get(&item.id) {
                 None => Cow::Borrowed(item),
                 Some(o) => {
                     let props = o.apply(&item.props());
@@ -405,6 +413,45 @@ impl State {
                 }
             })
             .collect()
+    }
+
+    /// The groups `scene` places directly, through `scene` sources: the scenes with
+    /// the role `group` its items show.
+    fn placed_groups<'a>(&'a self, scene: &'a Scene) -> impl Iterator<Item = &'a Scene> + 'a {
+        scene.items.iter().filter_map(|item| {
+            let SourceKind::Scene { scene_id } = self.source(&item.source_id)?.kind() else {
+                return None;
+            };
+            self.scene(scene_id)
+                .filter(|group| group.role == SceneRole::Group)
+        })
+    }
+
+    /// The items in the tree of scene `root`, which a keyframe scene of it may override
+    /// (ADR-0024 §2): `root`'s own, and the items of every group placed in it, at any
+    /// depth. A group placed twice counts once (ADR-0040 §2).
+    pub fn tree_items<'a>(&'a self, root: &'a SceneId) -> BTreeSet<&'a ItemId> {
+        let mut items = BTreeSet::new();
+        let mut seen = BTreeSet::new();
+        let mut todo: Vec<&Scene> = self.scene(root).into_iter().collect();
+        while let Some(scene) = todo.pop() {
+            if !seen.insert(&scene.id) {
+                continue;
+            }
+            items.extend(scene.items.iter().map(|item| &item.id));
+            todo.extend(self.placed_groups(scene));
+        }
+        items
+    }
+
+    /// Whether the keyframe scene `keyframe` overrides an item in the tree of `scene`
+    /// ([`Self::tree_items`]): whether a group drawn inside it looks different there.
+    pub fn overrides_within(&self, keyframe: &Scene, scene: &SceneId) -> bool {
+        !keyframe.overrides.is_empty()
+            && self
+                .tree_items(scene)
+                .iter()
+                .any(|item| keyframe.overrides.get(item).is_some())
     }
 
     /// The scene a keyframe scene shows the items of, or the scene itself: the head of

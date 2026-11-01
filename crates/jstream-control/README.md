@@ -196,9 +196,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   a scene's or source's delete restores its folder and metadata;
 - keyframe scenes (`mock/keyframe.rs`, [ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)):
   `scene.create_variant` (refused on a keyframe scene), placement edits addressed to a
-  keyframe scene, which write its override of one of its parent's own items field by
-  field, `item.clear_override`, and no `item.add` or `item.move` into one. Removing an
-  item, or moving it to another scene, drops its overrides, and a parent with keyframe
+  keyframe scene, which write its override of an item in its parent's tree (its own,
+  or a group's child at any depth) field by field, `item.clear_override`, and no
+  `item.add` or `item.move` into one. An edit that takes an item out of the tree
+  drops its overrides, as the graph's `drop_orphans` does, and a parent with keyframe
   scenes can't be deleted (they are the refusal's `blockers`). Each has the graph's
   inverse, so undo restores the overrides; the batch result's `dropped_overrides` stays
   empty. `state.get` reports each keyframe scene's `variant_of` and `overrides`, and

@@ -741,6 +741,9 @@ impl State {
                 _ => None,
             };
             let mut inverse = next.apply(edit, at, &running)?;
+            // Overrides whose item left its keyframe scene's tree go with the edit, as
+            // in the graph (ADR-0040 §1).
+            inverse.extend(next.drop_orphans());
             if let Some((entity, id)) = deleted {
                 inverse.extend(next.remove_hotkeys_naming(entity, &id, &mut removed));
             }
@@ -1530,9 +1533,7 @@ impl Collection {
                 let position = items.iter().position(|id| *id == item_id).unwrap_or(0);
                 items.remove(position);
                 // `item.add` puts it on top, which is index `len` now that it is gone.
-                let mut inverse = restore_item(&item_id, &item, position, items.len())?;
-                inverse.extend(self.drop_overrides(&item.scene_id, &item_id));
-                inverse
+                restore_item(&item_id, &item, position, items.len())?
             }
             Edit::ItemReorder { item_id, index } => {
                 let scene_id = self.existing_item(&item_id)?.scene_id.clone();
@@ -2115,16 +2116,11 @@ impl Collection {
         if let Some(item) = self.items.get_mut(&item_id) {
             item.scene_id = scene_id;
         }
-        let mut inverse = vec![Edit::ItemMove {
+        Ok(vec![Edit::ItemMove {
             item_id: item_id.clone(),
-            scene_id: from_scene_id.clone(),
+            scene_id: from_scene_id,
             index: wire_index(from_index)?,
-        }];
-        // Leaving its scene takes it out of that scene's keyframe scenes (ADR-0040 §1).
-        if to != from {
-            inverse.extend(self.drop_overrides(&from_scene_id, &item_id));
-        }
-        Ok(inverse)
+        }])
     }
 
     /// Creates a source and returns the edit that undoes it.

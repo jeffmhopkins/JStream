@@ -1530,7 +1530,29 @@ fn keyframe_script() -> Vec<Call> {
             create("kp"),
             add("kp", "ikp", "cam"),
             variant("kk", "kp"),
+            // A group placed in the parent, whose child the keyframe can override.
+            Edit::SceneCreate {
+                scene_id: SceneId::new("kg"),
+                name: "KG".into(),
+                role: Some(SceneRole::Group),
+            },
+            Edit::SourceCreate {
+                source_id: SourceId::new("skg"),
+                name: "KG".into(),
+                kind: SourceKind::Scene {
+                    scene_id: SceneId::new("kg"),
+                },
+                settings: Default::default(),
+                duplicated_from: None,
+            },
+            add("kg", "ikg", "cam"),
+            add("kp", "ipg", "skg"),
         ])),
+        one(Edit::ItemSetVisible {
+            item_id: ItemId::new("ikg"),
+            scene_id: Some(SceneId::new("kk")),
+            visible: false,
+        }),
         one(Edit::ItemSetVisible {
             item_id: ItemId::new("ikp"),
             scene_id: Some(SceneId::new("kk")),

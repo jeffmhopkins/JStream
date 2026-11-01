@@ -363,3 +363,137 @@ fn a_live_value_on_a_keyframe_scene_shows_where_the_keyframe_draws() {
     switch(&control, "k", None);
     assert_eq!(drawn("k"), [("a1".into(), 150.0), ("a2".into(), 950.0)]);
 }
+
+/// `family` with the group `g` placed in `a` over the whole canvas by `ag` (source
+/// `sg`), holding `g1` (red) at x 300.
+fn family_with_group(engine: &Engine) {
+    let control = connected(engine);
+    apply(
+        &control,
+        vec![
+            Edit::SceneCreate {
+                scene_id: SceneId::new("g"),
+                name: "G".into(),
+                role: Some(jstream_protocol::SceneRole::Group),
+            },
+            Edit::SourceCreate {
+                source_id: SourceId::new("sg"),
+                name: "G".into(),
+                kind: SourceKind::Scene {
+                    scene_id: SceneId::new("g"),
+                },
+                settings: Settings::default(),
+                duplicated_from: None,
+            },
+            add("g", "g1", "red"),
+            geometry("g1", None, 300.0),
+            add("a", "ag", "sg"),
+        ],
+    );
+}
+
+/// A keyframe scene draws a group in its parent with its overrides of the group's
+/// children, through a view of the group, while the parent draws the group as it is
+/// (#846). The view follows the group's own edits to fields it doesn't override.
+#[test]
+fn a_keyframe_scene_draws_a_groups_children_with_its_overrides() {
+    let engine = family();
+    family_with_group(&engine);
+    let control = connected(&engine);
+    apply(&control, vec![geometry("g1", Some("k"), 800.0)]);
+    let view = crate::snapshot::group_view(&SceneId::new("g"), &SceneId::new("k"));
+    switch(&control, "k", None);
+    assert_eq!(placed(&engine, view.as_str()), [("g1".into(), 800.0, 1.0)]);
+    let k = engine
+        .render_hub()
+        .load()
+        .shot()
+        .placed(&SceneId::new("k"))
+        .expect("k is drawn");
+    assert!(
+        k.iter().any(|(item, ..)| item.as_str() == "ag"),
+        "k places the group"
+    );
+    // An opacity the keyframe doesn't override follows the group.
+    apply(
+        &control,
+        vec![Edit::ItemSetOpacity {
+            item_id: ItemId::new("g1"),
+            scene_id: None,
+            opacity: Finite32::new(0.5).expect("finite"),
+        }],
+    );
+    assert_eq!(placed(&engine, view.as_str()), [("g1".into(), 800.0, 0.5)]);
+    // A live value addressed to the keyframe shows in the view.
+    let action = Action::LiveSet {
+        gesture_id: GestureId::new("drag"),
+        values: vec![geometry("g1", Some("k"), 850.0)],
+    };
+    block_on(control.call(Call::Action { action })).expect("live.set");
+    let hub = engine.render_hub();
+    let drawn = hub
+        .load()
+        .shot()
+        .drawn(&view, &hub.load_live())
+        .expect("the view is drawn");
+    assert_eq!(x(&drawn[0].1), 850.0);
+    let action = Action::LiveCancel {
+        gesture_id: GestureId::new("drag"),
+    };
+    block_on(control.call(Call::Action { action })).expect("live.cancel");
+    switch(&control, "a", None);
+    assert_eq!(placed(&engine, "g"), [("g1".into(), 300.0, 0.5)]);
+    // Clearing the last override of the group's children draws the group itself.
+    apply(
+        &control,
+        vec![Edit::ItemClearOverride {
+            scene_id: SceneId::new("k"),
+            item_id: ItemId::new("g1"),
+            field: jstream_protocol::OverrideField::Geometry,
+        }],
+    );
+    switch(&control, "k", None);
+    assert_eq!(placed(&engine, "g"), [("g1".into(), 300.0, 0.5)]);
+}
+
+/// A Move between a parent and its keyframe scene pairs a group's child by item and
+/// moves it from the parent's value to the keyframe's, the group being drawn as its
+/// items (ADR-0049 §3).
+#[test]
+fn a_move_within_a_family_moves_a_groups_children() {
+    let engine = family();
+    family_with_group(&engine);
+    let control = connected(&engine);
+    apply(
+        &control,
+        vec![
+            Edit::TransitionCreate {
+                preset_id: TransitionPresetId::new("move"),
+                name: "Move".into(),
+                kind: "move".into(),
+                duration_ms: 400,
+                easing: Easing::Linear,
+                settings: Settings::default(),
+            },
+            geometry("g1", Some("k"), 800.0),
+        ],
+    );
+    switch(&control, "a", None);
+    switch(&control, "k", Some("move"));
+    let tracks = engine
+        .render_hub()
+        .load()
+        .shot()
+        .tracks()
+        .expect("a transition runs");
+    let moves: Vec<(f32, f32)> = tracks
+        .iter()
+        .map(|track| match track {
+            Track::Pair { from, to, .. } => {
+                (from.geometry.center.x.get(), to.geometry.center.x.get())
+            }
+            other => panic!("not a pair: {other:?}"),
+        })
+        .collect();
+    assert_eq!(moves, [(100.0, 100.0), (500.0, 500.0), (300.0, 800.0)]);
+}

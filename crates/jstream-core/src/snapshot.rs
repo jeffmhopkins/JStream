@@ -31,8 +31,8 @@ use jstream_media::{FrameSize, MediaTime, PixelFormat, Rounding, VideoFrame};
 use jstream_platform::{ContextKey, GpuFrame};
 use jstream_protocol::{
     BlendMode, Canvas, ChainCost, Crop as ProtocolCrop, Edit, FilterChain, Glide, ItemGeometry,
-    ItemId, ItemTransition, ProtocolError, QueryResult, Rev, SceneId, SourceId, SourceKind,
-    VideoMixId,
+    ItemId, ItemTransition, ProtocolError, QueryResult, Rev, SceneId, SceneRole, SourceId,
+    SourceKind, VideoMixId,
 };
 use jstream_render::transition::{Endpoint, Track};
 use jstream_render::{
@@ -952,7 +952,54 @@ struct Planner<'a, 'f> {
     wake: Option<MediaTime>,
 }
 
-impl Planner<'_, '_> {
+impl<'a> Planner<'a, '_> {
+    /// The scene a planned ID draws, and the keyframe scene whose overrides its items
+    /// show: a scene of the collection, a keyframe scene of its own, or a group's
+    /// [`view_id`] through a keyframe scene.
+    fn drawn(&self, id: &SceneId) -> Option<(&'a GraphScene, Option<&'a GraphScene>)> {
+        let state = self.state;
+        if let Some(scene) = state.scene(id) {
+            return Some((scene, scene.variant_of().is_some().then_some(scene)));
+        }
+        let (group, keyframe) = view_of(id)?;
+        Some((state.scene(&group)?, Some(state.scene(&keyframe)?)))
+    }
+
+    /// The items the planned scene `id` draws, bottom first, at their effective values.
+    fn items_of(&self, id: &SceneId) -> Vec<std::borrow::Cow<'a, GraphItem>> {
+        match self.drawn(id) {
+            Some((scene, Some(keyframe))) if scene.variant_of().is_none() => {
+                State::items_through(scene, keyframe)
+            }
+            Some((scene, _)) => self.state.shown_items(scene),
+            None => Vec::new(),
+        }
+    }
+
+    /// The ID to plan scene `scene_id` under, placed by an item of a scene drawn
+    /// through `keyframe`: the group's view when the keyframe overrides one of its
+    /// children, at any depth (ADR-0040 §2), else the scene itself.
+    fn nested(&self, keyframe: Option<&GraphScene>, scene_id: &SceneId) -> SceneId {
+        let state = self.state;
+        let Some(keyframe) = keyframe else {
+            return scene_id.clone();
+        };
+        let group = state
+            .scene(scene_id)
+            .is_some_and(|scene| scene.role() == SceneRole::Group);
+        let view = view_id(scene_id, keyframe.id());
+        if group && state.overrides_within(keyframe, scene_id) && state.scene(&view).is_none() {
+            view
+        } else {
+            scene_id.clone()
+        }
+    }
+
+    /// The keyframe scene whose overrides the planned scene `id` shows, if any.
+    fn keyframe_of(&self, id: &SceneId) -> Option<&'a GraphScene> {
+        self.drawn(id).and_then(|(_, keyframe)| keyframe)
+    }
+
     /// Plans `running`: what it starts from, paired with the program scene's items. The
     /// frames and nested scenes either side shows go into `out`.
     fn transition(&mut self, running: &Running, out: &mut Shot) -> Planned {
@@ -1008,7 +1055,7 @@ impl Planner<'_, '_> {
     /// The video chain of scene `id` as the collection holds it, over its composite: a
     /// keyframe scene's is its parent's (ADR-0024). `None` when no filter of it runs.
     fn scene_chain(&self, id: &SceneId) -> Option<Chain> {
-        let scene = self.state.scene(id)?;
+        let (scene, _) = self.drawn(id)?;
         Chain::of_filters(
             &ChainOwner::Scene(id.clone()),
             scene_filters(self.state, scene),
@@ -1061,11 +1108,9 @@ impl Planner<'_, '_> {
     /// transition that retargets one with it on screen: whether they still run.
     fn reboxed(&mut self, scene_id: &SceneId, item_id: &ItemId, out: &mut Shot) -> bool {
         let state = self.state;
-        let Some(scene) = state.scene(scene_id) else {
-            return false;
-        };
-        let Some(item) = state
-            .shown_items(scene)
+        let keyframe = self.keyframe_of(scene_id);
+        let Some(item) = self
+            .items_of(scene_id)
             .into_iter()
             .find(|item| item.as_ref().id() == item_id)
         else {
@@ -1077,8 +1122,9 @@ impl Planner<'_, '_> {
         };
         let image = match source.kind() {
             SourceKind::Scene { scene_id } => {
-                self.collect(scene_id, out, &mut BTreeSet::new());
-                SourceRef::Scene(scene_id.clone())
+                let nested = self.nested(keyframe, scene_id);
+                self.collect(&nested, out, &mut BTreeSet::new());
+                SourceRef::Scene(nested)
             }
             _ => match self.shown(source, out) {
                 Some(image) => image,
@@ -1150,9 +1196,8 @@ impl Planner<'_, '_> {
             ItemBox {
                 item: item.id().clone(),
                 through: self
-                    .state
-                    .scene(scene)
-                    .and_then(|s| Through::of(s, item.id())),
+                    .keyframe_of(scene)
+                    .and_then(|keyframe| Through::of(keyframe, item.id())),
                 source: source.clone(),
                 placement: Placement::Geometry(geometry),
                 crop: crop(item.crop()),
@@ -1185,14 +1230,12 @@ impl Planner<'_, '_> {
         visuals: &mut Vec<Visual>,
     ) {
         let state = self.state;
-        let Some(scene) = state.scene(id) else {
-            return;
-        };
-        if !path.insert(id.clone()) {
+        if self.drawn(id).is_none() || !path.insert(id.clone()) {
             return;
         }
+        let keyframe = self.keyframe_of(id);
         let canvas = state.canvas();
-        for item in state.shown_items(scene) {
+        for item in self.items_of(id) {
             let item = item.as_ref();
             if !item.visible() {
                 continue;
@@ -1202,6 +1245,9 @@ impl Planner<'_, '_> {
             };
             let (image, size) = match source.kind() {
                 SourceKind::Scene { scene_id } => {
+                    // A group's children a keyframe overrides are drawn, and paired,
+                    // through it (ADR-0049 §3).
+                    let scene_id = &self.nested(keyframe, scene_id);
                     // A scene with a chain is one picture (ADR-0065 §6), and so is one
                     // placed with a blend mode or holding an item that has one: its
                     // items blend with its own layer, not the scene it is placed in
@@ -1211,12 +1257,10 @@ impl Planner<'_, '_> {
                         && covers(item, canvas)
                         && item.opacity().get() >= OPAQUE
                         && item.blend().is_normal()
-                        && state.scene(scene_id).is_none_or(|inner| {
-                            state
-                                .shown_items(inner)
-                                .iter()
-                                .all(|inner| inner.blend().is_normal())
-                        })
+                        && self
+                            .items_of(scene_id)
+                            .iter()
+                            .all(|inner| inner.blend().is_normal())
                         && self.scene_chain(scene_id).is_none()
                         && !item.effects().iter().any(|effect| effect.enabled())
                     {
@@ -1295,9 +1339,11 @@ impl Planner<'_, '_> {
         }
         let state = self.state;
         let mut placed = Vec::new();
-        if let Some(scene) = state.scene(id) {
-            // A keyframe scene draws its parent's items at their effective values.
-            for item in state.shown_items(scene) {
+        if self.drawn(id).is_some() {
+            // A keyframe scene draws its parent's items at their effective values, and
+            // a group's view its children at theirs.
+            let keyframe = self.keyframe_of(id);
+            for item in self.items_of(id) {
                 let item = item.as_ref();
                 if !item.visible() {
                     continue;
@@ -1307,8 +1353,9 @@ impl Planner<'_, '_> {
                 };
                 let source = match source.kind() {
                     SourceKind::Scene { scene_id } => {
-                        self.collect(scene_id, out, path);
-                        SourceRef::Scene(scene_id.clone())
+                        let nested = self.nested(keyframe, scene_id);
+                        self.collect(&nested, out, path);
+                        SourceRef::Scene(nested)
                     }
                     _ => match self.shown(source, out) {
                         Some(source) => source,
@@ -1318,7 +1365,7 @@ impl Planner<'_, '_> {
                 let effects = self.boxed(id, item, &source, out);
                 placed.push(Placed {
                     item: item.id().clone(),
-                    through: Through::of(scene, item.id()),
+                    through: keyframe.and_then(|keyframe| Through::of(keyframe, item.id())),
                     source,
                     placement: placement(item.placement()),
                     crop: crop(item.crop()),
@@ -1882,6 +1929,32 @@ struct LiveItem {
 struct LiveFields {
     placement: Option<Placement>,
     crop: Option<Crop>,
+}
+
+/// The ID a shot plans group `group` under where the keyframe scene `keyframe` draws it
+/// with overrides of its children (#846, ADR-0049 §3): a view of the group with its own
+/// layer, chains and boxes, since the group's own layer is shared by every scene that
+/// places it. It starts with a control character and gives the group's length, so
+/// [`view_of`] reads both IDs back; a scene of the collection with the same ID wins.
+fn view_id(group: &SceneId, keyframe: &SceneId) -> SceneId {
+    SceneId::new(format!("\u{1}{}:{group}{keyframe}", group.as_str().len()))
+}
+
+/// The ID a shot plans group `group` under as the keyframe scene `keyframe` draws it,
+/// for tests.
+#[cfg(test)]
+pub(crate) fn group_view(group: &SceneId, keyframe: &SceneId) -> SceneId {
+    view_id(group, keyframe)
+}
+
+/// The group and keyframe scene a [`view_id`] names.
+fn view_of(id: &SceneId) -> Option<(SceneId, SceneId)> {
+    let rest = id.as_str().strip_prefix('\u{1}')?;
+    let (len, rest) = rest.split_once(':')?;
+    let len: usize = len.parse().ok()?;
+    let group = rest.get(..len)?;
+    let keyframe = rest.get(len..)?;
+    Some((SceneId::new(group), SceneId::new(keyframe)))
 }
 
 /// The keyframe scene a layer draws its item through, for its live values: which

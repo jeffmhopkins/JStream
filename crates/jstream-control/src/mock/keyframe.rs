@@ -1,17 +1,17 @@
 //! The mock's keyframe scenes (ADR-0024 §2, ADR-0040 §1, ADR-0049,
 //! docs/adr/0049-keyframe-scene-model-and-evaluation.md): `scene.create_variant`, the
 //! placement edits addressed to a keyframe scene, which write its overrides,
-//! `item.clear_override`, and the overrides an item leaving its parent drops, with the
-//! checks, errors and inverses of `jstream-graph`'s `keyframe` module. As there, an
-//! override names one of the parent's own items, and is written and cleared one field at
-//! a time.
+//! `item.clear_override`, and the overrides an item leaving its parent's tree drops, with
+//! the checks, errors and inverses of `jstream-graph`'s `keyframe` module. As there, an
+//! override names an item in the parent's tree (its own, or a child of a group placed in
+//! it, at any depth), and is written and cleared one field at a time.
 
 use super::{Collection, already_exists, check_id, check_name, invalid, not_found};
 use jstream_protocol::{
     Blocker, Crop, Edit, EntityKind, Finite32, ItemGeometry, ItemId, ItemOverride, ItemTransform,
-    OverrideField, ProtocolError, SceneId,
+    OverrideField, ProtocolError, SceneId, SceneRole, SourceKind,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// An overridden placement, in the form the edit that wrote it used.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -334,7 +334,7 @@ impl Collection {
     }
 
     /// Refuses an override of `item_id` in a keyframe scene of `parent` unless the item
-    /// is one of `parent`'s own.
+    /// is in `parent`'s tree.
     fn check_parent_item(
         &self,
         parent: &SceneId,
@@ -342,21 +342,50 @@ impl Collection {
         at: usize,
         name: &str,
     ) -> Result<(), ProtocolError> {
-        let own = self
-            .items
-            .get(item_id)
-            .is_some_and(|item| &item.scene_id == parent);
-        if own {
+        if self.tree_items(parent).contains(item_id) {
             return Ok(());
         }
         Err(invalid(
             at,
             name,
             format!(
-                "item `{item_id}` is not an item of scene `{parent}`, the keyframe scene's \
-                 parent; overrides of a group's items are not built yet (#702)"
+                "item `{item_id}` is neither an item of scene `{parent}`, the keyframe scene's \
+                 parent, nor of a group placed in it"
             ),
         ))
+    }
+
+    /// The items in the tree of scene `root`: its own, and the items of every group
+    /// (role `group`) placed in it through a `scene` source, at any depth.
+    fn tree_items(&self, root: &SceneId) -> BTreeSet<ItemId> {
+        let mut items = BTreeSet::new();
+        let mut seen = BTreeSet::new();
+        let mut todo = vec![root.clone()];
+        while let Some(scene_id) = todo.pop() {
+            if !seen.insert(scene_id.clone()) {
+                continue;
+            }
+            let Some(si) = self.scene_index(&scene_id) else {
+                continue;
+            };
+            for item_id in &self.scenes[si].items {
+                items.insert(item_id.clone());
+                let group = self
+                    .items
+                    .get(item_id)
+                    .and_then(|item| self.sources.get(&item.source_id))
+                    .and_then(|source| match &source.kind {
+                        SourceKind::Scene { scene_id } => Some(scene_id),
+                        _ => None,
+                    })
+                    .filter(|id| {
+                        self.scene_index(id)
+                            .is_some_and(|gi| self.scenes[gi].role == SceneRole::Group)
+                    });
+                todo.extend(group.cloned());
+            }
+        }
+        items
     }
 
     /// Writes the field `edit` sets into `item_id`'s override in the keyframe scene at
@@ -385,19 +414,34 @@ impl Collection {
         Ok(inverse(&scene.id, item_id, before, field))
     }
 
-    /// Drops every override of `item_id` in the keyframe scenes of `parent`, which the
-    /// item is leaving (ADR-0040 §1), and returns the edits that write them back, to
-    /// follow the edit that brings the item back in the inverse. The batch result
-    /// doesn't report them in `dropped_overrides`: the mock leaves that empty.
-    pub(super) fn drop_overrides(&mut self, parent: &SceneId, item_id: &ItemId) -> Vec<Edit> {
-        let mut restore = Vec::new();
-        for scene in self
+    /// Drops every override whose item is no longer in its keyframe scene's tree
+    /// (ADR-0040 §1), and returns the edits that write them back, to follow the edit's
+    /// own inverse. The batch result doesn't report them in `dropped_overrides`: the
+    /// mock leaves that empty.
+    pub(super) fn drop_orphans(&mut self) -> Vec<Edit> {
+        let trees: Vec<Option<BTreeSet<ItemId>>> = self
             .scenes
-            .iter_mut()
-            .filter(|s| s.variant_of.as_ref() == Some(parent))
-        {
-            if let Some(o) = scene.overrides.remove(item_id) {
-                restore.extend(o.write_edits(&scene.id, item_id));
+            .iter()
+            .map(|scene| {
+                let parent = scene.variant_of.as_ref()?;
+                (!scene.overrides.is_empty()).then(|| self.tree_items(parent))
+            })
+            .collect();
+        let mut restore = Vec::new();
+        for (scene, tree) in self.scenes.iter_mut().zip(trees) {
+            let Some(tree) = tree else {
+                continue;
+            };
+            let gone: Vec<ItemId> = scene
+                .overrides
+                .keys()
+                .filter(|item| !tree.contains(*item))
+                .cloned()
+                .collect();
+            for item_id in gone {
+                if let Some(o) = scene.overrides.remove(&item_id) {
+                    restore.extend(o.write_edits(&scene.id, &item_id));
+                }
             }
         }
         restore

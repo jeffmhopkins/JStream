@@ -162,9 +162,10 @@ pub enum Edit {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         blend: Option<BlendMode>,
     },
-    /// Removes an item from its scene. The source itself stays. Every keyframe scene of
-    /// that scene loses its override of the item, reported in the batch result's
-    /// `dropped_overrides` (ADR-0040 §1). Inverse: `item.add` with
+    /// Removes an item from its scene. The source itself stays. Every keyframe scene
+    /// whose tree held the item loses its override of it, and of the items of a group
+    /// it was the last path to, reported in the batch result's `dropped_overrides`
+    /// (ADR-0040 §1). Inverse: `item.add` with
     /// the removed item's scene, ID and source, its placement in the field matching its
     /// form (`transform` or `geometry`), and its opacity and blend where they differ from
     /// the defaults, then `item.reorder` to its old stacking position (unless it was on
@@ -181,9 +182,9 @@ pub enum Edit {
     /// group scene, places it, and moves the selected items into it. Rejected with
     /// `invalid_argument` if the move would make a scene contain itself (field
     /// `scene_id`, naming the cycle), if the index is out of range, or if the scene is
-    /// a keyframe scene, which has no items of its own. A move to another scene drops
-    /// the item's overrides in the keyframe scenes of the scene it leaves, as
-    /// `item.remove` does. Inverse: `item.move` back to its previous scene and index,
+    /// a keyframe scene, which has no items of its own. A move out of a keyframe scene's
+    /// tree drops the item's overrides there, as `item.remove` does; a move between a
+    /// parent and a group it places keeps them. Inverse: `item.move` back to its previous scene and index,
     /// then the placement edits that write each dropped override back.
     #[serde(rename = "item.move")]
     ItemMove {
@@ -238,7 +239,8 @@ pub enum Edit {
         item_id: ItemId,
         /// The scene whose placement of the item to change, as every placement edit
         /// takes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item. A
-        /// keyframe scene of the item's scene writes that scene's override of this
+        /// keyframe scene whose tree holds the item (of the item's scene, or of a scene
+        /// placing the item's group) writes that scene's override of this
         /// field (since 0.39), whose inverse is `item.clear_override` if the field was
         /// not overridden and this edit with the old value if it was. Any other scene is
         /// `invalid_argument`.

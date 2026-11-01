@@ -386,9 +386,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   to another scene keeping its id, under the same cycle check. The placement edits take
   an optional `scene_id` (protocol 0.12): the item's own scene, or one of its keyframe
   scenes (protocol 0.39). Keyframe scenes (`scene.create_variant`) are built with their
-  per-item overrides of the parent's own items, `item.clear_override`, the overrides
-  `item.remove` and `item.move` drop (reported in the batch result and restored by
-  undo), their parent's delete blocked by them and its `delete.plan` deleting them
+  per-item overrides of the items in the parent's tree (its own, and a group's
+  children at any depth), `item.clear_override`, the overrides an edit that takes an
+  item out of the tree drops (reported in the batch result and restored by undo), their parent's delete blocked by them and its `delete.plan` deleting them
   first, and the switch within a family paired by item (ADR-0049 §3). Items refer to sources; they never copy them, and
   `item.set_source` retargets one, keeping its id, placement and stacking position.
   A source copied by `source.duplicate` records its original in `duplicated_from`, a
@@ -445,9 +445,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
   and hotkey bindings (protocol 0.25), as the organisation bullet above describes.
   Not yet: settings migrations between kind versions (a source saved at another
-  version is refused on load), a keyframe scene's overrides of a group's
-  children (so `scene.set_role` and removing or retargeting a group's item drop none
-  yet, #702), `background`, output audio buses and chains, the `YouTube` kind, a virtual
+  version is refused on load), `background`, output audio buses and chains, the `YouTube` kind, a virtual
   camera's video mix (it always shows the program), and everything outside `sources`,
   `scenes`, `outputs`, `encoders`, `video_mixes`, `audio`, `folders`, `labels`,
   `hotkeys` and `transitions`. The collection file saves everything built so far,

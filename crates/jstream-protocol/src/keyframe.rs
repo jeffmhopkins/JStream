@@ -4,8 +4,10 @@
 //! A keyframe scene (a **variant**) is created by `scene.create_variant` and names its
 //! parent in `SceneInfo.variant_of`. It has no items of its own: it shows its parent's
 //! items, and stores per item the fields it overrides ([`ItemOverride`]). A field it
-//! doesn't override follows the parent's current value. The placement edits write an
-//! override when their `scene_id` names a variant of the item's scene, and
+//! doesn't override follows the parent's current value. An override names an item in
+//! the parent's **tree**: one of the parent's own, or a child of a group (a scene with
+//! the role `group`) the parent places, at any depth (#846). The placement edits write
+//! an override when their `scene_id` names a variant whose tree holds the item, and
 //! `item.clear_override` removes one field ([`OverrideField`]).
 
 use crate::command::{Crop, ItemTransform};
@@ -32,8 +34,8 @@ pub enum OverrideField {
     Opacity,
 }
 
-/// What a keyframe scene overrides for one of its parent's items, as `state.get` reports
-/// it. An omitted field follows the parent. At least one field is set: an item with no
+/// What a keyframe scene overrides for one item in its parent's tree, as `state.get`
+/// reports it. An omitted field follows the parent. At least one field is set: an item with no
 /// override has no entry.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ItemOverride {
@@ -57,9 +59,10 @@ pub struct ItemOverride {
     pub opacity: Option<Finite32>,
 }
 
-/// Overrides a batch dropped because their item left the keyframe scene's parent
-/// (ADR-0040 §1): `item.remove` of the item, or `item.move` of it to another scene.
-/// Undoing the batch restores them.
+/// Overrides a batch dropped because their item left the keyframe scene's tree
+/// (ADR-0040 §1): `item.remove` of the item, `item.move` of it out of the tree, or an
+/// edit that takes the group holding it out (`scene.set_role` of the group, or removing
+/// or retargeting the last item that places it). Undoing the batch restores them.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct DroppedOverride {
     /// The keyframe scene that held the override.

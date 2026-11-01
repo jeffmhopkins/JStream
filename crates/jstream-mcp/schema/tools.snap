@@ -1096,7 +1096,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene of\nthat scene loses its override of the item, reported in the batch result's\n`dropped_overrides` (ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default, and the\nplacement edits that write each dropped override back.",
+                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default, and the\nplacement edits that write each dropped override back.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -1114,7 +1114,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Moves an item to a stacking position in another scene, keeping its ID, source,\nplacement, crop and visibility (ADR-0024 §1). Grouping is a batch that creates a\ngroup scene, places it, and moves the selected items into it. Rejected with\n`invalid_argument` if the move would make a scene contain itself (field\n`scene_id`, naming the cycle), if the index is out of range, or if the scene is\na keyframe scene, which has no items of its own. A move to another scene drops\nthe item's overrides in the keyframe scenes of the scene it leaves, as\n`item.remove` does. Inverse: `item.move` back to its previous scene and index,\nthen the placement edits that write each dropped override back.",
+                "description": "Moves an item to a stacking position in another scene, keeping its ID, source,\nplacement, crop and visibility (ADR-0024 §1). Grouping is a batch that creates a\ngroup scene, places it, and moves the selected items into it. Rejected with\n`invalid_argument` if the move would make a scene contain itself (field\n`scene_id`, naming the cycle), if the index is out of range, or if the scene is\na keyframe scene, which has no items of its own. A move out of a keyframe scene's\ntree drops the item's overrides there, as `item.remove` does; a move between a\nparent and a group it places keeps them. Inverse: `item.move` back to its previous scene and index,\nthen the placement edits that write each dropped override back.",
                 "properties": {
                   "index": {
                     "description": "Its position in that scene after the move, counted from the bottom (0). Must\nbe at most the number of items already in that scene (less than it for the\nitem's own scene), else `invalid_argument`.",
@@ -1227,7 +1227,7 @@ source: crates/jstream-mcp/src/tests.rs
                         "type": "null"
                       }
                     ],
-                    "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item. A\nkeyframe scene of the item's scene writes that scene's override of this\nfield (since 0.39), whose inverse is `item.clear_override` if the field was\nnot overridden and this edit with the old value if it was. Any other scene is\n`invalid_argument`."
+                    "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item. A\nkeyframe scene whose tree holds the item (of the item's scene, or of a scene\nplacing the item's group) writes that scene's override of this\nfield (since 0.39), whose inverse is `item.clear_override` if the field was\nnot overridden and this edit with the old value if it was. Any other scene is\n`invalid_argument`."
                   },
                   "type": {
                     "const": "item.set_visible",
@@ -6388,7 +6388,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene of\nthat scene loses its override of the item, reported in the batch result's\n`dropped_overrides` (ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default, and the\nplacement edits that write each dropped override back.",
+                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default, and the\nplacement edits that write each dropped override back.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -6406,7 +6406,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Moves an item to a stacking position in another scene, keeping its ID, source,\nplacement, crop and visibility (ADR-0024 §1). Grouping is a batch that creates a\ngroup scene, places it, and moves the selected items into it. Rejected with\n`invalid_argument` if the move would make a scene contain itself (field\n`scene_id`, naming the cycle), if the index is out of range, or if the scene is\na keyframe scene, which has no items of its own. A move to another scene drops\nthe item's overrides in the keyframe scenes of the scene it leaves, as\n`item.remove` does. Inverse: `item.move` back to its previous scene and index,\nthen the placement edits that write each dropped override back.",
+                "description": "Moves an item to a stacking position in another scene, keeping its ID, source,\nplacement, crop and visibility (ADR-0024 §1). Grouping is a batch that creates a\ngroup scene, places it, and moves the selected items into it. Rejected with\n`invalid_argument` if the move would make a scene contain itself (field\n`scene_id`, naming the cycle), if the index is out of range, or if the scene is\na keyframe scene, which has no items of its own. A move out of a keyframe scene's\ntree drops the item's overrides there, as `item.remove` does; a move between a\nparent and a group it places keeps them. Inverse: `item.move` back to its previous scene and index,\nthen the placement edits that write each dropped override back.",
                 "properties": {
                   "index": {
                     "description": "Its position in that scene after the move, counted from the bottom (0). Must\nbe at most the number of items already in that scene (less than it for the\nitem's own scene), else `invalid_argument`.",
@@ -6519,7 +6519,7 @@ source: crates/jstream-mcp/src/tests.rs
                         "type": "null"
                       }
                     ],
-                    "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item. A\nkeyframe scene of the item's scene writes that scene's override of this\nfield (since 0.39), whose inverse is `item.clear_override` if the field was\nnot overridden and this edit with the old value if it was. Any other scene is\n`invalid_argument`."
+                    "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item. A\nkeyframe scene whose tree holds the item (of the item's scene, or of a scene\nplacing the item's group) writes that scene's override of this\nfield (since 0.39), whose inverse is `item.clear_override` if the field was\nnot overridden and this edit with the old value if it was. Any other scene is\n`invalid_argument`."
                   },
                   "type": {
                     "const": "item.set_visible",
@@ -9677,7 +9677,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene of\nthat scene loses its override of the item, reported in the batch result's\n`dropped_overrides` (ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default, and the\nplacement edits that write each dropped override back.",
+                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default, and the\nplacement edits that write each dropped override back.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -9695,7 +9695,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Moves an item to a stacking position in another scene, keeping its ID, source,\nplacement, crop and visibility (ADR-0024 §1). Grouping is a batch that creates a\ngroup scene, places it, and moves the selected items into it. Rejected with\n`invalid_argument` if the move would make a scene contain itself (field\n`scene_id`, naming the cycle), if the index is out of range, or if the scene is\na keyframe scene, which has no items of its own. A move to another scene drops\nthe item's overrides in the keyframe scenes of the scene it leaves, as\n`item.remove` does. Inverse: `item.move` back to its previous scene and index,\nthen the placement edits that write each dropped override back.",
+                "description": "Moves an item to a stacking position in another scene, keeping its ID, source,\nplacement, crop and visibility (ADR-0024 §1). Grouping is a batch that creates a\ngroup scene, places it, and moves the selected items into it. Rejected with\n`invalid_argument` if the move would make a scene contain itself (field\n`scene_id`, naming the cycle), if the index is out of range, or if the scene is\na keyframe scene, which has no items of its own. A move out of a keyframe scene's\ntree drops the item's overrides there, as `item.remove` does; a move between a\nparent and a group it places keeps them. Inverse: `item.move` back to its previous scene and index,\nthen the placement edits that write each dropped override back.",
                 "properties": {
                   "index": {
                     "description": "Its position in that scene after the move, counted from the bottom (0). Must\nbe at most the number of items already in that scene (less than it for the\nitem's own scene), else `invalid_argument`.",
@@ -9808,7 +9808,7 @@ source: crates/jstream-mcp/src/tests.rs
                         "type": "null"
                       }
                     ],
-                    "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item. A\nkeyframe scene of the item's scene writes that scene's override of this\nfield (since 0.39), whose inverse is `item.clear_override` if the field was\nnot overridden and this edit with the old value if it was. Any other scene is\n`invalid_argument`."
+                    "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item. A\nkeyframe scene whose tree holds the item (of the item's scene, or of a scene\nplacing the item's group) writes that scene's override of this\nfield (since 0.39), whose inverse is `item.clear_override` if the field was\nnot overridden and this edit with the old value if it was. Any other scene is\n`invalid_argument`."
                   },
                   "type": {
                     "const": "item.set_visible",
@@ -11247,7 +11247,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene of\nthat scene loses its override of the item, reported in the batch result's\n`dropped_overrides` (ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default, and the\nplacement edits that write each dropped override back.",
+                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default, and the\nplacement edits that write each dropped override back.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -11265,7 +11265,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Moves an item to a stacking position in another scene, keeping its ID, source,\nplacement, crop and visibility (ADR-0024 §1). Grouping is a batch that creates a\ngroup scene, places it, and moves the selected items into it. Rejected with\n`invalid_argument` if the move would make a scene contain itself (field\n`scene_id`, naming the cycle), if the index is out of range, or if the scene is\na keyframe scene, which has no items of its own. A move to another scene drops\nthe item's overrides in the keyframe scenes of the scene it leaves, as\n`item.remove` does. Inverse: `item.move` back to its previous scene and index,\nthen the placement edits that write each dropped override back.",
+                "description": "Moves an item to a stacking position in another scene, keeping its ID, source,\nplacement, crop and visibility (ADR-0024 §1). Grouping is a batch that creates a\ngroup scene, places it, and moves the selected items into it. Rejected with\n`invalid_argument` if the move would make a scene contain itself (field\n`scene_id`, naming the cycle), if the index is out of range, or if the scene is\na keyframe scene, which has no items of its own. A move out of a keyframe scene's\ntree drops the item's overrides there, as `item.remove` does; a move between a\nparent and a group it places keeps them. Inverse: `item.move` back to its previous scene and index,\nthen the placement edits that write each dropped override back.",
                 "properties": {
                   "index": {
                     "description": "Its position in that scene after the move, counted from the bottom (0). Must\nbe at most the number of items already in that scene (less than it for the\nitem's own scene), else `invalid_argument`.",
@@ -11378,7 +11378,7 @@ source: crates/jstream-mcp/src/tests.rs
                         "type": "null"
                       }
                     ],
-                    "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item. A\nkeyframe scene of the item's scene writes that scene's override of this\nfield (since 0.39), whose inverse is `item.clear_override` if the field was\nnot overridden and this edit with the old value if it was. Any other scene is\n`invalid_argument`."
+                    "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item. A\nkeyframe scene whose tree holds the item (of the item's scene, or of a scene\nplacing the item's group) writes that scene's override of this\nfield (since 0.39), whose inverse is `item.clear_override` if the field was\nnot overridden and this edit with the old value if it was. Any other scene is\n`invalid_argument`."
                   },
                   "type": {
                     "const": "item.set_visible",

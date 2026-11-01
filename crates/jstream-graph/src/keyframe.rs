@@ -2,9 +2,10 @@
 //! clearing its overrides with their inverses, and dropping the overrides of an item that
 //! leaves its parent. The override set itself is `jstream-anim`'s [`Keyframe`].
 //!
-//! A keyframe scene (a variant) has no items of its own. Its overrides name items of its
-//! parent's own; an override of a group's child (an item of a group placed in the parent)
-//! is refused until the snapshot can draw a group per variant (#702).
+//! A keyframe scene (a variant) has no items of its own. Its overrides name items in its
+//! parent's tree: the parent's own, or a child of a group placed in the parent, at any
+//! depth (ADR-0024 §2). An edit that takes an item out of that tree drops its overrides
+//! ([`drop_orphans`], ADR-0040 §1).
 //!
 //! Docs: docs/adr/0049-keyframe-scene-model-and-evaluation.md, docs/adr/0024-scene-structure.md, crates/jstream-graph/README.md#purpose
 
@@ -148,7 +149,7 @@ pub(crate) fn target(
 }
 
 /// Refuses an override of `item_id` in a keyframe scene of `parent` unless the item is
-/// one of `parent`'s own.
+/// in `parent`'s tree: one of its own, or a child of a group placed in it.
 fn check_parent_item(
     state: &State,
     parent: &SceneId,
@@ -156,18 +157,15 @@ fn check_parent_item(
     at: usize,
     name: &str,
 ) -> Result<(), ProtocolError> {
-    let own = state
-        .scene(parent)
-        .is_some_and(|p| p.items.iter().any(|i| &i.id == item_id));
-    if own {
+    if state.tree_items(parent).contains(item_id) {
         return Ok(());
     }
     Err(invalid(
         at,
         name,
         format!(
-            "item `{item_id}` is not an item of scene `{parent}`, the keyframe scene's \
-             parent; overrides of a group's items are not built yet (#702)"
+            "item `{item_id}` is neither an item of scene `{parent}`, the keyframe scene's \
+             parent, nor of a group placed in it"
         ),
     ))
 }
@@ -189,22 +187,35 @@ pub(crate) fn write(
     Ok(vec![inverse_edit(&scene.id, item_id, inverse)])
 }
 
-/// Drops every override of `item_id` in the keyframe scenes of `parent`, which the item
-/// is leaving (ADR-0040 §1). Reports each in `dropped` and returns the edits that write
-/// them back, to follow the edit that brings the item back in the inverse.
-pub(crate) fn drop_item(
-    state: &mut State,
-    parent: &SceneId,
-    item_id: &ItemId,
-    dropped: &mut Vec<DroppedOverride>,
-) -> Vec<Edit> {
-    let mut restore = Vec::new();
-    for scene in state
+/// Drops every override that names an item no longer in its keyframe scene's tree: an
+/// edit took the item, or the group holding it, out of the parent (ADR-0040 §1). An
+/// override stays while any path still reaches its item. Reports each in `dropped` and
+/// returns the edits that write them back, to follow the edit's own inverse.
+pub(crate) fn drop_orphans(state: &mut State, dropped: &mut Vec<DroppedOverride>) -> Vec<Edit> {
+    let orphaned: Vec<(usize, Vec<ItemId>)> = state
         .scenes
-        .iter_mut()
-        .filter(|s| s.variant_of.as_ref() == Some(parent))
-    {
-        for (item, o) in scene.overrides.drop_unless(|item| item != item_id) {
+        .iter()
+        .enumerate()
+        .filter_map(|(vi, scene)| {
+            let parent = scene.variant_of.as_ref()?;
+            if scene.overrides.is_empty() {
+                return None;
+            }
+            let tree = state.tree_items(parent);
+            let gone: Vec<ItemId> = scene
+                .overrides
+                .iter()
+                .map(|(item, _)| item)
+                .filter(|item| !tree.contains(item))
+                .cloned()
+                .collect();
+            (!gone.is_empty()).then_some((vi, gone))
+        })
+        .collect();
+    let mut restore = Vec::new();
+    for (vi, gone) in orphaned {
+        let scene = &mut state.scenes[vi];
+        for (item, o) in scene.overrides.drop_unless(|item| !gone.contains(item)) {
             restore.extend(write_edits(&scene.id, &item, &o));
             dropped.push(DroppedOverride {
                 scene_id: scene.id.clone(),

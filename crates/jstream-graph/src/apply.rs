@@ -42,7 +42,7 @@ pub struct Applied {
     /// deleted (ADR-0040 §3), in the order it removed them. The inverse restores them.
     pub removed_hotkeys: Vec<HotkeyBinding>,
     /// The keyframe-scene overrides the batch dropped because their item left the
-    /// variant's parent (ADR-0040 §1), in the order it dropped them. The inverse
+    /// variant's tree (ADR-0040 §1), in the order it dropped them. The inverse
     /// restores them.
     pub dropped_overrides: Vec<DroppedOverride>,
 }
@@ -99,14 +99,10 @@ impl Graph {
         let mut dropped_overrides = Vec::new();
         for (at, edit) in edits.iter().enumerate() {
             let mut removed = Vec::new();
-            let mut inverse = apply_edit(
-                &mut work,
-                &self.kinds,
-                edit,
-                at,
-                running,
-                &mut dropped_overrides,
-            )?;
+            let mut inverse = apply_edit(&mut work, &self.kinds, edit, at, running)?;
+            // Overrides whose item left its keyframe scene's tree go with the edit, and
+            // come back after its inverse (ADR-0040 §1).
+            inverse.extend(keyframe::drop_orphans(&mut work, &mut dropped_overrides));
             // A delete takes the bindings that name its target with it (ADR-0040 §3);
             // they come back after the target does.
             if let Some((entity, id)) = deleted_object(edit) {
@@ -306,7 +302,6 @@ fn move_item(
     scene_id: &SceneId,
     index: u32,
     at: usize,
-    dropped: &mut Vec<DroppedOverride>,
 ) -> Result<Vec<Edit>, ProtocolError> {
     let (from_scene, from_index) = find_item(state, item_id)?;
     let to_scene = find_scene(state, scene_id)?;
@@ -352,16 +347,11 @@ fn move_item(
     }
     let item = state.scenes[from_scene].items.remove(from_index);
     state.scenes[to_scene].items.insert(to_index, item);
-    let mut inverse = vec![Edit::ItemMove {
+    Ok(vec![Edit::ItemMove {
         item_id: item_id.clone(),
-        scene_id: old_scene_id.clone(),
+        scene_id: old_scene_id,
         index: wire_index(from_index)?,
-    }];
-    // Leaving its scene takes it out of that scene's keyframe scenes (ADR-0040 §1).
-    if to_scene != from_scene {
-        inverse.extend(keyframe::drop_item(state, &old_scene_id, item_id, dropped));
-    }
-    Ok(inverse)
+    }])
 }
 
 /// Applies one edit to `state` and returns the edits that undo it.
@@ -371,7 +361,6 @@ fn apply_edit(
     edit: &Edit,
     at: usize,
     running: &BTreeSet<OutputId>,
-    dropped: &mut Vec<DroppedOverride>,
 ) -> Result<Vec<Edit>, ProtocolError> {
     if let Some(applied) = keyframe::apply(state, edit, at) {
         return applied;
@@ -427,10 +416,9 @@ fn apply_edit(
         }
         Edit::SceneSetRole { scene_id, role } => {
             let si = find_scene(state, scene_id)?;
-            // ADR-0040 §1 drops the overrides a role change orphans. Overrides name only
-            // a parent's own items so far (#702), and a role changes neither a parent's
-            // items nor a keyframe scene's parent, so none is orphaned: a keyframe
-            // scene's role is set like any scene's.
+            // A group that becomes a scene leaves every tree it was in, so the batch
+            // drops the overrides of its children (ADR-0040 §1, `drop_orphans`). A
+            // keyframe scene's role is set like any scene's.
             let old = std::mem::replace(&mut state.scenes[si].role, *role);
             Ok(vec![Edit::SceneSetRole {
                 scene_id: scene_id.clone(),
@@ -578,10 +566,7 @@ fn apply_edit(
             let scene = &mut state.scenes[si];
             let item = scene.items.remove(ii);
             // `item.add` puts it on top, which is index `len` now that it is gone.
-            let mut inverse = restore_item(&scene.id, &item, ii, scene.items.len())?;
-            let scene_id = scene.id.clone();
-            inverse.extend(keyframe::drop_item(state, &scene_id, item_id, dropped));
-            Ok(inverse)
+            restore_item(&scene.id, &item, ii, scene.items.len())
         }
         Edit::ItemReorder { item_id, index } => {
             let (si, from) = find_item(state, item_id)?;
@@ -598,7 +583,7 @@ fn apply_edit(
             item_id,
             scene_id,
             index,
-        } => move_item(state, item_id, scene_id, *index, at, dropped),
+        } => move_item(state, item_id, scene_id, *index, at),
         Edit::ItemSetTransform {
             item_id,
             scene_id,

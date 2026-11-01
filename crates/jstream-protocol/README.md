@@ -453,8 +453,11 @@ keeps the addressing of the edit it undoes.
   `item.set_geometry` or `item.set_transform` writes it, reported as `geometry` or, for
   the 0.3 form, `transform`), `crop`, `visible` and `opacity`. `SceneInfo.overrides`
   lists them in item ID order, as `ItemOverride`s with at least one field set (omitted
-  when there are none). An override names one of the parent's own items. Overriding a
-  child of a group the parent places is `invalid_argument` until it is built (#702).
+  when there are none). An override names an item in the parent's tree: one of the
+  parent's own, or a child of a group (role `group`) the parent places, at any depth.
+  Any other item is `invalid_argument`. An override of a group's child applies
+  wherever the group is placed in the tree (ADR-0040 §2), and the variant draws the
+  group with it (#846).
 - Writing a field that was absent is undone by
   `item.clear_override { scene_id, item_id, field }`, and writing one that was present by
   the same edit with the old value. `item.clear_override` of a present field is undone by
@@ -466,8 +469,12 @@ keeps the addressing of the edit it undoes.
   into it, and `scene.set_folder` (a variant is listed under its parent, never in a
   folder). `item.set_transform`, `scene.set_role`, renames, transitions and metadata
   work as on any scene.
-- **Dropped overrides** (ADR-0040 §1): `item.remove` of a parent's item, and `item.move`
-  of it to another scene, drop its override in every variant in the same edit. The
+- **Dropped overrides** (ADR-0040 §1): an edit that takes an item out of a variant's
+  tree drops its override there in the same edit: `item.remove` of it, `item.move` of
+  it out of the tree (a move between the parent and a group it places keeps it), and,
+  for a group's children, `scene.set_role` of the group to `scene` and removing or
+  retargeting (`item.set_source`) the last item that places the group. An override
+  stays while any path reaches its item. The
   batch result lists each as a `DroppedOverride {scene_id, item_id, ...fields}`
   (`dropped_overrides`, omitted when there are none), and the inverse restores them
   after the item is back.

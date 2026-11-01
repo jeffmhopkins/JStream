@@ -195,8 +195,17 @@ state machine. Contents:
   read back as a PNG on the engine's own snapshot thread, which owns the snapshot
   compositor. A keyframe scene draws its parent's items at their effective values
   (`State::shown_items`), so it follows every edit to the parent; so does what the
-  scene reaches for audio (`activity.rs`). `Shot::chain_cost` is what its scene chains
-  and item effects add to each frame, for `stats.tick`'s `chains`.
+  scene reaches for audio (`activity.rs`). A group in its tree whose children it
+  overrides (#846) is planned as a view of the group through the keyframe, with its
+  own layer, chains and boxes, under an internal scene ID (`view_id`, a control
+  character, the group's length and both IDs; a collection scene with that ID wins)
+  and drawn at `State::items_through`; a group it doesn't override is drawn as itself,
+  so the layer stays shared. A Move within the family flattens a group over the whole
+  canvas into its children, which pair by item and move between the two sides'
+  values. A group that doesn't flatten (placed elsewhere, or with a blend, chain or
+  effects) moves as one item and shows the incoming side's children from the start:
+  interpolating them inside its layer (ADR-0049 §3) is not built yet. `Shot::chain_cost` is what its
+  scene chains and item effects add to each frame, for `stats.tick`'s `chains`.
 - **Studio** (`studio.rs`): which scene is on program and which on preview, and the
   transition running onto program, runtime state under the collection lock that
   `scene.switch` and `studio.set_preview` set and `studio.get` reads
@@ -448,7 +457,9 @@ state machine. Contents:
   overrides a batch drops reported and restored by undo, with a no-op clear that is no
   undo step, and a live value on a keyframe scene shown only where the keyframe draws the
   item, the parent's own showing there through fields it doesn't override, committed as
-  its override and dropped with the keyframe; `transition.rs` pairs a source placed twice by item), YouTube on `jstream-youtube`'s `FakeTransport` and fixtures
+  its override and dropped with the keyframe, a variant drawing a group's child through
+  a view of the group, live values included, and a `move` moving that child between the
+  two sides; `activity.rs` silences what a keyframe hides in a group; `transition.rs` pairs a source placed twice by item), YouTube on `jstream-youtube`'s `FakeTransport` and fixtures
   (`src/tests/youtube.rs`: sign-in through a real loopback redirect, sign-out, the
   broadcast actions and lists, quota and refused tokens, a `youtube` output
   publishing to its broadcast's ingest on the CPU stand-in, with the key and tokens in
@@ -655,7 +666,7 @@ refusal (a scene's missing label too), the in-use deletes, the reads, undo and r
 and a filed, labelled scene's and a labelled source's delete, which the test checks applies, undone with their metadata;
 `history.rs` checks the engine's undo of them further. It sends the keyframe edits
 ([ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)) too: overrides
-written and cleared, each refusal, a `live.set` on a keyframe scene, the refused parent
+written and cleared (a group's child among them), each refusal, a `live.set` on a keyframe scene, the refused parent
 delete, and a keyframe scene with a role deleted and undone. It leaves out an
 `item.remove` that drops an override, since the mock leaves the batch result's
 `dropped_overrides` empty. The mock stays the reference
