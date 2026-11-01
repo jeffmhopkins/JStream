@@ -33,6 +33,7 @@ arc-swap.workspace = true
 futures-core.workspace = true
 jstream-audio.workspace = true
 jstream-control.workspace = true
+jstream-effects.workspace = true
 jstream-encode.workspace = true
 jstream-graph.workspace = true
 jstream-media.workspace = true

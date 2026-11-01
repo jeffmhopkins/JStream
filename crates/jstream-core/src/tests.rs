@@ -669,6 +669,76 @@ fn scene_filters_and_item_effects_are_taken() {
     );
 }
 
+/// The effect packs in the folder the engine watches become `video_filter` kinds, which a
+/// video chain takes; a pack removed from the folder takes its kinds out of `kind.list`.
+#[test]
+fn effect_packs_become_video_filter_kinds() {
+    use crate::effect_packs::test_pack::{self, KIND, Temp};
+
+    let temp = Temp::new("engine");
+    test_pack::write(&temp.pack(), test_pack::MUL);
+    let engine = Engine::new();
+    engine.watch_effect_packs(&temp.0);
+    let control = connected(&engine);
+    let listed = || {
+        let Ok(QueryResult::KindList { kinds }) = query(&control, Query::KindList) else {
+            panic!("kind.list");
+        };
+        kinds
+            .into_iter()
+            .find(|k| k.kind_id == KIND)
+            .map(|k| k.category)
+    };
+    assert_eq!(
+        listed(),
+        Some(KindCategory::VideoFilter),
+        "loaded before it returns"
+    );
+    batch(
+        &control,
+        Batch {
+            edits: vec![
+                Edit::SourceCreate {
+                    source_id: SourceId::new("bg"),
+                    name: "bg".into(),
+                    kind: SourceKind::Builtin {
+                        kind: "color".into(),
+                    },
+                    settings: Default::default(),
+                    duplicated_from: None,
+                },
+                Edit::FilterAdd {
+                    owner: jstream_protocol::FilterOwner::Source {
+                        source_id: SourceId::new("bg"),
+                    },
+                    chain: jstream_protocol::FilterChain::Video,
+                    filter_id: jstream_protocol::FilterId::new("tint"),
+                    kind: KIND.into(),
+                    settings: [("tint", serde_json::json!("#ff0000"))]
+                        .into_iter()
+                        .collect(),
+                    enabled: None,
+                    index: None,
+                },
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+            ends_gesture: None,
+        },
+    )
+    .expect("a pack filter on a video chain");
+
+    std::fs::remove_dir_all(temp.pack()).expect("remove the pack");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while listed().is_some() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the removed pack's kind stays listed"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}
+
 /// The engine describes its built-in kinds, and validates and completes settings against
 /// them (ADR-0025).
 #[test]

@@ -102,7 +102,7 @@ fn main() -> ExitCode {
         Ok(Invocation::UnregisterVcam) => register::unregister()
             .map_err(Failure::Failed)
             .and_then(|message| print(&message)),
-        Ok(Invocation::Serve(options)) => run(options),
+        Ok(Invocation::Serve(options)) => run(*options),
         Err(message) => Err(Failure::Usage(format!(
             "{message}\n(run `jstream-daemon --help` for usage)"
         ))),
@@ -230,6 +230,14 @@ fn run(mut options: Options) -> Result<(), Failure> {
     if options.plugin_dir.is_none() {
         options.plugin_dir = jstream_platform::paths::data_dir()
             .map(|dir| dir.join("plugins").to_string_lossy().into_owned());
+    }
+    // So are the effect packs.
+    if options.effects_dir.is_none() {
+        options.effects_dir = jstream_platform::paths::data_dir().map(|dir| {
+            dir.join(jstream_platform::paths::EFFECTS_DIR)
+                .to_string_lossy()
+                .into_owned()
+        });
     }
     let path = match options.token_file.clone() {
         Some(path) => PathBuf::from(path),

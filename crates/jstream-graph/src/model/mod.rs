@@ -128,6 +128,17 @@ impl Graph {
         self
     }
 
+    /// Removes the kind descriptors with these IDs: an effect pack that's gone. What the
+    /// collection holds of those kinds stays, as a collection file loaded without them
+    /// keeps it.
+    #[must_use]
+    pub fn without_kinds<'a>(mut self, ids: impl IntoIterator<Item = &'a str>) -> Self {
+        for id in ids {
+            self.kinds.remove(id);
+        }
+        self
+    }
+
     /// Every kind this graph can create sources or presets of, ordered by ID.
     pub fn kinds(&self) -> impl ExactSizeIterator<Item = &KindDescriptor> {
         self.kinds.values()
