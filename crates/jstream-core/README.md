@@ -36,7 +36,8 @@ state machine. Contents:
   `youtube_chat` preset open pages in) and `with_collection_file`; `set_process_cpu`
   and `start_stats_heartbeat` (`stats.tick`'s load, below); `open_plugin_dir`
   (where installed WASM plugins are saved, ADR-0076), called once the engine is built;
-  `scan_clap_plugins` adds the CLAP filter kinds;
+  `scan_clap_plugins` adds the CLAP filter kinds; `watch_effect_packs` loads and
+  hot-reloads the WGSL effect packs (video filter kinds, below);
   `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
   frame of a source; `output_stats` reads a running output's pipeline counters
   (`output_stats_of` names the output); `output_kind` reads a
@@ -966,9 +967,10 @@ scaled to fill the canvas, which is fitted the same way, or the output is black.
 
 **Video chains** (`chain.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md),
 roadmap V0). Planning copies each reached source's video chain into the `Shot`: its
-input (the source's upload or its capture) and its enabled filters of a kind
-`jstream-render` draws, in order. A disabled filter, or one of a kind it doesn't draw
-(an effect pack's), is bypassed, and a source with no filter left has no chain. Every
+input (the source's upload or its capture) and its enabled filters of a kind the
+engine draws, in order: a `jstream-render` built-in, or an effect pack's kind whose
+pack is loaded. A disabled filter, or one of a kind it doesn't draw (a pack that isn't
+loaded), is bypassed, and a source with no filter left has no chain. Every
 item that places a source with a chain shows the chain's output (`GpuKey::Filtered`)
 instead of its input, in every mix and in a transition's tracks, at the size the chain
 reports. A chain over a capture keeps that capture among the shot's captures. Each
@@ -988,6 +990,25 @@ images it reclaims, on that thread's collector. A chain whose filter fails (its 
 can't be made, or it fails to draw) draws nothing that frame, logged once per filter
 until a frame it draws. Unlike a failed audio filter, which ADR-0026 bypasses, it
 doesn't show its unfiltered input, so a failing key or mask reveals nothing it hides.
+
+**Effect packs** (`effect_packs.rs`, [ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md),
+X1). `Engine::watch_effect_packs(root)` watches a folder of pack folders with
+`jstream-effects`' `PackWatcher`: it loads them before it returns, then a
+`jstream-effect-packs` thread polls every 500 ms while the engine lives. Each effect is a
+`video_filter` kind, `<pack>/<effect>`, added to the graph's kinds, so `kind.list` and
+`kind.describe` report it and a video chain, a scene's or an item's effects take it. A
+poll that changes kinds applies them under the collection lock (`Graph::without_kinds`
+for the ones gone, `with_kinds` for the added and changed ones), hands the effects to
+the live sources' `FilterAssets`, which every plan reads, and re-plans. A chain's filter
+of a pack kind carries its `PackEffect`, so each compositor draws it through
+`Effect::video_filter` like a built-in kind. A reload is a new `PackEffect`, so the
+running filter is made again with the new WGSL and uniform layout; an effect that didn't
+change keeps its filter. A pack that fails to load is logged and adds nothing; one that
+fails a reload keeps its last good version. A filter of a kind no loaded pack has stays
+in the collection and is bypassed, as before its pack loaded. The daemon watches
+`--effects-dir` (default `effects` in the data folder, `paths::EFFECTS_DIR`) and the
+desktop app the data folder's `effects`. A filter's stored settings are not migrated
+through the effect's renames yet.
 Each filter's layer key is made when the chain's shape changes, so a steady frame
 builds none. A shot with a chain counts as
 changing with time (`Shot::changes_with_time`), so the preview redraws it like a
@@ -2434,7 +2455,8 @@ history, idempotency keys and the program and preview scenes are not saved (see 
 - Reporting a source that failed to build to clients (it is only logged), and
   updating a source in place for a change to a `live` setting instead of rebuilding
   it.
-- The rest of the video chain runtime (V0): effect-pack kinds in a chain (bypassed).
+- Migrating a pack filter's stored settings through its effect's declared renames
+  (`Effect::migrate`), and an event when the kinds change (clients re-read `kind.list`).
 - Activity gains that fade with a transition (audio follows a switch at once, so
   every weight is 0 or 1), and meters for every bus's true peak and loudness.
 - The audio and outputs snapshots, the mixer's parameter channel and its part in the
@@ -2546,8 +2568,9 @@ test pattern. Each loss is logged as a warning and counted
 (`OutputStats::gpu_device_losses`; leaving the context also counts in
 `gpu_fallbacks`). The third loss within 60 s fails the output instead ("the GPU was
 lost ... and the compositor could not reopen"), as does a switch that fails as above.
-There is no engine event for a loss yet (a protocol change), and no pack attribution
-or quarantine (X1).
+There is no engine event for a loss yet (a protocol change), and no attribution of a
+loss to the pack effects drawn before it, or quarantine of them, though packs are drawn
+now (X1).
 
 A session on the GPU encode path rules the fallback out: its encode targets are the
 context's, which a compositor on its own device can't write. If one runs when the

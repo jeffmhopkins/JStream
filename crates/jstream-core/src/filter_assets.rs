@@ -18,6 +18,8 @@ use jstream_protocol::{AssetRoot, Reference, Settings};
 use jstream_render::{Compositor, Image, Lut, LutError, RenderError};
 use jstream_sources::{Context, SourceError, StillImage, decode_still};
 
+use crate::effect_packs::PackEffects;
+
 /// What a filter reads its asset as.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum Use {
@@ -69,8 +71,56 @@ impl std::fmt::Debug for FilterAsset {
     }
 }
 
-/// The loaded assets, as a plan reads them.
-pub(crate) type FilterAssets = HashMap<AssetKey, Arc<FilterAsset>>;
+/// What a plan's video filters read: the loaded assets, by key, and the effects of the
+/// loaded effect packs ([`crate::effect_packs`]), by kind.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct FilterAssets {
+    images: HashMap<AssetKey, Arc<FilterAsset>>,
+    effects: PackEffects,
+}
+
+impl FilterAssets {
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+
+    /// These assets with `effects` as the loaded pack effects.
+    #[must_use]
+    pub(crate) fn with_effects(self, effects: PackEffects) -> Self {
+        Self { effects, ..self }
+    }
+
+    /// The loaded asset `key` names.
+    pub(crate) fn get(&self, key: &AssetKey) -> Option<&Arc<FilterAsset>> {
+        self.images.get(key)
+    }
+
+    /// Adds or replaces a loaded asset.
+    #[cfg(test)]
+    pub(crate) fn insert(&mut self, key: AssetKey, asset: Arc<FilterAsset>) {
+        self.images.insert(key, asset);
+    }
+
+    /// The loaded effect packs' effects.
+    pub(crate) fn effects(&self) -> &PackEffects {
+        &self.effects
+    }
+}
+
+impl FromIterator<(AssetKey, Arc<FilterAsset>)> for FilterAssets {
+    fn from_iter<I: IntoIterator<Item = (AssetKey, Arc<FilterAsset>)>>(iter: I) -> Self {
+        Self {
+            images: iter.into_iter().collect(),
+            effects: PackEffects::default(),
+        }
+    }
+}
+
+impl<const N: usize> From<[(AssetKey, Arc<FilterAsset>); N]> for FilterAssets {
+    fn from(assets: [(AssetKey, Arc<FilterAsset>); N]) -> Self {
+        assets.into_iter().collect()
+    }
+}
 
 /// The asset a filter of `kind` with `settings` reads, or `None` when its kind reads
 /// none or its setting is `null` (or not an asset, which the graph refuses).

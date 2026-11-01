@@ -26,6 +26,9 @@ Options:
                        (plugins.json) and loaded from at startup (default:
                        `plugins` in the platform data directory); created if
                        missing
+  --effects-dir <dir>  the folder of WGSL effect packs to load, one pack folder
+                       each, and reload when they change (default: `effects` in
+                       the platform data directory)
   --ui-dir <dir>       serve the web UI's built files from this directory at
                        http://127.0.0.1:<port>/ (the browser asks for the token
                        as a password)
@@ -86,6 +89,9 @@ pub struct Options {
     /// `--plugin-dir`: where installed WASM plugins are saved. Without it `main` uses
     /// `plugins` in the platform data directory; left out entirely, plugins aren't saved.
     pub plugin_dir: Option<String>,
+    /// `--effects-dir`: the folder of WGSL effect packs. Without it `main` uses
+    /// `effects` in the platform data directory; left out entirely, no packs load.
+    pub effects_dir: Option<String>,
 }
 
 /// A parsed command line.
@@ -99,8 +105,8 @@ pub enum Invocation {
     RegisterVcam,
     /// Unregister the virtual camera and delete its copy, then exit.
     UnregisterVcam,
-    /// Run the engine and serve it.
-    Serve(Options),
+    /// Run the engine and serve it. Boxed: the options dwarf the other variants.
+    Serve(Box<Options>),
 }
 
 /// Parses the arguments after the program name. The error is a usage message.
@@ -169,6 +175,12 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
                     return Err(format!("`{arg}` given twice"));
                 }
             }
+            "--effects-dir" => {
+                let dir = value()?;
+                if options.effects_dir.replace(dir.clone()).is_some() {
+                    return Err(format!("`{arg}` given twice"));
+                }
+            }
             other if other.starts_with('-') => return Err(format!("unknown option `{other}`")),
             other => return Err(format!("unexpected argument `{other}`")),
         }
@@ -186,7 +198,7 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
         return Ok(Invocation::UnregisterVcam);
     }
     options.port = port.unwrap_or(0);
-    Ok(Invocation::Serve(options))
+    Ok(Invocation::Serve(Box::new(options)))
 }
 
 #[cfg(test)]
@@ -200,7 +212,7 @@ mod tests {
 
     fn serve(line: &str) -> Options {
         match parse(&args(line)) {
-            Ok(Invocation::Serve(options)) => options,
+            Ok(Invocation::Serve(options)) => *options,
             other => panic!("`{line}` should serve, got {other:?}"),
         }
     }
@@ -223,7 +235,8 @@ mod tests {
         let options = serve(
             "--output out_1 --log-level debug --port 4455 --token-file /tmp/t \
              --collection /tmp/c.json --log-dir /tmp/logs --output out_2 --ui-dir /tmp/dist \
-             --youtube-client /tmp/yt.json --plugin-dir /tmp/plugins",
+             --youtube-client /tmp/yt.json --plugin-dir /tmp/plugins \
+             --effects-dir /tmp/effects",
         );
         assert_eq!(
             options,
@@ -237,6 +250,7 @@ mod tests {
                 youtube_client: Some("/tmp/yt.json".to_owned()),
                 ui_dir: Some("/tmp/dist".to_owned()),
                 plugin_dir: Some("/tmp/plugins".to_owned()),
+                effects_dir: Some("/tmp/effects".to_owned()),
             }
         );
     }
