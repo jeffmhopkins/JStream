@@ -389,7 +389,9 @@ state machine. Contents:
   falling back when no hardware session is open, and an HEVC start the machine lists no
   hardware encoder for kept at `prefer` and failing as `action_failed`, and a start
   beside a stopping holder whose session is still closing refused as
-  `hardware_session_limit` naming it (`src/tests/cpu_pipeline/hardware_sessions.rs`), a
+  `hardware_session_limit` naming it, and the warning naming the output when `prefer`
+  opens in software, hardware refused or absent, and none for hardware or `avoid`
+  (`src/tests/cpu_pipeline/hardware_sessions.rs`), a
   virtual camera publishing the program as BGRA at the canvas size (fitted into a canvas of another size, started again after a stop, running beside
   a stream, refused without a camera in the backends or while another output uses
   it, a refused start keeping the sink, a failed publish failing only that output), a render panic failing both outputs, overload drops from a
@@ -1734,7 +1736,11 @@ among the holders, rather than falling back on a cap that is still full while an
 output keeps the program stage up (#834). The codec list is read only while a hardware
 session is held. An output that joins an
 open session opens nothing, so it is never refused. With no hardware session open,
-`prefer` still falls back to software when hardware refuses (ADR-0031). A hardware
+`prefer` still falls back to software when hardware refuses (ADR-0031). A new video
+session that `prefer` opens in software, because the machine lists no hardware encoder
+for the codec or the listed one refused the session at configure, logs a warning
+naming the output it opens for, the encoder and why (`why_software`; #443 case 1), so
+the fallback is never silent; `output.status` reports `hardware` false. A hardware
 encoder that takes the session and then refuses its first frame no longer falls back
 either (its fallback is `prefer`'s only), but that comes after `output.start` has
 answered: the output settles `failed` with the encoder's reason, not this code.
