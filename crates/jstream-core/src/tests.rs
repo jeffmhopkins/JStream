@@ -3,6 +3,7 @@
 //! fixture), events, the placeholder outputs, and a differential run against
 //! `jstream-control`'s mock engine.
 
+mod activity;
 mod audio;
 mod audio_routing;
 #[cfg(feature = "wasm-plugins")]
@@ -6132,6 +6133,12 @@ pub(crate) fn check_secrets_are_redacted() {
             Query::OutputList,
             Query::OutputStatus {
                 output_id: OutputId::new("out_yt"),
+            },
+            // The activity log's sentence names the action and the output, never the key
+            // (ADR-0083).
+            Query::ActivityList {
+                after_seq: None,
+                limit: None,
             },
         ] {
             let result = query(&control, query_).expect("query");

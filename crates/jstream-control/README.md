@@ -300,6 +300,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `MOCK_DISPLAY`, then one 1280×720 window, "Mock window", whose ID is `MOCK_WINDOW`;
 - `source.sizes`, answered with every source and no size, since the mock makes no
   frames, so it never sends `source.size_changed`;
+- `activity.list`, answered with no entries and the host's clock as `now_ms`: the mock
+  keeps no activity log ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md));
 - the deprecated privacy calls, as from the engine
   ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md) §4):
   `privacy.set` is refused with `unsupported`, `privacy.get` reads off, and no

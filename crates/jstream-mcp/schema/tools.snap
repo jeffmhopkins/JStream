@@ -5,6 +5,59 @@ source: crates/jstream-mcp/src/tests.rs
   "tools": [
     {
       "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Runs one `activity` operation: set `op.type` to one of `activity.list` (query). A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "description": "The `activity` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Lists the engine's recent activity (0.51, ADR-0083): what each client's batches,\nundos, redos and actions did, newest first. The engine keeps the last 100\n([`MAX_ACTIVITY_ENTRIES`](crate::MAX_ACTIVITY_ENTRIES)), in memory, so a restarted\nengine starts empty. No event announces a new entry until event subscriptions exist\n(protocol open question 7): a client that shows the log asks again with\n`after_seq`. Runtime state: the result carries no `rev`.",
+                "properties": {
+                  "after_seq": {
+                    "description": "Only entries with a greater `seq`. Omitted, the newest entries whatever their\nnumber.",
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "limit": {
+                    "description": "At most this many, the newest. Omitted, or above 100\n([`MAX_ACTIVITY_ENTRIES`](crate::MAX_ACTIVITY_ENTRIES)), 100.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "activity.list",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "activity"
+    },
+    {
+      "annotations": {
         "destructiveHint": true,
         "idempotentHint": false,
         "openWorldHint": false,

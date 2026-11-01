@@ -618,6 +618,55 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "ActivityEntry": {
+      "description": "One executed batch, undo, redo or action, or a gesture that ended without a commit:\nan entry of the engine's audit log, as `activity.list` answers it.",
+      "properties": {
+        "call": {
+          "description": "What it called, as the audit log names it: `batch`, `history.undo`,\n`history.redo`, an action's name (`scene.switch`), or `live.cancel` or\n`live.ended` for a gesture that ended without a commit.",
+          "type": "string"
+        },
+        "client_id": {
+          "$ref": "#/$defs/ClientId",
+          "description": "The client that sent it. Numbered per engine run."
+        },
+        "client_name": {
+          "description": "The name the client gave in its latest `hello` (`claude-desktop`), or\n`device:<name>` for a paired device. Chosen by the client, so it says who claims\nto act, not who proved it.",
+          "type": "string"
+        },
+        "error": {
+          "description": "The protocol error code when the call failed (`rev_conflict`). Omitted when it\nsucceeded.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "seq": {
+          "description": "Its number: 1 for the engine's first entry, and one more for each after it.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "summary": {
+          "description": "One English sentence saying what it did (\"Switched to “Desktop + Cam”\", \"Mic\ngain −1.5 → −3.0 dB\"), written from the collection just before the call ran.\nIt names objects and gives numeric, on/off and enum values only: never a\nsource's or filter's settings, an output's target, or a stream key. At most 256\ncharacters ([`MAX_ACTIVITY_SUMMARY_CHARS`]).",
+          "type": "string"
+        },
+        "time_ms": {
+          "description": "When the call finished, in milliseconds since the Unix epoch (UTC).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "seq",
+        "time_ms",
+        "client_id",
+        "client_name",
+        "call",
+        "summary"
+      ],
+      "type": "object"
+    },
     "AudienceStatsInfo": {
       "description": "A running `youtube` output's audience, as YouTube last reported it (ADR-0041 §3,\n0.38): what the `youtube.stats` event sends and the `youtube.stats` query lists.\nThe engine reads it at a low fixed rate, about once a minute, while the output runs.\nA count YouTube doesn't report (the owner hides it, or the broadcast has no viewers\nnow or has ended) is omitted.",
       "properties": {
@@ -6531,6 +6580,37 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type"
           ],
           "type": "object"
+        },
+        {
+          "description": "Lists the engine's recent activity (0.51, ADR-0083): what each client's batches,\nundos, redos and actions did, newest first. The engine keeps the last 100\n([`MAX_ACTIVITY_ENTRIES`](crate::MAX_ACTIVITY_ENTRIES)), in memory, so a restarted\nengine starts empty. No event announces a new entry until event subscriptions exist\n(protocol open question 7): a client that shows the log asks again with\n`after_seq`. Runtime state: the result carries no `rev`.",
+          "properties": {
+            "after_seq": {
+              "description": "Only entries with a greater `seq`. Omitted, the newest entries whatever their\nnumber.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "limit": {
+              "description": "At most this many, the newest. Omitted, or above 100\n([`MAX_ACTIVITY_ENTRIES`](crate::MAX_ACTIVITY_ENTRIES)), 100.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "activity.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -7261,6 +7341,34 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "devices"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `activity.list` (0.51).",
+          "properties": {
+            "entries": {
+              "description": "The entries, newest first.",
+              "items": {
+                "$ref": "#/$defs/ActivityEntry"
+              },
+              "type": "array"
+            },
+            "now_ms": {
+              "description": "The engine's clock now, in milliseconds since the Unix epoch (UTC), so a\nclient on another machine can say how long ago each entry was without\ntrusting its own clock.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "activity.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "now_ms",
+            "entries"
           ],
           "type": "object"
         }
@@ -8716,5 +8824,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.50"
+  "title": "JStream protocol 0.51"
 }

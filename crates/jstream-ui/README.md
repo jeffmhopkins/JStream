@@ -484,9 +484,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Scene objects (`Sources`), the Inspector (`Inspector`, with `Pairing` under it), the
   Transform, Filters, Live chat, Stream stats, Audio mixer, Outputs, Agent activity and
   Transitions (`StudioMode`); `panel_view` maps each to its component, and a new panel
-  adds a `PanelId` and a line there. Live chat, Stream stats and Agent activity wait on
-  the engine (YouTube sign-in, an agent audit log), so they say what they wait on and
-  none is in a built-in layout. The
+  adds a `PanelId` and a line there. Live chat and Stream stats wait on the engine
+  (YouTube sign-in), so they say what they wait on and neither is in a built-in layout.
+  Agent activity (`panels/agent.rs`) lists what agents did from the engine's
+  `activity.list` ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md)),
+  leaving out JStream's own UIs, and asks again after each `state.changed`,
+  `studio.changed`, `output.state_changed`, `live.ended` and `events.dropped`, and every
+  5 seconds; the
+  Live layout shows it as a second tab beside Outputs. The
   panels' own `h2` headings are hidden, since the tab is the title. Narrow windows
   stack the zones, without splitters.
   - Each group keeps every tab's panel mounted and hides the inactive ones, so a tab

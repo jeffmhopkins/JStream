@@ -258,7 +258,10 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   (`device:<name>` for a paired device),
   the call and its edits by name, the output an action names, the `rev` before and
   after, and the result code. Never a call's arguments, so never a stream key
-  ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). When it would pass 8 MiB it becomes
+  ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). The engine also keeps the last 100
+  entries in memory, each with a sentence saying what it did, for `activity.list`
+  ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md)); those sentences
+  are not written to the file. When it would pass 8 MiB it becomes
   `audit.1.jsonl`, replacing the one before. Both files are created user-only (mode
   `0600` on Unix, a protected DACL for SYSTEM and the user on Windows), and so is each
   save of the collection file. A log that can't be opened is a startup failure (exit 1),

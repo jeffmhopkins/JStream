@@ -13,6 +13,7 @@
 //! `capture.targets` (one made-up primary display, [`MOCK_DISPLAY`], and one window,
 //! [`MOCK_WINDOW`]),
 //! `source.sizes` (every source without a size, since the mock makes no frames),
+//! `activity.list` (always empty: the mock keeps no activity log),
 //! `state.changed`, `studio.changed` and `output.state_changed` events, per-client undo
 //! and redo, and live-value gestures (`live.set`, `live.cancel`, `live.list`,
 //! `ends_gesture`, takeover and expiry). Each [`MockEngine::connect`] opens one client
@@ -1124,6 +1125,15 @@ impl State {
                     call: "device.list".into(),
                 });
             }
+            // The mock keeps no activity log (ADR-0083), so it lists none.
+            Query::ActivityList { .. } => QueryResult::ActivityList {
+                now_ms: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(0, |since| {
+                        u64::try_from(since.as_millis()).unwrap_or(u64::MAX)
+                    }),
+                entries: Vec::new(),
+            },
             other => return Err(unimplemented_by_mock(other.name())),
         };
         Ok(CallResult::Query { result })
@@ -3137,6 +3147,20 @@ mod tests {
         assert_eq!(targets[1].kind, crate::protocol::CaptureTargetKind::Window);
         assert_eq!(targets[1].target, super::MOCK_WINDOW);
         assert!(!targets[1].primary);
+    }
+
+    #[test]
+    fn activity_list_is_empty_with_the_hosts_clock() {
+        let (_engine, control) = parity_engine();
+        let asked = Query::ActivityList {
+            after_seq: None,
+            limit: None,
+        };
+        let Ok(QueryResult::ActivityList { now_ms, entries }) = query(&*control, asked) else {
+            panic!("an activity.list result");
+        };
+        assert!(entries.is_empty(), "the mock keeps no activity log");
+        assert!(now_ms > 0);
     }
 
     #[test]

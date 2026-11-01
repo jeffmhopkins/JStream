@@ -757,8 +757,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   that refers to it, and the `rev` it was planned at, plus the hotkey bindings it removes (protocol 0.25); `bus.list` (protocol 0.19) → the buses and sends;
   `capture.targets` (protocol 0.27) → the displays and windows a `display` or `window`
   source's `target` can name; `source.sizes` (protocol 0.40) → each source's current
-  size, runtime state ([ADR-0022](adr/0022-item-transform-and-canvas.md) §4); audio
-  levels are the `meters.tick` event, not a query).
+  size, runtime state ([ADR-0022](adr/0022-item-transform-and-canvas.md) §4);
+  `activity.list` (protocol 0.51) → the engine's last 100 audit entries, each with a
+  sentence saying what it did ([ADR-0083](adr/0083-activity-log-over-the-protocol.md));
+  audio levels are the `meters.tick` event, not a query).
 - **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops, load}`, `meters.tick`,
   `source.size_changed` (protocol 0.40), …).
   `stats.tick` (protocol 0.6) carries the pipeline's running drop totals
@@ -913,8 +915,9 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   token check: browsers send `Origin` on a cross-origin `fetch`, and the required
   `Content-Type: application/json` forces a preflight, so only native clients send none
   ([jstream-server › Design](../crates/jstream-server/README.md#design)).
-- Every agent action goes to the audit log with the client's name. Undo is per client,
-  so an agent can never undo the user's work.
+- Every agent action goes to the audit log with the client's name, and the last 100
+  are readable over the protocol (`activity.list`, ADR-0083) for the UI's Agent activity
+  panel. Undo is per client, so an agent can never undo the user's work.
 
 <a id="gpu-pipeline"></a>
 ## GPU pipeline

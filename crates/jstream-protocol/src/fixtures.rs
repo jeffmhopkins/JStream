@@ -5,6 +5,7 @@
 //! fixture fails `fixtures_cover_every_variant_in_the_schema`, and through it the
 //! naming and classification checks see every variant.
 
+use crate::ActivityEntry;
 use crate::{
     Action, Batch, BlendMode, Blocker, Call, CallResult, Canvas, ClientId, ClientMessage, Command,
     CommandClass, Crop, DeleteTarget, DropCounts, Edit, EngineLoad, EntityKind, ErrorResponse,
@@ -1101,6 +1102,14 @@ pub(crate) fn queries() -> Vec<Query> {
             },
         },
         Query::DeviceList,
+        Query::ActivityList {
+            after_seq: None,
+            limit: None,
+        },
+        Query::ActivityList {
+            after_seq: Some(41),
+            limit: Some(20),
+        },
         Query::YoutubeStats,
         Query::SourceSizes,
     ]
@@ -1790,7 +1799,24 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 last_used_at: 1_790_003_600,
             }],
         },
+        QueryResult::ActivityList {
+            now_ms: 1_790_000_120_000,
+            entries: vec![activity_entry(42, None), activity_entry(41, Some("rev_conflict"))],
+        },
     ]
+}
+
+/// An agent's scene switch, or its failure.
+fn activity_entry(seq: u64, error: Option<&str>) -> ActivityEntry {
+    ActivityEntry {
+        seq,
+        time_ms: 1_790_000_000_000 + seq,
+        client_id: ClientId::new("client_3"),
+        client_name: "claude-desktop".into(),
+        call: "scene.switch".into(),
+        summary: "Switched to “Desktop + Cam”".into(),
+        error: error.map(str::to_owned),
+    }
 }
 
 pub(crate) fn events() -> Vec<Event> {
