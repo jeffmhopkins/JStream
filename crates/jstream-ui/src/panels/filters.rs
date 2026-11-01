@@ -1,6 +1,7 @@
 //! Filters (spec-panels.md 5, spec-workspace.md 6.2.6 to 6.4): the selected item's
 //! source's video and audio chains (ADR-0026) in the Filters panel and the Properties
-//! dialog, the program output's and each output's chains (ADR-0080) in the Filters panel
+//! dialog, a scene's chain and the selected item's own effects (ADR-0065) in the Filters
+//! panel, the program output's and each output's chains (ADR-0080) in the Filters panel
 //! once an FX button picks them, and the Add filter and Filter settings dialogs over them. A row turns its
 //! filter on or off, shows a summary of its settings, opens its settings, drags to
 //! another place in its chain and removes it. A filter with three settings or fewer
@@ -31,6 +32,7 @@ use jstream_control::protocol::{
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use serde_json::Value;
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
 /// The most settings a filter has to open in place under its row (F7).
@@ -70,7 +72,7 @@ const AUDIO_GROUPS: [&str; 7] = [
 /// The kinds the prototype's catalogue has, by the engine's kind ID, in its order. The
 /// engine's kinds the prototype lacks (pixelate, aspect ratio, image mask) join the
 /// group they fit, and its wishes the engine lacks are left out.
-const KNOWN: [(&str, Known); 22] = {
+const KNOWN: [(&str, Known); 23] = {
     use FilterChain::{Audio, Video};
     const fn k(
         chain: FilterChain,
@@ -151,6 +153,10 @@ const KNOWN: [(&str, Known); 22] = {
         (
             "glow",
             k(Video, "Style", "Glow", "Soft light around the shape"),
+        ),
+        (
+            "vignette",
+            k(Video, "Style", "Vignette", "Darken or tint the edges"),
         ),
         (
             "aspect_ratio",
@@ -519,7 +525,8 @@ pub fn output_has_audio(kind: &OutputKind) -> bool {
 }
 
 /// The chains `owner` shows, as (video, audio). A source's follow its kind
-/// ([`chains_of`]); a scene has a video chain. The program output and an output show their
+/// ([`chains_of`]); a scene has a video chain, and so does an item whose source has a
+/// picture: its effects (ADR-0065). The program output and an output show their
 /// audio chain only, since the engine refuses their video chains so far, and an output
 /// without sound (the virtual camera) has none.
 pub fn owner_chains(collection: &Collection, owner: &FilterOwner) -> (bool, bool) {
@@ -535,12 +542,20 @@ pub fn owner_chains(collection: &Collection, owner: &FilterOwner) -> (bool, bool
                 .is_some_and(|o| output_has_audio(&o.kind)),
         ),
         FilterOwner::Scene { .. } => (true, false),
+        FilterOwner::Item { item_id } => (
+            collection
+                .item(item_id)
+                .and_then(|(_, item)| collection.source(&item.source_id))
+                .is_some_and(|source| chains_of(source).0),
+            false,
+        ),
         _ => (false, false),
     }
 }
 
-/// What the panel and the dialogs call `owner`: a source's or a scene's name, "Program
-/// output" for the master stage, and an output's ID, as the Outputs panel shows it.
+/// What the panel and the dialogs call `owner`: a source's or a scene's name, an item's
+/// source's name, "Program output" for the master stage, and an output's ID, as the
+/// Outputs panel shows it.
 pub fn owner_name(collection: &Collection, owner: &FilterOwner) -> String {
     match owner {
         FilterOwner::Source { source_id } => collection.source_name(source_id),
@@ -549,6 +564,10 @@ pub fn owner_name(collection: &Collection, owner: &FilterOwner) -> String {
         FilterOwner::Scene { scene_id } => collection
             .scene(scene_id)
             .map_or_else(|| scene_id.to_string(), |s| s.name.clone()),
+        FilterOwner::Item { item_id } => collection.item(item_id).map_or_else(
+            || item_id.to_string(),
+            |(_, item)| collection.source_name(&item.source_id),
+        ),
         _ => String::new(),
     }
 }
@@ -562,6 +581,7 @@ pub fn owner_note(collection: &Collection, owner: &FilterOwner) -> &'static str 
         }
         FilterOwner::Output { .. } => "Only this output, after the program filters. No sound.",
         FilterOwner::Scene { .. } => "Scene filters apply to the whole scene, top to bottom.",
+        FilterOwner::Item { .. } => "Only this item, after its crop, top to bottom.",
         _ => "Applies everywhere this source appears, top to bottom.",
     }
 }
@@ -572,7 +592,17 @@ fn owner_foot(owner: &FilterOwner) -> &'static str {
         FilterOwner::Master => "Applies to everything leaving JStream.",
         FilterOwner::Output { .. } => "Applies to this output only, after the program filters.",
         FilterOwner::Scene { .. } => "Applies to the whole scene.",
+        FilterOwner::Item { .. } => "Applies to this item only, after its crop.",
         _ => "Applies everywhere this source appears.",
+    }
+}
+
+/// The Add filter dialog's subtitle for `owner`, which `name` names: "For “Backdrop”", or
+/// for an item's effects "For this item of “Backdrop”", as its source is shared.
+fn add_sub(owner: &FilterOwner, name: &str) -> String {
+    match owner {
+        FilterOwner::Item { .. } => format!("For this item of “{name}”"),
+        _ => format!("For “{name}”"),
     }
 }
 
@@ -635,8 +665,9 @@ fn holds_scene(collection: &Collection, scene_id: &SceneId, inner: &SceneId) -> 
 }
 
 /// The scenes a scene-input filter on `owner` may use (F8). For a scene's chain, every
-/// scene whose picture doesn't hold the scene itself; for any other owner,
-/// [`scene_choices`]'.
+/// scene whose picture doesn't hold the scene itself; for an item's effects, every scene
+/// whose picture doesn't hold the item's scene, since the reference is an edge from that
+/// scene (ADR-0065 §3); for any other owner, [`scene_choices`]'.
 pub fn owner_scene_choices(
     collection: &Collection,
     owner: &FilterOwner,
@@ -648,6 +679,16 @@ pub fn owner_scene_choices(
             .filter(|s| !holds_scene(collection, &s.scene_id, scene_id))
             .map(|s| (s.scene_id.clone(), s.name.clone()))
             .collect(),
+        FilterOwner::Item { item_id } => {
+            let Some((home, _)) = collection.item(item_id) else {
+                return Vec::new();
+            };
+            collection
+                .listed_scenes()
+                .filter(|s| !holds_scene(collection, &s.scene_id, &home.scene_id))
+                .map(|s| (s.scene_id.clone(), s.name.clone()))
+                .collect()
+        }
         _ => scene_choices(collection, editing, &own_source(owner)),
     }
 }
@@ -772,8 +813,8 @@ fn describe_all(
 }
 
 /// The Filters panel (spec-panels.md 5): the chains an FX button or a scene's Edit
-/// filters… picked (FL-07, FL-06), else the selected item's source's, else the selected
-/// scene's (FL-06).
+/// filters… picked (FL-07, FL-06), else the selected item's source's with the item's own
+/// effects under them (FL-09), else the selected scene's (FL-06).
 #[component]
 pub fn Filters() -> impl IntoView {
     let studio = expect_context::<Studio>();
@@ -819,6 +860,17 @@ pub fn Filters() -> impl IntoView {
     });
     let chains =
         Memo::new(move |_| shown.with(|s| s.as_ref().map(|(chains, _, o)| (o.clone(), *chains))));
+    // The selected item's own effects (ADR-0065), under its source's chains, while the
+    // panel shows that source's and the item has a picture.
+    let effects = Memo::new(move |_| {
+        let source = shown.with(|s| matches!(s, Some((_, _, FilterOwner::Source { .. }))));
+        let (_, item) = selected.get();
+        let owner = FilterOwner::Item { item_id: item? };
+        let video = studio
+            .collection
+            .with(|c| c.as_ref().is_some_and(|c| owner_chains(c, &owner).0));
+        (source && video).then_some(owner)
+    });
     view! {
         <section class="panel filters-panel">
             {move || match shown.with(|s| s.as_ref().map(|(_, head, _)| head.clone())) {
@@ -861,6 +913,28 @@ pub fn Filters() -> impl IntoView {
                     }
                 })
             }}
+            {move || {
+                effects.get().map(|owner| {
+                    let add = {
+                        let owner = owner.clone();
+                        move |_| dialogs.add(owner.clone())
+                    };
+                    view! {
+                        <div class="filters-effects">
+                            <div class="filters-titles">
+                                <span class="filters-subtitle">"This item’s effects"</span>
+                                <span class="filters-effects-note">
+                                    {studio.collection.with_untracked(|c| {
+                                        c.as_ref().map(|c| owner_note(c, &owner)).unwrap_or_default()
+                                    })}
+                                </span>
+                            </div>
+                            <Chains owner=owner.clone() video=true audio=false in_place=true />
+                            <button type="button" class="filters-add" on:click=add>"+ Add effect…"</button>
+                        </div>
+                    }
+                })
+            }}
         </section>
     }
 }
@@ -889,7 +963,7 @@ pub fn Chains(
             studio.collection.with(|c| {
                 c.as_ref()
                     .and_then(|c| c.chains(&owner))
-                    .cloned()
+                    .map(Cow::into_owned)
                     .unwrap_or_default()
             })
         })
@@ -943,20 +1017,11 @@ pub fn Chains(
             }
         }
     };
+    let effects = matches!(owner, FilterOwner::Item { .. });
     let chain = move |which: FilterChain| {
-        let (title, icon, empty) = match which {
-            FilterChain::Video => ("Video", "monitor", "No video filters."),
-            FilterChain::Audio => ("Audio", "speaker", "No audio filters."),
-        };
+        let (title, icon, empty) = chain_head(effects, which);
         let list = Memo::new(move |_| chains.with(|c| c.chain(which).to_vec()));
-        let count = move || {
-            let n = list.with(Vec::len);
-            if n == 1 {
-                "1 filter".to_owned()
-            } else {
-                format!("{n} filters")
-            }
-        };
+        let count = move || count_text(effects, list.with(Vec::len));
         let owner = owner.clone();
         let drop = drop.clone();
         view! {
@@ -972,7 +1037,7 @@ pub fn Chains(
                 >
                     <ul
                         class="filter-rows"
-                        aria-label=format!("{title} filters")
+                        aria-label=if effects { "Item effects".to_owned() } else { format!("{title} filters") }
                         class:reordering=move || reorder.dragged.with(Option::is_some)
                         on:pointermove=move |event| reorder.moved(&event)
                         on:pointerup={
@@ -1007,6 +1072,27 @@ pub fn Chains(
             {video.then(|| chain(FilterChain::Video))}
             {audio.then(|| chain(FilterChain::Audio))}
         </div>
+    }
+}
+
+/// A chain's heading, icon and empty text: an item's effects (ADR-0065) are "Effects",
+/// any other owner's chains "Video" and "Audio".
+fn chain_head(effects: bool, which: FilterChain) -> (&'static str, &'static str, &'static str) {
+    match (effects, which) {
+        (true, _) => ("Effects", "monitor", "No effects."),
+        (false, FilterChain::Video) => ("Video", "monitor", "No video filters."),
+        (false, FilterChain::Audio) => ("Audio", "speaker", "No audio filters."),
+    }
+}
+
+/// A chain's count: "1 filter" or "N filters", or for an item's effects "1 effect" or
+/// "N effects".
+fn count_text(effects: bool, n: usize) -> String {
+    let word = if effects { "effect" } else { "filter" };
+    if n == 1 {
+        format!("1 {word}")
+    } else {
+        format!("{n} {word}s")
     }
 }
 
@@ -1360,6 +1446,9 @@ fn SettingsBody(target: Target, close: impl Fn() + Copy + Send + Sync + 'static)
             .unwrap_or_default()
     });
     let (icon, sub) = match chain {
+        FilterChain::Video if matches!(target.owner, FilterOwner::Item { .. }) => {
+            ("monitor", format!("Effect on “{owner_name}”"))
+        }
         FilterChain::Video => ("monitor", format!("Video filter on “{owner_name}”")),
         FilterChain::Audio => ("speaker", format!("Audio filter on “{owner_name}”")),
     };
@@ -1621,9 +1710,11 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
         })
     });
     let foot = owner_foot(&owner);
+    let sub = add_sub(&owner, &name);
     let none = match &owner {
         FilterOwner::Source { .. } => "The engine lists no filters for this source.",
         FilterOwner::Scene { .. } => "The engine lists no filters for this scene.",
+        FilterOwner::Item { .. } => "The engine lists no effects for this item.",
         _ => "The engine lists no filters for this output.",
     };
     let owner = StoredValue::new(owner);
@@ -1631,7 +1722,7 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
     let full = move |chain: FilterChain| {
         studio.collection.with(|c| {
             c.as_ref()
-                .and_then(|c| owner.with_value(|o| c.chains(o).cloned()))
+                .and_then(|c| owner.with_value(|o| c.chains(o).map(Cow::into_owned)))
                 .is_some_and(|f| f.chain(chain).len() >= MAX_CHAIN_FILTERS)
         })
     };
@@ -1833,7 +1924,7 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
             <div class="modal-header">
                 <div class="modal-titles">
                     <h2 class="modal-title">"Add filter"</h2>
-                    <span class="modal-sub">{format!("For “{name}”")}</span>
+                    <span class="modal-sub">{sub}</span>
                 </div>
                 <button type="button" class="modal-close" aria-label="Close" on:click=move |_| close()>
                     "×"
@@ -2290,6 +2381,151 @@ mod tests {
         assert_eq!(
             owner_scene_choices(&collection, &webcam, None),
             scene_choices(&collection, None, &SourceId::new("webcam"))
+        );
+    }
+
+    /// An item's effects (FL-09, ADR-0065): its video chain, named by its source, with
+    /// scene inputs that leave out every scene whose picture holds the item's scene.
+    #[test]
+    fn an_item_shows_its_effects_and_its_inputs_leave_out_what_holds_its_scene() {
+        use jstream_control::protocol::{
+            Crop, Finite32, ItemInfo, ItemTransform, PlacementForm, SceneRole,
+        };
+        let item = |source: &str, effects: Vec<FilterInfo>| ItemInfo {
+            item_id: format!("i-{source}").as_str().into(),
+            source_id: source.into(),
+            placement: PlacementForm::Legacy,
+            transform: ItemTransform::IDENTITY,
+            geometry: None,
+            crop: Crop::NONE,
+            visible: true,
+            effects,
+            opacity: Finite32::ONE,
+            blend: Default::default(),
+            transition: jstream_control::protocol::ItemTransition::default(),
+        };
+        let scene = |id: &str, items: Vec<ItemInfo>| SceneInfo {
+            overrides: Vec::new(),
+            filters: Default::default(),
+            variant_of: None,
+            scene_id: id.into(),
+            name: id.to_uppercase(),
+            role: SceneRole::Scene,
+            folder: None,
+            meta: Default::default(),
+            items,
+            transition_in: None,
+            transition_out: None,
+        };
+        let source = |id: &str, kind: SourceKind| SourceInfo {
+            source_id: SourceId::new(id),
+            name: format!("{id} source"),
+            kind,
+            settings: Settings::new(),
+            duplicated_from: None,
+            audio: None,
+            filters: Default::default(),
+            meta: Default::default(),
+        };
+        let vignette = FilterInfo {
+            filter_id: FilterId::new("v"),
+            kind: "vignette".into(),
+            enabled: true,
+            settings: Settings::new(),
+        };
+        // `outer` nests `middle`, which places the webcam with a vignette on it.
+        let collection = Collection {
+            scenes: vec![
+                scene(
+                    "middle",
+                    vec![item("webcam", vec![vignette.clone()]), item("mic", vec![])],
+                ),
+                scene("outer", vec![item("n-middle", vec![])]),
+                scene("shape", vec![]),
+            ],
+            sources: vec![
+                source(
+                    "webcam",
+                    SourceKind::Builtin {
+                        kind: "color".into(),
+                    },
+                ),
+                source(
+                    "mic",
+                    SourceKind::Builtin {
+                        kind: "audio_input".into(),
+                    },
+                ),
+                source(
+                    "n-middle",
+                    SourceKind::Scene {
+                        scene_id: SceneId::new("middle"),
+                    },
+                ),
+            ],
+            ..Collection::default()
+        };
+        let owner = |id: &str| FilterOwner::Item {
+            item_id: ItemId::new(id),
+        };
+        let cam = owner("i-webcam");
+        let chains = collection.chains(&cam).expect("the item's effects");
+        assert_eq!(chains.video, [vignette]);
+        assert!(chains.audio.is_empty());
+        assert_eq!(owner_chains(&collection, &cam), (true, false));
+        assert_eq!(owner_name(&collection, &cam), "webcam source");
+        assert_eq!(
+            owner_note(&collection, &cam),
+            "Only this item, after its crop, top to bottom."
+        );
+        assert_eq!(
+            owner_foot(&cam),
+            "Applies to this item only, after its crop."
+        );
+        assert_eq!(
+            add_sub(&cam, "webcam source"),
+            "For this item of “webcam source”"
+        );
+        let names: Vec<String> = owner_scene_choices(&collection, &cam, None)
+            .into_iter()
+            .map(|(_, name)| name)
+            .collect();
+        assert_eq!(names, ["SHAPE"], "middle is its scene, outer nests it");
+        // An audio-only item has no picture, so no effects to show.
+        assert_eq!(owner_chains(&collection, &owner("i-mic")), (false, false));
+        // An item that's gone has none.
+        assert!(collection.chains(&owner("gone")).is_none());
+        assert_eq!(owner_chains(&collection, &owner("gone")), (false, false));
+        assert!(owner_scene_choices(&collection, &owner("gone"), None).is_empty());
+        // Its chain reads as effects.
+        assert_eq!(
+            chain_head(true, FilterChain::Video),
+            ("Effects", "monitor", "No effects.")
+        );
+        assert_eq!(chain_head(false, FilterChain::Video).0, "Video");
+        assert_eq!(count_text(true, 1), "1 effect");
+        assert_eq!(count_text(true, 3), "3 effects");
+        assert_eq!(count_text(false, 0), "0 filters");
+    }
+
+    /// The vignette is a Style filter with the prototype's kind of hint (#862).
+    #[test]
+    fn the_vignette_is_offered_under_style() {
+        let kinds = [kind_summary(
+            "vignette",
+            "Vignette",
+            KindCategory::VideoFilter,
+        )];
+        let all = catalogue(&kinds, true, false);
+        assert_eq!(
+            all,
+            [FilterType {
+                kind: "vignette".into(),
+                chain: FilterChain::Video,
+                group: "Style",
+                name: "Vignette".into(),
+                hint: "Darken or tint the edges",
+            }]
         );
     }
 

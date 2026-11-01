@@ -535,10 +535,9 @@ prs = [244]
 id = "V4"
 milestone = "M1b"
 title = "Scene filter chains and item effects"
-status = "planned"
-prs = [802, 813, 815, 823, 824, 897]
-note = "ADR-0065 designs a video chain owned by a scene or by one placement, and ADR-0068 puts item effects in v1 (#529). Landed with wave/m1-5 (#877): a vignette kind (#802), the protocol part, the scene and item owners at 0.43 (#813's change, landed through #815), the graph and mock holding them at collection schema 2 (#815), the engine running scene filters over the scene's composite (#823), and item effects over each item's box (#824). The UI's scene filters (FL-06) merged (#897). Still to build: stats.tick's counts and goldens, and the UI's item effects"
-needs = ["build"]
+status = "done"
+prs = [802, 813, 815, 823, 824, 897, 921, 944, 968]
+note = "ADR-0065 designs a video chain owned by a scene or by one placement, and ADR-0068 puts item effects in v1 (#529). Landed with wave/m1-5 (#877): a vignette kind (#802), the protocol part, the scene and item owners at 0.43 (#813's change, landed through #815), the graph and mock holding them at collection schema 2 (#815), the engine running scene filters over the scene's composite (#823), and item effects over each item's box (#824). The UI's scene filters (FL-06) merged (#897), then vignette goldens at every level (#921), stats.tick's counts of scene-chain and item-effect layers (#944), and the UI's item effects with the vignette in the filter picker (FL-09, #968)"
 
 [[item]]
 id = "D9"
