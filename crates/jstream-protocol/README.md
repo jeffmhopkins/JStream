@@ -187,9 +187,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.54 because of
-  `stats.tick`'s `chains`, what scene filter chains and item effects add to each frame
-  (`ChainCost`); 0.53 made the engine take live values on a keyframe scene (`live.set`,
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.55 because a keyframe
+  scene overrides the children of the groups in its parent's tree (#846; no wire
+  change); 0.54 added `stats.tick`'s `chains`, what scene filter chains and item effects
+  add to each frame (`ChainCost`); 0.53 made the engine take live values on a keyframe scene (`live.set`,
   #846; no wire change); 0.52 added
   `ui_settings.set` and `ui_settings.get`, the UI settings the server keeps
   ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)); 0.51 added the
@@ -454,8 +455,8 @@ keeps the addressing of the edit it undoes.
   the 0.3 form, `transform`), `crop`, `visible` and `opacity`. `SceneInfo.overrides`
   lists them in item ID order, as `ItemOverride`s with at least one field set (omitted
   when there are none). An override names an item in the parent's tree: one of the
-  parent's own, or a child of a group (role `group`) the parent places, at any depth.
-  Any other item is `invalid_argument`. An override of a group's child applies
+  parent's own, or, since 0.55, a child of a group (role `group`) the parent places, at
+  any depth (before, `invalid_argument`). Any other item is `invalid_argument`. An override of a group's child applies
   wherever the group is placed in the tree (ADR-0040 §2), and the variant draws the
   group with it (#846).
 - Writing a field that was absent is undone by

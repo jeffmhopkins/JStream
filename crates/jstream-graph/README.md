@@ -287,7 +287,7 @@ the batch **touched**.
   by `item.clear_override` of the field or by the old value. `item.clear_override` of an
   absent field changes nothing and has no inverse. An override names an item in the
   parent's tree (`State::tree_items`: its own, or a child of a group placed in it, at
-  any depth, #846), and any other is refused. `item.add`, `item.move` into a variant
+  any depth, protocol 0.55, #846), and any other is refused. `item.add`, `item.move` into a variant
   and `scene.set_folder` of one are refused. After every edit of a batch,
   `keyframe::drop_orphans` drops each override whose item is no longer in its
   variant's tree (`drop_unless`), reports it in `Applied::dropped_overrides`, and

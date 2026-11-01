@@ -6,7 +6,7 @@
 //! items, and stores per item the fields it overrides ([`ItemOverride`]). A field it
 //! doesn't override follows the parent's current value. An override names an item in
 //! the parent's **tree**: one of the parent's own, or a child of a group (a scene with
-//! the role `group`) the parent places, at any depth (#846). The placement edits write
+//! the role `group`) the parent places, at any depth (since 0.55, #846). The placement edits write
 //! an override when their `scene_id` names a variant whose tree holds the item, and
 //! `item.clear_override` removes one field ([`OverrideField`]).
 

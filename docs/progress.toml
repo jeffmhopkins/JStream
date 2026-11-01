@@ -862,7 +862,7 @@ milestone = "M2"
 title = "Keyframe scenes, folders, organisation metadata and hotkeys"
 status = "planned"
 prs = [319, 720]
-note = "hotkeys #319 landed with wave/m1-2 (#545); organisation metadata #323 landed with wave/m1-3 (#754); keyframe scenes part 1, in the protocol, graph and engine (#720, protocol 0.39), landed with wave/m1-4 (#810); live values on a keyframe scene (protocol 0.53) and overrides of a group's children are built; the UI, and a Move of an unflattened group's children inside its layer, follow (#846)"
+note = "hotkeys #319 landed with wave/m1-2 (#545); organisation metadata #323 landed with wave/m1-3 (#754); keyframe scenes part 1, in the protocol, graph and engine (#720, protocol 0.39), landed with wave/m1-4 (#810); live values on a keyframe scene (protocol 0.53) and overrides of a group's children (protocol 0.55) are built; the UI, and a Move of an unflattened group's children inside its layer, follow (#846)"
 needs = ["build"]
 
 [[item]]
