@@ -685,6 +685,7 @@ fn the_preview_and_an_output_share_a_webcam() {
             fps: Some(30),
             codecs: Vec::new(),
             scene_id: None,
+            source: None,
         },
     }))
     .expect("preview.subscribe");

@@ -254,7 +254,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Opens a preview stream of the program mix, or of the scene `scene_id`, for this\nsession: low-resolution pictures sent as binary frames on `channel`, only to this\nsession (ADR-0045). The picture is the canvas scaled down to fit `max_width` ×\n`max_height`, with even sides; it follows the canvas when that changes. A picture\nis sent when what the stream shows changes, at most `fps` times a second, and at\nleast once every 2 s (a keyframe), so a client that lost frames recovers. The\nengine picks the first of `codecs` it can encode, and every frame names its codec.\nThe stream shows the mix before any master stage. A scene's stream shows the\nscene alone, as program would show it with no transition running, and never makes\na source shown or heard (ADR-0028). It lasts until `preview.unsubscribe`, the\nsession's end, or an end frame (the engine could not go on, or the scene was\ndeleted; the frame says why).\n\nFails with `invalid_argument` for a field out of range (`max_width` 16 to 1920,\ndefault 640; `max_height` 16 to 1080, default 360; `fps` 1 to 30, default 15), a\ncodec named twice, a `channel` this session already has open (`channel`), or a\nseventeenth open stream; with `not_found` for a `scene_id` the collection doesn't\nhave; and with `action_failed` when the session cannot receive binary frames (an\nMCP session) or none of `codecs` can be encoded here.",
+          "description": "Opens a preview stream of the program mix, or of the scene `scene_id`, for this\nsession: low-resolution pictures sent as binary frames on `channel`, only to this\nsession (ADR-0045). The picture is the canvas scaled down to fit `max_width` ×\n`max_height`, with even sides; it follows the canvas when that changes. A picture\nis sent when what the stream shows changes, at most `fps` times a second, and at\nleast once every 2 s (a keyframe), so a client that lost frames recovers. The\nengine picks the first of `codecs` it can encode, and every frame names its codec.\nThe stream shows the mix before any master stage. A scene's stream shows the\nscene alone, as program would show it with no transition running, and never makes\na source shown or heard (ADR-0028). It lasts until `preview.unsubscribe`, the\nsession's end, or an end frame (the engine could not go on, or the scene was\ndeleted; the frame says why).\n\nWith `source`, the stream shows that source alone, fitted into the canvas as an\nitem filling it would show it, with no filters: what a display, window or webcam\nsource would capture, before it exists or before its new settings are saved (the\nProperties dialog's picture). The engine opens the capture for the stream alone;\na webcam or capture card already open is shared, not opened twice. The canvas\nsize is the one at the subscription: subscribe again for other settings.\n\nFails with `invalid_argument` for a field out of range (`max_width` 16 to 1920,\ndefault 640; `max_height` 16 to 1080, default 360; `fps` 1 to 30, default 15), a\ncodec named twice, a `channel` this session already has open (`channel`), a\nseventeenth open stream, both `scene_id` and `source` (`source`), or a `source`\nwhose kind is not a capture kind or whose settings its kind refuses\n(`source.kind`, `source.settings.<param>`); with `not_found` for a `scene_id` the collection doesn't\nhave; and with `action_failed` when the session cannot receive binary frames (an\nMCP session) or none of `codecs` can be encoded here.",
           "properties": {
             "channel": {
               "description": "The number this stream's binary frames carry, chosen by the client. Not an\nID: it only tells this session's streams apart, and can be reused once the\nstream has ended.",
@@ -306,6 +306,17 @@ source: crates/jstream-protocol/src/fixtures.rs
                 }
               ],
               "description": "The scene to show. Omitted for the program mix."
+            },
+            "source": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PreviewDraft"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A source to show alone instead, one the collection doesn't hold (since 0.50).\nOmitted for the program mix or `scene_id`'s scene."
             },
             "type": {
               "const": "preview.subscribe",
@@ -6064,6 +6075,23 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "PreviewDraft": {
+      "description": "A source that is not in the collection, for `preview.subscribe`'s `source`: what a\nsource of `kind` with `settings` would show, so a client can show a device while the\nuser picks it, before the source is created or its settings are saved.",
+      "properties": {
+        "kind": {
+          "description": "The source kind, as `kind.list` reports it. Only the capture kinds (`display`,\n`window` and `webcam`) can be shown this way.",
+          "type": "string"
+        },
+        "settings": {
+          "$ref": "#/$defs/Settings",
+          "description": "Its settings, checked as `source.create` checks them. Parameters left out, or\nsent as `null`, take their defaults. Omitted means all defaults."
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object"
+    },
     "ProtocolVersion": {
       "description": "A protocol version: `major.minor`. Patch releases never change the wire format, so\nthey are not part of it.",
       "properties": {
@@ -8616,5 +8644,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.47"
+  "title": "JStream protocol 0.50"
 }

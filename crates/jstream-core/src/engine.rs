@@ -1147,9 +1147,16 @@ impl Engine {
                 fps,
                 codecs,
                 scene_id,
+                source,
             } => {
                 let settings = PreviewSettings::resolve(max_width, max_height, fps, &codecs)?;
-                let rev = {
+                if scene_id.is_some() && source.is_some() {
+                    return Err(ProtocolError::invalid_argument(
+                        "source",
+                        "a preview stream shows a scene or a source, not both",
+                    ));
+                }
+                let (rev, kinds, canvas) = {
                     let state = lock(&self.shared.state);
                     if let Some(scene_id) = &scene_id
                         && state.graph.state().scene(scene_id).is_none()
@@ -1159,7 +1166,17 @@ impl Engine {
                             id: scene_id.as_str().to_owned(),
                         });
                     }
-                    state.graph.rev()
+                    // Only the kinds and the canvas: the draft is planned unlocked.
+                    let kinds = source
+                        .as_ref()
+                        .map(|_| state.graph.kinds().cloned().collect::<Vec<_>>());
+                    (state.graph.rev(), kinds, state.graph.state().canvas())
+                };
+                let draft = match (&source, kinds) {
+                    (Some(source), Some(kinds)) => {
+                        Some(crate::preview::plan_draft(kinds, canvas, source)?)
+                    }
+                    _ => None,
                 };
                 let codecs = self.media.as_ref().and_then(|host| {
                     lock(&host.backends)
@@ -1176,6 +1193,7 @@ impl Engine {
                         codecs,
                         rev,
                         scene: scene_id.clone(),
+                        draft,
                     },
                 )?;
                 if scene_id.is_some() {

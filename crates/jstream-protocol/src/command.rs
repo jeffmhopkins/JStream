@@ -25,7 +25,7 @@ use crate::mix::VideoMix;
 use crate::organise::{SceneMeta, SourceMeta};
 use crate::output::{OutputKind, RtmpTarget, SecretString};
 use crate::plugin::PluginGrant;
-use crate::preview::PreviewCodec;
+use crate::preview::{PreviewCodec, PreviewDraft};
 use crate::settings::Settings;
 use crate::transition::{Easing, ItemTransition};
 use crate::youtube::{BroadcastPrivacy, BroadcastTransition};
@@ -1201,10 +1201,19 @@ pub enum Action {
     /// session's end, or an end frame (the engine could not go on, or the scene was
     /// deleted; the frame says why).
     ///
+    /// With `source`, the stream shows that source alone, fitted into the canvas as an
+    /// item filling it would show it, with no filters: what a display, window or webcam
+    /// source would capture, before it exists or before its new settings are saved (the
+    /// Properties dialog's picture). The engine opens the capture for the stream alone;
+    /// a webcam or capture card already open is shared, not opened twice. The canvas
+    /// size is the one at the subscription: subscribe again for other settings.
+    ///
     /// Fails with `invalid_argument` for a field out of range (`max_width` 16 to 1920,
     /// default 640; `max_height` 16 to 1080, default 360; `fps` 1 to 30, default 15), a
-    /// codec named twice, a `channel` this session already has open (`channel`), or a
-    /// seventeenth open stream; with `not_found` for a `scene_id` the collection doesn't
+    /// codec named twice, a `channel` this session already has open (`channel`), a
+    /// seventeenth open stream, both `scene_id` and `source` (`source`), or a `source`
+    /// whose kind is not a capture kind or whose settings its kind refuses
+    /// (`source.kind`, `source.settings.<param>`); with `not_found` for a `scene_id` the collection doesn't
     /// have; and with `action_failed` when the session cannot receive binary frames (an
     /// MCP session) or none of `codecs` can be encoded here.
     #[serde(rename = "preview.subscribe")]
@@ -1229,6 +1238,10 @@ pub enum Action {
         /// The scene to show. Omitted for the program mix.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         scene_id: Option<SceneId>,
+        /// A source to show alone instead, one the collection doesn't hold (since 0.50).
+        /// Omitted for the program mix or `scene_id`'s scene.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source: Option<PreviewDraft>,
     },
     /// Closes one of this session's preview streams. No end frame follows; frames
     /// already sent may still arrive. Succeeds for a channel that is not open.

@@ -13,8 +13,8 @@ use crate::{Engine, InProcessControl};
 use jstream_control::{BinaryStream, Control, ControlError};
 use jstream_platform::fake::{self, FakeClock};
 use jstream_protocol::{
-    Action, Batch, BinaryFrame, Call, Edit, PreviewCodec, ProtocolError, Rev, SceneId, SourceId,
-    SourceKind, WireError,
+    Action, Batch, BinaryFrame, Call, Edit, PreviewCodec, PreviewDraft, ProtocolError, Rev,
+    SceneId, SourceId, SourceKind, WireError,
 };
 use jstream_sources::CaptureSpec;
 use std::sync::{Arc, mpsc};
@@ -90,6 +90,7 @@ fn subscribe(channel: u32, fps: Option<u32>, codecs: Vec<PreviewCodec>) -> Call 
             fps,
             codecs,
             scene_id: None,
+            source: None,
         },
     }
 }
@@ -104,6 +105,7 @@ fn subscribe_scene(channel: u32, scene: &str) -> Call {
             fps: Some(30),
             codecs: Vec::new(),
             scene_id: Some(SceneId::new(scene)),
+            source: None,
         },
     }
 }
@@ -585,4 +587,148 @@ fn a_scene_stream_draws_its_display() {
     act(&control, subscribe_scene(1, "b")).expect("subscribed");
     until_drawn(&mut frames, &seen, &[CaptureSpec::Display(None)]);
     assert!(hub.load().shot().captures().is_empty());
+}
+
+/// [`subscribe`] to a source the collection doesn't hold, of `kind` with `settings`.
+fn subscribe_draft(channel: u32, kind: &str, settings: serde_json::Value) -> Call {
+    let settings = serde_json::from_value(settings).expect("settings");
+    Call::Action {
+        action: Action::PreviewSubscribe {
+            channel,
+            max_width: None,
+            max_height: None,
+            fps: Some(30),
+            codecs: Vec::new(),
+            scene_id: None,
+            source: Some(PreviewDraft {
+                kind: kind.into(),
+                settings,
+            }),
+        },
+    }
+}
+
+/// The Properties dialog's picture: a webcam that is not a source yet is drawn, captured
+/// for the stream, and the collection is left as it was. Closing the stream closes it.
+#[test]
+fn a_draft_stream_shows_a_webcam_before_it_is_a_source() {
+    let devices = fake::FakeVideoDevices::new(FakeClock::new(jstream_media::Timebase::MICROS));
+    let (engine, seen) = recording_captures(&devices);
+    let hub = engine.render_hub();
+    let control = connected(&engine);
+    let mut frames = control.binary();
+    let before = engine.rev();
+    act(
+        &control,
+        subscribe_draft(1, "webcam", serde_json::json!({})),
+    )
+    .expect("subscribed");
+    until_drawn(&mut frames, &seen, &[CaptureSpec::Device(None)]);
+    assert_eq!(devices.open_streams(), 1, "the draft opened the webcam");
+    assert!(
+        !hub.load()
+            .shot()
+            .captures()
+            .iter()
+            .any(|key| matches!(key.spec, CaptureSpec::Device(_))),
+        "the program shows no webcam"
+    );
+    let after = engine.rev();
+    assert_eq!(before, after, "a draft never reaches the collection");
+
+    act(
+        &control,
+        Call::Action {
+            action: Action::PreviewUnsubscribe { channel: 1 },
+        },
+    )
+    .expect("unsubscribed");
+    let deadline = Instant::now() + WAIT;
+    while devices.open_streams() > 0 {
+        assert!(Instant::now() < deadline, "the webcam stays open");
+        thread::sleep(Duration::from_millis(10));
+    }
+}
+
+/// A draft of the webcam the program already shows shares its one open, and a draft
+/// display is captured beside it.
+#[test]
+fn a_draft_shares_the_webcam_the_program_shows() {
+    let devices = fake::FakeVideoDevices::new(FakeClock::new(jstream_media::Timebase::MICROS));
+    let (engine, seen) = recording_captures(&devices);
+    let control = connected(&engine);
+    let mut frames = control.binary();
+    let scene = vec![create("scn"), webcam(), add("scn", "cam", "webcam")];
+    batch(&control, edits(scene)).expect("scene");
+    act(&control, subscribe(1, Some(30), Vec::new())).expect("program");
+    act(
+        &control,
+        subscribe_draft(2, "webcam", serde_json::json!({})),
+    )
+    .expect("draft");
+    act(
+        &control,
+        subscribe_draft(3, "display", serde_json::json!({"show_cursor": false})),
+    )
+    .expect("display draft");
+    until_drawn(
+        &mut frames,
+        &seen,
+        &[CaptureSpec::Device(None), CaptureSpec::Display(None)],
+    );
+    assert_eq!(devices.open_streams(), 1, "the webcam opens once");
+}
+
+#[test]
+fn drafts_are_checked() {
+    let engine = Engine::new().with_cpu_compositor();
+    let control = connected(&engine);
+    let _frames = control.binary();
+    let field = |error: ControlError| match error {
+        ControlError::Protocol(WireError {
+            error: ProtocolError::InvalidArgument { field, .. },
+            ..
+        }) => field,
+        other => panic!("expected invalid_argument, got {other:?}"),
+    };
+    let not_capture = act(&control, subscribe_draft(1, "color", serde_json::json!({})))
+        .expect_err("a color source captures nothing");
+    assert_eq!(field(not_capture), "source.kind");
+    let unknown =
+        act(&control, subscribe_draft(1, "nope", serde_json::json!({}))).expect_err("no such kind");
+    assert_eq!(field(unknown), "source.kind");
+    let bad = act(
+        &control,
+        subscribe_draft(1, "webcam", serde_json::json!({"device": 5})),
+    )
+    .expect_err("a number for a device");
+    assert_eq!(field(bad), "source.settings.device");
+    let Call::Action {
+        action: Action::PreviewSubscribe { source, .. },
+    } = subscribe_draft(1, "webcam", serde_json::json!({}))
+    else {
+        unreachable!()
+    };
+    let both = act(
+        &control,
+        Call::Action {
+            action: Action::PreviewSubscribe {
+                channel: 1,
+                max_width: None,
+                max_height: None,
+                fps: None,
+                codecs: Vec::new(),
+                scene_id: Some(SceneId::new("main")),
+                source,
+            },
+        },
+    )
+    .expect_err("a scene and a source");
+    assert_eq!(field(both), "source");
+    // A refused draft leaves its channel free.
+    act(
+        &control,
+        subscribe_draft(1, "window", serde_json::json!({})),
+    )
+    .expect("subscribed");
 }

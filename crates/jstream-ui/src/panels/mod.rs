@@ -11,6 +11,7 @@
 
 pub mod add_source;
 mod confirm;
+pub mod device_preview;
 pub mod filters;
 pub mod inspector;
 pub mod labels;

@@ -94,7 +94,9 @@ Contents ([Design](#design) explains the choices):
   properties form inside it (`properties.rs`), the Add source dialog (`add_source.rs`:
   `AddSource` and the `AddSourceDialog` context that opens it, with its type list and
   the edits it sends, tested natively), the Properties dialog (`source_properties.rs`:
-  `SourceProperties` and the `PropertiesDialog` context that opens it), the scene
+  `SourceProperties` and the `PropertiesDialog` context that opens it, with its live
+  picture of a capture source in `device_preview.rs`, whose request and what it follows
+  are tested natively), the scene
   Properties dialog (`scene_properties.rs`: `SceneProperties` and the `SceneDialog`
   context that opens it, with the edits OK sends and the hotkey chords tested
   natively), the Filters
@@ -401,7 +403,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   field blurs it before pressing OK, so the field's `change` reaches the draft first.
   The filter chains are the Filters panel's rows (below), which apply at once. A double click on
   an item and Properties… in the item menus open it for the item's source; a nested
-  scene's item opens the scene's Properties dialog instead.
+  scene's item opens the scene's Properties dialog instead. A display, window or webcam
+  source shows a live picture above the name (`device_preview.rs`, DL-02): a
+  `preview.subscribe` stream of the draft source (`source`, 0.50, small at 15 fps) on a
+  channel from the canvas's taps (`canvas/taps.rs`, numbered from 2³¹ so none is the
+  canvas's), drawn by the canvas's `Screen`. It follows the settings the capture reads
+  (a webcam's `device`, a display's or window's `target` and `show_cursor`): a change
+  closes the stream and opens the next on a new channel, and closing the dialog closes
+  it. A window source with no window picked says to pick one; an engine that refuses or
+  ends the stream shows why.
 - **The scene Properties dialog** (`scene_properties.rs`) opens from a double click on a
   scene row, the row menu's Properties…, the canvas margin's Scene properties… and a
   nested scene's item. It edits a draft of the name, Transition in and out and the
@@ -704,7 +714,8 @@ browser, and `mod.rs` is the component.
   mix while the canvas shows the scene on program, so its transitions show, else that
   scene's own stream (`preview.subscribe`'s `scene_id`, CV-03). The canvas opens the
   session's binary channel (`Control::binary`; a session has one, so the canvas is
-  its only reader) and one `preview.subscribe` stream on it, at 30 fps and as
+  its only reader, and hands each frame of another channel to that channel's tap,
+  `taps.rs`, the Properties dialog's picture) and one `preview.subscribe` stream on it, at 30 fps and as
   sharp as the stage (its size in device pixels, kept between 320×180 and 1280×720).
   It asks for H.264 first when the browser has WebCodecs' `VideoDecoder`, then JPEG.
   H.264 frames go to a `VideoDecoder` configured from the SPS in each keyframe
@@ -714,7 +725,7 @@ browser, and `mod.rs` is the component.
   is never lost. Each decoded picture is drawn into a `<canvas>` placed with the
   canvas's own fit, so the picture lies exactly under the boxes. If the decoder fails, the canvas closes the stream and subscribes
   again for JPEG only. If the engine refuses or ends the stream, the background says
-  why. Showing another scene closes the stream and opens that scene's on the next
+  why, and the channel is still read for the taps. Showing another scene closes the stream and opens that scene's on the next
   channel number, so a late frame of the old stream is never drawn; until the new
   stream's first frame, the background says the preview is starting. WebCodecs is reached through `js_sys::Reflect`, because `web-sys` has it only
   behind the `web_sys_unstable_apis` build flag. A drag's live values (below) reach
