@@ -3,15 +3,18 @@
 //! follow the descriptor's display order, groups, `advanced` and `visible_if` hints.
 //! A changed field is checked with the descriptor's own check, then sent as a
 //! one-parameter `source.set_settings` patch; "Reset" sends `null` for the default.
+//! A capture target parameter (a display or window source's `target`) is a list of the
+//! targets of its kind that `capture.targets` reports, read again each time the list
+//! gets focus, so a window opened since shows up.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/adr/0025-typed-settings-kind-descriptors.md
 
 use crate::app::SessionContext;
 use crate::icons::Icon;
-use crate::store::{Collection, Studio, apply};
+use crate::store::{Collection, Studio, apply, query};
 use jstream_control::protocol::{
-    AssetRoot, Edit, KindDescriptor, Media, ParamDescriptor, ParamType, Reference, Settings,
-    SourceId, SourceInfo, SourceKind,
+    AssetRoot, CaptureTargetInfo, CaptureTargetKind, Edit, KindDescriptor, Media, ParamDescriptor,
+    ParamType, Query, QueryResult, Reference, Settings, SourceId, SourceInfo, SourceKind,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -528,6 +531,7 @@ fn input_for(
             }
         }
         ParamType::Asset { accept } => asset_input(param, value, send, accept),
+        ParamType::CaptureTarget { kind, .. } => capture_target_input(param, value, send, *kind),
         ParamType::Scene => reference_select(value, send, move || {
             studio.collection.with(|c| {
                 c.iter()
@@ -623,6 +627,134 @@ fn reference_select(
     .into_any()
 }
 
+/// The choices of a capture target list, as (value, label): the empty value first (the
+/// primary display, or no window), then each target of `kind` that `targets` lists, in
+/// its order. A `current` value it doesn't list (a window closed since, or a display
+/// unplugged) stays a choice, so the list still shows what the source names.
+pub fn target_choices(
+    kind: CaptureTargetKind,
+    targets: &[CaptureTargetInfo],
+    current: &str,
+) -> Vec<(String, String)> {
+    let empty = match kind {
+        CaptureTargetKind::Display => "Primary display",
+        _ => "None",
+    };
+    let mut choices = vec![(String::new(), empty.to_owned())];
+    for target in targets.iter().filter(|t| t.kind == kind) {
+        let name = if target.name.trim().is_empty() {
+            format!("Untitled ({})", target.target)
+        } else {
+            target.name.clone()
+        };
+        let label = match target.size {
+            Some(size) => format!("{name} · {}×{}", size.width, size.height),
+            None => name,
+        };
+        choices.push((target.target.clone(), label));
+    }
+    if !current.is_empty() && !choices.iter().any(|(value, _)| value == current) {
+        let gone = match kind {
+            CaptureTargetKind::Display => "Display not connected",
+            _ => "Window not open",
+        };
+        choices.push((current.to_owned(), format!("{gone} ({current})")));
+    }
+    choices
+}
+
+/// A display or window to capture, picked from what `capture.targets` lists now. Until
+/// the list arrives, and when the engine can't list targets, it is the ID as text.
+fn capture_target_input(
+    param: &ParamDescriptor,
+    value: impl Fn() -> Value + Clone + Send + Sync + 'static,
+    send: impl Fn(Result<Value, String>) + Clone + Send + Sync + 'static,
+    kind: CaptureTargetKind,
+) -> AnyView {
+    let session = expect_context::<SessionContext>();
+    // `None` until the first answer; then the targets, or why they couldn't be listed.
+    let listed = RwSignal::new(None::<Result<Vec<CaptureTargetInfo>, String>>);
+    let refresh = move || {
+        let Some(session) = session.get() else {
+            return;
+        };
+        spawn_local(async move {
+            let got = match query(&session, Query::CaptureTargets).await {
+                Ok(QueryResult::CaptureTargets { targets }) => Ok(targets),
+                Ok(other) => Err(format!("unexpected {} result", other.name())),
+                Err(e) => Err(e.to_string()),
+            };
+            // The form may have closed meanwhile.
+            listed.try_set(Some(got));
+        });
+    };
+    refresh();
+    let current = {
+        let value = value.clone();
+        move || display(&value())
+    };
+    let p = param.clone();
+    let on_text = {
+        let send = send.clone();
+        move |event: leptos::ev::Event| send(parse(&p, &event_target_value(&event)))
+    };
+    let p = param.clone();
+    let on_pick = move |event: leptos::ev::Event| send(parse(&p, &event_target_value(&event)));
+    // Which input shows: the list once targets arrived, else the text. A refresh changes
+    // only the options, so an open list keeps its element and its focus.
+    let mode = Memo::new(move |_| {
+        listed.with(|l| match l {
+            Some(Ok(_)) => Ok(()),
+            Some(Err(reason)) => Err(format!("Can't list them: {reason}")),
+            None => Err(String::new()),
+        })
+    });
+    let choices = {
+        let current = current.clone();
+        move || {
+            listed.with(|l| match l {
+                Some(Ok(targets)) => target_choices(kind, targets, &current()),
+                _ => Vec::new(),
+            })
+        }
+    };
+    let max_len = match &param.ty {
+        ParamType::CaptureTarget { max_len, .. } => *max_len,
+        _ => 0,
+    };
+    let body = move || match mode.get() {
+        Ok(()) => {
+            let choices = choices.clone();
+            // Set again when the options change, which may have reset the selection.
+            let selected = {
+                let current = current.clone();
+                move || {
+                    listed.track();
+                    current()
+                }
+            };
+            view! {
+                <select class="capture-target" prop:value=selected.clone()
+                    on:focus=move |_| refresh() on:change=on_pick.clone()>
+                    {move || {
+                        choices()
+                            .into_iter()
+                            .map(|(v, label)| view! { <option value=v>{label}</option> })
+                            .collect_view()
+                    }}
+                </select>
+            }
+            .into_any()
+        }
+        Err(reason) => view! {
+            <input type="text" maxlength=max_len.to_string() title=reason
+                prop:value=current.clone() on:change=on_text.clone() />
+        }
+        .into_any(),
+    };
+    view! { {body} }.into_any()
+}
+
 /// An asset reference: which root, and a path under it. An empty path is no file.
 fn asset_input(
     param: &ParamDescriptor,
@@ -686,12 +818,12 @@ fn asset_input(
 #[cfg(test)]
 mod tests {
     use super::{
-        asset_value, display, draft_patch, is_visible, offers, parse, rgb_part, sections, value_of,
-        with_rgb,
+        asset_value, display, draft_patch, is_visible, offers, parse, rgb_part, sections,
+        target_choices, value_of, with_rgb,
     };
     use jstream_control::protocol::{
-        AssetRoot, EnumOption, KindCategory, KindDescriptor, ParamDescriptor, ParamType, Reference,
-        Settings, VisibleIf,
+        AssetRoot, CaptureTargetInfo, CaptureTargetKind, EnumOption, KindCategory, KindDescriptor,
+        ParamDescriptor, ParamType, PixelSize, Reference, Settings, VisibleIf,
     };
     use serde_json::{Value, json};
 
@@ -954,5 +1086,53 @@ mod tests {
         assert_eq!(draft_patch(&base, &draft), want);
         // Nothing changed: nothing is sent, whatever is stored now.
         assert!(draft_patch(&base, &base).is_empty());
+    }
+
+    fn target(kind: CaptureTargetKind, id: &str, name: &str) -> CaptureTargetInfo {
+        CaptureTargetInfo {
+            kind,
+            target: id.into(),
+            name: name.into(),
+            size: None,
+            primary: false,
+        }
+    }
+
+    #[test]
+    fn a_capture_target_lists_its_kind_and_keeps_a_closed_one() {
+        let mut listed = vec![
+            target(CaptureTargetKind::Display, "d1", "Display 1"),
+            target(CaptureTargetKind::Window, "w1", "Notepad"),
+            target(CaptureTargetKind::Window, "w2", " "),
+        ];
+        listed[1].size = Some(PixelSize {
+            width: 800,
+            height: 600,
+        });
+        let pairs = |choices: Vec<(String, String)>| {
+            choices
+                .into_iter()
+                .map(|(v, l)| format!("{v}={l}"))
+                .collect::<Vec<_>>()
+        };
+        // Only windows, with their size when known; an untitled one by its ID.
+        assert_eq!(
+            pairs(target_choices(CaptureTargetKind::Window, &listed, "w1")),
+            ["=None", "w1=Notepad · 800×600", "w2=Untitled (w2)"]
+        );
+        // A display's empty value is the primary display.
+        assert_eq!(
+            pairs(target_choices(CaptureTargetKind::Display, &listed, "")),
+            ["=Primary display", "d1=Display 1"]
+        );
+        // A window closed since stays the selected choice.
+        assert_eq!(
+            pairs(target_choices(
+                CaptureTargetKind::Window,
+                &listed[..1],
+                "gone"
+            )),
+            ["=None", "gone=Window not open (gone)"]
+        );
     }
 }

@@ -6,6 +6,7 @@
 //! value ([`ParamDescriptor::check`]) are pure functions here, so the engine's graph and
 //! any other implementation share them.
 
+use crate::query::CaptureTargetKind;
 use crate::settings::{AssetRoot, Reference};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -228,6 +229,15 @@ pub enum ParamType {
     },
     /// A bus reference (`{"type":"bus","bus_id":…}`) or `null`. Since 0.24.
     Bus,
+    /// The ID of a display or window, as `capture.targets` lists it, so a UI can offer
+    /// the targets of that kind to pick from: a string, empty for the kind's default.
+    /// Since 0.51.
+    CaptureTarget {
+        /// The kind of target it names.
+        kind: CaptureTargetKind,
+        /// Longest allowed value, in characters.
+        max_len: u32,
+    },
     /// A type this version of the protocol doesn't know. Never sent; produced only when
     /// parsing a descriptor from a newer server.
     #[serde(other)]
@@ -309,7 +319,7 @@ impl ParamDescriptor {
                     }
                 })
             }
-            ParamType::String { max_len, .. } => {
+            ParamType::String { max_len, .. } | ParamType::CaptureTarget { max_len, .. } => {
                 let Some(s) = value.as_str() else {
                     return Err("must be a string".into());
                 };
@@ -366,7 +376,9 @@ impl ParamDescriptor {
                 };
                 json!({"type": "string", "pattern": pattern})
             }
-            ParamType::String { max_len, .. } => json!({"type": "string", "maxLength": max_len}),
+            ParamType::String { max_len, .. } | ParamType::CaptureTarget { max_len, .. } => {
+                json!({"type": "string", "maxLength": max_len})
+            }
             ParamType::Asset { .. } => null_or(json!({
                 "type": "object",
                 "properties": {
@@ -553,6 +565,7 @@ mod tests {
     use super::{
         EnumOption, KindCategory, KindDescriptor, KindSummary, ParamDescriptor, ParamType,
     };
+    use crate::query::CaptureTargetKind;
     use crate::settings::AssetRoot;
     use serde_json::{Value, json};
 
@@ -657,6 +670,38 @@ mod tests {
         );
         assert!(text.check(&json!("héé")).is_ok());
         assert!(text.check(&json!("four")).is_err());
+    }
+
+    /// A capture target is a string on the wire and in settings, named by its kind, and
+    /// checked as text: whether the target exists is the engine's business.
+    #[test]
+    fn a_capture_target_is_a_bounded_string_of_one_kind() {
+        let window = param(
+            "target",
+            ParamType::CaptureTarget {
+                kind: CaptureTargetKind::Window,
+                max_len: 4,
+            },
+            json!(""),
+        );
+        let wire = serde_json::to_value(&window).expect("serializes");
+        assert_eq!(wire["type"], "capture_target");
+        assert_eq!(wire["kind"], "window");
+        assert_eq!(wire["max_len"], 4);
+        assert_eq!(
+            serde_json::from_value::<ParamDescriptor>(wire).ok(),
+            Some(window.clone())
+        );
+        assert!(window.check(&json!("")).is_ok());
+        assert!(window.check(&json!("w:42")).is_ok());
+        assert!(window.check(&json!("w:420")).is_err());
+        assert!(window.check(&json!(42)).is_err());
+        assert!(window.check(&Value::Null).is_err());
+        assert!(!window.is_reference());
+        assert_eq!(
+            window.value_schema(),
+            json!({"type": "string", "maxLength": 4, "title": "target", "default": ""})
+        );
     }
 
     #[test]

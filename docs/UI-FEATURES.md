@@ -262,7 +262,9 @@ covers = ["crates/jstream-ui/src/panels/inspector.rs", "crates/jstream-ui/src/pa
 Spec: [panels › inspector](../design/ui-prototype/spec-panels.md#inspector). Today the
 Inspector shows the item's placement, then the source's settings form in a Properties
 section. The Properties dialog (DL-02) uses the same form on a draft; the section stays
-in the Inspector until the Inspector's own rows say otherwise.
+in the Inspector until the Inspector's own rows say otherwise. A display or window
+capture's target is picked from a list of the displays or open windows the engine
+reports (`capture.targets`), not typed as an ID.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|

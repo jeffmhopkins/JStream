@@ -383,8 +383,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   select (of the scenes, the other sources, or the buses, with None for `null`, which
   for a `waveform`'s or `spectrum`'s `audio` is the program mix; a source reference
   restricted to audio, such as their `audio_source`, offers only the sources that
-  report audio settings, less `scene` sources, as the engine accepts no other) per
-  parameter type, in the descriptor's order, grouped by `group`, advanced
+  report audio settings, less `scene` sources, as the engine accepts no other), or capture
+  target list per parameter type. A `capture_target` (a `display` or `window` source's
+  `target`) lists the targets of its kind that `capture.targets` reports, each by name
+  and size, after "Primary display" or "None" for the empty value, and a target the
+  source names that isn't listed now (a closed window) as "Window not open (<ID>)". It
+  asks again each time the list gets focus, so a window opened since shows up; until
+  the first answer, or when the engine can't list targets, it is the ID as text. Fields
+  come in the descriptor's order, grouped by `group`, advanced
   ones collapsed, and hidden while their `visible_if` doesn't hold. A type this UI
   doesn't know is shown read-only. A change is checked with the descriptor's own check,
   then sent as a one-parameter `source.set_settings` patch, and Reset sends `null` for

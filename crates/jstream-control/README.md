@@ -297,7 +297,7 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `transition.*`, `scene.set_transitions` and `item.set_transition` edits answer
   `internal`;
 - `capture.targets`, answered with one made-up 1920×1080 primary display whose ID is
-  `MOCK_DISPLAY`;
+  `MOCK_DISPLAY`, then one 1280×720 window, "Mock window", whose ID is `MOCK_WINDOW`;
 - `source.sizes`, answered with every source and no size, since the mock makes no
   frames, so it never sends `source.size_changed`;
 - the deprecated privacy calls, as from the engine

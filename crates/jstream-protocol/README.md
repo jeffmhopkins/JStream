@@ -183,8 +183,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.47 because the engine
-  draws, and so accepts, every blend mode
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.51 because 0.51 added the
+  `capture_target` parameter type, which a `display` or `window` source's `target` has, so
+  a UI can offer what `capture.targets` lists ([Kinds](#design)); 0.47 made the engine
+  draw, and so accept, every blend mode
   ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md); no wire change); 0.46 added
   `preview.subscribe`'s `scene_id`, a preview stream of any scene, and its 16 streams a
   session ([Binary streams](#design)); 0.45 made scenes
@@ -524,7 +526,10 @@ never a type per kind.
 - A `ParamDescriptor` has an `id`, a `type` with its constraints flattened into the same
   object (`bool`; `int` and `float` with `min`, `max`, `step`, `unit`; `enum` with
   `options`; `color` with `alpha`; `string` with `multiline` and `max_len`; `asset` with
-  `accept`; `scene`; `source` with an optional `media`; `bus`, since 0.24), a `default`, a `label`, an
+  `accept`; `scene`; `source` with an optional `media`; `bus`, since 0.24;
+  `capture_target` with a `kind`, `display` or `window`, and `max_len`, since 0.51: a
+  string checked as `string` is, naming a target of that kind as `capture.targets`
+  lists it, so a UI can offer those to pick from), a `default`, a `label`, an
   optional `description`, the UI hints `group`, `advanced` and `visible_if`, and `live`.
   An unknown `type` parses as `ParamType::Unknown`, which a client shows read-only.
   `step`, `multiline` and the hints never affect validation.
