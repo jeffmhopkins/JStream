@@ -606,13 +606,19 @@ fn scene_filters_and_item_effects_are_taken() {
     // `stats.tick` counts what they add to each frame (ADR-0065 §7).
     let mut events = control.events();
     engine.emit_stats_tick();
-    let chains = drain(&mut events).into_iter().find_map(|event| match event {
-        Event::StatsTick { chains, .. } => chains,
-        _ => None,
-    });
+    let chains = drain(&mut events)
+        .into_iter()
+        .find_map(|event| match event {
+            Event::StatsTick { chains, .. } => chains,
+            _ => None,
+        });
     let chains = chains.expect("a tick with its chain cost");
     assert_eq!(
-        (chains.scene_chains, chains.scene_layers, chains.scene_passes),
+        (
+            chains.scene_chains,
+            chains.scene_layers,
+            chains.scene_passes
+        ),
         (1, 2, 2),
         "the scene's composite and its filter"
     );
