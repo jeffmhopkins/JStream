@@ -435,7 +435,7 @@ stamp = { hash = "b3:a772352ba69e809b" }
 stamp = { hash = "b3:f04f6f9fd5c83e65", by = "agent:claude", note = "Re-read the MCP section: privacy is gone from the noun list, matching tools.rs DEPRECATED and tools.snap. Then: Round 2: the MCP Tools bullet now names the DEPRECATED privacy ops, and tools.snap follows the new PrivacySet.on description; the noun list already omits privacy." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:7dc69f34715240b8", by = "agent:claude", note = "tools.snap gained preview.subscribe's source and PreviewDraft from the shared schema; MCP still can't open preview streams (no binary channel), as the section says." }
+stamp = { hash = "b3:af9af5b132ec8b09", by = "agent:claude", note = "Re-read after renumbering the draft-source protocol bump from 0.50 to 0.49 (protocol queue reset); only the version number changed." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -561,19 +561,19 @@ stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:6a8359020b202ead", by = "agent:claude", note = "Re-read the protocol summary: it defers preview details to jstream-protocol's design, which now covers preview.subscribe's source (0.50); still holds." }
+stamp = { hash = "b3:6655c679e16ca43a", by = "agent:claude", note = "Re-read after renumbering the draft-source protocol bump from 0.50 to 0.49 (protocol queue reset); only the version number changed." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:5e601bf05c456a06", by = "agent:claude", note = "Re-read the protocol summary: it defers preview details to jstream-protocol's design, which now covers preview.subscribe's source (0.50); still holds." }
+stamp = { hash = "b3:bd8386b9200a4bb4", by = "agent:claude", note = "Re-read after renumbering the draft-source protocol bump from 0.50 to 0.49 (protocol queue reset); only the version number changed." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:8eeac365af774eaf", by = "agent:claude", note = "Re-read the protocol summary: it defers preview details to jstream-protocol's design, which now covers preview.subscribe's source (0.50); still holds." }
+stamp = { hash = "b3:839ebe7ada4a965a", by = "agent:claude", note = "Re-read after renumbering the draft-source protocol bump from 0.50 to 0.49 (protocol queue reset); only the version number changed." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:d61ec77f35ffdcfa", by = "agent:builder-b8rnvf", note = "D9 0.42: edit list adds bus.set_monitor (a bus's monitor, protocol 0.42); re-read the rest against the mock's set_monitor and the snapshots." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:e21b2de003af7a19", by = "agent:claude", note = "Re-read the protocol summary: it defers preview details to jstream-protocol's design, which now covers preview.subscribe's source (0.50); still holds." }
+stamp = { hash = "b3:d56dc9825d44fd88", by = "agent:claude", note = "Re-read after renumbering the draft-source protocol bump from 0.50 to 0.49 (protocol queue reset); only the version number changed." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:c07491919104bdad", by = "agent:claude", note = "Re-read after the merge of #899 (scenes carry labels, ADR-0078, protocol 0.45), which doesn't touch the privacy removal, and after moving its ADR-0027 citations to ADR-0080 (same decision numbers, ADR-0027 now superseded); the section holds." }
@@ -657,7 +657,7 @@ stamp = { hash = "b3:12085313843efe02", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:6e51f25e6183bec2", by = "agent:claude", note = "This PR (#813 and #815): PR 3: Re-read for #529 PR 3: filter owner text says the graph holds scene filters and item effects and the engine refuses both owners on owner until rendered; mock and parity changes match. Stacked #529 PR 2 (protocol 0.43): the filter-owner sentence (0.43 owners, read fields, max_outset_px, engine refuses both) matches; the rest is m1-5's text. Merge: refreshed onto wave/m1-5 (main after m1-4 landed) with #813's refresh: conflicts resolved by taking m1-5's side and re-applying #813's and this PR's own diff; the tree equals refreshed #813 plus this PR's changes. #813's record: #529 PR 2 (protocol 0.43): the filter-owner sentence (0.43 owners, read fields, max_outset_px, engine refuses both) matches; the rest is m1-5's text. Merge: refreshed onto wave/m1-5 (main after m1-4 landed); conflicts resolved by taking m1-5's side and re-applying this PR's own diff, plus max_outset_px: None on the e2e mock daemon's new KindDescriptor literal; snapshots regenerated. Merge of wave/m1-5 at bd50026: the wave didn't change crates/jstream-protocol/src/transition.rs. Merge of wave/m1-5 at e84bc9c: the wave didn't change crates/jstream-protocol/src/transition.rs." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:ad3b18e19d9ce1b0", by = "agent:claude", note = "Re-read the protocol summary: it defers preview details to jstream-protocol's design, which now covers preview.subscribe's source (0.50); still holds." }
+stamp = { hash = "b3:dfaa88940656cdc7", by = "agent:claude", note = "Re-read after renumbering the draft-source protocol bump from 0.50 to 0.49 (protocol queue reset); only the version number changed." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/youtube.rs"]
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = "whole PR: the YouTube bullet says that since 0.38 a running output's audience comes in the youtube.stats event and the query lists it with the day's quota estimate, by which audience reads slow and stop first (ADR-0041 §3, §5), the chat rate following with chat polling; its protocol README input changed by B1's version-paragraph wording only; matches the README, the schema snapshots and the examples; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) brought #726's parity fixture text into the protocol README's Contents (display capture screen, a webcam with its paired input), which this section doesn't describe; the body, snapshots and sources came in unchanged, so the YouTube bullet holds" }
@@ -1353,13 +1353,13 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): ws_web.rs gains main's error handler; State::close still takes the binary queue, so the binary stream ends on error as on close; contents text holds" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:2d82faee026672fd", by = "agent:claude", note = "Added the draft-source paragraph to Preview streams (planned once on its own collection, checks and error fields, captured by the hub beside scenes, not counting as the program) and the new tests to the test list." }
+stamp = { hash = "b3:e98e330e7f8660fd", by = "agent:claude", note = "Re-read after renumbering the draft-source protocol bump from 0.50 to 0.49 (protocol queue reset); only the version number changed." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:020e354b66572f01", by = "agent:blend-modes", note = "The compositor paragraph says each item draws with its blend mode (ADR-0082), a transition track takes its endpoint's and a pair switches halfway, and a nested scene with blends isn't flattened; checked against snapshot.rs's Placed/Layer/Visual plumbing and the flatten condition. Removed 'blend modes other than normal' from not-built. The protocol README dep changed only for 0.47's blend entry." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:e2a50f1b89a24ba4", by = "agent:claude", note = "Added the draft-source paragraph to Preview streams (planned once on its own collection, checks and error fields, captured by the hub beside scenes, not counting as the program) and the new tests to the test list." }
+stamp = { hash = "b3:310416efb3f10826", by = "agent:claude", note = "Re-read after renumbering the draft-source protocol bump from 0.50 to 0.49 (protocol queue reset); only the version number changed." }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:2f25f3fd6a337f9e", by = "agent:claude@session_018f8xSzYLonPoGnTdov9TZu", note = "Edited: the merge brought #899 (scenes carry labels, 0.45), so this PR's scene_id and 16 streams re-bump to 0.46; the scene-stream paragraph says 0.46; the rest (plan_scene, look_quiet, session-end re-plan) is unchanged and matches the code | merge: the merge brought #894 (no privacy screen, ADR-0080): privacy.* deprecated and refused, the privacy state, overlay and Pause key gone; the scene-stream paragraph (0.46, plan_scene, look_quiet, session-end re-plan) is unchanged and still matches engine.rs and snapshot.rs after the privacy code left them | kept from the merged side: Edited the differential-test paragraph: the script refuses a scene's missing label and deletes a filed, labelled scene, undone with its labels. Deps: control README (mock blockers for scenes), protocol README (0.45 SceneMeta.labels), ARCH protocol note; the engine itself needed no change since the graph applies scene.set_meta. | kept from the merged side: Re-read Design: the Privacy screen subsection is now No privacy screen (set refused unsupported and audited, get off, no event, per engine.rs and tests.rs), kept the webcam-microphone paragraph; actions list, encode_frames row, activity-gain and audit-line text no longer mention privacy. Then: Re-read after the merge of #899 (scenes carry labels, ADR-0078, protocol 0.45), which doesn't touch the privacy removal, and after moving its ADR-0027 citations to ADR-0080 (same decision numbers, ADR-0027 now superseded); the section holds." }
@@ -1788,7 +1788,7 @@ stamp = { hash = "b3:03d1d6659abcca55", by = "agent:claude", note = "Secrets kee
 stamp = { hash = "b3:29e7e31c24cd9674", by = "agent:claude-webcam-preview", note = "Live on Windows: the capture and video-device backends open when a preview shows a display, window or webcam, and a webcam's one open is shared with an output's; the rest holds against core's design | merge: #913 changed the CLAP host line to name the master and output chains; the preview's capture and video-device line, and the shared webcam open, still hold. | kept from the merged side: Re-read Live on Windows against core's change: the engine now starts a plugin host for a CLAP filter on the master's or an output's chain too; updated that sentence. Nothing else in the daemon changed." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:2d82faee026672fd", by = "agent:claude", note = "Re-read: backends open a device when a preview shows a display, window or webcam, a webcam's open shared; holds for the new draft-source streams (preview.subscribe source, 0.50), nothing daemon-side changed." }
+stamp = { hash = "b3:e98e330e7f8660fd", by = "agent:claude", note = "Re-read after renumbering the draft-source protocol bump from 0.50 to 0.49 (protocol queue reset); only the version number changed." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:6329bf91b0ab645f", by = "agent:claude", note = "Re-read Design against core's removed privacy screen and the server's caused_by change; the daemon wiring it describes is unchanged." }
@@ -2127,7 +2127,7 @@ stamp = { hash = "b3:4500e061e4435b08", by = "agent:claude-443", note = "Re-read
 stamp = { hash = "b3:00fa751672adf485", by = "agent:blend-modes", note = "item.set_blend and item.add's blend accept every mode (check_blend removed from apply.rs, ADR-0082); removed the not-built blend line; persist (multiply loads and saves) and model notes re-read, still hold. The protocol README and ARCH data-model deps changed only in their blend wording. | merge: #923 added the labels a set_meta puts on to the touched list; the purpose's blend wording (every mode accepted) is unaffected and still holds | kept from the merged side: touched.rs: scene.set_meta now uses each label it names, as source.set_meta did; the touched-sets bullet's used list now names those labels; the rest of the section is unaffected" }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:e2a50f1b89a24ba4", by = "agent:claude", note = "Re-read against the protocol design change (preview.subscribe source, PreviewDraft): no graph-side change; the draft reuses Graph::apply on a collection of its own." }
+stamp = { hash = "b3:310416efb3f10826", by = "agent:claude", note = "Re-read after renumbering the draft-source protocol bump from 0.50 to 0.49 (protocol queue reset); only the version number changed." }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -3156,7 +3156,7 @@ stamp = { hash = "b3:5fb43febc7970009", by = "agent:ab9c156e", note = """#486 ro
 stamp = { hash = "b3:fc19c48180f9c975", by = "agent:builder-core", note = "#843: limits.rs's Caps limiter makes a growth past the memory or table cap a trap (CapReached, Error::MemoryLimit in error.rs), a memory starting above the cap fails the load the same way, and a growth past the module's own maximum still answers -1; the limits paragraph, the tests list and Not here (core now saves plugins and holds grants to the manifest; the data folder and file imports aren't anywhere) say so" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:e2a50f1b89a24ba4", by = "agent:claude", note = "Binary streams: subscribe's source field, a Draft sources bullet (checks, error fields, canvas size kept, shared webcam, no collection change); fixed the stale note that previews draw display/window as nothing; snapshots regenerated for the new field and 0.50." }
+stamp = { hash = "b3:310416efb3f10826", by = "agent:claude", note = "Re-read after renumbering the draft-source protocol bump from 0.50 to 0.49 (protocol queue reset); only the version number changed." }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -3174,16 +3174,16 @@ stamp = { hash = "b3:24e470838185e418" }
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:5e601bf05c456a06", by = "agent:claude", note = "Binary streams: subscribe's source field, a Draft sources bullet (checks, error fields, canvas size kept, shared webcam, no collection change); fixed the stale note that previews draw display/window as nothing; snapshots regenerated for the new field and 0.50." }
+stamp = { hash = "b3:bd8386b9200a4bb4", by = "agent:claude", note = "Re-read after renumbering the draft-source protocol bump from 0.50 to 0.49 (protocol queue reset); only the version number changed." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:8eeac365af774eaf", by = "agent:claude", note = "Binary streams: subscribe's source field, a Draft sources bullet (checks, error fields, canvas size kept, shared webcam, no collection change); fixed the stale note that previews draw display/window as nothing; snapshots regenerated for the new field and 0.50." }
+stamp = { hash = "b3:839ebe7ada4a965a", by = "agent:claude", note = "Re-read after renumbering the draft-source protocol bump from 0.50 to 0.49 (protocol queue reset); only the version number changed." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:d61ec77f35ffdcfa", by = "agent:builder-b8rnvf", note = "D9 0.42: new Monitors paragraph (bus.set_monitor, BusMonitor fields, taps, device never looked up, unknown tap refused on monitor.tap, the engine not playing them yet); bus.delete's undo and the touched-property and 0.19 EntityKind paragraphs name bus.set_monitor; snapshots carry the edit, the field and the types." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:e21b2de003af7a19", by = "agent:claude", note = "Binary streams: subscribe's source field, a Draft sources bullet (checks, error fields, canvas size kept, shared webcam, no collection change); fixed the stale note that previews draw display/window as nothing; snapshots regenerated for the new field and 0.50." }
+stamp = { hash = "b3:d56dc9825d44fd88", by = "agent:claude", note = "Re-read after renumbering the draft-source protocol bump from 0.50 to 0.49 (protocol queue reset); only the version number changed." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:c07491919104bdad", by = "agent:claude", note = "Re-read after the merge of #899 (scenes carry labels, ADR-0078, protocol 0.45), which doesn't touch the privacy removal, and after moving its ADR-0027 citations to ADR-0080 (same decision numbers, ADR-0027 now superseded); the section holds." }
@@ -3267,13 +3267,13 @@ stamp = { hash = "b3:12085313843efe02", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:6e51f25e6183bec2", by = "agent:claude", note = "This PR (#813 and #815): PR 3: Re-read for #529 PR 3: 0.43 paragraph states the graph holds scene filters and item effects and the engine refuses both owners on edits.N.owner until it renders them; parity fixture description holds. Stacked #529 PR 2 (protocol 0.43): the From-0.43 filter paragraph (owners, video only, read fields omitted while empty, max_outset_px, engine refuses both owners) matches the code and regenerated protocol/examples snapshots. Merge: refreshed onto wave/m1-5 (main after m1-4 landed) with #813's refresh: conflicts resolved by taking m1-5's side and re-applying #813's and this PR's own diff; the tree equals refreshed #813 plus this PR's changes. #813's record: #529 PR 2 (protocol 0.43): the From-0.43 filter paragraph (owners, video only, read fields omitted while empty, max_outset_px, engine refuses both owners) matches the code and regenerated protocol/examples snapshots. Merge: refreshed onto wave/m1-5 (main after m1-4 landed); conflicts resolved by taking m1-5's side and re-applying this PR's own diff, plus max_outset_px: None on the e2e mock daemon's new KindDescriptor literal; snapshots regenerated. Merge of wave/m1-5 at bd50026: the wave didn't change crates/jstream-protocol/src/transition.rs. Merge of wave/m1-5 at e84bc9c: the wave didn't change crates/jstream-protocol/src/transition.rs." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:ad3b18e19d9ce1b0", by = "agent:claude", note = "Binary streams: subscribe's source field, a Draft sources bullet (checks, error fields, canvas size kept, shared webcam, no collection change); fixed the stale note that previews draw display/window as nothing; snapshots regenerated for the new field and 0.50." }
+stamp = { hash = "b3:dfaa88940656cdc7", by = "agent:claude", note = "Re-read after renumbering the draft-source protocol bump from 0.50 to 0.49 (protocol queue reset); only the version number changed." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/youtube.rs"]
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = """whole PR: the Events list adds youtube.stats {output_id, broadcast_id, concurrent_viewers?, likes?, views?} (0.38) and the YouTube section describes the event, the query's outputs and quota {used, daily, exhausted?, stats} with normal/slowed/stopped, and drops audience stats from "come later"; both schema snapshots changed only by the new types and 0.38; the B1 fix touched only the purpose's version paragraph; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) changed none of this section's inputs (the body, both snapshots and the source files came in as this branch had them); the youtube.stats and quota text holds""" }
 
 ["CRATE-jstream-protocol#purpose"."body"]
-stamp = { hash = "b3:0cfabff620b43316", by = "agent:claude", note = "Added PreviewDraft to the preview streams bullet and 0.50 to the version history (preview.subscribe source)." }
+stamp = { hash = "b3:e04a49e91768b926", by = "agent:claude", note = "Re-read after renumbering the draft-source protocol bump from 0.50 to 0.49 (protocol queue reset); only the version number changed." }
 
 ["CRATE-jstream-protocol#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
 stamp = { hash = "b3:55468c98f61fc0f9" }
@@ -3282,7 +3282,7 @@ stamp = { hash = "b3:55468c98f61fc0f9" }
 stamp = { hash = "b3:d61ec77f35ffdcfa", by = "agent:builder-b8rnvf", note = "D9 0.42: audio.rs gains BusMonitor {device, tap}, MonitorTap (pre_filters, post_filters, unknown skipped in the schema), BusMonitor::problem and MAX_MONITOR_DEVICE_LEN; BusInfo.monitor; Edit::BusSetMonitor named and classified (plugin.rs); edit list and Audio bullet updated; version paragraph says 0.42 for bus monitors; fixtures and parity cover set, change, removal, a deleted bus's monitor and three refusals." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:e21b2de003af7a19", by = "agent:claude", note = "Added PreviewDraft to the preview streams bullet and 0.50 to the version history (preview.subscribe source)." }
+stamp = { hash = "b3:d56dc9825d44fd88", by = "agent:claude", note = "Re-read after renumbering the draft-source protocol bump from 0.50 to 0.49 (protocol queue reset); only the version number changed." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:c07491919104bdad", by = "agent:claude", note = "Re-read after the merge of #899 (scenes carry labels, ADR-0078, protocol 0.45), which doesn't touch the privacy removal, and after moving its ADR-0027 citations to ADR-0080 (same decision numbers, ADR-0027 now superseded); the section holds." }
@@ -3366,7 +3366,7 @@ stamp = { hash = "b3:12085313843efe02", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:6e51f25e6183bec2", by = "agent:claude", note = "This PR (#813 and #815): PR 3: Re-read for #529 PR 3: parity.rs cases now cover audio chains on a scene and item and missing scene/item owners; purpose holds. Stacked #529 PR 2 (protocol 0.43): Contents lists FilterOwner's scene and item, SceneInfo filters and ItemInfo.effects, and the version paragraph names 0.43 with 0.39's keyframes after it; matches filter.rs, query.rs, kind.rs, version.rs and fixtures. Merge: refreshed onto wave/m1-5 (main after m1-4 landed) with #813's refresh: conflicts resolved by taking m1-5's side and re-applying #813's and this PR's own diff; the tree equals refreshed #813 plus this PR's changes. #813's record: #529 PR 2 (protocol 0.43): Contents lists FilterOwner's scene and item, SceneInfo filters and ItemInfo.effects, and the version paragraph names 0.43 with 0.39's keyframes after it; matches filter.rs, query.rs, kind.rs, version.rs and fixtures. Merge: refreshed onto wave/m1-5 (main after m1-4 landed); conflicts resolved by taking m1-5's side and re-applying this PR's own diff, plus max_outset_px: None on the e2e mock daemon's new KindDescriptor literal; snapshots regenerated. Merge of wave/m1-5 at bd50026: the wave didn't change crates/jstream-protocol/src/transition.rs. Merge of wave/m1-5 at e84bc9c: the wave didn't change crates/jstream-protocol/src/transition.rs." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:ad3b18e19d9ce1b0", by = "agent:claude", note = "Added PreviewDraft to the preview streams bullet and 0.50 to the version history (preview.subscribe source)." }
+stamp = { hash = "b3:dfaa88940656cdc7", by = "agent:claude", note = "Re-read after renumbering the draft-source protocol bump from 0.50 to 0.49 (protocol queue reset); only the version number changed." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/youtube.rs"]
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = "whole PR: contents list youtube.stats among the queries and events and AudienceStatsInfo, QuotaInfo and StatsPolling in youtube.rs; the version paragraph says 0.38 for YouTube audience stats and, after review B1, that 0.34 to 0.37 are assigned to other open bumps (#629, #642, #682, #653), which the PR API confirms are open, with only #653 on wave/m1-3; matches event.rs, query.rs, youtube.rs, lib.rs, version.rs and the fixtures; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) brought #726's Contents text on the parity fixture (a display capture screen never placed for no-audio cases, a webcam with its paired input); event.rs, fixtures.rs, lib.rs, query.rs, version.rs and youtube.rs came in unchanged, so the youtube contents and 0.38 version text hold" }
@@ -4320,7 +4320,7 @@ stamp = { hash = "b3:8207aab1afa325b5", by = "agent:claude", note = "The preview
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR. Body: the Crop bullet (crop mode from the tool, C or the menu; V, Move, Escape and a scene switch leave it; Alt crops on the box's handles; amber chrome and the ghost; the readout's crop, cropped and no source size yet, and with no size the box's handles resize as usual, review N1) and Layout::sized. crop.rs (new): Picture::of over ItemGeometry::content with flips and fill clipping, CropGesture in the rotated frame clamped to the extent and MIN_SIZE, settled, clear and readout. mod.rs: Action::Crop, single_handle (crop handles on the picture; without a picture the box's handles resize, with Alt too), on_move, end and cancel, the keys, the drawing and the toolbar. model.rs: CanvasItem.crop and source_size, Layout::sized and item, and the commit's crops after its geometries in one ends_gesture batch. live.rs: Values carries crops, so live.set sends item.set_crop beside item.set_geometry. transform.rs: rotate and from_local are pub(crate) for crop.rs, otherwise unchanged." }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:95f033159fdad25c", by = "agent:claude", note = "Properties dialog: added the live picture paragraph (draft-source stream on a tap channel from 2^31, follows the capture's settings, reopens on change, closes with the dialog, window hint); style.css adds props-preview classes." }
+stamp = { hash = "b3:f9e20a815ece161f", by = "agent:claude", note = "Re-read after renumbering the draft-source protocol bump from 0.50 to 0.49 (protocol queue reset); only the version number changed." }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:020e354b66572f01", by = "agent:blend-modes", note = "Inspector Blending lists the nine modes, each sent as item.set_blend and drawn by the engine since 0.47; inspector.rs no longer disables the non-normal options." }
@@ -4404,7 +4404,7 @@ stamp = { hash = "b3:c3af1e840fbc4df5", by = "agent:ui-polish", note = "Whole PR
 stamp = { hash = "b3:44587926fc590102", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#461: re-read Design against mixer.rs (BusStrip delete reads delete.plan with DeleteTarget::Bus, confirms with the plan_summary detail, applies the plan expecting its rev) and confirm.rs (doc comment only); rewrote the Mixer bullet that said the engine refuses deleting a drawn bus, and the Native builds bullet still holds. Tests: new a_drawn_bus_is_deleted_through_its_plan (mixer.rs) against MockEngine; cargo test -p jstream-ui --all-features passes" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/device_preview.rs"]
-stamp = { hash = "b3:47d479d1ce0f0105", by = "agent:claude", note = "Properties dialog: added the live picture paragraph (draft-source stream on a tap channel from 2^31, follows the capture's settings, reopens on change, closes with the dialog, window hint); style.css adds props-preview classes." }
+stamp = { hash = "b3:a7a67ec7699b523d", by = "agent:claude", note = "Re-read after renumbering the draft-source protocol bump from 0.50 to 0.49 (protocol queue reset); only the version number changed." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/filters.rs"]
 stamp = { hash = "b3:94fb4a41811b693f", by = "agent:claude-clap-chains", note = "Re-read the Filters panel bullet against filter_type's new clap/ arm and the clap_plugins_are_offered_under_plugins test: added that the catalogue puts a CLAP kind under Plugins." }
@@ -4548,7 +4548,7 @@ stamp = { hash = "b3:c3af1e840fbc4df5", by = "agent:ui-polish", note = "Whole PR
 stamp = { hash = "b3:44587926fc590102", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#461: re-read Purpose against mixer.rs (bus delete now reads delete.plan via plan_bus_delete/apply_plan and shows Confirm) and confirm.rs (doc comment names the mixer's bus strips); updated the Panels line so confirm.rs is shared with the mixer. Tests: new a_drawn_bus_is_deleted_through_its_plan; cargo test -p jstream-ui --all-features passes" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/device_preview.rs"]
-stamp = { hash = "b3:47d479d1ce0f0105", by = "agent:claude", note = "Properties dialog bullet names device_preview.rs (its live picture of a capture source, tested natively); app.rs provides the canvas taps context; projector and canvas preview only gained source: None." }
+stamp = { hash = "b3:a7a67ec7699b523d", by = "agent:claude", note = "Re-read after renumbering the draft-source protocol bump from 0.50 to 0.49 (protocol queue reset); only the version number changed." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/filters.rs"]
 stamp = { hash = "b3:94fb4a41811b693f", by = "agent:claude-clap-chains", note = "Re-read the Filters panel entry against filter_type's new clap/ arm and the clap_plugins_are_offered_under_plugins test: added that the catalogue puts a scanned CLAP plugin's clap/ kind under Plugins." }
@@ -5148,7 +5148,7 @@ stamp = { hash = "b3:747acc8bf268e7d7", by = "agent:wave-owner", note = "merge: 
 stamp = { hash = "b3:d60273e78f360f4f", by = "agent:wave-owner", note = "merge: main at a798a5e8 brought #859, which adds this guide (main's record is kept below). This wave's #803 changed this input since: desktop Usage's Logs bullet makes the log a new user-only file at each start (#780). Re-read: Outputs' Stream (RTMP), the key in Credential Manager, Go Live and End stream don't depend on either change and hold. | kept from the merged side: New: Outputs' Add an output with Stream (RTMP) and the server URL without the key, the Stream key field kept in Credential Manager ('Stream key: set'), Go Live/End stream (HD-09) starting stream outputs whose key is set; YouTube sign-in rows are blocked on ADR-0058" }
 
 ["GETTING-STARTED#live"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:979f9e33f96bc0a8", by = "agent:claude", note = "Re-read against UI-FEATURES' DL-02 note: going live steps unaffected." }
+stamp = { hash = "b3:57585e106287831a", by = "agent:claude", note = "Re-read after renumbering the draft-source protocol bump from 0.50 to 0.49 (protocol queue reset); only the version number changed." }
 
 ["GETTING-STARTED#record"."body"]
 stamp = { hash = "b3:b21c49ef28545229", by = "agent:wave-owner", note = "merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: Recording (MP4) output with a file path, the header's Record/Stop recording (HD-07)" }
@@ -5157,7 +5157,7 @@ stamp = { hash = "b3:b21c49ef28545229", by = "agent:wave-owner", note = "merge: 
 stamp = { hash = "b3:d60273e78f360f4f", by = "agent:wave-owner", note = "merge: main at a798a5e8 brought #859, which adds this guide (main's record is kept below). This wave's #803 changed this input since: desktop Usage's Logs bullet makes the log a new user-only file at each start (#780). Re-read: the Recording (MP4) output with Record and Stop recording doesn't depend on either change and holds. | kept from the merged side: New: Recording (MP4) output with a file path, the header's Record/Stop recording (HD-07)" }
 
 ["GETTING-STARTED#record"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:979f9e33f96bc0a8", by = "agent:claude", note = "Re-read against UI-FEATURES' DL-02 note: recording steps unaffected." }
+stamp = { hash = "b3:57585e106287831a", by = "agent:claude", note = "Re-read after renumbering the draft-source protocol bump from 0.50 to 0.49 (protocol queue reset); only the version number changed." }
 
 ["GETTING-STARTED#requirements"."body"]
 stamp = { hash = "b3:33e39447d2457615", by = "agent:wave-owner", note = "merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: Windows 11 x64 build 22000 per README Platforms (fact min-windows-build), D3D12, Media Feature Pack on N editions (the desktop app's can't-start window), WebView2, no installer or admin per ADR-0066" }
@@ -5175,7 +5175,7 @@ stamp = { hash = "b3:67130f6f84b33399", by = "agent:wave-owner", note = "merge: 
 stamp = { hash = "b3:73397d93bfd295b7", by = "agent:claude", note = "Step 2 now says a display, window or webcam shows its live picture at the top of the Properties dialog before OK (DL-02)." }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:979f9e33f96bc0a8", by = "agent:claude", note = "Step 2 now says a display, window or webcam shows its live picture at the top of the Properties dialog before OK (DL-02)." }
+stamp = { hash = "b3:57585e106287831a", by = "agent:claude", note = "Re-read after renumbering the draft-source protocol bump from 0.50 to 0.49 (protocol queue reset); only the version number changed." }
 
 ["GETTING-STARTED#trouble"."body"]
 stamp = { hash = "b3:cdea88ae9fde1c6f", by = "agent:wave-owner", note = '''merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: logs\jstream-desktop.log and cef.log, crash-*.txt with secrets redacted and never uploaded (R-SEC-004, desktop Usage), issue and private-advisory links (registered in external.toml), SECURITY.md''' }
@@ -5589,7 +5589,7 @@ stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-
 stamp = { hash = "b3:c09bd1eaa6bef5cf", by = "agent:claude", note = "Re-read: CV-17 is ⏸ with the blur and notice removed from canvas/mod.rs and store.rs; other rows unchanged. Then: The retargeting commit only moves ADR-0027 citations to ADR-0080 (same decision numbers §1-§3, since ADR-0080 restates them unchanged), now that ADR-0080 is accepted and ADR-0027 superseded; re-read, the text still holds." }
 
 ["UI-FEATURES#dialogs"."body"]
-stamp = { hash = "b3:b3f893f1ff2c58f2", by = "agent:claude", note = "DL-02 note: the live picture of a display, window or webcam from the draft (preview.subscribe source, 0.50), reopened on change, window hint, no filters." }
+stamp = { hash = "b3:70fec3d863bbea3c", by = "agent:claude", note = "Re-read after renumbering the draft-source protocol bump from 0.50 to 0.49 (protocol queue reset); only the version number changed." }
 
 ["UI-FEATURES#dialogs"."file:crates/jstream-ui/src/dialog.rs"]
 stamp = { hash = "b3:85f3ad4ab8f63257", by = "agent:ui-parity", note = "Re-read DL-01, DL-02 and DL-06 against dialog.rs (Enter blurs the field first), source_properties.rs (the dialog waits for a new source, OK sends only changes since opening) and add_source.rs (opens Properties after the batch is accepted); the notes now say so and DL-02 is built." }
@@ -5709,7 +5709,7 @@ stamp = { hash = "b3:ffe2cb2430032b74", by = "agent:ui-parity", note = "Recounte
 stamp = { hash = "b3:3f74327d12cde611", by = "agent:ui-parity", note = "Recounted by script: CV-03 🟡→✅ (Canvas 18 = 16/0/0/1/1), CV-04's note only; with this PR's other rows the total is 130 = 109/8/0/9/4. | merge: main's #918 moved CV-15 to ✅; recounted with this branch's CV-03, CM-03, CM-05, OB-05 and KB-05: canvas 18 = 17/0/0/0/1, total 130 = 111/8/0/7/4 | kept from the merged side: Canvas row 16 built, 0 needs-engine after CV-15; with #913's Filters row (7 built, 0 needs-engine) the total is 130 rows: 106 built, 11 partial, 1 to build, 8 needs-engine, 4 decision, summed from the table." }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#dialogs"]
-stamp = { hash = "b3:b3f893f1ff2c58f2", by = "agent:claude", note = "Counts unchanged: DL-02 stays built, with its live device picture added to the note." }
+stamp = { hash = "b3:70fec3d863bbea3c", by = "agent:claude", note = "Re-read after renumbering the draft-source protocol bump from 0.50 to 0.49 (protocol queue reset); only the version number changed." }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#docking"]
 stamp = { hash = "b3:1225d2e488a94805", by = "agent:claude", note = "CV-04 and DK-06 only gained note text (outline rule, tab cursor deviation from the spec); both stay ✅, so the counts hold" }

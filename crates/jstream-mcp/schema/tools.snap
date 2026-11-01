@@ -363,7 +363,7 @@ source: crates/jstream-mcp/src/tests.rs
                         "type": "null"
                       }
                     ],
-                    "description": "A source to show alone instead, one the collection doesn't hold (since 0.50).\nOmitted for the program mix or `scene_id`'s scene."
+                    "description": "A source to show alone instead, one the collection doesn't hold (since 0.49).\nOmitted for the program mix or `scene_id`'s scene."
                   },
                   "type": {
                     "const": "preview.subscribe",
@@ -5634,7 +5634,7 @@ source: crates/jstream-mcp/src/tests.rs
                         "type": "null"
                       }
                     ],
-                    "description": "A source to show alone instead, one the collection doesn't hold (since 0.50).\nOmitted for the program mix or `scene_id`'s scene."
+                    "description": "A source to show alone instead, one the collection doesn't hold (since 0.49).\nOmitted for the program mix or `scene_id`'s scene."
                   },
                   "type": {
                     "const": "preview.subscribe",
@@ -10472,7 +10472,7 @@ source: crates/jstream-mcp/src/tests.rs
                         "type": "null"
                       }
                     ],
-                    "description": "A source to show alone instead, one the collection doesn't hold (since 0.50).\nOmitted for the program mix or `scene_id`'s scene."
+                    "description": "A source to show alone instead, one the collection doesn't hold (since 0.49).\nOmitted for the program mix or `scene_id`'s scene."
                   },
                   "type": {
                     "const": "preview.subscribe",
@@ -14452,7 +14452,7 @@ source: crates/jstream-mcp/src/tests.rs
                         "type": "null"
                       }
                     ],
-                    "description": "A source to show alone instead, one the collection doesn't hold (since 0.50).\nOmitted for the program mix or `scene_id`'s scene."
+                    "description": "A source to show alone instead, one the collection doesn't hold (since 0.49).\nOmitted for the program mix or `scene_id`'s scene."
                   },
                   "type": {
                     "const": "preview.subscribe",

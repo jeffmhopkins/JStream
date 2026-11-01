@@ -1331,7 +1331,7 @@ stream waits. A scene the collection doesn't have is `not_found`, and when a sce
 streams is deleted the re-plan ends them with the end frame "the scene was deleted"
 (`PreviewHub::end_scene`).
 
-A stream with a `source` shows a source the collection doesn't hold (0.50): the
+A stream with a `source` shows a source the collection doesn't hold (0.49): the
 Properties dialog's picture of the display, window or webcam being picked, before the
 source exists or its new settings are saved (`preview/draft.rs`). `preview.subscribe`
 reads the kinds and the canvas under the lock and plans the draft once, after it, on a

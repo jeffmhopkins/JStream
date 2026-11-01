@@ -1,7 +1,7 @@
 //! The Properties dialog's live picture of a display, window, webcam or capture card
 //! (DL-02): what the settings being edited capture, before OK saves them, so the user
 //! sees the device they pick. It is a `preview.subscribe` stream of the draft source
-//! (`source`, protocol 0.50) on a channel tapped from the canvas's binary channel
+//! (`source`, protocol 0.49) on a channel tapped from the canvas's binary channel
 //! ([`taps`](crate::canvas::taps)), and it follows the draft: a change of what is
 //! captured closes the stream and opens the next on a new channel. The engine opens
 //! the capture for the stream alone, sharing a webcam already open; the picture never

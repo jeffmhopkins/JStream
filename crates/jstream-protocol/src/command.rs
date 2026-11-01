@@ -1238,7 +1238,7 @@ pub enum Action {
         /// The scene to show. Omitted for the program mix.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         scene_id: Option<SceneId>,
-        /// A source to show alone instead, one the collection doesn't hold (since 0.50).
+        /// A source to show alone instead, one the collection doesn't hold (since 0.49).
         /// Omitted for the program mix or `scene_id`'s scene.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         source: Option<PreviewDraft>,

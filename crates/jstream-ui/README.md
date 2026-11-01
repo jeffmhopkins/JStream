@@ -405,7 +405,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   an item and Properties… in the item menus open it for the item's source; a nested
   scene's item opens the scene's Properties dialog instead. A display, window or webcam
   source shows a live picture above the name (`device_preview.rs`, DL-02): a
-  `preview.subscribe` stream of the draft source (`source`, 0.50, small at 15 fps) on a
+  `preview.subscribe` stream of the draft source (`source`, 0.49, small at 15 fps) on a
   channel from the canvas's taps (`canvas/taps.rs`, numbered from 2³¹ so none is the
   canvas's), drawn by the canvas's `Screen`. It follows the settings the capture reads
   (a webcam's `device`, a display's or window's `target` and `show_cursor`): a change

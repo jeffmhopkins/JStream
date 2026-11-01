@@ -316,7 +316,7 @@ source: crates/jstream-protocol/src/fixtures.rs
                   "type": "null"
                 }
               ],
-              "description": "A source to show alone instead, one the collection doesn't hold (since 0.50).\nOmitted for the program mix or `scene_id`'s scene."
+              "description": "A source to show alone instead, one the collection doesn't hold (since 0.49).\nOmitted for the program mix or `scene_id`'s scene."
             },
             "type": {
               "const": "preview.subscribe",
@@ -8644,5 +8644,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.50"
+  "title": "JStream protocol 0.49"
 }

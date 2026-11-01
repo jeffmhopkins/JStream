@@ -184,7 +184,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.50 because
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.49 because
   `preview.subscribe` takes a `source`, a draft source the collection doesn't hold
   (`PreviewDraft`, [Binary streams](#design)); 0.47 made the engine draw, and so
   accept, every blend mode
@@ -1538,7 +1538,7 @@ the JSON text messages of the same connection (0.20,
 
 - **Opening and closing.** `preview.subscribe {channel, max_width?, max_height?, fps?,
   codecs?, scene_id?, source?}` is an action: it opens a stream of the program mix, of
-  the scene `scene_id` (0.46), or of the draft source `source` (0.50), for the calling
+  the scene `scene_id` (0.46), or of the draft source `source` (0.49), for the calling
   session only, tagged with the `channel`
   number the client chose (a `u32`, not an ID: it only tells the session's streams
   apart in the frame header). The picture is the canvas scaled down to fit
@@ -1561,7 +1561,7 @@ the JSON text messages of the same connection (0.20,
   windows and webcams it shows for the preview itself. A scene the collection doesn't
   have fails with `not_found`; a scene deleted while its stream is open ends the stream
   with an end frame.
-- **Draft sources.** A `source` stream (`PreviewDraft {kind, settings?}`, 0.50) shows a
+- **Draft sources.** A `source` stream (`PreviewDraft {kind, settings?}`, 0.49) shows a
   source the collection doesn't hold, alone, as an item covering the canvas would show
   it and with no filters: what a `display`, `window` or `webcam` source with those
   settings captures, so a client shows the device being picked before the source is
