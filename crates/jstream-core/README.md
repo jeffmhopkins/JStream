@@ -77,7 +77,8 @@ state machine. Contents:
   keeps entries in memory; `AuditFile` writes them as JSON lines to a size-capped
   `audit.jsonl` from its own writer thread (see *Audit log* in [Design](#design)).
 - **Collection file** (`collection.rs`): loads the collection from the file the host
-  names with `with_collection_file` (or creates it), and saves it atomically after every
+  names with `with_collection_file` (or creates it, with the four sample labels,
+  `Graph::with_sample_labels`, at the same `rev`), and saves it atomically after every
   change (see *Collection file* in [Design](#design)).
 - **Kinds** (`kinds.rs`): the built-in kinds the graph validates settings
   against and `kind.list` reports ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)):
@@ -407,7 +408,8 @@ state machine. Contents:
   session ends, a scene the collection doesn't have refused, a deleted scene's stream
   ended, its display drawn from the preview's own capture, and nothing captured for it
   by the program stage), the
-  collection file (`src/tests/collection.rs`: created when missing, batches, an undo
+  collection file (`src/tests/collection.rs`: created when missing with the sample
+  labels at `rev` 0, batches, an undo
   and a redo each saved, a saved collection loaded by a new engine with its `rev` and
   outputs, a `waveform` drawing another source saved and loaded with the source it
   draws made first, and loaded from a file from before `audio_source` existed
