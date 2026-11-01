@@ -213,7 +213,9 @@ state machine. Contents:
   track and the transition's start, sampled when the pass is drawn, through the
   group's chain and its item's effects. The layers either side planned for the group,
   with their chains and boxes, are then left out of the shot unless another track
-  reads them (`Shot::keep_read`), so they don't run each frame. A switch mid-Move
+  reads them (`Shot::keep_read`), so they don't run each frame. A `scene` video mix
+  that shows one of those scenes plans it again in full, chain and boxes, since the
+  mixes are planned after the transition (#961). A switch mid-Move
   holds the children where they are on screen and moves them on from there.
   `Shot::chain_cost` is what its
   scene chains and item effects add to each frame, for `stats.tick`'s `chains`.
@@ -479,8 +481,9 @@ state machine. Contents:
   one side's override to the other's or to the group's own value, and on from where it
   is when a switch retargets the Move, a group nested in that group moving inside its
   own layer, a group under a scene chain and item effects, whose layers no track shows
-  are left out of the shot, and a child appearing or disappearing with the group item's
-  timing; `snapshot.rs` draws such a child where its
+  are left out of the shot while a `scene` video mix showing the group or the new side
+  still plans that scene in full, chain and boxes, and a child appearing or
+  disappearing with the group item's timing; `snapshot.rs` draws such a child where its
   track is at the frame's time; `activity.rs` silences what a keyframe hides in a group; `transition.rs` pairs a source placed twice by item), YouTube on `jstream-youtube`'s `FakeTransport` and fixtures
   (`src/tests/youtube.rs`: sign-in through a real loopback redirect, sign-out, the
   broadcast actions and lists, quota and refused tokens, a `youtube` output
@@ -923,7 +926,9 @@ or the transition running onto it, whose tracks the shot holds in place of the
 program's pass. A `program` or `preview` mix draws the program's passes, or the
 transition while one runs (no mix draws studio mode's preview scene yet), and
 so does a mix the shot doesn't have, such as one deleted while an output still
-renders it. The engine re-plans after every applied batch, undo and redo, a
+renders it. The mixes' scenes are planned after the transition, so a scene a Move
+inside a group left out of the shot (`Shot::keep_read`) is planned again in full, with
+its chain and its items' boxes, for a mix that shows it (#961). The engine re-plans after every applied batch, undo and redo, a
 `scene.switch` that moves program, a transition's end, every `set_source_frame`, a
 collection file's load, a live source's build and a live source's next frame (see
 *Live sources*), under the collection lock, and `RenderHub::publish` stores

@@ -707,35 +707,10 @@ fn a_move_within_a_family_moves_a_nested_groups_children() {
 /// frame: only the moving layer's chain and boxes are counted.
 #[test]
 fn a_move_within_a_family_moves_a_chained_groups_children_and_runs_only_whats_shown() {
-    use jstream_protocol::FilterOwner;
     let engine = family();
     family_with_group(&engine);
     let control = connected(&engine);
-    apply(
-        &control,
-        vec![
-            move_preset(),
-            sharpen(
-                FilterOwner::Scene {
-                    scene_id: SceneId::new("g"),
-                },
-                "grade",
-            ),
-            sharpen(
-                FilterOwner::Item {
-                    item_id: ItemId::new("ag"),
-                },
-                "outer",
-            ),
-            sharpen(
-                FilterOwner::Item {
-                    item_id: ItemId::new("g1"),
-                },
-                "inner",
-            ),
-            geometry("g1", Some("k"), 800.0),
-        ],
-    );
+    apply(&control, chained_group());
     switch(&control, "a", None);
     switch(&control, "k", Some("move"));
     let hub = engine.render_hub();
@@ -764,6 +739,82 @@ fn a_move_within_a_family_moves_a_chained_groups_children_and_runs_only_whats_sh
         (1, 2),
         "the moving layer's chain, its box, and g1's: {cost:?}"
     );
+}
+
+/// What a scene mix shows is planned in full though the Move above dropped it from the
+/// program's tracks (#961): a mix showing the group's scene `g` gets `g` with its chain
+/// and `g1`'s box, and a mix showing `k` gets `k` with `ag`'s box, while the Move
+/// still runs.
+#[test]
+fn a_scene_mix_plans_again_what_the_move_dropped() {
+    use jstream_protocol::{MixInput, MixResolution, VideoMix, VideoMixId};
+    let engine = family();
+    family_with_group(&engine);
+    let control = connected(&engine);
+    let mix = |id: &str, scene: &str| Edit::VideoMixCreate {
+        mix_id: VideoMixId::new(id),
+        name: id.into(),
+        mix: VideoMix {
+            input: MixInput::Scene {
+                scene_id: SceneId::new(scene),
+            },
+            resolution: MixResolution {
+                width: 64,
+                height: 36,
+            },
+            fps_divisor: 1,
+        },
+    };
+    let mut list = chained_group();
+    list.extend([mix("gm", "g"), mix("km", "k")]);
+    apply(&control, list);
+    switch(&control, "a", None);
+    switch(&control, "k", Some("move"));
+    let hub = engine.render_hub();
+    let shot = hub.load();
+    let shot = shot.shot();
+    assert!(shot.tracks().is_some(), "a transition runs");
+    assert_eq!(moving(&engine), [("g1".into(), 300.0, 800.0, 400.0)]);
+    let (g, k) = (SceneId::new("g"), SceneId::new("k"));
+    assert_eq!(shot.root_of(Some(&VideoMixId::new("gm"))), Some(&g));
+    assert_eq!(shot.root_of(Some(&VideoMixId::new("km"))), Some(&k));
+    assert!(shot.scene_chain(&g).is_some(), "gm's scene runs its chain");
+    assert!(
+        shot.item_chain(&g, &ItemId::new("g1")).is_some(),
+        "gm's scene runs g1's effects"
+    );
+    assert!(
+        shot.item_chain(&k, &ItemId::new("ag")).is_some(),
+        "km's scene runs ag's effects"
+    );
+}
+
+/// The edits that give the group `g` a scene chain, its item `ag` and its child `g1`
+/// effects, and `g1` another place in `k`, with the Move preset.
+fn chained_group() -> Vec<Edit> {
+    use jstream_protocol::FilterOwner;
+    vec![
+        move_preset(),
+        sharpen(
+            FilterOwner::Scene {
+                scene_id: SceneId::new("g"),
+            },
+            "grade",
+        ),
+        sharpen(
+            FilterOwner::Item {
+                item_id: ItemId::new("ag"),
+            },
+            "outer",
+        ),
+        sharpen(
+            FilterOwner::Item {
+                item_id: ItemId::new("g1"),
+            },
+            "inner",
+        ),
+        geometry("g1", Some("k"), 800.0),
+    ]
 }
 
 /// A child only one side of a Move within a family draws appears or disappears inside
