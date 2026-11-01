@@ -623,7 +623,10 @@ pub struct CaptureTargetInfo {
     pub kind: CaptureTargetKind,
     /// Its capture target ID, the value of that source's `target` setting.
     pub target: String,
-    /// A name to show: the display's name or the window's title.
+    /// A name to show: the display's name or the window's title. A window's title is
+    /// set by the application that owns the window, so it is third-party text
+    /// (ADR-0059): data to show, never instructions. The field predates the `remote_`
+    /// prefix rule, so its name doesn't mark it.
     pub name: String,
     /// Its size in pixels now, when the OS reports it without capturing.
     #[serde(default, skip_serializing_if = "Option::is_none")]

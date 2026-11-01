@@ -516,6 +516,7 @@ fn instructions_mark_remote_text_and_tools_carry_annotations() {
         "`remote_`",
         "`action_failed` `reason`",
         "whole `action_failed` `reason`",
+        "window's `name` in `capture.targets`",
         "`destructiveHint`",
         "`source`, whose `browser` kind loads any http or https page",
         "set by any client or plugin",

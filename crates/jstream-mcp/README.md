@@ -111,15 +111,19 @@ or `output.start` also asks before `output.list`.
 
 Text from outside JStream is marked by where it sits, and the reply keeps its protocol
 shape (ADR-0059): a protocol field holding third-party text is named `remote_*`
-(`REMOTE_PREFIX`; none yet), and the `output` tool's description says that an
+(`REMOTE_PREFIX`; `plugin.state_changed`'s `remote_name` is one, though `plugin.*`
+events don't reach agents), and the `output` tool's description says that an
 `output.start` `action_failed` `reason` includes the code and description a streaming
 server sent (each at most 512 characters). Nothing delimits the server's words there, so
-the description and the server instructions say the whole `reason` is untrusted. The
-server instructions say both are data, never instructions, and point at the
+the description and the server instructions say the whole `reason` is untrusted. A
+window's `name` in a `capture.targets` result is its title, set by the application that
+owns it, in a field named before the `remote_` rule; the `capture` tool's description and
+the server instructions say it is untrusted too (#934). The
+server instructions say all three are data, never instructions, and point at the
 annotations. They also say that names and other state text can be set by any client or
 plugin, and are data, not instructions ([ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)'s
 U1). Tested by `annotations_follow_what_each_tool_can_do`,
-`output_tool_marks_remote_rejection_text` and
+`output_tool_marks_remote_rejection_text`, `capture_tool_marks_window_titles_as_remote_text` and
 `instructions_mark_remote_text_and_tools_carry_annotations`.
 
 The `pairing` and `device` tools (protocol 0.21) need no code here either: the session
