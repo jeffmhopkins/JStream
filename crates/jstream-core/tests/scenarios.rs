@@ -39,8 +39,8 @@ use jstream_platform::{
     HardwarePreference, MediaClock, PlatformError, RateControl, VideoEncoderConfig, VideoSurface,
 };
 use jstream_protocol::{
-    Action, Batch, Call, CallResult, Edit, Event, Hello, OutputId, OutputState, PROTOCOL_VERSION,
-    Rev, SceneId,
+    Action, Batch, Call, CallResult, ChainCost, Edit, Event, Hello, OutputId, OutputState,
+    PROTOCOL_VERSION, Rev, SceneId,
 };
 
 fn block_on<F: std::future::Future>(future: F) -> F::Output {
@@ -60,10 +60,13 @@ fn unloaded(events: Vec<Event>) -> Vec<Event> {
     events
         .into_iter()
         .map(|event| match event {
-            Event::StatsTick { seq, drops, .. } => Event::StatsTick {
+            Event::StatsTick {
+                seq, drops, chains, ..
+            } => Event::StatsTick {
                 seq,
                 drops,
                 load: None,
+                chains,
             },
             other => other,
         })
@@ -217,6 +220,7 @@ fn overload_drops_and_counts() {
         seq: 1,
         drops: expected,
         load: None,
+        chains: Some(ChainCost::default()),
     };
     assert_eq!(unloaded(drain(&mut user_events)), vec![tick.clone()]);
     assert_eq!(unloaded(drain(&mut agent_events)), vec![tick]);
@@ -226,6 +230,7 @@ fn overload_drops_and_counts() {
         seq: 2,
         drops: expected,
         load: None,
+        chains: Some(ChainCost::default()),
     };
     assert_eq!(
         unloaded(drain(&mut user_events)),

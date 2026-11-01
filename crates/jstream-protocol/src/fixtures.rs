@@ -7,14 +7,15 @@
 
 use crate::ActivityEntry;
 use crate::{
-    Action, Batch, BlendMode, Blocker, Call, CallResult, Canvas, ClientId, ClientMessage, Command,
-    CommandClass, Crop, DeleteTarget, DropCounts, Edit, EngineLoad, EntityKind, ErrorResponse,
-    Event, EventMessage, FilterChain, FilterChains, FilterId, FilterInfo, FilterOwner, Finite32,
-    FitMode, Hello, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, MasterInfo,
-    OutputId, OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError,
-    Query, QueryResult, RecordContainer, Request, RequestId, Response, Rev, RtmpTarget, SceneId,
-    SceneInfo, SceneRole, SceneSummary, SecretString, ServerMessage, Settings, Size, SourceId,
-    SourceInfo, SourceKind, Vec2, Welcome, json_schema,
+    Action, Batch, BlendMode, Blocker, Call, CallResult, Canvas, ChainCost, ClientId,
+    ClientMessage, Command, CommandClass, Crop, DeleteTarget, DropCounts, Edit, EngineLoad,
+    EntityKind, ErrorResponse, Event, EventMessage, FilterChain, FilterChains, FilterId,
+    FilterInfo, FilterOwner, Finite32, FitMode, Hello, IdempotencyKey, ItemGeometry, ItemId,
+    ItemInfo, ItemTransform, MasterInfo, OutputId, OutputInfo, OutputKind, OutputState,
+    PROTOCOL_VERSION, PlacementForm, ProtocolError, Query, QueryResult, RecordContainer, Request,
+    RequestId, Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary,
+    SecretString, ServerMessage, Settings, Size, SourceId, SourceInfo, SourceKind, Vec2, Welcome,
+    json_schema,
 };
 use crate::{
     ActionResult, AudioCodec, AudioEncoding, BroadcastInfo, BroadcastLifeCycle,
@@ -1927,6 +1928,15 @@ pub(crate) fn events() -> Vec<Event> {
             program_frames: 120,
             cpu_ms: Some(150),
             cpus: 8,
+        }),
+        chains: Some(ChainCost {
+            scene_chains: 1,
+            scene_layers: 2,
+            scene_passes: 2,
+            item_effects: 1,
+            item_layers: 3,
+            item_passes: 3,
+            layer_bytes: 99_532_800,
         }),
     });
     events.push(Event::LiveChanged {

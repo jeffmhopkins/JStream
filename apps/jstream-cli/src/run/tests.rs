@@ -977,6 +977,7 @@ fn events_golden_dropped_notice() {
             output_packets: 3,
         },
         load: None,
+        chains: None,
     });
     let mut out = Vec::new();
     stream_events(events, Some(1), false, &mut out).expect("one event");
@@ -997,6 +998,7 @@ fn events_golden_dropped_notice() {
             cpu_ms: Some(40),
             cpus: 8,
         }),
+        chains: None,
     });
     let mut out = Vec::new();
     stream_events(events, Some(1), false, &mut out).expect("one event");

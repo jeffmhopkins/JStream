@@ -56,7 +56,7 @@ pub use envelope::{
     Response, ServerMessage, Welcome,
 };
 pub use error::{Blocker, EntityKind, ProtocolError, WireError};
-pub use event::{DropCounts, EngineLoad, Event, OutputState};
+pub use event::{ChainCost, DropCounts, EngineLoad, Event, OutputState};
 pub use filter::{FilterChain, FilterChains, FilterInfo, FilterOwner, MAX_CHAIN_FILTERS};
 pub use finite::Finite32;
 pub use geometry::{

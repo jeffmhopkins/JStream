@@ -149,7 +149,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Events** (`event.rs`): `state.changed`, `output.state_changed`, `studio.changed`
   (program, preview and the transition a switch started), `privacy.changed` (deprecated),
   `source.size_changed`, `events.dropped`,
-  `stats.tick` (with `DropCounts` and `EngineLoad`), `meters.tick`,
+  `stats.tick` (with `DropCounts`, `EngineLoad` and `ChainCost`), `meters.tick`,
   `youtube.status_changed`, `youtube.health_changed`,
   `youtube.stats`, `live.changed`, `live.ended` and `plugin.state_changed`.
 - **Plugins** (`plugin.rs`, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)): `PluginClass` (`read`,
@@ -187,8 +187,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.53 because the engine
-  takes live values on a keyframe scene (`live.set`, #846; no wire change); 0.52 added
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.54 because of
+  `stats.tick`'s `chains`, what scene filter chains and item effects add to each frame
+  (`ChainCost`); 0.53 made the engine take live values on a keyframe scene (`live.set`,
+  #846; no wire change); 0.52 added
   `ui_settings.set` and `ui_settings.get`, the UI settings the server keeps
   ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)); 0.51 added the
   `activity.list` query, the engine's recent activity with a sentence for each call
@@ -1226,7 +1228,7 @@ After `welcome`, the server pushes every event to every client.
   ([jstream-server › Design](../jstream-server/README.md#design)). Answers are never
   dropped. The client re-reads what it shows with `state.get`, which carries `rev`.
   Added in 0.4.
-- `stats.tick {seq, drops, load}` is one sample of the pipeline's drop counters
+- `stats.tick {seq, drops, load, chains}` is one sample of the pipeline's drop counters
   ([R-RT-004](../../docs/RULES.md#R-RT-004)). `drops` is a running total since the
   engine started, not a delta, so a client that misses a tick subtracts the last one
   it did see. The fields are `capture_frames` (frames a capture mailbox replaced
@@ -1250,7 +1252,21 @@ After `welcome`, the server pushes every event to every client.
   takes two ticks for a rate: frames over the elapsed time for the frame rate, and CPU
   time over the elapsed time times `cpus` for the share of every CPU. An older engine
   leaves `load` out, and a missing field in it parses as 0 or absent. A render tick that falls a whole period or more behind
-  the clock is skipped rather than drawn late, and counted in `render_ticks`. Until
+  the clock is skipped rather than drawn late, and counted in `render_ticks`. A tick
+  also carries `chains` (`ChainCost`), what scene filter chains and item effects add
+  to each frame as the current render plan schedules them
+  ([ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md) §7): a gauge, not
+  a running total. `scene_chains` counts the scenes whose video chain runs, and
+  `scene_layers` and `scene_passes` their offscreen layers and GPU passes (each scene's
+  canvas-sized composite and one per enabled filter); `item_effects` counts the items
+  whose effects run, once for each scene that draws the item, and `item_layers` and
+  `item_passes` theirs (each item's box layer and one per enabled effect);
+  `layer_bytes` is the texture memory of all those layers (`Rgba16Float`, 8 bytes a
+  pixel). A filter of a kind the engine doesn't draw is bypassed and not counted, nor
+  are a source's own chain, a `scene_mask`'s scene, and the canvas-sized layer a
+  nested scene without a chain is drawn into for an item with effects that shows it
+  (it takes the place of the layer that scene would be drawn into anyway). An older engine leaves `chains`
+  out, and a count missing from it parses as 0. `chains` was added in 0.54. Until
   [open question 7](#open-questions) every client receives it. Added in 0.6. A late plugin block is an audio drop in
   `audio_frames` once the mixer counts it
   ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)); that host is not

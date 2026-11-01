@@ -363,6 +363,7 @@ pub fn Header(
                         seq,
                         drops,
                         load: now,
+                        ..
                     } => {
                         dropped.try_update(|d| d.observe(seq, drops));
                         engine_load.try_update(|l| l.observe(seq, now));

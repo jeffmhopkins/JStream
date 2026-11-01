@@ -3418,6 +3418,7 @@ impl State {
                 seq: self.stats_seq,
                 drops,
                 load: Some(load),
+                chains: Some(self.render.load().shot().chain_cost()),
             },
             wake,
         );
