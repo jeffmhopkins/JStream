@@ -809,8 +809,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `label.delete` refused because a scene or folder is in the folder or a source carries
   the label.
 - **Binary streams** (WebSocket binary frames, protocol 0.20): preview video.
-  `preview.subscribe` opens a stream of the program mix, or of any one scene (0.46,
-  `scene_id`: the UI's projector windows and multiview), for the calling session,
+  `preview.subscribe` opens a stream of the program mix, of any one scene (0.46,
+  `scene_id`: the UI's projector windows and multiview), or of one source alone (0.56,
+  `source_id`: the UI's projector of a source), for the calling session,
   scaled down, at most `fps` pictures a second and only when the mix changes (as it
   does throughout a running transition), in H.264
   when the platform has an encoder and JPEG otherwise; `preview.unsubscribe` or the

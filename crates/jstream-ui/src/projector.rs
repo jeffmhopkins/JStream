@@ -1,9 +1,10 @@
-//! Projector windows (DL-07): the program mix, one scene, or a multiview in a window of
-//! its own, or full screen. A projector is this same page, opened by [`open`] with a
-//! `?projector=` query ([`Request`]): the app connects as it always does and shows
-//! [`Projector`] instead of the workspace. Each picture is a preview stream
-//! (`preview.subscribe`, with `scene_id` for a scene), all on the session's one binary
-//! channel, which [`Channels`] hands out by channel number.
+//! Projector windows (DL-07): the program mix, one scene, one source alone, or a
+//! multiview in a window of its own, or full screen. A projector is this same page,
+//! opened by [`open`] with a `?projector=` query ([`Request`]): the app connects as it
+//! always does and shows [`Projector`] instead of the workspace. Each picture is a
+//! preview stream (`preview.subscribe`, with `scene_id` for a scene and `source_id` for
+//! a source, 0.56), all on the session's one binary channel, which [`Channels`] hands
+//! out by channel number.
 //!
 //! A double click fills the screen the window is on, or leaves full screen; Escape
 //! closes a projector that isn't full screen. A projector opened full screen in the
@@ -18,7 +19,7 @@ use crate::canvas::screen::Screen;
 use crate::store::Studio;
 use futures_util::StreamExt;
 use jstream_control::protocol::{
-    Action, BinaryFrame, Call, PreviewCodec, PreviewSettings, SceneId, SceneRole,
+    Action, BinaryFrame, Call, PreviewCodec, PreviewSettings, SceneId, SceneRole, SourceId,
 };
 use jstream_control::{BinaryStream, Control};
 use leptos::html::Canvas;
@@ -40,6 +41,8 @@ pub enum Target {
     Program,
     /// One scene, on program or not.
     Scene(SceneId),
+    /// One source alone, with its own filters: what an item filling the canvas shows.
+    Source(SourceId),
     /// Program, preview in studio mode, and the scenes marked "Show in multiview".
     Multiview,
 }
@@ -60,6 +63,7 @@ impl Request {
             Target::Program => "program".to_owned(),
             Target::Multiview => "multiview".to_owned(),
             Target::Scene(id) => format!("scene:{}", encode(id.as_str())),
+            Target::Source(id) => format!("source:{}", encode(id.as_str())),
         };
         let full = if self.full { "&full=1" } else { "" };
         format!("?{KEY}={target}{full}")
@@ -78,11 +82,16 @@ impl Request {
                         "program" => Target::Program,
                         "multiview" => Target::Multiview,
                         _ => {
-                            let id = decode(value.strip_prefix("scene:")?)?;
+                            let (kind, id) = value.split_once(':')?;
+                            let id = decode(id)?;
                             if id.is_empty() {
                                 return None;
                             }
-                            Target::Scene(SceneId::new(id))
+                            match kind {
+                                "scene" => Target::Scene(SceneId::new(id)),
+                                "source" => Target::Source(SourceId::new(id)),
+                                _ => return None,
+                            }
                         }
                     });
                 }
@@ -103,6 +112,7 @@ impl Request {
             Target::Program => "jstream-projector-program".to_owned(),
             Target::Multiview => "jstream-projector-multiview".to_owned(),
             Target::Scene(id) => format!("jstream-projector-scene-{}", encode(id.as_str())),
+            Target::Source(id) => format!("jstream-projector-source-{}", encode(id.as_str())),
         }
     }
 }
@@ -211,18 +221,42 @@ pub fn pop_out(studio: Studio, scene_id: Option<SceneId>) -> crate::menu::Entry 
     Entry::submenu("Pop out", entries)
 }
 
+/// The Pop out submenu of a source's item (spec-workspace.md 5.2.10): the source alone
+/// in a window, or full screen.
+pub fn pop_out_source(studio: Studio, source_id: SourceId) -> crate::menu::Entry {
+    use crate::menu::Entry;
+    let windowed = Request {
+        target: Target::Source(source_id),
+        full: false,
+    };
+    let full = Request {
+        full: true,
+        ..windowed.clone()
+    };
+    Entry::submenu(
+        "Pop out",
+        vec![
+            Entry::item("Source in a window", move || {
+                open_and_report(studio, &windowed)
+            }),
+            Entry::Head("FULL SCREEN".into()),
+            Entry::item("Source full screen", move || open_and_report(studio, &full)),
+        ],
+    )
+}
+
 /// `target[key]`, or `undefined`.
 fn js_sys_get(target: &leptos::wasm_bindgen::JsValue, key: &str) -> leptos::wasm_bindgen::JsValue {
     leptos::web_sys::js_sys::Reflect::get(target, &leptos::wasm_bindgen::JsValue::from_str(key))
         .unwrap_or(leptos::wasm_bindgen::JsValue::UNDEFINED)
 }
 
-/// The `preview.subscribe` for one projector picture: `scene`, or the program mix for
-/// `None`, at most `max` pixels and `fps` pictures a second, H.264 first when the
-/// browser can decode it.
+/// The `preview.subscribe` for one projector picture: `source` alone, else `scene`, else
+/// the program mix, at most `max` pixels and `fps` pictures a second, H.264 first when
+/// the browser can decode it.
 pub fn subscribe(
     channel: u32,
-    scene: Option<SceneId>,
+    (scene, source): (Option<SceneId>, Option<SourceId>),
     (width, height): (u32, u32),
     fps: u32,
     h264: bool,
@@ -244,8 +278,9 @@ pub fn subscribe(
         )),
         fps: Some(fps.clamp(*PreviewSettings::FPS.start(), *PreviewSettings::FPS.end())),
         codecs,
-        scene_id: scene,
+        scene_id: scene.filter(|_| source.is_none()),
         source: None,
+        source_id: source,
     }
 }
 
@@ -340,6 +375,9 @@ async fn act(control: &Weak<dyn Control>, action: Action) -> Option<Result<(), S
 #[component]
 fn Picture(
     scene: Option<SceneId>,
+    /// A source to show alone instead of `scene`.
+    #[prop(optional)]
+    source: Option<SourceId>,
     /// The largest picture to ask for.
     max: (u32, u32),
     fps: u32,
@@ -372,6 +410,7 @@ fn Picture(
                 let control = control.clone();
                 let h264 = Rc::clone(&h264);
                 let scene = scene.clone();
+                let source = source.clone();
                 Box::new(move |frame| {
                     let header = frame.header;
                     if header.end {
@@ -391,11 +430,11 @@ fn Picture(
                         // reused.
                         h264.set(false);
                         let control = control.clone();
-                        let scene = scene.clone();
+                        let shows = (scene.clone(), source.clone());
                         spawn_local(async move {
                             let close = Action::PreviewUnsubscribe { channel };
                             let _closed = act(&control, close).await;
-                            let again = subscribe(channel, scene, max, fps, false);
+                            let again = subscribe(channel, shows, max, fps, false);
                             if let Some(Err(error)) = act(&control, again).await {
                                 shown.try_set(Shown::Ended(error));
                             }
@@ -404,9 +443,9 @@ fn Picture(
                 })
             };
             channels.handlers.borrow_mut().insert(channel, handler);
-            let scene = scene.clone();
+            let shows = (scene.clone(), source.clone());
             spawn_local(async move {
-                let open = subscribe(channel, scene, max, fps, h264.get());
+                let open = subscribe(channel, shows, max, fps, h264.get());
                 if let Some(Err(error)) = act(&control, open).await {
                     shown.try_set(Shown::Ended(error));
                 }
@@ -503,6 +542,13 @@ pub fn Projector(
                 .map(|s| s.name.clone())
         })
     };
+    let source_name = move |id: &SourceId| {
+        studio.collection.with(|c| {
+            c.as_ref()
+                .and_then(|c| c.sources.iter().find(|s| &s.source_id == id))
+                .map(|s| s.name.clone())
+        })
+    };
     let title = {
         let target = request.target.clone();
         move || match &target {
@@ -511,6 +557,10 @@ pub fn Projector(
             Target::Scene(id) => {
                 format!("Scene: {}", name_of(id).unwrap_or_else(|| id.to_string()))
             }
+            Target::Source(id) => format!(
+                "Source: {}",
+                source_name(id).unwrap_or_else(|| id.to_string())
+            ),
         }
     };
     let page_title = title.clone();
@@ -544,6 +594,9 @@ pub fn Projector(
         Target::Program => view! { <Picture scene=None max=screen_pixels() fps=30 /> }.into_any(),
         Target::Scene(id) => {
             view! { <Picture scene=Some(id) max=screen_pixels() fps=30 /> }.into_any()
+        }
+        Target::Source(id) => {
+            view! { <Picture scene=None source=id max=screen_pixels() fps=30 /> }.into_any()
         }
         Target::Multiview => view! { <Multiview /> }.into_any(),
     };
@@ -642,7 +695,9 @@ fn Multiview() -> impl IntoView {
 #[cfg(test)]
 mod tests {
     use super::{MULTIVIEW_SCENES, Request, Target, decode, encode, multiview_scenes, subscribe};
-    use jstream_control::protocol::{Action, PreviewCodec, SceneId, SceneInfo, SceneRole};
+    use jstream_control::protocol::{
+        Action, PreviewCodec, SceneId, SceneInfo, SceneRole, SourceId,
+    };
 
     fn request(target: Target, full: bool) -> Request {
         Request { target, full }
@@ -655,6 +710,7 @@ mod tests {
             request(Target::Multiview, true),
             request(Target::Scene(SceneId::new("scn_1")), false),
             request(Target::Scene(SceneId::new("a b&c=d/é")), true),
+            request(Target::Source(SourceId::new("cam 1")), false),
         ] {
             assert_eq!(Request::parse(&request.query()), Some(request.clone()));
         }
@@ -720,7 +776,7 @@ mod tests {
             codecs,
             scene_id,
             ..
-        } = subscribe(3, Some(SceneId::new("s")), (3840, 2160), 60, true)
+        } = subscribe(3, (Some(SceneId::new("s")), None), (3840, 2160), 60, true)
         else {
             panic!("a subscribe");
         };
@@ -731,12 +787,21 @@ mod tests {
         assert_eq!(scene_id, Some(SceneId::new("s")));
         let Action::PreviewSubscribe {
             codecs, scene_id, ..
-        } = subscribe(1, None, (640, 360), 15, false)
+        } = subscribe(1, (None, None), (640, 360), 15, false)
         else {
             panic!("a subscribe");
         };
         assert_eq!(codecs, vec![PreviewCodec::Jpeg]);
         assert_eq!(scene_id, None);
+        let Action::PreviewSubscribe {
+            scene_id,
+            source_id,
+            ..
+        } = subscribe(2, (None, Some(SourceId::new("cam"))), (640, 360), 15, false)
+        else {
+            panic!("a subscribe");
+        };
+        assert_eq!((scene_id, source_id), (None, Some(SourceId::new("cam"))));
     }
 
     fn scene(id: &str, role: SceneRole, shown: bool) -> SceneInfo {
