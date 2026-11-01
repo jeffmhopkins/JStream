@@ -99,7 +99,7 @@ pub use preview::{
 };
 pub use query::{
     CaptureTargetInfo, CaptureTargetKind, DeleteTarget, DeviceInfo, ItemInfo, MasterInfo,
-    PixelSize, Query, QueryResult, SceneInfo, SceneSummary, SourceInfo, SourceSize,
+    PixelSize, Query, QueryResult, SceneInfo, SceneOptions, SceneSummary, SourceInfo, SourceSize,
 };
 pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};

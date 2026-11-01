@@ -47,7 +47,7 @@ test('a scene row sets its transitions from submenus', async ({ page, daemon, co
   await expect(page.getByRole('tabpanel', { name: 'Transitions', exact: true })).toBeVisible();
 });
 
-test('a double click opens the scene properties, which set its name and hotkey', async ({ page, daemon }) => {
+test('a double click opens the scene properties, which set its name, hotkey, multiview and nested audio', async ({ page, daemon }) => {
   await connect(page, daemon);
   await scene(page, 'Intro').locator('.row-main').dblclick();
   const dialog = page.getByRole('dialog', { name: 'Scene properties' });
@@ -64,6 +64,12 @@ test('a double click opens the scene properties, which set its name and hotkey',
   await expect(hotkey).toHaveValue('');
   await page.keyboard.press('F3');
   await expect(hotkey).toHaveValue('F3');
+  const multiview = dialog.getByRole('checkbox', { name: 'Show in multiview' });
+  await expect(multiview).toBeChecked();
+  await multiview.uncheck();
+  const audio = dialog.getByRole('checkbox', { name: 'Include its audio when nested' });
+  await expect(audio).toBeChecked();
+  await audio.uncheck();
   await dialog.getByLabel('Name').fill('Opening');
   await dialog.getByRole('button', { name: 'OK' }).click();
   await expect(dialog).toBeHidden();
@@ -73,6 +79,8 @@ test('a double click opens the scene properties, which set its name and hotkey',
   await scene(page, 'Opening').click({ button: 'right' });
   await menu(page).getByRole('menuitem', { name: 'Properties…' }).click();
   await expect(dialog.getByLabel('Hotkey')).toHaveValue('F3');
+  await expect(dialog.getByRole('checkbox', { name: 'Show in multiview' })).not.toBeChecked();
+  await expect(dialog.getByRole('checkbox', { name: 'Include its audio when nested' })).not.toBeChecked();
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(dialog).toBeHidden();
 });

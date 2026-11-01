@@ -322,7 +322,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   checks "Default (Cut)", lists the Cut preset with its kind, and sends
   `scene.set_transitions`, and Manage presets… shows the Transitions tab; a double click
   opens the scene's Properties dialog, whose hotkey field takes a chord, clears on
-  Backspace, and with a new name is saved by OK and read back by the dialog; the canvas margin's Scene properties… opens it for the shown scene; the
+  Backspace, and with a new name and Show in multiview and Include its audio when nested unchecked is saved by OK and read
+  back by the dialog; the canvas margin's Scene properties… opens it for the shown scene; the
   Inspector's Scene switches send `item.set_transition` with the whole settings. The
   mock engine refuses the transition edits after the page has sent them.
 - **Projectors** (`projectors.spec.js`): the View menu's Program in a window opens a

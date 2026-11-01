@@ -2221,6 +2221,28 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the\nMixer when it is nested. Every field left out takes its default. A keyframe scene\nhas options of its own. Inverse: `scene.set_options` with the previous options.",
+                "properties": {
+                  "include_audio": {
+                    "description": "Whether its sources reach the Mixer through the nested scene sources that show\nit. Off, a scene placed inside another adds none of its audio there, whatever\nthose sources' own `audio.enabled`; it changes nothing while the scene itself is\non program. Omitted for `true`, the default.",
+                    "type": "boolean"
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to change."
+                  },
+                  "type": {
+                    "const": "scene.set_options",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Adds a label, last in label order (ADR-0024 §4). Rejected with `invalid_argument`\nfor an empty name, a colour that isn't `#rrggbb`, or an icon checked as\n`scene.set_meta`'s. Inverse: `label.delete`.",
                 "properties": {
                   "color": {
@@ -7524,6 +7546,28 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the\nMixer when it is nested. Every field left out takes its default. A keyframe scene\nhas options of its own. Inverse: `scene.set_options` with the previous options.",
+                "properties": {
+                  "include_audio": {
+                    "description": "Whether its sources reach the Mixer through the nested scene sources that show\nit. Off, a scene placed inside another adds none of its audio there, whatever\nthose sources' own `audio.enabled`; it changes nothing while the scene itself is\non program. Omitted for `true`, the default.",
+                    "type": "boolean"
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to change."
+                  },
+                  "type": {
+                    "const": "scene.set_options",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Adds a label, last in label order (ADR-0024 §4). Rejected with `invalid_argument`\nfor an empty name, a colour that isn't `#rrggbb`, or an icon checked as\n`scene.set_meta`'s. Inverse: `label.delete`.",
                 "properties": {
                   "color": {
@@ -12394,6 +12438,28 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the\nMixer when it is nested. Every field left out takes its default. A keyframe scene\nhas options of its own. Inverse: `scene.set_options` with the previous options.",
+                "properties": {
+                  "include_audio": {
+                    "description": "Whether its sources reach the Mixer through the nested scene sources that show\nit. Off, a scene placed inside another adds none of its audio there, whatever\nthose sources' own `audio.enabled`; it changes nothing while the scene itself is\non program. Omitted for `true`, the default.",
+                    "type": "boolean"
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to change."
+                  },
+                  "type": {
+                    "const": "scene.set_options",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Adds a label, last in label order (ADR-0024 §4). Rejected with `invalid_argument`\nfor an empty name, a colour that isn't `#rrggbb`, or an icon checked as\n`scene.set_meta`'s. Inverse: `label.delete`.",
                 "properties": {
                   "color": {
@@ -14666,7 +14732,7 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Runs one `scene` operation: set `op.type` to one of `scene.create` (edit), `scene.create_variant` (edit), `scene.rename` (edit), `scene.set_role` (edit), `scene.delete` (edit), `scene.reorder` (edit), `scene.set_folder` (edit), `scene.set_meta` (edit), `scene.set_transitions` (edit), `scene.switch` (action), `scene.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `scene` operation: set `op.type` to one of `scene.create` (edit), `scene.create_variant` (edit), `scene.rename` (edit), `scene.set_role` (edit), `scene.delete` (edit), `scene.reorder` (edit), `scene.set_folder` (edit), `scene.set_meta` (edit), `scene.set_options` (edit), `scene.set_transitions` (edit), `scene.switch` (action), `scene.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "FolderId": {
@@ -14956,6 +15022,28 @@ source: crates/jstream-mcp/src/tests.rs
                   },
                   "type": {
                     "const": "scene.set_meta",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the\nMixer when it is nested. Every field left out takes its default. A keyframe scene\nhas options of its own. Inverse: `scene.set_options` with the previous options.",
+                "properties": {
+                  "include_audio": {
+                    "description": "Whether its sources reach the Mixer through the nested scene sources that show\nit. Off, a scene placed inside another adds none of its audio there, whatever\nthose sources' own `audio.enabled`; it changes nothing while the scene itself is\non program. Omitted for `true`, the default.",
+                    "type": "boolean"
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to change."
+                  },
+                  "type": {
+                    "const": "scene.set_options",
                     "type": "string"
                   }
                 },

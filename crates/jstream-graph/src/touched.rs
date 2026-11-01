@@ -84,6 +84,8 @@ enum Prop {
     Folder,
     /// A scene's or source's organisation metadata (ADR-0024 §4).
     Meta,
+    /// A scene's options (ADR-0089).
+    Options,
     /// A label's colour and icon.
     Look,
 }
@@ -308,6 +310,9 @@ impl Touched {
                 for label in &meta.labels {
                     self.uses.insert(Object::Label(label.clone()));
                 }
+            }
+            Edit::SceneSetOptions { scene_id, .. } => {
+                self.prop(Object::Scene(scene_id.clone()), Prop::Options);
             }
             Edit::LabelCreate { label_id, .. } | Edit::LabelDelete { label_id } => {
                 self.exists.insert(Object::Label(label_id.clone()));

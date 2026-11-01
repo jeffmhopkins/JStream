@@ -104,6 +104,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("scene.reorder", Class(E)),
     ("scene.set_folder", Class(E)),
     ("scene.set_meta", Class(E)),
+    ("scene.set_options", Class(E)),
     ("scene.set_transitions", Class(E)),
     ("scene.create_variant", Class(E)),
     ("item.add", Class(E)),

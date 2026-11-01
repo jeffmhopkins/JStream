@@ -345,7 +345,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   screen's size in device pixels, at most 1920×1080, at 30 fps. The multiview shows
   program (with preview beside it while the page's studio mode, read from the browser's
   storage and followed as the workspace changes it, is on) over up to 8 scenes that are not groups and are marked "Show in
-  multiview", red-framed on program and green on preview. A double click fills the
+  multiview" (in the scene Properties dialog), red-framed on program and green on preview. A double click fills the
   screen (the Fullscreen API) or leaves it, Escape closes a projector that isn't full
   screen, and the pointer and the hint at the bottom hide after 2 s without moving. A
   window the browser doesn't open is reported in the problem bar; a full-screen one in
@@ -441,17 +441,20 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   ends the stream shows why.
 - **The scene Properties dialog** (`scene_properties.rs`) opens from a double click on a
   scene row, the row menu's Properties…, the canvas margin's Scene properties… and a
-  nested scene's item. It edits a draft of the name, Transition in and out and the
-  hotkey: the hotkey field takes the next key press as a chord (the modifiers in the
+  nested scene's item. It edits a draft of the name, Transition in and out, the
+  hotkey, Show in multiview and Include its audio when nested: the hotkey field takes the next key press as a chord (the modifiers in the
   protocol's order, then the key's `code`; Backspace or Delete clears it, Tab,
   Escape and Enter keep their dialog meaning). OK sends what changed as one batch:
-  `scene.rename`, `scene.set_transitions`, and `hotkey.clear` of the old chord before
+  `scene.rename`, `scene.set_transitions`, `scene.set_meta` (the scene's labels, icon,
+  colour and favourite kept as the collection has them at OK), `scene.set_options` (the
+  nested audio switch, [ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)),
+  and `hotkey.clear` of the old chord before
   `hotkey.set` of the new one, bound to a `scene.switch` with the preset the old binding
   named (none for a first hotkey). A chord bound already is refused before sending, with
   what it runs. The scene's hotkey is the first binding
-  whose action switches to it. Defaults clears the overrides and the hotkey. The engine
-  has no scene background colour, multiview or scene-wide "include its audio", so the
-  dialog leaves them out. On the right, in the source Properties dialog's shell, are the
+  whose action switches to it. Defaults clears the overrides and the hotkey and checks
+  both switches. The engine has no scene background colour, so the dialog leaves it
+  out. Duplicate scene copies the scene's options with it. On the right, in the source Properties dialog's shell, are the
   scene's filters: the Filters panel's rows on its video chain, which apply at once (a
   keyframe shows its parent's).
 - **Filters** ([UI features › filters](../../docs/UI-FEATURES.md#filters)). The

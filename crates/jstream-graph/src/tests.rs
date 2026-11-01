@@ -1104,8 +1104,8 @@ mod property {
         Action, AudioFollow, BusId, Chord, Crop, DeleteTarget, Easing, Edit, EncoderProfile,
         EncoderProfileId, Finite32, FitMode, FolderId, Glide, ItemEasing, ItemGeometry, ItemId,
         ItemTransform, ItemTransition, LabelId, MixInput, MixResolution, OutputId, RateControl,
-        Rev, SceneId, SceneMeta, SceneRole, Settings, Size, SourceId, SourceKind, SourceMeta,
-        TransitionEffect, TransitionPresetId, Vec2, VideoMix, VideoMixId,
+        Rev, SceneId, SceneMeta, SceneOptions, SceneRole, Settings, Size, SourceId, SourceKind,
+        SourceMeta, TransitionEffect, TransitionPresetId, Vec2, VideoMix, VideoMixId,
     };
     use serde_json::{Value, json};
     use std::collections::BTreeSet;
@@ -1762,7 +1762,13 @@ mod property {
             64 => Edit::LabelDelete {
                 label_id: LabelId::new(label(rng)),
             },
-            65 | 66 => Edit::SourceSetMeta {
+            66 => Edit::SceneSetOptions {
+                scene_id: SceneId::new(scene(rng)),
+                options: SceneOptions {
+                    include_audio: rng.below(2) == 0,
+                },
+            },
+            65 => Edit::SourceSetMeta {
                 source_id: SourceId::new(source(rng)),
                 meta: SourceMeta {
                     labels: (0..rng.below(3))
@@ -1898,6 +1904,7 @@ mod property {
             "folder.delete",
             "scene.set_folder",
             "scene.set_meta",
+            "scene.set_options",
             "label.create",
             "label.update",
             "label.reorder",

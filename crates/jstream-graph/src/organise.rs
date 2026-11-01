@@ -10,8 +10,8 @@ use crate::apply::{
 };
 use crate::model::{Folder, Graph, Label, Source, State};
 use jstream_protocol::{
-    Blocker, Edit, EntityKind, FolderId, LabelId, ProtocolError, SceneId, SceneMeta, SourceId,
-    SourceMeta, check_color, check_icon,
+    Blocker, Edit, EntityKind, FolderId, LabelId, ProtocolError, SceneId, SceneMeta, SceneOptions,
+    SourceId, SourceMeta, check_color, check_icon,
 };
 use std::collections::BTreeSet;
 
@@ -83,6 +83,7 @@ pub(crate) fn apply(
             folder_id,
         } => set_folder(state, scene_id, folder_id.as_ref(), at),
         Edit::SceneSetMeta { scene_id, meta } => set_scene_meta(state, scene_id, meta, at),
+        Edit::SceneSetOptions { scene_id, options } => set_scene_options(state, scene_id, options),
         Edit::LabelCreate {
             label_id,
             name,
@@ -396,6 +397,21 @@ fn set_folder(
     Ok(vec![Edit::SceneSetFolder {
         scene_id: scene_id.clone(),
         folder_id: old,
+    }])
+}
+
+fn set_scene_options(
+    state: &mut State,
+    scene_id: &SceneId,
+    options: &SceneOptions,
+) -> Result<Vec<Edit>, ProtocolError> {
+    let si = state
+        .scene_index(scene_id)
+        .ok_or_else(|| not_found(EntityKind::Scene, scene_id.as_str()))?;
+    let old = std::mem::replace(&mut state.scenes[si].options, options.clone());
+    Ok(vec![Edit::SceneSetOptions {
+        scene_id: scene_id.clone(),
+        options: old,
     }])
 }
 

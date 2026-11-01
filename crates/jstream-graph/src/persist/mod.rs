@@ -19,8 +19,8 @@ use jstream_protocol::{
     Action, BlendMode, BusId, BusMonitor, Canvas, Chord, Crop, Easing, Edit, EncoderProfile,
     EncoderProfileId, FilterChain, FilterId, FilterOwner, Finite32, FolderId, INITIAL_PRESET,
     ItemGeometry, ItemId, ItemOverride, ItemTransform, ItemTransition, LabelId, OutputId,
-    OutputKind, ProtocolError, Rev, SceneId, SceneMeta, SceneRole, Settings, SourceAudio, SourceId,
-    SourceKind, SourceMeta, TransitionPresetId, VideoMix, VideoMixId,
+    OutputKind, ProtocolError, Rev, SceneId, SceneMeta, SceneOptions, SceneRole, Settings,
+    SourceAudio, SourceId, SourceKind, SourceMeta, TransitionPresetId, VideoMix, VideoMixId,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -244,6 +244,9 @@ struct FileScene {
     favourite: bool,
     #[serde(default = "yes", skip_serializing_if = "is_true")]
     show_in_multiview: bool,
+    /// Whether its audio reaches the Mixer when nested (ADR-0089); omitted for `true`.
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    include_audio: bool,
     /// The scene it is a keyframe scene of (ADR-0024 §2); omitted for any other scene.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     variant_of: Option<SceneId>,
@@ -499,6 +502,7 @@ impl Graph {
                     color: scene.meta.color.clone(),
                     favourite: scene.meta.favourite,
                     show_in_multiview: scene.meta.show_in_multiview,
+                    include_audio: scene.options.include_audio,
                     variant_of: scene.variant_of.clone(),
                     overrides: scene
                         .overrides
@@ -890,10 +894,22 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
         };
         if !meta.is_default() {
             edits.push((
-                object,
+                object.clone(),
                 Edit::SceneSetMeta {
                     scene_id: scene.id.clone(),
                     meta,
+                },
+            ));
+        }
+        let options = SceneOptions {
+            include_audio: scene.include_audio,
+        };
+        if !options.is_default() {
+            edits.push((
+                object,
+                Edit::SceneSetOptions {
+                    scene_id: scene.id.clone(),
+                    options,
                 },
             ));
         }

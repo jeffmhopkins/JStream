@@ -16,8 +16,8 @@ use jstream_protocol::{
     Batch, Blocker, Canvas, Crop, DroppedOverride, Edit, EntityKind, Finite32, GeometryError,
     HotkeyBinding, ItemGeometry, ItemId, ItemTransform, ItemTransition, KindCategory,
     KindDescriptor, Media, OutputId, OutputKind, ParamDescriptor, ParamType, ProtocolError,
-    RecordContainer, Reference, Rev, RtmpTarget, SceneId, SceneMeta, Settings, SourceAudio,
-    SourceId, SourceKind,
+    RecordContainer, Reference, Rev, RtmpTarget, SceneId, SceneMeta, SceneOptions, Settings,
+    SourceAudio, SourceId, SourceKind,
 };
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -405,6 +405,7 @@ fn apply_edit(
                 transition_out: None,
                 folder: None,
                 meta: SceneMeta::default(),
+                options: SceneOptions::default(),
                 items: Vec::new(),
                 variant_of: None,
                 overrides: crate::model::Overrides::new(),
@@ -486,6 +487,12 @@ fn apply_edit(
                 inverse.push(Edit::SceneSetMeta {
                     scene_id: scene.id.clone(),
                     meta: scene.meta.clone(),
+                });
+            }
+            if !scene.options.is_default() {
+                inverse.push(Edit::SceneSetOptions {
+                    scene_id: scene.id.clone(),
+                    options: scene.options.clone(),
                 });
             }
             inverse.extend(crate::filter::restore_scene(&scene));

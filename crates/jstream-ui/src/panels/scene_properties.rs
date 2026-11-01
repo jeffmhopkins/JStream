@@ -1,10 +1,11 @@
 //! The scene Properties dialog (spec-workspace.md 6.2.5): a scene's name, its
-//! Transition in and out, and the hotkey that switches to it. Everything is a draft until
+//! Transition in and out, the hotkey that switches to it, whether a multiview shows it,
+//! and whether its audio reaches the Mixer when it is nested. Everything is a draft until
 //! OK, which sends what changed as one batch (`scene.rename`, `scene.set_transitions`,
-//! `hotkey.clear` and `hotkey.set`); Cancel, Escape and the backdrop drop it, and
-//! Defaults clears the overrides and the hotkey, keeping the name. The engine has no
-//! scene background colour, multiview or per-scene "include its audio" setting, so the
-//! dialog leaves them out. The scene's filters show on the right, each change sent at
+//! `scene.set_meta`, `scene.set_options`, `hotkey.clear` and `hotkey.set`); Cancel,
+//! Escape and the backdrop drop it, and Defaults clears the overrides and the hotkey and
+//! checks both switches again, keeping the name. The engine has no scene background
+//! colour, so the dialog leaves it out. The scene's filters show on the right, each change sent at
 //! once, as the source Properties dialog's are.
 //!
 //! Docs: docs/UI-FEATURES.md#dialogs
@@ -53,6 +54,10 @@ pub struct SceneDraft {
     pub transition_out: Option<TransitionPresetId>,
     /// The chord that switches to it, or none.
     pub hotkey: Option<Chord>,
+    /// Whether a multiview shows it.
+    pub show_in_multiview: bool,
+    /// Whether its audio reaches the Mixer when it is nested (ADR-0089).
+    pub include_audio: bool,
 }
 
 impl SceneDraft {
@@ -64,12 +69,15 @@ impl SceneDraft {
             transition_in: scene.transition_in.clone(),
             transition_out: scene.transition_out.clone(),
             hotkey: collection.scene_hotkey(scene_id).map(|b| b.chord.clone()),
+            show_in_multiview: scene.meta.show_in_multiview,
+            include_audio: scene.options.include_audio,
         })
     }
 }
 
 /// The edits that turn `before` into `draft` for `scene_id`, in one batch: a rename
-/// (a blank name is ignored), the overrides, then the hotkey (the old chord cleared
+/// (a blank name is ignored), the overrides, the multiview flag (the scene's other
+/// metadata kept), the options, then the hotkey (the old chord cleared
 /// before the new one is bound, keeping the preset the old binding named). Refused when
 /// the new chord is bound already, which `hotkey.set` would refuse too.
 pub fn scene_edits(
@@ -93,6 +101,28 @@ pub fn scene_edits(
             scene_id: scene_id.clone(),
             transition_in: draft.transition_in.clone(),
             transition_out: draft.transition_out.clone(),
+        });
+    }
+    if draft.show_in_multiview != before.show_in_multiview {
+        let mut meta = collection
+            .scene(scene_id)
+            .map(|s| s.meta.clone())
+            .unwrap_or_default();
+        meta.show_in_multiview = draft.show_in_multiview;
+        edits.push(Edit::SceneSetMeta {
+            scene_id: scene_id.clone(),
+            meta,
+        });
+    }
+    if draft.include_audio != before.include_audio {
+        let mut options = collection
+            .scene(scene_id)
+            .map(|s| s.options.clone())
+            .unwrap_or_default();
+        options.include_audio = draft.include_audio;
+        edits.push(Edit::SceneSetOptions {
+            scene_id: scene_id.clone(),
+            options,
         });
     }
     if draft.hotkey != before.hotkey {
@@ -275,6 +305,8 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
             d.transition_in = None;
             d.transition_out = None;
             d.hotkey = None;
+            d.show_in_multiview = true;
+            d.include_audio = true;
         });
     };
     let ok = move |_| {
@@ -352,6 +384,32 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                     />
                     <span class="field-note">"Press the keys that switch to this scene. Backspace clears it."</span>
                 </label>
+                <label class="field">
+                    <span class="label">"Show in multiview"</span>
+                    <input
+                        type="checkbox"
+                        aria-label="Show in multiview"
+                        prop:checked=move || draft.with(|d| d.show_in_multiview)
+                        on:change=move |event| {
+                            let shown = event_target_checked(&event);
+                            draft.update(|d| d.show_in_multiview = shown);
+                        }
+                    />
+                    <span class="field-note">"A multiview window shows it as one of its tiles."</span>
+                </label>
+                <label class="field">
+                    <span class="label">"Include its audio when nested"</span>
+                    <input
+                        type="checkbox"
+                        aria-label="Include its audio when nested"
+                        prop:checked=move || draft.with(|d| d.include_audio)
+                        on:change=move |event| {
+                            let included = event_target_checked(&event);
+                            draft.update(|d| d.include_audio = included);
+                        }
+                    />
+                    <span class="field-note">"When off, its sources don't reach the Mixer through this scene."</span>
+                </label>
                 {move || problem.get().map(|e| view! { <p class="problem" role="alert">{e}</p> })}
             </div>
             <SceneFilterSide owner=owner parent=parent />
@@ -395,7 +453,7 @@ fn SceneFilterSide(owner: FilterOwner, parent: Option<String>) -> impl IntoView 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use jstream_control::protocol::HotkeyBinding;
+    use jstream_control::protocol::{HotkeyBinding, SceneInfo, SceneOptions};
 
     fn switch(id: &str) -> Action {
         Action::SceneSwitch {
@@ -471,6 +529,71 @@ mod tests {
         assert_eq!(
             scene_edits(&c, &a, &before, &draft("A", Some("F2"))),
             Err("F2 already switches to “b”. Clear that hotkey first.".into())
+        );
+    }
+
+    /// The multiview switch sends the scene's metadata with only that flag changed.
+    #[test]
+    fn the_multiview_switch_keeps_the_other_metadata() {
+        let mut scene: SceneInfo = serde_json::from_value(serde_json::json!({
+            "scene_id": "a",
+            "name": "A",
+            "items": [],
+        }))
+        .expect("a scene");
+        scene.meta.favourite = true;
+        scene.meta.color = Some("#ff0000".into());
+        let c = Collection {
+            scenes: vec![scene],
+            ..Collection::default()
+        };
+        let a = SceneId::new("a");
+        let before = SceneDraft::of(&c, &a).expect("the scene");
+        assert!(before.show_in_multiview);
+        let hidden = SceneDraft {
+            show_in_multiview: false,
+            ..before.clone()
+        };
+        let Ok(edits) = scene_edits(&c, &a, &before, &hidden) else {
+            panic!("edits");
+        };
+        let [Edit::SceneSetMeta { scene_id, meta }] = edits.as_slice() else {
+            panic!("one set_meta, not {edits:?}");
+        };
+        assert_eq!(scene_id, &a);
+        assert!(!meta.show_in_multiview && meta.favourite);
+        assert_eq!(meta.color.as_deref(), Some("#ff0000"));
+    }
+
+    /// The nested audio switch sends `scene.set_options`.
+    #[test]
+    fn the_audio_switch_sends_the_scene_s_options() {
+        let mut scene: SceneInfo = serde_json::from_value(serde_json::json!({
+            "scene_id": "a",
+            "name": "A",
+            "items": [],
+        }))
+        .expect("a scene");
+        scene.meta.favourite = true;
+        let c = Collection {
+            scenes: vec![scene],
+            ..Collection::default()
+        };
+        let a = SceneId::new("a");
+        let before = SceneDraft::of(&c, &a).expect("the scene");
+        assert!(before.include_audio);
+        let left_out = SceneDraft {
+            include_audio: false,
+            ..before.clone()
+        };
+        assert_eq!(
+            scene_edits(&c, &a, &before, &left_out),
+            Ok(vec![Edit::SceneSetOptions {
+                scene_id: a,
+                options: SceneOptions {
+                    include_audio: false
+                },
+            }])
         );
     }
 

@@ -364,8 +364,11 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 - **Shown and on program** (D29): "shown" is relative to the Program mix only. Its roots
   are `program_scene`, or both scenes of a running transition, weighted by the
   transition's audio curve (weights sum to 1). A source is reachable from a scene through
-  `visible` items, following nested scene sources whose `audio.enabled` is on, to any
-  depth. A nested scene source set to `follow = always` is an extra root of weight 1. A
+  `visible` items, following nested scene sources whose `audio.enabled` is on, into
+  scenes whose `include_audio` option is on
+  ([ADR-0089](adr/0089-scene-options-and-nested-audio.md)), to any depth. A nested scene
+  source set to `follow = always` is an extra root of weight 1, unless its scene's
+  `include_audio` is off. A
   `when_shown` source's activity gain is `min(1, Σ w(r))` over the roots that reach it;
   an `always` source's is 1. The activity gain is runtime state, never an edit. Preview,
   other video mixes, projectors and editor previews never make a source shown.
@@ -658,7 +661,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `label.update`, `label.reorder`, `label.delete`, `scene.set_meta` and
   `source.set_meta` edit labels and organisation metadata
   ([ADR-0024](adr/0024-scene-structure.md), protocol 0.31; a scene's labels, protocol
-  0.45, [ADR-0078](adr/0078-scenes-carry-labels.md)).
+  0.45, [ADR-0078](adr/0078-scenes-carry-labels.md)). `scene.set_options` sets a scene's
+  behaviour options, so far whether its audio reaches the Mixer when nested
+  ([ADR-0089](adr/0089-scene-options-and-nested-audio.md), protocol 0.65).
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
@@ -889,7 +894,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 758 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 763 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking

@@ -1670,9 +1670,12 @@ brings the mixer in line with the collection under the collection lock:
   inputs are not sources and keep sending to the master at unity.
 - each such input's activity gain (`activity.rs`, ADR-0028's "shown"): 1 for a source
   that follows `always`; for a `when_shown` one, `min(1, Σ w)` over the roots that
-  reach it through visible items and nested scene sources whose audio is on. The roots
-  are the program scene (weight 1) and every nested scene source whose audio is on and
-  follows `always` (weight 1 each). The mixer applies it after the input's fader and
+  reach it through visible items and nested scene sources whose audio is on, into
+  scenes whose `include_audio` option is on
+  ([ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)). The roots are the
+  program scene (weight 1, whatever its own `include_audio`) and every nested scene
+  source whose audio is on, whose scene's `include_audio` is on, and that follows
+  `always` (weight 1 each). The mixer applies it after the input's fader and
   meter, scaling every send, and ramps to it over one block, so a cut never clicks
   and the meter still reads a source that is off program. `scene.switch` and a batch
   that moves program sync too, after program is reconciled;

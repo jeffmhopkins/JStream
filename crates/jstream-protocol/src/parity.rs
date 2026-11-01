@@ -588,6 +588,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                         items: items_of_b(),
                         folder: None,
                         meta: Default::default(),
+                        options: Default::default(),
                     },
                     SceneInfo {
                         overrides: Vec::new(),
@@ -601,6 +602,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                         items: items_of_a(),
                         folder: None,
                         meta: Default::default(),
+                        options: Default::default(),
                     },
                 ],
                 outputs: outputs(),

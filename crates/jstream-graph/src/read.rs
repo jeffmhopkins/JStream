@@ -316,6 +316,7 @@ impl Scene {
             transition_out: self.transition_out.clone(),
             folder: self.folder.clone(),
             meta: self.meta.clone(),
+            options: self.options.clone(),
             variant_of: self.variant_of.clone(),
             overrides: self
                 .overrides

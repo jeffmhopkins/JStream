@@ -3222,6 +3222,28 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the\nMixer when it is nested. Every field left out takes its default. A keyframe scene\nhas options of its own. Inverse: `scene.set_options` with the previous options.",
+          "properties": {
+            "include_audio": {
+              "description": "Whether its sources reach the Mixer through the nested scene sources that show\nit. Off, a scene placed inside another adds none of its audio there, whatever\nthose sources' own `audio.enabled`; it changes nothing while the scene itself is\non program. Omitted for `true`, the default.",
+              "type": "boolean"
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene to change."
+            },
+            "type": {
+              "const": "scene.set_options",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Adds a label, last in label order (ADR-0024 §4). Rejected with `invalid_argument`\nfor an empty name, a colour that isn't `#rrggbb`, or an icon checked as\n`scene.set_meta`'s. Inverse: `label.delete`.",
           "properties": {
             "color": {
@@ -7828,6 +7850,10 @@ source: crates/jstream-protocol/src/fixtures.rs
             "null"
           ]
         },
+        "include_audio": {
+          "description": "Whether its sources reach the Mixer through the nested scene sources that show\nit. Off, a scene placed inside another adds none of its audio there, whatever\nthose sources' own `audio.enabled`; it changes nothing while the scene itself is\non program. Omitted for `true`, the default.",
+          "type": "boolean"
+        },
         "items": {
           "description": "Its items, in stacking order: the first is at the bottom. Always empty for a\nkeyframe scene, which shows its parent's.",
           "items": {
@@ -9058,5 +9084,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.57"
+  "title": "JStream protocol 0.65"
 }

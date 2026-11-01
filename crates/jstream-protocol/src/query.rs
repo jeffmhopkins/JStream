@@ -769,6 +769,10 @@ pub struct SceneInfo {
     /// Its organisation metadata, each field omitted while it has its default.
     #[serde(flatten)]
     pub meta: SceneMeta,
+    /// What `scene.set_options` sets (since 0.65), each field omitted while it has its
+    /// default, so missing (also from an older server) parses as the defaults.
+    #[serde(flatten)]
+    pub options: SceneOptions,
     /// The scene this one is a keyframe scene of (ADR-0024 §2, protocol 0.39), whose
     /// items it shows. Omitted for a scene that is not a variant.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -787,6 +791,39 @@ pub struct SceneInfo {
     /// Its items, in stacking order: the first is at the bottom. Always empty for a
     /// keyframe scene, which shows its parent's.
     pub items: Vec<ItemInfo>,
+}
+
+/// A scene's options (ADR-0089): what `scene.set_options` sets, and what `state.get`
+/// reports beside the scene's other fields. Each field left out takes its default, so a
+/// scene with none set reports none of them. A keyframe scene has its own.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct SceneOptions {
+    /// Whether its sources reach the Mixer through the nested scene sources that show
+    /// it. Off, a scene placed inside another adds none of its audio there, whatever
+    /// those sources' own `audio.enabled`; it changes nothing while the scene itself is
+    /// on program. Omitted for `true`, the default.
+    #[serde(skip_serializing_if = "is_true")]
+    pub include_audio: bool,
+}
+
+impl Default for SceneOptions {
+    fn default() -> Self {
+        SceneOptions {
+            include_audio: true,
+        }
+    }
+}
+
+impl SceneOptions {
+    /// Whether every field has its default.
+    pub fn is_default(&self) -> bool {
+        *self == SceneOptions::default()
+    }
+}
+
+fn is_true(value: &bool) -> bool {
+    *value
 }
 
 /// One item, a placement of a source in a scene, as `item.list` and `state.get` report
