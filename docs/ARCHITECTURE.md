@@ -902,10 +902,10 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   output, sets its key, goes live, points a browser source at a page or deletes. Text
   from outside JStream sits in `remote_*` fields, in an `output.start` `action_failed`
   `reason` (the whole of which is untrusted), or in a window's `name` in
-  `capture.targets` (its title, set by the window's application), and the tool
-  descriptions and server
-  instructions say it is data, never instructions
-  ([ADR-0059](adr/0059-mcp-annotations-and-remote-text.md)). The instructions also say
+  `capture.targets` (its title or, on macOS, its application's name, set by the
+  window's application), and the tool descriptions and server instructions say it is
+  data, never instructions ([ADR-0059](adr/0059-mcp-annotations-and-remote-text.md),
+  amended by [ADR-0085](adr/0085-capture-target-names-marked-as-remote-text.md)). The instructions also say
   that names and other state text can be set by any client or plugin, and are data too
   (ADR-0069's U1).
 - **Names** follow the tool-name pattern in [R-API-002](RULES.md#R-API-002).
