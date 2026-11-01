@@ -859,10 +859,9 @@ note = "#323 landed with wave/m1-3 (#754)"
 id = "K1"
 milestone = "M2"
 title = "Keyframe scenes, folders, organisation metadata and hotkeys"
-status = "planned"
-prs = [319, 720]
-note = "hotkeys #319 landed with wave/m1-2 (#545); organisation metadata #323 landed with wave/m1-3 (#754); keyframe scenes part 1, in the protocol, graph and engine (#720, protocol 0.39), landed with wave/m1-4 (#810); live values on a keyframe scene (protocol 0.53) and overrides of a group's children (protocol 0.55) and a Move of an unflattened group's children inside its layer (#948) are built; the UI follows (#846)"
-needs = ["build"]
+status = "done"
+prs = [319, 720, 941, 947, 970]
+note = "hotkeys #319 landed with wave/m1-2 (#545); organisation metadata #323 landed with wave/m1-3 (#754); keyframe scenes part 1, in the protocol, graph and engine (#720, protocol 0.39), landed with wave/m1-4 (#810); live values on a keyframe scene (protocol 0.53, #941) and overrides of a group's children (protocol 0.55, #947) and a Move of an unflattened group's children inside its layer (#948) are built; then the UI (#846, #970): the canvas's live values on a keyframe, and a group's children overridden from their rows and the Inspector"
 
 [[item]]
 id = "K2"

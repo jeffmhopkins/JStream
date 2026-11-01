@@ -272,7 +272,8 @@ impl CropGesture {
 
 /// The batch Clear crop sends for `items` of `scene_id`: no crop for each cropped one,
 /// and, as the prototype restores the full extent, its uncropped extent as its box
-/// while its source's size is known.
+/// while its source's size is known. In a keyframe scene the children of the groups in
+/// its tree count too, at its overrides, so the edits write its overrides (#846).
 pub fn clear(
     collection: &Collection,
     sizes: &Sizes,
@@ -284,7 +285,13 @@ pub fn clear(
     };
     let cropped: Vec<_> = items
         .iter()
-        .filter_map(|id| scene.items.iter().find(|i| i.item_id == *id))
+        .filter_map(|id| {
+            scene
+                .items
+                .iter()
+                .find(|i| i.item_id == *id)
+                .or_else(|| collection.keyframe_child(scene_id, id))
+        })
         .filter(|i| i.crop != Crop::NONE)
         .collect();
     let crops = cropped.iter().map(|i| Edit::ItemSetCrop {
@@ -498,6 +505,63 @@ mod tests {
         assert_box(&full, 480.0, 270.0, 960.0, 540.0);
         let ghost = picture.ghost(&start);
         assert!(close(ghost[0].x, 0.0) && close(ghost[2].x, 960.0));
+    }
+
+    /// B2 on #970: Clear crop on a group's child in a keyframe writes the keyframe's
+    /// overrides, from the child at them.
+    #[test]
+    fn clearing_a_keyframes_group_child_writes_the_keyframe() {
+        use jstream_control::protocol::{
+            Finite32, ItemInfo, ItemTransform, PlacementForm, SceneInfo, SceneRole,
+        };
+        let start = geometry(530.0, 270.0, 860.0, 540.0, 0.0);
+        let child = ItemInfo {
+            item_id: "x".into(),
+            source_id: "cam".into(),
+            placement: PlacementForm::Geometry,
+            transform: ItemTransform::IDENTITY,
+            geometry: Some(start),
+            crop: crop(200, 0, 0, 0),
+            visible: true,
+            effects: Vec::new(),
+            opacity: Finite32::ONE,
+            blend: Default::default(),
+            transition: jstream_control::protocol::ItemTransition::default(),
+        };
+        let keyframe = SceneInfo {
+            overrides: Vec::new(),
+            filters: Default::default(),
+            variant_of: Some("main".into()),
+            scene_id: "k".into(),
+            name: "Keyframe 1".into(),
+            role: SceneRole::Scene,
+            folder: None,
+            meta: Default::default(),
+            items: Vec::new(),
+            transition_in: None,
+            transition_out: None,
+        };
+        let mut c = Collection {
+            scenes: vec![keyframe],
+            ..Collection::default()
+        };
+        c.keyframe_children.insert("k".into(), vec![child]);
+        let sizes: Sizes = [("cam".into(), (1920, 1080))].into();
+        let k = SceneId::new("k");
+        let edits = clear(&c, &sizes, &k, &[ItemId::new("x")]);
+        assert_eq!(edits.len(), 2, "no crop, then the uncropped box: {edits:?}");
+        assert!(matches!(
+            &edits[0],
+            Edit::ItemSetCrop { scene_id: Some(s), crop, .. } if *s == k && *crop == Crop::NONE
+        ));
+        match &edits[1] {
+            Edit::ItemSetGeometry {
+                scene_id: Some(s),
+                geometry,
+                ..
+            } if *s == k => assert_box(geometry, 480.0, 270.0, 960.0, 540.0),
+            other => panic!("not the keyframe's box: {other:?}"),
+        }
     }
 
     #[test]

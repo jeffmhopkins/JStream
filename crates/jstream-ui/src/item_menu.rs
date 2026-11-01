@@ -676,18 +676,28 @@ struct Facts {
     audio: Option<bool>,
     /// Whether the scene is a keyframe scene, which shows its parent's items.
     keyframe: bool,
+    /// Whether the primary item is a child of a group in the keyframe scene's tree,
+    /// which the canvas draws no box for.
+    child: bool,
     /// Whether the primary item is a reference or a clone.
     sharing: Sharing,
 }
 
 impl Facts {
-    /// The facts for `items` of `scene_id`, keeping only the items in that scene; `None`
-    /// when none of them is.
+    /// The facts for `items` of `scene_id`, keeping only the items in that scene (in a
+    /// keyframe scene, the children of the groups in its tree too, at its overrides);
+    /// `None` when none of them is.
     fn of(collection: &Collection, scene_id: &SceneId, items: &[ItemId]) -> Option<Facts> {
         let scene = collection.scene(scene_id)?;
         let selected: Vec<_> = items
             .iter()
-            .filter_map(|id| scene.items.iter().find(|i| i.item_id == *id))
+            .filter_map(|id| {
+                scene
+                    .items
+                    .iter()
+                    .find(|i| i.item_id == *id)
+                    .or_else(|| collection.keyframe_child(scene_id, id))
+            })
             .collect();
         let primary = selected.first()?;
         let source = collection.source(&primary.source_id)?;
@@ -710,6 +720,7 @@ impl Facts {
             picture,
             audio: source.audio.as_ref().map(|a| a.enabled),
             keyframe: scene.variant_of.is_some(),
+            child: !scene.items.iter().any(|i| i.item_id == primary.item_id),
             sharing: Sharing::of(collection, primary),
         })
     }
@@ -1206,7 +1217,9 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
         move || crop_mode.update(|on| *on = !*on),
     )
     .hint("C")
-    .disabled_if(many);
+    // The canvas draws no box for a keyframe's group child, so crop mode has nothing
+    // to crop there; leaving it stays on.
+    .disabled_if(many || (facts.child && !crop_mode.get_untracked()));
     let duplicate = |label: &str, clone: bool| {
         let facts = Rc::clone(&facts);
         let scene = scene_id.clone();
@@ -1439,6 +1452,37 @@ mod tests {
         };
         c.sources.push(src);
         c
+    }
+
+    /// B1 on #970: a group's child selected in a keyframe gets the keyframe's facts, so
+    /// its menu's placement choices write the keyframe's overrides and what would change
+    /// the parent's items is off; in the group's own scene it gets the group's.
+    #[test]
+    fn a_keyframes_group_child_gets_the_keyframes_menu() {
+        let mut c = grouped(
+            vec![placing("g1", "grp_src")],
+            vec![boxed("x", "logo", 960.0, 540.0, 200.0, 100.0, 0.0)],
+        );
+        let mut keyframe = c.scenes[0].clone();
+        keyframe.scene_id = "k".into();
+        keyframe.variant_of = Some("main".into());
+        c.scenes.push(keyframe);
+        let mut child = c.scenes[1].items[0].clone();
+        child.visible = false;
+        c.keyframe_children.insert("k".into(), vec![child]);
+        let x = ids(&["x"]);
+        let facts = Facts::of(&c, &SceneId::new("k"), &x).expect("the keyframe's child");
+        assert!(facts.keyframe && facts.child);
+        assert_eq!(facts.items, x);
+        assert_eq!(
+            facts.placed.len(),
+            1,
+            "its box, to place it in the keyframe"
+        );
+        let own = Facts::of(&c, &SceneId::new("grp"), &x).expect("the group's item");
+        assert!(!own.keyframe && !own.child);
+        // Main itself doesn't hold it.
+        assert!(Facts::of(&c, &SceneId::new("main"), &x).is_none());
     }
 
     fn ids_of(edits: &[Edit]) -> Vec<String> {
