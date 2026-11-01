@@ -2593,6 +2593,54 @@ fn the_render_snapshot_follows_scene_switch() {
 /// failure to open still fails the test, just later.
 const GPU_OPEN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
 
+/// The warnings logged while `run` runs on this thread, each as its message and fields.
+pub(crate) fn warnings<T>(run: impl FnOnce() -> T) -> (T, Vec<String>) {
+    use tracing::field::{Field, Visit};
+    use tracing::span::{Attributes, Id, Record};
+    use tracing::{Event, Level, Metadata, Subscriber};
+
+    #[derive(Clone, Default)]
+    struct Warnings(Arc<std::sync::Mutex<Vec<String>>>);
+
+    struct Text<'a>(&'a mut String);
+
+    impl Visit for Text<'_> {
+        fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
+            self.0.push_str(&format!("{}={value:?} ", field.name()));
+        }
+    }
+
+    impl Subscriber for Warnings {
+        fn enabled(&self, metadata: &Metadata<'_>) -> bool {
+            *metadata.level() == Level::WARN
+        }
+        fn new_span(&self, _: &Attributes<'_>) -> Id {
+            Id::from_u64(1)
+        }
+        fn record(&self, _: &Id, _: &Record<'_>) {}
+        fn record_follows_from(&self, _: &Id, _: &Id) {}
+        fn event(&self, event: &Event<'_>) {
+            let mut text = String::new();
+            event.record(&mut Text(&mut text));
+            self.0
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .push(text);
+        }
+        fn enter(&self, _: &Id) {}
+        fn exit(&self, _: &Id) {}
+    }
+
+    let logged = Warnings::default();
+    let out = tracing::subscriber::with_default(logged.clone(), run);
+    let logged = logged
+        .0
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone();
+    (out, logged)
+}
+
 /// One GPU test at a time, on whatever adapter opens (software in CI). Parallel compositors starve the pipeline
 /// test's media wait and crash WARP. The lock schedules tests; it is not engine state.
 pub(crate) fn one_gpu_test_at_a_time() -> MutexGuard<'static, ()> {

@@ -7,7 +7,7 @@
 //! holds its hardware session until it closes (#834). A new session that `prefer` opens
 //! in software logs a warning naming the output and why (#443 case 1).
 
-use super::super::{batch, block_on, connected, edits, output_call};
+use super::super::{batch, block_on, connected, edits, output_call, warnings};
 use super::{TempDir, encoder_status, fakes, streaming_and_recording};
 use crate::runtime::cpu_draw;
 use crate::{Engine, InProcessControl, RecordingPublish};
@@ -22,7 +22,6 @@ use jstream_protocol::{
     Edit, EncoderProfile, EncoderProfileId, HardwarePreference as ProfileHardware, OutputId,
     OutputKind, OutputState, ProtocolError, RateControl, RecordContainer, VideoCodec,
 };
-use std::fmt;
 use std::sync::Arc;
 use std::sync::Condvar;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -493,54 +492,6 @@ fn a_stopping_holder_still_holds_its_hardware_session() {
     assert_eq!(encoder_status(&control, "yt").0, OutputState::Stopped);
     assert_eq!(encoder_status(&control, "rec2").0, OutputState::Failed);
     let _ = block_on(control.call(output_call("rec", false)));
-}
-
-/// The warnings logged while `run` runs on this thread, each as its message and fields.
-fn warnings<T>(run: impl FnOnce() -> T) -> (T, Vec<String>) {
-    use tracing::field::{Field, Visit};
-    use tracing::span::{Attributes, Id, Record};
-    use tracing::{Event, Level, Metadata, Subscriber};
-
-    #[derive(Clone, Default)]
-    struct Warnings(Arc<std::sync::Mutex<Vec<String>>>);
-
-    struct Text<'a>(&'a mut String);
-
-    impl Visit for Text<'_> {
-        fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
-            self.0.push_str(&format!("{}={value:?} ", field.name()));
-        }
-    }
-
-    impl Subscriber for Warnings {
-        fn enabled(&self, metadata: &Metadata<'_>) -> bool {
-            *metadata.level() == Level::WARN
-        }
-        fn new_span(&self, _: &Attributes<'_>) -> Id {
-            Id::from_u64(1)
-        }
-        fn record(&self, _: &Id, _: &Record<'_>) {}
-        fn record_follows_from(&self, _: &Id, _: &Id) {}
-        fn event(&self, event: &Event<'_>) {
-            let mut text = String::new();
-            event.record(&mut Text(&mut text));
-            self.0
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .push(text);
-        }
-        fn enter(&self, _: &Id) {}
-        fn exit(&self, _: &Id) {}
-    }
-
-    let logged = Warnings::default();
-    let out = tracing::subscriber::with_default(logged.clone(), run);
-    let logged = logged
-        .0
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .clone();
-    (out, logged)
 }
 
 /// The warnings among `logged` that say a `prefer` encoder opened in software.

@@ -53,7 +53,9 @@ the encode thread's rules ([R-RT-002](../../docs/RULES.md#R-RT-002),
 - `VideoInput` / `AudioInput`: cloneable push handles. `push` never blocks.
 - `Subscription`: `recv`, `try_recv`, `recv_timeout`, each returning packets in decode
   order and then a `StreamEnd`; `info()`, per-subscriber `stats()`, and
-  `request_keyframe()` for a consumer that holds only its subscription.
+  `request_keyframe()` for a consumer that holds only its subscription. `codec()` is
+  the session's `codec()`: the encoder falls back before its first packet, so a
+  subscriber sees the fallback by the first packet it receives (#965).
 - `StreamInfo`: the `CodecInfo` that was opened plus `EncoderSettings` (the video or
   audio config it was opened with).
 - `VideoPath`: `Gpu`, or `Cpu` with the reason a given context was not used.

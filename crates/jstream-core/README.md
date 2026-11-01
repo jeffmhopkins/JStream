@@ -1748,7 +1748,12 @@ naming the output it opens for, the encoder and why (`why_software`; #443 case 1
 the fallback is never silent; `output.status` reports `hardware` false. A hardware
 encoder that takes the session and then refuses its first frame no longer falls back
 either (its fallback is `prefer`'s only), but that comes after `output.start` has
-answered: the output settles `failed` with the encoder's reason, not this code.
+answered: the output settles `failed` with the encoder's reason, not this code. With
+no hardware session held, a `prefer` hardware encoder that refuses its first frame
+falls back to software on the platform (#443 case 3). Each output on that session
+then logs a warning naming itself and both encoders when its output thread gets its
+first video packet (`warn_fallback`, reading `Subscription::codec`; #965), beside the
+platform's warning with the refusal.
 
 **Video mixes.** The render thread keeps one frame per video mix the running sessions
 are fed from, each at its session's size, and counts base ticks (1/30 s). On a tick it
