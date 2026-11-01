@@ -534,13 +534,16 @@ pub fn ungroup_edits(collection: &Collection, item_id: &ItemId) -> Option<Result
                 }),
         );
     }
-    // Each keyframe scene of the parent keeps drawing the items where it drew them
-    // through the group, at its own values of the group and of each item (#846).
-    for keyframe in collection
-        .scenes
-        .iter()
-        .filter(|s| s.variant_of.as_ref() == Some(&parent.scene_id))
-    {
+    // Each keyframe scene whose tree holds the parent (the parent's own, or one of a
+    // scene that places the parent as a group, at any depth) keeps drawing the items
+    // where it drew them through the group, at its own values of the group and of each
+    // item (#846). Its view of the parent shares the parent's space: the placements
+    // above it don't change.
+    for keyframe in collection.scenes.iter().filter(|s| {
+        s.variant_of
+            .as_ref()
+            .is_some_and(|root| tree_holds(collection, root, &parent.scene_id))
+    }) {
         match keyframe_edits(
             (item, &nested.items, carry),
             (&keyframe.scene_id, &keyframe.overrides),
@@ -562,6 +565,32 @@ pub fn ungroup_edits(collection: &Collection, item_id: &ItemId) -> Option<Result
         });
     }
     Some(Ok(edits))
+}
+
+/// Whether the tree of scene `root` holds scene `scene`: it is `root`, or a group placed
+/// in the tree, at any depth (ADR-0024 §2, as the graph's `State::tree_items` walks it).
+fn tree_holds(collection: &Collection, root: &SceneId, scene: &SceneId) -> bool {
+    let mut seen: Vec<&SceneId> = Vec::new();
+    let mut todo = vec![root];
+    while let Some(at) = todo.pop() {
+        if at == scene {
+            return true;
+        }
+        if seen.contains(&at) {
+            continue;
+        }
+        seen.push(at);
+        let Some(here) = collection.scene(at) else {
+            continue;
+        };
+        todo.extend(here.items.iter().filter_map(|item| {
+            let SourceKind::Scene { scene_id } = &collection.source(&item.source_id)?.kind else {
+                return None;
+            };
+            (collection.scene(scene_id)?.role == SceneRole::Group).then_some(scene_id)
+        }));
+    }
+    false
 }
 
 /// The overrides keyframe scene `keyframe` needs once the group `group` is ungrouped,
@@ -1603,6 +1632,7 @@ mod tests {
     /// it through the group: its override of an item is carried by the group's
     /// placement, its own value of the group carries the items it doesn't override, and
     /// a group it hides hides them there. Nothing is written where it would follow.
+    /// B4: the same holds for a keyframe of a scene that places the parent as a group.
     #[test]
     fn ungrouping_carries_a_keyframe_scenes_view_of_the_items() {
         use jstream_control::protocol::ItemOverride;
@@ -1676,6 +1706,42 @@ mod tests {
         assert_eq!(in_k(&edits), ["x visible false", "y visible false"]);
         // A keyframe with no say over the group or its items gets nothing.
         assert!(in_k(&at(half(), Vec::new())).is_empty());
+
+        // B4 on #947: the parent is itself a group, placed in "main" by "o1"; k is a
+        // keyframe of "main", whose tree reaches the items through both groups.
+        let deeper = |overrides: Vec<ItemOverride>| {
+            let mut c = grouped(vec![half()], kids());
+            let mut outer = c.scenes[0].clone();
+            outer.scene_id = "outer".into();
+            outer.role = SceneRole::Group;
+            outer.items = std::mem::take(&mut c.scenes[0].items);
+            c.scenes.push(outer);
+            let mut src = source("outer_src", None);
+            src.kind = SourceKind::Scene {
+                scene_id: "outer".into(),
+            };
+            c.sources.push(src);
+            c.scenes[0].items = vec![boxed("o1", "outer_src", 960.0, 540.0, 1920.0, 1080.0, 0.0)];
+            let mut keyframe = c.scenes[0].clone();
+            keyframe.scene_id = "k".into();
+            keyframe.variant_of = Some("main".into());
+            keyframe.items = Vec::new();
+            keyframe.overrides = overrides;
+            c.scenes.push(keyframe);
+            ungroup_edits(&c, &ItemId::new("g1"))
+                .expect("a nested scene")
+                .expect("carried")
+        };
+        let mut x = none("x");
+        x.geometry = boxed("x", "logo", 960.0, 540.0, 400.0, 200.0, 0.0).geometry;
+        assert_eq!(in_k(&deeper(vec![x])), ["x at 480 270 200x100 0"]);
+        let mut hidden = none("g1");
+        hidden.visible = Some(false);
+        assert_eq!(
+            in_k(&deeper(vec![hidden])),
+            ["x visible false", "y visible false"]
+        );
+        assert!(in_k(&deeper(Vec::new())).is_empty());
     }
 
     /// N10 on #871: the Fit scale of a box of another shape, the axis swap for a
