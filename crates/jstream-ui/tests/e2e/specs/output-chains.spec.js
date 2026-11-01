@@ -144,7 +144,7 @@ test('filters added to the program output and to an output count on their FX but
   // The master's filter opens in the Filter settings dialog on a double-click.
   // The panel now scrolls (the video chain sits above), and the double-click's first
   // click folds the open editor, which scrolls the row from under the second; so the
-  // test sends the dblclick event alone.
+  // test sends the dblclick event alone (#984).
   await program.click();
   await audioRows(page).first().locator('.filter-row').dispatchEvent('dblclick');
   const dialog = page.getByRole('dialog', { name: 'Filter settings' });
