@@ -1368,10 +1368,10 @@ stamp = { hash = "b3:18dea091d5a0704f", by = "agent:effect-packs", note = "effec
 stamp = { hash = "b3:9545fad569fc5ad9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "846a (#846 part a), whole PR, rebased onto main at 0.54: the control mock applies the graph's tree rule and drop pass (a keyframe scene overrides any item in its parent's tree (its own, or a role-group child at any depth, State::tree_items; before, invalid_argument); keyframe::drop_orphans drops overrides whose item leaves the tree (item.remove, item.move out, scene.set_role of a group, removing or retargeting the last placing item), reported in dropped_overrides and restored by undo; the engine draws a group it overrides as a view (view_id) with its own layer, chains and boxes; no wire change, PROTOCOL_VERSION 0.54 -> 0.55); consistent with this section. Main's #941 keyframe live values (0.53) and #944 stats.tick chains (0.54) are kept beside it." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:1fe2dd0fd4fc3920", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2: the engine still leaves max_request_bytes unset; the protocol README's added id cap concerns only the server's refusals, so nothing in core's design changes." }
+stamp = { hash = "b3:1fe2dd0fd4fc3920", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: the engine's hello answer leaves max_request_bytes unset (a server in front sets it); the protocol README and ARCH changes it depends on (too_large, the 4 MiB request limit, the 256-byte echoed id, the 1009 close at the frame limit, protocol 0.62) are enforced only by the server, so nothing in core's design changes." }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:0d0a9c5b546539e8", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: the engine's hello answer leaves max_request_bytes unset (a server in front sets it); the protocol and ARCH changes it depends on add a size limit only the server enforces, so nothing here changes." }
+stamp = { hash = "b3:0d0a9c5b546539e8", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: the engine's hello answer leaves max_request_bytes unset (a server in front sets it); the protocol README and ARCH changes it depends on (too_large, the 4 MiB request limit, the 256-byte echoed id, the 1009 close at the frame limit, protocol 0.62) are enforced only by the server, so nothing in core's design changes." }
 
 ["CRATE-jstream-core#design"."dep:docs/RULES.md#R-API-004"]
 stamp = { hash = "b3:2d6cfa635e9b2786" }
@@ -1497,7 +1497,7 @@ stamp = { hash = "b3:5972950015a64680", by = "agent:claude-746", note = "re-read
 stamp = { hash = "b3:20b9282859764b8b" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/session.rs"]
-stamp = { hash = "b3:54823968b31e97fc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: the engine's hello answer leaves max_request_bytes unset (a server in front sets it); the protocol and ARCH changes it depends on add a size limit only the server enforces, so nothing here changes." }
+stamp = { hash = "b3:54823968b31e97fc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: the engine's hello answer leaves max_request_bytes unset (a server in front sets it); the protocol README and ARCH changes it depends on (too_large, the 4 MiB request limit, the 256-byte echoed id, the 1009 close at the frame limit, protocol 0.62) are enforced only by the server, so nothing in core's design changes." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/snapshot.rs"]
 stamp = { hash = "b3:192efc53e3478922", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#960: plan_inner's Ended branch now clears shot.boxes with scenes, frames and chains, so re-planning the program scene plans each item's box and its effects' chain again (before, a leftover box made boxed() skip the chain until the next replan); new transitions.rs test an_items_effects_run_once_a_transition_onto_its_scene_ends checks item_chain(b, b1) and chain_cost().item_effects == 1 after the first replan, and fails without the fix; the Purpose test inventory now lists it and #959's three keyframes.rs tests (nested group, chained/boxed group with unshown layers left out, Appear/Disappear with the group's timing). Re-read the section against the whole diff; the Transitions paragraph's 'from that frame the program scene is drawn alone' now also holds for items with effects, and the item effects text (box and chain planned together) is unchanged and holds." }
@@ -1824,7 +1824,7 @@ stamp = { hash = "b3:0935f08727cff0b0", by = "agent:effect-packs", note = "effec
 stamp = { hash = "b3:18dea091d5a0704f", by = "agent:effect-packs", note = "effect packs drawn in the engine: added the Effect packs bullet (main fills --effects-dir's default so tests watch nothing; serve::engine calls watch_effect_packs once built, every platform); the core design dep now describes the packs runtime, which this bullet links. args.rs only adds the option and boxes Serve(Options). Rest still holds." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:26b12e32717aed1a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2: the server README now names envelope.rs and the 256-byte id cap; the daemon builds the server the same way and configures no limit." }
+stamp = { hash = "b3:26b12e32717aed1a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: the server README's new Message size bullet (4 MiB request limit, too_large read through envelope.rs with at most a 256-byte id echoed, 16 MiB frame limit closing with 1009) and MCP table rows (-32000 too_large, 413 over 16 MiB) don't change how the daemon builds and runs the server; the daemon configures no limit." }
 
 ["CRATE-jstream-daemon#design"."dep:docs/ARCHITECTURE.md#persistence"]
 stamp = { hash = "b3:560ad6de35803be8", by = "agent:ui-layouts", note = "Added the UI settings file bullet: main.rs names ServerConfig::ui_settings_file as ui-settings.json in the data directory (UI_SETTINGS_FILE), in memory without one; serve::bind gains that parameter." }
@@ -2160,7 +2160,7 @@ stamp = { hash = "b3:4500e061e4435b08", by = "agent:claude-443", note = "Re-read
 stamp = { hash = "b3:5b9dc707978a0749", by = "agent:effect-packs", note = "effect packs drawn in the engine: model/mod.rs adds Graph::without_kinds (removes descriptors by ID, keeps the collection's filters of those kinds as an uninstalled kind's are kept); the Model bullet now names it beside with_kinds. Data-model dep changed only its video filter sentence." }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:1fe2dd0fd4fc3920", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2: the protocol README's round-2 edit (the 256-byte echoed id) touches only the envelope; the graph's purpose doesn't." }
+stamp = { hash = "b3:1fe2dd0fd4fc3920", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: the protocol README change is the too_large error (size_bytes, limit_bytes), Welcome.max_request_bytes with its Message size paragraph (4 MiB request limit, echoed id at most 256 bytes, 1009 over the frame limit) and the 0.62 version paragraph; the graph's purpose doesn't touch the envelope and holds." }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -5406,13 +5406,13 @@ stamp = { hash = "b3:b254445ece5850cc", by = "agent:a2656", note = "#639 review 
 stamp = { hash = "b3:13c57061e7eadb1e", by = "agent:ui-parity", note = "Step 4 now says stats.tick lines come about once a second before and while live, and end with the load (program_frames about 30 a second while live, cpu_ms), matching the CLI's line and the 1/30 s base tick." }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:945ece8bed77c391", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: the CLI table only adds too_large to exit 20, and the server README's size limits don't touch the go-live steps." }
+stamp = { hash = "b3:945ece8bed77c391", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: the CLI usage table only adds too_large to exit 20, and the server README's Message size bullet (4 MiB request limit refused with too_large, at most a 256-byte id echoed, 16 MiB frame limit closing with 1009) and MCP rows (-32000 too_large, 413 over 16 MiB) don't touch the go-live steps, which send small requests." }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-daemon/README.md#usage"]
 stamp = { hash = "b3:f21509931db029b9", by = "agent:effect-packs", note = "effect packs drawn in the engine: dep daemon usage only adds the --effects-dir row; the go-live steps don't use it; re-read, still holds." }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:26b12e32717aed1a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2: the server README's id cap on refused messages doesn't touch any go-live step." }
+stamp = { hash = "b3:26b12e32717aed1a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: the CLI usage table only adds too_large to exit 20, and the server README's Message size bullet (4 MiB request limit refused with too_large, at most a 256-byte id echoed, 16 MiB frame limit closing with 1009) and MCP rows (-32000 too_large, 413 over 16 MiB) don't touch the go-live steps, which send small requests." }
 
 ["RUNBOOK-RELEASE#cut"."body"]
 stamp = { hash = "b3:29c05a3a4731dace", by = "agent:release-thread", note = "B1 fix: ui fails unless ls-remote reports the tag absent (exit 2), publish on a dispatched run creates the tag ref via the API (422 if it exists) and then uses --verify-tag like a pushed tag; step 3 and 4 say so, steps 1-2 apply to main's head on a dispatched run; rest of the section still matches the jobs" }
