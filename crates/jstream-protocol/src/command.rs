@@ -1299,6 +1299,26 @@ pub enum Action {
         /// The device to revoke, as `device.list` reports it.
         device_id: DeviceId,
     },
+    /// Keeps a UI setting on the engine's machine (0.52, ADR-0084): an opaque JSON value
+    /// the UI owns, under `key` (the web UI keeps its dock under `workspace.dock`), so
+    /// every client of the engine, the desktop app and each browser, reads the same one
+    /// back with `ui_settings.get`. A `value` of `null`, or none, removes the key. Not
+    /// collection state: it changes no `rev`, is never undone, emits no event, and is
+    /// kept across restarts in the data folder (ADR-0020), whatever collection is open.
+    /// Answered by the server that admits clients, not the engine: a `Control` with no
+    /// server in front fails with `unsupported`. Fails with `invalid_argument` on `key`
+    /// for a key that isn't 1 to 64 of `a`-`z`, `0`-`9`, `.`, `_` and `-`, on `value`
+    /// for a value over 64 KiB as compact JSON, and on `key` for a 65th key;
+    /// `action_failed` when the settings file can't be written (the value is then kept
+    /// until the server stops).
+    #[serde(rename = "ui_settings.set")]
+    UiSettingsSet {
+        /// The setting's key.
+        key: String,
+        /// Its new value, any JSON; `null` or none removes the key.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        value: Option<serde_json::Value>,
+    },
     /// Installs a WASM automation plugin from the package at `path` on the engine's
     /// machine, with what the person granted it after seeing its manifest (0.35,
     /// ADR-0069). It starts enabled, and `plugin.state_changed` reports it. For a person
@@ -1371,6 +1391,7 @@ impl Action {
             Action::SceneSwitch { .. } => "scene.switch",
             Action::PairingStart => "pairing.start",
             Action::DeviceRevoke { .. } => "device.revoke",
+            Action::UiSettingsSet { .. } => "ui_settings.set",
             Action::StudioSetPreview { .. } => "studio.set_preview",
             Action::PrivacySet { .. } => "privacy.set",
             Action::PluginInstall { .. } => "plugin.install",
@@ -1416,6 +1437,7 @@ impl Action {
             | Action::PreviewUnsubscribe { .. }
             | Action::PairingStart
             | Action::DeviceRevoke { .. }
+            | Action::UiSettingsSet { .. }
             | Action::PrivacySet { .. }
             | Action::PluginInstall { .. }
             | Action::PluginGrant { .. }
@@ -1449,6 +1471,11 @@ impl Action {
                 "type",
                 "a pairing or device action can't be bound: the server answers it for the \
                  client that asks",
+            )),
+            Action::UiSettingsSet { .. } => Some((
+                "type",
+                "`ui_settings.set` can't be bound: the server answers it, and a UI keeps \
+                 its own settings",
             )),
             Action::PluginInstall { .. }
             | Action::PluginGrant { .. }

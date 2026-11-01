@@ -2955,7 +2955,9 @@ impl State {
                 }
                 return Ok(CallResult::action());
             }
-            other @ (Action::PairingStart | Action::DeviceRevoke { .. }) => {
+            other @ (Action::PairingStart
+            | Action::DeviceRevoke { .. }
+            | Action::UiSettingsSet { .. }) => {
                 return Err(served_by_the_server(other.name()));
             }
             // Built without the `wasm-plugins` feature, the engine can't run a plugin, so
@@ -3021,7 +3023,9 @@ impl State {
                     program_scene: self.studio.program().cloned(),
                     preview_scene: self.studio.preview().cloned(),
                 },
-                Query::DeviceList => return Err(served_by_the_server(query.name())),
+                Query::DeviceList | Query::UiSettingsGet { .. } => {
+                    return Err(served_by_the_server(query.name()));
+                }
                 Query::ActivityList { after_seq, limit } => QueryResult::ActivityList {
                     now_ms: activity_log::unix_ms(std::time::SystemTime::now()),
                     entries: self.activity.list(*after_seq, *limit),
@@ -3616,8 +3620,9 @@ fn capture_target_info(info: CaptureTargetInfo) -> Option<jstream_protocol::Capt
 
 /// A protocol variant added after this engine was written.
 /// `unsupported`, for the calls that concern the listener's credentials (`pairing.start`,
-/// `device.list`, `device.revoke`): the server in front of the engine answers them
-/// (ADR-0044), so one that reaches the engine came from a client with no server between.
+/// `device.list`, `device.revoke`) and the UI settings it keeps (`ui_settings.get`,
+/// `ui_settings.set`): the server in front of the engine answers them (ADR-0044,
+/// ADR-0084), so one that reaches the engine came from a client with no server between.
 fn served_by_the_server(call: &str) -> ProtocolError {
     ProtocolError::Unsupported { call: call.into() }
 }

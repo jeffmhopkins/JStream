@@ -960,6 +960,10 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::DeviceRevoke {
             device_id: DeviceId::new("dev_1"),
         },
+        Action::UiSettingsSet {
+            key: "workspace.dock".into(),
+            value: Some(serde_json::json!({"version": 1, "current": "Live"})),
+        },
         Action::PluginInstall {
             plugin_id: PluginId::new("plg_1"),
             path: "/home/me/plugins/chat-scenes".into(),
@@ -1109,6 +1113,9 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::ActivityList {
             after_seq: Some(41),
             limit: Some(20),
+        },
+        Query::UiSettingsGet {
+            key: "workspace.dock".into(),
         },
         Query::YoutubeStats,
         Query::SourceSizes,
@@ -1802,6 +1809,10 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
         QueryResult::ActivityList {
             now_ms: 1_790_000_120_000,
             entries: vec![activity_entry(42, None), activity_entry(41, Some("rev_conflict"))],
+        },
+        QueryResult::UiSettingsGet {
+            key: "workspace.dock".into(),
+            value: Some(serde_json::json!({"version": 1, "current": "Live"})),
         },
     ]
 }

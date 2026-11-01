@@ -56,7 +56,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 |---|---|---|---|---|---|---|
 | [Theme and shared controls](#theme) | 8 | 8 | 0 | 0 | 0 | 0 |
 | [Header bar](#header) | 9 | 7 | 0 | 0 | 1 | 1 |
-| [Docking and layouts](#docking) | 10 | 8 | 2 | 0 | 0 | 0 |
+| [Docking and layouts](#docking) | 10 | 9 | 1 | 0 | 0 | 0 |
 | [Canvas](#canvas) | 18 | 17 | 0 | 0 | 0 | 1 |
 | [Context menus](#menus) | 8 | 6 | 2 | 0 | 0 | 0 |
 | [Dialogs and windows](#dialogs) | 8 | 5 | 2 | 0 | 1 | 0 |
@@ -70,7 +70,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Transitions](#transitions) | 6 | 6 | 0 | 0 | 0 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 1 | 0 | 0 | 3 | 0 |
 | [Keyboard](#keyboard) | 7 | 6 | 0 | 0 | 0 | 1 |
-| **Total** | **130** | **113** | **7** | **0** | **6** | **4** |
+| **Total** | **130** | **114** | **6** | **0** | **6** | **4** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -139,7 +139,7 @@ their rows are built ([live panels](#live-panels)).
 | DK-07 | Home zones | A panel added from the View menu goes to its home zone (Scenes and Scene objects left; Inspector, Transform, Filters, chat, stats and agent right; Mixer, Outputs and Transitions bottom). | ✅ | |
 | DK-08 | Editing and Live layouts | Editing is the default: left Scenes, Scene objects; right Inspector (weight 2), Filters+Transform; bottom Mixer, Outputs+Transitions. Live: Scenes; Mixer and Transitions under the canvas; chat, then stats+Outputs+Agent on the right. | 🟡 | Both built with the panels the UI has: Editing puts Filters and Transform in one group under the Inspector, Filters shown. Live puts Agent activity as a second tab beside Outputs; Live chat and Stream stats only say what they wait on, so Live leaves them out until the engine supports them. |
 | DK-09 | "(modified)" and saving | Any move, close, resize or View toggle marks the layout "(modified)"; layouts can be saved as "My layout N" and reset. | ✅ | |
-| DK-10 | Layouts persist | Layouts survive a reload, the same on the desktop app and in a browser. | 🟡 | Kept in the browser's storage, so per browser rather than the same everywhere. Decision register D35 recommends an engine-side UI settings store, which the protocol doesn't have. |
+| DK-10 | Layouts persist | Layouts survive a reload, the same on the desktop app and in a browser. | ✅ | The engine's server keeps the dock, saved layouts included, in its UI settings (`ui_settings.get`/`set`, [ADR-0084](adr/0084-ui-settings-kept-by-the-server.md)), in the data folder the desktop app and the daemon share. The browser keeps a copy too, shown first and used alone with no server in front, and a change the server never got (the page closed within the send delay) is sent on the next load rather than lost. Another open client picks up a change when its workspace next opens. |
 
 <a id="canvas"></a>
 ## Canvas

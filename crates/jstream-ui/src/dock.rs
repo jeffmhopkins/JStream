@@ -686,8 +686,14 @@ impl Dock {
         self.current = EDITING.into();
     }
 
-    /// The dock as JSON, for the browser's storage.
+    /// The dock as JSON text, for the browser's storage.
     pub fn to_json(&self) -> String {
+        self.to_value().to_string()
+    }
+
+    /// The dock as a JSON value, for the browser's storage and the engine's UI settings
+    /// (ADR-0084).
+    pub fn to_value(&self) -> Value {
         json!({
             "version": 1,
             "current": self.current,
@@ -697,14 +703,18 @@ impl Dock {
                 "arrangement": arrangement_json(&l.arrangement),
             })).collect::<Vec<_>>(),
         })
-        .to_string()
     }
 
     /// The dock [`Dock::to_json`] stored, if `text` is one. Panels this UI doesn't know
     /// are dropped, a panel docked twice keeps its first place, and sizes are brought
     /// within limits.
     pub fn from_json(text: &str) -> Option<Dock> {
-        let value: Value = serde_json::from_str(text).ok()?;
+        Dock::from_value(&serde_json::from_str(text).ok()?)
+    }
+
+    /// The dock [`Dock::to_value`] made, if `value` is one, read as
+    /// [`Dock::from_json`] reads it.
+    pub fn from_value(value: &Value) -> Option<Dock> {
         if value["version"] != 1 {
             return None;
         }

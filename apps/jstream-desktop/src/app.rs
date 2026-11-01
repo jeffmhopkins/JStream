@@ -109,7 +109,12 @@ pub fn start(
             !options.no_vcam,
             secrets,
         )?;
-        Host::start(engine, ui::ORIGIN, secrets)
+        Host::start(
+            engine,
+            ui::ORIGIN,
+            secrets,
+            Some(data.join(jstream_platform::paths::UI_SETTINGS_FILE)),
+        )
     })();
     let vcam = host::vcam_status(exe_dir, !options.no_vcam);
     tracing::info!(vcam = vcam.as_str(), "virtual camera");

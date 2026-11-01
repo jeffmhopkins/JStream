@@ -104,6 +104,10 @@ folder, and its log `logs\cef.log`.
   ([jstream-platform › Purpose](../../crates/jstream-platform/README.md#purpose)).
 - **The collection** is `collection.json` in the data folder, created the first time
   with nothing in it but the prototype's four sample labels, and saved on every change, so the next start opens where the last one stopped.
+- **The workspace layout** (the dock and saved layouts) is kept in `ui-settings.json` in
+  the data folder, the file the daemon keeps it in too, so the window and a browser of
+  the daemon show the same layout
+  ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)).
 - **Logs.** `logs\jstream-desktop.log` in the data folder, replaced at each start by a
   new, user-only file (a protected DACL for SYSTEM and the user on Windows, mode `0600`
   on Unix, in a folder created `0700`, #780) and capped at 10 MiB, filtered by `RUST_LOG` (default `info`). A debug build also logs to
@@ -139,7 +143,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   (`ServerConfig::pairing` off): `pairing.start`, `device.list` and `device.revoke`
   answer `unsupported`, `jstream-ui`'s pairing panel stays hidden, and there is no
   pairing page or device cookie
-  ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md)). On Windows the engine is live with the same wiring as the daemon (OS backends,
+  ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md)). The
+  server still answers `ui_settings.get` and `ui_settings.set`, keeping them in the data
+  folder's `ui-settings.json` (`Host::start`'s `ui_settings`,
+  [ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)). On Windows the engine is live with the same wiring as the daemon (OS backends,
   keys in Credential Manager, an RTMP(S) publish opener); elsewhere it has no backends.
   Everywhere it starts the engine's stats heartbeat, so the header's readout shows the
   engine's load while nothing is live, and on Windows it hands the engine

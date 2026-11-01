@@ -187,7 +187,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.51 because 0.51 added the
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.52 because it added
+  `ui_settings.set` and `ui_settings.get`, the UI settings the server keeps
+  ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)); 0.51 added the
   `activity.list` query, the engine's recent activity with a sentence for each call
   ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md)); 0.50 added the
   `capture_target` parameter type, which a `display` or `window` source's `target` has, so
@@ -964,6 +966,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
 - `device.list`: the devices paired with the listener this client reached, each with
   its `device_id`, `name`, and when it was paired and last used (Unix seconds). Not
   collection state, so no `rev`. Added in 0.21 (see *Pairing* below).
+- `ui_settings.get {key}`: the UI setting kept under `key`, or no `value` when there is
+  none. Not collection state, so no `rev`. Added in 0.52 (see *UI settings* below).
 - `delete.plan {target}`: the batch that deletes a scene, source or bus (`target` is
   `{"type":"scene","scene_id":…}`, `{"type":"source","source_id":…}` or, since 0.24,
   `{"type":"bus","bus_id":…}`), or a folder or label (`{"type":"folder","folder_id":…}`,
@@ -1010,6 +1014,19 @@ in front of the engine answers them
 [jstream-server › Design](../jstream-server/README.md#design)); a `Control` with no
 server in front answers `unsupported`. The code is a `SecretString`: it never prints,
 and nothing but this answer carries it ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
+
+**UI settings** (0.52, [ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)).
+`ui_settings.set {key, value}` keeps any JSON value under a key, and a `null` or missing
+`value` removes the key; `ui_settings.get {key}` reads it back. A UI owns each value's
+shape: the web UI keeps its dock under `workspace.dock`, so the desktop app and every
+browser of one engine show the same layout. A key is 1 to 64 of `a`-`z`, `0`-`9`, `.`,
+`_` and `-`, a value at most 64 KiB as compact JSON, and at most 64 keys are kept
+(`invalid_argument` on `key` or `value` otherwise). They are not collection state: no
+`rev`, no undo, no event, and they outlive switching collections. The server in front of
+the engine answers them and keeps them in its settings file, with pairing off too; a
+`Control` with no server in front answers `unsupported`. `ui_settings.set` fails with
+`action_failed` when the file can't be written, and the value is then kept until the
+server stops.
 
 An item is reported with its `source_id`, `placement` form, `transform`, `geometry`,
 `crop`, `visible`, `opacity`, `blend` and `transition`, and a source with its name, kind, settings and

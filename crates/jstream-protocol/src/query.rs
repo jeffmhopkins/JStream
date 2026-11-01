@@ -193,6 +193,16 @@ pub enum Query {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         limit: Option<u32>,
     },
+    /// Reads a UI setting `ui_settings.set` kept (0.52, ADR-0084): the value under
+    /// `key`, omitted when there is none. Not collection state, so no `rev`. Answered by
+    /// the server that admits clients, like `device.list`: a `Control` with no server in
+    /// front fails with `unsupported`. Fails with `invalid_argument` on `key` for a key
+    /// `ui_settings.set` would refuse.
+    #[serde(rename = "ui_settings.get")]
+    UiSettingsGet {
+        /// The setting's key.
+        key: String,
+    },
 }
 
 /// What a `delete.plan` deletes: a scene, a source, (since 0.24) a bus, a folder or a
@@ -257,6 +267,7 @@ impl Query {
             Query::CaptureTargets => "capture.targets",
             Query::DeviceList => "device.list",
             Query::ActivityList { .. } => "activity.list",
+            Query::UiSettingsGet { .. } => "ui_settings.get",
         }
     }
 }
@@ -545,6 +556,16 @@ pub enum QueryResult {
         /// The entries, newest first.
         entries: Vec<ActivityEntry>,
     },
+    /// The result of `ui_settings.get`. UI settings are not collection state, so it
+    /// carries no `rev`.
+    #[serde(rename = "ui_settings.get")]
+    UiSettingsGet {
+        /// The key read.
+        key: String,
+        /// Its value, omitted when the key has none.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        value: Option<serde_json::Value>,
+    },
 }
 
 impl QueryResult {
@@ -575,6 +596,7 @@ impl QueryResult {
             QueryResult::CaptureTargets { .. } => "capture.targets",
             QueryResult::DeviceList { .. } => "device.list",
             QueryResult::ActivityList { .. } => "activity.list",
+            QueryResult::UiSettingsGet { .. } => "ui_settings.get",
         }
     }
 }

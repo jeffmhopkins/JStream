@@ -528,6 +528,27 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Keeps a UI setting on the engine's machine (0.52, ADR-0084): an opaque JSON value\nthe UI owns, under `key` (the web UI keeps its dock under `workspace.dock`), so\nevery client of the engine, the desktop app and each browser, reads the same one\nback with `ui_settings.get`. A `value` of `null`, or none, removes the key. Not\ncollection state: it changes no `rev`, is never undone, emits no event, and is\nkept across restarts in the data folder (ADR-0020), whatever collection is open.\nAnswered by the server that admits clients, not the engine: a `Control` with no\nserver in front fails with `unsupported`. Fails with `invalid_argument` on `key`\nfor a key that isn't 1 to 64 of `a`-`z`, `0`-`9`, `.`, `_` and `-`, on `value`\nfor a value over 64 KiB as compact JSON, and on `key` for a 65th key;\n`action_failed` when the settings file can't be written (the value is then kept\nuntil the server stops).",
+                "properties": {
+                  "key": {
+                    "description": "The setting's key.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "ui_settings.set",
+                    "type": "string"
+                  },
+                  "value": {
+                    "description": "Its new value, any JSON; `null` or none removes the key."
+                  }
+                },
+                "required": [
+                  "type",
+                  "key"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Installs a WASM automation plugin from the package at `path` on the engine's\nmachine, with what the person granted it after seeing its manifest (0.35,\nADR-0069). It starts enabled, and `plugin.state_changed` reports it. For a person\nonly: no MCP tool carries it, and no plugin is ever granted it. Fails with\n`already_exists` for a plugin ID in use, `invalid_argument` for a grant whose\n`problem` names a field (`grant.hosts.0`), a grant that gives more than the\nmanifest asks for (`grant.classes.0`, `grant.hosts.0`, `grant.folders.0`), or a\npackage that isn't a plugin, `action_failed` for a module whose `start` function\ntraps or runs past its limits, and `unsupported` from an engine that hosts no\nplugins.",
                 "properties": {
                   "grant": {
@@ -5799,6 +5820,27 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Keeps a UI setting on the engine's machine (0.52, ADR-0084): an opaque JSON value\nthe UI owns, under `key` (the web UI keeps its dock under `workspace.dock`), so\nevery client of the engine, the desktop app and each browser, reads the same one\nback with `ui_settings.get`. A `value` of `null`, or none, removes the key. Not\ncollection state: it changes no `rev`, is never undone, emits no event, and is\nkept across restarts in the data folder (ADR-0020), whatever collection is open.\nAnswered by the server that admits clients, not the engine: a `Control` with no\nserver in front fails with `unsupported`. Fails with `invalid_argument` on `key`\nfor a key that isn't 1 to 64 of `a`-`z`, `0`-`9`, `.`, `_` and `-`, on `value`\nfor a value over 64 KiB as compact JSON, and on `key` for a 65th key;\n`action_failed` when the settings file can't be written (the value is then kept\nuntil the server stops).",
+                "properties": {
+                  "key": {
+                    "description": "The setting's key.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "ui_settings.set",
+                    "type": "string"
+                  },
+                  "value": {
+                    "description": "Its new value, any JSON; `null` or none removes the key."
+                  }
+                },
+                "required": [
+                  "type",
+                  "key"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Installs a WASM automation plugin from the package at `path` on the engine's\nmachine, with what the person granted it after seeing its manifest (0.35,\nADR-0069). It starts enabled, and `plugin.state_changed` reports it. For a person\nonly: no MCP tool carries it, and no plugin is ever granted it. Fails with\n`already_exists` for a plugin ID in use, `invalid_argument` for a grant whose\n`problem` names a field (`grant.hosts.0`), a grant that gives more than the\nmanifest asks for (`grant.classes.0`, `grant.hosts.0`, `grant.folders.0`), or a\npackage that isn't a plugin, `action_failed` for a module whose `start` function\ntraps or runs past its limits, and `unsupported` from an engine that hosts no\nplugins.",
                 "properties": {
                   "grant": {
@@ -10633,6 +10675,27 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "device_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Keeps a UI setting on the engine's machine (0.52, ADR-0084): an opaque JSON value\nthe UI owns, under `key` (the web UI keeps its dock under `workspace.dock`), so\nevery client of the engine, the desktop app and each browser, reads the same one\nback with `ui_settings.get`. A `value` of `null`, or none, removes the key. Not\ncollection state: it changes no `rev`, is never undone, emits no event, and is\nkept across restarts in the data folder (ADR-0020), whatever collection is open.\nAnswered by the server that admits clients, not the engine: a `Control` with no\nserver in front fails with `unsupported`. Fails with `invalid_argument` on `key`\nfor a key that isn't 1 to 64 of `a`-`z`, `0`-`9`, `.`, `_` and `-`, on `value`\nfor a value over 64 KiB as compact JSON, and on `key` for a 65th key;\n`action_failed` when the settings file can't be written (the value is then kept\nuntil the server stops).",
+                "properties": {
+                  "key": {
+                    "description": "The setting's key.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "ui_settings.set",
+                    "type": "string"
+                  },
+                  "value": {
+                    "description": "Its new value, any JSON; `null` or none removes the key."
+                  }
+                },
+                "required": [
+                  "type",
+                  "key"
                 ],
                 "type": "object"
               },
@@ -15771,6 +15834,69 @@ source: crates/jstream-mcp/src/tests.rs
         "type": "object"
       },
       "name": "transition"
+    },
+    {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Runs one `ui_settings` operation: set `op.type` to one of `ui_settings.set` (action), `ui_settings.get` (query). An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "description": "The `ui_settings` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Keeps a UI setting on the engine's machine (0.52, ADR-0084): an opaque JSON value\nthe UI owns, under `key` (the web UI keeps its dock under `workspace.dock`), so\nevery client of the engine, the desktop app and each browser, reads the same one\nback with `ui_settings.get`. A `value` of `null`, or none, removes the key. Not\ncollection state: it changes no `rev`, is never undone, emits no event, and is\nkept across restarts in the data folder (ADR-0020), whatever collection is open.\nAnswered by the server that admits clients, not the engine: a `Control` with no\nserver in front fails with `unsupported`. Fails with `invalid_argument` on `key`\nfor a key that isn't 1 to 64 of `a`-`z`, `0`-`9`, `.`, `_` and `-`, on `value`\nfor a value over 64 KiB as compact JSON, and on `key` for a 65th key;\n`action_failed` when the settings file can't be written (the value is then kept\nuntil the server stops).",
+                "properties": {
+                  "key": {
+                    "description": "The setting's key.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "ui_settings.set",
+                    "type": "string"
+                  },
+                  "value": {
+                    "description": "Its new value, any JSON; `null` or none removes the key."
+                  }
+                },
+                "required": [
+                  "type",
+                  "key"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Reads a UI setting `ui_settings.set` kept (0.52, ADR-0084): the value under\n`key`, omitted when there is none. Not collection state, so no `rev`. Answered by\nthe server that admits clients, like `device.list`: a `Control` with no server in\nfront fails with `unsupported`. Fails with `invalid_argument` on `key` for a key\n`ui_settings.set` would refuse.",
+                "properties": {
+                  "key": {
+                    "description": "The setting's key.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "ui_settings.get",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "key"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "ui_settings"
     },
     {
       "annotations": {

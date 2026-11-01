@@ -683,6 +683,13 @@ The wire format, versioning, error codes and compatibility policy are designed i
   whom a listener admits, so `jstream-server` answers them, and a session with no server
   in front, or one whose server pairs nothing (the desktop app's), answers `unsupported`
   ([ADR-0057](adr/0057-server-answers-credential-calls.md)).
+- **UI settings** (protocol 0.52, [ADR-0084](adr/0084-ui-settings-kept-by-the-server.md)):
+  the action `ui_settings.set` keeps an opaque JSON value under a key and the query
+  `ui_settings.get` reads it back, so the web UI's dock follows the person from the
+  desktop app to a browser. Not collection state (no `rev`, undo or event).
+  `jstream-server` answers them, with pairing off too, and keeps them in
+  `ui-settings.json` in the data folder ([Persistence](#persistence)); a session with
+  no server in front answers `unsupported`.
 - **Plugins** (protocol 0.35, [ADR-0069](adr/0069-wasm-plugin-limits-and-capabilities.md)): the actions
   `plugin.install`, `plugin.grant` and `plugin.enable` install a WASM automation plugin
   with what a person grants it, change the grant and re-enable it; they are for a person,
@@ -858,7 +865,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  (`activity`, `audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `ui_settings`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
@@ -877,7 +884,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 731 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 749 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking
@@ -1188,6 +1195,12 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   and disabled reason. `jstream-core` loads it at startup, loading each enabled plugin
   again, and replaces it atomically after every change. A file it can't read is left as
   it is ([ADR-0076](adr/0076-saved-wasm-plugins-and-manifest-requests.md)).
+- **UI settings:** `ui-settings.json` (version 1) in the data directory, the values UIs
+  keep through `ui_settings.set`, such as the web UI's dock. `jstream-server` reads it
+  when it binds and replaces it atomically after every change; the desktop app and the
+  daemon name the same file, so both show the same workspace. A file it can't read is
+  logged and replaced on the next change
+  ([ADR-0084](adr/0084-ui-settings-kept-by-the-server.md)).
 - **App settings:** `jstream.toml` in the platform config directory.
 - **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store. On
   Linux, where no Secret Service is reachable, they are kept in a `0600` `secrets` file

@@ -278,9 +278,20 @@ fn run(mut options: Options) -> Result<(), Failure> {
         let engine = serve::engine(&options, Arc::new(audit), youtube, &secrets)?;
         let ui_dir = options.ui_dir.as_deref().map(Path::new);
         let device_file = token::device_file(&path);
-        let server = serve::bind(engine, options.port, token, Some(device_file), ui_dir)
-            .await
-            .map_err(anyhow::Error::from)?;
+        // In the data folder, where the desktop app keeps them too, so both show the
+        // same workspace (ADR-0084).
+        let ui_settings = jstream_platform::paths::data_dir()
+            .map(|dir| dir.join(jstream_platform::paths::UI_SETTINGS_FILE));
+        let server = serve::bind(
+            engine,
+            options.port,
+            token,
+            Some(device_file),
+            ui_settings,
+            ui_dir,
+        )
+        .await
+        .map_err(anyhow::Error::from)?;
         let shown = path.display();
         let token_line = match provenance {
             token::Provenance::Created => format!("token file: {shown} (created, new token)"),

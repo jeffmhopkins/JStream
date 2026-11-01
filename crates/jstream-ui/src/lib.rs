@@ -31,6 +31,7 @@ pub mod panels;
 pub mod projector;
 pub mod session;
 pub mod store;
+pub mod ui_settings;
 pub mod workspace;
 
 pub use app::{App, SessionContext};

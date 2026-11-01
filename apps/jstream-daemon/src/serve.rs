@@ -325,7 +325,8 @@ fn live_redacting(
 }
 
 /// Binds the server on `127.0.0.1:<port>`, serving `engine` behind `token` and the
-/// devices paired in `device_file` (ADR-0044; in memory without one), with MCP's
+/// devices paired in `device_file` (ADR-0044; in memory without one), keeping the UI
+/// settings in `ui_settings_file` (ADR-0084; in memory without one), with MCP's
 /// streamable-HTTP transport on, and the web UI's files from `ui_dir` when given. Each
 /// connection and each MCP session gets its own session (its own `client_id`); all of
 /// them share the engine.
@@ -334,6 +335,7 @@ pub async fn bind(
     port: u16,
     token: Token,
     device_file: Option<PathBuf>,
+    ui_settings_file: Option<PathBuf>,
     ui_dir: Option<&Path>,
 ) -> Result<Server, jstream_server::ServerError> {
     let connector: Connector = Arc::new(move || Box::new(engine.connect()));
@@ -341,6 +343,7 @@ pub async fn bind(
     config.bind = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
     config.mcp = true;
     config.device_file = device_file;
+    config.ui_settings_file = ui_settings_file;
     config.ui_dir = ui_dir.map(Path::to_path_buf);
     Server::bind(config, connector).await
 }
@@ -432,6 +435,7 @@ mod tests {
             .expect("an engine"),
             0,
             token,
+            None,
             None,
             None,
         )
@@ -528,6 +532,7 @@ mod tests {
             token.clone(),
             None,
             None,
+            None,
         )
         .await
         .expect("binds");
@@ -542,6 +547,7 @@ mod tests {
             .expect("an engine"),
             port,
             token,
+            None,
             None,
             None,
         )
