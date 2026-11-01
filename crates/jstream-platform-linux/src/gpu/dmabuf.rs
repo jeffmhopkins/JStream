@@ -1,5 +1,6 @@
 //! DMA-BUF import into the context's Vulkan device (ADR-0060 §3): which DRM format
-//! modifiers the device can import, and wrapping one PipeWire buffer's DMA-BUF as a
+//! modifiers the device can import, which formats it imports in the `LINEAR` layout V4L2
+//! buffers have, and wrapping one PipeWire or V4L2 buffer's DMA-BUF plane as a
 //! `wgpu::Texture`.
 //!
 //! Only single-plane layouts are offered and imported (wgpu-hal's
@@ -30,10 +31,51 @@ pub(crate) fn texture_format(format: SpaVideoFormat) -> wgpu::TextureFormat {
 
 /// [`texture_format`] as Vulkan names it (wgpu-hal's mapping).
 fn vk_format(format: SpaVideoFormat) -> vk::Format {
-    match texture_format(format) {
-        wgpu::TextureFormat::Bgra8Unorm => vk::Format::B8G8R8A8_UNORM,
-        _ => vk::Format::R8G8B8A8_UNORM,
+    vk_texture_format(texture_format(format)).unwrap_or(vk::Format::R8G8B8A8_UNORM)
+}
+
+/// A texture format a DMA-BUF plane can be imported as, as Vulkan names it (wgpu-hal's
+/// mapping), or `None` for one this module doesn't import.
+fn vk_texture_format(format: wgpu::TextureFormat) -> Option<vk::Format> {
+    match format {
+        wgpu::TextureFormat::Bgra8Unorm => Some(vk::Format::B8G8R8A8_UNORM),
+        wgpu::TextureFormat::Rgba8Unorm => Some(vk::Format::R8G8B8A8_UNORM),
+        _ => None,
     }
+}
+
+/// DRM's `LINEAR` modifier: rows one after the other, `stride` bytes apart. The layout
+/// of every V4L2 buffer.
+pub(crate) const MOD_LINEAR: u64 = 0;
+
+/// The formats a V4L2 buffer plane may be imported as.
+pub(crate) const LINEAR_CANDIDATES: [wgpu::TextureFormat; 2] = [
+    wgpu::TextureFormat::Bgra8Unorm,
+    wgpu::TextureFormat::Rgba8Unorm,
+];
+
+/// Of [`LINEAR_CANDIDATES`], those the adapter can import in the [`MOD_LINEAR`] layout
+/// as a single-plane DMA-BUF image to sample. Empty, rather than an error, when the
+/// adapter is not Vulkan 1.1.
+pub(crate) fn importable_linear(adapter: &wgpu::Adapter) -> Vec<wgpu::TextureFormat> {
+    // SAFETY: as in `importable_modifiers`: only read for the property queries below,
+    // while `adapter` keeps the instance and physical device alive.
+    let Some(hal) = (unsafe { adapter.as_hal::<Vulkan>() }) else {
+        return Vec::new();
+    };
+    let instance = hal.shared_instance();
+    let version = hal.physical_device_capabilities().properties().api_version;
+    if instance.instance_api_version() < vk::API_VERSION_1_1 || version < vk::API_VERSION_1_1 {
+        return Vec::new();
+    }
+    let (raw, device) = (instance.raw_instance(), hal.raw_physical_device());
+    LINEAR_CANDIDATES
+        .into_iter()
+        .filter(|&format| {
+            vk_texture_format(format)
+                .is_some_and(|vk| modifiers(raw, device, vk).contains(&MOD_LINEAR))
+        })
+        .collect()
 }
 
 /// For each format PipeWire may send, the DRM modifiers the adapter can import as a
@@ -131,10 +173,10 @@ fn importable(
         .contains(vk::ExternalMemoryFeatureFlags::IMPORTABLE)
 }
 
-/// One PipeWire buffer's single DMA-BUF plane.
+/// One buffer's DMA-BUF plane: a PipeWire buffer's only one, or a V4L2 buffer's.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Plane<'fd> {
-    /// The buffer's file descriptor, which PipeWire owns; the import duplicates it.
+    /// The buffer's file descriptor, which its producer owns; the import duplicates it.
     pub(crate) fd: BorrowedFd<'fd>,
     /// Bytes from the DMA-BUF's start to the first row.
     pub(crate) offset: u32,
@@ -150,24 +192,30 @@ fn os(call: &'static str, message: impl ToString) -> PlatformError {
     }
 }
 
-/// Imports `plane`, a DMA-BUF of `size` pixels in `format` laid out by `modifier`, as a
-/// texture on `device` that shaders can read (`TEXTURE_BINDING`).
+/// Imports `plane`, a DMA-BUF of `size` texels read as `texture_format` (one of
+/// [`texture_format`]'s or [`LINEAR_CANDIDATES`]) laid out by `modifier`, as a texture on
+/// `device` that shaders can read (`TEXTURE_BINDING`).
 ///
 /// The texture keeps its own duplicate of the descriptor, so it stays valid however
 /// long it is held; it shows whatever the producer last wrote into the buffer.
 ///
 /// # Errors
+/// [`PlatformError::Unsupported`] for another texture format, and
 /// [`PlatformError::Os`] when the descriptor can't be duplicated, `device` isn't Vulkan
 /// with DMA-BUF import, or the driver refuses the layout.
 pub(crate) fn import(
     device: &wgpu::Device,
-    format: SpaVideoFormat,
+    texture_format: wgpu::TextureFormat,
     (width, height): (u32, u32),
     modifier: u64,
     plane: Plane<'_>,
 ) -> Result<wgpu::Texture, PlatformError> {
+    if vk_texture_format(texture_format).is_none() {
+        return Err(PlatformError::Unsupported {
+            what: format!("importing a DMA-BUF as {texture_format:?}"),
+        });
+    }
     let fd = plane.fd.try_clone_to_owned().map_err(|e| os("dup", e))?;
-    let texture_format = texture_format(format);
     let size = wgpu::Extent3d {
         width,
         height,
@@ -191,9 +239,10 @@ pub(crate) fn import(
             view_formats: Vec::new(),
         };
         // SAFETY: the device was opened with VULKAN_EXTERNAL_MEMORY_DMA_BUF (only such a
-        // context offers modifiers, `LinuxGpu::open_device`); `fd` is our own duplicate
-        // of a DMA-BUF PipeWire negotiated for this format, size and modifier, with this
-        // offset and stride, and the import takes it (or closes it on failure).
+        // context offers modifiers or LINEAR formats, `LinuxGpu::open_device`); `fd` is
+        // our own duplicate of a DMA-BUF its producer (PipeWire, or a V4L2 driver)
+        // laid out in this format, size and modifier, with this offset and stride, and
+        // the import takes it (or closes it on failure).
         unsafe {
             hal.texture_from_dmabuf_fd(
                 fd,
@@ -233,8 +282,24 @@ pub(crate) fn import(
 
 #[cfg(test)]
 mod tests {
-    use super::{texture_format, vk_format};
+    use super::{LINEAR_CANDIDATES, MOD_LINEAR, texture_format, vk_format, vk_texture_format};
     use crate::spa::SpaVideoFormat;
+
+    /// Only the formats Vulkan import is written for are imported, and V4L2's
+    /// candidates are among them.
+    #[test]
+    fn linear_candidates_have_vulkan_formats() {
+        use ash::vk::Format;
+        for format in LINEAR_CANDIDATES {
+            assert!(vk_texture_format(format).is_some(), "{format:?}");
+        }
+        assert_eq!(
+            vk_texture_format(wgpu::TextureFormat::Bgra8Unorm),
+            Some(Format::B8G8R8A8_UNORM)
+        );
+        assert_eq!(vk_texture_format(wgpu::TextureFormat::R8Unorm), None);
+        assert_eq!(MOD_LINEAR, 0);
+    }
 
     #[test]
     fn formats_read_the_bytes_in_memory_order() {

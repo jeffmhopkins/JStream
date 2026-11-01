@@ -82,7 +82,9 @@ It has:
   before the rest and integrated before discrete GPUs, since the desktop doesn't say
   which GPU it composites on. It records, per format the stream offers, the DRM format
   modifiers the device can import as a single-plane DMA-BUF and sample
-  (`vkGetPhysicalDeviceFormatProperties2` and `…ImageFormatProperties2` through `ash`).
+  (`vkGetPhysicalDeviceFormatProperties2` and `…ImageFormatProperties2` through `ash`),
+  and which formats a V4L2 buffer plane may be imported as in the `LINEAR` layout
+  (`Bgra8Unorm`, `Rgba8Unorm`).
   Multi-plane layouts (Intel CCS, AMD DCC with metadata) are left out, because
   wgpu-hal's `texture_from_dmabuf_fd` takes one plane. Its encode targets
   (`encode_target`, `gpu/export.rs`) are NV12 images in the `LINEAR` DRM layout with
@@ -247,7 +249,10 @@ It has:
   (also the multi-planar `NV12M` and `YUV420M`, each image plane in its own buffer
   plane, mapped on its own and copied with `jstream_platform::yuv::copy_planes` at that
   plane's stride, refused as `Unsupported` if the driver settles on another plane
-  count), and MJPEG (`MJPG` or `JPEG`) for the engine's decoder. Where two FourCCs
+  count), 32-bit RGB with the alpha or padding byte last as it is (`AR24` and `XR24` as
+  `Bgra8`, `AB24` and `XB24` as `Rgba8`, as capture cards and `vivid` offer them; the
+  engine reads a capture's alpha as opaque), and MJPEG (`MJPG` or `JPEG`) for the
+  engine's decoder. Where two FourCCs
   deliver the same encoding, `open` asks for one whose own sizes list the format. A
   stepwise size range offers its largest size and the common sizes its steps reach, a
   stepwise interval its shortest, and a driver that enumerates no sizes or no intervals
@@ -262,6 +267,22 @@ It has:
   limited range. An unplug is `DeviceLost`, a device another application streams from
   `Busy`. Dropping the stream wakes and joins the thread, which turns the stream off,
   unmaps the buffers and closes the node.
+  `on_context`, on a context `LinuxGpu` opened with DMA-BUF import of a format V4L2
+  buffers come in, in the `LINEAR` layout they have, gives the backend on the GPU path
+  (`v4l2/gpu.rs`); on one without, `Ok(None)`, and on another platform's context,
+  `InvalidState`. It opens the 32-bit RGB formats there: once the stream is on, it
+  exports each driver buffer as a DMA-BUF (`VIDIOC_EXPBUF`, read-only) and imports it
+  once as a `Bgra8Unorm` or `Rgba8Unorm` texture (`gpu/dmabuf.rs`). The capture thread
+  copies each filled buffer into the stream's own `blit::Ring` texture on the context's
+  queue, made opaque, and waits for that copy before it hands the buffer back with
+  `VIDIOC_QBUF`, so the driver never writes into a frame the GPU still reads. The ring
+  texture is the `Gpu` frame. Other formats, compressed ones, and a device whose
+  buffers don't export or import, are `Unsupported` there, which the engine opens on
+  the CPU path. A buffer that can't be read on the GPU (one whose data doesn't start at
+  its memory's start) or a copy that fails or isn't done within a second ends the
+  stream as `DeviceLost`, without handing that buffer back, and the backend on that
+  context then refuses every format, so the engine's retry opens the device on the CPU
+  path.
 - **`LinuxBackends`**: the backend set, ADR-0060 §4's choice made once when it is built
   (`backends.rs`). Audio is `PipeWireAudio` when libpipewire loads and the daemon
   answers a device listing, else `AlsaAudio`; `audio_backend` says which and
@@ -363,7 +384,7 @@ The engine starts each display and window source's capture with `start_with` and
 It calls `forget_source` when the source is deleted.
 
 Not here yet, in roughly the order they follow:
-- DMA-BUF export from V4L2;
+- V4L2's YUYV, NV12 and NV12M on the GPU path (only 32-bit RGB goes there so far);
 - media-file decoders, which `LinuxBackends` leaves to the host;
 - an app keeping its stream keys and OAuth tokens in `LinuxSecrets`, the protocol field
   that tells the UI the secret store's fallback is active, and the `jstream.toml`
@@ -377,11 +398,14 @@ copy, the cursor metadata, the H.264 and HEVC parameters, parameter sets (checke
 `trace_headers`, as are HEVC's slice headers), GOPs and upload, and V4L2's ABI layouts,
 formats list, colour, buffer times and device IDs are platform-independent. The GPU interop's tests open a device on a software Vulkan
 adapter where there is no GPU, and skip without one: the frame copy (crop, opaque
-padding, slots reused only once free) and the context checks. The VA-API surface
+padding, slots reused only once free), the context checks, and V4L2's GPU delivery
+from plain textures standing in for imported buffers (each buffer's texels reaching an
+opaque RGBA frame, short buffers dropped, an unreadable buffer ending the GPU path). The VA-API surface
 attributes and DRM PRIME descriptor are checked against libva's layout at compile time
 and built in a test, and render-node numbers are split as glibc does. DMA-BUF import
 and export need a GPU driver, so they are tested only in the `hw-tests` portal capture
-on the GPU and the GPU encode of the context's encode targets. The Linux ones (the clock, loading libc through the loader,
+on the GPU, the V4L2 capture on the GPU path, and the GPU encode of the context's
+encode targets. The Linux ones (the clock, loading libc through the loader,
 passing a file descriptor over a socket pair, restore token files, the PipeWire and
 libva probes, and ALSA through its sound-card-free `null` PCM: recording, playing,
 stopping on drop, a capture stream running again after an overrun, loopback refused, an
@@ -411,4 +435,5 @@ are enough, no sound card, and one says it is on ALSA card 7 for the pairing tes
 `LinuxBackends` picking PipeWire with a daemon and ALSA without, the secret store against a real Secret Service (gnome-keyring under
 `dbus-run-session` is enough), and a second of ALSA's default input on a sound card (`null`
 isn't paced, so only a real device shows real-time recording), and V4L2 capture from a webcam or capture card (the `vivid` test
-driver will do).
+driver will do), on the CPU path and, with a Vulkan driver that imports DMA-BUFs, on
+the GPU path in a format it takes (`vivid`'s 32-bit RGB).
