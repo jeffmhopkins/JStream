@@ -996,7 +996,10 @@ steps (`schedule_chains`) and counts each scene chain as its canvas-sized compos
 plus one layer and pass per filter, and each item's effects as its box layer and pass
 plus one per effect, with each layer's texture bytes at the sizes `Chains` makes them
 (`Chain::layer_sizes`). It reads the plan the render hub holds, on the control side,
-so the render thread does no extra work; a source's own chain is not counted.
+so the render thread does no extra work. Not counted: a source's own chain, a scene a
+`scene_mask` reads, and the canvas-sized layer a nested scene without a chain is drawn
+into for an item's effects (it takes the place of the layer it would be drawn into
+anyway).
 
 A filter that reads an asset (`apply_lut`'s `lut`, a `.cube` file or a tiled PNG, and
 `image_mask`'s `image`, whose first frame is the mask) gets it through the live
