@@ -1042,11 +1042,13 @@ impl<'a> Planner<'a, '_> {
         }
         // Each group with children inside it gets a scene of the shot that draws them.
         let tracks = std::mem::take(&mut planned.tracks);
+        let mut redrawn = false;
         for (index, (visual, track)) in tracks.into_iter().enumerate() {
             if visual.inside.is_none() {
                 planned.tracks.push((visual, track));
                 continue;
             }
+            redrawn = true;
             match self.reshown(&visual, &inner_id(index), running.start, out) {
                 Some(visual) => planned.tracks.push((visual, track)),
                 // A group arriving is drawn as it is: its children show the new side's
@@ -1063,6 +1065,12 @@ impl<'a> Planner<'a, '_> {
                 // A group leaving that can't be drawn any more is left out.
                 None => {}
             }
+        }
+        // The layers either side planned each such group with, their chains and its
+        // item's effects are no longer shown: they no longer run each frame, unless
+        // another track reads them.
+        if redrawn {
+            out.keep_read(planned.tracks.iter().map(|(visual, _)| &visual.image));
         }
         planned
     }
@@ -1724,6 +1732,47 @@ struct Layer {
 }
 
 impl Shot {
+    /// Keeps only the scenes, video chains and item boxes that `roots` read, at any
+    /// depth: what a nested scene places, the boxes of its items with effects, a
+    /// scene's or source's chain, the scenes its filters read and what a box reads. A
+    /// scene goes with its chain, so planning it again plans both.
+    fn keep_read<'r>(&mut self, roots: impl Iterator<Item = &'r SourceRef>) {
+        let mut scenes = BTreeSet::new();
+        let mut owners = BTreeSet::new();
+        let mut stack: Vec<SourceRef> = roots.cloned().collect();
+        while let Some(image) = stack.pop() {
+            let owner = match image {
+                SourceRef::Frame(_) | SourceRef::Capture(_) => continue,
+                SourceRef::Filtered(id) => ChainOwner::Source(id),
+                SourceRef::Boxed(scene, item) => ChainOwner::Item(scene, item),
+                SourceRef::Scene(id) => {
+                    if !scenes.insert(id.clone()) {
+                        continue;
+                    }
+                    for placed in self.scenes.get(&id).into_iter().flatten() {
+                        stack.push(placed.source.clone());
+                        if placed.effects.is_some() {
+                            stack.push(SourceRef::Boxed(id.clone(), placed.item.clone()));
+                        }
+                    }
+                    ChainOwner::Scene(id)
+                }
+            };
+            if !owners.insert(owner.clone()) {
+                continue;
+            }
+            if let Some(planned) = self.boxes.get(&owner) {
+                stack.push(planned.source.clone());
+            }
+            if let Some(chain) = self.chains.get(&owner) {
+                stack.extend(chain.scenes().cloned().map(SourceRef::Scene));
+            }
+        }
+        self.scenes.retain(|id, _| scenes.contains(id));
+        self.chains.retain(|owner, _| owners.contains(owner));
+        self.boxes.retain(|owner, _| owners.contains(owner));
+    }
+
     /// How much each source whose frame a layer draws is enlarged where it is shown
     /// most, in canvas pixels per pixel of the frame's extent: what its source should
     /// draw at to stay sharp (ADR-0073). It is measured on every pass, the program's and
