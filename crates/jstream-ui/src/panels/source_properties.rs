@@ -3,7 +3,9 @@
 //! here editing a draft: OK sends what the user changed since it opened as one batch,
 //! Cancel, Escape and the backdrop drop it, and Defaults empties it, so OK resets each
 //! value the dialog opened with. Filter changes apply at once, as in the prototype; the
-//! filter rows and dialogs are the Filters panel's (`filters.rs`).
+//! filter rows and dialogs are the Filters panel's (`filters.rs`). A display, window
+//! or webcam source shows a live picture of what its edited settings capture above the
+//! form (`device_preview.rs`).
 //!
 //! Docs: docs/UI-FEATURES.md#dialogs
 
@@ -11,6 +13,7 @@ use crate::app::SessionContext;
 use crate::dialog::Modal;
 use crate::icons::Icon;
 use crate::panels::add_source::type_label;
+use crate::panels::device_preview::{self, DevicePreview};
 use crate::panels::filters::{Chains, FilterDialogs, chains_of};
 use crate::panels::properties::{Form, draft_patch};
 use crate::store::{Studio, apply};
@@ -185,6 +188,10 @@ fn PropertiesBody(
         }
     };
 
+    // A display, window or webcam shows what the settings being edited capture, so
+    // the user sees the device they pick before OK (DL-02).
+    let preview = device_preview::shows(&kind_id)
+        .then(|| view! { <DevicePreview kind_id=kind_id.clone() draft=draft /> });
     let title = format!("{type_name} properties");
     let subtitle = source.name.clone();
     let form = {
@@ -228,6 +235,7 @@ fn PropertiesBody(
             </div>
             <div class="props-body">
                 <div class="props-settings">
+                    {preview}
                     <label class="field props-name">
                         <span class="label">"Name"</span>
                         <input type="text" bind:value=name />

@@ -160,7 +160,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `plugin_may_bind`, `PluginState` and `PluginDisabledReason` ([Plugins](#design)).
 - **Preview streams** (`preview.rs`, [ADR-0045](../../docs/adr/0045-leptos-web-ui.md)):
   `PreviewCodec` (`h264`, `jpeg`), `PreviewSettings` (`preview.subscribe`'s fields with
-  their defaults and range checks, which the engine applies), and the binary
+  their defaults and range checks, which the engine applies), `PreviewDraft` (its
+  `source`, a draft source the collection doesn't hold), and the binary
   frame: `BinaryFrame`, its fixed `BinaryHeader` with `StreamKind`, the byte layout's
   `to_bytes`/`parse` and `BinaryError`, and `KeyframeGate`, the drop rule every hop that
   queues frames applies ([Binary streams](#design)).
@@ -184,9 +185,11 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.48 because of
-  `stats.tick`'s `load`, the engine's frame and CPU totals (`EngineLoad`); 0.47 made
-  the engine draw, and so accept, every blend mode
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.49 because
+  `preview.subscribe` takes a `source`, a draft source the collection doesn't hold
+  (`PreviewDraft`, [Binary streams](#design)); 0.48 added `stats.tick`'s `load`, the
+  engine's frame and CPU totals (`EngineLoad`); 0.47 made the engine draw, and so
+  accept, every blend mode
   ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md); no wire change); 0.46 added
   `preview.subscribe`'s `scene_id`, a preview stream of any scene, and its 16 streams a
   session ([Binary streams](#design)); 0.45 made scenes
@@ -1545,8 +1548,9 @@ the JSON text messages of the same connection (0.20,
 `meters.tick` event; a binary meter stream would be another kind of the same frame.
 
 - **Opening and closing.** `preview.subscribe {channel, max_width?, max_height?, fps?,
-  codecs?, scene_id?}` is an action: it opens a stream of the program mix, or of the
-  scene `scene_id` (0.46), for the calling session only, tagged with the `channel`
+  codecs?, scene_id?, source?}` is an action: it opens a stream of the program mix, of
+  the scene `scene_id` (0.46), or of the draft source `source` (0.49), for the calling
+  session only, tagged with the `channel`
   number the client chose (a `u32`, not an ID: it only tells the session's streams
   apart in the frame header). The picture is the canvas scaled down to fit
   `max_width` × `max_height` (default 640 × 360, at most 1920 × 1080) with even sides,
@@ -1564,10 +1568,22 @@ the JSON text messages of the same connection (0.20,
   it with no transition running, whether or not it is on program: what the UI's
   pop-out and projector windows and its multiview show. It never makes a source shown
   or heard ([ADR-0028](../../docs/adr/0028-audio-model-v2.md)), and the program stage
-  never draws it, so it costs an output nothing; like every preview it draws a
-  `display` or `window` source as nothing. A scene the collection doesn't have fails
-  with `not_found`; a scene deleted while its stream is open ends the stream with an
-  end frame.
+  never draws it, so it costs an output nothing; the engine captures the displays,
+  windows and webcams it shows for the preview itself. A scene the collection doesn't
+  have fails with `not_found`; a scene deleted while its stream is open ends the stream
+  with an end frame.
+- **Draft sources.** A `source` stream (`PreviewDraft {kind, settings?}`, 0.49) shows a
+  source the collection doesn't hold, alone, as an item covering the canvas would show
+  it and with no filters: what a `display`, `window` or `webcam` source with those
+  settings captures, so a client shows the device being picked before the source is
+  created or its new settings are saved (the UI's Properties dialog). The settings are
+  checked as `source.create` checks them; a refused one fails with `invalid_argument`
+  naming `source.settings.<param>`, a kind that isn't a capture kind or that the engine
+  doesn't have names `source.kind`, and a request with both `scene_id` and `source`
+  names `source`. The stream keeps the canvas size it was opened at: a client
+  subscribes again for other settings. A webcam or capture card already open is shared,
+  not opened twice. Nothing reaches the collection: no `rev` changes and no event goes
+  out.
 - **The frame.** A fixed 32-byte little-endian header, then the payload:
 
   | Offset | Size | Field |

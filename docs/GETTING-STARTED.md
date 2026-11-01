@@ -62,7 +62,8 @@ on **program**, drawn on the canvas in the middle.
    window capture, a webcam, an audio input (your microphone), a media file, an image, a
    browser page, text, a colour, or an audio visualiser. Name it and press **Create**
    (or pick an existing source to reuse it); its properties open, so you can choose the
-   display, the device or the file.
+   display, the device or the file. A display, window or webcam shows its live picture
+   at the top of the dialog as you pick it, before you press **OK**.
 3. Drag the source on the canvas to move it, and its handles to resize it. To crop it,
    hold Alt on a handle, or press C for crop mode (V leaves it). The **Inspector** and
    **Transform** panels hold the exact numbers.

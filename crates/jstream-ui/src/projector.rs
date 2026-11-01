@@ -245,6 +245,7 @@ pub fn subscribe(
         fps: Some(fps.clamp(*PreviewSettings::FPS.start(), *PreviewSettings::FPS.end())),
         codecs,
         scene_id: scene,
+        source: None,
     }
 }
 
@@ -718,6 +719,7 @@ mod tests {
             fps,
             codecs,
             scene_id,
+            ..
         } = subscribe(3, Some(SceneId::new("s")), (3840, 2160), 60, true)
         else {
             panic!("a subscribe");

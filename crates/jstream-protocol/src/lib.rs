@@ -91,7 +91,7 @@ pub use plugin::{
 };
 pub use preview::{
     BINARY_HEADER_LEN, BINARY_VERSION, BinaryError, BinaryFrame, BinaryHeader, KeyframeGate,
-    PreviewCodec, PreviewSettings, StreamKind,
+    PreviewCodec, PreviewDraft, PreviewSettings, StreamKind,
 };
 pub use query::{
     CaptureTargetInfo, CaptureTargetKind, DeleteTarget, DeviceInfo, ItemInfo, MasterInfo,

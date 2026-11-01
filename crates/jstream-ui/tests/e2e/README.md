@@ -180,7 +180,12 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   button; Cancel and Escape drop
   a changed name, OK renames in one edit, and Enter with a blank name sends nothing.
   The mock describes no kinds, so the settings form and the draft patch are covered
-  natively.
+  natively. A video capture device created through Add source, with its descriptor
+  from `describeKinds`, opens the dialog with its live picture: a `preview.subscribe`
+  of the draft source on a channel from 2³¹ up, another on a new channel once the
+  Device field changes, closing the first with nothing saved, and an unsubscribe when
+  Cancel closes the dialog; a colour source shows no picture. The mock streams no
+  pictures, so what the picture draws is checked by hand.
 - **Inspector** (`inspector.spec.js`): the selected Backdrop's X, Y, W, H and Rotation;
   a new width with the W/H link on scales the height and the canvas readout follows,
   and with it off the other side stays; a stepper is one edit Ctrl+Z on the canvas
