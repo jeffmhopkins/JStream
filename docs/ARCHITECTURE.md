@@ -341,7 +341,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   outputs whose video chain is empty share one encoder session when they have the same
   `(video_mix, encoder_profile)`, the master stage counting as part of the mix. An
   output with a video chain, even one holding only disabled filters, gets its own render
-  pass and session, keyed by its output ID. An output's own audio chain gives it its own
+  pass and session, keyed by its output ID; a virtual camera, which encodes nothing,
+  gets the render pass only and is never reported dedicated. An output's own audio chain gives it its own
   audio encode and never affects video sharing. Hardware session caps differ by GPU
   vendor, so the engine reports, per output, whether it shares and with which outputs
   and whether its session is its own, plus the sessions in use. It does not guess the
