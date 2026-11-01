@@ -1685,7 +1685,7 @@ impl Engine {
                             program,
                             vcam,
                             canvas,
-                            output_id.clone(),
+                            (output_id.clone(), key.0.owner.clone()),
                             generation,
                             fail_tx,
                         )

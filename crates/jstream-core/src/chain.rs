@@ -2,7 +2,9 @@
 //! order over its frame before it is placed, with `jstream-render`'s built-in filter
 //! kinds. A scene's enabled video filters (ADR-0065) run the same way, over the scene's
 //! composite ([`GpuKey::Composite`]), once per frame wherever the scene shows; each
-//! chain is keyed by its [`ChainOwner`].
+//! chain is keyed by its [`ChainOwner`]. The master stage's video chain runs over each
+//! mix an output draws, once per frame, and an output's own over what the master stage
+//! made of its mix (ADR-0080), both at the canvas size ([`GpuKey::Mixed`]).
 //!
 //! [`plan`](crate::snapshot::plan_with) copies each reached source's chain into the
 //! [`Shot`](crate::snapshot::Shot) as a [`Chain`]: its input (the source's frame upload,
@@ -37,14 +39,17 @@ use std::sync::{Arc, OnceLock};
 
 use jstream_graph::{Filter, Source};
 use jstream_media::{FrameSize, MediaTime};
-use jstream_protocol::{FilterChain, FilterId, ItemId, Reference, SceneId, Settings, SourceId};
+use jstream_protocol::{
+    FilterChain, FilterId, ItemId, OutputId, Reference, SceneId, Settings, SourceId, VideoMixId,
+};
 use jstream_render::{Compositor, FilterClock, Image, RenderError, ResourceCache, VideoFilter};
 
 use crate::filter_assets::{self, FilterAsset, FilterAssets};
 use crate::snapshot::GpuKey;
 
 /// What owns a video chain the engine runs: a source, over its frame, a scene, over its
-/// composite, or an item, over its box (ADR-0065).
+/// composite, an item, over its box (ADR-0065), or the master stage and an output, over
+/// what leaves JStream (ADR-0080).
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum ChainOwner {
     Source(SourceId),
@@ -52,6 +57,12 @@ pub(crate) enum ChainOwner {
     /// An item's effects, as the scene it names draws the item: a keyframe scene draws
     /// its parent's items at its own values, so each has a chain of its own.
     Item(SceneId, ItemId),
+    /// The master stage's chain over one mix an output draws: `None` is the program of
+    /// an output that names no mix. Each mix has a chain of its own, so a stateful
+    /// filter sees each mix's frames in order.
+    Master(Option<VideoMixId>),
+    /// An output's own chain, after the master stage.
+    Output(OutputId),
 }
 
 impl std::fmt::Display for ChainOwner {
@@ -60,6 +71,9 @@ impl std::fmt::Display for ChainOwner {
             Self::Source(id) => write!(f, "source {id}"),
             Self::Scene(id) => write!(f, "scene {id}"),
             Self::Item(scene, item) => write!(f, "item {item} in scene {scene}"),
+            Self::Master(None) => write!(f, "the master stage over the program"),
+            Self::Master(Some(mix)) => write!(f, "the master stage over mix {mix}"),
+            Self::Output(id) => write!(f, "output {id}"),
         }
     }
 }
@@ -261,6 +275,10 @@ pub(crate) struct Chains {
     /// The frame of the cache the chains last ran in. Every mix a tick draws shares one
     /// frame, and the chains run once in it, so a stateful filter sees each tick once.
     ran: Option<u64>,
+    /// The output stage's images drawn in the frame `ran` names: each mix's
+    /// [`GpuKey::Mixed`] once its master chain ran, and each output's chain output, so
+    /// a mix two outputs draw at different sizes is composited and filtered once.
+    staged: BTreeSet<GpuKey>,
     /// How many frames the chains ran in, for tests.
     #[cfg(test)]
     runs: usize,
@@ -273,11 +291,14 @@ impl Chains {
     /// more. Returns `false` when they already ran in the cache's current frame, so the
     /// caller runs none of them again: every mix a tick draws shares one frame, and a
     /// stateful filter sees each tick once. Each chain then runs with [`Self::run_one`].
+    /// `stages` are the output stage's chains (ADR-0080), kept the same way, which
+    /// [`Self::stage`] runs once each per frame.
     pub(crate) fn begin(
         &mut self,
         compositor: &mut Compositor,
         cache: &mut ResourceCache<GpuKey>,
         chains: &BTreeMap<ChainOwner, Chain>,
+        stages: &BTreeMap<ChainOwner, Chain>,
     ) -> bool {
         let frame = cache.frame();
         if self.ran == Some(frame) {
@@ -289,15 +310,16 @@ impl Chains {
             self.runs += 1;
         }
         self.failed.clear();
+        self.staged.clear();
         let retired = &mut self.retired;
         self.running.retain(|source, running| {
-            let keep = chains.contains_key(source);
+            let keep = chains.contains_key(source) || stages.contains_key(source);
             if !keep {
                 retired.extend(running.drain(..).map(|r| r.filter));
             }
             keep
         });
-        for (source, chain) in chains {
+        for (source, chain) in chains.iter().chain(stages) {
             if !self.running.contains_key(source) {
                 self.running.insert(source.clone(), Vec::new());
             }
@@ -410,6 +432,17 @@ impl Chains {
             *warned = false;
             input = key;
         }
+    }
+
+    /// Records that the output stage's `key` is drawn in this frame, and returns whether
+    /// it was not yet: the caller draws it only then (ADR-0080 §1, once per tick for
+    /// each mix).
+    pub(crate) fn stage(&mut self, key: &GpuKey) -> bool {
+        if self.staged.contains(key) {
+            return false;
+        }
+        self.staged.insert(key.clone());
+        true
     }
 
     /// Marks the layers the chains drew into last time as used in the cache's current
@@ -632,9 +665,11 @@ fn see(
 #[cfg(test)]
 mod tests {
     use jstream_graph::Graph;
+    use jstream_media::FrameSize;
     use jstream_media::{MediaTime, Timebase};
     use jstream_protocol::{
-        Edit, FilterChain, FilterId, FilterOwner, ItemId, SceneId, Settings, SourceId, SourceKind,
+        Edit, FilterChain, FilterId, FilterOwner, ItemId, OutputId, OutputKind, RecordContainer,
+        SceneId, Settings, SourceId, SourceKind, VideoMixId,
     };
     use std::sync::Arc;
 
@@ -760,7 +795,7 @@ mod tests {
                 compositor,
                 (&mut *cache, &mut *chains),
                 (shot, at),
-                snapshot::View { mix: None },
+                snapshot::View::default(),
                 &LiveParams::default(),
                 &NoCaptures,
                 snapshot::DrawAt::read(canvas),
@@ -786,7 +821,7 @@ mod tests {
             compositor,
             (&mut *cache, &mut *chains),
             (shot, MediaTime::zero(Timebase::MILLIS)),
-            snapshot::View { mix: None },
+            snapshot::View::default(),
             live,
             &NoCaptures,
             snapshot::DrawAt::read(canvas),
@@ -983,7 +1018,7 @@ mod tests {
                 &mut compositor,
                 (&mut cache, &mut chains),
                 &filtered,
-                None,
+                snapshot::View::default(),
                 canvas,
             )
             .expect("claim");
@@ -1741,5 +1776,201 @@ mod tests {
             ",
             "the ellipse turns with the box",
         );
+    }
+
+    /// A `color_correction` filter `id` multiplying by `colour` on `owner`'s video chain.
+    fn multiply(owner: FilterOwner, id: &str, colour: &str) -> Edit {
+        Edit::FilterAdd {
+            owner,
+            chain: FilterChain::Video,
+            filter_id: FilterId::new(id),
+            kind: "color_correction".into(),
+            settings: [("multiply", serde_json::json!(colour))]
+                .into_iter()
+                .collect(),
+            enabled: None,
+            index: None,
+        }
+    }
+
+    fn record(id: &str) -> Edit {
+        Edit::OutputCreate {
+            output_id: OutputId::new(id),
+            kind: OutputKind::Record {
+                path: format!("/home/me/{id}.mp4"),
+                container: RecordContainer::Mp4,
+            },
+        }
+    }
+
+    fn output(id: &str) -> FilterOwner {
+        FilterOwner::Output {
+            output_id: OutputId::new(id),
+        }
+    }
+
+    /// The master stage's video chain is planned over the program and each video mix,
+    /// and an output's own over what the master stage makes of the mix it shows, or
+    /// over the mix itself without one (ADR-0080). A disabled filter plans nothing.
+    #[test]
+    fn the_output_stage_chains_are_planned_per_mix_and_output() {
+        let mut g = graph(&[]);
+        apply(
+            &mut g,
+            vec![
+                record("rec"),
+                record("vod"),
+                multiply(output("rec"), "o", "#ff0000"),
+            ],
+        );
+        let plain = shot(&g);
+        assert_eq!(plain.stage_chain(&ChainOwner::Master(None)), None);
+        assert_eq!(
+            plain
+                .stage_chain(&ChainOwner::Output(OutputId::new("rec")))
+                .map(|chain| &chain.input),
+            Some(&GpuKey::Mixed(None)),
+            "no master chain: the output's reads the mix"
+        );
+        assert!(plain.changes_with_time());
+
+        apply(
+            &mut g,
+            vec![
+                Edit::VideoMixCreate {
+                    mix_id: VideoMixId::new("vertical"),
+                    name: "Vertical".into(),
+                    mix: jstream_protocol::VideoMix {
+                        input: jstream_protocol::MixInput::Program,
+                        resolution: jstream_protocol::MixResolution {
+                            width: 1080,
+                            height: 1920,
+                        },
+                        fps_divisor: 1,
+                    },
+                },
+                Edit::OutputSetVideoMix {
+                    output_id: OutputId::new("rec"),
+                    mix_id: Some(VideoMixId::new("vertical")),
+                },
+                multiply(FilterOwner::Master, "m", "#ff0000"),
+                multiply(output("vod"), "o", "#00ff00"),
+                Edit::FilterSetEnabled {
+                    owner: output("vod"),
+                    filter_id: FilterId::new("o"),
+                    enabled: false,
+                },
+            ],
+        );
+        let staged = shot(&g);
+        let vertical = Some(VideoMixId::new("vertical"));
+        for mix in [None, vertical.clone()] {
+            assert_eq!(
+                staged
+                    .stage_chain(&ChainOwner::Master(mix.clone()))
+                    .map(|chain| &chain.input),
+                Some(&GpuKey::Mixed(mix)),
+            );
+        }
+        assert_eq!(
+            staged
+                .stage_chain(&ChainOwner::Output(OutputId::new("rec")))
+                .map(|chain| &chain.input),
+            Some(&GpuKey::Filtered(ChainOwner::Master(vertical))),
+        );
+        assert_eq!(
+            staged.stage_chain(&ChainOwner::Output(OutputId::new("vod"))),
+            None,
+            "a disabled filter is bypassed"
+        );
+    }
+
+    /// Draws each of `views` of `shot` at its size in one cache frame, as the render
+    /// thread draws a tick's frames, and reads back each one's top-left pixel.
+    fn draw_views(
+        compositor: &mut Compositor,
+        (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+        shot: &Shot,
+        views: &[(snapshot::View<'_>, FrameSize)],
+    ) -> Vec<[u8; 4]> {
+        cache.begin_frame();
+        let at = MediaTime::zero(Timebase::MILLIS);
+        let pixels = views
+            .iter()
+            .map(|(view, size)| {
+                let output = snapshot::compose(
+                    compositor,
+                    (&mut *cache, &mut *chains),
+                    (shot, at),
+                    *view,
+                    &LiveParams::default(),
+                    &NoCaptures,
+                    snapshot::DrawAt::read(*size),
+                )
+                .expect("compose");
+                output
+                    .pixels()
+                    .expect("read back")
+                    .pixel(1, 1)
+                    .expect("a pixel")
+            })
+            .collect();
+        drop(cache.end_frame(compositor));
+        pixels
+    }
+
+    /// The master stage's chain shows on every output's frame and not before it (the
+    /// editing canvas, a preview); an output's own shows on its frame alone, after the
+    /// master's. Two outputs drawing the program at different sizes composite it and run
+    /// the master chain once.
+    #[test]
+    fn the_output_stage_runs_on_outputs_only() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let mut g = graph(&[]);
+        apply(
+            &mut g,
+            vec![
+                record("rec"),
+                multiply(FilterOwner::Master, "m", "#ff00ff"),
+                multiply(output("rec"), "o", "#ff0000"),
+            ],
+        );
+        let staged = shot(&g);
+        let canvas = staged.canvas().expect("canvas");
+        let half = FrameSize::new(canvas.width() / 2, canvas.height() / 2).expect("half");
+        let rec = OutputId::new("rec");
+        let pixels = draw_views(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            &staged,
+            &[
+                (snapshot::View::default(), canvas),
+                (snapshot::View::output(None, None), canvas),
+                (snapshot::View::output(None, None), half),
+                (snapshot::View::output(None, Some(&rec)), half),
+            ],
+        );
+        let magenta = [255, 0, 255, 255];
+        assert_eq!(pixels, [WHITE, magenta, magenta, RED]);
+        assert_eq!(
+            chains.staged.len(),
+            3,
+            "the program's layer, its master chain and the output's chain, once each"
+        );
+        assert_eq!(chains.len(), 2);
+
+        // Without the chains the filters are retired and the output draws the mix.
+        let plain = shot(&graph(&[]));
+        let pixels = draw_views(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            &plain,
+            &[(snapshot::View::output(None, Some(&rec)), canvas)],
+        );
+        assert_eq!(pixels, [WHITE]);
+        assert_eq!(chains.len(), 0);
     }
 }

@@ -291,9 +291,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   bypassed. The audio chain runs on the source's input before its fader. The master
   stage and each output own `filters { video, audio }` too, edited with the same
   `filter.*` edits under the owners `master` and `output`
-  ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md)); only their audio chains
-  hold filters until video mixes run the video ones, and their filters can't hold a
-  reference (a scene, source, bus or asset) yet. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
+  ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md)): every output has a
+  video chain (the virtual camera's is its only one) and the master stage and each
+  output that carries audio an audio chain, and their filters can't hold a reference
+  (a scene, source, bus or asset) yet. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
   multiplier in [0, 1]) and `blend` (default `normal`; every mode is drawn,
   [ADR-0082](adr/0082-blend-modes-drawn.md)). A scene's `filters` and a placement's `effects[]` are video filter
   chains, the owners `scene` and `item` of `filter.*`
@@ -344,9 +345,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   audio encode and never affects video sharing. Hardware session caps differ by GPU
   vendor, so the engine reports, per output, whether it shares and with which outputs
   and whether its session is its own, plus the sessions in use. It does not guess the
-  caps. Outputs carry no video chain until filters land, so for now every output shares
-  by `(video_mix, encoder_profile)`; the engine already keys and draws an output with a
-  chain on its own.
+  caps. A chain added to a running output that started without one takes effect at its
+  next start.
 - **No privacy screen** ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md)
   §4): nothing covers the outputs or mutes the microphones on a switch. Muting a source
   and switching scenes do that job.
@@ -1084,8 +1084,10 @@ plus an `effect.toml` manifest.
 **Output path** ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md)), for each
 output: mix → master video chain → the output's own video chain → colour conversion
 (step 4) → encoder. The render plan has a master node per consumed mix and a node per
-output with a video chain. Built so far: the sharing key's output part. The master and
-output video chains are not built yet (their audio chains are, protocol 0.29).
+output with a video chain. Both chains run at the canvas size over the mix's layer
+(`GpuKey::Mixed`), the master's once per frame per mix however many outputs draw it,
+and the result is fitted into the output's frame; a frame with neither chain draws as
+before. Built: the audio chains in protocol 0.29, the video chains in 0.61.
 
 <a id="browser-source"></a>
 ## Browser source

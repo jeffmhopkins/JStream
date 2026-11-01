@@ -187,9 +187,11 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.55 because a keyframe
-  scene overrides the children of the groups in its parent's tree (#846; no wire
-  change); 0.54 added `stats.tick`'s `chains`, what scene filter chains and item effects
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.61 because the master
+  stage and every output take video filters on their `video` chain (ADR-0080; no wire
+  change: earlier minors refused them with `invalid_argument` on `chain`); 0.55 made
+  a keyframe scene override the children of the groups in its parent's tree (#846; no
+  wire change); 0.54 added `stats.tick`'s `chains`, what scene filter chains and item effects
   add to each frame (`ChainCost`); 0.53 made the engine take live values on a keyframe scene (`live.set`,
   #846; no wire change); 0.52 added
   `ui_settings.set` and `ui_settings.get`, the UI settings the server keeps

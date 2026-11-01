@@ -1045,6 +1045,28 @@ so the render thread does no extra work. Not counted: a source's own chain, a sc
 into for an item's effects (it takes the place of the layer it would be drawn into
 anyway).
 
+**The output stage** ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)).
+Planning the program stage's shot (not a preview's) copies the master stage's video
+chain into `Shot::stages` once for the program and once for each video mix, keyed
+`ChainOwner::Master(mix)` over `GpuKey::Mixed(mix)`, and each output's own chain,
+keyed `ChainOwner::Output(id)`, over the master chain's output for the mix it shows
+(its mix if the collection has it, else the program, as its encoder session is keyed),
+or over the mix itself when the master chain is empty. The render thread draws each
+output's frame with `View::output(mix, owner)`, `owner` being the output whose session
+is its own. When the frame's mix has a master chain or its owner a chain of its own,
+`compose` draws the mix at the canvas size into `GpuKey::Mixed` instead of straight to
+the output, runs the master chain over it, then the owner's, and fits the last output
+inside the output's frame, centred, with black bars. `Chains::stage` records what the
+cache's frame has drawn, so a mix that two outputs draw at different sizes is composited
+and its master chain run once per tick, as ADR-0080 §1 asks, and each output chain runs
+once. A failed stage chain draws a black frame: the unfiltered mix never leaves in its
+place. A frame without either chain draws as before, with no extra layer. The editing
+canvas, previews and `video.snapshot` draw with `View::default()`, before the master
+stage. The stage's chains count toward `Shot::changes_with_time`, and `Chains::begin`
+keeps their filters with the shot's other chains, so a stateful kind sees each frame
+of its mix in order. Their filters hold no references (the graph refuses one), so none
+reads a scene or an asset.
+
 A filter that reads an asset (`apply_lut`'s `lut`, a `.cube` file or a tiled PNG, and
 `image_mask`'s `image`, whose first frame is the mask) gets it through the live
 sources (`filter_assets.rs`). Each sync lists the assets the collection's video filters
@@ -1715,9 +1737,11 @@ entries.
 `EncoderProfile::DEFAULT` when it has none. Running outputs share an encoder session
 when they have the same key: the video mix (or none, for the program at the canvas
 size and base rate), its resolution and rate, and the profile ID and its settings, all
-as they were at start. An output with its own video chain adds its ID to the key, so
-its session and its drawn frame are its own; outputs carry no chain yet
-(`Output::has_video_chain` is false), so none does so far. So `encoder.update`, `output.set_encoder`, a mix's new
+as they were at start. An output with its own video chain (`Output::has_video_chain`:
+a filter on it, even a disabled one) adds its ID to the key, so its session and its
+drawn frame are its own and it shares with no one, which `output.status` reports as
+`dedicated`. A chain added to a running output that started without one takes effect at
+its next start; edits to a chain it started with apply live. So `encoder.update`, `output.set_encoder`, a mix's new
 resolution or rate, or `output.set_video_mix` on a running output changes nothing until
 it restarts, and an
 output started after the update opens a session of its own rather than joining one
@@ -1935,7 +1959,9 @@ it. It starts the camera at the canvas size the collection has then, as BGRA8 at
 the render thread a tap, and starts the output's camera thread, `jstream-vcam`. The
 tap and that thread share only the output's stop flag and two bounded channels, never
 a lock ([R-RT-003](../../docs/RULES.md#R-RT-003)). Each tick the tap copies the
-program frame (RGBA) into a buffer the camera thread handed back and sends it,
+program frame (RGBA) into a buffer the camera thread handed back and sends it (a
+camera with its own video chain is fed a program frame of its own, drawn through that
+chain, which the render thread holds for it as it holds the shared one),
 without blocking: with a frame still waiting, it drops this one and counts it in
 `output_stats`' output drops. The camera thread converts each frame to BGRA at the
 canvas size (as is when the program frame is the canvas size, otherwise fitted inside

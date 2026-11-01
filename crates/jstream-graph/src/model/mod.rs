@@ -981,10 +981,10 @@ impl Output {
     }
 
     /// Whether its own video filter chain has any filters. Such an output gets its own
-    /// render pass and encoder session (ADR-0080 §3). Outputs carry no video chain
-    /// until filters land, so this is `false` for every output.
+    /// render pass and encoder session (ADR-0080 §3), even when every filter is off, so
+    /// switching one never moves the output between sessions.
     pub fn has_video_chain(&self) -> bool {
-        false
+        !self.filters.chain(FilterChain::Video).is_empty()
     }
 }
 

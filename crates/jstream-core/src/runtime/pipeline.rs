@@ -1385,15 +1385,13 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
                     &mut compositor,
                     (&mut cache, &mut chains),
                     shot,
-                    frame.mix.as_ref(),
+                    View::output(frame.mix.as_ref(), frame.owner.as_ref()),
                     frame.size,
                 );
                 claimed.map_err(|err| draw_error(&compositor, &err))?;
             }
             for frame in frames.iter_mut().filter(|frame| frame.due) {
-                let view = View {
-                    mix: frame.mix.as_ref(),
-                };
+                let view = View::output(frame.mix.as_ref(), frame.owner.as_ref());
                 let drawn = snapshot::compose(
                     &mut compositor,
                     (&mut cache, &mut chains),
@@ -1896,7 +1894,7 @@ pub(crate) fn launch_vcam(
     program: Arc<Program>,
     mut vcam: VcamOut,
     canvas: FrameSize,
-    output_id: OutputId,
+    (output_id, owner): (OutputId, Option<OutputId>),
     generation: u64,
     fail_tx: Sender<PipelineEvent>,
 ) -> Result<Running, String> {
@@ -1911,7 +1909,7 @@ pub(crate) fn launch_vcam(
     })?;
     let stop = Arc::new(AtomicBool::new(false));
     let output_drops = Arc::new(AtomicU64::new(0));
-    let (tap, frames, spare) = camera_channels(Arc::clone(&stop), Arc::clone(&output_drops));
+    let (tap, frames, spare) = camera_channels(Arc::clone(&stop), Arc::clone(&output_drops), owner);
     // The tap goes first: a tap the render thread can't take drops here, with `vcam`
     // still on this thread. A camera thread that fails to start drops its channel
     // ends, and the tap leaves.
@@ -2407,9 +2405,11 @@ struct Frames {
     targets: Vec<Vec<VideoTap>>,
     /// For each of `mixes`, its encode targets, for the sessions on the GPU path.
     encode: Vec<MixEncode>,
-    /// Whether a virtual camera needs the program at the program stage's size, so that feed is
-    /// drawn even with no session on it.
-    program_held: bool,
+    /// The owners of the program frames at the program stage's size that the virtual
+    /// cameras need, so each is drawn even with no session on it: `None` for a camera
+    /// without its own video chain, which shares the program frame of an output that
+    /// shows no mix, or the camera's output for one with a chain (ADR-0080 §2).
+    held: Vec<Option<OutputId>>,
 }
 
 impl Frames {
@@ -2441,7 +2441,7 @@ impl Frames {
     fn prune(&mut self, mut free: impl FnMut(Garbage)) {
         let mut at = 0;
         while at < self.targets.len() {
-            let held = self.program_held && is_program(&self.mixes[at], self.mixes[at].size);
+            let held = self.holds(&self.mixes[at], self.mixes[at].size);
             if self.targets[at].is_empty() && !held {
                 free(Garbage::Inputs(self.targets.swap_remove(at)));
                 free(Garbage::Pixels(self.mixes.swap_remove(at).out));
@@ -2456,22 +2456,48 @@ impl Frames {
         }
     }
 
-    /// Keeps the program at the program stage's `size` drawn on every tick while `held`, for the
-    /// virtual cameras, adding its frame if no session has it yet. Once no longer held,
-    /// [`prune`](Self::prune) drops it like any feed with no session left.
-    fn hold_program(&mut self, held: bool, size: FrameSize) {
-        self.program_held = held;
-        if held && self.program_frame(size).is_none() {
-            self.mixes.push(MixFrame::new(None, size, 1, None));
-            self.shown.push(Vec::new());
-            self.targets.push(Vec::new());
-            self.encode.push(MixEncode::default());
+    /// Keeps the program at the program stage's `size` drawn on every tick for each of
+    /// `owners`, the virtual cameras' ([`Frames::held`]), adding its frame if no session
+    /// has it yet. Once no longer held, [`prune`](Self::prune) drops it like any feed
+    /// with no session left. Allocates only when the owners change.
+    fn hold_program<'a>(
+        &mut self,
+        owners: impl Iterator<Item = Option<&'a OutputId>> + Clone,
+        size: FrameSize,
+    ) {
+        let same = owners.clone().count() == self.held.len()
+            && owners
+                .clone()
+                .zip(&self.held)
+                .all(|(new, old)| new == old.as_ref());
+        if !same {
+            self.held = owners.map(Option::<&OutputId>::cloned).collect();
+        }
+        for at in 0..self.held.len() {
+            if self.program_frame(size, self.held[at].as_ref()).is_none() {
+                let owner = self.held[at].clone();
+                self.mixes.push(MixFrame::new(None, size, 1, owner));
+                self.shown.push(Vec::new());
+                self.targets.push(Vec::new());
+                self.encode.push(MixEncode::default());
+            }
         }
     }
 
-    /// Where the program at the program stage's `size`, drawn on every tick, is kept.
-    fn program_frame(&self, size: FrameSize) -> Option<usize> {
-        self.mixes.iter().position(|frame| is_program(frame, size))
+    /// Whether a virtual camera needs `frame`, the program at the program stage's
+    /// `size`.
+    fn holds(&self, frame: &MixFrame, size: FrameSize) -> bool {
+        self.held
+            .iter()
+            .any(|owner| is_program(frame, size, owner.as_ref()))
+    }
+
+    /// Where the program at the program stage's `size` for `owner`, drawn on every
+    /// tick, is kept.
+    fn program_frame(&self, size: FrameSize, owner: Option<&OutputId>) -> Option<usize> {
+        self.mixes
+            .iter()
+            .position(|frame| is_program(frame, size, owner))
     }
 
     /// Marks the mixes due on base tick `index` and returns how many are. A mix is due
@@ -2497,7 +2523,7 @@ impl Frames {
 
     /// Sets out what each due mix is drawn into on this tick: a readback while a session
     /// on the CPU path is fed it (or, for the program at the stage's `size`, while a
-    /// virtual camera runs, as `cams` says), and the next free encode target of its ring
+    /// virtual camera needs it, [`Frames::held`]), and the next free encode target of its ring
     /// while a session on the GPU path is. A mix whose ring has none free gets no
     /// target, and its GPU sessions miss the tick's frame. Returns how many sessions
     /// missed it, for [`encode_frame_drops`].
@@ -2510,18 +2536,19 @@ impl Frames {
         gpu: &dyn GpuInterop,
         context: Option<&GpuContext>,
         size: FrameSize,
-        cams: bool,
     ) -> Result<u64, String> {
-        let program = if cams { self.program_frame(size) } else { None };
+        let held = &self.held;
         let mut missed: u64 = 0;
-        for (at, ((frame, taps), encode)) in self
+        for ((frame, taps), encode) in self
             .mixes
             .iter_mut()
             .zip(&self.targets)
             .zip(&mut self.encode)
-            .enumerate()
         {
-            frame.readback = program == Some(at) || taps.iter().any(|tap| !tap.gpu);
+            let held = held
+                .iter()
+                .any(|owner| is_program(frame, size, owner.as_ref()));
+            frame.readback = held || taps.iter().any(|tap| !tap.gpu);
             encode.starved = false;
             let gpu_taps = taps.iter().filter(|tap| tap.gpu).count() as u64;
             if !frame.due || gpu_taps == 0 {
@@ -2665,7 +2692,7 @@ fn render_loop(job: RenderJob) {
         shown: Vec::new(),
         targets: Vec::new(),
         encode: Vec::new(),
-        program_held: false,
+        held: Vec::new(),
     };
     let mut next: Option<MediaTime> = None;
     // Base ticks since the thread started, skipped ones included: the mixes with a
@@ -2687,7 +2714,7 @@ fn render_loop(job: RenderJob) {
             frames.add(feed, tap);
         }
         cams.extend(cam_inputs.try_iter());
-        frames.hold_program(!cams.is_empty(), size);
+        frames.hold_program(cams.iter().map(VcamTap::owner), size);
         frames.prune(|garbage| collector.free(garbage));
         if frames.mixes.is_empty() {
             // No session to draw for, so no tick is due and none counts as skipped;
@@ -2721,7 +2748,7 @@ fn render_loop(job: RenderJob) {
         // session on the GPU path has none, which fails the pipeline.
         if !broken && switch.is_none() && drawn > 0 {
             let on = context.as_deref().filter(|_| on_context);
-            match frames.prepare(gpu.as_ref(), on, size, !cams.is_empty()) {
+            match frames.prepare(gpu.as_ref(), on, size) {
                 Ok(missed) => encode_held = encode_held.saturating_add(missed),
                 Err(err) => {
                     broken = true;
@@ -2937,10 +2964,12 @@ fn render_loop(job: RenderJob) {
         }
         // A camera whose output is stopping, or whose thread has ended, goes to the
         // collector.
-        let program = frames.program_frame(size).map(|at| &frames.shown[at]);
         let mut at = 0;
         while at < cams.len() {
             let cam = &mut cams[at];
+            let program = frames
+                .program_frame(size, cam.owner())
+                .map(|at| &frames.shown[at]);
             let stays = match program {
                 Some(shown) if !shown.is_empty() => cam.push(size, due, shown),
                 _ => cam.stay(),
@@ -3076,8 +3105,10 @@ impl Switch {
 
 /// Whether `frame` is the program at the program stage's `size` on every base tick: what an
 /// output with no mix, and every virtual camera, is fed.
-fn is_program(frame: &MixFrame, size: FrameSize) -> bool {
-    frame.mix.is_none() && frame.size == size && frame.divisor == 1 && frame.owner.is_none()
+/// For a camera with its own video chain, `owner` is its output, whose frame it alone
+/// is fed (ADR-0080 §2).
+fn is_program(frame: &MixFrame, size: FrameSize, owner: Option<&OutputId>) -> bool {
+    frame.mix.is_none() && frame.size == size && frame.divisor == 1 && frame.owner.as_ref() == owner
 }
 
 /// One mix's encode targets, for the sessions on the GPU path it feeds.
@@ -4242,7 +4273,7 @@ mod tests {
             shown: Vec::new(),
             targets: Vec::new(),
             encode: Vec::new(),
-            program_held: false,
+            held: Vec::new(),
         }
     }
 
@@ -4505,10 +4536,10 @@ mod tests {
     fn a_camera_holds_the_program_frame() {
         let size = FrameSize::new(64, 36).expect("size");
         let mut frames = no_frames();
-        frames.hold_program(true, size);
-        frames.hold_program(true, size);
+        frames.hold_program(std::iter::once(None), size);
+        frames.hold_program(std::iter::once(None), size);
         frames.prune(|_| panic!("held"));
-        assert_eq!(frames.program_frame(size), Some(0));
+        assert_eq!(frames.program_frame(size, None), Some(0));
         assert_eq!(frames.mixes.len(), 1);
         assert_eq!(frames.schedule(1), 1, "drawn on every tick");
 
@@ -4534,10 +4565,32 @@ mod tests {
 
         frames.targets[0].clear();
         frames.prune(|_| panic!("still held"));
-        frames.hold_program(false, size);
+        frames.hold_program(std::iter::empty(), size);
         let mut freed = 0;
         frames.prune(|_| freed += 1);
         assert_eq!((freed, frames.mixes.len()), (4, 0));
+    }
+
+    /// A virtual camera with its own video chain holds a program frame of its own,
+    /// drawn through its chain, beside the shared one another camera holds; each is
+    /// dropped once its camera goes (ADR-0080 §2).
+    #[test]
+    fn a_camera_with_a_chain_holds_a_frame_of_its_own() {
+        let size = FrameSize::new(64, 36).expect("size");
+        let cam = OutputId::new("cam");
+        let mut frames = no_frames();
+        frames.hold_program([None, Some(&cam)].into_iter(), size);
+        frames.prune(|_| panic!("held"));
+        assert_eq!(frames.mixes.len(), 2);
+        assert_eq!(frames.program_frame(size, None), Some(0));
+        assert_eq!(frames.program_frame(size, Some(&cam)), Some(1));
+        assert_eq!(frames.mixes[1].owner.as_ref(), Some(&cam));
+
+        frames.hold_program(std::iter::once(Some(&cam)), size);
+        let mut freed = 0;
+        frames.prune(|_| freed += 1);
+        assert_eq!(freed, 4, "the shared frame goes");
+        assert_eq!(frames.program_frame(size, Some(&cam)), Some(0));
     }
 
     fn us(ticks: i64) -> MediaTime {

@@ -2890,7 +2890,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it.",
+                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it. Its video chain (since 0.61)\nruns once per frame on each mix an output draws, at the canvas size; the\nediting canvas, previews and `video.snapshot` show the mix before it. Its\nfilters can't hold a reference.",
                 "properties": {
                   "type": {
                     "const": "master",
@@ -2903,7 +2903,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "An output's own chains, which run after the master stage for that output only\n(ADR-0080 §2). An output with filters on its audio chain gets its own audio\nencode from its next start; edits to a chain it started with apply live.",
+                "description": "An output's own chains, which run after the master stage for that output only\n(ADR-0080 §2). An output with filters on its audio chain gets its own audio\nencode from its next start; edits to a chain it started with apply live. Every\noutput, the virtual camera included, has a video chain (since 0.61): one with\na filter on it, even a disabled one, gets its own render pass and encoder\nsession from its next start, which `output.status` reports as `dedicated`.",
                 "properties": {
                   "output_id": {
                     "$ref": "#/$defs/OutputId",
@@ -4811,7 +4811,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it.",
+                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it. Its video chain (since 0.61)\nruns once per frame on each mix an output draws, at the canvas size; the\nediting canvas, previews and `video.snapshot` show the mix before it. Its\nfilters can't hold a reference.",
                 "properties": {
                   "type": {
                     "const": "master",
@@ -4824,7 +4824,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "An output's own chains, which run after the master stage for that output only\n(ADR-0080 §2). An output with filters on its audio chain gets its own audio\nencode from its next start; edits to a chain it started with apply live.",
+                "description": "An output's own chains, which run after the master stage for that output only\n(ADR-0080 §2). An output with filters on its audio chain gets its own audio\nencode from its next start; edits to a chain it started with apply live. Every\noutput, the virtual camera included, has a video chain (since 0.61): one with\na filter on it, even a disabled one, gets its own render pass and encoder\nsession from its next start, which `output.status` reports as `dedicated`.",
                 "properties": {
                   "output_id": {
                     "$ref": "#/$defs/OutputId",
@@ -8182,7 +8182,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it.",
+                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it. Its video chain (since 0.61)\nruns once per frame on each mix an output draws, at the canvas size; the\nediting canvas, previews and `video.snapshot` show the mix before it. Its\nfilters can't hold a reference.",
                 "properties": {
                   "type": {
                     "const": "master",
@@ -8195,7 +8195,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "An output's own chains, which run after the master stage for that output only\n(ADR-0080 §2). An output with filters on its audio chain gets its own audio\nencode from its next start; edits to a chain it started with apply live.",
+                "description": "An output's own chains, which run after the master stage for that output only\n(ADR-0080 §2). An output with filters on its audio chain gets its own audio\nencode from its next start; edits to a chain it started with apply live. Every\noutput, the virtual camera included, has a video chain (since 0.61): one with\na filter on it, even a disabled one, gets its own render pass and encoder\nsession from its next start, which `output.status` reports as `dedicated`.",
                 "properties": {
                   "output_id": {
                     "$ref": "#/$defs/OutputId",
@@ -13041,7 +13041,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it.",
+                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it. Its video chain (since 0.61)\nruns once per frame on each mix an output draws, at the canvas size; the\nediting canvas, previews and `video.snapshot` show the mix before it. Its\nfilters can't hold a reference.",
                 "properties": {
                   "type": {
                     "const": "master",
@@ -13054,7 +13054,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "An output's own chains, which run after the master stage for that output only\n(ADR-0080 §2). An output with filters on its audio chain gets its own audio\nencode from its next start; edits to a chain it started with apply live.",
+                "description": "An output's own chains, which run after the master stage for that output only\n(ADR-0080 §2). An output with filters on its audio chain gets its own audio\nencode from its next start; edits to a chain it started with apply live. Every\noutput, the virtual camera included, has a video chain (since 0.61): one with\na filter on it, even a disabled one, gets its own render pass and encoder\nsession from its next start, which `output.status` reports as `dedicated`.",
                 "properties": {
                   "output_id": {
                     "$ref": "#/$defs/OutputId",

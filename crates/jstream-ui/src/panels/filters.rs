@@ -22,12 +22,12 @@ use crate::icons::Icon;
 use crate::panels::add_source::{has_picture, type_label};
 use crate::panels::properties::{Form, draft_patch, value_of};
 use crate::panels::tree::{Reorder, Side, dropped_at};
-use crate::store::{Collection, Studio, apply};
+use crate::store::{Collection, Studio, apply, query};
 use crate::workspace::DockState;
 use jstream_control::protocol::{
     Edit, FilterChain, FilterId, FilterInfo, FilterOwner, ItemId, KindCategory, KindDescriptor,
-    KindSummary, MAX_CHAIN_FILTERS, OutputKind, ParamType, Reference, SceneId, Settings, SourceId,
-    SourceInfo, SourceKind,
+    KindSummary, MAX_CHAIN_FILTERS, OutputKind, OutputState, ParamType, Query, QueryResult,
+    Reference, SceneId, Settings, SourceId, SourceInfo, SourceKind,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -526,21 +526,19 @@ pub fn output_has_audio(kind: &OutputKind) -> bool {
 
 /// The chains `owner` shows, as (video, audio). A source's follow its kind
 /// ([`chains_of`]); a scene has a video chain, and so does an item whose source has a
-/// picture: its effects (ADR-0065). The program output and an output show their
-/// audio chain only, since the engine refuses their video chains so far, and an output
-/// without sound (the virtual camera) has none.
+/// picture: its effects (ADR-0065). The program output and every output have a video
+/// chain, and an audio chain unless the output has no sound (the virtual camera)
+/// (ADR-0080).
 pub fn owner_chains(collection: &Collection, owner: &FilterOwner) -> (bool, bool) {
     match owner {
         FilterOwner::Source { source_id } => collection
             .source(source_id)
             .map_or((false, false), chains_of),
-        FilterOwner::Master => (false, true),
-        FilterOwner::Output { output_id } => (
-            false,
-            collection
-                .output(output_id)
-                .is_some_and(|o| output_has_audio(&o.kind)),
-        ),
+        FilterOwner::Master => (true, true),
+        FilterOwner::Output { output_id } => match collection.output(output_id) {
+            Some(output) => (true, output_has_audio(&output.kind)),
+            None => (false, false),
+        },
         FilterOwner::Scene { .. } => (true, false),
         FilterOwner::Item { item_id } => (
             collection
@@ -595,6 +593,37 @@ fn owner_foot(owner: &FilterOwner) -> &'static str {
         FilterOwner::Item { .. } => "Applies to this item only, after its crop.",
         _ => "Applies everywhere this source appears.",
     }
+}
+
+/// Whether a filter of `kind` would hold a reference: a setting that names a scene, a
+/// source, a bus or an asset. A master or output filter can't hold one yet (ADR-0080),
+/// so the Add filter dialog won't add such a kind to those chains.
+pub fn refers(kind: &KindDescriptor) -> bool {
+    kind.params.iter().any(|p| {
+        matches!(
+            p.ty,
+            ParamType::Scene | ParamType::Source { .. } | ParamType::Bus | ParamType::Asset { .. }
+        )
+    })
+}
+
+/// The Add filter dialog's note on what an output's first video filter costs (ADR-0080
+/// §3): its own GPU pass and encoder session, beside the `sessions` in use now, from its
+/// next start when it is `running`.
+pub fn first_video_cost(sessions: u32, running: bool) -> String {
+    let in_use = match sessions {
+        1 => "the 1 in use now".to_owned(),
+        n => format!("the {n} in use now"),
+    };
+    let when = if running {
+        " It takes effect the next time this output starts."
+    } else {
+        ""
+    };
+    format!(
+        "A video filter gives this output its own GPU pass and encoder session, one more \
+         than {in_use}, even while the filter is off.{when}"
+    )
 }
 
 /// The Add filter dialog's subtitle for `owner`, which `name` names: "For “Backdrop”", or
@@ -897,16 +926,12 @@ pub fn Filters() -> impl IntoView {
             }}
             {move || {
                 chains.get().map(|(owner, (video, audio))| {
-                    let stage = matches!(owner, FilterOwner::Master | FilterOwner::Output { .. });
                     let add = {
                         let owner = owner.clone();
                         move |_| dialogs.add(owner.clone())
                     };
                     view! {
                         <Chains owner=owner video=video audio=audio in_place=true />
-                        {stage.then(|| view! {
-                            <p class="filters-later">"Video filters on outputs aren’t available yet."</p>
-                        })}
                         {(video || audio).then(|| view! {
                             <button type="button" class="filters-add" on:click=add>"+ Add filter…"</button>
                         })}
@@ -1709,6 +1734,37 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
                 .map(|p| p.id.clone())
         })
     });
+    // A master or output filter can't hold a reference yet (ADR-0080).
+    let stage = matches!(owner, FilterOwner::Master | FilterOwner::Output { .. });
+    let referring =
+        Memo::new(move |_| stage && descriptor.with(|d| d.as_ref().is_some_and(refers)));
+    // An output's first video filter costs a session of its own (ADR-0080 §3): the
+    // sessions in use, and whether the output runs, from `output.status`.
+    let cost = RwSignal::new(None::<String>);
+    if let FilterOwner::Output { output_id } = &owner {
+        let first = studio.collection.with_untracked(|c| {
+            c.as_ref()
+                .and_then(|c| {
+                    c.chains(&owner)
+                        .map(|f| f.chain(FilterChain::Video).is_empty())
+                })
+                .unwrap_or(false)
+        });
+        if let (true, Some(s)) = (first, session.get()) {
+            let output_id = output_id.clone();
+            spawn_local(async move {
+                if let Ok(QueryResult::OutputStatus {
+                    state,
+                    encoder_sessions,
+                    ..
+                }) = query(&s, Query::OutputStatus { output_id }).await
+                {
+                    let running = !matches!(state, OutputState::Stopped | OutputState::Failed);
+                    _ = cost.try_set(Some(first_video_cost(encoder_sessions, running)));
+                }
+            });
+        }
+    }
     let foot = owner_foot(&owner);
     let sub = add_sub(&owner, &name);
     let none = match &owner {
@@ -1729,7 +1785,11 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
     let blocked = {
         move || match current.get() {
             None => true,
-            Some(t) => full(t.chain) || (scene_param.get().is_some() && scene.get().is_none()),
+            Some(t) => {
+                full(t.chain)
+                    || referring.get()
+                    || (scene_param.get().is_some() && scene.get().is_none())
+            }
         }
     };
     let add = {
@@ -1826,7 +1886,10 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
             let quick = {
                 let t = t.clone();
                 move |_| {
-                    if scene_param.get_untracked().is_none() && !full(t.chain) {
+                    if scene_param.get_untracked().is_none()
+                        && !referring.get_untracked()
+                        && !full(t.chain)
+                    {
                         add.with_value(|add| add(t.clone()));
                     }
                 }
@@ -1876,7 +1939,18 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
                 .map(|c| owner.with_value(|o| owner_scene_choices(c, o, editing.as_ref())))
                 .unwrap_or_default()
         });
-        let scene_select = scene_param.get().map(|_| {
+        let refer_note = referring.get().then(|| {
+            view! {
+                <p class="add-note">
+                    "A filter on an output can’t use a scene, a source or a file yet."
+                </p>
+            }
+        });
+        let cost_note = (t.chain == FilterChain::Video)
+            .then(|| cost.get())
+            .flatten()
+            .map(|text| view! { <p class="add-note add-filter-cost">{text}</p> });
+        let scene_select = scene_param.get().filter(|_| !referring.get()).map(|_| {
             let options = choices
                 .into_iter()
                 .map(|(id, name)| view! { <option value=id.to_string()>{name}</option> })
@@ -1916,6 +1990,8 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
                 </div>
             })}
             {full_note}
+            {refer_note}
+            {cost_note}
         })
     };
 
@@ -2530,7 +2606,7 @@ mod tests {
     }
 
     #[test]
-    fn the_program_output_and_outputs_show_their_audio_chain_only() {
+    fn the_program_output_and_outputs_show_their_chains() {
         use jstream_control::protocol::{OutputId, OutputInfo, RecordContainer};
         let output = |id: &str, kind: OutputKind| OutputInfo {
             output_id: id.into(),
@@ -2556,20 +2632,20 @@ mod tests {
             output_id: OutputId::new(id),
         };
         let master = FilterOwner::Master;
-        assert_eq!(owner_chains(&collection, &master), (false, true));
+        assert_eq!(owner_chains(&collection, &master), (true, true));
         assert_eq!(owner_name(&collection, &master), "Program output");
         assert_eq!(
             owner_note(&collection, &master),
             "Master chain: applies to everything leaving JStream."
         );
-        assert_eq!(owner_chains(&collection, &out("rec")), (false, true));
+        assert_eq!(owner_chains(&collection, &out("rec")), (true, true));
         assert_eq!(owner_name(&collection, &out("rec")), "rec");
         assert_eq!(
             owner_note(&collection, &out("rec")),
             "Only this output, after the program filters."
         );
-        // The virtual camera has no sound, so no chain the engine takes.
-        assert_eq!(owner_chains(&collection, &out("cam")), (false, false));
+        // The virtual camera has no sound, so a video chain only.
+        assert_eq!(owner_chains(&collection, &out("cam")), (true, false));
         assert_eq!(
             owner_note(&collection, &out("cam")),
             "Only this output, after the program filters. No sound."
@@ -2578,6 +2654,53 @@ mod tests {
         assert!(collection.chains(&out("gone")).is_none());
         assert!(collection.chains(&master).is_some());
         assert_eq!(own_source(&master), SourceId::new(""));
+    }
+
+    /// A kind whose settings name a scene, a source, a bus or an asset refers; the Add
+    /// filter dialog keeps it off the master's and outputs' chains (ADR-0080).
+    #[test]
+    fn a_kind_with_a_reference_setting_refers() {
+        let kind = |params| KindDescriptor {
+            kind_id: "k".into(),
+            category: KindCategory::VideoFilter,
+            name: "K".into(),
+            version: 1,
+            video: true,
+            audio: false,
+            params,
+            max_outset_px: None,
+        };
+        assert!(!refers(&kind(vec![param(
+            "amount",
+            "Amount",
+            float(0.0, 1.0, None, None),
+            json!(0.5)
+        )])));
+        assert!(refers(&kind(vec![param(
+            "scene",
+            "Scene",
+            ParamType::Scene,
+            Value::Null
+        )])));
+        assert!(refers(&kind(vec![param(
+            "audio",
+            "Audio",
+            ParamType::Bus,
+            Value::Null
+        )])));
+    }
+
+    /// The cost of an output's first video filter names the sessions in use, and says
+    /// when it takes effect for a running output (ADR-0080 §3).
+    #[test]
+    fn the_first_video_filter_states_its_cost() {
+        assert_eq!(
+            first_video_cost(1, false),
+            "A video filter gives this output its own GPU pass and encoder session, one more \
+             than the 1 in use now, even while the filter is off."
+        );
+        assert!(first_video_cost(2, true).contains("the 2 in use now"));
+        assert!(first_video_cost(0, true).ends_with("the next time this output starts."));
     }
 
     #[test]
