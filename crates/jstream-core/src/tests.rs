@@ -2593,8 +2593,17 @@ fn the_render_snapshot_follows_scene_switch() {
 /// failure to open still fails the test, just later.
 const GPU_OPEN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
 
-/// The warnings logged while `run` runs on this thread, each as its message and fields.
+/// The warnings logged while `run` runs on this thread, and on the pipeline threads it
+/// starts, each as its message and fields.
 pub(crate) fn warnings<T>(run: impl FnOnce() -> T) -> (T, Vec<String>) {
+    warnings_with(|_| run())
+}
+
+/// [`warnings`], with `run` given what has been logged so far, to wait for a warning a
+/// pipeline thread logs.
+pub(crate) fn warnings_with<T>(
+    run: impl FnOnce(&dyn Fn() -> Vec<String>) -> T,
+) -> (T, Vec<String>) {
     use tracing::field::{Field, Visit};
     use tracing::span::{Attributes, Id, Record};
     use tracing::{Event, Level, Metadata, Subscriber};
@@ -2632,13 +2641,15 @@ pub(crate) fn warnings<T>(run: impl FnOnce() -> T) -> (T, Vec<String>) {
     }
 
     let logged = Warnings::default();
-    let out = tracing::subscriber::with_default(logged.clone(), run);
-    let logged = logged
-        .0
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .clone();
-    (out, logged)
+    let read = || {
+        logged
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    };
+    let out = tracing::subscriber::with_default(logged.clone(), || run(&read));
+    (out, read())
 }
 
 /// One GPU test at a time, on whatever adapter opens (software in CI). Parallel compositors starve the pipeline

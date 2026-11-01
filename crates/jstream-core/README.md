@@ -392,8 +392,9 @@ state machine. Contents:
   hardware encoder for kept at `prefer` and failing as `action_failed`, and a start
   beside a stopping holder whose session is still closing refused as
   `hardware_session_limit` naming it, and the warning naming the output when `prefer`
-  opens in software, hardware refused or absent, and none for hardware or `avoid`
-  (`src/tests/cpu_pipeline/hardware_sessions.rs`), a
+  opens in software, hardware refused or absent, and none for hardware or `avoid`, and
+  one warning per output naming it when a hardware encoder falls back at its first
+  frame (`src/tests/cpu_pipeline/hardware_sessions.rs`), a
   virtual camera publishing the program as BGRA at the canvas size (fitted into a canvas of another size, started again after a stop, running beside
   a stream, refused without a camera in the backends or while another output uses
   it, a refused start keeping the sink, a failed publish failing only that output), a render panic failing both outputs, overload drops from a
@@ -2608,8 +2609,10 @@ the collector rather than drop it. While the stage has no session and no virtual
 camera, or no mix is due on a tick, it draws nothing but still adopts the latest render
 snapshot. A virtual camera is fed the program at the canvas size on every tick, so that
 feed is drawn while a camera runs even if no session is on it; its video mix doesn't
-apply yet. Each output but a virtual
-camera has its own output thread that muxes; a virtual camera's thread converts and
+apply yet. Every pipeline thread starts under the
+`tracing` dispatcher of the call that starts it (`spawn`), so its events go where that
+call's do: the global subscriber in a host, a test's own in a test. Each output but a
+virtual camera has its own output thread that muxes; a virtual camera's thread converts and
 publishes what the render thread sends it through a tap, which the render thread takes
 from a channel like a session's input and hands to the collector when it leaves. An output leaving a session others still use takes what is queued for
 it and goes; the last one drains the encoders. The output thread muxes FLV and sends

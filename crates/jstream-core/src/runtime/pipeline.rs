@@ -1949,10 +1949,13 @@ pub(crate) fn launch_vcam(
     })
 }
 
+/// Starts a pipeline thread under the caller's `tracing` dispatcher, so what it logs
+/// goes where the caller's does: the global one in a host, a test's own in a test.
 fn spawn(name: &str, body: impl FnOnce() + Send + 'static) -> Result<JoinHandle<()>, String> {
+    let dispatch = tracing::dispatcher::get_default(Clone::clone);
     thread::Builder::new()
         .name(name.into())
-        .spawn(body)
+        .spawn(move || tracing::dispatcher::with_default(&dispatch, body))
         .map_err(|err| format!("starting the {name} thread: {err}"))
 }
 
@@ -3463,6 +3466,22 @@ struct OutputJob {
     started: Sender<()>,
 }
 
+/// Logs a warning naming `output_id` when its video encoder opened as `opened` in
+/// hardware and now encodes in `now`'s software: a hardware encoder that refused its
+/// first frame under `prefer` and fell back (#443 case 3, #965). The fallback comes
+/// before the first packet, so the output thread checks once, on its first one; the
+/// platform's own warning gives the refusal.
+fn warn_fallback(output_id: &OutputId, opened: &CodecInfo, now: &CodecInfo) {
+    if opened.hardware && !now.hardware {
+        tracing::warn!(
+            output_id = %output_id,
+            hardware = %opened.name,
+            software = %now.name,
+            "the output's hardware video encoder refused its first frame; encoding in software"
+        );
+    }
+}
+
 /// Muxes both encoder streams and publishes or records them. A publish or write
 /// error, or an encoder
 /// stream that ends before the pipeline was told to stop (the encoder failed, or its
@@ -3480,22 +3499,6 @@ struct OutputJob {
 /// is already on its way to `stopped`. An output leaving encoder sessions that other
 /// outputs still use is `cut` instead of waiting for the streams to end: it sends what
 /// is queued for it and finishes as soon as a pass finds nothing more.
-/// Logs a warning naming `output_id` when its video encoder opened as `opened` in
-/// hardware and now encodes in `now`'s software: a hardware encoder that refused its
-/// first frame under `prefer` and fell back (#443 case 3, #965). The fallback comes
-/// before the first packet, so the output thread checks once, on its first one; the
-/// platform's own warning gives the refusal.
-fn warn_fallback(output_id: &OutputId, opened: &CodecInfo, now: &CodecInfo) {
-    if opened.hardware && !now.hardware {
-        tracing::warn!(
-            output_id = %output_id,
-            hardware = %opened.name,
-            software = %now.name,
-            "the output's hardware video encoder refused its first frame; encoding in software"
-        );
-    }
-}
-
 fn output_loop(job: OutputJob) {
     let OutputJob {
         output_id,
