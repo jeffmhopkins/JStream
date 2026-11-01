@@ -5499,7 +5499,7 @@ stamp = { hash = "b3:4e79a30662e4e8f8", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:6ddfe9bd3ef4f4ac", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#721: re-read Controls and Gaps against the final diff of handlers.rs, permission.rs and request.rs. Controls: the local_network opt-in covers only the source's own origin, decided per request by the requesting origin, so a third-party frame is refused and a file or blank page whose main frame navigates to the web loses its opaque-origin access. Gaps: the LNA prompt is granted per requesting origin (a prompt without one counts as opaque); new residue named (opaque origins can't be told apart, so a sandboxed/data: frame made by a third-party frame in a file page counts as the file page's). LNA enforcement still unconfirmed (#347); #347 gaps-table row unchanged and still true." }
 
 ["THREAT-MODEL#mcp"."body"]
-stamp = { hash = "b3:56c99981df84f340", by = "agent:claude", note = "Re-read MCP: added that agents can read the last 100 audit entries with activity.list, whose sentences never carry settings, targets or keys, and that WASM plugins can't; check_secrets_are_redacted now reads activity.list too." }
+stamp = { hash = "b3:73fc25eed0e40467", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the MCP agents section against #955: the remote-text paragraph now also names a window's name in capture.targets (title, or on macOS the application's name) as third-party text that the capture tool's description and the server instructions mark as data, never instructions (checked in crates/jstream-mcp tools.rs and server.rs), cites ADR-0085, drops 'today the only third-party text', and ADR-0085 is added to depends_on; the rest of the section still holds." }
 
 ["THREAT-MODEL#mcp"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -5509,6 +5509,9 @@ stamp = { hash = "b3:528a4d728be121b6" }
 
 ["THREAT-MODEL#mcp"."dep:docs/adr/0059-mcp-annotations-and-remote-text.md"]
 stamp = { hash = "b3:3d3001bba844d9a7", by = "agent:threat-model-covers", note = "#346 fixed on wave/m1-2 (#370, #482, ADR-0059): RTMP rejection text redacted, cut to 512 chars, control chars replaced (publisher.rs remote_text); server instructions mark remote_* fields and the action_failed reason as data; tools carry readOnly/destructive/openWorld hints. Gap removed, per-tool limit moved to Accepted. Added ADR-0059 dep." }
+
+["THREAT-MODEL#mcp"."dep:docs/adr/0085-capture-target-names-marked-as-remote-text.md"]
+stamp = { hash = "b3:2e3a686f5d15ee5b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the MCP agents section against #955: the remote-text paragraph now also names a window's name in capture.targets (title, or on macOS the application's name) as third-party text that the capture tool's description and the server instructions mark as data, never instructions (checked in crates/jstream-mcp tools.rs and server.rs), cites ADR-0085, drops 'today the only third-party text', and ADR-0085 is added to depends_on; the rest of the section still holds." }
 
 ["THREAT-MODEL#pairing"."body"]
 stamp = { hash = "b3:933767e326fe4ee3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#769: devices-file gap no longer says it only inherits its folder's ACL; checked devices.rs create_private (tmp file then rename) and read_file's check_private_file on Windows; what remains is the Windows hardware run (#546, #344 open)" }
