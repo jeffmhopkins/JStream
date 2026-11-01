@@ -26,10 +26,11 @@ use jstream_platform::fake::{
 };
 use jstream_platform::wgpu;
 use jstream_platform::{
-    AdapterId, AudioEncoder, AudioEncoderConfig, Backends, Capture, CaptureStats, CaptureStream,
-    CaptureTarget, CaptureTargetInfo, CodecInfo, Codecs, FrameSync, GpuContext, GpuFrame,
-    GpuInterop, MediaClock, PlatformError, VideoDecoder, VideoDecoderConfig, VideoEncoder,
-    VideoEncoderConfig, VideoSurface,
+    AdapterId, AudioEncoder, AudioEncoderConfig, Backends, Capture, CaptureDecoder, CaptureStats,
+    CaptureStream, CaptureTarget, CaptureTargetInfo, CodecInfo, Codecs, DeviceId, FrameSync,
+    GpuContext, GpuFrame, GpuInterop, MediaClock, PlatformError, VideoDecoder, VideoDecoderConfig,
+    VideoDeviceFormat, VideoDeviceInfo, VideoDevices, VideoEncoder, VideoEncoderConfig,
+    VideoSurface,
 };
 use jstream_protocol::{Batch, Edit, OutputId, OutputState, Settings, SourceId, SourceKind};
 use jstream_render::{Compositor, OpenOptions};
@@ -371,6 +372,85 @@ fn with_gpu_interop_capture_moves_onto_the_device_or_falls_back() {
     ] {
         let backends = backends(&clock, Arc::new(SoftwareGpu), mode);
         assert_eq!(path(&backends), expected, "{mode:?}");
+    }
+}
+
+/// Fake devices whose `on_context` gives themselves, refuses, or (`None`) is the
+/// trait's default.
+struct DevicesOnContext {
+    devices: FakeVideoDevices,
+    refuse: Option<bool>,
+}
+
+impl VideoDevices for DevicesOnContext {
+    fn devices(&self) -> Result<Vec<VideoDeviceInfo>, PlatformError> {
+        self.devices.devices()
+    }
+    fn formats(&self, device: &DeviceId) -> Result<Vec<VideoDeviceFormat>, PlatformError> {
+        self.devices.formats(device)
+    }
+    fn open(
+        &self,
+        device: &DeviceId,
+        format: &VideoDeviceFormat,
+        decoder: Option<Box<dyn CaptureDecoder>>,
+    ) -> Result<Box<dyn CaptureStream>, PlatformError> {
+        self.devices.open(device, format, decoder)
+    }
+    fn on_context(
+        &self,
+        _context: &GpuContext,
+    ) -> Result<Option<Arc<dyn VideoDevices>>, PlatformError> {
+        match self.refuse {
+            None => Ok(None),
+            Some(true) => Err(PlatformError::InvalidState {
+                what: "on_context",
+                state: "the test refuses every context",
+            }),
+            Some(false) => Ok(Some(Arc::new(self.devices.clone()))),
+        }
+    }
+}
+
+/// `open_capture` asks the video-device backend for its GPU path once there is a
+/// platform device, and keeps none when the backend has none or refuses the context.
+#[test]
+fn with_gpu_interop_video_devices_are_asked_onto_the_device() {
+    let _gpu = one_gpu_test_at_a_time();
+    if !have_software_gpu() {
+        return;
+    }
+    let clock = FakeClock::new(Timebase::MICROS);
+    for (interop, refuse, expected) in [
+        (true, Some(false), true),
+        (true, None, false),
+        (true, Some(true), false),
+        (false, Some(false), false),
+    ] {
+        let gpu: Arc<dyn GpuInterop> = if interop {
+            Arc::new(SoftwareGpu)
+        } else {
+            Arc::new(FakeGpuInterop)
+        };
+        let mut backends = backends(&clock, gpu, GpuMode::None);
+        backends.video_devices = Arc::new(DevicesOnContext {
+            devices: FakeVideoDevices::new(clock.clone()),
+            refuse,
+        });
+        let parts = parts_from(
+            &backends,
+            gpu_draw(),
+            GPU_OPEN_TIMEOUT,
+            Arc::new(RenderHub::default()),
+            Arc::new(Wanted::default()),
+            (1280, 720),
+        );
+        let opened = open_capture(&parts).expect("a capture path");
+        assert_eq!(
+            opened.backends.gpu_devices.is_some(),
+            expected,
+            "interop {interop}, refuse {refuse:?}"
+        );
     }
 }
 

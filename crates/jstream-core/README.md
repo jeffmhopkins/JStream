@@ -306,9 +306,13 @@ state machine. Contents:
   one open of a device shared by two readers, each taking each frame once, closed
   with its last reader, a reader that joins counting frames from then on, and a lost
   device failing every reader and not shared again (`runtime/devices.rs`), the format a webcam opens in, with and
-  without an MJPEG decoder, its frames, decoded or not, read as RGBA, and a webcam
-  left running, and not opened twice, when the GPU path is left (`runtime/captures.rs`), which capture path an output takes and each
-  fallback, an output compositing GPU capture frames (opaque, whatever alpha the
+  without an MJPEG decoder, its frames, decoded or not, read as RGBA, a webcam
+  opening on the video-device backend's GPU path in an uncompressed format, MJPEG and a
+  refused format on the CPU path, a webcam on the CPU path left running, and not opened
+  twice, when the GPU path is left, and one on the GPU path, running or still starting,
+  moved to the CPU path, closed before it opens again (`runtime/captures.rs`), which
+  capture path an output takes and each
+  fallback, the video-device backend asked onto the platform's device, an output compositing GPU capture frames (opaque, whatever alpha the
   texture holds), a browser page painting on
   the stage's context, composited as premultiplied red and given back the device when
   the stage stops, an output leaving the GPU path mid-run when every GPU frame
@@ -2318,7 +2322,10 @@ platform's `GpuInterop` for its device. With one, the render thread's compositor
 `GpuContext`, and the capture backend is asked for a copy of itself on the context
 (`Capture::on_context`); a capture started from that copy delivers `GpuFrame`s, which
 the render thread samples where they are, with no CPU copy, and counts
-(`OutputStats::gpu_captures`). Each fallback is logged and keeps the output running on
+(`OutputStats::gpu_captures`). The video-device backend is asked the same
+(`VideoDevices::on_context`): a webcam or capture card opens in its uncompressed format on
+that copy, and on the CPU backend in the same format when the copy refuses it; MJPEG
+always opens on the CPU backend, which decodes it there. Each fallback is logged and keeps the output running on
 CPU frames: no device (the fakes, CI, a machine without interop; the compositor then
 opens its own device, hardware adapter first with the software one as the fallback), a
 backend with no GPU path or one that refuses the context, and a GPU capture that does not start (that capture then runs on
@@ -2334,10 +2341,13 @@ a row on the context, a third of a second, the render thread leaves it once. A
 takes the collection lock) and opens the compositor on a device of its own, while the
 render thread keeps repeating the last frames and adopting snapshots. Then the render
 thread lets go of the frames it holds on the context's device, has the `jstream-capture` thread drop its GPU
-backend and start every display and window capture again on the CPU path (a start asked
+backends and start every display and window capture again on the CPU path (a start asked
 for before is stopped when it comes back), and takes the new compositor. A webcam or
-capture card is on the CPU path already, so it keeps running and keeps its frame, and
-one still starting takes the stream it asked for: most devices open only once (#734). Until the re-planned snapshot
+capture card on the GPU path is stopped and started again on the CPU path, the stop
+first, so the device is closed before it opens again. One on the CPU path keeps running
+and keeps its frame, and one still starting takes the stream it asked for: most devices
+open only once (#734). If that stream is on the GPU path, it is stopped and started
+again on the CPU path. Until the re-planned snapshot
 arrives, the pages' frames, carrying the context's key, draw nothing on it. The fallback
 is logged as a warning and counted (`OutputStats::gpu_fallbacks`). The output fails at
 once if the compositor can't open on its own device, the fallback panics, or it isn't
