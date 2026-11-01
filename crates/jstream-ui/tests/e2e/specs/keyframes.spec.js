@@ -142,8 +142,11 @@ test('a drag on a keyframe sends the keyframe\'s live values and commits its ove
   await expect.poll(() => rev(page)).toBe(start + 1);
 
   // The live values and the commit both name the keyframe, not Main.
+  const variant = calls.sent('scene.create_variant').at(-1);
   const commit = calls.sent('item.set_geometry').at(-1);
   const keyframeId = commit.scene_id;
+  expect(keyframeId).toBe(variant.scene_id);
+  expect(keyframeId).not.toBe(variant.variant_of);
   const live = calls.sent('live.set').flatMap((a) => a.values);
   expect(live.length).toBeGreaterThan(0);
   expect(live.every((v) => v.scene_id === keyframeId)).toBe(true);
@@ -153,7 +156,6 @@ test('a drag on a keyframe sends the keyframe\'s live values and commits its ove
   await scene(page, 'Main').locator('.row-main').click();
   await backdrop(page).locator('.row-main').click();
   await expect(field(page, 'X')).toHaveValue('640');
-  expect(keyframeId).toBeTruthy();
 });
 
 test('a keyframe overrides a group\'s children from their rows and the Inspector', async ({ page, daemon }) => {
@@ -194,6 +196,13 @@ test('a keyframe overrides a group\'s children from their rows and the Inspector
   await field(page, 'X').press('Enter');
   await expect.poll(() => rev(page)).toBe(start + 2);
   await expect(field(page, 'X')).toHaveValue('100');
+
+  // Its menu is the keyframe's: what would change Main's items is off.
+  await child.locator('.row-main').click({ button: 'right' });
+  await expect(menu(page).getByRole('menuitem', { name: 'Remove from scene' })).toBeDisabled();
+  await expect(menu(page).getByRole('menuitem', { name: 'Bring to front' })).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await expect(scene(page, 'Keyframe 1')).toHaveClass(/selected/);
 
   // In Main the group's child is as it was.
   await scene(page, 'Main').locator('.row-main').click();

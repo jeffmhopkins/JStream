@@ -639,7 +639,7 @@ pub fn Sources() -> impl IntoView {
         let on_row_context = {
             let id = item_id.clone();
             let (source, name) = (source_id.clone(), name.clone());
-            let scene_id = row_scene.clone();
+            let row_scene = row_scene.clone();
             let select_here = select_here.clone();
             move |event: leptos::ev::MouseEvent| {
                 let (Some(menus), Some(cx)) = (menus, item_cx) else {
@@ -651,6 +651,15 @@ pub fn Sources() -> impl IntoView {
                 let items: Vec<ItemId> = studio
                     .selection
                     .with_untracked(|s| s.items().cloned().collect());
+                // A group's child in a keyframe's tree takes the keyframe's menu, whose
+                // placement choices write its overrides and whose other choices are off.
+                let Some(scene_id) = (if keyframed {
+                    scene()
+                } else {
+                    Some(row_scene.clone())
+                }) else {
+                    return;
+                };
                 let mut entries =
                     item_menu::entries(cx, &scene_id, &items, item_menu::Scope::Objects);
                 if entries.is_empty() {

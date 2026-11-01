@@ -209,9 +209,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   and its eye, the canvas, the Inspector's placement fields and the item menu's
   placement choices send placement edits addressed to it, which write its overrides
   (ADR-0049). The children of the groups in its tree (through groups only) list at its
-  overrides too: their eye writes its override, and a click selects one in the
-  keyframe, where the Inspector's placement fields write its override (#846, protocol
-  0.55); a plain nested scene's items still open their own scene. What would change the parent's items (Del, dragging rows, Add source,
+  overrides too: their eye writes its override, a click selects one in the keyframe,
+  where the Inspector's placement fields write its override, and its row's item menu
+  is the keyframe's, so its placement choices write the override and what is off below
+  is off for it too (#846, protocol 0.55); a plain nested scene's items still open
+  their own scene. The Transform panel's align and Clear crop work on the canvas's
+  boxes, so they leave such a child as it is. What would change the parent's items (Del, dragging rows, Add source,
   New group, layer order, the duplicates, Remove, the blend mode, the reference or clone
   switch) is off there. The
   sources list shows the selected scene's items with the top of the stack first, each
