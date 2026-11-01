@@ -1379,7 +1379,14 @@ and reads nothing when the other reader holds it, so the render thread never wai
 the preview thread; the frame is still there on its next tick. The device closes with
 its last reader, and once it is lost every reader reports it and the next open opens it
 afresh. Each reader's `stats` count from when it joined, so an output that joins a
-webcam the preview opened reports only its own frames and drops in `stats.tick`. While
+webcam the preview opened reports only its own frames and drops in `stats.tick`. The
+program stage on the GPU context opens through a second view of the same devices
+(`VideoDevices::on_context`), which opens a device that isn't open on the platform's
+GPU path and shares one that is. The preview can't read GPU frames, so when it joins a
+device open on the GPU path, the device is closed there and opened again on the CPU
+backend in the same format, under its lock: the program's reader reads on, its
+counters carried over, missing only the frames of the move, and the device stays on
+the CPU path until it closes. One that doesn't open again is lost for both. While
 the program stage reads a device the preview also shows, the reader that is not last
 copies each frame; a run on a capture card at 1080p60 has not measured that copy. `video.snapshot` still draws every capture as nothing. A `scene.switch` republishes the render
 snapshot, so the preview shows the transition onto the new program scene, then the
