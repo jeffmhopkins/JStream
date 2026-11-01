@@ -4208,7 +4208,7 @@ fn deleting_a_bus_takes_its_sends_and_undoes_exactly() {
 
 /// An output carries one bus (0.60): the edit sets it and undoes exactly, an output's
 /// delete gives it back, and a bus an output carries blocks its delete until
-/// `delete.plan` moves the output to the master.
+/// `delete.plan` moves the output to the master, which a running output refuses.
 #[test]
 fn an_output_carries_a_bus_that_blocks_its_delete() {
     let mut graph = fixture();
@@ -4281,6 +4281,31 @@ fn an_output_carries_a_bus_that_blocks_its_delete() {
             },
         ]
     );
+    // While `yt` runs it reads `vod`, so the plan is refused rather than leave it
+    // silent; keeping its bus is fine.
+    let running = BTreeSet::from([yt.clone()]);
+    let refused = graph
+        .clone()
+        .apply_with_running(&edits, None, &running)
+        .expect_err("a running output can't move");
+    assert_eq!(
+        refused,
+        ProtocolError::invalid_argument(
+            "edits.0.output_id",
+            "output `yt` is running; stop it first"
+        )
+    );
+    graph
+        .clone()
+        .apply_with_running(
+            &[Edit::OutputSetAudioBuses {
+                output_id: yt.clone(),
+                audio_buses: vec![vod.clone()],
+            }],
+            None,
+            &running,
+        )
+        .expect("the same bus");
 
     let applied = apply_ok(
         &mut graph,

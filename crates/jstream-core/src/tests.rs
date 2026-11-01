@@ -5301,8 +5301,8 @@ mod cpu_pipeline {
 
     /// A recording on a bus other than the master (`output.set_audio_buses`) gets an
     /// output tap on that bus and its own audio encode, while its video still shares the
-    /// stream's session; its file finishes. Moving it back to the master while it runs
-    /// keeps its tap on `vod` until it stops.
+    /// stream's session; its file finishes. While it runs it can't move off `vod`, so
+    /// `vod` can't be deleted under it.
     #[test]
     fn an_output_on_another_bus_encodes_that_bus() {
         let dir = TempDir::new("bus-audio");
@@ -5342,14 +5342,28 @@ mod cpu_pipeline {
             Some(&vod),
             "the recording taps its bus"
         );
-        batch(
+        // The plan to delete `vod` moves the recording to the master first, which is
+        // refused while it runs and reads `vod`.
+        let refused = batch(
             &control,
-            edits(vec![Edit::OutputSetAudioBuses {
-                output_id: OutputId::new("rec"),
-                audio_buses: vec![jstream_protocol::BusId::master()],
-            }]),
+            edits(vec![
+                Edit::OutputSetAudioBuses {
+                    output_id: OutputId::new("rec"),
+                    audio_buses: vec![jstream_protocol::BusId::master()],
+                },
+                Edit::BusDelete {
+                    bus_id: vod.clone(),
+                },
+            ]),
         )
-        .expect("back to the master, from its next start");
+        .expect_err("a running output keeps its bus");
+        assert_eq!(
+            refused.protocol(),
+            Some(&jstream_protocol::ProtocolError::invalid_argument(
+                "edits.0.output_id",
+                "output `rec` is running; stop it first"
+            ))
+        );
         assert!(
             pump_until(&fakes.clock, &fakes.audio, || {
                 engine
@@ -5364,7 +5378,7 @@ mod cpu_pipeline {
         assert_eq!(
             engine.routed_bus_hosted().1.get(&OutputId::new("rec")),
             Some(&vod),
-            "a running output keeps the bus it started with"
+            "a running output keeps its bus"
         );
         block_on(control.call(output_call("rec", false))).expect("rec stop");
         let bytes = std::fs::read(&path).expect("the finished recording");

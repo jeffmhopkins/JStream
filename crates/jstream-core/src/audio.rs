@@ -282,6 +282,16 @@ fn drawn_sources(state: &State) -> BTreeSet<SourceId> {
 }
 
 impl Attached {
+    /// The buses but the master that an output tap reads and the mixer still has: a
+    /// bus gone from the mixer needs no hosts.
+    fn tapped_buses(&self) -> BTreeSet<BusId> {
+        self.output_taps
+            .values()
+            .filter(|tap| self.buses.contains_key(&tap.bus))
+            .map(|tap| tap.bus.clone())
+            .collect()
+    }
+
     /// Names the master chain and each tapped output's chain to the program stage's
     /// audio thread, which runs their CLAP filters' hosts.
     fn name_routed(&mut self, state: &State) {
@@ -292,12 +302,7 @@ impl Attached {
                 .keys()
                 .filter_map(|id| Some((id.clone(), chain_of(state.output(id)?.filters()))))
                 .collect(),
-            buses: self
-                .output_taps
-                .values()
-                .filter(|tap| !tap.bus.is_master())
-                .map(|tap| tap.bus.clone())
-                .collect(),
+            buses: self.tapped_buses(),
         };
         self.wanted.set_routed_chains(self.routed.clone());
     }
@@ -565,12 +570,7 @@ impl AudioRouting {
             // Its CLAP filters' hosts stop, and its bus's own master hosts once no other
             // tap reads it; the next sync puts that bus's copies back on the stand-in.
             attached.routed.outputs.remove(output_id);
-            attached.routed.buses = attached
-                .output_taps
-                .values()
-                .filter(|tap| !tap.bus.is_master())
-                .map(|tap| tap.bus.clone())
-                .collect();
+            attached.routed.buses = attached.tapped_buses();
             attached.wanted.set_routed_chains(attached.routed.clone());
         }
     }

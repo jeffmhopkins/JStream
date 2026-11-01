@@ -435,7 +435,7 @@ not remove them; they move into the prototype's look.
 - Delete plans: deleting a scene, source or bus shows what else it takes.
 - Outputs: creating stream, recording and virtual camera outputs, the write-only stream
   key, per-output start and stop, encoder profiles, the audio bus each output carries
-  (its card's Audio select, from its next start), virtual camera registration hints,
+  (its card's Audio select, while it is stopped), virtual camera registration hints,
   and the pipeline's health line.
 - Mixer: buses, sends, "heard always or when on program", mute, the console-taper fader,
   peak hold, loudness reset, and a monitor on any bus, with its output device.

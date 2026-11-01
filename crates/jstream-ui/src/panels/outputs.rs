@@ -255,7 +255,7 @@ pub fn take_key(typed: String) -> Option<SecretString> {
 }
 
 /// The edit that has `output_id` carry the bus a select's `value` names: one audio track
-/// (`output.set_audio_buses`, protocol 0.60), applied from the output's next start.
+/// (`output.set_audio_buses`, protocol 0.60), which a stopped output takes.
 pub fn bus_edit(output_id: OutputId, value: &str) -> Edit {
     Edit::OutputSetAudioBuses {
         output_id,
@@ -1039,8 +1039,9 @@ fn OutputCard(panel: Panel, output_id: OutputId) -> impl IntoView {
                 "Audio"
                 <select
                     on:change=choose_bus
+                    disabled=running
                     title=move || {
-                        if running() { "Applies from its next start" } else { "The bus it carries" }
+                        if running() { "Stop the output to change its bus" } else { "The bus it carries" }
                     }
                 >
                     <For

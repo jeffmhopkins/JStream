@@ -623,9 +623,9 @@ pub enum Edit {
     /// holds exactly one bus; any other length is `invalid_argument` on `audio_buses`,
     /// as is an output with no audio (a virtual camera). Each bus must exist, else
     /// `not_found`. The master stage's audio chain runs on the bus, then the output's
-    /// own chain (ADR-0080 §1). A running output keeps the bus it started with; the
-    /// new one applies from its next `output.start`. Inverse: `output.set_audio_buses`
-    /// with the previous buses.
+    /// own chain (ADR-0080 §1). A running output reads its bus, so moving it to another
+    /// is `invalid_argument` on `output_id` until it stops. Inverse:
+    /// `output.set_audio_buses` with the previous buses.
     #[serde(rename = "output.set_audio_buses")]
     OutputSetAudioBuses {
         /// The output to change.

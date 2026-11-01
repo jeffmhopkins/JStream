@@ -2005,7 +2005,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Chooses the buses whose audio an output carries (since 0.60), one per audio\ntrack, in track order. Every output writes one audio track for now, so the list\nholds exactly one bus; any other length is `invalid_argument` on `audio_buses`,\nas is an output with no audio (a virtual camera). Each bus must exist, else\n`not_found`. The master stage's audio chain runs on the bus, then the output's\nown chain (ADR-0080 §1). A running output keeps the bus it started with; the\nnew one applies from its next `output.start`. Inverse: `output.set_audio_buses`\nwith the previous buses.",
+                "description": "Chooses the buses whose audio an output carries (since 0.60), one per audio\ntrack, in track order. Every output writes one audio track for now, so the list\nholds exactly one bus; any other length is `invalid_argument` on `audio_buses`,\nas is an output with no audio (a virtual camera). Each bus must exist, else\n`not_found`. The master stage's audio chain runs on the bus, then the output's\nown chain (ADR-0080 §1). A running output reads its bus, so moving it to another\nis `invalid_argument` on `output_id` until it stops. Inverse:\n`output.set_audio_buses` with the previous buses.",
                 "properties": {
                   "audio_buses": {
                     "description": "The buses, in track order.",
@@ -7323,7 +7323,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Chooses the buses whose audio an output carries (since 0.60), one per audio\ntrack, in track order. Every output writes one audio track for now, so the list\nholds exactly one bus; any other length is `invalid_argument` on `audio_buses`,\nas is an output with no audio (a virtual camera). Each bus must exist, else\n`not_found`. The master stage's audio chain runs on the bus, then the output's\nown chain (ADR-0080 §1). A running output keeps the bus it started with; the\nnew one applies from its next `output.start`. Inverse: `output.set_audio_buses`\nwith the previous buses.",
+                "description": "Chooses the buses whose audio an output carries (since 0.60), one per audio\ntrack, in track order. Every output writes one audio track for now, so the list\nholds exactly one bus; any other length is `invalid_argument` on `audio_buses`,\nas is an output with no audio (a virtual camera). Each bus must exist, else\n`not_found`. The master stage's audio chain runs on the bus, then the output's\nown chain (ADR-0080 §1). A running output reads its bus, so moving it to another\nis `invalid_argument` on `output_id` until it stops. Inverse:\n`output.set_audio_buses` with the previous buses.",
                 "properties": {
                   "audio_buses": {
                     "description": "The buses, in track order.",
@@ -12208,7 +12208,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Chooses the buses whose audio an output carries (since 0.60), one per audio\ntrack, in track order. Every output writes one audio track for now, so the list\nholds exactly one bus; any other length is `invalid_argument` on `audio_buses`,\nas is an output with no audio (a virtual camera). Each bus must exist, else\n`not_found`. The master stage's audio chain runs on the bus, then the output's\nown chain (ADR-0080 §1). A running output keeps the bus it started with; the\nnew one applies from its next `output.start`. Inverse: `output.set_audio_buses`\nwith the previous buses.",
+                "description": "Chooses the buses whose audio an output carries (since 0.60), one per audio\ntrack, in track order. Every output writes one audio track for now, so the list\nholds exactly one bus; any other length is `invalid_argument` on `audio_buses`,\nas is an output with no audio (a virtual camera). Each bus must exist, else\n`not_found`. The master stage's audio chain runs on the bus, then the output's\nown chain (ADR-0080 §1). A running output reads its bus, so moving it to another\nis `invalid_argument` on `output_id` until it stops. Inverse:\n`output.set_audio_buses` with the previous buses.",
                 "properties": {
                   "audio_buses": {
                     "description": "The buses, in track order.",
@@ -14376,7 +14376,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Chooses the buses whose audio an output carries (since 0.60), one per audio\ntrack, in track order. Every output writes one audio track for now, so the list\nholds exactly one bus; any other length is `invalid_argument` on `audio_buses`,\nas is an output with no audio (a virtual camera). Each bus must exist, else\n`not_found`. The master stage's audio chain runs on the bus, then the output's\nown chain (ADR-0080 §1). A running output keeps the bus it started with; the\nnew one applies from its next `output.start`. Inverse: `output.set_audio_buses`\nwith the previous buses.",
+                "description": "Chooses the buses whose audio an output carries (since 0.60), one per audio\ntrack, in track order. Every output writes one audio track for now, so the list\nholds exactly one bus; any other length is `invalid_argument` on `audio_buses`,\nas is an output with no audio (a virtual camera). Each bus must exist, else\n`not_found`. The master stage's audio chain runs on the bus, then the output's\nown chain (ADR-0080 §1). A running output reads its bus, so moving it to another\nis `invalid_argument` on `output_id` until it stops. Inverse:\n`output.set_audio_buses` with the previous buses.",
                 "properties": {
                   "audio_buses": {
                     "description": "The buses, in track order.",

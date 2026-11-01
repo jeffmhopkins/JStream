@@ -2028,6 +2028,15 @@ impl Collection {
                 if !self.buses.contains_key(bus_id) {
                     return Err(not_found(EntityKind::Bus, bus_id.as_str()));
                 }
+                let current = self.output_buses.get(&output_id).cloned();
+                if running.contains(&output_id) && current.unwrap_or_else(BusId::master) != *bus_id
+                {
+                    return Err(invalid(
+                        at,
+                        "output_id",
+                        format!("output `{output_id}` is running; stop it first"),
+                    ));
+                }
                 let old = if bus_id.is_master() {
                     self.output_buses.remove(&output_id)
                 } else {
@@ -4824,15 +4833,19 @@ mod tests {
     }
 
     /// A configured output gets a runtime state, as in the engine: it starts `stopped`,
-    /// can't be deleted while it runs (`jstream_graph::Graph::apply_with_running`'s
-    /// error), and is forgotten once deleted. A declared output is not in the collection.
+    /// can't be deleted or moved to another bus while it runs
+    /// (`jstream_graph::Graph::apply_with_running`'s error), and is forgotten once deleted. A declared output is not in the collection.
     #[test]
     fn configured_outputs_follow_the_collection() {
         let engine = MockEngine::new().with_output(OutputId::new("declared"));
         let control = connected(&engine);
-        let create = Batch::single(Edit::OutputCreate {
+        let mut create = Batch::single(Edit::OutputCreate {
             output_id: OutputId::new("yt"),
             kind: rtmp("rtmp://a.rtmp.youtube.com/live2"),
+        });
+        create.edits.push(Edit::BusCreate {
+            bus_id: BusId::new("vod"),
+            name: "VOD".into(),
         });
         assert_eq!(batch(&*control, create), Ok(Rev(1)));
         assert_eq!(status(&*control, "yt"), Ok((OutputState::Stopped, false)));
@@ -4863,6 +4876,19 @@ mod tests {
         let running = batch(&*control, delete()).expect_err("running");
         assert_eq!(
             running.protocol(),
+            Some(&ProtocolError::invalid_argument(
+                "edits.0.output_id",
+                "output `yt` is running; stop it first"
+            ))
+        );
+        // Nor can it move to another bus, which would let the bus it reads go.
+        let move_bus = Batch::single(Edit::OutputSetAudioBuses {
+            output_id: OutputId::new("yt"),
+            audio_buses: vec![BusId::new("vod")],
+        });
+        let moved = batch(&*control, move_bus).expect_err("running");
+        assert_eq!(
+            moved.protocol(),
             Some(&ProtocolError::invalid_argument(
                 "edits.0.output_id",
                 "output `yt` is running; stop it first"

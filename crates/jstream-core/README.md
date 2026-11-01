@@ -1669,13 +1669,14 @@ An output whose audio chain holds a filter, even a disabled one
 ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), or that
 carries a bus other than the master (`output.set_audio_buses`, protocol 0.60), gets an
 output tap on its bus when it starts (`Engine::add_output_tap`), and its own audio
-encode fed from the tap's blocks, stamped earlier by its chain's latency. The tap stays
-on the bus it started with until the output stops. Its video
+encode fed from the tap's blocks, stamped earlier by its chain's latency. The graph
+refuses to move a running output to another bus, so the bus its tap reads can't be
+deleted while it runs. Its video
 still shares a session as *Encoder profiles* says. The other outputs on its video
 session (the same video mix and encoder profile) share one audio encode of the master
 bus, opened when the first of them starts; each video session has its own. The tap is
-removed when the output stops; a chain added to a running output, or another bus
-chosen, takes effect at its next start, while edits to an existing tap's chain apply
+removed when the output stops; a chain added to a running output takes effect at its
+next start, while edits to an existing tap's chain apply
 live.
 
 The `jstream-stats` sampler also emits `meters.tick` on each of its 100 ms wakes: a
@@ -1694,7 +1695,8 @@ An output's configuration is collection state (`output.create`, `output.set_targ
 `output.delete`, kept by `jstream-graph`); whether it runs is runtime state, which never
 changes `rev`. After each applied batch the runtime states follow the collection: a
 created output starts `stopped`, and a deleted one is forgotten. The graph refuses to
-delete a running output (`invalid_argument`), so the batch passes it the running set.
+delete a running output or move one to another bus (`invalid_argument`), so the batch
+passes it the running set.
 A host can also declare an output with `Engine::with_output(id)`, outside the
 collection: it starts `stopped`, has no target and stays known whatever the collection
 holds. A live host reads a collection output's target with `output_kind` when its

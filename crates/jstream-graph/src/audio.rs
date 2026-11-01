@@ -2,7 +2,7 @@
 //! sends from sources into buses. The `source.set_audio`, `bus.*` and `send.*` edits,
 //! `output.set_audio_buses`, and what `source.create`, `source.duplicate` and
 //! `source.delete` do to a source's audio. An output that carries a bus blocks its
-//! delete, as a settings reference does.
+//! delete, as a settings reference does, and a running output can't change its bus.
 //!
 //! Buses never feed other buses (ADR-0028), and a send always runs from a source into a
 //! bus, so the audio graph can't have a cycle. Keys, which can close one, come with the
@@ -15,7 +15,7 @@ use jstream_protocol::{
     AudioFollow, BusId, BusMonitor, Edit, EntityKind, Finite32, KindDescriptor, OutputId,
     ProtocolError, SourceAudio, SourceId, SourceKind, gain_db_problem,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// The audio settings a new source of `kind` starts with, or `None` when it has no
 /// audio. A `scene` source follows `when_shown`. A builtin kind with audio follows
@@ -142,6 +142,7 @@ pub(crate) fn apply(
     state: &mut State,
     edit: &Edit,
     at: usize,
+    running: &BTreeSet<OutputId>,
 ) -> Option<Result<Vec<Edit>, ProtocolError>> {
     Some(match edit {
         Edit::SourceSetAudio {
@@ -179,7 +180,7 @@ pub(crate) fn apply(
         Edit::OutputSetAudioBuses {
             output_id,
             audio_buses,
-        } => set_output_buses(state, output_id, audio_buses, at),
+        } => set_output_buses(state, output_id, audio_buses, at, running),
         _ => return None,
     })
 }
@@ -288,12 +289,15 @@ fn create_bus(
 }
 
 /// `output.set_audio_buses`: an output with audio carries one bus that exists, since
-/// every output writes one audio track.
+/// every output writes one audio track. A running output keeps the bus its audio is
+/// read from, so it can't move: that keeps the bus from being deleted under it, since
+/// the output still names it.
 fn set_output_buses(
     state: &mut State,
     output_id: &OutputId,
     buses: &[BusId],
     at: usize,
+    running: &BTreeSet<OutputId>,
 ) -> Result<Vec<Edit>, ProtocolError> {
     let output = state
         .outputs
@@ -315,6 +319,13 @@ fn set_output_buses(
     }
     if !state.buses.contains_key(bus_id) {
         return Err(not_found(EntityKind::Bus, bus_id.as_str()));
+    }
+    if running.contains(output_id) && output.audio_bus != *bus_id {
+        return Err(invalid(
+            at,
+            "output_id",
+            format!("output `{output_id}` is running; stop it first"),
+        ));
     }
     let output = state
         .outputs

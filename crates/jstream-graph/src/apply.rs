@@ -70,8 +70,9 @@ impl Graph {
     }
 
     /// [`apply`](Self::apply), for an engine whose outputs in `running` are running: an
-    /// `output.delete` of one of them fails with `invalid_argument` (field
-    /// `edits.<n>.output_id`), in edit order like any other failure. Whether an output
+    /// `output.delete` of one of them, or an `output.set_audio_buses` moving one to
+    /// another bus, fails with `invalid_argument` (field `edits.<n>.output_id`), in edit
+    /// order like any other failure. Whether an output
     /// runs is runtime state, which the graph doesn't hold, so the engine passes it.
     pub fn apply_with_running(
         &mut self,
@@ -377,7 +378,7 @@ fn apply_edit(
     if let Some(applied) = crate::transition::apply(state, kinds, edit, at) {
         return applied;
     }
-    if let Some(applied) = crate::audio::apply(state, edit, at) {
+    if let Some(applied) = crate::audio::apply(state, edit, at, running) {
         return applied;
     }
     if let Some(applied) = crate::hotkey::apply(state, edit, at) {

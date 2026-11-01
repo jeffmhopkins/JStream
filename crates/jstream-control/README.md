@@ -150,8 +150,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     `video_mix.create` and `video_mix.update`, deleting a mix an output shows, and
     `output.set_video_mix` naming a missing output, then a missing mix;
   - output buses: `output.set_audio_buses` naming a missing output, a list that isn't
-    exactly one bus, a virtual camera and a missing bus, and `bus.delete` of a bus an
-    output carries, with the graph's reason and blocker;
+    exactly one bus, a virtual camera, a missing bus and a running output moving, and
+    `bus.delete` of a bus an output carries, with the graph's reason and blocker;
   - an `opacity` outside 0 to 1, in `item.add` and `item.set_opacity` (every blend
     mode is taken, as the engine draws them all,
     [ADR-0082](../../docs/adr/0082-blend-modes-drawn.md));

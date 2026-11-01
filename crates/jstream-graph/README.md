@@ -221,9 +221,10 @@ the batch **touched**.
   whether the file can be written, is the engine's check at `output.start`. `output.set_target` on a recording or a virtual camera fails with
   `invalid_argument` (neither has an RTMP target). `output.delete` is undone by `output.create` with its kind, and
   `output.set_target` by the previous target. `Graph::apply_with_running` is `apply`
-  for an engine whose outputs in the given set are running: deleting one of them fails
-  with `invalid_argument`, in edit order. The `OutputDelete` inverse also restores the
-  output's encoder profile and video mix, and then its filters.
+  for an engine whose outputs in the given set are running: deleting one of them, or
+  moving one to another bus, fails with `invalid_argument`, in edit order. The
+  `OutputDelete` inverse also restores the output's encoder profile, video mix and bus,
+  and then its filters.
 - **Encoder profiles** (`encoder.rs`): `encoder.create` and `encoder.update` check the
   profile with the protocol's `EncoderProfile::problem` (`invalid_argument`, field
   `profile.<field>`) and the name; `encoder.delete` is refused with `invalid_argument`
@@ -267,8 +268,9 @@ the batch **touched**.
   inverse is the previous monitor, or none.
   `output.set_audio_buses` checks the output (`not_found`), that the list names exactly
   one bus (an output writes one audio track), that the output carries audio (a virtual
-  camera doesn't), then the bus (`not_found`), and is undone by the previous bus. It
-  needs no running check: the engine reads an output's bus at its start.
+  camera doesn't), then the bus (`not_found`), then that a running output keeps its
+  bus (`invalid_argument` on `output_id`: its tap reads that bus, which must not be
+  deleted under it), and is undone by the previous bus.
   `send.set` and `send.remove` check the source, then the bus (`not_found`), then that
   the source has a channel (a `scene` source sends nothing of its own). Every gain is
   checked with the protocol's `gain_db_problem` (−100 to +24 dB). A send always runs

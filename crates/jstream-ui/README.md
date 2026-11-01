@@ -554,8 +554,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   creates RTMP(S), recording and virtual camera outputs (IDs `output-N`, the first free one), changes
   an RTMP server URL (`output.set_target`) and the encoder profile, deletes a stopped
   output, and starts and stops each. A card's Audio select picks the bus the output
-  carries (`output.set_audio_buses`, one bus); while the output runs it is titled
-  "Applies from its next start", as the engine reads the bus at a start. A virtual
+  carries (`output.set_audio_buses`, one bus); while the output runs it is disabled and
+  titled "Stop the output to change its bus", as the engine refuses the move. A virtual
   camera's card has none. Above the cards, the program output's row
   ("master") and a row per output with its state each have an "FX N" button counting
   that chain's filters, which shows the chain in the Filters panel (below the rows,

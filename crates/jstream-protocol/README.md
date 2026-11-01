@@ -517,8 +517,9 @@ so far, so the list holds exactly one bus; `OutputInfo` leaves it out while it i
 `["master"]`, the default and what a server older than 0.60 means. `output.set_audio_buses
 { output_id, audio_buses }` chooses it: any other length, or an output with no audio (a
 virtual camera), is `invalid_argument` on `audio_buses`, and a bus that doesn't exist
-`not_found`. A running output keeps the bus it started with until its next
-`output.start`. The master stage's audio chain runs on the bus before the output's own
+`not_found`. A running output reads its bus, so moving it to another one is
+`invalid_argument` on `output_id` until it stops; that also refuses `delete.plan`'s
+batch for a bus a running output carries, rather than leave the output silent. The master stage's audio chain runs on the bus before the output's own
 chain ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md) §1), a
 CLAP filter there on a plugin host of that bus's own
 ([ADR-0086](../../docs/adr/0086-master-clap-filter-one-host-per-output-bus.md)). An
