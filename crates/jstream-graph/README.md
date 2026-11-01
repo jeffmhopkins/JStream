@@ -63,7 +63,9 @@ protocol's types (`Overrides`).
   audio chain is always empty; a keyframe scene has none.
 - `Folder` and `Label`: a folder has an ID, a name and an optional parent folder, and a
   label an ID, a name, a colour and an optional icon (ADR-0024 §3 and §4). They organise
-  only.
+  only. `Graph::with_sample_labels` gives a graph with no labels the prototype's four
+  samples (Intro / outro, Gameplay, Overlay, Sponsor) without changing its `rev`; the
+  engine calls it when it creates a collection file.
 - `Item`: the source it places, a `Placement`, a `crop`, `visible`, an `opacity` from
   0 to 1 and a `BlendMode`, its `ItemTransition`
   ([ADR-0029](../../docs/adr/0029-transitions.md)), and its `effects`

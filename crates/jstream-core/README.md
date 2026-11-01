@@ -77,7 +77,8 @@ state machine. Contents:
   keeps entries in memory; `AuditFile` writes them as JSON lines to a size-capped
   `audit.jsonl` from its own writer thread (see *Audit log* in [Design](#design)).
 - **Collection file** (`collection.rs`): loads the collection from the file the host
-  names with `with_collection_file` (or creates it), and saves it atomically after every
+  names with `with_collection_file` (or creates it, with the four sample labels,
+  `Graph::with_sample_labels`, at the same `rev`), and saves it atomically after every
   change (see *Collection file* in [Design](#design)).
 - **Kinds** (`kinds.rs`): the built-in kinds the graph validates settings
   against and `kind.list` reports ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)):
@@ -407,7 +408,8 @@ state machine. Contents:
   session ends, a scene the collection doesn't have refused, a deleted scene's stream
   ended, its display drawn from the preview's own capture, and nothing captured for it
   by the program stage), the
-  collection file (`src/tests/collection.rs`: created when missing, batches, an undo
+  collection file (`src/tests/collection.rs`: created when missing with the sample
+  labels at `rev` 0, batches, an undo
   and a redo each saved, a saved collection loaded by a new engine with its `rev` and
   outputs, a `waveform` drawing another source saved and loaded with the source it
   draws made first, and loaded from a file from before `audio_source` existed
@@ -2215,12 +2217,13 @@ are UTC, RFC 3339 to the millisecond, formatted without a date crate.
 `Engine::with_collection_file(path)` loads the collection from `path`
 (`jstream-graph`'s `Graph::with_collection_json`, checked against the engine's kinds)
 and replaces the engine's collection and `rev` with it; the outputs' runtime state
-follows, so a loaded output is `stopped`. With no file at `path` it saves the current,
-empty, collection there at once, so an unwritable path fails at startup rather than at
-the first change. A file that doesn't read or load is refused with
-`CollectionFileError` (`Read`, `Load` or `Create`, each naming the path but never the
-contents) and left as it is. It is configured before `connect`, like the other
-builders.
+follows, so a loaded output is `stopped`. With no file at `path` it saves the current
+collection there at once, with `Graph::with_sample_labels`'s four labels when it has
+none, still at its `rev`, and keeps that as the engine's collection, so the file and the
+engine agree and an unwritable path fails at startup rather than at the first change.
+A file that doesn't read or load is refused with `CollectionFileError` (`Read`, `Load`
+or `Create`, each naming the path but never the contents) and left as it is. It is
+configured before `connect`, like the other builders.
 
 After each applied batch, undo or redo, `Engine::execute` saves the collection before
 the call returns, so the client whose call it was knows the file holds its `rev`. The save
