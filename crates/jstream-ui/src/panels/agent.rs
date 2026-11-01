@@ -4,7 +4,8 @@
 //!
 //! Calls from JStream's own UIs (this one, and paired browsers) are left out: they are
 //! the user's own. The panel asks for new entries when it opens, after each event that
-//! most calls send, and every [`POLL`], which catches failed calls and quiet actions.
+//! most calls send, and every 5 seconds (`POLL`), which catches failed calls and quiet
+//! actions.
 //!
 //! Docs: docs/adr/0083-activity-log-over-the-protocol.md, docs/UI-FEATURES.md#live-panels
 
