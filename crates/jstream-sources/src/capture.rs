@@ -14,7 +14,7 @@ use crate::describe::{kind, param};
 use crate::source::{changed_non_live, setting};
 use crate::{Context, Source, SourceError, SourceKind};
 use jstream_media::{MediaTime, VideoFrame};
-use jstream_protocol::{KindDescriptor, ParamType, Settings};
+use jstream_protocol::{CaptureTargetKind, KindDescriptor, ParamType, Settings};
 use serde_json::json;
 use std::sync::Arc;
 
@@ -93,15 +93,22 @@ impl CaptureKind {
             Flavor::Window => ("target", "Window"),
             Flavor::Device => ("device", "Device"),
         };
-        let mut target = param(
-            param_id,
-            label,
-            ParamType::String {
+        // A display or window names a `capture.targets` entry, so a UI can list them.
+        let ty = match flavor {
+            Flavor::Display => ParamType::CaptureTarget {
+                kind: CaptureTargetKind::Display,
+                max_len: MAX_TARGET,
+            },
+            Flavor::Window => ParamType::CaptureTarget {
+                kind: CaptureTargetKind::Window,
+                max_len: MAX_TARGET,
+            },
+            Flavor::Device => ParamType::String {
                 multiline: false,
                 max_len: MAX_TARGET,
             },
-            json!(""),
-        );
+        };
+        let mut target = param(param_id, label, ty, json!(""));
         target.description = Some(match flavor {
             Flavor::Window => "The ID of the window to capture, as `capture.targets` lists \
                                it. Empty captures nothing."

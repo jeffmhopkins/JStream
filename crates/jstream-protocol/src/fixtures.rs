@@ -1273,6 +1273,14 @@ fn color_kind() -> KindDescriptor {
             ),
             param("any", ParamType::Source { media: None }, Value::Null),
             param("audio", ParamType::Bus, Value::Null),
+            param(
+                "window",
+                ParamType::CaptureTarget {
+                    kind: CaptureTargetKind::Window,
+                    max_len: 512,
+                },
+                json!(""),
+            ),
         ],
     }
 }

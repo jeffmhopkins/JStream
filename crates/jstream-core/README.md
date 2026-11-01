@@ -638,7 +638,7 @@ The engine's answers are the mock's for the differential script: `tests.rs` runs
 script of calls against both and compares results, error codes and fields, and events.
 That script does not call `video.snapshot`. The mock has no compositor and answers it
 with `internal`, so the two are not compared. Nor does it call `capture.targets`,
-which the mock answers with a made-up display. It does send the folder, label and
+which the mock answers with a made-up display and window. It does send the folder, label and
 metadata edits ([ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4): each
 refusal (a scene's missing label too), the in-use deletes, the reads, undo and redo,
 and a filed, labelled scene's and a labelled source's delete, which the test checks applies, undone with their metadata;

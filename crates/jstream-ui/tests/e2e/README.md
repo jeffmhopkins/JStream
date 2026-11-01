@@ -186,6 +186,10 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   Device field changes, closing the first with nothing saved, and an unsubscribe when
   Cancel closes the dialog; a colour source shows no picture. The mock streams no
   pictures, so what the picture draws is checked by hand.
+- **Capture targets** (`capture-targets.spec.js`): with the `window` kind described, a
+  new Window capture's Properties dialog lists the mock's one window by name and size
+  after None, and not its display; picking it and pressing OK is one edit, and the
+  dialog opened again shows that window.
 - **Inspector** (`inspector.spec.js`): the selected Backdrop's X, Y, W, H and Rotation;
   a new width with the W/H link on scales the height and the canvas readout follows,
   and with it off the other side stays; a stepper is one edit Ctrl+Z on the canvas

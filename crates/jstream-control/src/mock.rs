@@ -10,7 +10,8 @@
 //! by one, `expected_rev` conflicts, idempotency keys, every query, the output and
 //! stream-key actions, `scene.switch`, `studio.set_preview` and the program and preview
 //! scenes they set (`studio.get`),
-//! `capture.targets` (one made-up primary display, [`MOCK_DISPLAY`]),
+//! `capture.targets` (one made-up primary display, [`MOCK_DISPLAY`], and one window,
+//! [`MOCK_WINDOW`]),
 //! `source.sizes` (every source without a size, since the mock makes no frames),
 //! `state.changed`, `studio.changed` and `output.state_changed` events, per-client undo
 //! and redo, and live-value gestures (`live.set`, `live.cancel`, `live.list`,
@@ -308,6 +309,10 @@ fn param_of(value: &Edit) -> Option<Param> {
 /// The capture target ID of the one display the mock's `capture.targets` lists, a
 /// 1920×1080 primary display.
 pub const MOCK_DISPLAY: &str = "mock:display";
+
+/// The capture target ID of the one window the mock's `capture.targets` lists, titled
+/// "Mock window".
+pub const MOCK_WINDOW: &str = "mock:window";
 
 /// How many undo steps each client keeps unless [`MockEngine::with_history_limit`]
 /// says otherwise, as in the engine.
@@ -1073,16 +1078,28 @@ impl State {
                 video_mixes: self.collection.video_mix_infos(),
             },
             Query::CaptureTargets => QueryResult::CaptureTargets {
-                targets: vec![CaptureTargetInfo {
-                    kind: CaptureTargetKind::Display,
-                    target: MOCK_DISPLAY.into(),
-                    name: "Mock display".into(),
-                    size: Some(PixelSize {
-                        width: 1920,
-                        height: 1080,
-                    }),
-                    primary: true,
-                }],
+                targets: vec![
+                    CaptureTargetInfo {
+                        kind: CaptureTargetKind::Display,
+                        target: MOCK_DISPLAY.into(),
+                        name: "Mock display".into(),
+                        size: Some(PixelSize {
+                            width: 1920,
+                            height: 1080,
+                        }),
+                        primary: true,
+                    },
+                    CaptureTargetInfo {
+                        kind: CaptureTargetKind::Window,
+                        target: MOCK_WINDOW.into(),
+                        name: "Mock window".into(),
+                        size: Some(PixelSize {
+                            width: 1280,
+                            height: 720,
+                        }),
+                        primary: false,
+                    },
+                ],
             },
             Query::LiveList => QueryResult::LiveList {
                 gestures: self
@@ -3107,16 +3124,19 @@ mod tests {
     }
 
     #[test]
-    fn capture_targets_lists_one_primary_display() {
+    fn capture_targets_lists_one_primary_display_and_one_window() {
         let engine = MockEngine::new();
         let control = connected(&engine);
         let Ok(QueryResult::CaptureTargets { targets }) = query(&*control, Query::CaptureTargets)
         else {
             panic!("a capture.targets result");
         };
-        assert_eq!(targets.len(), 1);
+        assert_eq!(targets.len(), 2);
         assert_eq!(targets[0].target, super::MOCK_DISPLAY);
         assert!(targets[0].primary);
+        assert_eq!(targets[1].kind, crate::protocol::CaptureTargetKind::Window);
+        assert_eq!(targets[1].target, super::MOCK_WINDOW);
+        assert!(!targets[1].primary);
     }
 
     #[test]
