@@ -14,7 +14,8 @@ use crate::dock::{Dock, PanelId, Target, Zone};
 use crate::pairing::Pairing;
 use crate::panels::mixer::MixerFlip;
 use crate::panels::{
-    AgentActivity, Filters, Inspector, Mixer, Outputs, Scenes, Sources, StudioMode, Transform,
+    AgentActivity, Filters, Inspector, Mixer, Outputs, Scenes, Sources, StreamStats, StudioMode,
+    Transform,
 };
 use crate::ui_settings::{self, DOCK_KEY, FirstStep, Kept, Theirs};
 use leptos::html;
@@ -216,12 +217,7 @@ fn panel_view(panel: PanelId) -> AnyView {
             "Live chat shows a YouTube broadcast's chat once JStream can sign in to YouTube, \
              which this build can't yet. Streaming with a stream key works without it.",
         ),
-        PanelId::Stats => waiting(
-            "Stream stats",
-            "Stream stats show a YouTube broadcast's viewers and stream health once JStream \
-             can sign in to YouTube, which this build can't yet. The header counts dropped \
-             frames.",
-        ),
+        PanelId::Stats => view! { <StreamStats /> }.into_any(),
         PanelId::Agent => view! { <AgentActivity /> }.into_any(),
     }
 }

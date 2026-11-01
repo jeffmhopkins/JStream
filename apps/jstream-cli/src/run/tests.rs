@@ -6,8 +6,9 @@ use crate::block::block_on;
 use crate::exit::{self, CliError};
 use jstream_control::protocol::{
     Batch, Call, Canvas, ClientId, Crop, DropCounts, Edit, EngineLoad, Event, GestureId, Hello,
-    ItemGeometry, ItemId, ItemTransform, LiveOutcome, OutputId, OutputState, PROTOCOL_VERSION,
-    Response, Rev, SceneId, SourceId, SourceInfo, SourceKind, Welcome,
+    ItemGeometry, ItemId, ItemTransform, LiveOutcome, OutputHealth, OutputId, OutputState,
+    OutputStatsInfo, PROTOCOL_VERSION, Response, Rev, SceneId, SourceId, SourceInfo, SourceKind,
+    Welcome,
 };
 use jstream_control::{BoxFuture, Control, ControlError, EventStream, MockControl, MockEngine};
 use serde_json::{Value, json};
@@ -978,6 +979,7 @@ fn events_golden_dropped_notice() {
         },
         load: None,
         chains: None,
+        outputs: Vec::new(),
     });
     let mut out = Vec::new();
     stream_events(events, Some(1), false, &mut out).expect("one event");
@@ -999,6 +1001,7 @@ fn events_golden_dropped_notice() {
             cpus: 8,
         }),
         chains: None,
+        outputs: Vec::new(),
     });
     let mut out = Vec::new();
     stream_events(events, Some(1), false, &mut out).expect("one event");
@@ -1007,6 +1010,34 @@ fn events_golden_dropped_notice() {
         "stats.tick seq 3 capture_frames 0 audio_frames 0 render_ticks 0 \
          encode_frames 0 encode_blocks 0 output_packets 0 \
          elapsed_ms 2000 program_frames 60 cpus 8 cpu_ms 40\n"
+    );
+
+    // Then each running output's stats (protocol 0.57).
+    let events = control.events();
+    engine.emit(Event::StatsTick {
+        seq: 4,
+        drops: DropCounts::default(),
+        load: None,
+        chains: None,
+        outputs: vec![OutputStatsInfo {
+            output_id: OutputId::new("yt"),
+            uptime_ms: 61_000,
+            bytes: 45_750_000,
+            frames: 3_660,
+            kbps: 6_000,
+            dropped_frames: 3,
+            dropped_packets: 1,
+            health: OutputHealth::Fair,
+        }],
+    });
+    let mut out = Vec::new();
+    stream_events(events, Some(1), false, &mut out).expect("one event");
+    assert_eq!(
+        String::from_utf8_lossy(&out),
+        "stats.tick seq 4 capture_frames 0 audio_frames 0 render_ticks 0 \
+         encode_frames 0 encode_blocks 0 output_packets 0 \
+         output yt uptime_ms 61000 kbps 6000 bytes 45750000 frames 3660 \
+         dropped_frames 3 dropped_packets 1 health fair\n"
     );
 
     let events = control.events();

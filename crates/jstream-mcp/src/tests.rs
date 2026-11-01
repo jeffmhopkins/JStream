@@ -839,6 +839,7 @@ fn stats_ticks_are_not_buffered_and_evict_nothing() {
         drops: DropCounts::default(),
         load: None,
         chains: None,
+        outputs: Vec::new(),
     };
     let ticks = 2 * crate::events::BUFFER_CAPACITY as u64;
     for seq in 1..=ticks {

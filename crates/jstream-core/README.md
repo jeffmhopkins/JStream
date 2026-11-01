@@ -306,6 +306,9 @@ state machine. Contents:
   the publish link's, and a sampler thread
   emits a tick about once a second until the last output stops. The same thread emits
   `meters.tick` about ten times a second.
+- **Output stats** (`output_stats.rs`): each running output's meter for `stats.tick`'s
+  `outputs` (protocol 0.57). `output.start` registers one per output once it runs (not
+  for a virtual camera yet), and the stop removes it (*Output stats* below).
 - **Engine load** (`load.rs`): what a `stats.tick`'s `load` reads besides the render
   hub's frame count: when the engine started, the process CPU time from the host's
   `ProcessCpu` (`Engine::set_process_cpu`), and the idle heartbeat
@@ -401,7 +404,9 @@ state machine. Contents:
   virtual camera publishing the program as BGRA at the canvas size (fitted into a canvas of another size, started again after a stop, running beside
   a stream, refused without a camera in the backends or while another output uses
   it, a refused start keeping the sink, a failed publish failing only that output), a render panic failing both outputs, overload drops from a
-  fake encoder and the mixer reported in `stats.tick`, render and mixer panics
+  fake encoder and the mixer reported in `stats.tick`, a running output listed in each
+  `stats.tick` with what it sent and left out once stopped, a lost link making it
+  `poor` and its bytes stop counting, render and mixer panics
   reported as `failed` on the CPU stand-in (`tests/scenarios.rs` reaches it through
   the hidden `Engine::with_cpu_compositor`), audio sources becoming mixer inputs on the CPU
   stand-in (`src/tests/audio.rs`: the defaults while there is none, sources added and
@@ -1629,6 +1634,29 @@ While no output runs there is no sampler, so a host that wants ticks while idle 
 holds the engine weakly and emits a tick about once a second while no program stage's
 `jstream-stats` thread runs, ending once the last engine handle is gone. The daemon and
 the desktop app start it; tests and an embedding host call `emit_stats_tick` as before.
+
+### Output stats (`stats.tick`'s `outputs`)
+
+Each tick also lists every running output's live stats (protocol 0.57;
+`output_stats.rs`). The output thread counts each packet the muxer takes while the
+publish link is up into its `SentCounters` (two relaxed atomic adds: the bytes, and a
+frame for video), so a link that is down sends nothing and its tags count as the
+link's drops instead. `output.start` registers an `OutputMeter` for the run once it is
+armed, with its uptime counted from when the engine received the `output.start`
+(before the start waits for an earlier one, opens the destination and starts the
+program stage), whose read gathers those counts with the output's drops: its video encode
+session's queue-full and busy drops counted from when the meter was armed (a shared
+session may have dropped frames for an earlier output), and the video subscriber's
+losses, for `dropped_frames`; the audio subscriber's losses, the output thread's own
+drops and the publish link's, for `dropped_packets`. The meters are on their own lock,
+which the stats thread takes after the drop ledger and before the collection lock, and
+never with it. Each meter keeps the samples of the last ten seconds: `kbps` is the
+bytes since the previous sample over the time between them, and `health` compares the
+newest sample with the one at the window's start (`waiting` until a video frame was
+sent, `good` with nothing new lost, `poor` with 2% or more of the video frames lost,
+`fair` otherwise). Under the collection lock the engine then makes an output that is
+`reconnecting` `poor`. The stop drops the meter with the output's drop guard, so the
+next tick leaves the output out. A virtual camera output has no meter yet.
 
 ### Audio routing (`meters.tick`)
 
