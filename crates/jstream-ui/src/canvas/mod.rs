@@ -4,8 +4,8 @@
 //! edit, and undo and redo (ADR-0032) from the keyboard. The scene and the selected item
 //! are the shared [`Studio`] selection, so the canvas, the sources list and the
 //! properties form show the same ones. A keyframe scene shows its parent's items at its
-//! overrides under the keyframe banner, and its drags commit without live values: the
-//! engine takes them there (#846), but the canvas doesn't send them yet; Ctrl+D, Ctrl+V and Del, which would change
+//! overrides under the keyframe banner, and its drags send the keyframe's live values
+//! and commit its overrides (#846); Ctrl+D, Ctrl+V and Del, which would change
 //! the parent's items, do nothing there. Ctrl+C and Ctrl+V copy and paste items
 //! (`clipboard`).
 //!
@@ -509,14 +509,15 @@ pub fn Canvas() -> impl IntoView {
             Action::Group(gesture) => Some(Active::Group(gesture.kind)),
             Action::Marquee { .. } => None,
         });
-        // A box drag opens a gesture, so the output follows it before the drop. A drag on
-        // a keyframe scene sends no live values yet (#846), so it only commits.
+        // A box drag opens a gesture, so the output follows it before the drop. On a
+        // keyframe scene its values are the keyframe's (protocol 0.53, #846): they name
+        // the keyframe, as its commit does.
         let gesture = match (&action, session, current.scene.as_ref()) {
             (
                 Action::One { .. } | Action::Crop { .. } | Action::Group(_),
                 Some(session),
                 Some((scene_id, _)),
-            ) if current.keyframe_of.is_none() => {
+            ) => {
                 // Unique for the session, so a remounted canvas never reuses one.
                 session.get().map(|open| {
                     let id = GestureId::new(studio.fresh_id(&open, "drag"));

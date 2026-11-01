@@ -26,8 +26,8 @@ use crate::store::{Collection, Studio, apply};
 use crate::workspace::DockState;
 use jstream_control::protocol::{
     Edit, FilterChain, FilterId, FilterInfo, FilterOwner, ItemId, KindCategory, KindDescriptor,
-    KindSummary, MAX_CHAIN_FILTERS, OutputKind, ParamType, Reference, SceneId, Settings, SourceId,
-    SourceInfo, SourceKind,
+    KindSummary, MAX_CHAIN_FILTERS, OutputKind, ParamType, Reference, Rev, SceneId, Settings,
+    SourceId, SourceInfo, SourceKind,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -721,6 +721,9 @@ pub struct FilterDialogs {
     edit: RwSignal<Option<Target>>,
     fresh: RwSignal<Option<FilterId>>,
     picked: RwSignal<Option<FilterOwner>>,
+    /// The revision of the batch that added the filter the settings dialog opened on,
+    /// when it opened right after that add.
+    added_at: RwSignal<Option<Rev>>,
 }
 
 impl FilterDialogs {
@@ -731,6 +734,7 @@ impl FilterDialogs {
             edit: RwSignal::new(None),
             fresh: RwSignal::new(None),
             picked: RwSignal::new(None),
+            added_at: RwSignal::new(None),
         }
     }
 
@@ -741,6 +745,14 @@ impl FilterDialogs {
 
     /// Opens the Filter settings dialog on a filter.
     pub fn edit(&self, owner: FilterOwner, filter_id: FilterId) {
+        self.added_at.set(None);
+        self.edit.set(Some(Target { owner, filter_id }));
+    }
+
+    /// Opens the Filter settings dialog on a filter just added by the batch that made
+    /// revision `rev`, which the collection may not hold yet.
+    fn edit_added(&self, owner: FilterOwner, filter_id: FilterId, rev: Rev) {
+        self.added_at.set(Some(rev));
         self.edit.set(Some(Target { owner, filter_id }));
     }
 
@@ -1381,16 +1393,26 @@ pub fn FilterSettings() -> impl IntoView {
     let close = move || dialogs.edit.set(None);
     move || {
         dialogs.edit.get().map(|target| {
-            // A filter removed elsewhere closes the dialog.
+            // A filter removed elsewhere closes the dialog. One just added may not be in
+            // the collection yet, as the batch's answer can come before the state that
+            // holds it: the dialog waits for it to show first, or for a state at or after
+            // the batch's revision without it (another client removed it meanwhile),
+            // which closes it.
             let present = {
                 let target = target.clone();
                 Memo::new(move |_| filter_of(studio, &target).is_some())
             };
+            let rev = move || studio.collection.with(|c| c.as_ref().map(|c| c.rev));
+            let added_at = dialogs.added_at.get_untracked();
+            let seen = StoredValue::new(false);
             move || {
                 if present.get() {
+                    seen.set_value(true);
                     Some(view! { <SettingsBody target=target.clone() close=close /> })
                 } else {
-                    request_animation_frame(close);
+                    if seen.get_value() || added_at.is_none_or(|at| rev() >= Some(at)) {
+                        request_animation_frame(close);
+                    }
                     None
                 }
             }
@@ -1758,10 +1780,10 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
             };
             spawn_local(async move {
                 match apply(&s, vec![edit], None).await {
-                    Ok(_) => {
+                    Ok(rev) => {
                         close();
                         if many {
-                            dialogs.edit(owner.get_value(), filter_id);
+                            dialogs.edit_added(owner.get_value(), filter_id, rev);
                         } else {
                             dialogs.fresh.set(Some(filter_id));
                         }
