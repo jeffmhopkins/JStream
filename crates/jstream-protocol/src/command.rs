@@ -698,8 +698,10 @@ pub enum Edit {
         meta: SceneMeta,
     },
     /// Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the
-    /// Mixer when it is nested. Every field left out takes its default. A keyframe scene
-    /// has options of its own. Inverse: `scene.set_options` with the previous options.
+    /// Mixer when it is nested, and its background colour. Every field left out takes
+    /// its default. A keyframe scene has options of its own, except a background, which
+    /// it shows from its parent. `invalid` for a background that isn't a colour, or one
+    /// on a keyframe scene. Inverse: `scene.set_options` with the previous options.
     #[serde(rename = "scene.set_options")]
     SceneSetOptions {
         /// The scene to change.

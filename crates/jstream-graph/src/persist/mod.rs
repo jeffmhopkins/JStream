@@ -247,6 +247,9 @@ struct FileScene {
     /// Whether its audio reaches the Mixer when nested (ADR-0089); omitted for `true`.
     #[serde(default = "yes", skip_serializing_if = "is_true")]
     include_audio: bool,
+    /// Its background colour (ADR-0089 §4); omitted for none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    background: Option<String>,
     /// The scene it is a keyframe scene of (ADR-0024 §2); omitted for any other scene.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     variant_of: Option<SceneId>,
@@ -503,6 +506,7 @@ impl Graph {
                     favourite: scene.meta.favourite,
                     show_in_multiview: scene.meta.show_in_multiview,
                     include_audio: scene.options.include_audio,
+                    background: scene.options.background.clone(),
                     variant_of: scene.variant_of.clone(),
                     overrides: scene
                         .overrides
@@ -903,6 +907,7 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
         }
         let options = SceneOptions {
             include_audio: scene.include_audio,
+            background: scene.background.clone(),
         };
         if !options.is_default() {
             edits.push((

@@ -1,12 +1,13 @@
 //! The scene Properties dialog (spec-workspace.md 6.2.5): a scene's name, its
 //! Transition in and out, the hotkey that switches to it, whether a multiview shows it,
-//! and whether its audio reaches the Mixer when it is nested. Everything is a draft until
-//! OK, which sends what changed as one batch (`scene.rename`, `scene.set_transitions`,
-//! `scene.set_meta`, `scene.set_options`, `hotkey.clear` and `hotkey.set`); Cancel,
-//! Escape and the backdrop drop it, and Defaults clears the overrides and the hotkey and
-//! checks both switches again, keeping the name. The engine has no scene background
-//! colour, so the dialog leaves it out. The scene's filters show on the right, each change sent at
-//! once, as the source Properties dialog's are.
+//! its background colour, and whether its audio reaches the Mixer when it is nested.
+//! Everything is a draft until OK, which sends what changed as one batch
+//! (`scene.rename`, `scene.set_transitions`, `scene.set_meta`, `scene.set_options`,
+//! `hotkey.clear` and `hotkey.set`); Cancel, Escape and the backdrop drop it, and
+//! Defaults clears the overrides, the hotkey and the background and checks both switches
+//! again, keeping the name. A keyframe scene shows its parent's background, which its
+//! dialog shows and doesn't edit. The scene's filters show on the right, each change sent
+//! at once, as the source Properties dialog's are.
 //!
 //! Docs: docs/UI-FEATURES.md#dialogs
 
@@ -17,7 +18,9 @@ use crate::icons::Icon;
 use crate::panels::filters::{Chains, FilterDialogs, scene_owner};
 use crate::panels::inspector::transition_options;
 use crate::store::{Collection, Studio, apply};
-use jstream_control::protocol::{Action, Chord, Edit, FilterOwner, SceneId, TransitionPresetId};
+use jstream_control::protocol::{
+    Action, Chord, Edit, FilterOwner, SceneId, TransitionPresetId, parse_rgba,
+};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 
@@ -58,6 +61,8 @@ pub struct SceneDraft {
     pub show_in_multiview: bool,
     /// Whether its audio reaches the Mixer when it is nested (ADR-0089).
     pub include_audio: bool,
+    /// Its background colour as typed (`#rrggbb` or `#rrggbbaa`), or none.
+    pub background: Option<String>,
 }
 
 impl SceneDraft {
@@ -71,6 +76,7 @@ impl SceneDraft {
             hotkey: collection.scene_hotkey(scene_id).map(|b| b.chord.clone()),
             show_in_multiview: scene.meta.show_in_multiview,
             include_audio: scene.options.include_audio,
+            background: scene.options.background.clone(),
         })
     }
 }
@@ -79,7 +85,8 @@ impl SceneDraft {
 /// (a blank name is ignored), the overrides, the multiview flag (the scene's other
 /// metadata kept), the options, then the hotkey (the old chord cleared
 /// before the new one is bound, keeping the preset the old binding named). Refused when
-/// the new chord is bound already, which `hotkey.set` would refuse too.
+/// the background isn't a colour, or the new chord is bound already, which
+/// `scene.set_options` and `hotkey.set` would refuse too.
 pub fn scene_edits(
     collection: &Collection,
     scene_id: &SceneId,
@@ -114,12 +121,21 @@ pub fn scene_edits(
             meta,
         });
     }
-    if draft.include_audio != before.include_audio {
+    let background = draft
+        .background
+        .as_deref()
+        .map(str::trim)
+        .filter(|b| !b.is_empty());
+    if background.is_some_and(|b| parse_rgba(b).is_none()) {
+        return Err("The background colour must be #rrggbb or #rrggbbaa.".into());
+    }
+    if (draft.include_audio, background) != (before.include_audio, before.background.as_deref()) {
         let mut options = collection
             .scene(scene_id)
             .map(|s| s.options.clone())
             .unwrap_or_default();
         options.include_audio = draft.include_audio;
+        options.background = background.map(str::to_owned);
         edits.push(Edit::SceneSetOptions {
             scene_id: scene_id.clone(),
             options,
@@ -229,6 +245,28 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
     });
     let before = StoredValue::new(opened.clone());
     let draft = RwSignal::new(opened);
+    // A keyframe scene shows its parent's background (ADR-0089 §4).
+    let keyframe_of = studio.collection.with_untracked(|c| {
+        c.as_ref()
+            .and_then(|c| c.parent_of(&scene_id))
+            .map(|p| (p.name.clone(), p.options.background.clone()))
+    });
+    let background_note = match &keyframe_of {
+        Some((parent, _)) => format!("A keyframe scene shows the background of “{parent}”."),
+        None => "Drawn under its items, nested or not. None is transparent.".to_owned(),
+    };
+    let keyframe = keyframe_of.is_some();
+    let shown_background = {
+        let parents = keyframe_of.as_ref().map(|(_, b)| b.clone());
+        move || match &parents {
+            Some(parents) => parents.clone().unwrap_or_default(),
+            None => draft.with(|d| d.background.clone().unwrap_or_default()),
+        }
+    };
+    let swatch = {
+        let shown = shown_background.clone();
+        move || background_swatch(&shown())
+    };
     let problem = RwSignal::new(None::<String>);
     let id = StoredValue::new(scene_id);
 
@@ -307,6 +345,9 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
             d.hotkey = None;
             d.show_in_multiview = true;
             d.include_audio = true;
+            if keyframe_of.is_none() {
+                d.background = None;
+            }
         });
     };
     let ok = move |_| {
@@ -397,6 +438,39 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                     />
                     <span class="field-note">"A multiview window shows it as one of its tiles."</span>
                 </label>
+                <div class="field">
+                    <span class="label">"Background color"</span>
+                    <div class="control">
+                        <input
+                            type="color"
+                            aria-label="Background color swatch"
+                            disabled=keyframe
+                            prop:value=swatch
+                            on:change=move |event| {
+                                let picked = event_target_value(&event);
+                                draft.update(|d| {
+                                    d.background = Some(with_swatch(d.background.as_deref(), &picked));
+                                });
+                            }
+                        />
+                        <input
+                            type="text"
+                            class="color-text"
+                            aria-label="Background color"
+                            placeholder="None"
+                            disabled=keyframe
+                            prop:value=shown_background
+                            on:change=move |event| {
+                                let typed = event_target_value(&event);
+                                let typed = typed.trim();
+                                draft.update(|d| {
+                                    d.background = (!typed.is_empty()).then(|| typed.to_owned());
+                                });
+                            }
+                        />
+                    </div>
+                    <span class="field-note">{background_note}</span>
+                </div>
                 <label class="field">
                     <span class="label">"Include its audio when nested"</span>
                     <input
@@ -425,6 +499,24 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
 }
 
 /// The scene's video chain (FL-06), each change sent at once, and the Add filter button.
+/// The `#rrggbb` a colour swatch shows for `background`: its colour without alpha, or
+/// black for none or for text that isn't a colour.
+fn background_swatch(background: &str) -> String {
+    parse_rgba(background.trim()).map_or_else(
+        || "#000000".to_owned(),
+        |[r, g, b, _]| format!("#{r:02x}{g:02x}{b:02x}"),
+    )
+}
+
+/// `background` with its colour replaced by the swatch's `picked` `#rrggbb`, keeping an
+/// alpha it had.
+fn with_swatch(background: Option<&str>, picked: &str) -> String {
+    match background.map(str::trim).and_then(parse_rgba) {
+        Some([.., a]) if a != 0xff => format!("{picked}{a:02x}"),
+        _ => picked.to_owned(),
+    }
+}
+
 /// A keyframe scene shows its parent's chain, which it has no other of (ADR-0065 §3).
 #[component]
 fn SceneFilterSide(owner: FilterOwner, parent: Option<String>) -> impl IntoView {
@@ -591,10 +683,69 @@ mod tests {
             Ok(vec![Edit::SceneSetOptions {
                 scene_id: a,
                 options: SceneOptions {
-                    include_audio: false
+                    include_audio: false,
+                    background: None,
                 },
             }])
         );
+    }
+
+    /// The background colour is one of the options; it keeps the switch, a blank one is
+    /// none, and one that isn't a colour is refused before anything is sent.
+    #[test]
+    fn the_background_colour_sends_the_scene_s_options() {
+        let mut scene: SceneInfo = serde_json::from_value(serde_json::json!({
+            "scene_id": "a",
+            "name": "A",
+            "include_audio": false,
+            "items": [],
+        }))
+        .expect("a scene");
+        scene.options.background = Some("#112233".into());
+        let c = Collection {
+            scenes: vec![scene],
+            ..Collection::default()
+        };
+        let a = SceneId::new("a");
+        let before = SceneDraft::of(&c, &a).expect("the scene");
+        let with = |background: &str| SceneDraft {
+            background: Some(background.into()),
+            ..before.clone()
+        };
+        assert_eq!(
+            scene_edits(&c, &a, &before, &with(" #0F111580 ")),
+            Ok(vec![Edit::SceneSetOptions {
+                scene_id: a.clone(),
+                options: SceneOptions {
+                    include_audio: false,
+                    background: Some("#0F111580".into()),
+                },
+            }])
+        );
+        assert_eq!(
+            scene_edits(&c, &a, &before, &with("  ")),
+            Ok(vec![Edit::SceneSetOptions {
+                scene_id: a.clone(),
+                options: SceneOptions {
+                    include_audio: false,
+                    background: None,
+                },
+            }])
+        );
+        assert_eq!(scene_edits(&c, &a, &before, &with("#112233")), Ok(vec![]));
+        assert!(scene_edits(&c, &a, &before, &with("blue")).is_err());
+    }
+
+    /// The swatch shows a background's colour without its alpha, and picking one keeps
+    /// the alpha.
+    #[test]
+    fn the_swatch_keeps_a_background_s_alpha() {
+        assert_eq!(background_swatch("#0F111580"), "#0f1115");
+        assert_eq!(background_swatch(""), "#000000");
+        assert_eq!(background_swatch("blue"), "#000000");
+        assert_eq!(with_swatch(Some("#0f111580"), "#ff0000"), "#ff000080");
+        assert_eq!(with_swatch(Some("#0f1115"), "#ff0000"), "#ff0000");
+        assert_eq!(with_swatch(None, "#ff0000"), "#ff0000");
     }
 
     /// Rebinding a scene's hotkey keeps the preset its old binding switched with.

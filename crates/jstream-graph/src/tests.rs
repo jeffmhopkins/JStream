@@ -1766,6 +1766,12 @@ mod property {
                 scene_id: SceneId::new(scene(rng)),
                 options: SceneOptions {
                     include_audio: rng.below(2) == 0,
+                    // Sometimes not a colour, which is refused.
+                    background: match rng.below(3) {
+                        0 => None,
+                        1 => Some(color(rng).into()),
+                        _ => Some("none".into()),
+                    },
                 },
             },
             65 => Edit::SourceSetMeta {

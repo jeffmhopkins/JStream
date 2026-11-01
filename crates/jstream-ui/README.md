@@ -442,19 +442,20 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **The scene Properties dialog** (`scene_properties.rs`) opens from a double click on a
   scene row, the row menu's Properties…, the canvas margin's Scene properties… and a
   nested scene's item. It edits a draft of the name, Transition in and out, the
-  hotkey, Show in multiview and Include its audio when nested: the hotkey field takes the next key press as a chord (the modifiers in the
+  hotkey, the Background color, Show in multiview and Include its audio when nested: the hotkey field takes the next key press as a chord (the modifiers in the
   protocol's order, then the key's `code`; Backspace or Delete clears it, Tab,
   Escape and Enter keep their dialog meaning). OK sends what changed as one batch:
   `scene.rename`, `scene.set_transitions`, `scene.set_meta` (the scene's labels, icon,
   colour and favourite kept as the collection has them at OK), `scene.set_options` (the
-  nested audio switch, [ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)),
+  nested audio switch and the background, [ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)),
   and `hotkey.clear` of the old chord before
   `hotkey.set` of the new one, bound to a `scene.switch` with the preset the old binding
-  named (none for a first hotkey). A chord bound already is refused before sending, with
-  what it runs. The scene's hotkey is the first binding
-  whose action switches to it. Defaults clears the overrides and the hotkey and checks
-  both switches. The engine has no scene background colour, so the dialog leaves it
-  out. Duplicate scene copies the scene's options with it. On the right, in the source Properties dialog's shell, are the
+  named (none for a first hotkey). A chord bound already, or a background that isn't
+  `#rrggbb` or `#rrggbbaa`, is refused before sending, the chord with what it runs.
+  The background is a colour swatch, which keeps an alpha the text gives, beside the
+  text, blank for none; a keyframe scene's shows its parent's and is disabled. The scene's hotkey is the first binding
+  whose action switches to it. Defaults clears the overrides, the hotkey and the
+  background and checks both switches. Duplicate scene copies the scene's options with it. On the right, in the source Properties dialog's shell, are the
   scene's filters: the Filters panel's rows on its video chain, which apply at once (a
   keyframe shows its parent's).
 - **Filters** ([UI features › filters](../../docs/UI-FEATURES.md#filters)). The

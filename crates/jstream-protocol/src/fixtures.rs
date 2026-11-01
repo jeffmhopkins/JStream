@@ -417,6 +417,7 @@ pub(crate) fn edits() -> Vec<Edit> {
             scene_id: SceneId::new("scn_1"),
             options: SceneOptions {
                 include_audio: false,
+                background: Some("#0f1115".into()),
             },
         },
         Edit::LabelCreate {
@@ -1573,6 +1574,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     meta: scene_meta(),
                     options: SceneOptions {
                         include_audio: false,
+                        background: Some("#0f1115".into()),
                     },
                 },
                 SceneInfo {

@@ -83,7 +83,9 @@ pub(crate) fn apply(
             folder_id,
         } => set_folder(state, scene_id, folder_id.as_ref(), at),
         Edit::SceneSetMeta { scene_id, meta } => set_scene_meta(state, scene_id, meta, at),
-        Edit::SceneSetOptions { scene_id, options } => set_scene_options(state, scene_id, options),
+        Edit::SceneSetOptions { scene_id, options } => {
+            set_scene_options(state, scene_id, options, at)
+        }
         Edit::LabelCreate {
             label_id,
             name,
@@ -404,10 +406,21 @@ fn set_scene_options(
     state: &mut State,
     scene_id: &SceneId,
     options: &SceneOptions,
+    at: usize,
 ) -> Result<Vec<Edit>, ProtocolError> {
     let si = state
         .scene_index(scene_id)
         .ok_or_else(|| not_found(EntityKind::Scene, scene_id.as_str()))?;
+    if let Some((name, reason)) = options.problem() {
+        return Err(invalid(at, name, reason));
+    }
+    if options.background.is_some() && state.scenes[si].variant_of().is_some() {
+        return Err(invalid(
+            at,
+            "background",
+            "a keyframe scene shows its parent's background",
+        ));
+    }
     let old = std::mem::replace(&mut state.scenes[si].options, options.clone());
     Ok(vec![Edit::SceneSetOptions {
         scene_id: scene_id.clone(),

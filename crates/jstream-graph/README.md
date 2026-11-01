@@ -315,9 +315,11 @@ the batch **touched**.
   must exist and appear once; stored ordered by ID) and favourite flag, and
   `source.duplicate` copies both to the copy; `scene.set_meta` checks and stores a
   scene's labels the same way ([ADR-0078](../../docs/adr/0078-scenes-carry-labels.md)).
-  `scene.set_options` replaces a scene's options, which need no check: `include_audio`
-  ([ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)), which the engine
-  reads when it follows nesting for audio. A deleted scene's inverse restores them.
+  `scene.set_options` replaces a scene's options
+  ([ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)): `include_audio`,
+  which the engine reads when it follows nesting for audio, and `background`, checked as
+  a colour (`SceneOptions::problem`) and refused on a keyframe scene, which shows its
+  parent's. A deleted scene's inverse restores them.
   `folder.delete` is refused while a scene (`folder`) or folder (`parent`) sits in the
   folder, and `label.delete` while a source, then a scene (`labels`), carries the label,
   listing them as `blockers`; their `delete.plan` moves what the folder holds up to its
@@ -406,7 +408,7 @@ when set, and an item its `transition` when not the default. A source's `audio` 
 only where it differs from its kind's defaults, except a `webcam`'s, which is always
 saved, so a webcam without it can only come from before webcams had audio (#716). `folders` and `labels` are in their
 orders, each omitted when empty. A scene's `folder`, `labels`, `icon`, `color`,
-`favourite`, `show_in_multiview` and `include_audio`, and a source's `labels` and `favourite`, are each omitted while
+`favourite`, `show_in_multiview`, `include_audio` and `background`, and a source's `labels` and `favourite`, are each omitted while
 they have their default, so a collection without them saves as it did before they
 existed and needs no schema bump. A keyframe scene writes `variant_of` and its
 `overrides` in item ID order, each omitted for any other scene, so it needs no schema

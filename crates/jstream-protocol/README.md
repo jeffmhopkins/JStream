@@ -190,7 +190,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   negative scale is not refused: `from_legacy` returns the drawn outline with the
   reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.65 because of
   `scene.set_options` and `SceneInfo`'s flattened `SceneOptions`, whose `include_audio`
-  leaves a scene's audio out of every nesting of it
+  leaves a scene's audio out of every nesting of it and whose `background` is the
+  colour a scene is drawn over
   ([ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)); 0.57 added
   `stats.tick`'s `outputs`, each running output's live stats (`OutputStatsInfo`); 0.56
   added `preview.subscribe`'s `source_id`, a stream of one of the collection's sources alone
@@ -814,9 +815,13 @@ the whole metadata, so a field left out takes its default. A scene's `SceneOptio
 [ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)) are behaviour, not
 organisation: `include_audio` (default `true`), off for a scene whose sources reach the
 Mixer through no nesting of it, whatever each scene source's own `audio.enabled`, while
-it is still heard on program itself. `scene.set_options` replaces them all the same way,
-a keyframe scene has its own, and `state.get` reports them flattened beside the scene's
-other fields, each omitted while it has its default. Colours are sRGB `#rrggbb`;
+it is still heard on program itself (on a group, which is only reached through nesting,
+it leaves out the children's audio wherever the group shows), and `background` (default
+none, which is transparent), `#rrggbb` or `#rrggbbaa` with straight alpha, drawn under the
+scene's items wherever it is drawn, though never for a group (`parse_rgba` reads it). `scene.set_options` replaces them all the
+same way, a keyframe scene has its own except a background, which it shows from its
+parent and is refused, and `state.get` reports them flattened beside the scene's other
+fields, each omitted while it has its default. Other colours are sRGB `#rrggbb`;
 an icon is an opaque name from the UI's icon set, checked only for its length (1 to 64
 bytes). A folder that holds a scene or folder, and a label a source or scene carries, can't
 be deleted: the `invalid_argument` lists the `blockers` (`folder`, `parent` or `labels`;

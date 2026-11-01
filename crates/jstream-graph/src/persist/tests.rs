@@ -1181,6 +1181,7 @@ fn folders_labels_and_metadata_round_trip() {
         "favourite",
         "show_in_multiview",
         "include_audio",
+        "background",
     ] {
         assert!(
             !plain.contains(&format!("\"{field}\"")),
@@ -1227,6 +1228,7 @@ fn folders_labels_and_metadata_round_trip() {
                 scene_id: SceneId::new("a"),
                 options: SceneOptions {
                     include_audio: false,
+                    background: Some("#0f111580".into()),
                 },
             },
             Edit::SourceSetMeta {
@@ -1258,6 +1260,7 @@ fn folders_labels_and_metadata_round_trip() {
         .and_then(|scenes| scenes.iter().find(|s| s["id"] == "a"));
     assert_eq!(scene.map(|s| &s["labels"]), Some(&json!(["sponsor"])));
     assert_eq!(scene.map(|s| &s["include_audio"]), Some(&json!(false)));
+    assert_eq!(scene.map(|s| &s["background"]), Some(&json!("#0f111580")));
     assert_eq!(load(&json), Ok(graph));
 }
 

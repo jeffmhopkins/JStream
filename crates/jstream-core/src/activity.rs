@@ -285,7 +285,10 @@ mod tests {
     fn include_audio(scene_id: &str, include_audio: bool) -> Edit {
         Edit::SceneSetOptions {
             scene_id: SceneId::new(scene_id),
-            options: SceneOptions { include_audio },
+            options: SceneOptions {
+                include_audio,
+                ..SceneOptions::default()
+            },
         }
     }
 

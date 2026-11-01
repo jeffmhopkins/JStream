@@ -912,9 +912,13 @@ scene into its items only when it and they are all `normal`.
 then placed like any image. The shot is scheduled inside out: each nested scene is
 one pass into its own layer (`Compositor::render_into`), which stays on the GPU as
 premultiplied linear `Rgba16Float` (no sRGB round trip, no readback) and is kept for
-the next frame while the program still nests it. A nested scene has no background yet, so it is transparent where it
-draws nothing and the scene under it shows through; the program scene is drawn over
-opaque black. A scene placed more than once at the same depth is composited once.
+the next frame while the program still nests it. Each pass clears to its scene's
+background ([ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md) §4; a
+keyframe scene's is its parent's, and a group has none), so a nested scene without one is transparent where it
+draws nothing and the scene under it shows through; the program scene's pass clears to
+its background over opaque black (`Color::over_black`). While a transition runs, its
+tracks are drawn over the two scenes' backgrounds mixed by the time since it started
+(`Transitioning::background`). A scene placed more than once at the same depth is composited once.
 Depth is bounded: the program scene is depth 0, and a scene source more than 8
 levels below it draws nothing (logged at `debug`). A scene with a scene filter
 (ADR-0065) is composited once per frame at depth 0 wherever it shows, so the count
