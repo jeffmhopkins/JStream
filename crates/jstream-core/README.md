@@ -203,8 +203,15 @@ state machine. Contents:
   so the layer stays shared. A Move within the family flattens a group over the whole
   canvas into its children, which pair by item and move between the two sides'
   values. A group that doesn't flatten (placed elsewhere, or with a blend, chain or
-  effects) moves as one item and shows the incoming side's children from the start:
-  interpolating them inside its layer (ADR-0049 §3) is not built yet. `Shot::chain_cost` is what its
+  effects) moves as one item, and its children move inside its layer (ADR-0049 §3):
+  `transition.rs` plans them by item between the group's two sides (a view through
+  each keyframe, or the group itself) with the group item's timing, as the
+  `transition::Inside` of its visual, at any depth. The shot draws the group from a
+  scene of its own (`inner_id`, a control character and the track's index; a
+  collection scene with that ID draws the group as it is) whose layers carry their
+  track and the transition's start, sampled when the pass is drawn, through the
+  group's chain and its item's effects. A switch mid-Move holds the children where
+  they are on screen and moves them on from there. `Shot::chain_cost` is what its
   scene chains and item effects add to each frame, for `stats.tick`'s `chains`.
 - **Studio** (`studio.rs`): which scene is on program and which on preview, and the
   transition running onto program, runtime state under the collection lock that
@@ -220,7 +227,9 @@ state machine. Contents:
   *Preview streams* in [Design](#design)).
 - **Transitions** (`transition.rs`, [ADR-0029](../../docs/adr/0029-transitions.md)):
   which preset a switch runs (`resolve`), and the plan that pairs what is on screen
-  with the new scene's items, one `jstream-render` `Track` per item (`plan`).
+  with the new scene's items, one `jstream-render` `Track` per item (`plan`), and for
+  a group that moves as one item within a family its children's tracks inside its
+  layer (`Inside`, ADR-0049 §3).
 - **Runtime** (`runtime/`): the `output.start` pipeline. Every running output shares
   one program stage: the render thread reads the platform capture mailbox of each
   display, window and webcam the program mix or a video mix shows
@@ -459,7 +468,10 @@ state machine. Contents:
   item, the parent's own showing there through fields it doesn't override, committed as
   its override and dropped with the keyframe, a variant drawing a group's child through
   a view of the group, live values included, and a `move` moving that child between the
-  two sides; `activity.rs` silences what a keyframe hides in a group; `transition.rs` pairs a source placed twice by item), YouTube on `jstream-youtube`'s `FakeTransport` and fixtures
+  two sides, flattened or, for a group placed in a box, inside the group's layer from
+  one side's override to the other's or to the group's own value, and on from where it
+  is when a switch retargets the Move; `snapshot.rs` draws such a child where its
+  track is at the frame's time; `activity.rs` silences what a keyframe hides in a group; `transition.rs` pairs a source placed twice by item), YouTube on `jstream-youtube`'s `FakeTransport` and fixtures
   (`src/tests/youtube.rs`: sign-in through a real loopback redirect, sign-out, the
   broadcast actions and lists, quota and refused tokens, a `youtube` output
   publishing to its broadcast's ingest on the CPU stand-in, with the key and tokens in
@@ -752,7 +764,8 @@ the render parameter channel, never through the collection:
   the item's geometry and crop it overrides (`Through`): there the keyframe's own live
   value wins, then the item's own in a field the keyframe doesn't override (it follows
   the parent there, ADR-0049 §1), then the shot's. A keyframe's live value shows
-  nowhere else. A running transition's tracks are the exception: they move between
+  nowhere else. A running transition's tracks, a group's children moving inside its
+  layer among them, are the exception: they move between
   the items as the collection holds them, so a live value on a program item shows once
   the transition ends. `video.snapshot` and the preview thread read the channel with the
   snapshot under the lock, so a snapshot or a preview picture shows an open gesture as
@@ -834,7 +847,10 @@ so it pairs each item with itself (`Running::by_item`, ADR-0049 §3), which stay
 when a source is placed twice or an item is hidden on one side. For `move`, a nested scene's items are flattened into its parent only
 when its item covers the canvas exactly (an identity placement, no crop, not rotated)
 and is opaque, so a scene shown at another size or faded moves as one image
-(ADR-0052 §2). Stagger delays only
+(ADR-0052 §2). Within a family, such a group carries its children's own tracks,
+planned by item between its two sides with the group item's timing, which the pass
+that draws its layer samples at the frame's time (ADR-0049 §3); a switch mid-Move
+holds them where `on_screen` finds them. Stagger delays only
 the incoming items (§3). Audio does not follow a transition
 yet (D29).
 

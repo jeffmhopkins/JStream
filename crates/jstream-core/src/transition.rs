@@ -14,6 +14,10 @@
 //! `move` pairs by item instead: each item with itself on the other side.
 //! Everything else appears or disappears with its effect. The render thread only samples
 //! the tracks (R-RT-002).
+//!
+//! A group that moves as one item between two members of a family carries its
+//! children's own tracks ([`Inside`]), planned the same way inside the group's layer
+//! with the group item's progress (ADR-0049 §3).
 
 use std::sync::Arc;
 
@@ -108,6 +112,23 @@ pub(crate) struct Visual {
     /// Its effects' kinds and settings in order (ADR-0065), empty without: two items
     /// pair only when theirs are the same (§6).
     pub(crate) effects: Vec<(String, Settings)>,
+    /// For a group that moves as one item within a family, its children's tracks
+    /// inside its layer (ADR-0049 §3); `None` for everything else.
+    pub(crate) inside: Option<Arc<Inside>>,
+}
+
+/// A group's children as a Move within a family draws them inside the group's layer
+/// (ADR-0049 §3): their tracks, which follow the group item's progress, or, once a
+/// switch retargets the Move, what of them was on screen then, held still.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Inside {
+    /// The group scene, whose video chain runs over its layer.
+    pub(crate) group: SceneId,
+    /// The scene the group item is planned in, when the item's effects draw it: its box
+    /// is planned again over the children's layer.
+    pub(crate) boxed_in: Option<SceneId>,
+    /// The children's tracks, in drawing order.
+    pub(crate) planned: Planned,
 }
 
 /// What a transition starts from: a scene, planned from the collection as it is now, or
@@ -144,7 +165,7 @@ pub(crate) fn elapsed_ms(start: MediaTime, at: MediaTime) -> f32 {
 }
 
 /// The planned transition: each item's track in drawing order, with what it shows.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct Planned {
     pub(crate) tracks: Vec<(Visual, Track)>,
     /// When the last item is done, in milliseconds from the start.
@@ -154,17 +175,50 @@ pub(crate) struct Planned {
 impl Planned {
     /// What is on screen `elapsed_ms` after the start, as the starting point of a
     /// transition that retargets this one: every item still drawn, with the settings of
-    /// the placement it came from.
+    /// the placement it came from. A group's children inside its layer are held where
+    /// they are then.
     pub(crate) fn on_screen(&self, elapsed_ms: f32, canvas: [f32; 2]) -> Vec<Visual> {
         self.tracks
             .iter()
             .filter_map(|(visual, track)| {
                 track.sample(elapsed_ms, canvas).map(|at| Visual {
                     at,
+                    inside: visual.inside.as_ref().map(|inside| {
+                        Arc::new(Inside {
+                            planned: inside.planned.held(elapsed_ms, canvas),
+                            ..Inside::clone(inside)
+                        })
+                    }),
                     ..visual.clone()
                 })
             })
             .collect()
+    }
+
+    /// What is on screen `elapsed_ms` after the start, as tracks that stay there.
+    fn held(&self, elapsed_ms: f32, canvas: [f32; 2]) -> Planned {
+        let still = Timing {
+            delay_ms: 0.0,
+            duration_ms: 0.0,
+            easing: Easing::Linear,
+        };
+        let tracks = self
+            .on_screen(elapsed_ms, canvas)
+            .into_iter()
+            .map(|visual| {
+                let track = Track::Pair {
+                    from: visual.at,
+                    to: visual.at,
+                    timing: still,
+                    source: visual.size,
+                };
+                (visual, track)
+            })
+            .collect();
+        Planned {
+            tracks,
+            end_ms: 0.0,
+        }
     }
 }
 
@@ -184,8 +238,14 @@ fn effect(effect: TransitionEffect, unmatched: TransitionEffect) -> Effect {
 /// With `by_item`, the sides are members of one family and pair by item ID; otherwise
 /// by source. An item's progress starts after its delay plus, for the new scene's items,
 /// `stagger_ms` × its index; a pair follows the new item's settings. The transition ends
-/// when its last item does.
-pub(crate) fn plan(from: &[Visual], to: &[Visual], run: &Run, by_item: bool) -> Planned {
+/// when its last item does. Beside the plan: the index in `from` of each track's
+/// partner, in the tracks' order, `Some` for a pair.
+pub(crate) fn plan(
+    from: &[Visual],
+    to: &[Visual],
+    run: &Run,
+    by_item: bool,
+) -> (Planned, Vec<Option<usize>>) {
     let duration_ms = run.duration_ms as f32;
     let timing = |settings: &ItemTransition, delay_ms: f32| Timing {
         delay_ms,
@@ -194,6 +254,8 @@ pub(crate) fn plan(from: &[Visual], to: &[Visual], run: &Run, by_item: bool) -> 
     };
     let mut used = vec![false; from.len()];
     let mut arriving = Vec::with_capacity(to.len());
+    let mut partners: Vec<Option<usize>> = Vec::with_capacity(from.len() + to.len());
+    let mut arriving_partners = Vec::with_capacity(to.len());
     for (index, item) in to.iter().enumerate() {
         let delay_ms = item.settings.delay_ms as f32 + index as f32 * run.stagger_ms as f32;
         let partner = (run.pairs && item.settings.glide == Glide::Auto)
@@ -225,6 +287,7 @@ pub(crate) fn plan(from: &[Visual], to: &[Visual], run: &Run, by_item: bool) -> 
             },
         };
         arriving.push((item.clone(), track));
+        arriving_partners.push(partner);
     }
     let mut tracks: Vec<(Visual, Track)> = from
         .iter()
@@ -239,12 +302,35 @@ pub(crate) fn plan(from: &[Visual], to: &[Visual], run: &Run, by_item: bool) -> 
             (item.clone(), track)
         })
         .collect();
+    partners.resize(tracks.len(), None);
     tracks.extend(arriving);
+    partners.extend(arriving_partners);
     let end_ms = tracks
         .iter()
         .map(|(_, track)| track.end_ms())
         .fold(0.0, f32::max);
-    Planned { tracks, end_ms }
+    (Planned { tracks, end_ms }, partners)
+}
+
+/// `track` following `timing` instead of its own: a group's child moves with the group
+/// item's progress (ADR-0049 §3).
+pub(crate) fn with_timing(track: Track, timing: Timing) -> Track {
+    match track {
+        Track::Pair {
+            from, to, source, ..
+        } => Track::Pair {
+            from,
+            to,
+            timing,
+            source,
+        },
+        Track::Appear { to, effect, .. } => Track::Appear { to, effect, timing },
+        Track::Disappear { from, effect, .. } => Track::Disappear {
+            from,
+            effect,
+            timing,
+        },
+    }
 }
 
 /// What `studio.changed` reports for a switch that resolved `preset_id` and runs for
@@ -258,7 +344,7 @@ pub(crate) fn started(preset_id: TransitionPresetId, end_ms: Option<f32>) -> Tra
 
 #[cfg(test)]
 mod tests {
-    use super::{Planned, Run, Visual, plan};
+    use super::{Planned, Run, Visual};
     use crate::snapshot::SourceRef;
     use jstream_protocol::{
         Easing, Glide, ItemGeometry, ItemId, ItemTransition, Size, SourceId, TransitionEffect,
@@ -266,6 +352,10 @@ mod tests {
     };
     use jstream_render::Crop;
     use jstream_render::transition::{Effect, Endpoint, Track};
+
+    fn plan(from: &[Visual], to: &[Visual], run: &Run, by_item: bool) -> Planned {
+        super::plan(from, to, run, by_item).0
+    }
 
     fn visual(source: &str, x: f32) -> Visual {
         item(&format!("{source}_{x}"), source, x)
@@ -290,6 +380,7 @@ mod tests {
             size: None,
             settings: ItemTransition::default(),
             effects: Vec::new(),
+            inside: None,
         }
     }
 

@@ -291,7 +291,14 @@ struct Placed {
     /// Its effects' box, when an effect of it runs: the layer then shows the effects'
     /// output in place of `source`.
     effects: Option<Boxed>,
+    /// A group's child that a Move within a family moves inside the group's layer
+    /// (ADR-0049 §3): its track and the transition's start, which replace the fields
+    /// above (`placement` holds its end) and its live values.
+    moving: Option<Moving>,
 }
+
+/// A layer's track inside a group a transition moves, and when the transition started.
+type Moving = (MediaTime, Track);
 
 /// The longest side of an item's effects layer, in pixels: a larger box plus outset is
 /// drawn into it scaled down uniformly (ADR-0065 §5).
@@ -592,6 +599,17 @@ impl Shot {
         self.transition
             .as_ref()
             .map(|t| t.tracks.iter().map(|(_, track)| *track).collect())
+    }
+
+    /// The layers a transition moves inside a group's layer (ADR-0049 §3), each item
+    /// with its track, ordered by the scene that holds them, for tests.
+    #[cfg(test)]
+    pub(crate) fn moving(&self) -> Vec<(ItemId, Track)> {
+        self.scenes
+            .values()
+            .flatten()
+            .filter_map(|p| p.moving.map(|(_, track)| (p.item.clone(), track)))
+            .collect()
     }
 
     /// What scene `id` places, bottom first: each item with its placement and opacity,
@@ -1002,18 +1020,207 @@ impl<'a> Planner<'a, '_> {
 
     /// Plans `running`: what it starts from, paired with the program scene's items. The
     /// frames and nested scenes either side shows go into `out`.
+    ///
+    /// Within a family, a group that moves as one item carries its children's tracks
+    /// inside its layer, from their values on one side to those on the other
+    /// (ADR-0049 §3), and is drawn from a scene of the shot that holds them.
     fn transition(&mut self, running: &Running, out: &mut Shot) -> Planned {
         let flatten = running.run.pairs;
-        let from = match &running.from {
+        let from: Vec<Visual> = match &running.from {
             From::Scene(scene) => self.endpoint(scene, flatten, out),
+            // A group whose children were moving is drawn once its track is known.
             From::OnScreen(items) => items
                 .iter()
-                .filter(|visual| self.shows(&visual.image, out))
+                .filter(|visual| visual.inside.is_some() || self.shows(&visual.image, out))
                 .cloned()
                 .collect(),
         };
         let to = self.endpoint(&running.to, flatten, out);
-        transition::plan(&from, &to, &running.run, running.by_item)
+        let (mut planned, partners) = transition::plan(&from, &to, &running.run, running.by_item);
+        if running.by_item && flatten {
+            self.move_inside(&mut planned, &from, &partners, &running.run, out);
+        }
+        // Each group with children inside it gets a scene of the shot that draws them.
+        let tracks = std::mem::take(&mut planned.tracks);
+        for (index, (visual, track)) in tracks.into_iter().enumerate() {
+            if visual.inside.is_none() {
+                planned.tracks.push((visual, track));
+                continue;
+            }
+            match self.reshown(&visual, &inner_id(index), running.start, out) {
+                Some(visual) => planned.tracks.push((visual, track)),
+                // A group arriving is drawn as it is: its children show the new side's
+                // values.
+                None if partners[index].is_some() => {
+                    let shown = Visual {
+                        inside: None,
+                        ..visual
+                    };
+                    if self.shows(&shown.image, out) {
+                        planned.tracks.push((shown, track));
+                    }
+                }
+                // A group leaving that can't be drawn any more is left out.
+                None => {}
+            }
+        }
+        planned
+    }
+
+    /// Gives each pair of `planned` that moves a group as one image, between two views
+    /// of it through members of a family, its children's tracks inside the group's
+    /// layer: planned by item from their values on the `from` side to the new side's,
+    /// with the group item's progress, and the same again for a group among them
+    /// (ADR-0049 §3). `partners` is each track's partner in `from`.
+    fn move_inside(
+        &mut self,
+        planned: &mut Planned,
+        from: &[Visual],
+        partners: &[Option<usize>],
+        run: &transition::Run,
+        out: &mut Shot,
+    ) {
+        for ((visual, track), partner) in planned.tracks.iter_mut().zip(partners) {
+            let (Some(partner), Track::Pair { timing, .. }) = (partner, *track) else {
+                continue;
+            };
+            let outgoing = &from[*partner];
+            let Some(to_layer) = self.group_layer(&visual.image, out) else {
+                continue;
+            };
+            let Some((group, _)) = self.drawn(&to_layer) else {
+                continue;
+            };
+            let children = match &outgoing.inside {
+                Some(inside) if inside.group == *group.id() => inside
+                    .planned
+                    .tracks
+                    .iter()
+                    .map(|(child, _)| child.clone())
+                    .collect(),
+                Some(_) => continue,
+                None => {
+                    let Some(from_layer) = self.group_layer(&outgoing.image, out) else {
+                        continue;
+                    };
+                    let same = self
+                        .drawn(&from_layer)
+                        .is_some_and(|(scene, _)| scene.id() == group.id());
+                    if !same || from_layer == to_layer {
+                        continue;
+                    }
+                    self.visuals(&from_layer, false, out)
+                }
+            };
+            let arriving = self.visuals(&to_layer, false, out);
+            let (mut inner, inner_partners) = transition::plan(&children, &arriving, run, true);
+            for (_, track) in &mut inner.tracks {
+                *track = transition::with_timing(*track, timing);
+            }
+            inner.end_ms = timing.end_ms();
+            self.move_inside(&mut inner, &children, &inner_partners, run, out);
+            visual.inside = Some(Arc::new(transition::Inside {
+                group: group.id().clone(),
+                boxed_in: match &visual.image {
+                    SourceRef::Boxed(scene, _) => Some(scene.clone()),
+                    _ => None,
+                },
+                planned: inner,
+            }));
+        }
+    }
+
+    /// The scene the layer of `image` draws, for a nested scene placed as one image:
+    /// the scene itself, or the one its item's effects read.
+    fn group_layer(&self, image: &SourceRef, out: &Shot) -> Option<SceneId> {
+        match image {
+            SourceRef::Scene(id) => Some(id.clone()),
+            SourceRef::Boxed(scene, item) => {
+                match &out
+                    .boxes
+                    .get(&ChainOwner::Item(scene.clone(), item.clone()))?
+                    .source
+                {
+                    SourceRef::Scene(id) => Some(id.clone()),
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// `visual` as the shot can draw it, or `None` when it can't. A group whose children
+    /// move inside its layer ([`transition::Inside`]) is drawn from scene `id` of the
+    /// shot, which places each child by its track, through the group's video chain and
+    /// the group item's effects; a group among its children the same way, below `id`.
+    fn reshown(
+        &mut self,
+        visual: &Visual,
+        id: &SceneId,
+        start: MediaTime,
+        out: &mut Shot,
+    ) -> Option<Visual> {
+        let Some(inside) = visual.inside.as_deref() else {
+            return self.shows(&visual.image, out).then(|| visual.clone());
+        };
+        let state = self.state;
+        if state.scene(id).is_some() {
+            // A scene of the collection has the ID: the group shows as it is.
+            return None;
+        }
+        let mut placed = Vec::new();
+        let mut tracks = Vec::new();
+        for (index, (child, track)) in inside.planned.tracks.iter().enumerate() {
+            let Some(child) = self.reshown(child, &nested_inner_id(id, index), start, out) else {
+                continue;
+            };
+            placed.push(Placed {
+                item: child.item_id.clone(),
+                through: None,
+                source: child.image.clone(),
+                placement: Placement::Geometry(child.at.geometry),
+                crop: child.at.crop,
+                opacity: child.at.opacity,
+                blend: child.at.blend,
+                effects: None,
+                moving: Some((start, *track)),
+            });
+            tracks.push((child, *track));
+        }
+        out.scenes.insert(id.clone(), placed);
+        if let Some(group) = state.scene(&inside.group)
+            && let Some(chain) = Chain::of_filters(
+                &ChainOwner::Scene(id.clone()),
+                scene_filters(state, group),
+                GpuKey::Composite(id.clone()),
+                self.assets,
+            )
+        {
+            self.add_chain(ChainOwner::Scene(id.clone()), chain, out);
+        }
+        let layer = SourceRef::Scene(id.clone());
+        let image = match &inside.boxed_in {
+            None => layer,
+            Some(scene) => {
+                let item = self
+                    .items_of(scene)
+                    .into_iter()
+                    .find(|item| item.as_ref().id() == &visual.item_id)?;
+                self.boxed(id, item.as_ref(), &layer, out)?;
+                SourceRef::Boxed(id.clone(), visual.item_id.clone())
+            }
+        };
+        Some(Visual {
+            image,
+            inside: Some(Arc::new(transition::Inside {
+                planned: Planned {
+                    tracks,
+                    end_ms: inside.planned.end_ms,
+                },
+                ..inside.clone()
+            })),
+            ..visual.clone()
+        })
     }
 
     /// What a transition shows of scene `id` at one end: its items as
@@ -1049,6 +1256,7 @@ impl<'a> Planner<'a, '_> {
                 ..ItemTransition::default()
             },
             effects: Vec::new(),
+            inside: None,
         }]
     }
 
@@ -1328,6 +1536,7 @@ impl<'a> Planner<'a, '_> {
                 size,
                 settings: *item.transition(),
                 effects,
+                inside: None,
             });
         }
         path.remove(id);
@@ -1372,6 +1581,7 @@ impl<'a> Planner<'a, '_> {
                     opacity: item.opacity().get(),
                     blend: item.blend(),
                     effects,
+                    moving: None,
                 });
             }
         }
@@ -1509,6 +1719,8 @@ struct Layer {
     /// The box of an item whose effects run: `image` is their output, placed over the
     /// box grown by their outset, uncropped.
     boxed: Option<Boxed>,
+    /// Its track, for a group's child a transition moves inside the group's layer.
+    moving: Option<Moving>,
 }
 
 impl Shot {
@@ -1610,6 +1822,7 @@ fn schedule(shot: &Shot, program: &SceneId) -> Vec<Pass> {
                 opacity: OPAQUE,
                 blend: BlendMode::Normal,
                 boxed: None,
+                moving: None,
             })
             .into_iter()
             .collect();
@@ -1779,6 +1992,12 @@ fn visit_into(
                 passes.filtered(shot, &owner, done);
                 GpuKey::Filtered(owner)
             }
+            // A moving child with effects shows their output, placed by its track.
+            SourceRef::Boxed(scene, item) if placed.moving.is_some() => {
+                let owner = ChainOwner::Item(scene.clone(), item.clone());
+                passes.filtered(shot, &owner, done);
+                GpuKey::Filtered(owner)
+            }
             SourceRef::Boxed(..) => continue,
             SourceRef::Frame(source) => GpuKey::Frame(source.clone()),
             SourceRef::Capture(spec) => GpuKey::Capture(spec.clone()),
@@ -1817,6 +2036,7 @@ fn visit_into(
             opacity: placed.opacity,
             blend: placed.blend,
             boxed: placed.effects,
+            moving: placed.moving,
         });
     }
     path.remove(id);
@@ -1938,6 +2158,18 @@ struct LiveFields {
 /// [`view_of`] reads both IDs back; a scene of the collection with the same ID wins.
 fn view_id(group: &SceneId, keyframe: &SceneId) -> SceneId {
     SceneId::new(format!("\u{1}{}:{group}{keyframe}", group.as_str().len()))
+}
+
+/// The ID a transition shot draws the group at track `index` under when its children
+/// move inside its layer ([`transition::Inside`]), or are held there as a retargeted
+/// transition found them. A control character starts it, as for [`view_id`].
+fn inner_id(index: usize) -> SceneId {
+    SceneId::new(format!("\u{2}{index}"))
+}
+
+/// The ID of a group at track `index` inside the group drawn as `parent`.
+fn nested_inner_id(parent: &SceneId, index: usize) -> SceneId {
+    SceneId::new(format!("{parent}/{index}"))
 }
 
 /// The ID a shot plans group `group` under as the keyframe scene `keyframe` draws it,
@@ -2688,7 +2920,7 @@ pub(crate) fn compose(
     };
     let mut items: Vec<Item<'_>> = Vec::new();
     for pass in nested {
-        fill_items(&mut items, (cache, chains), pass, live);
+        fill_items(&mut items, (cache, chains), pass, (at, canvas), live);
         compositor.render_into(
             &scene(canvas, Color::TRANSPARENT, &items),
             image(&pass.key)?,
@@ -2698,7 +2930,9 @@ pub(crate) fn compose(
         (_, Some(transition)) => {
             fill_tracks(&mut items, (cache, chains), transition, canvas, at);
         }
-        (Some(root), None) => fill_items(&mut items, (cache, chains), root, live),
+        (Some(root), None) => {
+            fill_items(&mut items, (cache, chains), root, (at, canvas), live);
+        }
         (None, None) => items.clear(),
     }
     if direct {
@@ -2757,7 +2991,7 @@ fn run_chains(
             ChainStep::Pass(pass) => {
                 cache.layer(compositor, &pass.key, canvas.width(), canvas.height())?;
                 let mut items = Vec::new();
-                fill_items(&mut items, (&*cache, &*chains), pass, live);
+                fill_items(&mut items, (&*cache, &*chains), pass, (at, canvas), live);
                 let Some(layer) = cache.get(&pass.key) else {
                     continue;
                 };
@@ -2895,19 +3129,33 @@ pub(crate) fn claim_layers(
     Ok(())
 }
 
-/// Replaces `items` with the layers of `pass`, with the live values in `live` applied. A
-/// layer whose image is not cached (a failed or skipped upload), or whose video chain
-/// failed this frame, draws nothing.
+/// Replaces `items` with the layers of `pass`, with the live values in `live` applied,
+/// and a moving layer's track sampled at `at` on a canvas of `canvas`. A layer whose
+/// image is not cached (a failed or skipped upload), or whose video chain failed this
+/// frame, draws nothing.
 fn fill_items<'a>(
     items: &mut Vec<Item<'a>>,
     (cache, chains): (&'a ResourceCache<GpuKey>, &Chains),
     pass: &Pass,
+    (at, canvas): (MediaTime, FrameSize),
     live: &LiveParams,
 ) {
+    let size = [canvas.width() as f32, canvas.height() as f32];
     items.clear();
     items.extend(pass.layers.iter().filter_map(|layer| {
         if chains.failed(&layer.image) {
             return None;
+        }
+        if let Some((start, track)) = &layer.moving {
+            let sampled = track.sample(transition::elapsed_ms(*start, at), size)?;
+            return Some(Item {
+                image: cache.get(&layer.image)?,
+                placement: Placement::Geometry(sampled.geometry),
+                crop: sampled.crop,
+                opacity: sampled.opacity,
+                blend: sampled.blend,
+                visible: true,
+            });
         }
         let (placement, crop) = live.apply(layer);
         let (placement, crop) = match &layer.boxed {
@@ -3258,6 +3506,7 @@ pub(crate) mod tests {
             opacity: super::OPAQUE,
             blend: jstream_protocol::BlendMode::Normal,
             effects: None,
+            moving: None,
         }
     }
 
@@ -3821,6 +4070,73 @@ pub(crate) mod tests {
         .expect("compose");
         drop(cache.end_frame(compositor));
         output.pixels().expect("invariant: read back").clone()
+    }
+
+    /// A layer a transition moves inside a nested scene (ADR-0049 §3) is drawn where its
+    /// track is at the frame's time: the nested pass samples it, as the program's
+    /// tracks are.
+    #[test]
+    fn a_moving_layer_is_drawn_where_its_track_is() {
+        use jstream_render::transition::{Endpoint, Timing, Track};
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let size = FrameSize::new(32, 18).expect("invariant: non-zero");
+        let half = |x: f32| Endpoint {
+            geometry: jstream_protocol::ItemGeometry::try_new(
+                jstream_protocol::Vec2::new(x, 540.0).expect("finite"),
+                jstream_protocol::Size::try_new(960.0, 1080.0).expect("positive"),
+            )
+            .expect("valid"),
+            crop: Crop::NONE,
+            opacity: super::OPAQUE,
+            blend: jstream_protocol::BlendMode::Normal,
+        };
+        let track = Track::Pair {
+            from: half(480.0),
+            to: half(1440.0),
+            timing: Timing {
+                delay_ms: 0.0,
+                duration_ms: 1000.0,
+                easing: jstream_protocol::Easing::Linear,
+            },
+            source: None,
+        };
+        let moving = Placed {
+            moving: Some((zero(), track)),
+            ..fill("green")
+        };
+        let mix = shot(vec![
+            (
+                "program",
+                vec![fill("red"), nest("inner", Placement::IDENTITY)],
+            ),
+            ("inner", vec![moving]),
+        ]);
+        let mut at = |ms: i64| {
+            cache.begin_frame();
+            let output = compose(
+                &mut compositor,
+                (&mut cache, &mut Chains::default()),
+                (
+                    &mix,
+                    MediaTime::new(ms, Timebase::new(1, 1000).expect("valid")),
+                ),
+                View::default(),
+                &LiveParams::default(),
+                &Every(None),
+                super::DrawAt::read(size),
+            )
+            .expect("compose");
+            drop(cache.end_frame(&compositor));
+            output.pixels().expect("invariant: read back").clone()
+        };
+        let start = at(0);
+        assert_eq!(start.pixel(8, 9), Some(GREEN), "the start: on the left");
+        assert_eq!(start.pixel(24, 9), Some(RED));
+        let end = at(1000);
+        assert_eq!(end.pixel(8, 9), Some(RED));
+        assert_eq!(end.pixel(24, 9), Some(GREEN), "the end: on the right");
     }
 
     /// A live value (ADR-0032) moves or crops its item where it is drawn, in every pass
