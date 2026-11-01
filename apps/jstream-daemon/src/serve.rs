@@ -95,6 +95,9 @@ pub fn engine(
         // it is now, so it sees the loaded collection and acts through the backends.
         engine.open_plugin_dir(dir);
     }
+    if let Some(dir) = &options.effects_dir {
+        engine.watch_effect_packs(dir);
+    }
     #[cfg(windows)]
     scan_clap_plugins(&engine);
     // `stats.tick`'s load: the process's CPU time, and a tick a second while idle.

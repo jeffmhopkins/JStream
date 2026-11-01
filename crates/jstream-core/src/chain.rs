@@ -1,6 +1,6 @@
 //! Video filter chains (ADR-0026, roadmap V0): a source's enabled video filters, run in
 //! order over its frame before it is placed, with `jstream-render`'s built-in filter
-//! kinds. A scene's enabled video filters (ADR-0065) run the same way, over the scene's
+//! kinds and the loaded effect packs' kinds ([`crate::effect_packs`]). A scene's enabled video filters (ADR-0065) run the same way, over the scene's
 //! composite ([`GpuKey::Composite`]), once per frame wherever the scene shows; each
 //! chain is keyed by its [`ChainOwner`].
 //!
@@ -40,6 +40,7 @@ use jstream_media::{FrameSize, MediaTime};
 use jstream_protocol::{FilterChain, FilterId, ItemId, Reference, SceneId, Settings, SourceId};
 use jstream_render::{Compositor, FilterClock, Image, RenderError, ResourceCache, VideoFilter};
 
+use crate::effect_packs::PackEffect;
 use crate::filter_assets::{self, FilterAsset, FilterAssets};
 use crate::snapshot::GpuKey;
 
@@ -94,6 +95,25 @@ pub(crate) struct ChainFilter {
     /// scene its setting names. `None` for a kind that reads none, or a `null` setting:
     /// it then passes its input through.
     pub(crate) scene: Option<GpuKey>,
+    /// The effect that draws it, for a kind from an effect pack; `None` for a built-in
+    /// kind.
+    pub(crate) effect: Option<PackEffect>,
+}
+
+impl ChainFilter {
+    /// A render filter drawing it: its pack's effect, or the built-in kind.
+    fn video_filter(&self) -> Option<VideoFilter> {
+        make(&self.kind, &self.settings, self.effect.as_ref())
+    }
+}
+
+/// A render filter of `kind` with `settings`: drawn by `effect` for a pack kind, else by
+/// the built-in kind of that ID. `None` for a kind this engine doesn't draw.
+fn make(kind: &str, settings: &Settings, effect: Option<&PackEffect>) -> Option<VideoFilter> {
+    match effect {
+        Some(effect) => Some(effect.video_filter(settings)),
+        None => VideoFilter::new(kind, settings),
+    }
 }
 
 /// A source's or a scene's video chain as a shot draws it: the image it starts from
@@ -109,7 +129,7 @@ impl Chain {
     /// `source`'s chain over `input`, or `None` when no filter of it runs: the chain is
     /// empty, every filter is disabled, or none is of a kind this engine draws (an
     /// effect pack that isn't loaded). Such a filter is bypassed. A filter that reads an
-    /// asset gets it from `assets`.
+    /// asset gets it from `assets`, and a pack kind's effect comes from there too.
     pub(crate) fn of(source: &Source, input: GpuKey, assets: &FilterAssets) -> Option<Self> {
         Self::of_filters(
             &ChainOwner::Source(source.id().clone()),
@@ -130,8 +150,10 @@ impl Chain {
         let filters: Vec<ChainFilter> = filters
             .iter()
             .filter(|filter| filter.enabled())
-            .filter(|filter| {
-                let drawn = VideoFilter::new(filter.kind(), filter.settings()).is_some();
+            .filter_map(|filter| {
+                let effect = assets.effects().get(filter.kind()).cloned();
+                let drawn = effect.is_some()
+                    || VideoFilter::new(filter.kind(), filter.settings()).is_some();
                 if !drawn {
                     tracing::debug!(
                         owner = %owner,
@@ -139,17 +161,18 @@ impl Chain {
                         kind = filter.kind(),
                         "video filter kind is not drawn by this engine; bypassed"
                     );
+                    return None;
                 }
-                drawn
-            })
-            .map(|filter| ChainFilter {
-                id: filter.id().clone(),
-                kind: filter.kind().to_owned(),
-                settings: filter.settings().clone(),
-                reference: filter_assets::wanted(filter.kind(), filter.settings())
-                    .and_then(|key| assets.get(&key).cloned()),
-                scene: scene_read(filter.kind(), filter.settings())
-                    .map(|id| GpuKey::reference(&id)),
+                Some(ChainFilter {
+                    id: filter.id().clone(),
+                    kind: filter.kind().to_owned(),
+                    settings: filter.settings().clone(),
+                    reference: filter_assets::wanted(filter.kind(), filter.settings())
+                        .and_then(|key| assets.get(&key).cloned()),
+                    scene: scene_read(filter.kind(), filter.settings())
+                        .map(|id| GpuKey::reference(&id)),
+                    effect,
+                })
             })
             .collect();
         (!filters.is_empty()).then_some(Self { input, filters })
@@ -208,7 +231,7 @@ impl Chain {
         self.filters
             .iter()
             .map(|filter| {
-                if let Some(drawn) = VideoFilter::new(&filter.kind, &filter.settings) {
+                if let Some(drawn) = filter.video_filter() {
                     size = drawn.output_size(size.0, size.1);
                 }
                 size
@@ -222,7 +245,7 @@ impl Chain {
     pub(crate) fn output_size(&self, width: u32, height: u32) -> (u32, u32) {
         self.filters
             .iter()
-            .filter_map(|filter| VideoFilter::new(&filter.kind, &filter.settings))
+            .filter_map(ChainFilter::video_filter)
             .fold((width, height), |(w, h), filter| filter.output_size(w, h))
     }
 }
@@ -232,6 +255,8 @@ struct Running {
     id: FilterId,
     kind: String,
     settings: Settings,
+    /// The pack effect drawing it, for a pack kind: a reload makes the filter again.
+    effect: Option<PackEffect>,
     filter: VideoFilter,
     /// The version of the asset whose image `filter` reads, if any.
     reference: Option<u64>,
@@ -480,7 +505,8 @@ fn output_key(source: &ChainOwner, at: usize, last: usize) -> GpuKey {
 /// Makes `running` run `filters`: a filter with the same ID and kind as the one at its
 /// place keeps its state and takes new settings in place; any other change rebuilds the
 /// list, keeping each filter whose ID and kind it finds, and gives each its layer's key
-/// for `source`'s chain. Allocates nothing when nothing changed.
+/// for `source`'s chain. A pack filter whose effect was reloaded is made again with the
+/// new effect. Allocates nothing when nothing changed.
 fn sync(
     source: &ChainOwner,
     running: &mut Vec<Running>,
@@ -494,10 +520,7 @@ fn sync(
             .all(|(r, f)| r.id == f.id && r.kind == f.kind);
     if same_shape {
         for (r, f) in running.iter_mut().zip(filters) {
-            if r.settings != f.settings {
-                r.filter.set_settings(&f.settings);
-                r.settings = f.settings.clone();
-            }
+            update(r, f, retired);
         }
         return;
     }
@@ -509,17 +532,15 @@ fn sync(
             .map(|at| old.swap_remove(at));
         let entry = match kept {
             Some(mut r) => {
-                if r.settings != f.settings {
-                    r.filter.set_settings(&f.settings);
-                    r.settings = f.settings.clone();
-                }
+                update(&mut r, f, retired);
                 r
             }
-            None => match VideoFilter::new(&f.kind, &f.settings) {
+            None => match f.video_filter() {
                 Some(filter) => Running {
                     id: f.id.clone(),
                     kind: f.kind.clone(),
                     settings: f.settings.clone(),
+                    effect: f.effect.clone(),
                     filter,
                     reference: None,
                     scene: None,
@@ -537,6 +558,25 @@ fn sync(
         r.key = output_key(source, at, last);
     }
     retired.extend(old.into_iter().map(|r| r.filter));
+}
+
+/// Gives `running` the settings of `filter`, the same filter as the plan has it now: in
+/// place, or, when its pack effect was reloaded, by making it again with the new effect
+/// and retiring the old one. A pack effect keeps no state between frames, so nothing is
+/// lost.
+fn update(running: &mut Running, filter: &ChainFilter, retired: &mut Vec<VideoFilter>) {
+    if running.effect != filter.effect {
+        if let Some(fresh) = filter.video_filter() {
+            retired.push(std::mem::replace(&mut running.filter, fresh));
+        }
+        running.effect = filter.effect.clone();
+        running.settings = filter.settings.clone();
+        return;
+    }
+    if running.settings != filter.settings {
+        running.filter.set_settings(&filter.settings);
+        running.settings = filter.settings.clone();
+    }
 }
 
 /// Gives `running` the image of the asset `filter` reads, when that asset changed: the
@@ -557,7 +597,7 @@ fn refer(
         return;
     }
     running.reference = wanted;
-    let Some(mut fresh) = VideoFilter::new(&filter.kind, &filter.settings) else {
+    let Some(mut fresh) = filter.video_filter() else {
         return;
     };
     if let Some(asset) = &filter.reference {
@@ -619,7 +659,7 @@ fn see(
     {
         return true;
     }
-    let Some(mut fresh) = VideoFilter::new(&running.kind, &running.settings) else {
+    let Some(mut fresh) = make(&running.kind, &running.settings, running.effect.as_ref()) else {
         return true;
     };
     let held = Arc::new(layer.clone());
@@ -819,6 +859,54 @@ mod tests {
         let pixel = draw(&mut compositor, (&mut cache, &mut chains), &plain, 1);
         assert_eq!(pixel, WHITE);
         assert_eq!((chains.runs, chains.len()), (2, 0), "the filter is retired");
+    }
+
+    /// A filter of an effect pack's kind is bypassed until its pack loads, then draws
+    /// like a built-in kind; a reloaded effect draws its new shader on the next frame.
+    #[test]
+    fn a_pack_filter_draws_once_its_pack_loads() {
+        use crate::effect_packs::test_pack::{self, Temp};
+
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut graph = graph(&[]).with_kinds([test_pack::descriptor()]);
+        apply(
+            &mut graph,
+            vec![Edit::FilterAdd {
+                owner: FilterOwner::Source {
+                    source_id: SourceId::new("cam"),
+                },
+                chain: FilterChain::Video,
+                filter_id: FilterId::new("tint"),
+                kind: test_pack::KIND.into(),
+                settings: Settings::default(),
+                enabled: None,
+                index: None,
+            }],
+        );
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+
+        let unloaded = shot_with(&graph, &FilterAssets::default());
+        assert_eq!(unloaded.chain_count(), 0, "bypassed before its pack loads");
+        let pixel = draw(&mut compositor, (&mut cache, &mut chains), &unloaded, 1);
+        assert_eq!(pixel, WHITE);
+
+        let temp = Temp::new("chain");
+        let effects = |effect| {
+            FilterAssets::new().with_effects(Arc::new(
+                [(test_pack::KIND.to_owned(), effect)].into_iter().collect(),
+            ))
+        };
+        let loaded = shot_with(&graph, &effects(test_pack::effect(&temp, test_pack::MUL)));
+        assert_eq!(loaded.chain_count(), 1);
+        let pixel = draw(&mut compositor, (&mut cache, &mut chains), &loaded, 1);
+        assert_eq!(pixel, [0, 255, 0, 255], "white times the default green");
+
+        let reloaded = shot_with(&graph, &effects(test_pack::effect(&temp, test_pack::BLUE)));
+        let pixel = draw(&mut compositor, (&mut cache, &mut chains), &reloaded, 1);
+        assert_eq!(pixel, [0, 0, 255, 255], "the reloaded shader");
+        assert_eq!(chains.len(), 1, "the filter was made again, not added");
     }
 
     /// Applies `edits` to `graph`.
