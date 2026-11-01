@@ -7,9 +7,11 @@
 //! side, through a [`CaptureDecoder`] the engine passes in; the device backend never
 //! decodes them itself.
 
+use std::sync::Arc;
+
 use jstream_media::{FrameSize, MediaTime, PixelFormat, Timebase};
 
-use crate::{CaptureStream, DeviceId, PlatformError, VideoSurface};
+use crate::{CaptureStream, DeviceId, GpuContext, PlatformError, VideoSurface};
 
 /// A video capture device as [`VideoDevices::devices`] lists it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -141,6 +143,26 @@ pub trait VideoDevices: Send + Sync {
         format: &VideoDeviceFormat,
         decoder: Option<Box<dyn CaptureDecoder>>,
     ) -> Result<Box<dyn CaptureStream>, PlatformError>;
+
+    /// This backend on `context`'s device: its streams deliver `VideoSurface::Gpu`
+    /// frames that render samples without a CPU copy (README › GPU frames), as
+    /// [`Capture::on_context`](crate::Capture::on_context)'s do. `Ok(None)`, the
+    /// default, when the backend has no GPU path; the engine then opens devices on
+    /// this backend and takes their CPU frames.
+    ///
+    /// The backend on the context opens only the formats it delivers there, and is
+    /// [`PlatformError::Unsupported`] for the others, so the engine opens those on this
+    /// backend. The engine never asks it for a compressed format.
+    ///
+    /// # Errors
+    /// [`PlatformError::InvalidState`] for a context another platform opened.
+    fn on_context(
+        &self,
+        context: &GpuContext,
+    ) -> Result<Option<Arc<dyn VideoDevices>>, PlatformError> {
+        let _ = context;
+        Ok(None)
+    }
 }
 
 #[cfg(test)]

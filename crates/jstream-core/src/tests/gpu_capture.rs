@@ -26,10 +26,11 @@ use jstream_platform::fake::{
 };
 use jstream_platform::wgpu;
 use jstream_platform::{
-    AdapterId, AudioEncoder, AudioEncoderConfig, Backends, Capture, CaptureStats, CaptureStream,
-    CaptureTarget, CaptureTargetInfo, CodecInfo, Codecs, FrameSync, GpuContext, GpuFrame,
-    GpuInterop, MediaClock, PlatformError, VideoDecoder, VideoDecoderConfig, VideoEncoder,
-    VideoEncoderConfig, VideoSurface,
+    AdapterId, AudioEncoder, AudioEncoderConfig, Backends, Capture, CaptureDecoder, CaptureStats,
+    CaptureStream, CaptureTarget, CaptureTargetInfo, CodecInfo, Codecs, DeviceId, FrameSync,
+    GpuContext, GpuFrame, GpuInterop, MediaClock, PlatformError, VideoDecoder, VideoDecoderConfig,
+    VideoDeviceFormat, VideoDeviceInfo, VideoDevices, VideoEncoder, VideoEncoderConfig,
+    VideoSurface,
 };
 use jstream_protocol::{Batch, Edit, OutputId, OutputState, Settings, SourceId, SourceKind};
 use jstream_render::{Compositor, OpenOptions};
@@ -372,6 +373,127 @@ fn with_gpu_interop_capture_moves_onto_the_device_or_falls_back() {
         let backends = backends(&clock, Arc::new(SoftwareGpu), mode);
         assert_eq!(path(&backends), expected, "{mode:?}");
     }
+}
+
+/// Fake devices whose `on_context` gives themselves, refuses, or (`None`) is the
+/// trait's default.
+struct DevicesOnContext {
+    devices: FakeVideoDevices,
+    refuse: Option<bool>,
+}
+
+impl VideoDevices for DevicesOnContext {
+    fn devices(&self) -> Result<Vec<VideoDeviceInfo>, PlatformError> {
+        self.devices.devices()
+    }
+    fn formats(&self, device: &DeviceId) -> Result<Vec<VideoDeviceFormat>, PlatformError> {
+        self.devices.formats(device)
+    }
+    fn open(
+        &self,
+        device: &DeviceId,
+        format: &VideoDeviceFormat,
+        decoder: Option<Box<dyn CaptureDecoder>>,
+    ) -> Result<Box<dyn CaptureStream>, PlatformError> {
+        self.devices.open(device, format, decoder)
+    }
+    fn on_context(
+        &self,
+        _context: &GpuContext,
+    ) -> Result<Option<Arc<dyn VideoDevices>>, PlatformError> {
+        match self.refuse {
+            None => Ok(None),
+            Some(true) => Err(PlatformError::InvalidState {
+                what: "on_context",
+                state: "the test refuses every context",
+            }),
+            Some(false) => Ok(Some(Arc::new(self.devices.clone()))),
+        }
+    }
+}
+
+/// `open_capture` asks the video-device backend for its GPU path once there is a
+/// platform device, and keeps none when the backend has none or refuses the context.
+#[test]
+fn with_gpu_interop_video_devices_are_asked_onto_the_device() {
+    let _gpu = one_gpu_test_at_a_time();
+    if !have_software_gpu() {
+        return;
+    }
+    let clock = FakeClock::new(Timebase::MICROS);
+    for (interop, refuse, expected) in [
+        (true, Some(false), true),
+        (true, None, false),
+        (true, Some(true), false),
+        (false, Some(false), false),
+    ] {
+        let gpu: Arc<dyn GpuInterop> = if interop {
+            Arc::new(SoftwareGpu)
+        } else {
+            Arc::new(FakeGpuInterop)
+        };
+        let mut backends = backends(&clock, gpu, GpuMode::None);
+        backends.video_devices = Arc::new(DevicesOnContext {
+            devices: FakeVideoDevices::new(clock.clone()),
+            refuse,
+        });
+        let parts = parts_from(
+            &backends,
+            gpu_draw(),
+            GPU_OPEN_TIMEOUT,
+            Arc::new(RenderHub::default()),
+            Arc::new(Wanted::default()),
+            (1280, 720),
+        );
+        let opened = open_capture(&parts).expect("a capture path");
+        assert_eq!(
+            opened.backends.gpu_devices.is_some(),
+            expected,
+            "interop {interop}, refuse {refuse:?}"
+        );
+    }
+}
+
+/// The engine's `SharedVideoDevices` passes `on_context` through: no GPU view when the
+/// platform's backend has none, its refusal as it is, and otherwise a view sharing the
+/// same open devices, so a CPU-view open of a device the view opened on the GPU path
+/// moves it rather than opening it twice.
+#[test]
+fn shared_video_devices_pass_on_context_through() {
+    let _gpu = one_gpu_test_at_a_time();
+    if !have_software_gpu() {
+        return;
+    }
+    let context = SoftwareGpu.open_device().expect("a software device");
+    let clock = FakeClock::new(Timebase::MICROS);
+    for refuse in [None, Some(true)] {
+        let shared = crate::runtime::SharedVideoDevices::new(Arc::new(DevicesOnContext {
+            devices: FakeVideoDevices::new(clock.clone()),
+            refuse,
+        }));
+        match (refuse, shared.on_context(&context)) {
+            (None, Ok(None)) | (Some(true), Err(PlatformError::InvalidState { .. })) => {}
+            (_, other) => panic!("refuse {refuse:?}: {:?}", other.map(|v| v.is_some())),
+        }
+    }
+    let fake = FakeVideoDevices::new(clock.clone());
+    let shared = crate::runtime::SharedVideoDevices::new(Arc::new(DevicesOnContext {
+        devices: fake.clone(),
+        refuse: Some(false),
+    }));
+    let on_gpu = shared
+        .on_context(&context)
+        .expect("our context")
+        .expect("a GPU view");
+    let id = DeviceId::new(jstream_platform::fake::FAKE_WEBCAM);
+    let format = shared.formats(&id).expect("formats")[0];
+    let program = on_gpu
+        .open(&id, &format, None)
+        .expect("opens on the GPU view");
+    let preview = shared.open(&id, &format, None).expect("moves and shares");
+    assert_eq!(fake.open_streams(), 1, "one open, shared by both views");
+    drop((program, preview));
+    assert_eq!(fake.open_streams(), 0);
 }
 
 /// What the render thread's compositor saw: whether it opened on the platform's
