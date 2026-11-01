@@ -2103,7 +2103,7 @@ stamp = { hash = "b3:6a8de9fcad8ead85" }
 stamp = { hash = "b3:d74d3e9e3322b8fc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "session.rs moves the fallback lookup into Shared::codec; the encode thread still sets the cell after the first encode that changes the codec, before polling packets, which is why a subscriber sees it by its first packet" }
 
 ["CRATE-jstream-encode#design"."file:crates/jstream-encode/src/tests.rs"]
-stamp = { hash = "b3:0f0f40966c64dd97", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "tests.rs adds the subscription fallback test, deterministic (finish-free, recv after pushes); Design's claims hold" }
+stamp = { hash = "b3:0f0f40966c64dd97", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "tests.rs adds the subscription fallback test, deterministic (it receives after pushing, then finishes); Design's claims hold" }
 
 ["CRATE-jstream-encode#design"."file:crates/jstream-encode/src/video.rs"]
 stamp = { hash = "b3:4500e061e4435b08", by = "agent:claude-443", note = "Re-read threads and pacing, drops and codec configuration: the encode loop now asks the driver for a codec change after each encode (a bool and name compare, allocating only on the one change) and stores it in a OnceLock, so no lock and no wait on the control plane; Subscription::info still carries the opened codec." }
