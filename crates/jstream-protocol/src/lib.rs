@@ -7,6 +7,7 @@
 
 #![forbid(unsafe_code)]
 
+mod activity;
 mod audio;
 mod command;
 mod encoder;
@@ -36,6 +37,7 @@ mod transition;
 mod version;
 mod youtube;
 
+pub use activity::{ActivityEntry, MAX_ACTIVITY_ENTRIES};
 pub use audio::{
     AudioFollow, BusInfo, BusMeter, BusMonitor, Loudness, MAX_BUSES, MAX_GAIN_DB,
     MAX_MONITOR_DEVICE_LEN, MIN_GAIN_DB, MonitorTap, SendInfo, SourceAudio, SourceMeter,

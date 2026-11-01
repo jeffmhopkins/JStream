@@ -68,9 +68,9 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Mixer](#mixer) | 7 | 6 | 0 | 0 | 0 | 1 |
 | [Outputs](#outputs) | 4 | 3 | 0 | 0 | 1 | 0 |
 | [Transitions](#transitions) | 6 | 6 | 0 | 0 | 0 | 0 |
-| [Stream stats, live chat, agent activity](#live-panels) | 4 | 0 | 0 | 0 | 4 | 0 |
+| [Stream stats, live chat, agent activity](#live-panels) | 4 | 1 | 0 | 0 | 3 | 0 |
 | [Keyboard](#keyboard) | 7 | 6 | 0 | 0 | 0 | 1 |
-| **Total** | **130** | **111** | **8** | **0** | **7** | **4** |
+| **Total** | **130** | **112** | **8** | **0** | **6** | **4** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -137,7 +137,7 @@ wait on until their rows are built ([live panels](#live-panels)).
 | DK-05 | Close twice | × arms red on the first click, closes on the second; disarms after 3 s or when the pointer leaves. | ✅ | |
 | DK-06 | Drag to dock | Drag a tab onto a tab strip (group), a panel's half (split before or after), or a zone (append); empty zones show "Drop here" placeholders while dragging. | ✅ | Pointer drag rather than HTML drag and drop, which desktop webviews can intercept. Unlike the spec's `cursor: grab`, a tab keeps the arrow pointer, on the maintainer's alpha feedback; the grabbing hand shows only while it drags. |
 | DK-07 | Home zones | A panel added from the View menu goes to its home zone (Scenes and Scene objects left; Inspector, Transform, Filters, chat, stats and agent right; Mixer, Outputs and Transitions bottom). | ✅ | |
-| DK-08 | Editing and Live layouts | Editing is the default: left Scenes, Scene objects; right Inspector (weight 2), Filters+Transform; bottom Mixer, Outputs+Transitions. Live: Scenes; Mixer and Transitions under the canvas; chat, then stats+Outputs+Agent on the right. | 🟡 | Both built with the panels the UI has: Editing puts Filters and Transform in one group under the Inspector, Filters shown. Live chat, Stream stats and Agent activity only say what they wait on, so Live leaves them out until the engine supports them. |
+| DK-08 | Editing and Live layouts | Editing is the default: left Scenes, Scene objects; right Inspector (weight 2), Filters+Transform; bottom Mixer, Outputs+Transitions. Live: Scenes; Mixer and Transitions under the canvas; chat, then stats+Outputs+Agent on the right. | 🟡 | Both built with the panels the UI has: Editing puts Filters and Transform in one group under the Inspector, Filters shown. Live puts Agent activity as a second tab beside Outputs; Live chat and Stream stats only say what they wait on, so Live leaves them out until the engine supports them. |
 | DK-09 | "(modified)" and saving | Any move, close, resize or View toggle marks the layout "(modified)"; layouts can be saved as "My layout N" and reset. | ✅ | |
 | DK-10 | Layouts persist | Layouts survive a reload, the same on the desktop app and in a browser. | 🟡 | Kept in the browser's storage, so per browser rather than the same everywhere. Decision register D35 recommends an engine-side UI settings store, which the protocol doesn't have. |
 
@@ -389,7 +389,7 @@ Spec: [panels › stream stats](../design/ui-prototype/spec-panels.md#stream-sta
 | ST-01 | Stream stats | LIVE/READY pill and uptime, watching, likes, chat rate, dropped frames, stream health, 2-minute bitrate chart, details. | 🔒 | Y4 (YouTube health and audience stats); bitrate needs engine stats (D39). |
 | CH-01 | Live chat | YouTube chat with badges and Super Chats, pinned message, composer. | 🔒 | Y4 (#363) and the OAuth client. |
 | CH-02 | Show on stream | Feature one message on stream. | 🔒 | Y4 (#363 draws the featured message). |
-| AG-01 | Agent activity | What MCP clients changed, newest first. | 🔒 | An audit log over the protocol (decision register D38). |
+| AG-01 | Agent activity | What MCP clients changed, newest first. | ✅ | `activity.list` (protocol 0.51, [ADR-0083](adr/0083-activity-log-over-the-protocol.md)): the engine's sentence for each call under the client's name and how long ago; JStream's own UIs are left out, a failed call shows its error code. |
 
 <a id="keyboard"></a>
 ## Keyboard

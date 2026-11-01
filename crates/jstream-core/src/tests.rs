@@ -3,6 +3,7 @@
 //! fixture), events, the placeholder outputs, and a differential run against
 //! `jstream-control`'s mock engine.
 
+mod activity;
 mod audio;
 mod audio_routing;
 #[cfg(feature = "wasm-plugins")]

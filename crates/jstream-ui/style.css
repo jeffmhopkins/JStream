@@ -1484,3 +1484,10 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Agent activity (AG-01): newest first, a mono meta line over the engine's sentence. */
+.agent-activity .problem { margin: 0; }
+.activity-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.activity-log li { display: flex; flex-direction: column; gap: 2px; }
+.activity-meta { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; color: var(--dim); }
+.activity-log li.failed .activity-meta { color: var(--problem); }

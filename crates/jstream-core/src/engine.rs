@@ -7,9 +7,10 @@
 //! Device open and thread joins happen after it is released. Subscribers are woken only
 //! after the lock is released.
 
+use crate::activity_log::{self, Activity};
 use crate::audio::{AudioRouting, MixerHandles};
 use crate::audio_sources::AudioSources;
-use crate::audit::{self, Audit, AuditSink};
+use crate::audit::{self, Audit, AuditEntry, AuditSink};
 use crate::collection::{CollectionFile, CollectionFileError};
 use crate::drops::{self, DropLedger, DropSource, DropSourceId};
 use crate::events::{QueueRef, Subscribers, Subscription};
@@ -294,7 +295,8 @@ impl Engine {
 
     /// Records every batch, undo, redo and action this engine executes in `sink`, after
     /// the call and with no engine lock held (see [`AuditSink`]). Without a sink nothing
-    /// is recorded. Every clone of the engine shares it.
+    /// is written to it; the in-memory activity log (`activity.list`, ADR-0083) keeps
+    /// the last entries either way. Every clone of the engine shares it.
     #[must_use]
     pub fn with_audit(self, sink: Arc<dyn AuditSink>) -> Self {
         self.shared.audit.set(sink);
@@ -847,16 +849,22 @@ impl Engine {
         if ended.is_empty() {
             return;
         }
-        let Some(sink) = self.shared.audit.sink() else {
-            return;
-        };
         for (request_id, ended) in ended {
-            sink.record(audit::gesture_entry(
+            self.record(audit::gesture_entry(
                 ended,
                 client_name.to_owned(),
                 request_id,
                 rev,
             ));
+        }
+    }
+
+    /// Records `entry`: it joins the activity log, then goes to the host's audit sink,
+    /// if any, with no lock held.
+    fn record(&self, entry: AuditEntry) {
+        lock(&self.shared.state).activity.push(&entry);
+        if let Some(sink) = self.shared.audit.sink() {
+            sink.record(entry);
         }
     }
 
@@ -888,16 +896,17 @@ impl Engine {
         state.graph.rev()
     }
 
-    /// What an audit entry needs before its call runs: the current `rev` and the
-    /// client's name from its latest `hello`.
-    fn audit_context(&self, client_id: &ClientId) -> (Rev, String) {
+    /// What an audit entry needs before `call` runs: the current `rev`, the client's
+    /// name from its latest `hello`, and the activity log's sentence for the call.
+    fn audit_context(&self, client_id: &ClientId, call: &Call) -> audit::Pending {
         let state = lock(&self.shared.state);
         let name = state
             .client_names
             .get(client_id)
             .cloned()
             .unwrap_or_default();
-        (state.graph.rev(), name)
+        let summary = activity_log::describe(call, state.graph.state());
+        audit::Pending::new(call, state.graph.rev(), name, summary)
     }
 
     /// Opens an event subscription: the stream, and the weak handle its session keeps
@@ -940,10 +949,7 @@ impl Engine {
             drop(_entered);
             return Executed::Pending(self.video_snapshot(), span);
         }
-        let audit = self.shared.audit.sink_for(&call).map(|sink| {
-            let (rev, client_name) = self.audit_context(client_id);
-            (sink, audit::Pending::new(&call, rev, client_name))
-        });
+        let audit = Audit::records(&call).then(|| self.audit_context(client_id, &call));
         let output = match &call {
             Call::Action {
                 action:
@@ -1029,8 +1035,8 @@ impl Engine {
             }
             (Err(error), None) => tracing::debug!(code = error.code(), "call failed"),
         }
-        if let Some((sink, pending)) = audit {
-            sink.record(pending.finish(client_id, request_id, &result));
+        if let Some(pending) = audit {
+            self.record(pending.finish(client_id, request_id, &result));
         }
         Executed::Ready(Box::new(result))
     }
@@ -2507,6 +2513,9 @@ struct State {
     /// Every client's open live-value gestures (ADR-0032), and the committed values the
     /// render thread has not caught up with yet.
     gestures: Gestures,
+    /// The last entries of the audit log, with their sentences (ADR-0083), for
+    /// `activity.list`.
+    activity: Activity,
     /// Gestures cancelled or expired by the call running now, with its request, for the
     /// audit log once the lock is released.
     ended: Vec<(Option<RequestId>, Ended)>,
@@ -2937,6 +2946,10 @@ impl State {
                     preview_scene: self.studio.preview().cloned(),
                 },
                 Query::DeviceList => return Err(served_by_the_server(query.name())),
+                Query::ActivityList { after_seq, limit } => QueryResult::ActivityList {
+                    now_ms: activity_log::unix_ms(std::time::SystemTime::now()),
+                    entries: self.activity.list(*after_seq, *limit),
+                },
                 Query::PrivacyGet => QueryResult::PrivacyGet { on: false },
                 Query::SourceSizes => QueryResult::SourceSizes {
                     sources: self

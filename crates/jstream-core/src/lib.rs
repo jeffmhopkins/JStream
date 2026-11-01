@@ -21,6 +21,7 @@
 #![forbid(unsafe_code)]
 
 mod activity;
+mod activity_log;
 mod audio;
 mod audio_sources;
 mod audit;

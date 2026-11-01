@@ -76,6 +76,10 @@ state machine. Contents:
   the `AuditSink` the host injects with `with_audit` (none by default). `AuditMemory`
   keeps entries in memory; `AuditFile` writes them as JSON lines to a size-capped
   `audit.jsonl` from its own writer thread (see *Audit log* in [Design](#design)).
+- **Activity log** (`activity_log.rs`): the last 100 audit entries with a sentence for
+  each, kept whether or not the host gave a sink, for `activity.list`
+  ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md); see *Audit log*
+  in [Design](#design)).
 - **Collection file** (`collection.rs`): loads the collection from the file the host
   names with `with_collection_file` (or creates it, with the four sample labels,
   `Graph::with_sample_labels`, at the same `rev`), and saves it atomically after every
@@ -2178,6 +2182,17 @@ landing in between does not skew it, and a failed call or an action reports the 
 client the server maps its own wire ID to it, so the entry can't yet be matched to the
 ID the client sent. The engine keeps each client's name for its lifetime, as it keeps
 the IDs.
+
+Every entry also carries a `summary`, one English sentence written from the
+collection under the same lock as the `rev` before, so a deleted object keeps its name
+and a gain, mute, opacity or visibility setter says what it changed from ("Mic gain
+−1.5 → −3.0 dB"); a batch is led by its delete, if any, else its first edit, "and N
+more changes" ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md)). The
+sentence names objects and gives numeric, on/off and enum values only, never settings,
+targets or keys, and is not written to `audit.jsonl`. The engine keeps the last 100
+entries with their sentences in memory (`activity_log.rs`), whether or not the host gave
+a sink, and answers `activity.list` from them; a restarted engine starts empty. An edit
+or action the sentence table doesn't name reads as its command name.
 
 Live values are logged once per gesture, never per `live.set`
 ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): `live.set` and `live.cancel`
