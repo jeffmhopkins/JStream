@@ -70,6 +70,10 @@ pub(crate) struct Update {
     pub(crate) effects: PackEffects,
     /// The kinds quarantined now, loaded or not, for `kind.list`.
     pub(crate) quarantined: BTreeSet<String>,
+    /// Counts up with each update [`Packs`] makes. The engine installs each under the
+    /// packs' lock, so in order, and ignores one older than the last it installed: a
+    /// stale update can't put a blamed effect back (#976 round 2).
+    pub(crate) seq: u64,
 }
 
 /// A device loss blamed on pack effects ([`Packs::blame`]).
@@ -122,6 +126,8 @@ pub(crate) struct Packs {
     /// Whether a poll panicked and that was logged, so one that keeps panicking logs
     /// once.
     panicked: bool,
+    /// The last [`Update::seq`] made.
+    seq: u64,
 }
 
 impl Packs {
@@ -135,6 +141,7 @@ impl Packs {
             quarantine,
             blamed: BTreeMap::new(),
             panicked: false,
+            seq: 0,
         }
     }
 
@@ -281,7 +288,8 @@ impl Packs {
     }
 
     /// The update for the loaded effects and quarantine as they are now.
-    fn update(&self, removed: Vec<String>, described: Vec<KindDescriptor>) -> Update {
+    fn update(&mut self, removed: Vec<String>, described: Vec<KindDescriptor>) -> Update {
+        self.seq += 1;
         let effects = self
             .loaded
             .iter()
@@ -305,6 +313,7 @@ impl Packs {
             described,
             effects: Arc::new(effects),
             quarantined,
+            seq: self.seq,
         }
     }
 

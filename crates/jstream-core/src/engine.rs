@@ -288,18 +288,18 @@ impl Engine {
     /// The quarantine of effects a GPU device loss was blamed on (#349) is kept in
     /// `root` too. Call it once: a second call is logged and ignored.
     pub fn watch_effect_packs(&self, root: impl Into<PathBuf>) {
-        let update = {
+        {
             let mut packs = lock(&self.shared.effect_packs);
             if packs.is_some() {
                 tracing::warn!("effect packs are already watched; one folder per engine");
                 return;
             }
-            packs
+            let update = packs
                 .insert(crate::effect_packs::Packs::new(root.into()))
-                .poll()
-        };
-        if let Some(update) = update {
-            self.shared.install_effects(update);
+                .poll();
+            if let Some(update) = update {
+                self.shared.install_effects(update);
+            }
         }
         let shared = Arc::downgrade(&self.shared);
         let spawned = thread::Builder::new()
@@ -310,8 +310,10 @@ impl Engine {
                     let Some(shared) = shared.upgrade() else {
                         return;
                     };
-                    let update = lock(&shared.effect_packs).as_mut().and_then(Packs::poll);
-                    if let Some(update) = update {
+                    // Installed under the packs' lock, so an update can't land after
+                    // a newer one (a blame's or an enable's) and undo it.
+                    let mut packs = lock(&shared.effect_packs);
+                    if let Some(update) = packs.as_mut().and_then(Packs::poll) {
                         shared.install_effects(update);
                     }
                 }
@@ -322,9 +324,12 @@ impl Engine {
     }
 
     /// `effect.enable`: lifts a quarantine, then re-plans. Runs with no engine lock
-    /// held, as the poll takes the packs' lock.
+    /// held, as the poll takes the packs' lock. Every pack update is installed under
+    /// the packs' lock (then the collection's; nothing takes them the other way round),
+    /// so an older update can't overwrite a newer one.
     fn effect_enable(&self, kind_id: &str) -> Result<CallResult, ProtocolError> {
-        let update = match lock(&self.shared.effect_packs).as_mut() {
+        let mut packs = lock(&self.shared.effect_packs);
+        let update = match packs.as_mut() {
             Some(packs) => packs.enable(kind_id)?,
             None => {
                 return Err(ProtocolError::invalid_argument(
@@ -337,6 +342,12 @@ impl Engine {
             self.shared.install_effects(update);
         }
         Ok(CallResult::action())
+    }
+
+    /// Installs a pack update as the watcher, a blame or `effect.enable` does.
+    #[cfg(test)]
+    pub(crate) fn install_effects(&self, update: crate::effect_packs::Update) {
+        self.shared.install_effects(update);
     }
 
     /// The body of the program stage's `jstream-device-losses` thread: for each GPU
@@ -2647,6 +2658,8 @@ struct State {
     /// The effect-pack kinds quarantined after a GPU device loss (#349), which
     /// `kind.list` marks.
     quarantined: BTreeSet<String>,
+    /// The last effect-pack update installed ([`crate::effect_packs::Update::seq`]).
+    effects_seq: u64,
     outputs: Outputs,
     /// The result of each batch, undo or redo applied with an idempotency key, per
     /// client: batches and history calls share a client's keys (ADR-0032). Kept for the
@@ -3559,6 +3572,17 @@ impl Shared {
         let mut wake = Vec::new();
         {
             let mut state = lock(&self.state);
+            // Every caller installs under the packs' lock, so updates come in order; one
+            // older than the last would put back what a newer one (a blame) took out.
+            if update.seq <= state.effects_seq {
+                tracing::warn!(
+                    seq = update.seq,
+                    installed = state.effects_seq,
+                    "an effect-pack update older than the installed one was ignored"
+                );
+                return;
+            }
+            state.effects_seq = update.seq;
             state.graph = std::mem::take(&mut state.graph)
                 .without_kinds(update.removed.iter().map(String::as_str))
                 .with_kinds(update.described);
@@ -3579,10 +3603,10 @@ impl Shared {
             recovering,
             handled,
         } = loss;
-        let blame = lock(&self.effect_packs)
-            .as_mut()
-            .map(|packs| packs.blame(&drawn));
-        let (blamed, quarantined) = match blame {
+        // Installed under the packs' lock, so a poll's update computed before the blame
+        // can't land after it and draw the blamed effect again.
+        let mut packs = lock(&self.effect_packs);
+        let (blamed, quarantined) = match packs.as_mut().map(|packs| packs.blame(&drawn)) {
             Some(crate::effect_packs::Blame {
                 blamed,
                 quarantined,
@@ -3595,6 +3619,7 @@ impl Shared {
             }
             None => (Vec::new(), Vec::new()),
         };
+        drop(packs);
         // The render snapshot without the quarantined kinds is published: the render
         // thread may draw on its new device.
         drop(handled);

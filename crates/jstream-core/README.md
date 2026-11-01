@@ -1002,7 +1002,10 @@ validating untrusted WGSL) is caught, logged once and changes nothing. Each effe
 `kind.describe` report it and a video chain, a scene's or an item's effects take it. A
 poll that changes kinds applies them under the collection lock (`Graph::without_kinds`
 for the ones gone, `with_kinds` for the added and changed ones), hands the effects to
-the live sources' `FilterAssets`, which every plan reads, and re-plans. A chain's filter
+the live sources' `FilterAssets`, which every plan reads, and re-plans. Every pack
+update, a poll's, a blame's or an `effect.enable`'s, is installed with the packs' lock
+still held (then the collection's; nothing takes them the other way round), so an
+older update can't land after a newer one and undo it. A chain's filter
 of a pack kind carries its `PackEffect`, so each compositor draws it through
 `Effect::video_filter` like a built-in kind. A reload is a new `PackEffect`, so the
 running filter is made again with the new WGSL and uniform layout; an effect that didn't
@@ -2672,8 +2675,8 @@ output stops, and `meters.tick` about ten times a second. The stage also starts
 render thread sends under the collection lock and announces the sources it changes
 (`source.size_changed`, *Source sizes* in [Design](#design)), and when the render thread
 lets go of its captures it forgets them all and ends. `Program`'s drop joins it after
-the render thread. So it does `jstream-device-losses`, which takes each GPU device loss
-the render thread sends it to the engine (below). The render loop counts each tick it composites into the render hub
+the render thread. It also joins `jstream-device-losses`, which hands each lost device
+the render thread sends to the engine (the lost-device paragraph above). The render loop counts each tick it composites into the render hub
 (`stats.tick`'s `program_frames`), and publishes capture mailbox skips and the frames an encode ring drops
 (`encode_frames`), and a tick that falls a
 whole period behind the clock skips to the current tick and counts the skipped ones in

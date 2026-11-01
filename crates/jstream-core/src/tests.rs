@@ -672,6 +672,37 @@ fn scene_filters_and_item_effects_are_taken() {
 /// The effect packs in the folder the engine watches become `video_filter` kinds, which a
 /// video chain takes; a pack removed from the folder takes its kinds out of `kind.list`.
 #[test]
+fn a_pack_update_older_than_a_blame_does_not_lift_its_quarantine() {
+    use crate::effect_packs::test_pack::{self, KIND, Temp};
+    use crate::effect_packs::{Blame, Packs};
+
+    let temp = Temp::new("stale-update");
+    test_pack::write(&temp.pack(), test_pack::MUL);
+    let mut packs = Packs::new(temp.0.clone());
+    let engine = Engine::new();
+    engine.install_effects(packs.poll().expect("the pack loads"));
+    // A reload's update, made before the loss but installed after the blame's: the race
+    // that installing under the packs' lock rules out (#976 round 2, B4).
+    std::fs::write(temp.pack().join("mul.wgsl"), test_pack::BLUE).expect("edit");
+    let stale = packs.poll().expect("the pack reloads");
+    assert!(stale.effects.contains_key(KIND));
+    let Blame { update, .. } = packs.blame(&[KIND.to_owned()].into());
+    let blamed = update.expect("the blame quarantines the kind");
+    assert!(!blamed.effects.contains_key(KIND));
+    engine.install_effects(blamed);
+    engine.install_effects(stale);
+    let control = connected(&engine);
+    let Ok(QueryResult::KindList { kinds }) = query(&control, Query::KindList) else {
+        panic!("kind.list");
+    };
+    let kind = kinds
+        .iter()
+        .find(|k| k.kind_id == KIND)
+        .expect("the blame's update described the kind");
+    assert!(kind.quarantined, "the older update was ignored");
+}
+
+#[test]
 fn effect_packs_become_video_filter_kinds() {
     use crate::effect_packs::test_pack::{self, KIND, Temp};
 
