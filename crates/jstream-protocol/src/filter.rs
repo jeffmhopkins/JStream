@@ -6,7 +6,7 @@
 //! (ADR-0025). The `filter.*` edits address a filter by its owner and its ID.
 //!
 //! Sources own chains, and so do the master stage and each output (ADR-0080). Since
-//! 0.61 the master's and every output's video chain take filters too (earlier minors
+//! 0.60 the master's and every output's video chain take filters too (earlier minors
 //! refused them). Since 0.43 a scene and an item also name a video chain (ADR-0065): a scene's
 //! filters run on its whole composite, and an item's effects on its cropped, fitted box.
 
@@ -34,7 +34,7 @@ pub enum FilterOwner {
     /// The master stage's chains, which apply to everything leaving JStream: every
     /// output, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose
     /// fader feeds it. Its audio chain runs once per block on each bus that feeds an
-    /// output, and monitoring hears the bus before it. Its video chain (since 0.61)
+    /// output, and monitoring hears the bus before it. Its video chain (since 0.60)
     /// runs once per frame on each mix an output draws, at the canvas size; the
     /// editing canvas, previews and `video.snapshot` show the mix before it. Its
     /// filters can't hold a reference.
@@ -42,7 +42,7 @@ pub enum FilterOwner {
     /// An output's own chains, which run after the master stage for that output only
     /// (ADR-0080 §2). An output with filters on its audio chain gets its own audio
     /// encode from its next start; edits to a chain it started with apply live. Every
-    /// output, the virtual camera included, has a video chain (since 0.61). A stream
+    /// output, the virtual camera included, has a video chain (since 0.60). A stream
     /// or recording with a filter on it, even a disabled one, gets its own render
     /// pass and encoder session from its next start, which `output.status` reports as
     /// `dedicated`; a virtual camera, which opens no encoder session, gets its own

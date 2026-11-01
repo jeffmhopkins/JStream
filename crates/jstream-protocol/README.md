@@ -187,7 +187,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.61 because the master
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.60 because the master
   stage and every output take video filters on their `video` chain (ADR-0080; no wire
   change: earlier minors refused them with `invalid_argument` on `chain`); 0.55 made
   a keyframe scene override the children of the groups in its parent's tree (#846; no
@@ -645,7 +645,7 @@ From 0.29 the master stage and each output own chains too
 `{"type":"master"}` and `{"type":"output","output_id":…}` and the same edits. The
 master's audio chain runs on every bus that feeds an output, after that bus's own chain;
 an output's runs after it, for that output only, and gives the output its own audio
-encode from its next start (edits to a chain it started with apply live). From 0.61
+encode from its next start (edits to a chain it started with apply live). From 0.60
 their video chains take filters too (earlier minors refused them with
 `invalid_argument` on `edits.N.chain`): the master's runs once per frame on each mix an
 output draws, and an output's after it, for that output only. A stream or recording

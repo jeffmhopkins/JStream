@@ -1234,7 +1234,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
             },
             invalid("edits.6.chain", "a chain holds at most 8 filters"),
         ),
-        // The master stage and outputs (ADR-0080): since 0.61 every output has a video
+        // The master stage and outputs (ADR-0080): since 0.60 every output has a video
         // chain, on an output that exists.
         (
             Batch::single(gain_on(

@@ -644,7 +644,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   the owners `scene` and `item`, `SceneInfo.filters`, `ItemInfo.effects` and a
   descriptor's `max_outset_px` are in the protocol
   ([ADR-0065](adr/0065-scene-chains-and-item-effects.md)). The engine runs both. Since
-  0.61 the master stage's and outputs' video chains take filters too (ADR-0080).
+  0.60 the master stage's and outputs' video chains take filters too (ADR-0080).
   `source.set_audio`, `bus.create`, `bus.rename`, `bus.set_fader`, `bus.delete`,
   `send.set` and `send.remove` edit sources' audio, the buses and the send matrix
   ([ADR-0028](adr/0028-audio-model-v2.md), protocol 0.19), and `bus.set_monitor` a
@@ -1089,7 +1089,7 @@ output: mix → master video chain → the output's own video chain → colour c
 output with a video chain. Both chains run at the canvas size over the mix's layer
 (`GpuKey::Mixed`), the master's once per frame per mix however many outputs draw it,
 and the result is fitted into the output's frame; a frame with neither chain draws as
-before. Built: the audio chains in protocol 0.29, the video chains in 0.61.
+before. Built: the audio chains in protocol 0.29, the video chains in 0.60.
 
 <a id="browser-source"></a>
 ## Browser source
