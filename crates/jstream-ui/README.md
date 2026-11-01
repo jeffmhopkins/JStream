@@ -104,8 +104,8 @@ Contents ([Design](#design) explains the choices):
   panel and its dialogs (`filters.rs`: `Filters`, `Chains`, which the Properties dialog
   shows too, `AddFilter`, `FilterSettings` and the `FilterDialogs` context that opens
   them and holds the chain an FX button picked, with the catalogue (a scanned CLAP plugin's `clap/` kind under Plugins), the row summaries,
-  the choice of in place or dialog, each owner's chains, name and note, and Cancel's
-  restore patch tested natively), the number
+  the choice of in place or dialog, each owner's chains, name and note (an item's
+  effects too), and Cancel's restore patch tested natively), the number
   field the panels share (`number.rs`) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
   (the program output and each output with its FX button, creating, editing and
   deleting streams, recordings and the virtual camera, their stream keys, start and
@@ -469,7 +469,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Add filter dialog's Uses the scene picker on it offers only the scenes whose picture
   doesn't hold the scene by nesting or as a keyframe; the engine refuses other cycles.
   Selecting another item or scene, or an item's Edit filters…, goes back to the
-  selection's chains.
+  selection's chains. Under the selected item's source's chains, the panel shows the
+  item's own effects (owner `item`, ADR-0065), a video chain for an item whose source has
+  a picture, with the same rows and dialogs; `Collection::chains` reads them from
+  `ItemInfo.effects`, and their Uses the scene picker leaves out the scenes whose
+  picture holds the item's scene. The Add filter dialog lists the vignette under Style.
 - **The shell** is the header bar over the workspace. A failed call shows in a
   dismissable bar. A confirmation, such as "Added a reference…" after a placement of
   an existing source or a duplicate, shows in the toast (`Studio::notify`, or
