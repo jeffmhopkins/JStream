@@ -1201,7 +1201,9 @@ After `welcome`, the server pushes every event to every client.
   `item_passes` theirs (each item's box layer and one per enabled effect);
   `layer_bytes` is the texture memory of all those layers (`Rgba16Float`, 8 bytes a
   pixel). A filter of a kind the engine doesn't draw is bypassed and not counted, nor
-  are a source's own chain and a `scene_mask`'s scene. An older engine leaves `chains`
+  are a source's own chain, a `scene_mask`'s scene, and the canvas-sized layer a
+  nested scene without a chain is drawn into for an item with effects that shows it
+  (it takes the place of the layer that scene would be drawn into anyway). An older engine leaves `chains`
   out, and a count missing from it parses as 0. `chains` was added in 0.48. Until
   [open question 7](#open-questions) every client receives it. Added in 0.6. A late plugin block is an audio drop in
   `audio_frames` once the mixer counts it

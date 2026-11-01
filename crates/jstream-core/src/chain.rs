@@ -1307,6 +1307,64 @@ mod tests {
             },
             "the scene's composite and grade; cam's 16x9 box and its two tints"
         );
+
+        // A chained scene placed twice in another chained scene counts once, and an
+        // item drawn by two scenes (main and its keyframe scene) counts once for each.
+        let mut nested = graph(&[]);
+        let mut edits = vec![
+            scene_red("main", true),
+            item_tint("cam", "#ff0000"),
+            Edit::SceneCreateVariant {
+                scene_id: SceneId::new("key"),
+                variant_of: SceneId::new("main"),
+                name: "Key".into(),
+            },
+            Edit::SceneCreate {
+                scene_id: SceneId::new("outer"),
+                name: "Outer".into(),
+                role: None,
+            },
+            scene_red("outer", true),
+        ];
+        for (source, scene) in [("nest", "main"), ("nest_key", "key")] {
+            edits.push(Edit::SourceCreate {
+                source_id: SourceId::new(source),
+                name: source.into(),
+                kind: SourceKind::Scene {
+                    scene_id: SceneId::new(scene),
+                },
+                settings: Default::default(),
+                duplicated_from: None,
+            });
+        }
+        for (item, source) in [("a", "nest"), ("b", "nest"), ("c", "nest_key")] {
+            edits.push(Edit::ItemAdd {
+                scene_id: SceneId::new("outer"),
+                item_id: ItemId::new(item),
+                source_id: SourceId::new(source),
+                transform: None,
+                geometry: None,
+                opacity: None,
+                blend: None,
+            });
+        }
+        apply(&mut nested, edits);
+        let planned = shot_of(&nested, "outer");
+        let canvas = planned.canvas().expect("a canvas");
+        let canvas_bytes = u64::from(canvas.width()) * u64::from(canvas.height()) * 8;
+        assert_eq!(
+            planned.chain_cost(),
+            ChainCost {
+                scene_chains: 3,
+                scene_layers: 6,
+                scene_passes: 6,
+                item_effects: 2,
+                item_layers: 4,
+                item_passes: 4,
+                layer_bytes: 6 * canvas_bytes + 4 * box_bytes,
+            },
+            "outer, main (placed twice) and key; cam in main and in key, one tint each"
+        );
     }
 
     /// A box with a geometry gets a layer of that box's size in canvas pixels, however

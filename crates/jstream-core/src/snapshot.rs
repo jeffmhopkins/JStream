@@ -2216,7 +2216,9 @@ impl Shot {
     /// counts what each frame runs once, before any mix draws. A scene's chain is its
     /// canvas-sized composite and one layer and pass per filter; an item's effects are
     /// its box's layer and pass and one per effect, at the sizes [`Chains`] makes them.
-    /// A source's chain and a scene a `scene_mask` reads are not counted.
+    /// A source's chain, a scene a `scene_mask` reads, and the reference layer a nested
+    /// scene without a chain is drawn into for an item's effects (in place of the layer
+    /// it would be drawn into anyway) are not counted.
     pub(crate) fn chain_cost(&self) -> ChainCost {
         let mut cost = ChainCost::default();
         let canvas = (self.canvas.width, self.canvas.height);

@@ -260,8 +260,10 @@ impl Event {
 /// layer the size of its box plus the effects' outset, and each enabled effect then
 /// draws one pass into a layer of its own. An item placed in two scenes counts once for
 /// each. A filter of a kind the engine doesn't draw is bypassed and not counted. Every
-/// layer is `Rgba16Float`, 8 bytes a pixel. A source's own filters (ADR-0026) and the
-/// scenes a `scene_mask` reads are not counted.
+/// layer is `Rgba16Float`, 8 bytes a pixel. Not counted: a source's own filters
+/// (ADR-0026), the scenes a `scene_mask` reads, and the canvas-sized layer a nested
+/// scene without a chain is drawn into for an item with effects that shows it (it takes
+/// the place of the layer the scene would be drawn into anyway).
 ///
 /// A missing field parses as 0, so a field added later can be left out by an older
 /// sender (R-API-001). Unknown fields are ignored.
