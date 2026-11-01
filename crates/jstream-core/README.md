@@ -1381,12 +1381,14 @@ its last reader, and once it is lost every reader reports it and the next open o
 afresh. Each reader's `stats` count from when it joined, so an output that joins a
 webcam the preview opened reports only its own frames and drops in `stats.tick`. The
 program stage on the GPU context opens through a second view of the same devices
-(`VideoDevices::on_context`), which opens a device that isn't open on the platform's
-GPU path and shares one that is. The preview can't read GPU frames, so when it joins a
+(`VideoDevices::on_context`), which opens a device that isn't open yet on the
+platform's GPU path, shares one open on the GPU path, and refuses one open on the CPU
+path, which the program then shares through the CPU view, on CPU frames. The preview can't read GPU frames, so when it joins a
 device open on the GPU path, the device is closed there and opened again on the CPU
 backend in the same format, under its lock: the program's reader reads on, its
 counters carried over, missing only the frames of the move, and the device stays on
-the CPU path until it closes. One that doesn't open again is lost for both. While
+the CPU path until it closes. One that doesn't open again is lost (`DeviceLost`) for
+both, so each capture stops and opens it afresh later. While
 the program stage reads a device the preview also shows, the reader that is not last
 copies each frame; a run on a capture card at 1080p60 has not measured that copy. `video.snapshot` still draws every capture as nothing. A `scene.switch` republishes the render
 snapshot, so the preview shows the transition onto the new program scene, then the
@@ -2337,7 +2339,9 @@ that copy, and on the CPU backend in the same format when the copy refuses it; M
 always opens on the CPU backend, which decodes it there. A device opens once, shared
 with the preview (`runtime/devices.rs`), and the preview reads only CPU frames: when it
 joins a device open on the GPU path, the device is closed there and opened again on the
-CPU backend in the same format, in place, so the program's capture reads on. Each fallback is logged and keeps the output running on
+CPU backend in the same format, in place, so the program's capture reads on. A device
+the preview has open already, on the CPU path, is refused by the GPU view and shared
+through the CPU backend, on CPU frames. Each fallback is logged and keeps the output running on
 CPU frames: no device (the fakes, CI, a machine without interop; the compositor then
 opens its own device, hardware adapter first with the software one as the fallback), a
 backend with no GPU path or one that refuses the context, and a GPU capture that does not start (that capture then runs on
@@ -2430,8 +2434,10 @@ sends and allocates nothing. A capture restarting after a failure or a move off 
 path keeps the size it had until a frame says otherwise. The primary display is looked up when its
 capture starts. A webcam or capture card is opened on the backends' `VideoDevices`
 (shared with the preview thread's captures, `SharedVideoDevices`; see *Preview streams*
-in Design), on
-the CPU path, in the format `device_format` picks from those it lists: frames that arrive
+in Design), in the format `device_format` picks from those it lists: on the backend's
+GPU view (`VideoDevices::on_context`) when there is one and it takes that uncompressed
+format, else on the CPU path; MJPEG always on the CPU path (see *Capture path*). The
+candidates are frames that arrive
 uncompressed as RGBA, BGRA or NV12 (YUY2 is delivered as NV12), the largest of at most
 1920x1080 (else the smallest), then the fastest. An empty `device` is the first device
 listed, looked up when it starts. MJPEG is a candidate when the device offers it and the

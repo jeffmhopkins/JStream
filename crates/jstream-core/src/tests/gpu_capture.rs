@@ -454,6 +454,48 @@ fn with_gpu_interop_video_devices_are_asked_onto_the_device() {
     }
 }
 
+/// The engine's `SharedVideoDevices` passes `on_context` through: no GPU view when the
+/// platform's backend has none, its refusal as it is, and otherwise a view sharing the
+/// same open devices, so a CPU-view open of a device the view opened on the GPU path
+/// moves it rather than opening it twice.
+#[test]
+fn shared_video_devices_pass_on_context_through() {
+    let _gpu = one_gpu_test_at_a_time();
+    if !have_software_gpu() {
+        return;
+    }
+    let context = SoftwareGpu.open_device().expect("a software device");
+    let clock = FakeClock::new(Timebase::MICROS);
+    for refuse in [None, Some(true)] {
+        let shared = crate::runtime::SharedVideoDevices::new(Arc::new(DevicesOnContext {
+            devices: FakeVideoDevices::new(clock.clone()),
+            refuse,
+        }));
+        match (refuse, shared.on_context(&context)) {
+            (None, Ok(None)) | (Some(true), Err(PlatformError::InvalidState { .. })) => {}
+            (_, other) => panic!("refuse {refuse:?}: {:?}", other.map(|v| v.is_some())),
+        }
+    }
+    let fake = FakeVideoDevices::new(clock.clone());
+    let shared = crate::runtime::SharedVideoDevices::new(Arc::new(DevicesOnContext {
+        devices: fake.clone(),
+        refuse: Some(false),
+    }));
+    let on_gpu = shared
+        .on_context(&context)
+        .expect("our context")
+        .expect("a GPU view");
+    let id = DeviceId::new(jstream_platform::fake::FAKE_WEBCAM);
+    let format = shared.formats(&id).expect("formats")[0];
+    let program = on_gpu
+        .open(&id, &format, None)
+        .expect("opens on the GPU view");
+    let preview = shared.open(&id, &format, None).expect("moves and shares");
+    assert_eq!(fake.open_streams(), 1, "one open, shared by both views");
+    drop((program, preview));
+    assert_eq!(fake.open_streams(), 0);
+}
+
 /// What the render thread's compositor saw: whether it opened on the platform's
 /// context, and the first pixel of the newest frame it read back.
 #[derive(Default)]
