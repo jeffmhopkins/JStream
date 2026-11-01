@@ -17,6 +17,18 @@ function rows(page) {
   return page.locator('.sources-panel li.row .row-main');
 }
 
+/** Clicks row `i` alone and waits until the selection, and so the canvas's readout, is
+ * that one item: the row shows as selected, the panel counts one item, and the readout is
+ * one box's (a group's starts with its count). Reading the readout straight after the
+ * click could catch the previous selection's. */
+async function selectOnly(page, i) {
+  await rows(page).nth(i).click();
+  await expect(page.locator('.sources-panel li.row').nth(i)).toHaveClass(/\bselected\b/);
+  await expect(page.locator('.sources-panel li.row.selected')).toHaveCount(1);
+  await expect(panel(page).locator('.summary')).toHaveText('1 item selected');
+  await expect(readout(page)).not.toHaveText(/items/);
+}
+
 test('with one item, buttons work against the canvas and undo as one edit', async ({ page, daemon }) => {
   await connect(page, daemon);
   // Filters is the shown tab of the Transform panel's group.
@@ -59,9 +71,11 @@ test('two items can align to their bounds and match sizes', async ({ page, daemo
   await nestScene(page, 'Intro');
   await expect(rows(page)).toHaveCount(2);
 
-  await rows(page).nth(0).click();
+  await selectOnly(page, 0);
   const first = await readout(page).textContent();
-  await rows(page).nth(1).click();
+  await selectOnly(page, 1);
+  // The readout follows the selection to the second item.
+  await expect(readout(page)).not.toHaveText(first);
   const second = await readout(page).textContent();
   expect(first).not.toBe(second);
 
@@ -77,8 +91,8 @@ test('two items can align to their bounds and match sizes', async ({ page, daemo
   await panel(page).getByRole('button', { name: 'Match height' }).click();
   await expect.poll(() => rev(page)).toBe(before + 2);
 
-  await rows(page).nth(1).click();
+  await selectOnly(page, 1);
   const matched = await readout(page).textContent();
-  await rows(page).nth(0).click();
+  await selectOnly(page, 0);
   await expect(readout(page)).toHaveText(matched);
 });
