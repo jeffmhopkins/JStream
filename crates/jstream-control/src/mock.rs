@@ -909,11 +909,13 @@ impl State {
                 self.keys.remove(&output_id);
                 return Ok(CallResult::action());
             }
-            // As the engine: the server in front answers the pairing calls (ADR-0044).
+            // As the engine: the server in front answers the pairing calls (ADR-0044) and
+            // keeps the UI settings (ADR-0083).
             // The mock runs no plugins (ADR-0069), so it installs none: it can't load a
             // module, and none is ever installed to grant or enable.
             other @ (Action::PairingStart
             | Action::DeviceRevoke { .. }
+            | Action::UiSettingsSet { .. }
             | Action::PluginInstall { .. }) => {
                 return Err(ProtocolError::Unsupported {
                     call: other.name().into(),
@@ -1102,9 +1104,9 @@ impl State {
             },
             // The mock describes no kinds, so it lists none.
             Query::KindList => QueryResult::KindList { kinds: Vec::new() },
-            Query::DeviceList => {
+            Query::DeviceList | Query::UiSettingsGet { .. } => {
                 return Err(ProtocolError::Unsupported {
-                    call: "device.list".into(),
+                    call: query.name().into(),
                 });
             }
             other => return Err(unimplemented_by_mock(other.name())),

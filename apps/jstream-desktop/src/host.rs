@@ -13,7 +13,7 @@ use jstream_core::{AuditSink, Engine};
 use jstream_crash::Secrets;
 use jstream_server::{Connector, Server, ServerConfig, Token};
 use std::fmt::Write as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::Runtime;
@@ -41,12 +41,18 @@ pub struct Host {
 }
 
 impl Host {
-    /// Serves `engine` on `127.0.0.1` with a new token, accepting pages from `origin`.
+    /// Serves `engine` on `127.0.0.1` with a new token, accepting pages from `origin`,
+    /// and keeps the UI settings in `ui_settings` (ADR-0083; in memory without one).
     ///
     /// # Errors
     /// When the runtime can't start, the OS has no randomness for the token, or the
     /// server can't bind.
-    pub fn start(engine: Arc<Engine>, origin: &str, secrets: &Secrets) -> anyhow::Result<Host> {
+    pub fn start(
+        engine: Arc<Engine>,
+        origin: &str,
+        secrets: &Secrets,
+        ui_settings: Option<PathBuf>,
+    ) -> anyhow::Result<Host> {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .thread_name("jstream-host")
@@ -58,6 +64,9 @@ impl Host {
         config.extra_origins = vec![origin.to_owned()];
         // The engine serves only this webview, so it pairs no device (ADR-0047).
         config.pairing = false;
+        // The UI settings are still kept, so the window shows the workspace the daemon's
+        // browsers do.
+        config.ui_settings_file = ui_settings;
         let connector: Connector = Arc::new(move || Box::new(engine.connect()));
         let server: Server = runtime
             .block_on(Server::bind(config, connector))
@@ -403,7 +412,7 @@ mod tests {
             &secrets,
         )
         .unwrap_or_else(|e| panic!("an engine: {e:#}"));
-        let host = Host::start(engine, "http://jstream.localhost", &secrets)
+        let host = Host::start(engine, "http://jstream.localhost", &secrets, None)
             .unwrap_or_else(|e| panic!("a host: {e:#}"));
         assert!(
             host.ws_url().starts_with("ws://127.0.0.1:"),
@@ -485,7 +494,7 @@ mod tests {
             &Secrets::new(),
         )
         .unwrap_or_else(|e| panic!("an engine: {e:#}"));
-        let host = Host::start(engine, ORIGIN, &Secrets::new())
+        let host = Host::start(engine, ORIGIN, &Secrets::new(), None)
             .unwrap_or_else(|e| panic!("a host: {e:#}"));
         assert_eq!(upgrade_status(&host, ORIGIN), "HTTP/1.1 101");
         assert_eq!(upgrade_status(&host, "http://evil.example"), "HTTP/1.1 403");

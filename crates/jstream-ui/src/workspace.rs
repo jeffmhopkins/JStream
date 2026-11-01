@@ -2,17 +2,23 @@
 //! zones around it, drawn from the [`Dock`] model. Panels are grouped and tabbed in the
 //! zones, dragged by their tabs to another group, half or zone, resized with the
 //! splitters and dividers, collapsed by their title and closed with a second click on
-//! their ×. The dock is kept in the browser's storage, so the layout survives a reload.
+//! their ×. The dock is kept in the browser's storage, so the layout survives a reload,
+//! and in the engine's UI settings (ADR-0083), so the desktop app and every browser of
+//! one engine show the same layout.
 //!
 //! Docs: docs/UI-FEATURES.md#docking, crates/jstream-ui/README.md#design
 
+use crate::app::SessionContext;
 use crate::canvas::Canvas;
 use crate::dock::{Dock, PanelId, Target, Zone};
 use crate::pairing::Pairing;
 use crate::panels::mixer::MixerFlip;
 use crate::panels::{Filters, Inspector, Mixer, Outputs, Scenes, Sources, StudioMode, Transform};
+use crate::ui_settings::{self, DOCK_KEY, Kept};
 use leptos::html;
 use leptos::prelude::*;
+use leptos::task::spawn_local;
+use serde_json::Value;
 use std::time::Duration;
 
 /// The dock, provided as context by the shell so the header's View and Layout menus can
@@ -26,6 +32,9 @@ const STORAGE_KEY: &str = "jstream.dock";
 const DRAG_START: f64 = 4.0;
 /// How long a close button stays armed.
 const ARMED_FOR: Duration = Duration::from_millis(3000);
+/// How long the dock stays unchanged before it is sent to the engine: dragging a
+/// splitter changes it on every move.
+const SHARE_AFTER: Duration = Duration::from_millis(500);
 
 /// The dock the browser kept, or the default one.
 pub fn restore() -> Dock {
@@ -44,6 +53,104 @@ fn keep(dock: &Dock) {
     if let Ok(Some(storage)) = window().local_storage() {
         let _ = storage.set_item(STORAGE_KEY, &dock.to_json());
     }
+}
+
+/// Whether the engine's server keeps the dock for this session, once it is known.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Shared {
+    /// `ui_settings.get` hasn't answered yet: nothing is sent, so the browser's copy never
+    /// replaces a newer one the server holds.
+    Asking,
+    /// The server keeps it: changes are sent.
+    Yes,
+    /// Nothing keeps it (no server in front, or the call failed): the browser alone does.
+    No,
+}
+
+/// Shares `dock` through the engine's UI settings (ADR-0083) while the workspace is
+/// shown: reads the dock the server keeps and shows it, or sends this browser's when
+/// the server keeps none yet, then sends each change once the dock has stayed the same
+/// for [`SHARE_AFTER`].
+fn share(dock: RwSignal<Dock>) {
+    let Some(session) = use_context::<SessionContext>().and_then(|context| context.get()) else {
+        return;
+    };
+    let shared = StoredValue::new(Shared::Asking);
+    // The value last read from or sent to the server, so a dock it sent isn't sent back.
+    let last = StoredValue::new(None::<Value>);
+    // Bumped by every change, so only the last of a run of changes is sent.
+    let changes = StoredValue::new(0u64);
+    let control = session.control.clone();
+    let send = move |value: Value| {
+        let control = control.clone();
+        last.try_set_value(Some(value.clone()));
+        spawn_local(async move {
+            if let Err(error) = ui_settings::set(&*control, DOCK_KEY, value).await {
+                leptos::logging::warn!("the dock could not be shared: {error}");
+            }
+        });
+    };
+    let read = session.control.clone();
+    spawn_local({
+        let send = send.clone();
+        async move {
+            let kept = ui_settings::get(&*read, DOCK_KEY).await;
+            match kept {
+                Ok(Kept::Value(value)) => match Dock::from_value(&value) {
+                    Some(theirs) => {
+                        last.try_set_value(Some(value));
+                        if dock.try_with_untracked(|ours| *ours != theirs) == Some(true) {
+                            dock.try_set(theirs);
+                        }
+                    }
+                    // A dock this UI can't read, perhaps from a newer one: replaced by ours.
+                    None => {
+                        if let Some(ours) = dock.try_with_untracked(Dock::to_value) {
+                            send(ours);
+                        }
+                    }
+                },
+                Ok(Kept::Nothing) => {
+                    if let Some(ours) = dock.try_with_untracked(Dock::to_value) {
+                        send(ours);
+                    }
+                }
+                Ok(Kept::Unserved) => {
+                    shared.try_set_value(Shared::No);
+                    return;
+                }
+                Err(error) => {
+                    leptos::logging::warn!("the shared dock could not be read: {error}");
+                    shared.try_set_value(Shared::No);
+                    return;
+                }
+            }
+            shared.try_set_value(Shared::Yes);
+        }
+    });
+    Effect::new(move |_| {
+        let value = dock.with(Dock::to_value);
+        if shared.get_value() != Shared::Yes {
+            return;
+        }
+        let Some(change) = changes.try_update_value(|n| {
+            *n += 1;
+            *n
+        }) else {
+            return;
+        };
+        let send = send.clone();
+        set_timeout(
+            move || {
+                let settled = changes.try_get_value() == Some(change);
+                let unsent = last.try_with_value(|last| last.as_ref() != Some(&value));
+                if settled && unsent == Some(true) {
+                    send(value);
+                }
+            },
+            SHARE_AFTER,
+        );
+    });
 }
 
 /// A panel whose engine side isn't there yet: its title and what it waits on.
@@ -172,6 +279,7 @@ pub fn Workspace() -> impl IntoView {
         dock.with(keep);
         nudge_canvas();
     });
+    share(dock);
 
     let end_drag = move |drop: bool| {
         let panel = ui.dragging.get_untracked();

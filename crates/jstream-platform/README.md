@@ -183,7 +183,9 @@ Contents:
   `$XDG_DATA_HOME/jstream` (else `~/.local/share/jstream`) elsewhere. Only absolute
   variables count, so nothing is written beside the exe without the marker. It reads the
   environment itself: three cases don't pay for `dirs`. A plain function, not a trait:
-  no host needs to swap it.
+  no host needs to swap it. `paths::UI_SETTINGS_FILE` names the file in it that keeps
+  the UI settings, so the desktop app and the daemon name the same one
+  ([ADR-0083](../../docs/adr/0083-ui-settings-kept-by-the-server.md)).
 - **Shared backend helpers** (`mailbox.rs`, `nv12.rs`, `yuv.rs`): safe, platform-independent code
   the platform crates share, so it is written and tested once. `mailbox::Mailbox` is the
   capture callbacks' single-slot latest-frame mailbox: `put` swaps a boxed frame in and

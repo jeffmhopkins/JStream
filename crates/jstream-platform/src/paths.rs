@@ -16,6 +16,11 @@ pub const PORTABLE_MARKER: &str = "portable";
 /// The folder, beside the exe, that holds the state of a portable JStream.
 pub const PORTABLE_DATA_DIR: &str = "data";
 
+/// The file in the data folder that keeps the UI settings (ADR-0083), such as the web
+/// UI's dock. The desktop app and the daemon both keep them there, so both show the
+/// same workspace.
+pub const UI_SETTINGS_FILE: &str = "ui-settings.json";
+
 /// The data folder of this process: [`data_dir_for`] with the running exe's folder and
 /// the process environment. `None` when it can't be found (no usable `APPDATA` on
 /// Windows, no usable `HOME` elsewhere, and no portable marker).

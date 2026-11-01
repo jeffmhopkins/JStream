@@ -160,6 +160,14 @@ pub struct ServerConfig {
     /// and rewritten user-only on every change. [`ServerConfig::new`] leaves it unset:
     /// devices then live in memory and are gone when the server stops.
     pub device_file: Option<PathBuf>,
+    /// The file that keeps the UI settings `ui_settings.set` stores (ADR-0083), such as
+    /// the web UI's dock, so every client of the engine shows the same workspace. Read
+    /// when the server binds (a missing file means no settings; one that can't be read
+    /// is logged and replaced on the next change), and rewritten user-only on every
+    /// change. [`ServerConfig::new`] leaves it unset: the settings then live in memory
+    /// and are gone when the server stops. Unlike the devices, they are served with
+    /// `pairing` off too.
+    pub ui_settings_file: Option<PathBuf>,
     /// Whether clients reach this listener over TLS (ADR-0047). Only then is the browser
     /// pairing page served at [`PAIR_PAGE_PATH`](crate::PAIR_PAGE_PATH), may a browser
     /// pair into the `__Host-jstream_device` cookie and present it, is pairing offered
@@ -198,6 +206,7 @@ impl ServerConfig {
             mcp_idle_timeout: MCP_IDLE_TIMEOUT,
             ui_dir: None,
             device_file: None,
+            ui_settings_file: None,
             tls: false,
             pairing: true,
         }
