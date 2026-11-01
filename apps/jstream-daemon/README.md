@@ -338,6 +338,10 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   Credential Manager (behind `jstream_crash::Redacting`, which the binary adds, so the
   library never sees it), and the tests (`live.rs`'s and `tests/e2e.rs`) the platform
   fakes, so the end-to-end test runs the daemon's wiring, not a copy of it.
+- **Engine load.** `serve.rs` starts the engine's stats heartbeat, so a client gets a
+  `stats.tick` about once a second while no output runs, and hands the engine the
+  process CPU reader on Windows (`WindowsProcessCpu`) and macOS (`MacosProcessCpu`),
+  for the ticks' `load` (protocol 0.48). Elsewhere the ticks leave `cpu_ms` out.
 - **Media Foundation check and delay-load.** The `windows` crate imports Media
   Foundation's DLLs as load-time imports, so on a Windows without Media Foundation
   the loader would refuse to start the binary, naming a DLL, before `main` runs.

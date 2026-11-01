@@ -31,6 +31,7 @@ mod media_file;
 pub mod nv12;
 pub mod paths;
 pub mod plugin_host;
+mod process;
 mod surface;
 #[cfg(test)]
 mod tests;
@@ -61,6 +62,7 @@ pub use media_file::{
     MediaAudioInfo, MediaDecoder, MediaDecoderConfig, MediaDecoders, MediaInfo, MediaVideoInfo,
 };
 pub use plugin_host::{HostBlock, HostRequest, PluginHost, PluginHosts};
+pub use process::ProcessCpu;
 pub use surface::VideoSurface;
 pub use vcam::{VcamFormat, VcamSink};
 pub use video_device::{

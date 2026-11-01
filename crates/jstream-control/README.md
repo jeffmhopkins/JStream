@@ -297,7 +297,7 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `transition.*`, `scene.set_transitions` and `item.set_transition` edits answer
   `internal`;
 - `capture.targets`, answered with one made-up 1920×1080 primary display whose ID is
-  `MOCK_DISPLAY`;
+  `MOCK_DISPLAY`, then one 1280×720 window, "Mock window", whose ID is `MOCK_WINDOW`;
 - `source.sizes`, answered with every source and no size, since the mock makes no
   frames, so it never sends `source.size_changed`;
 - `activity.list`, answered with no entries and the host's clock as `now_ms`: the mock
@@ -401,7 +401,8 @@ the reason a session ended with, which it shares, are unit-tested natively
 ### Open questions
 
 1. **Backpressure.** The client's own event buffers are unbounded. `stats.tick` (protocol
-   0.6) is emitted about once a second while the pipeline runs, and a slow subscriber of
+   0.6) is emitted about once a second while the pipeline runs (and, since 0.48, while
+   idle too when the host started the engine's heartbeat), and a slow subscriber of
    it, or of meters, would grow without limit. Bounded buffers that
    drop the oldest events (a gap in `rev` already shows a missed `state.changed`) are
    the likely client-side answer

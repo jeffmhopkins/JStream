@@ -84,7 +84,7 @@ It has:
   modifiers the device can import as a single-plane DMA-BUF and sample
   (`vkGetPhysicalDeviceFormatProperties2` and `…ImageFormatProperties2` through `ash`),
   and which formats a V4L2 buffer plane may be imported as in the `LINEAR` layout
-  (`Bgra8Unorm`, `Rgba8Unorm`).
+  (`Bgra8Unorm`, `Rgba8Unorm`, and NV12's `R8Unorm` and `Rg8Unorm`).
   Multi-plane layouts (Intel CCS, AMD DCC with metadata) are left out, because
   wgpu-hal's `texture_from_dmabuf_fd` takes one plane. Its encode targets
   (`encode_target`, `gpu/export.rs`) are NV12 images in the `LINEAR` DRM layout with
@@ -270,19 +270,26 @@ It has:
   `on_context`, on a context `LinuxGpu` opened with DMA-BUF import of a format V4L2
   buffers come in, in the `LINEAR` layout they have, gives the backend on the GPU path
   (`v4l2/gpu.rs`); on one without, `Ok(None)`, and on another platform's context,
-  `InvalidState`. It opens the 32-bit RGB formats there: once the stream is on, it
-  exports each driver buffer as a DMA-BUF (`VIDIOC_EXPBUF`, read-only) and imports it
-  once as a `Bgra8Unorm` or `Rgba8Unorm` texture (`gpu/dmabuf.rs`). The capture thread
-  copies each filled buffer into the stream's own `blit::Ring` texture on the context's
-  queue, made opaque, and waits for that copy before it hands the buffer back with
-  `VIDIOC_QBUF`, so the driver never writes into a frame the GPU still reads. The ring
-  texture is the `Gpu` frame. Other formats and compressed ones are `Unsupported`
-  there, and a device whose buffers don't export or import fails the open with the OS
-  error; either way the engine opens it on the CPU path. A buffer that can't be read on the GPU (one whose data doesn't start at
-  its memory's start) or a copy that fails or isn't done within a second ends the
-  stream as `DeviceLost`, without handing that buffer back, and the backend on that
-  context then refuses every format, so the engine's retry opens the device on the CPU
-  path.
+  `InvalidState`. It opens the 32-bit RGB formats, YUYV, and NV12 and NV12M there, each
+  only when the device imports all its planes: once the stream is on, it exports each
+  driver buffer plane as a DMA-BUF (`VIDIOC_EXPBUF`, read-only) and imports each image
+  plane once (`gpu/dmabuf.rs`), RGB as a `Bgra8Unorm` or `Rgba8Unorm` texture, YUYV as
+  `Rgba8Unorm` at half the width, each texel `Y0 U Y1 V`, and NV12 as an `R8Unorm` luma
+  and an `Rg8Unorm` chroma texture at half the size each way (rounded up), the chroma
+  at the luma's stride after its rows in NV12's one buffer plane, or in NV12M's second.
+  The capture thread draws each filled buffer into the stream's own `blit::Ring`
+  texture on the context's queue: RGB copied and made opaque, YUYV and NV12 converted
+  to R'G'B' with the frame's matrix and range as the engine's CPU path converts NV12
+  (each pixel its own luma and its pair's or 2x2 block's chroma, limited range scaled
+  to full). It waits for that draw before it hands the buffer back with `VIDIOC_QBUF`,
+  so the driver never writes into a frame the GPU still reads. The ring texture is the
+  `Gpu` frame. Other formats and compressed ones are `Unsupported` there, and a device
+  whose buffers don't export or import fails the open with the OS error; either way
+  the engine opens it on the CPU path. A buffer that can't be read on the GPU (one
+  whose data doesn't start at its memory's start) or a draw that fails or isn't done
+  within a second ends the stream as `DeviceLost`, without handing that buffer back,
+  and the backend on that context then refuses every format, so the engine's retry
+  opens the device on the CPU path.
 - **`LinuxBackends`**: the backend set, ADR-0060 §4's choice made once when it is built
   (`backends.rs`). Audio is `PipeWireAudio` when libpipewire loads and the daemon
   answers a device listing, else `AlsaAudio`; `audio_backend` says which and
@@ -384,7 +391,6 @@ The engine starts each display and window source's capture with `start_with` and
 It calls `forget_source` when the source is deleted.
 
 Not here yet, in roughly the order they follow:
-- V4L2's YUYV, NV12 and NV12M on the GPU path (only 32-bit RGB goes there so far);
 - media-file decoders, which `LinuxBackends` leaves to the host;
 - an app keeping its stream keys and OAuth tokens in `LinuxSecrets`, the protocol field
   that tells the UI the secret store's fallback is active, and the `jstream.toml`
@@ -400,7 +406,9 @@ formats list, colour, buffer times and device IDs are platform-independent. The 
 adapter where there is no GPU, and skip without one: the frame copy (crop, opaque
 padding, slots reused only once free), the context checks, and V4L2's GPU delivery
 from plain textures standing in for imported buffers (each buffer's texels reaching an
-opaque RGBA frame, short buffers dropped, an unreadable buffer ending the GPU path). The VA-API surface
+opaque RGBA frame, YUYV converted as the CPU path converts it in BT.601, BT.709 and
+BT.2020, limited and full range, NV12 in one buffer plane and in two converted the same
+way at odd sizes, short buffers dropped, an unreadable buffer ending the GPU path). The VA-API surface
 attributes and DRM PRIME descriptor are checked against libva's layout at compile time
 and built in a test, and render-node numbers are split as glibc does. DMA-BUF import
 and export need a GPU driver, so they are tested only in the `hw-tests` portal capture
@@ -436,4 +444,5 @@ are enough, no sound card, and one says it is on ALSA card 7 for the pairing tes
 `dbus-run-session` is enough), and a second of ALSA's default input on a sound card (`null`
 isn't paced, so only a real device shows real-time recording), and V4L2 capture from a webcam or capture card (the `vivid` test
 driver will do), on the CPU path and, with a Vulkan driver that imports DMA-BUFs, on
-the GPU path in a format it takes (`vivid`'s 32-bit RGB).
+the GPU path in a format it takes (`vivid`'s 32-bit RGB, YUYV or NV12, and NV12M with
+`multiplanar=2`; a UVC webcam's YUYV or NV12).

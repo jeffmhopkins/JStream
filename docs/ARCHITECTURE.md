@@ -761,10 +761,12 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `activity.list` (protocol 0.51) → the engine's last 100 audit entries, each with a
   sentence saying what it did ([ADR-0083](adr/0083-activity-log-over-the-protocol.md));
   audio levels are the `meters.tick` event, not a query).
-- **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops}`, `meters.tick`,
+- **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops, load}`, `meters.tick`,
   `source.size_changed` (protocol 0.40), …).
   `stats.tick` (protocol 0.6) carries the pipeline's running drop totals
-  ([R-RT-004](RULES.md#R-RT-004)), and `meters.tick` (protocol 0.19, about ten a second
+  ([R-RT-004](RULES.md#R-RT-004)) and, since 0.48, the engine's load (program frames
+  drawn and process CPU time, from which a client derives the frame rate and CPU use;
+  the daemon and the desktop app also tick about once a second while idle), and `meters.tick` (protocol 0.19, about ten a second
   while the mixer runs) every source's and bus's levels and the master's loudness,
   which `audio.reset_loudness` restarts; the fields are in
   [jstream-protocol › Design](../crates/jstream-protocol/README.md#design).

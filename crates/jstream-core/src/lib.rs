@@ -37,6 +37,7 @@ mod gesture;
 mod history;
 mod kinds;
 mod live;
+mod load;
 mod outputs;
 mod plugins;
 mod preview;

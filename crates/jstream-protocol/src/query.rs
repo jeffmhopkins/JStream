@@ -621,6 +621,12 @@ pub enum CaptureTargetKind {
     Display,
     /// One top-level window, captured by a `window` source.
     Window,
+    /// A kind this version of the protocol doesn't know. Never sent; produced only when
+    /// parsing a target, or a `capture_target` parameter, from a newer server, so adding
+    /// a kind stays a minor change (since 0.50).
+    #[serde(other)]
+    #[schemars(skip)]
+    Unknown,
 }
 
 /// A size in whole pixels.
