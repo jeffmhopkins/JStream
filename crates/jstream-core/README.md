@@ -2220,10 +2220,10 @@ and replaces the engine's collection and `rev` with it; the outputs' runtime sta
 follows, so a loaded output is `stopped`. With no file at `path` it saves the current
 collection there at once, with `Graph::with_sample_labels`'s four labels when it has
 none, still at its `rev`, and keeps that as the engine's collection, so the file and the
-engine agree and an unwritable path fails at startup rather than at the first change. A file that doesn't read or load is refused with
-`CollectionFileError` (`Read`, `Load` or `Create`, each naming the path but never the
-contents) and left as it is. It is configured before `connect`, like the other
-builders.
+engine agree and an unwritable path fails at startup rather than at the first change.
+A file that doesn't read or load is refused with `CollectionFileError` (`Read`, `Load`
+or `Create`, each naming the path but never the contents) and left as it is. It is
+configured before `connect`, like the other builders.
 
 After each applied batch, undo or redo, `Engine::execute` saves the collection before
 the call returns, so the client whose call it was knows the file holds its `rev`. The save
