@@ -608,18 +608,26 @@ pub fn refers(kind: &KindDescriptor) -> bool {
 }
 
 /// The Add filter dialog's note on what an output's first video filter costs (ADR-0080
-/// §3): its own GPU pass and encoder session, beside the `sessions` in use now, from its
-/// next start when it is `running`.
-pub fn first_video_cost(sessions: u32, running: bool) -> String {
+/// §3), from its next start when it is `running`. A stream or a recording that
+/// `encodes` gets its own GPU pass and encoder session, beside the `sessions` in use
+/// now; a virtual camera, which opens no encoder session, only a GPU pass of its own.
+pub fn first_video_cost(encodes: bool, sessions: u32, running: bool) -> String {
     let when = if running {
         " It takes effect the next time this output starts."
     } else {
         ""
     };
-    format!(
-        "A video filter gives this output its own GPU pass and encoder session, even \
-         while the filter is off. Encoder sessions in use now: {sessions}.{when}"
-    )
+    if encodes {
+        format!(
+            "A video filter gives this output its own GPU pass and encoder session, even \
+             while the filter is off. Encoder sessions in use now: {sessions}.{when}"
+        )
+    } else {
+        format!(
+            "A video filter gives the virtual camera its own GPU pass, even while the \
+             filter is off; it opens no encoder session.{when}"
+        )
+    }
 }
 
 /// The Add filter dialog's subtitle for `owner`, which `name` names: "For “Backdrop”", or
@@ -1734,17 +1742,22 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
     let stage = matches!(owner, FilterOwner::Master | FilterOwner::Output { .. });
     let referring =
         Memo::new(move |_| stage && descriptor.with(|d| d.as_ref().is_some_and(refers)));
-    // An output's first video filter costs a session of its own (ADR-0080 §3): the
-    // sessions in use, and whether the output runs, from `output.status`.
+    // An output's first video filter costs a pass, and for a stream or a recording a
+    // session, of its own (ADR-0080 §3): the sessions in use, and whether the output
+    // runs, from `output.status`.
     let cost = RwSignal::new(None::<String>);
     if let FilterOwner::Output { output_id } = &owner {
-        let first = studio.collection.with_untracked(|c| {
-            c.as_ref()
-                .and_then(|c| {
-                    c.chains(&owner)
-                        .map(|f| f.chain(FilterChain::Video).is_empty())
-                })
-                .unwrap_or(false)
+        let (first, encodes) = studio.collection.with_untracked(|c| {
+            let Some(c) = c.as_ref() else {
+                return (false, false);
+            };
+            let first = c
+                .chains(&owner)
+                .is_some_and(|f| f.chain(FilterChain::Video).is_empty());
+            let encodes = c
+                .output(output_id)
+                .is_some_and(|o| !matches!(o.kind, OutputKind::VirtualCam));
+            (first, encodes)
         });
         if let (true, Some(s)) = (first, session.get()) {
             let output_id = output_id.clone();
@@ -1756,7 +1769,8 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
                 }) = query(&s, Query::OutputStatus { output_id }).await
                 {
                     let running = !matches!(state, OutputState::Stopped | OutputState::Failed);
-                    _ = cost.try_set(Some(first_video_cost(encoder_sessions, running)));
+                    let text = first_video_cost(encodes, encoder_sessions, running);
+                    _ = cost.try_set(Some(text));
                 }
             });
         }
@@ -2691,12 +2705,16 @@ mod tests {
     #[test]
     fn the_first_video_filter_states_its_cost() {
         assert_eq!(
-            first_video_cost(1, false),
+            first_video_cost(true, 1, false),
             "A video filter gives this output its own GPU pass and encoder session, even \
              while the filter is off. Encoder sessions in use now: 1."
         );
-        assert!(first_video_cost(0, false).ends_with("in use now: 0."));
-        assert!(first_video_cost(2, true).ends_with("the next time this output starts."));
+        assert!(first_video_cost(true, 0, false).ends_with("in use now: 0."));
+        assert!(first_video_cost(true, 2, true).ends_with("the next time this output starts."));
+        // A virtual camera opens no encoder session, so its filter costs a pass only.
+        let camera = first_video_cost(false, 2, false);
+        assert!(camera.contains("its own GPU pass") && camera.contains("no encoder session"));
+        assert!(!camera.contains("in use now"));
     }
 
     #[test]

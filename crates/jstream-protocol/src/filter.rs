@@ -42,9 +42,11 @@ pub enum FilterOwner {
     /// An output's own chains, which run after the master stage for that output only
     /// (ADR-0080 §2). An output with filters on its audio chain gets its own audio
     /// encode from its next start; edits to a chain it started with apply live. Every
-    /// output, the virtual camera included, has a video chain (since 0.61): one with
-    /// a filter on it, even a disabled one, gets its own render pass and encoder
-    /// session from its next start, which `output.status` reports as `dedicated`.
+    /// output, the virtual camera included, has a video chain (since 0.61). A stream
+    /// or recording with a filter on it, even a disabled one, gets its own render
+    /// pass and encoder session from its next start, which `output.status` reports as
+    /// `dedicated`; a virtual camera, which opens no encoder session, gets its own
+    /// render pass (a program frame of its own) and is never reported `dedicated`.
     Output {
         /// The output.
         output_id: OutputId,

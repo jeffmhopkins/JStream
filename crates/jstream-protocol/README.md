@@ -645,10 +645,15 @@ From 0.29 the master stage and each output own chains too
 `{"type":"master"}` and `{"type":"output","output_id":…}` and the same edits. The
 master's audio chain runs on every bus that feeds an output, after that bus's own chain;
 an output's runs after it, for that output only, and gives the output its own audio
-encode from its next start (edits to a chain it started with apply live). Only their
-audio chains hold filters so far: a video filter is `invalid_argument` on
-`edits.N.chain` until video mixes run them, and so is an audio filter on an output that
-carries no audio (a `virtual_cam`). A missing output is `not_found` with entity
+encode from its next start (edits to a chain it started with apply live). From 0.61
+their video chains take filters too (earlier minors refused them with
+`invalid_argument` on `edits.N.chain`): the master's runs once per frame on each mix an
+output draws, and an output's after it, for that output only. A stream or recording
+with a video filter, even a disabled one, gets its own render pass and encoder session
+from its next start (`output.status` reports it `dedicated`); a virtual camera has a
+video chain only, and with a filter gets a render pass of its own but no encoder
+session. An audio filter on an output that carries no audio (a `virtual_cam`) is
+`invalid_argument` on `edits.N.chain`. A missing output is `not_found` with entity
 `output`. Their filters can't hold a reference yet (a scene, source, bus or asset;
 `invalid_argument` on the parameter), since the delete checks follow only a source's
 references. `output.delete`'s

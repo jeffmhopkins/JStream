@@ -4694,7 +4694,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "An output's own chains, which run after the master stage for that output only\n(ADR-0080 §2). An output with filters on its audio chain gets its own audio\nencode from its next start; edits to a chain it started with apply live. Every\noutput, the virtual camera included, has a video chain (since 0.61): one with\na filter on it, even a disabled one, gets its own render pass and encoder\nsession from its next start, which `output.status` reports as `dedicated`.",
+          "description": "An output's own chains, which run after the master stage for that output only\n(ADR-0080 §2). An output with filters on its audio chain gets its own audio\nencode from its next start; edits to a chain it started with apply live. Every\noutput, the virtual camera included, has a video chain (since 0.61). A stream\nor recording with a filter on it, even a disabled one, gets its own render\npass and encoder session from its next start, which `output.status` reports as\n`dedicated`; a virtual camera, which opens no encoder session, gets its own\nrender pass (a program frame of its own) and is never reported `dedicated`.",
           "properties": {
             "output_id": {
               "$ref": "#/$defs/OutputId",
@@ -5542,7 +5542,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "properties": {
         "filters": {
           "$ref": "#/$defs/FilterChains",
-          "description": "Its chains, which `filter.*` edits with the owner `{\"type\":\"master\"}`. Only the\naudio chain holds filters so far. Omitted while both are empty."
+          "description": "Its chains, which `filter.*` edits with the owner `{\"type\":\"master\"}`. Both hold\nfilters (the video chain since 0.61). Omitted while both are empty."
         }
       },
       "type": "object"
@@ -5668,7 +5668,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         "filters": {
           "$ref": "#/$defs/FilterChains",
-          "description": "Its own chains, which `filter.*` edits with the owner\n`{\"type\":\"output\",\"output_id\":…}` and which run after the master stage\n(ADR-0080 §2). Only the audio chain holds filters so far, and a virtual camera,\nwhich has no audio, has none. Omitted while both are empty."
+          "description": "Its own chains, which `filter.*` edits with the owner\n`{\"type\":\"output\",\"output_id\":…}` and which run after the master stage\n(ADR-0080 §2). Both hold filters (the video chain since 0.61); a virtual camera,\nwhich has no audio, has a video chain only. Omitted while both are empty."
         },
         "kind": {
           "$ref": "#/$defs/OutputKind",
