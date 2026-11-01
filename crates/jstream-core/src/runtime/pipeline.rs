@@ -1143,7 +1143,8 @@ pub(crate) struct Running {
     drop_guard: Option<DropGuard>,
     /// What the output thread has handed its muxer this run, for `stats.tick`.
     sent: Arc<SentCounters>,
-    /// When this run's `output.start` call began, for its uptime.
+    /// When this run's `output.start` call began, for its uptime; a vcam, which has no
+    /// meter, takes its launch instead.
     started: Instant,
     /// Its meter in each `stats.tick`'s `outputs`, removed with the drop guard.
     meter: Option<MeterGuard>,
