@@ -16,7 +16,9 @@
 //!
 //! A keyframe scene lists its parent's items as it shows them (ADR-0049): the eye
 //! writes the keyframe's override, and what would change the parent's items (Del,
-//! dragging, Add source) is off, as the caption says.
+//! dragging, Add source) is off, as the caption says. The children of the groups in its
+//! tree list at its overrides too, and a click selects one there, so the Inspector
+//! writes its override (#846).
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#objects
 
@@ -35,8 +37,8 @@ use crate::panels::scenes::RenameField;
 use crate::panels::tree::{Filter, Reorder, SearchBar, Side, Star, dropped_at, indent};
 use crate::store::{Collection, Studio, apply, plan_delete, plan_summary};
 use jstream_control::protocol::{
-    DeleteTarget, Edit, FilterId, FilterInfo, ItemId, LabelId, Reference, SceneId, SourceId,
-    SourceKind,
+    DeleteTarget, Edit, FilterId, FilterInfo, ItemId, LabelId, Reference, SceneId, SceneRole,
+    SourceId, SourceKind,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -58,6 +60,9 @@ struct Row {
     scene_id: SceneId,
     /// How deep it is nested under the selected scene's own items.
     depth: usize,
+    /// Whether it is a child of a group in the selected keyframe scene's tree, shown at
+    /// the keyframe's overrides, which it can override (#846, protocol 0.55).
+    keyframed: bool,
     /// The scene the item nests, when that has items to show under it.
     nests: Option<SceneId>,
     /// Whether its items show under it.
@@ -170,8 +175,9 @@ fn rows(
         filtering,
         shows,
         seen: vec![scene_id.clone()],
+        keyframe: collection.is_keyframe(scene_id).then(|| scene_id.clone()),
     };
-    walk.level(scene_id, 0, &mut out);
+    walk.level(scene_id, 0, true, &mut out);
     out
 }
 
@@ -183,16 +189,30 @@ struct Walk<'a> {
     shows: &'a dyn Fn(&str, bool, &[LabelId]) -> bool,
     /// The scenes on the way down, which a nested scene can't repeat.
     seen: Vec<SceneId>,
+    /// The selected scene, when it is a keyframe scene: the groups in its tree list
+    /// their items at its overrides.
+    keyframe: Option<SceneId>,
 }
 
 impl Walk<'_> {
-    /// Adds `scene_id`'s rows at `depth` to `out`.
-    fn level(&mut self, scene_id: &SceneId, depth: usize, out: &mut Vec<Row>) {
+    /// Adds `scene_id`'s rows at `depth` to `out`. `through` says whether the level is
+    /// in the selected scene's tree: the scene itself, or a group placed in it through
+    /// groups only.
+    fn level(&mut self, scene_id: &SceneId, depth: usize, through: bool, out: &mut Vec<Row>) {
         let collection = self.collection;
         let Some(scene) = collection.scene(scene_id) else {
             return;
         };
+        // A keyframe's own items are its parent's at its overrides already; a group's in
+        // its tree take them here.
+        let keyframed = depth > 0 && through && self.keyframe.is_some();
         for item in scene.items.iter().rev() {
+            let item = match &self.keyframe {
+                Some(keyframe) if keyframed => collection
+                    .keyframe_child(keyframe, &item.item_id)
+                    .unwrap_or(item),
+                _ => item,
+            };
             let source = collection.source(&item.source_id);
             let nests = match source.map(|s| &s.kind) {
                 Some(SourceKind::Scene { scene_id: nested })
@@ -207,8 +227,11 @@ impl Walk<'_> {
             };
             let mut inside = Vec::new();
             if let Some(nested) = &nests {
+                let group = collection
+                    .scene(nested)
+                    .is_some_and(|s| s.role == SceneRole::Group);
                 self.seen.push(nested.clone());
-                self.level(nested, depth + 1, &mut inside);
+                self.level(nested, depth + 1, through && group, &mut inside);
                 self.seen.pop();
             }
             let name = collection.source_name(&item.source_id);
@@ -241,6 +264,7 @@ impl Walk<'_> {
                 favourite,
                 scene_id: scene_id.clone(),
                 depth,
+                keyframed,
                 nests,
                 open,
                 kept,
@@ -448,6 +472,7 @@ pub fn Sources() -> impl IntoView {
             favourite,
             scene_id: row_scene,
             depth,
+            keyframed,
             nests,
             open,
             kept,
@@ -465,12 +490,13 @@ pub fn Sources() -> impl IntoView {
             })
         };
         let key = item_id.to_string();
-        // A nested scene's item is selected in its own scene, which the panel then shows.
+        // A nested scene's item is selected in its own scene, which the panel then shows,
+        // but a group's child in a keyframe's tree in the keyframe, which overrides it.
         let inside = depth > 0;
         let select_here = {
             let scene = row_scene.clone();
             move |id: ItemId| {
-                if inside {
+                if inside && !keyframed {
                     studio.select_scene(scene.clone());
                 }
                 studio.select_item(Some(id));
@@ -578,14 +604,14 @@ pub fn Sources() -> impl IntoView {
             let item = item_id.clone();
             move |_: leptos::ev::MouseEvent| {
                 // A nested scene's item belongs to that scene, which a keyframe doesn't
-                // override.
-                if inside && in_keyframe() {
+                // override, unless it is a group's in the keyframe's tree.
+                if inside && in_keyframe() && !keyframed {
                     return;
                 }
                 // Addressed to the selected scene: in a keyframe, its override.
                 send(Edit::ItemSetVisible {
                     item_id: item.clone(),
-                    scene_id: if inside { None } else { scene() },
+                    scene_id: if inside && !keyframed { None } else { scene() },
                     visible: !visible,
                 });
             }
@@ -613,7 +639,7 @@ pub fn Sources() -> impl IntoView {
         let on_row_context = {
             let id = item_id.clone();
             let (source, name) = (source_id.clone(), name.clone());
-            let scene_id = row_scene.clone();
+            let row_scene = row_scene.clone();
             let select_here = select_here.clone();
             move |event: leptos::ev::MouseEvent| {
                 let (Some(menus), Some(cx)) = (menus, item_cx) else {
@@ -625,6 +651,15 @@ pub fn Sources() -> impl IntoView {
                 let items: Vec<ItemId> = studio
                     .selection
                     .with_untracked(|s| s.items().cloned().collect());
+                // A group's child in a keyframe's tree takes the keyframe's menu, whose
+                // placement choices write its overrides and whose other choices are off.
+                let Some(scene_id) = (if keyframed {
+                    scene()
+                } else {
+                    Some(row_scene.clone())
+                }) else {
+                    return;
+                };
                 let mut entries =
                     item_menu::entries(cx, &scene_id, &items, item_menu::Scope::Objects);
                 if entries.is_empty() {
@@ -1007,6 +1042,48 @@ mod tests {
                 "cam@main",
             ]
         );
+    }
+
+    /// In a keyframe scene a group's children in its tree list at the keyframe's
+    /// overrides and can be overridden there; a plain nested scene's can't (#846).
+    #[test]
+    fn a_keyframe_lists_its_groups_children_at_its_overrides() {
+        let mut c = nested();
+        c.scenes[1].role = SceneRole::Group;
+        let mut keyframe = c.scenes[0].clone();
+        keyframe.scene_id = "k".into();
+        keyframe.variant_of = Some("main".into());
+        c.scenes.push(keyframe);
+        // `logo1` hidden in the keyframe: what `Collection::from_result` derives.
+        let mut children = c.scenes[1].items.clone();
+        children[0].visible = false;
+        c.keyframe_children.insert("k".into(), children);
+        let open: HashSet<ItemId> = [ItemId::new("g"), ItemId::new("in")].into();
+        let rows = rows(&c, &SceneId::new("k"), &open, false, &|_, _, _| true);
+        let facts: Vec<(String, bool, bool)> = rows
+            .iter()
+            .map(|r| (r.item_id.to_string(), r.keyframed, r.visible))
+            .collect();
+        let fact = |id: &str, keyframed: bool, visible: bool| (id.to_owned(), keyframed, visible);
+        assert_eq!(
+            facts,
+            [
+                fact("g", false, true),
+                fact("in", true, true),
+                fact("loop", false, true),
+                fact("title1", false, true),
+                fact("logo1", true, false),
+                fact("cam", false, true),
+            ]
+        );
+        // In the parent nothing is keyframed, and the group's own items show as they are.
+        let rows = rows_of(&c, "main", &open);
+        assert!(rows.iter().all(|r| !r.keyframed));
+        assert!(rows.iter().all(|r| r.visible));
+    }
+
+    fn rows_of(c: &Collection, scene: &str, open: &HashSet<ItemId>) -> Vec<super::Row> {
+        rows(c, &SceneId::new(scene), open, false, &|_, _, _| true)
     }
 
     #[test]

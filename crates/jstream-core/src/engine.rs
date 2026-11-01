@@ -270,6 +270,43 @@ impl Engine {
         scan
     }
 
+    /// Loads the WGSL effect packs in `root`, a folder of pack folders (ADR-0035), and
+    /// keeps them in step with it while the engine lives. Each effect becomes a
+    /// `video_filter` kind, `<pack>/<effect>`, in `kind.list` and `kind.describe`, and a
+    /// chain draws its filters like a built-in kind's. The packs are loaded before this
+    /// returns. A thread then polls the folder ([`jstream_effects::DEFAULT_POLL_INTERVAL`]):
+    /// a pack added, edited or removed changes its kinds, and what draws them, on the
+    /// next poll. A pack that fails to load is logged; one that fails a reload keeps its
+    /// last good version. A filter of a kind no loaded pack has is bypassed, as before its
+    /// pack loads. A missing `root` holds no packs, and is watched for packs to appear.
+    pub fn watch_effect_packs(&self, root: impl Into<PathBuf>) {
+        let mut packs = crate::effect_packs::Packs::new(root.into());
+        if let Some(update) = packs.poll() {
+            self.shared.install_effects(update);
+        }
+        let shared = Arc::downgrade(&self.shared);
+        let spawned = thread::Builder::new()
+            .name("jstream-effect-packs".into())
+            .spawn(move || {
+                loop {
+                    thread::sleep(jstream_effects::DEFAULT_POLL_INTERVAL);
+                    if shared.strong_count() == 0 {
+                        return;
+                    }
+                    let update = packs.poll();
+                    let Some(shared) = shared.upgrade() else {
+                        return;
+                    };
+                    if let Some(update) = update {
+                        shared.install_effects(update);
+                    }
+                }
+            });
+        if let Err(error) = spawned {
+            tracing::error!(%error, "effect pack watcher did not start; packs won't reload");
+        }
+    }
+
     /// Gives the engine YouTube (ADR-0058): a Google OAuth client, the HTTPS transport
     /// and the store for the account's refresh token. The host passes
     /// [`YoutubeSetup::built_in`] when the build has a built-in client (ADR-0058), or a
@@ -3458,6 +3495,22 @@ impl Shared {
         {
             let mut state = lock(&self.state);
             change(&mut state.capture_sizes);
+            state.sync_sizes(&mut wake);
+        }
+        wake_all(wake);
+    }
+
+    /// Applies a poll of the effect packs: their kinds to `kind.list`, their effects to
+    /// the chains, then re-plans.
+    fn install_effects(&self, update: crate::effect_packs::Update) {
+        let mut wake = Vec::new();
+        {
+            let mut state = lock(&self.state);
+            state.graph = std::mem::take(&mut state.graph)
+                .without_kinds(update.removed.iter().map(String::as_str))
+                .with_kinds(update.described);
+            state.live.set_effects(update.effects);
+            state.publish_render();
             state.sync_sizes(&mut wake);
         }
         wake_all(wake);

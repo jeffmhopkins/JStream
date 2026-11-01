@@ -2,7 +2,8 @@
 //! settings against (ADR-0025, docs/adr/0025-typed-settings-kind-descriptors.md): the
 //! descriptors of `jstream-sources`' built-in registry, the audio filter kinds of
 //! [`crate::filters`], and `jstream-render`'s built-in video filter kinds, which
-//! [`crate::chain`] runs.
+//! [`crate::chain`] runs. The effect packs' video filter kinds are added as their packs
+//! load ([`crate::effect_packs`]), and the CLAP kinds after a scan.
 //!
 //! Frames still come from `Engine::set_source_frame`; rendering sources from the
 //! registry is the next step.

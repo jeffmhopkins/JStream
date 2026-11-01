@@ -234,10 +234,13 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   dialog listing the scene's chain, adding to it at once, which Cancel keeps.
 - **Item effects** (`effects.spec.js`): no effects section with no item selected; with
   the Backdrop selected, "This item’s effects" with its note and an empty Effects chain
-  under the source's; with Vignette and Gain described, "+ Add effect…" offering only
-  Vignette, under Video · Style with its hint, for this item, with the item's foot, and
-  Add as one edit on the item while the source keeps its own two; the row's eye and ×
-  as one edit each; and selecting the scene again leaving the effects section out.
+  under the source's; with Vignette (the core kind's four settings), Sharpen and Gain
+  described, "+ Add effect…" offering the two video kinds, Vignette under Video · Style
+  with its hint, for this item, with the item's foot; Add as one edit on the item, which
+  opens the Filter settings dialog titled "Effect on “Backdrop”" once the collection
+  holds it, while the source keeps its own two; Sharpen added as a second effect, and
+  dragged above the vignette as one reorder of the item's chain; the row's eye and × as
+  one edit each; and selecting the scene again leaving the effects section out.
 - **Program and output chains** (`output-chains.spec.js`): the Outputs panel's Program
   output row ("master", "FX 0"), a recording's row under it with its state and FX
   button, and the footnote; the program's FX showing the master chain in the Filters
@@ -296,7 +299,16 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   overrides while Main's own item stays as it was, the blend mode is locked, the Scene switches section is gone, and the
   item menu's Remove from scene and layer order are disabled; Reset to “Main” clears
   the overrides, after which the canvas's Ctrl+D and Del change nothing there; Switch
-  to it puts it on program, and Delete keyframe removes it and selects Main. The Inspector's Hotkey row binds F1 to Intro (which a second client
+  to it puts it on program, and Delete keyframe removes it and selects Main. A drag on
+  a keyframe's canvas sends `live.set` values that name the keyframe (the
+  `scene.create_variant`'s scene, not its parent), as its commit's `item.set_geometry` does, with no revision until the drop, and leaves Main's box as it
+  was. With the Backdrop and a second colour grouped in Main, the keyframe lists the
+  group's children: a child's eye hides it there as one edit, a click selects it in
+  the keyframe, whose X field writes its override, a Left crop is written there, its row's
+  menu has Remove from scene, Bring to front and Crop disabled and its Clear crop clears
+  that crop as one edit, leaving the keyframe selected, Main still shows it as it was (where
+  a click opens the group's scene at its own box), and Reset to “Main” brings it back.
+  The Inspector's Hotkey row binds F1 to Intro (which a second client
   sees), F1 on the canvas then puts Intro on program on both clients, binding F1 to
   Main takes it from Intro, Escape cancels a capture and × unbinds.
 - **Studio mode** (`studio.spec.js`, on the Transitions tab): in studio mode a scene
