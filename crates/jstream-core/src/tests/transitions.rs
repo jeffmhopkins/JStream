@@ -483,3 +483,45 @@ fn a_nested_scene_with_a_blend_mode_moves_as_one_picture() {
     set("b2", BlendMode::Screen);
     assert_eq!(tracks("b"), Some(3), "n is placed with a mode");
 }
+
+/// The shot planned when a transition ends draws an item's effects (ADR-0065 §5): the
+/// program scene is planned again with each item's box and its effects' chain, not a
+/// box the transition left without its chain (#960).
+#[test]
+fn an_items_effects_run_once_a_transition_onto_its_scene_ends() {
+    use jstream_protocol::{FilterChain, FilterId, FilterOwner, ItemId};
+    let (engine, clock) = studio();
+    let control = connected(&engine);
+    let hub = engine.render_hub();
+    batch(
+        &control,
+        edits(vec![Edit::FilterAdd {
+            owner: FilterOwner::Item {
+                item_id: ItemId::new("b1"),
+            },
+            chain: FilterChain::Video,
+            filter_id: FilterId::new("sharp"),
+            kind: "sharpen".into(),
+            settings: Settings::default(),
+            enabled: None,
+            index: None,
+        }]),
+    )
+    .expect("b1 sharpened");
+    switch(&control, "b", Some("fade")).expect("to b");
+    assert!(
+        hub.load().shot().transition_tracks().is_some(),
+        "a fade runs"
+    );
+    clock.advance(400_000);
+    engine.replan();
+    let shot = hub.load();
+    let shot = shot.shot();
+    assert_eq!(shot.transition_tracks(), None, "the fade ended");
+    assert!(
+        shot.item_chain(&SceneId::new("b"), &ItemId::new("b1"))
+            .is_some(),
+        "b1's effects are planned"
+    );
+    assert_eq!(shot.chain_cost().item_effects, 1, "and run each frame");
+}
