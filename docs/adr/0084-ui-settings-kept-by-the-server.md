@@ -56,6 +56,14 @@ architecture, so agent tier ([R-GOV-005](../RULES.md#R-GOV-005)).
   and shows that copy first, so a reload draws at once and works with no server; the
   server's copy then replaces it. When the server keeps none yet, the browser's copy is
   sent, so an existing layout carries over.
+- **A change the server never got is not lost.** The browser also keeps the dock it last
+  read from or sent to the server (`jstream.dock.shared`). When its own copy differs
+  from that one, it holds a change the server never received (the page closed within the
+  send delay, or the server couldn't be reached), and it is sent instead of replaced.
+- **An unreadable dock is left alone.** The desktop app and a daemon's `--ui-dir` can
+  serve different UI builds over one file. A dock a UI can't read, perhaps a newer
+  UI's, is not overwritten when the workspace opens, only by the person's next change
+  or by a change of theirs the server never got.
 
 <a id="consequences"></a>
 ## Consequences

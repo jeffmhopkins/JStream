@@ -14,7 +14,7 @@ use crate::dock::{Dock, PanelId, Target, Zone};
 use crate::pairing::Pairing;
 use crate::panels::mixer::MixerFlip;
 use crate::panels::{Filters, Inspector, Mixer, Outputs, Scenes, Sources, StudioMode, Transform};
-use crate::ui_settings::{self, DOCK_KEY, Kept};
+use crate::ui_settings::{self, DOCK_KEY, FirstStep, Kept, Theirs};
 use leptos::html;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -67,10 +67,32 @@ enum Shared {
     No,
 }
 
+/// Where the browser keeps the dock it last read from or sent to the server, so a
+/// change the server never received is known on the next load (ADR-0084).
+const SHARED_KEY: &str = "jstream.dock.shared";
+
+/// The dock this browser last read from or sent to the server, if it kept one.
+fn last_shared() -> Option<Value> {
+    window()
+        .local_storage()
+        .ok()
+        .flatten()
+        .and_then(|storage| storage.get_item(SHARED_KEY).ok().flatten())
+        .and_then(|text| serde_json::from_str(&text).ok())
+}
+
+/// Records `value` as the dock the server holds now.
+fn keep_shared(value: &Value) {
+    if let Ok(Some(storage)) = window().local_storage() {
+        let _ = storage.set_item(SHARED_KEY, &value.to_string());
+    }
+}
+
 /// Shares `dock` through the engine's UI settings (ADR-0084) while the workspace is
-/// shown: reads the dock the server keeps and shows it, or sends this browser's when
-/// the server keeps none yet, then sends each change once the dock has stayed the same
-/// for [`SHARE_AFTER`].
+/// shown. When the server answers, [`ui_settings::first_step`] decides: show its dock,
+/// send this browser's (when the server keeps none, or this browser holds a change the
+/// server never received), or leave both alone. Each change after that is sent once the
+/// dock has stayed the same for [`SHARE_AFTER`].
 fn share(dock: RwSignal<Dock>) {
     let Some(session) = use_context::<SessionContext>().and_then(|context| context.get()) else {
         return;
@@ -85,8 +107,9 @@ fn share(dock: RwSignal<Dock>) {
         let control = control.clone();
         last.try_set_value(Some(value.clone()));
         spawn_local(async move {
-            if let Err(error) = ui_settings::set(&*control, DOCK_KEY, value).await {
-                leptos::logging::warn!("the dock could not be shared: {error}");
+            match ui_settings::set(&*control, DOCK_KEY, value.clone()).await {
+                Ok(()) => keep_shared(&value),
+                Err(error) => leptos::logging::warn!("the dock could not be shared: {error}"),
             }
         });
     };
@@ -94,35 +117,46 @@ fn share(dock: RwSignal<Dock>) {
     spawn_local({
         let send = send.clone();
         async move {
-            let kept = ui_settings::get(&*read, DOCK_KEY).await;
-            match kept {
-                Ok(Kept::Value(value)) => match Dock::from_value(&value) {
-                    Some(theirs) => {
-                        last.try_set_value(Some(value));
-                        if dock.try_with_untracked(|ours| *ours != theirs) == Some(true) {
-                            dock.try_set(theirs);
-                        }
-                    }
-                    // A dock this UI can't read, perhaps from a newer one: replaced by ours.
-                    None => {
-                        if let Some(ours) = dock.try_with_untracked(Dock::to_value) {
-                            send(ours);
-                        }
-                    }
-                },
-                Ok(Kept::Nothing) => {
-                    if let Some(ours) = dock.try_with_untracked(Dock::to_value) {
-                        send(ours);
-                    }
-                }
+            let kept = match ui_settings::get(&*read, DOCK_KEY).await {
                 Ok(Kept::Unserved) => {
                     shared.try_set_value(Shared::No);
                     return;
                 }
+                Ok(kept) => kept,
                 Err(error) => {
                     leptos::logging::warn!("the shared dock could not be read: {error}");
                     shared.try_set_value(Shared::No);
                     return;
+                }
+            };
+            let Some(ours) = dock.try_with_untracked(Dock::to_value) else {
+                return;
+            };
+            let parsed = match &kept {
+                Kept::Value(value) => Dock::from_value(value),
+                _ => None,
+            };
+            let theirs = match (&kept, &parsed) {
+                (Kept::Value(value), Some(_)) => Theirs::Readable(value),
+                (Kept::Value(_), None) => Theirs::Unreadable,
+                _ => Theirs::Nothing,
+            };
+            match ui_settings::first_step(theirs, &ours, last_shared().as_ref()) {
+                FirstStep::Adopt => {
+                    if let (Kept::Value(value), Some(theirs)) = (kept, parsed) {
+                        last.try_set_value(Some(value));
+                        let adopted = theirs.to_value();
+                        dock.try_set(theirs);
+                        keep_shared(&adopted);
+                    }
+                }
+                FirstStep::Send => send(ours),
+                FirstStep::Hold => {
+                    // An unreadable dock stays until the person changes ours.
+                    if matches!(kept, Kept::Value(_)) && parsed.is_some() {
+                        keep_shared(&ours);
+                    }
+                    last.try_set_value(Some(ours));
                 }
             }
             shared.try_set_value(Shared::Yes);

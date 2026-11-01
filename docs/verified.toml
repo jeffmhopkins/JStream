@@ -561,7 +561,7 @@ stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:56b4a498feb6ca8f", by = "agent:ui-layouts", note = "Added the UI settings bullet for protocol 0.52 (ADR-0084): ui_settings.set action and ui_settings.get query, answered by jstream-server with pairing off too, unsupported with no server; Pairing bullet unchanged and still true." }
+stamp = { hash = "b3:f538e35808f7e7e7", by = "agent:ui-layouts", note = "Added the UI settings bullet for protocol 0.52 (ADR-0084): ui_settings.set action and ui_settings.get query, answered by jstream-server with pairing off too, unsupported with no server; the protocol README's version line now names 0.52; Pairing bullet unchanged." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
 stamp = { hash = "b3:6eb2a51a198658fa", by = "agent:ui-layouts", note = "Added the UI settings bullet for protocol 0.52 (ADR-0084): ui_settings.set action and ui_settings.get query, answered by jstream-server with pairing off too, unsupported with no server; Pairing bullet unchanged and still true." }
@@ -3270,7 +3270,7 @@ stamp = { hash = "b3:4dd33797e5c7b909", by = "agent:ui-layouts", note = "Queries
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = """whole PR: the Events list adds youtube.stats {output_id, broadcast_id, concurrent_viewers?, likes?, views?} (0.38) and the YouTube section describes the event, the query's outputs and quota {used, daily, exhausted?, stats} with normal/slowed/stopped, and drops audience stats from "come later"; both schema snapshots changed only by the new types and 0.38; the B1 fix touched only the purpose's version paragraph; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) changed none of this section's inputs (the body, both snapshots and the source files came in as this branch had them); the youtube.stats and quota text holds""" }
 
 ["CRATE-jstream-protocol#purpose"."body"]
-stamp = { hash = "b3:f27d78cedc2e943a", by = "agent:blend-modes", note = "PROTOCOL_VERSION is 0.47 for drawn blend modes (no wire change, ADR-0082), followed by 0.46's entry; BlendMode's doc says every mode is drawn since 0.47; fixtures' comment updated." }
+stamp = { hash = "b3:a803032b731df33c", by = "agent:ui-layouts", note = "Version history now opens with 0.52, which added ui_settings.set and ui_settings.get (ADR-0084), matching version.rs's minor 52 (review B1); command.rs, query.rs, fixtures.rs and plugin.rs add UiSettingsSet, UiSettingsGet and its result, their fixtures and plugin scopes (never); the contents list still holds." }
 
 ["CRATE-jstream-protocol#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
 stamp = { hash = "b3:55468c98f61fc0f9" }
@@ -3279,7 +3279,7 @@ stamp = { hash = "b3:55468c98f61fc0f9" }
 stamp = { hash = "b3:d61ec77f35ffdcfa", by = "agent:builder-b8rnvf", note = "D9 0.42: audio.rs gains BusMonitor {device, tap}, MonitorTap (pre_filters, post_filters, unknown skipped in the schema), BusMonitor::problem and MAX_MONITOR_DEVICE_LEN; BusInfo.monitor; Edit::BusSetMonitor named and classified (plugin.rs); edit list and Audio bullet updated; version paragraph says 0.42 for bus monitors; fixtures and parity cover set, change, removal, a deleted bus's monitor and three refusals." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:5caf2351503409a7", by = "agent:ui-layouts", note = "Added UiSettingsSet, UiSettingsGet and its result, fixtures and plugin scopes (never); purpose and contents still hold." }
+stamp = { hash = "b3:5caf2351503409a7", by = "agent:ui-layouts", note = "Version history now opens with 0.52, which added ui_settings.set and ui_settings.get (ADR-0084), matching version.rs's minor 52 (review B1); command.rs, query.rs, fixtures.rs and plugin.rs add UiSettingsSet, UiSettingsGet and its result, their fixtures and plugin scopes (never); the contents list still holds." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:c07491919104bdad", by = "agent:claude", note = "Re-read after the merge of #899 (scenes carry labels, ADR-0078, protocol 0.45), which doesn't touch the privacy removal, and after moving its ADR-0027 citations to ADR-0080 (same decision numbers, ADR-0027 now superseded); the section holds." }
@@ -3300,7 +3300,7 @@ stamp = { hash = "b3:1233fe7e77286788", by = "agent:claude", note = "Re-read aft
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:c85b87d223db378a", by = "agent:ui-layouts", note = "Added UiSettingsSet, UiSettingsGet and its result, fixtures and plugin scopes (never); purpose and contents still hold." }
+stamp = { hash = "b3:c85b87d223db378a", by = "agent:ui-layouts", note = "Version history now opens with 0.52, which added ui_settings.set and ui_settings.get (ADR-0084), matching version.rs's minor 52 (review B1); command.rs, query.rs, fixtures.rs and plugin.rs add UiSettingsSet, UiSettingsGet and its result, their fixtures and plugin scopes (never); the contents list still holds." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:436b74f300d069cd", by = "agent:wave-owner", note = "Re-read against #765: fitted() now divides before multiplying; geometry.rs contents and content() description unchanged, no wire change | merge: Merged main at 5693733 (wave/m3-3 landed, #786) into wave/m1-4. geometry.rs: this branch's #774 (a fitted image's overflow); main's #611 (drawn_polygon and unplace) and #629 (check_drawable, 3D drawable from 0.34). Both sets of functions sit side by side in the merged file. Holds." }
@@ -3345,13 +3345,13 @@ stamp = { hash = "b3:28a4754c96763ce5", by = "agent:claude", note = "Re-read aft
 stamp = { hash = "b3:a616c6316e4de343", by = "agent:blend-modes", note = "PROTOCOL_VERSION is 0.47 for drawn blend modes (no wire change, ADR-0082), followed by 0.46's entry; BlendMode's doc says every mode is drawn since 0.47; fixtures' comment updated." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/plugin.rs"]
-stamp = { hash = "b3:37de63e62a2a3048", by = "agent:ui-layouts", note = "Added UiSettingsSet, UiSettingsGet and its result, fixtures and plugin scopes (never); purpose and contents still hold." }
+stamp = { hash = "b3:37de63e62a2a3048", by = "agent:ui-layouts", note = "Version history now opens with 0.52, which added ui_settings.set and ui_settings.get (ADR-0084), matching version.rs's minor 52 (review B1); command.rs, query.rs, fixtures.rs and plugin.rs add UiSettingsSet, UiSettingsGet and its result, their fixtures and plugin scopes (never); the contents list still holds." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/preview.rs"]
 stamp = { hash = "b3:fbdee1b05a69d0ec", by = "agent:claude@session_018f8xSzYLonPoGnTdov9TZu", note = "Re-read: preview.subscribe's optional scene_id and the 16-stream limit are additions to the existing command; the purpose's list of what the crate defines still holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:a46e8cfd298663b8", by = "agent:ui-layouts", note = "Added UiSettingsSet, UiSettingsGet and its result, fixtures and plugin scopes (never); purpose and contents still hold." }
+stamp = { hash = "b3:a46e8cfd298663b8", by = "agent:ui-layouts", note = "Version history now opens with 0.52, which added ui_settings.set and ui_settings.get (ADR-0084), matching version.rs's minor 52 (review B1); command.rs, query.rs, fixtures.rs and plugin.rs add UiSettingsSet, UiSettingsGet and its result, their fixtures and plugin scopes (never); the contents list still holds." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced" }
@@ -3363,7 +3363,7 @@ stamp = { hash = "b3:12085313843efe02", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:6e51f25e6183bec2", by = "agent:claude", note = "This PR (#813 and #815): PR 3: Re-read for #529 PR 3: parity.rs cases now cover audio chains on a scene and item and missing scene/item owners; purpose holds. Stacked #529 PR 2 (protocol 0.43): Contents lists FilterOwner's scene and item, SceneInfo filters and ItemInfo.effects, and the version paragraph names 0.43 with 0.39's keyframes after it; matches filter.rs, query.rs, kind.rs, version.rs and fixtures. Merge: refreshed onto wave/m1-5 (main after m1-4 landed) with #813's refresh: conflicts resolved by taking m1-5's side and re-applying #813's and this PR's own diff; the tree equals refreshed #813 plus this PR's changes. #813's record: #529 PR 2 (protocol 0.43): Contents lists FilterOwner's scene and item, SceneInfo filters and ItemInfo.effects, and the version paragraph names 0.43 with 0.39's keyframes after it; matches filter.rs, query.rs, kind.rs, version.rs and fixtures. Merge: refreshed onto wave/m1-5 (main after m1-4 landed); conflicts resolved by taking m1-5's side and re-applying this PR's own diff, plus max_outset_px: None on the e2e mock daemon's new KindDescriptor literal; snapshots regenerated. Merge of wave/m1-5 at bd50026: the wave didn't change crates/jstream-protocol/src/transition.rs. Merge of wave/m1-5 at e84bc9c: the wave didn't change crates/jstream-protocol/src/transition.rs." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:4dd33797e5c7b909", by = "agent:ui-layouts", note = "Added UiSettingsSet, UiSettingsGet and its result, fixtures and plugin scopes (never); purpose and contents still hold." }
+stamp = { hash = "b3:4dd33797e5c7b909", by = "agent:ui-layouts", note = "Version history now opens with 0.52, which added ui_settings.set and ui_settings.get (ADR-0084), matching version.rs's minor 52 (review B1); command.rs, query.rs, fixtures.rs and plugin.rs add UiSettingsSet, UiSettingsGet and its result, their fixtures and plugin scopes (never); the contents list still holds." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/youtube.rs"]
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = "whole PR: contents list youtube.stats among the queries and events and AudienceStatsInfo, QuotaInfo and StatsPolling in youtube.rs; the version paragraph says 0.38 for YouTube audience stats and, after review B1, that 0.34 to 0.37 are assigned to other open bumps (#629, #642, #682, #653), which the PR API confirms are open, with only #653 on wave/m1-3; matches event.rs, query.rs, youtube.rs, lib.rs, version.rs and the fixtures; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) brought #726's Contents text on the parity fixture (a display capture screen never placed for no-audio cases, a webcam with its paired input); event.rs, fixtures.rs, lib.rs, query.rs, version.rs and youtube.rs came in unchanged, so the youtube contents and 0.38 version text hold" }
@@ -4320,7 +4320,7 @@ stamp = { hash = "b3:ee23c35acad1943b", by = "agent:claude-ui-features", note = 
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR. Body: the Crop bullet (crop mode from the tool, C or the menu; V, Move, Escape and a scene switch leave it; Alt crops on the box's handles; amber chrome and the ghost; the readout's crop, cropped and no source size yet, and with no size the box's handles resize as usual, review N1) and Layout::sized. crop.rs (new): Picture::of over ItemGeometry::content with flips and fill clipping, CropGesture in the rotated frame clamped to the extent and MIN_SIZE, settled, clear and readout. mod.rs: Action::Crop, single_handle (crop handles on the picture; without a picture the box's handles resize, with Alt too), on_move, end and cancel, the keys, the drawing and the toolbar. model.rs: CanvasItem.crop and source_size, Layout::sized and item, and the commit's crops after its geometries in one ends_gesture batch. live.rs: Values carries crops, so live.set sends item.set_crop beside item.set_geometry. transform.rs: rotate and from_local are pub(crate) for crop.rs, otherwise unchanged." }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:c48cd0e0d3e35bb9", by = "agent:ui-layouts", note = "Docking bullet now says the dock is also kept in the engine's UI settings under workspace.dock: browser copy first, server's then replaces it, nothing sent before the answer, 500 ms debounce, no echo, unsupported keeps it browser-only." }
+stamp = { hash = "b3:16729a527c879a35", by = "agent:ui-layouts", note = "Docking bullet: the dock is also kept in the engine's UI settings under workspace.dock; ui_settings::first_step decides on the first answer, jstream.dock.shared marks the dock last read or sent so an unsent change is sent rather than lost (review B2), an unreadable dock is left alone (N3), 500 ms debounce, no echo, unsupported keeps it browser-only." }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:d15587360aa73723", by = "agent:ui-layouts", note = "Docking bullet now says the dock is also kept in the engine's UI settings under workspace.dock: browser copy first, server's then replaces it, nothing sent before the answer, 500 ms debounce, no echo, unsupported keeps it browser-only." }
@@ -4455,10 +4455,10 @@ stamp = { hash = "b3:076299ee126c849d" }
 stamp = { hash = "b3:c09bd1eaa6bef5cf", by = "agent:claude", note = "Re-read Design: the events bullet says JStream has no privacy screen (ADR-0080 §4) and the UI sends no privacy call; PrivacyReports, the Pause exceptions in the scene dialogs and the privacy CSS are gone, matching the sources and style.css. Then: Re-read after the merge of #899 (scenes carry labels, ADR-0078, protocol 0.45), which doesn't touch the privacy removal, and after moving its ADR-0027 citations to ADR-0080 (same decision numbers, ADR-0027 now superseded); the section holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/ui_settings.rs"]
-stamp = { hash = "b3:b23e2e892fb65f98", by = "agent:ui-layouts", note = "Docking bullet now says the dock is also kept in the engine's UI settings under workspace.dock: browser copy first, server's then replaces it, nothing sent before the answer, 500 ms debounce, no echo, unsupported keeps it browser-only." }
+stamp = { hash = "b3:78a6e5b51e04f509", by = "agent:ui-layouts", note = "Docking bullet: the dock is also kept in the engine's UI settings under workspace.dock; ui_settings::first_step decides on the first answer, jstream.dock.shared marks the dock last read or sent so an unsent change is sent rather than lost (review B2), an unreadable dock is left alone (N3), 500 ms debounce, no echo, unsupported keeps it browser-only." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/workspace.rs"]
-stamp = { hash = "b3:bc58e43bb2d2861b", by = "agent:ui-layouts", note = "Docking bullet now says the dock is also kept in the engine's UI settings under workspace.dock: browser copy first, server's then replaces it, nothing sent before the answer, 500 ms debounce, no echo, unsupported keeps it browser-only." }
+stamp = { hash = "b3:6a7118da34587c12", by = "agent:ui-layouts", note = "Docking bullet: the dock is also kept in the engine's UI settings under workspace.dock; ui_settings::first_step decides on the first answer, jstream.dock.shared marks the dock last read or sent so an unsent change is sent rather than lost (review B2), an unreadable dock is left alone (N3), 500 ms debounce, no echo, unsupported keeps it browser-only." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/style.css"]
 stamp = { hash = "b3:b75ee9b31acfec27", by = "agent:ui-parity", note = "Re-read the lists paragraph: the scene-reference child rows (a scene mask or another kind's scene setting, on the source's chain or the item's effects, with a role badge; open under a plain object, opening with a nested scene's row; folded by the caret; a click selects the scene); style.css's .ref-badge and the mask icon match it. | merge: main's #916 moved the meter track and soft text colours into style.css variables; the section names no colours, and this branch's scene-ref badge styles sit beside them unchanged | kept from the merged side: style.css only moves two literal colours into palette variables (--meter-track, --text-soft); the design section names no colours and its panel descriptions are unaffected" }
@@ -4596,10 +4596,10 @@ stamp = { hash = "b3:076299ee126c849d" }
 stamp = { hash = "b3:c09bd1eaa6bef5cf", by = "agent:claude", note = "Re-read after removing the privacy screen from the UI: the header list drops the Privacy button and Pause key, the Studio list drops the privacy state, the mixer drops the privacy mark, and the Inspector and scene Properties hotkey notes drop Pause. Then: Re-read after the merge of #899 (scenes carry labels, ADR-0078, protocol 0.45), which doesn't touch the privacy removal, and after moving its ADR-0027 citations to ADR-0080 (same decision numbers, ADR-0027 now superseded); the section holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/ui_settings.rs"]
-stamp = { hash = "b3:b23e2e892fb65f98", by = "agent:ui-layouts", note = "lib.rs adds the ui_settings module and dock.rs to_value/from_value; purpose unchanged." }
+stamp = { hash = "b3:78a6e5b51e04f509", by = "agent:ui-layouts", note = "lib.rs adds the ui_settings module (get, set, and first_step, the pure decision of what the workspace does on the server's first answer) and dock.rs to_value/from_value; workspace.rs shares the dock; purpose unchanged." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/workspace.rs"]
-stamp = { hash = "b3:bc58e43bb2d2861b", by = "agent:ui-layouts", note = "lib.rs adds the ui_settings module and dock.rs to_value/from_value; purpose unchanged." }
+stamp = { hash = "b3:6a7118da34587c12", by = "agent:ui-layouts", note = "lib.rs adds the ui_settings module (get, set, and first_step, the pure decision of what the workspace does on the server's first answer) and dock.rs to_value/from_value; workspace.rs shares the dock; purpose unchanged." }
 
 ["CRATE-jstream-ui-e2e#harness"."body"]
 stamp = { hash = "b3:bdd951698a4e8b82", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#924: meterTicks bullet now says it re-sends the tick every 100 ms until the next one; mock daemon, other fixtures, setup and browser bullets unchanged" }
@@ -5142,7 +5142,7 @@ stamp = { hash = "b3:747acc8bf268e7d7", by = "agent:wave-owner", note = "merge: 
 stamp = { hash = "b3:398144f56857a7fb", by = "agent:ui-layouts", note = "Deps changed only in the layout rows and the desktop's layout file; going live is unchanged." }
 
 ["GETTING-STARTED#live"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:ecae2a95396dbe70", by = "agent:ui-layouts", note = "Deps changed only in the layout rows and the desktop's layout file; going live is unchanged." }
+stamp = { hash = "b3:67c70097514179dd", by = "agent:ui-layouts", note = "Deps changed only in the layout rows and the desktop's layout file; going live is unchanged." }
 
 ["GETTING-STARTED#record"."body"]
 stamp = { hash = "b3:b21c49ef28545229", by = "agent:wave-owner", note = "merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: Recording (MP4) output with a file path, the header's Record/Stop recording (HD-07)" }
@@ -5151,7 +5151,7 @@ stamp = { hash = "b3:b21c49ef28545229", by = "agent:wave-owner", note = "merge: 
 stamp = { hash = "b3:398144f56857a7fb", by = "agent:ui-layouts", note = "Deps changed only in the layout rows and the desktop's layout file; recording is unchanged." }
 
 ["GETTING-STARTED#record"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:ecae2a95396dbe70", by = "agent:ui-layouts", note = "Deps changed only in the layout rows and the desktop's layout file; recording is unchanged." }
+stamp = { hash = "b3:67c70097514179dd", by = "agent:ui-layouts", note = "Deps changed only in the layout rows and the desktop's layout file; recording is unchanged." }
 
 ["GETTING-STARTED#requirements"."body"]
 stamp = { hash = "b3:33e39447d2457615", by = "agent:wave-owner", note = "merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: Windows 11 x64 build 22000 per README Platforms (fact min-windows-build), D3D12, Media Feature Pack on N editions (the desktop app's can't-start window), WebView2, no installer or admin per ADR-0066" }
@@ -5169,7 +5169,7 @@ stamp = { hash = "b3:67130f6f84b33399", by = "agent:wave-owner", note = "merge: 
 stamp = { hash = "b3:4be90c176fd17591", by = "agent:claude-labels", note = "Edited the opening: a new JStream starts empty but for the four sample labels; the scene steps are unchanged." }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:ecae2a95396dbe70", by = "agent:ui-layouts", note = "UI-FEATURES changed DK-10 to done; the panels and Layout sentence still holds." }
+stamp = { hash = "b3:67c70097514179dd", by = "agent:ui-layouts", note = "UI-FEATURES changed DK-10 to done, with an unsent change kept across a reload; the panels and Layout sentence still holds." }
 
 ["GETTING-STARTED#trouble"."body"]
 stamp = { hash = "b3:cdea88ae9fde1c6f", by = "agent:wave-owner", note = '''merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: logs\jstream-desktop.log and cef.log, crash-*.txt with secrets redacted and never uploaded (R-SEC-004, desktop Usage), issue and private-advisory links (registered in external.toml), SECURITY.md''' }
@@ -5598,7 +5598,7 @@ stamp = { hash = "b3:ff8f62abec05429b", by = "agent:claude", note = "Re-read Dia
 stamp = { hash = "b3:80347f35f9835c10", by = "agent:program-output-chains", note = "DL-05 note now says the catalogue follows the owner's chains, including the program output's and outputs' audio chain; DL-02 and DL-04 still hold, as source_properties.rs only passes the source as a FilterOwner. | merge: wave/m1-6 changed none of this section's inputs that this PR touches. | kept from the merged side: Whole PR against wave/m1-4: DL-04 and DL-05 move to built in filters.rs. DL-04: 460 wide, live changes, the switch, Cancel/Escape/backdrop restoring the opened settings and switch in one batch including edits the engine hasn't reported back (review B1), Defaults keeping the scene, Remove. DL-05: kind.list's filter kinds for the source's chains under the prototype's groups, the scene picker from scene_choices, the eight-filter limit, and the settings dialog after Add for more than three settings or an undescribed kind (N2). DL-02's filter column is now the panel's Chains with an enabled Add filter. All match the code." }
 
 ["UI-FEATURES#docking"."body"]
-stamp = { hash = "b3:c154d5b8c89fcc49", by = "agent:ui-layouts", note = "DK-10 is done: the engine's server keeps the dock and saved layouts (ui_settings, ADR-0084) in the data folder shared by desktop and daemon, with the browser copy shown first." }
+stamp = { hash = "b3:84f5927e42214501", by = "agent:ui-layouts", note = "DK-10 is done: the engine's server keeps the dock and saved layouts (ui_settings, ADR-0084) in the data folder shared by desktop and daemon; the browser copy is shown first, and a change the server never got is sent on the next load rather than lost (review B2)." }
 
 ["UI-FEATURES#docking"."file:crates/jstream-ui/src/app.rs"]
 stamp = { hash = "b3:3b3775108c6ffc96", by = "agent:ui-parity", note = "app.rs gains only provide_context(Clipboard::new()); re-read the docking intro and rows, none depends on it; holds." }
@@ -5607,7 +5607,7 @@ stamp = { hash = "b3:3b3775108c6ffc96", by = "agent:ui-parity", note = "app.rs g
 stamp = { hash = "b3:662c19bfd7c18231", by = "agent:ui-layouts", note = "DK-10 is done: the engine's server keeps the dock and saved layouts (ui_settings, ADR-0084) in the data folder shared by desktop and daemon, with the browser copy shown first." }
 
 ["UI-FEATURES#docking"."file:crates/jstream-ui/src/workspace.rs"]
-stamp = { hash = "b3:bc58e43bb2d2861b", by = "agent:ui-layouts", note = "DK-10 is done: the engine's server keeps the dock and saved layouts (ui_settings, ADR-0084) in the data folder shared by desktop and daemon, with the browser copy shown first." }
+stamp = { hash = "b3:6a7118da34587c12", by = "agent:ui-layouts", note = "DK-10 is done: the engine's server keeps the dock and saved layouts (ui_settings, ADR-0084) in the data folder shared by desktop and daemon; the browser copy is shown first, and a change the server never got is sent on the next load rather than lost (review B2)." }
 
 ["UI-FEATURES#filters"."body"]
 stamp = { hash = "b3:508df9feee649004", by = "agent:claude-clap-chains", note = "Re-read FL-01 to FL-08 against filters.rs and the engine change: FL-08 is now built (each scanned plugin by name under Plugins, on source, program output and output chains, Windows live-audio run #912); FL-05 and FL-07 still hold." }
@@ -5703,7 +5703,7 @@ stamp = { hash = "b3:3f74327d12cde611", by = "agent:ui-parity", note = "Recounte
 stamp = { hash = "b3:6ef22f1fb29ce94c", by = "agent:claude@session_018f8xSzYLonPoGnTdov9TZu", note = "Recounted every table after the merge brought #894 (no privacy screen, ADR-0080) (four rows to ⏸) with this PR's DL-07 🔒→🟡: Dialogs 8|5|2|0|1|0, Total 130|104|11|1|10|4, and each area row matches its table | kept from the merged side: Re-read Summary: counted rows per section again, Header 9|6|1|0|1|1, Canvas 18|15|1|0|1|1, Mixer 7|6|0|0|0|1, Keyboard 7|5|0|1|0|1, Total 130|104|10|1|11|4, with the four privacy rows ⏸; batch 9 no longer lists them. | merge: #901 changed no status; recounted rows: 104 ✅, 10 🟡, 1 ⬜, 11 🔒, 4 ⏸ = 130, matching the table. | kept from the merged side: Filters 5→6 built, 2→1 needs the engine (FL-06 flipped); total 107→108 built, 12→11 locked; rows still 130 | kept from the merged side: #897 review follow-up rewords DL-05, FL-06 and FL-07 only; no status changed, counts hold (130/108/10/1/11/0)" }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#docking"]
-stamp = { hash = "b3:c154d5b8c89fcc49", by = "agent:ui-layouts", note = "Docking now 9 done and 1 partial (DK-10 moved to done), total 112 done and 7 partial." }
+stamp = { hash = "b3:84f5927e42214501", by = "agent:ui-layouts", note = "Docking now 9 done and 1 partial (DK-10 moved to done), total 112 done and 7 partial." }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#filters"]
 stamp = { hash = "b3:508df9feee649004", by = "agent:claude-clap-chains", note = "Recounted Filters after FL-08 moved from locked to built: 8 rows, 7 built, 1 partial, 0 locked; totals 130 rows, 105 built, 11 partial, 1 to build, 9 need the engine, 4 decision." }

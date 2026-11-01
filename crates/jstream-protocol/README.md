@@ -183,8 +183,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.47 because the engine
-  draws, and so accepts, every blend mode
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.52 because it added
+  `ui_settings.set` and `ui_settings.get`, the UI settings the server keeps
+  ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)); 0.47 made the
+  engine draw, and so accept, every blend mode
   ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md); no wire change); 0.46 added
   `preview.subscribe`'s `scene_id`, a preview stream of any scene, and its 16 streams a
   session ([Binary streams](#design)); 0.45 made scenes

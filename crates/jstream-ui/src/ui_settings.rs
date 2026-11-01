@@ -24,6 +24,48 @@ pub enum Kept {
     Unserved,
 }
 
+/// What the server answered for the dock, as the first step needs it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Theirs<'a> {
+    /// The server keeps none.
+    Nothing,
+    /// The server keeps a dock this UI reads.
+    Readable(&'a Value),
+    /// The server keeps a value this UI can't read as a dock, perhaps a newer UI's.
+    Unreadable,
+}
+
+/// What the workspace does once the server first answers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FirstStep {
+    /// Show the server's dock.
+    Adopt,
+    /// Send this browser's dock.
+    Send,
+    /// Change nothing now; the person's next change is sent.
+    Hold,
+}
+
+/// The first step, from the server's answer, this browser's dock (`ours`) and the dock
+/// this browser last read from or sent to the server (`last_shared`). The browser's copy
+/// holds a change the server never received when it differs from `last_shared`, for
+/// example one made in the last moments before the page closed, or while the server
+/// couldn't be reached: then ours is sent rather than replaced. A browser that never
+/// shared a dock takes the server's, so a layout made elsewhere follows the person. An
+/// unreadable dock is left alone unless ours holds an unsent change, so an older UI never
+/// overwrites a newer one's dock just by opening.
+pub fn first_step(theirs: Theirs<'_>, ours: &Value, last_shared: Option<&Value>) -> FirstStep {
+    let unsent = last_shared.is_some_and(|shared| shared != ours);
+    match theirs {
+        Theirs::Nothing => FirstStep::Send,
+        Theirs::Unreadable if unsent => FirstStep::Send,
+        Theirs::Unreadable => FirstStep::Hold,
+        Theirs::Readable(theirs) if theirs == ours => FirstStep::Hold,
+        Theirs::Readable(_) if unsent => FirstStep::Send,
+        Theirs::Readable(_) => FirstStep::Adopt,
+    }
+}
+
 /// Reads the value kept under `key` (`ui_settings.get`).
 pub async fn get(control: &dyn Control, key: &str) -> Result<Kept, String> {
     let call = Call::Query {
@@ -63,7 +105,7 @@ fn unsupported(error: &ControlError) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{DOCK_KEY, Kept, get, set};
+    use super::{DOCK_KEY, FirstStep, Kept, Theirs, first_step, get, set};
     use jstream_control::{BoxFuture, Control, ControlError, EventStream, MockEngine};
     use jstream_protocol::{
         Action, Call, CallResult, Hello, PROTOCOL_VERSION, Query, QueryResult, RequestId, Response,
@@ -159,5 +201,48 @@ mod tests {
         assert_eq!(now(get(&bare, DOCK_KEY)), Ok(Kept::Unserved));
         let refused = now(set(&bare, DOCK_KEY, json!(1)));
         assert!(refused.is_err(), "{refused:?}");
+    }
+
+    /// A change the server never received (the page closed within the send delay, or
+    /// the server couldn't be reached) is sent on the next load, not replaced by the
+    /// server's older dock.
+    #[test]
+    fn an_unsent_change_wins_over_the_server_s_older_dock() {
+        let old = json!({"version": 1, "current": "Editing"});
+        let ours = json!({"version": 1, "current": "My layout 1"});
+        assert_eq!(
+            first_step(Theirs::Readable(&old), &ours, Some(&old)),
+            FirstStep::Send
+        );
+    }
+
+    #[test]
+    fn the_first_step_follows_what_each_side_holds() {
+        let a = json!({"version": 1, "current": "Editing"});
+        let b = json!({"version": 1, "current": "Live"});
+        // Nothing on the server: ours goes up.
+        assert_eq!(first_step(Theirs::Nothing, &a, None), FirstStep::Send);
+        // Another device changed it, and ours is what we last shared: take theirs.
+        assert_eq!(
+            first_step(Theirs::Readable(&b), &a, Some(&a)),
+            FirstStep::Adopt
+        );
+        // A browser that never shared takes the server's.
+        assert_eq!(first_step(Theirs::Readable(&b), &a, None), FirstStep::Adopt);
+        // The same on both sides: nothing to do.
+        assert_eq!(
+            first_step(Theirs::Readable(&a), &a, Some(&b)),
+            FirstStep::Hold
+        );
+        // A newer UI's dock is left alone unless ours holds an unsent change.
+        assert_eq!(
+            first_step(Theirs::Unreadable, &a, Some(&a)),
+            FirstStep::Hold
+        );
+        assert_eq!(first_step(Theirs::Unreadable, &a, None), FirstStep::Hold);
+        assert_eq!(
+            first_step(Theirs::Unreadable, &a, Some(&b)),
+            FirstStep::Send
+        );
     }
 }

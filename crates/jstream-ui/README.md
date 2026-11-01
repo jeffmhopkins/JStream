@@ -490,9 +490,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
     (`ui_settings.rs`, [ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)),
     so the desktop app and every browser of one engine show the same layout. When the
     workspace opens it shows the browser's copy, then reads the server's
-    (`ui_settings.get`) and shows that instead; when the server keeps none yet, or one
-    this UI can't read, it sends the browser's. Nothing is sent before that answer, so a
-    stale browser copy never replaces the server's. After that each change is sent
+    (`ui_settings.get`), and `ui_settings::first_step` decides what happens next. The
+    browser also keeps the dock it last read from or sent to the server
+    (`jstream.dock.shared`), so it knows when its own copy holds a change the server
+    never got (the page closed within the send delay, or the server couldn't be
+    reached): that copy is sent. Otherwise the server's dock is shown, or the browser's
+    is sent when the server keeps none. A dock this UI can't read is left alone until
+    the person changes theirs, so an older UI never overwrites a newer one's just by
+    opening. Nothing is sent before that answer. After that each change is sent
     (`ui_settings.set`) once the dock has stayed the same for 500 ms, since a splitter
     drag changes it on every move, and a dock just read from the server isn't sent back.
     A session with no server in front answers `unsupported`, and the browser alone keeps
