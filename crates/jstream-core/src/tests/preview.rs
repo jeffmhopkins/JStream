@@ -13,8 +13,8 @@ use crate::{Engine, InProcessControl};
 use jstream_control::{BinaryStream, Control, ControlError};
 use jstream_platform::fake::{self, FakeClock};
 use jstream_protocol::{
-    Action, Batch, BinaryFrame, Call, Edit, PreviewCodec, PreviewDraft, ProtocolError, Query,
-    QueryResult, Rev, SceneId, SourceId, SourceKind, WireError,
+    Action, Batch, BinaryFrame, Call, Edit, ItemId, PreviewCodec, PreviewDraft, ProtocolError,
+    Query, QueryResult, Rev, SceneId, Settings, SourceId, SourceKind, WireError,
 };
 use jstream_sources::CaptureSpec;
 use std::sync::{Arc, mpsc};
@@ -868,6 +868,66 @@ fn source_streams_are_checked() {
         }) => assert_eq!(field, "source_id"),
         other => panic!("expected invalid_argument, got {other:?}"),
     }
+    // With all three, the error still names `source_id`, the later field.
+    let all = act(
+        &control,
+        Call::Action {
+            action: Action::PreviewSubscribe {
+                channel: 1,
+                max_width: None,
+                max_height: None,
+                fps: None,
+                codecs: Vec::new(),
+                scene_id: Some(SceneId::new("main")),
+                source: Some(PreviewDraft {
+                    kind: "color".into(),
+                    settings: Settings::new(),
+                }),
+                source_id: Some(SourceId::new("webcam")),
+            },
+        },
+    )
+    .expect_err("all three");
+    match all {
+        ControlError::Protocol(WireError {
+            error: ProtocolError::InvalidArgument { field, .. },
+            ..
+        }) => assert_eq!(field, "source_id"),
+        other => panic!("expected invalid_argument, got {other:?}"),
+    }
     // A refused subscription leaves its channel free.
     act(&control, subscribe_source(1, "webcam")).expect("subscribed");
+}
+
+/// A collection that already holds the IDs a source's stream plans through still gets
+/// its picture: the stream's scene and item take other IDs.
+#[test]
+fn a_source_stream_avoids_the_collection_s_ids() {
+    let engine = Engine::new().with_cpu_compositor();
+    let control = connected(&engine);
+    let mut frames = control.binary();
+    batch(
+        &control,
+        edits(vec![
+            Edit::SceneCreate {
+                scene_id: SceneId::new("jstream-source-preview"),
+                name: "Taken".into(),
+                role: None,
+            },
+            webcam(),
+            Edit::ItemAdd {
+                scene_id: SceneId::new("jstream-source-preview"),
+                item_id: ItemId::new("jstream-source-preview-item"),
+                source_id: SourceId::new("webcam"),
+                transform: None,
+                geometry: None,
+                opacity: None,
+                blend: None,
+            },
+        ]),
+    )
+    .expect("taken");
+    act(&control, subscribe_source(4, "webcam")).expect("subscribed");
+    let first = frame(&mut frames);
+    assert_eq!(first.header.channel, 4);
 }

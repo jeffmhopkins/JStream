@@ -728,7 +728,7 @@ pub(crate) fn plan_scene(
 }
 
 /// The scene and item a source's preview stream draws it through, in a copy of the
-/// collection: no ID the collection holds.
+/// collection, each with a number added while the collection holds that ID.
 const SOURCE_SCENE: &str = "jstream-source-preview";
 const SOURCE_ITEM: &str = "jstream-source-preview-item";
 
@@ -752,6 +752,12 @@ pub(crate) fn plan_source(
         n += 1;
         scene_id = SceneId::new(format!("{SOURCE_SCENE}-{n}"));
     }
+    let mut item_id = ItemId::new(SOURCE_ITEM);
+    let mut n = 1;
+    while graph.state().item(&item_id).is_some() {
+        n += 1;
+        item_id = ItemId::new(format!("{SOURCE_ITEM}-{n}"));
+    }
     let mut own = graph.clone();
     let edits = [
         Edit::SceneCreate {
@@ -761,7 +767,7 @@ pub(crate) fn plan_source(
         },
         Edit::ItemAdd {
             scene_id: scene_id.clone(),
-            item_id: ItemId::new(SOURCE_ITEM),
+            item_id,
             source_id: source_id.clone(),
             transform: None,
             geometry: Some(geometry),

@@ -1196,16 +1196,18 @@ impl Engine {
                 source_id,
             } => {
                 let settings = PreviewSettings::resolve(max_width, max_height, fps, &codecs)?;
-                if scene_id.is_some() && source.is_some() {
-                    return Err(ProtocolError::invalid_argument(
-                        "source",
-                        "a preview stream shows a scene or a source, not both",
-                    ));
-                }
+                // `source_id` first, so the error names the later field however many
+                // of the three are given.
                 if source_id.is_some() && (scene_id.is_some() || source.is_some()) {
                     return Err(ProtocolError::invalid_argument(
                         "source_id",
                         "a preview stream shows one scene or one source, not both",
+                    ));
+                }
+                if scene_id.is_some() && source.is_some() {
+                    return Err(ProtocolError::invalid_argument(
+                        "source",
+                        "a preview stream shows a scene or a source, not both",
                     ));
                 }
                 let (rev, kinds, canvas) = {

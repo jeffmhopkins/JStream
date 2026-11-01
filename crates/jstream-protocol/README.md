@@ -1669,7 +1669,7 @@ the JSON text messages of the same connection (0.20,
   scene's stream it follows the source's settings, filters and the canvas as they
   change, never makes the source shown or heard, and costs an output nothing. A source
   the collection doesn't have fails with `not_found`, a request with `scene_id` or
-  `source` too fails with `invalid_argument` naming `source_id`, and a source deleted
+  `source` too (or both) fails with `invalid_argument` naming `source_id`, and a source deleted
   while its stream is open ends the stream with the end frame "the source was
   deleted".
 - **The frame.** A fixed 32-byte little-endian header, then the payload:
