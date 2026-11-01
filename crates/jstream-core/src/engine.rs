@@ -1015,8 +1015,9 @@ impl Engine {
             self.audit_gestures(ended, rev, &client_name);
             self.with_key_set(result)
         };
-        // Before the save, so a client that reads `activity.list` as soon as the call's
-        // events reach it finds the entry.
+        // Before the save, so a client that reads `activity.list` after the call's events
+        // usually finds the entry; one that reads faster than this finds it on its next
+        // read.
         if let Some(pending) = audit {
             self.record(pending.finish(client_id, request_id, &result));
         }
