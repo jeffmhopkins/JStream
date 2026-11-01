@@ -12,7 +12,7 @@
 use crate::snapshot::LiveParams;
 use jstream_protocol::{
     ClientId, Edit, Event, GestureId, GestureInfo, ItemId, LiveOutcome, MAX_GESTURES_PER_CLIENT,
-    MAX_LIVE_VALUES, ProtocolError, is_live_adjustable,
+    MAX_LIVE_VALUES, ProtocolError, SceneId, is_live_adjustable,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::{Duration, Instant};
@@ -21,30 +21,47 @@ use std::time::{Duration, Instant};
 /// second.
 pub(crate) const CHANGED_INTERVAL: Duration = Duration::from_micros(33_334);
 
-/// One parameter a live value can override.
+/// One parameter a live value can override: a field of an item, as the item itself has
+/// it (`None`) or as a keyframe scene of the item's scene overrides it (#846). The two
+/// are different parameters, so gestures on both can be open at once.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Param {
     /// An item's placement: `item.set_transform` and `item.set_geometry` both set it.
-    Placement(ItemId),
+    Placement(Option<SceneId>, ItemId),
     /// An item's crop.
-    Crop(ItemId),
+    Crop(Option<SceneId>, ItemId),
 }
 
 impl Param {
-    /// The parameter `value` sets, if it is live-adjustable.
-    fn of(value: &Edit) -> Option<Param> {
+    /// The parameter `value` sets, if it is live-adjustable. `is_keyframe` says whether
+    /// the scene a value names is a keyframe scene; any other `scene_id` names the
+    /// item's own placement, which the collection has checked.
+    fn of(value: &Edit, is_keyframe: impl Fn(&SceneId) -> bool) -> Option<Param> {
+        let keyframe = |scene_id: &Option<SceneId>| scene_id.clone().filter(|id| is_keyframe(id));
         match value {
-            Edit::ItemSetTransform { item_id, .. } | Edit::ItemSetGeometry { item_id, .. } => {
-                Some(Param::Placement(item_id.clone()))
+            Edit::ItemSetTransform {
+                item_id, scene_id, ..
             }
-            Edit::ItemSetCrop { item_id, .. } => Some(Param::Crop(item_id.clone())),
+            | Edit::ItemSetGeometry {
+                item_id, scene_id, ..
+            } => Some(Param::Placement(keyframe(scene_id), item_id.clone())),
+            Edit::ItemSetCrop {
+                item_id, scene_id, ..
+            } => Some(Param::Crop(keyframe(scene_id), item_id.clone())),
             _ => None,
         }
     }
 
     fn item(&self) -> &ItemId {
         match self {
-            Param::Placement(item_id) | Param::Crop(item_id) => item_id,
+            Param::Placement(_, item_id) | Param::Crop(_, item_id) => item_id,
+        }
+    }
+
+    /// The keyframe scene it belongs to, if it is a keyframe's.
+    fn keyframe(&self) -> Option<&SceneId> {
+        match self {
+            Param::Placement(keyframe, _) | Param::Crop(keyframe, _) => keyframe.as_ref(),
         }
     }
 }
@@ -123,12 +140,19 @@ impl Gestures {
 
     /// Opens the gesture if it is new and sets `values`, which [`check_set`](Self::check_set)
     /// and the collection have accepted. Each takes its parameter over from any other
-    /// gesture that held it.
-    pub(crate) fn set(&mut self, client_id: &ClientId, gesture_id: &GestureId, values: Vec<Edit>) {
+    /// gesture that held it. `is_keyframe` says which scenes are keyframe scenes, whose
+    /// values are parameters of their own.
+    pub(crate) fn set(
+        &mut self,
+        client_id: &ClientId,
+        gesture_id: &GestureId,
+        values: Vec<Edit>,
+        is_keyframe: impl Fn(&SceneId) -> bool,
+    ) {
         let key = (client_id.clone(), gesture_id.clone());
         self.open.entry(key.clone()).or_default();
         for value in values {
-            let Some(param) = Param::of(&value) else {
+            let Some(param) = Param::of(&value, &is_keyframe) else {
                 continue;
             };
             if let Some(holder) = self.holders.insert(param.clone(), key.clone())
@@ -234,13 +258,17 @@ impl Gestures {
         !self.releasing.is_empty()
     }
 
-    /// Drops every live value on an item that `exists` says is gone: a batch deleted
-    /// it. Returns whether any went.
-    pub(crate) fn drop_missing(&mut self, exists: impl Fn(&ItemId) -> bool) -> bool {
+    /// Drops every live value that `exists` says has nothing left to draw it: a batch
+    /// deleted its item, or the keyframe scene it is addressed to (the second
+    /// argument, `None` for the item's own). Returns whether any went.
+    pub(crate) fn drop_missing(
+        &mut self,
+        exists: impl Fn(&ItemId, Option<&SceneId>) -> bool,
+    ) -> bool {
         let gone: Vec<Param> = self
             .holders
             .keys()
-            .filter(|param| !exists(param.item()))
+            .filter(|param| !exists(param.item(), param.keyframe()))
             .cloned()
             .collect();
         for param in &gone {
@@ -254,7 +282,7 @@ impl Gestures {
         let mut released = false;
         for (_, values) in &mut self.releasing {
             let before = values.len();
-            values.retain(|param, _| exists(param.item()));
+            values.retain(|param, _| exists(param.item(), param.keyframe()));
             released |= values.len() != before;
         }
         self.releasing.retain(|(_, values)| !values.is_empty());
@@ -264,16 +292,17 @@ impl Gestures {
     /// What the parameter channel holds: the values committed gestures still keep,
     /// oldest first, then every open gesture's, which win.
     pub(crate) fn params(&self) -> LiveParams {
-        let committed = self
-            .releasing
-            .iter()
-            .flat_map(|(_, values)| values.values());
+        let committed = self.releasing.iter().flat_map(|(_, values)| values.iter());
         let open = self.holders.iter().filter_map(|(param, key)| {
             self.open
                 .get(key)
-                .and_then(|gesture| gesture.values.get(param))
+                .and_then(|gesture| gesture.values.get_key_value(param))
         });
-        LiveParams::from_values(committed.chain(open))
+        LiveParams::from_values(
+            committed
+                .chain(open)
+                .map(|(param, value)| (param.keyframe(), value)),
+        )
     }
 
     /// The open gestures, for `live.list`, ordered by client and gesture ID.

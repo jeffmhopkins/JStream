@@ -7,9 +7,9 @@ use super::{add, block_on, connected, create, edits};
 use crate::Engine;
 use jstream_control::Control;
 use jstream_protocol::{
-    Action, Call, CallResult, DroppedOverride, Easing, Edit, Finite32, HistoryCall, HistoryOp,
-    ItemGeometry, ItemId, ItemOverride, Query, QueryResult, SceneId, Settings, Size, SourceId,
-    SourceKind, TransitionPresetId, Vec2,
+    Action, Batch, Call, CallResult, DroppedOverride, Easing, Edit, Finite32, GestureId,
+    HistoryCall, HistoryOp, ItemGeometry, ItemId, ItemOverride, Query, QueryResult, SceneId,
+    Settings, Size, SourceId, SourceKind, TransitionPresetId, Vec2,
 };
 use jstream_render::Placement;
 use jstream_render::transition::Track;
@@ -273,32 +273,50 @@ fn a_batch_reports_the_overrides_it_drops_and_undo_restores_them() {
     assert!(overrides(&control).is_empty());
 }
 
-/// A live value addressed to a keyframe scene is refused (`values.<n>.scene_id`): live
-/// values are drawn per item, so it would move the parent's item wherever it shows
-/// (#720 review B2; #702 builds them). Nothing is applied, and a value naming the
-/// parent's own scene is still taken.
+/// A live value addressed to a keyframe scene is a parameter of that keyframe's (#846):
+/// it shows only where the keyframe draws the item, beside the item's own live value,
+/// which shows in the keyframe only through the fields the keyframe doesn't override.
+/// Committing it writes the keyframe's override, and deleting the keyframe drops it.
 #[test]
-fn a_live_value_on_a_keyframe_scene_is_refused() {
+fn a_live_value_on_a_keyframe_scene_shows_where_the_keyframe_draws() {
     let engine = family();
     let control = connected(&engine);
-    let live_set = |values: Vec<Edit>| {
+    apply(&control, vec![geometry("a2", Some("k"), 900.0)]);
+    let live_set = |gesture: &str, values: Vec<Edit>| {
         let action = Action::LiveSet {
-            gesture_id: jstream_protocol::GestureId::new("drag"),
+            gesture_id: GestureId::new(gesture),
             values,
         };
-        block_on(control.call(Call::Action { action }))
+        block_on(control.call(Call::Action { action })).expect("live.set");
     };
-    let error = live_set(vec![
-        geometry("a1", None, 150.0),
-        geometry("a1", Some("k"), 900.0),
-    ])
-    .expect_err("refused");
-    match error.protocol() {
-        Some(jstream_protocol::ProtocolError::InvalidArgument { field, .. }) => {
-            assert_eq!(field, "values.1.scene_id");
-        }
-        other => panic!("not invalid_argument: {other:?}"),
-    }
+    let drawn = |scene: &str| -> Vec<(String, f32)> {
+        let hub = engine.render_hub();
+        hub.load()
+            .shot()
+            .drawn(&SceneId::new(scene), &hub.load_live())
+            .expect("the shot draws the scene")
+            .iter()
+            .map(|(item, placement, _)| (item.to_string(), x(placement)))
+            .collect()
+    };
+    switch(&control, "k", None);
+
+    // The parent's live values show where the keyframe follows it: a1, not a2.
+    live_set(
+        "parent",
+        vec![geometry("a1", None, 150.0), geometry("a2", None, 550.0)],
+    );
+    assert_eq!(drawn("k"), [("a1".into(), 150.0), ("a2".into(), 900.0)]);
+
+    // The keyframe's own live values win in the keyframe, for either kind of field.
+    live_set(
+        "key",
+        vec![
+            geometry("a1", Some("k"), 170.0),
+            geometry("a2", Some("k"), 950.0),
+        ],
+    );
+    assert_eq!(drawn("k"), [("a1".into(), 170.0), ("a2".into(), 950.0)]);
     let call = Call::Query {
         query: Query::LiveList,
     };
@@ -308,6 +326,40 @@ fn a_live_value_on_a_keyframe_scene_is_refused() {
     else {
         panic!("not live.list");
     };
-    assert!(gestures.is_empty(), "nothing opened: {gestures:?}");
-    live_set(vec![geometry("a1", Some("a"), 150.0)]).expect("the parent's own scene");
+    assert_eq!(
+        gestures.len(),
+        2,
+        "each holds its own parameters: {gestures:?}"
+    );
+
+    // On the parent the keyframe's live values don't show.
+    switch(&control, "a", None);
+    assert_eq!(drawn("a"), [("a1".into(), 150.0), ("a2".into(), 550.0)]);
+
+    // Committing writes the keyframe's override; the parent's gesture stays open.
+    let commit =
+        Batch::single(geometry("a2", Some("k"), 950.0)).ending_gesture(GestureId::new("key"));
+    block_on(control.call(Call::Batch(commit))).expect("commit");
+    switch(&control, "k", None);
+    assert_eq!(drawn("k"), [("a1".into(), 150.0), ("a2".into(), 950.0)]);
+
+    // A keyframe that goes takes the live values addressed to it.
+    live_set("key2", vec![geometry("a1", Some("k"), 180.0)]);
+    switch(&control, "a", None);
+    apply(
+        &control,
+        vec![Edit::SceneDelete {
+            scene_id: SceneId::new("k"),
+        }],
+    );
+    let live = engine.render_hub().load_live();
+    assert_eq!(
+        live.item(&ItemId::new("a1"))
+            .map(|(placement, _)| placement.map(|p| x(&p))),
+        Some(Some(150.0)),
+        "the parent's own value stays"
+    );
+    block_on(control.call(Call::History(HistoryCall::new(HistoryOp::Undo)))).expect("undo");
+    switch(&control, "k", None);
+    assert_eq!(drawn("k"), [("a1".into(), 150.0), ("a2".into(), 950.0)]);
 }

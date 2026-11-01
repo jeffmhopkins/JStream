@@ -739,8 +739,8 @@ browser, and `mod.rs` is the component.
   outline. A keyframe scene shows its
   parent's items at its overrides under a banner, "◆ Keyframe of “<parent>”: only
   placement and visibility can change", and its edits are addressed to it, so they
-  write its overrides (ADR-0049). Its drags send no live values, which the engine
-  doesn't take on a keyframe scene yet (#702): the drop commits as usual.
+  write its overrides (ADR-0049). Its drags send no live values yet, though the engine
+  takes them on a keyframe scene (#846): the drop commits as usual.
 - **The preview.** Under the boxes is the shown scene's picture, live: the program
   mix while the canvas shows the scene on program, so its transitions show, else that
   scene's own stream (`preview.subscribe`'s `scene_id`, CV-03). The canvas opens the

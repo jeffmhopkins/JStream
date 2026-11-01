@@ -445,7 +445,9 @@ state machine. Contents:
   parent's items with its overrides and following the parent, a `move` between a parent
   and its variant pairing by item where pairing by source would cross, and the
   overrides a batch drops reported and restored by undo, with a no-op clear that is no
-  undo step, and a live value on a keyframe scene refused; `transition.rs` pairs a source placed twice by item), YouTube on `jstream-youtube`'s `FakeTransport` and fixtures
+  undo step, and a live value on a keyframe scene shown only where the keyframe draws the
+  item, the parent's own showing there through fields it doesn't override, committed as
+  its override and dropped with the keyframe; `transition.rs` pairs a source placed twice by item), YouTube on `jstream-youtube`'s `FakeTransport` and fixtures
   (`src/tests/youtube.rs`: sign-in through a real loopback redirect, sign-out, the
   broadcast actions and lists, quota and refused tokens, a `youtube` output
   publishing to its broadcast's ingest on the CPU stand-in, with the key and tokens in
@@ -718,21 +720,27 @@ Live values ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)) live in
 `gesture.rs`'s table, under the collection lock, and reach the render thread through
 the render parameter channel, never through the collection:
 - **`live.set`** checks the message's shape (1 to 256 values, each a live-adjustable
-  setter, room for a new gesture among the client's 16), refuses a value whose
-  `scene_id` names a keyframe scene (`values.<n>.scene_id`: the parameters are per
-  item, so it would move the parent's item wherever it is drawn; #702 builds them),
+  setter, room for a new gesture among the client's 16),
   then applies the values to a copy of the graph exactly as a batch would, naming a failure `values.<n>.<field>`.
   The copy is thrown away: `rev`, the undo history, the collection file and every
   collection read stay as they were. The values go into the gesture, each taking its
   parameter (an item's placement, set by `item.set_transform` or `item.set_geometry`,
   or its crop) from any gesture that held it, and the table is published on the
   channel (`RenderHub::publish_live`, a `LiveParams` of per-item overrides, swapped
-  with `arc-swap` only when it changed).
+  with `arc-swap` only when it changed). A value whose `scene_id` names a keyframe
+  scene is a parameter of its own, the keyframe's field of the item (protocol 0.53,
+  #846), so a
+  gesture on the parent's item and one on the keyframe's can both be open. A batch
+  that deletes an item, or a keyframe scene, drops the live values addressed to it.
 - **The channel.** The render thread reads it after it adopts the snapshot on every
   tick, with a pointer compare, and hands a replaced one to the collector
   (`RenderReader::adopt`, R-RT-003). `compose` applies an item's live placement and
   crop wherever the item is drawn, nested passes included, with no new snapshot and
-  no allocation. A running transition's tracks are the exception: they move between
+  no allocation. Each layer a keyframe scene draws carries the keyframe and which of
+  the item's geometry and crop it overrides (`Through`): there the keyframe's own live
+  value wins, then the item's own in a field the keyframe doesn't override (it follows
+  the parent there, ADR-0049 §1), then the shot's. A keyframe's live value shows
+  nowhere else. A running transition's tracks are the exception: they move between
   the items as the collection holds them, so a live value on a program item shows once
   the transition ends. `video.snapshot` and the preview thread read the channel with the
   snapshot under the lock, so a snapshot or a preview picture shows an open gesture as

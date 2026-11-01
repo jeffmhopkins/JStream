@@ -278,6 +278,8 @@ pub(crate) enum SourceRef {
 struct Placed {
     /// The item, whose live values (ADR-0032) override `placement` and `crop`.
     item: ItemId,
+    /// The keyframe scene that draws it, if the scene is one: which live values apply.
+    through: Option<Through>,
     source: SourceRef,
     placement: Placement,
     crop: Crop,
@@ -408,6 +410,8 @@ impl Boxed {
 #[derive(Clone, Debug, PartialEq)]
 struct ItemBox {
     item: ItemId,
+    /// The keyframe scene that draws it, if the scene is one: which live values apply.
+    through: Option<Through>,
     source: SourceRef,
     placement: Placement,
     crop: Crop,
@@ -597,6 +601,27 @@ impl Shot {
             placed
                 .iter()
                 .map(|p| (p.item.clone(), p.placement, p.opacity))
+                .collect()
+        })
+    }
+
+    /// What scene `id` places, bottom first, as it is drawn with the live values in
+    /// `live`: each item with its placement and crop, or `None` when the shot doesn't
+    /// draw the scene, for tests.
+    #[cfg(test)]
+    pub(crate) fn drawn(
+        &self,
+        id: &SceneId,
+        live: &LiveParams,
+    ) -> Option<Vec<(ItemId, Placement, Crop)>> {
+        self.scenes.get(id).map(|placed| {
+            placed
+                .iter()
+                .map(|p| {
+                    let (placement, crop) =
+                        live.apply_to(&p.item, p.through.as_ref(), p.placement, p.crop);
+                    (p.item.clone(), placement, crop)
+                })
                 .collect()
         })
     }
@@ -1123,6 +1148,10 @@ impl Planner<'_, '_> {
             owner.clone(),
             ItemBox {
                 item: item.id().clone(),
+                through: self
+                    .state
+                    .scene(scene)
+                    .and_then(|s| Through::of(s, item.id())),
                 source: source.clone(),
                 placement: Placement::Geometry(geometry),
                 crop: crop(item.crop()),
@@ -1288,6 +1317,7 @@ impl Planner<'_, '_> {
                 let effects = self.boxed(id, item, &source, out);
                 placed.push(Placed {
                     item: item.id().clone(),
+                    through: Through::of(scene, item.id()),
                     source,
                     placement: placement(item.placement()),
                     crop: crop(item.crop()),
@@ -1419,6 +1449,8 @@ struct Pass {
 struct Layer {
     /// The item it draws, whose live values override `placement` and `crop`.
     item: ItemId,
+    /// The keyframe scene that draws it, if its pass is one: which live values apply.
+    through: Option<Through>,
     /// The cached image the item shows: a frame's upload, the capture's, or the layer an
     /// earlier pass drew.
     image: GpuKey,
@@ -1523,6 +1555,7 @@ fn schedule(shot: &Shot, program: &SceneId) -> Vec<Pass> {
             .map(|geometry| Layer {
                 // No item: a live value never moves the whole picture.
                 item: ItemId::new(""),
+                through: None,
                 image: GpuKey::Filtered(owner),
                 placement: Placement::Geometry(geometry),
                 crop: Crop::NONE,
@@ -1729,6 +1762,7 @@ fn visit_into(
         };
         layers.push(Layer {
             item: placed.item.clone(),
+            through: placed.through.clone(),
             image,
             placement: placed.placement,
             crop: placed.crop,
@@ -1824,76 +1858,146 @@ fn placement(placement: &GraphPlacement) -> Placement {
 /// [`Shot`] until the gesture ends. The render thread and the snapshot thread apply it as
 /// they draw, so a live value needs no new snapshot. Built on the control side; the
 /// render thread only looks items up in it, which allocates nothing.
+///
+/// A value addressed to a keyframe scene (#846) is kept apart from the item's own: it
+/// shows only where that keyframe draws the item. Where a keyframe draws the item and
+/// holds no live value of a field, the item's own live value shows if the keyframe
+/// doesn't override that field, since the field follows the parent there (ADR-0049 §1).
 #[derive(Debug, Default, PartialEq)]
 pub(crate) struct LiveParams {
     items: BTreeMap<ItemId, LiveItem>,
 }
 
-/// One item's live values: either may be absent, leaving the shot's.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+/// One item's live values: its own, and those addressed to each keyframe scene.
+#[derive(Clone, Debug, Default, PartialEq)]
 struct LiveItem {
+    own: LiveFields,
+    keyframes: BTreeMap<SceneId, LiveFields>,
+}
+
+/// The live values of one item as one scene draws it: either may be absent, leaving
+/// the shot's.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct LiveFields {
     placement: Option<Placement>,
     crop: Option<Crop>,
 }
 
+/// The keyframe scene a layer draws its item through, for its live values: which
+/// keyframe, and which of the fields a live value can set it overrides.
+#[derive(Clone, Debug, PartialEq)]
+struct Through {
+    keyframe: SceneId,
+    geometry: bool,
+    crop: bool,
+}
+
+impl Through {
+    /// How `scene` draws `item`: `None` unless `scene` is a keyframe scene.
+    fn of(scene: &GraphScene, item: &ItemId) -> Option<Self> {
+        scene.variant_of()?;
+        let overrides = scene.overrides().get(item);
+        Some(Self {
+            keyframe: scene.id().clone(),
+            geometry: overrides.is_some_and(|o| o.geometry.is_some()),
+            crop: overrides.is_some_and(|o| o.crop.is_some()),
+        })
+    }
+}
+
 impl LiveParams {
     /// The overrides `values` set, later ones winning. Each is an `item.set_transform`,
-    /// `item.set_geometry` or `item.set_crop`; any other edit sets nothing.
-    pub(crate) fn from_values<'a>(values: impl IntoIterator<Item = &'a Edit>) -> Self {
+    /// `item.set_geometry` or `item.set_crop`, with the keyframe scene it addresses, if
+    /// any; any other edit sets nothing.
+    pub(crate) fn from_values<'a>(
+        values: impl IntoIterator<Item = (Option<&'a SceneId>, &'a Edit)>,
+    ) -> Self {
         let mut items: BTreeMap<ItemId, LiveItem> = BTreeMap::new();
-        for value in values {
-            match value {
+        for (keyframe, value) in values {
+            let (item_id, placement, cut) = match value {
                 Edit::ItemSetTransform {
                     item_id, transform, ..
-                } => {
-                    items.entry(item_id.clone()).or_default().placement =
-                        Some(placement(&GraphPlacement::Legacy(*transform)));
-                }
+                } => (
+                    item_id,
+                    Some(placement(&GraphPlacement::Legacy(*transform))),
+                    None,
+                ),
                 Edit::ItemSetGeometry {
                     item_id, geometry, ..
-                } => {
-                    items.entry(item_id.clone()).or_default().placement =
-                        Some(placement(&GraphPlacement::Geometry(*geometry)));
-                }
+                } => (
+                    item_id,
+                    Some(placement(&GraphPlacement::Geometry(*geometry))),
+                    None,
+                ),
                 Edit::ItemSetCrop {
                     item_id, crop: c, ..
-                } => {
-                    items.entry(item_id.clone()).or_default().crop = Some(crop(c));
-                }
-                _ => {}
+                } => (item_id, None, Some(crop(c))),
+                _ => continue,
+            };
+            let item = items.entry(item_id.clone()).or_default();
+            let fields = match keyframe {
+                Some(keyframe) => item.keyframes.entry(keyframe.clone()).or_default(),
+                None => &mut item.own,
+            };
+            if placement.is_some() {
+                fields.placement = placement;
+            }
+            if cut.is_some() {
+                fields.crop = cut;
             }
         }
         Self { items }
     }
 
-    /// The live placement and crop of `item_id`, for tests.
+    /// The own live placement and crop of `item_id`, those not addressed to a keyframe
+    /// scene, for tests.
     #[cfg(test)]
     pub(crate) fn item(&self, item_id: &ItemId) -> Option<(Option<Placement>, Option<Crop>)> {
         self.items
             .get(item_id)
-            .map(|live| (live.placement, live.crop))
+            .map(|live| (live.own.placement, live.own.crop))
     }
 
-    /// `placement` and `crop`, item `item`'s in the shot, with its live values applied.
-    fn apply_to(&self, item: &ItemId, placement: Placement, crop: Crop) -> (Placement, Crop) {
-        match self.items.get(item) {
-            Some(live) => (
-                live.placement.unwrap_or(placement),
-                live.crop.unwrap_or(crop),
-            ),
-            None => (placement, crop),
-        }
+    /// `placement` and `crop`, item `item`'s as a scene draws it, through the keyframe
+    /// scene `through` if it is one, with its live values applied.
+    fn apply_to(
+        &self,
+        item: &ItemId,
+        through: Option<&Through>,
+        placement: Placement,
+        crop: Crop,
+    ) -> (Placement, Crop) {
+        let Some(live) = self.items.get(item) else {
+            return (placement, crop);
+        };
+        let Some(through) = through else {
+            return (
+                live.own.placement.unwrap_or(placement),
+                live.own.crop.unwrap_or(crop),
+            );
+        };
+        let keyed = live.keyframes.get(&through.keyframe);
+        // A field the keyframe doesn't override follows the parent, live value and all.
+        (
+            keyed
+                .and_then(|fields| fields.placement)
+                .or(live.own.placement.filter(|_| !through.geometry))
+                .unwrap_or(placement),
+            keyed
+                .and_then(|fields| fields.crop)
+                .or(live.own.crop.filter(|_| !through.crop))
+                .unwrap_or(crop),
+        )
     }
 
     /// `layer`'s placement and crop, with this item's live values applied.
     fn apply(&self, layer: &Layer) -> (Placement, Crop) {
-        match self.items.get(&layer.item) {
-            Some(live) => (
-                live.placement.unwrap_or(layer.placement),
-                live.crop.unwrap_or(layer.crop),
-            ),
-            None => (layer.placement, layer.crop),
-        }
+        self.apply_to(
+            &layer.item,
+            layer.through.as_ref(),
+            layer.placement,
+            layer.crop,
+        )
     }
 }
 
@@ -2561,7 +2665,12 @@ fn draw_box(
     let [width, height] = boxed.boxed.layer;
     cache.layer(compositor, &key, width, height)?;
     let input = box_input(shot, &boxed.source).filter(|input| !chains.failed(input));
-    let (placement, crop) = live.apply_to(&boxed.item, boxed.placement, boxed.crop);
+    let (placement, crop) = live.apply_to(
+        &boxed.item,
+        boxed.through.as_ref(),
+        boxed.placement,
+        boxed.crop,
+    );
     let inside = boxed
         .boxed
         .geometry_of(placement, crop)
@@ -3005,6 +3114,7 @@ pub(crate) mod tests {
     fn placed(source: SourceRef, placement: Placement) -> Placed {
         Placed {
             item: ItemId::new("itm"),
+            through: None,
             source,
             placement,
             crop: Crop::NONE,
@@ -3601,7 +3711,7 @@ pub(crate) mod tests {
                 ..jstream_protocol::ItemTransform::IDENTITY
             },
         };
-        let live = LiveParams::from_values([&half]);
+        let live = LiveParams::from_values([(None, &half)]);
         let out = live_frame_at(&mut compositor, &mut cache, &mix, &live, None, size);
         assert_eq!(out.pixel(8, 9), Some(GREEN), "still on the left");
         assert_eq!(out.pixel(24, 9), Some(RED), "moved by its live value");
@@ -3615,10 +3725,56 @@ pub(crate) mod tests {
                 ..jstream_protocol::Crop::NONE
             },
         };
-        let live = LiveParams::from_values([&cropped]);
+        let live = LiveParams::from_values([(None, &cropped)]);
         let out = live_frame_at(&mut compositor, &mut cache, &mix, &live, None, size);
         assert_eq!(out.pixel(8, 9), Some(GREEN));
         assert_eq!(out.pixel(24, 9), Some(RED), "cropped away on the right");
+    }
+
+    /// Where a keyframe scene draws an item, its own live crop wins; the item's own live
+    /// crop shows only while the keyframe doesn't override the crop (#846).
+    #[test]
+    fn a_keyframe_takes_the_items_live_crop_only_where_it_follows() {
+        let item = ItemId::new("top");
+        let cut = |right: u32| Edit::ItemSetCrop {
+            item_id: item.clone(),
+            scene_id: None,
+            crop: jstream_protocol::Crop {
+                right,
+                ..jstream_protocol::Crop::NONE
+            },
+        };
+        let (own, keyed) = (cut(4), cut(8));
+        let k = SceneId::new("k");
+        let through = |crop: bool| super::Through {
+            keyframe: k.clone(),
+            geometry: false,
+            crop,
+        };
+        let right = |live: &LiveParams, through: Option<&super::Through>| {
+            live.apply_to(&item, through, FULL, Crop::NONE).1.right
+        };
+        let live = LiveParams::from_values([(None, &own)]);
+        assert_eq!(right(&live, None), 4);
+        assert_eq!(right(&live, Some(&through(false))), 4, "follows the item");
+        assert_eq!(
+            right(&live, Some(&through(true))),
+            0,
+            "overridden: the shot's"
+        );
+        let live = LiveParams::from_values([(None, &own), (Some(&k), &keyed)]);
+        assert_eq!(right(&live, None), 4, "the keyframe's isn't the item's");
+        assert_eq!(right(&live, Some(&through(true))), 8);
+        let other = super::Through {
+            keyframe: SceneId::new("other"),
+            geometry: false,
+            crop: true,
+        };
+        assert_eq!(
+            right(&live, Some(&other)),
+            0,
+            "another keyframe's isn't its"
+        );
     }
 
     /// The render thread's output is the encoder size, not the canvas: with no program
