@@ -561,7 +561,7 @@ stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:8ed7f8130e2f484c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: the Envelope bullet adds the 4 MiB request limit advertised as max_request_bytes, too_large keeping the connection, and the 16 MiB frame limit closing with 1009 at protocol 0.62; mock.rs and core's Welcome only gain max_request_bytes: None." }
+stamp = { hash = "b3:ad70c22003dae842", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2: the Envelope bullet's 4 MiB request limit, max_request_bytes, too_large keeping the connection and 16 MiB 1009 close still match; round 2's id cap is a server detail in envelope.rs that the server README carries." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
 stamp = { hash = "b3:719f4c82642a1d5a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: the Envelope bullet adds the 4 MiB request limit advertised as max_request_bytes, too_large keeping the connection, and the 16 MiB frame limit closing with 1009 at protocol 0.62; mock.rs and core's Welcome only gain max_request_bytes: None." }
@@ -669,7 +669,7 @@ stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = "whole PR: t
 stamp = { hash = "b3:ad5aebeceee47ce7", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: the Envelope bullet adds the 4 MiB request limit advertised as max_request_bytes, too_large keeping the connection, and the 16 MiB frame limit closing with 1009 at protocol 0.62; mock.rs and core's Welcome only gain max_request_bytes: None." }
 
 ["ARCH#protocol"."file:crates/jstream-server/README.md"]
-stamp = { hash = "b3:c61f49224f02c976", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: the Envelope bullet adds the 4 MiB request limit advertised as max_request_bytes, too_large keeping the connection, and the 16 MiB frame limit closing with 1009 at protocol 0.62; mock.rs and core's Welcome only gain max_request_bytes: None." }
+stamp = { hash = "b3:a6cf8e0e4ead0c54", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2: the Envelope bullet's 4 MiB request limit, max_request_bytes, too_large keeping the connection and 16 MiB 1009 close still match; round 2's id cap is a server detail in envelope.rs that the server README carries." }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/admitted.rs"]
 stamp = { hash = "b3:f1450f8e69153ead", by = "agent:ui-layouts", note = "Added the UI settings bullet for protocol 0.52 (ADR-0084): ui_settings.set action and ui_settings.get query, answered by jstream-server with pairing off too, unsupported with no server; Pairing bullet unchanged and still true." }
@@ -680,6 +680,9 @@ stamp = { hash = "b3:51bdd8740daf42cb", by = "agent:ui-layouts", note = "Added t
 ["ARCH#protocol"."file:crates/jstream-server/src/devices.rs"]
 stamp = { hash = "b3:a6a4d994f0a43c7c", by = "agent:ui-layouts", note = "Added the UI settings bullet for protocol 0.52 (ADR-0084): ui_settings.set action and ui_settings.get query, answered by jstream-server with pairing off too, unsupported with no server; Pairing bullet unchanged and still true." }
 
+["ARCH#protocol"."file:crates/jstream-server/src/envelope.rs"]
+stamp = { hash = "b3:7e1c40f2bf347e19", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2: the Envelope bullet's 4 MiB request limit, max_request_bytes, too_large keeping the connection and 16 MiB 1009 close still match; round 2's id cap is a server detail in envelope.rs that the server README carries." }
+
 ["ARCH#protocol"."file:crates/jstream-server/src/error.rs"]
 stamp = { hash = "b3:568a80e28081d7f9", by = "agent:claude", note = "WS liveness: re-read; the server's ping liveness is a transport detail with no protocol change, and the live-values text (gestures expire with their session, ADR-0032) still holds" }
 
@@ -687,13 +690,13 @@ stamp = { hash = "b3:568a80e28081d7f9", by = "agent:claude", note = "WS liveness
 stamp = { hash = "b3:c6043f37c1183c3b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Transport bullet's gate description unaffected by the log limit on failed credentials; no protocol change" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/lib.rs"]
-stamp = { hash = "b3:e9a31576547fcfd9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: the Envelope bullet adds the 4 MiB request limit advertised as max_request_bytes, too_large keeping the connection, and the 16 MiB frame limit closing with 1009 at protocol 0.62; mock.rs and core's Welcome only gain max_request_bytes: None." }
+stamp = { hash = "b3:c18e3a23eccd09ce", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2: the Envelope bullet's 4 MiB request limit, max_request_bytes, too_large keeping the connection and 16 MiB 1009 close still match; round 2's id cap is a server detail in envelope.rs that the server README carries." }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/listener.rs"]
 stamp = { hash = "b3:3b79687f434f2902", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#354 adds a TCP connection cap in jstream-server's listener and a 64-call in-flight cap per WebSocket connection (stops reading, no new message or error); the envelope, versioning, transport and slow-client summary here still hold, and no protocol version changes" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/mcp.rs"]
-stamp = { hash = "b3:ef73241912ffd310", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: the Envelope bullet adds the 4 MiB request limit advertised as max_request_bytes, too_large keeping the connection, and the 16 MiB frame limit closing with 1009 at protocol 0.62; mock.rs and core's Welcome only gain max_request_bytes: None." }
+stamp = { hash = "b3:d28236c8cc2149be", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2: the Envelope bullet's 4 MiB request limit, max_request_bytes, too_large keeping the connection and 16 MiB 1009 close still match; round 2's id cap is a server detail in envelope.rs that the server README carries." }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/pair.html"]
 stamp = { hash = "b3:31924fc017e3dee1", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
@@ -708,10 +711,10 @@ stamp = { hash = "b3:66c0cafeb37a1943", by = "agent:claude", note = "ADR-0047: t
 stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/session.rs"]
-stamp = { hash = "b3:039105883f0570c0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: the Envelope bullet adds the 4 MiB request limit advertised as max_request_bytes, too_large keeping the connection, and the 16 MiB frame limit closing with 1009 at protocol 0.62; mock.rs and core's Welcome only gain max_request_bytes: None." }
+stamp = { hash = "b3:8ce0c2db2d2b727e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2: the Envelope bullet's 4 MiB request limit, max_request_bytes, too_large keeping the connection and 16 MiB 1009 close still match; round 2's id cap is a server detail in envelope.rs that the server README carries." }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:bedd3ed95acfecd7", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: the Envelope bullet adds the 4 MiB request limit advertised as max_request_bytes, too_large keeping the connection, and the 16 MiB frame limit closing with 1009 at protocol 0.62; mock.rs and core's Welcome only gain max_request_bytes: None." }
+stamp = { hash = "b3:c97bc9ce4618f06b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2: the Envelope bullet's 4 MiB request limit, max_request_bytes, too_large keeping the connection and 16 MiB 1009 close still match; round 2's id cap is a server detail in envelope.rs that the server README carries." }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/ui.rs"]
 stamp = { hash = "b3:09e0cbba67fc2339", by = "agent:claude", note = "ADR-0047: the pairing bullet's note that a server which pairs nothing (the desktop's) leaves the calls to the session, and the API bullet's TLS-only GET /pair page and __Host-jstream_device cookie (never the control token), match pair_page.rs, gate.rs, config.rs and the server README. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): the 0.22 filter and 0.23 YouTube bullets are new wire calls; this PR's text and code are unchanged; holds" }
@@ -1365,7 +1368,7 @@ stamp = { hash = "b3:18dea091d5a0704f", by = "agent:effect-packs", note = "effec
 stamp = { hash = "b3:9545fad569fc5ad9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "846a (#846 part a), whole PR, rebased onto main at 0.54: the control mock applies the graph's tree rule and drop pass (a keyframe scene overrides any item in its parent's tree (its own, or a role-group child at any depth, State::tree_items; before, invalid_argument); keyframe::drop_orphans drops overrides whose item leaves the tree (item.remove, item.move out, scene.set_role of a group, removing or retargeting the last placing item), reported in dropped_overrides and restored by undo; the engine draws a group it overrides as a view (view_id) with its own layer, chains and boxes; no wire change, PROTOCOL_VERSION 0.54 -> 0.55); consistent with this section. Main's #941 keyframe live values (0.53) and #944 stats.tick chains (0.54) are kept beside it." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:3f1f7c7508832fc2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: the engine's hello answer leaves max_request_bytes unset (a server in front sets it); the protocol and ARCH changes it depends on add a size limit only the server enforces, so nothing here changes." }
+stamp = { hash = "b3:1fe2dd0fd4fc3920", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2: the engine still leaves max_request_bytes unset; the protocol README's added id cap concerns only the server's refusals, so nothing in core's design changes." }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:0d0a9c5b546539e8", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: the engine's hello answer leaves max_request_bytes unset (a server in front sets it); the protocol and ARCH changes it depends on add a size limit only the server enforces, so nothing here changes." }
@@ -1821,7 +1824,7 @@ stamp = { hash = "b3:0935f08727cff0b0", by = "agent:effect-packs", note = "effec
 stamp = { hash = "b3:18dea091d5a0704f", by = "agent:effect-packs", note = "effect packs drawn in the engine: added the Effect packs bullet (main fills --effects-dir's default so tests watch nothing; serve::engine calls watch_effect_packs once built, every platform); the core design dep now describes the packs runtime, which this bullet links. args.rs only adds the option and boxes Serve(Options). Rest still holds." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:6b926ea890ba63e8", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: the server README's new Message size bullet and MCP table rows don't change how the daemon builds and runs the server; no limit is configured from the daemon." }
+stamp = { hash = "b3:26b12e32717aed1a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2: the server README now names envelope.rs and the 256-byte id cap; the daemon builds the server the same way and configures no limit." }
 
 ["CRATE-jstream-daemon#design"."dep:docs/ARCHITECTURE.md#persistence"]
 stamp = { hash = "b3:560ad6de35803be8", by = "agent:ui-layouts", note = "Added the UI settings file bullet: main.rs names ServerConfig::ui_settings_file as ui-settings.json in the data directory (UI_SETTINGS_FILE), in memory without one; serve::bind gains that parameter." }
@@ -2157,7 +2160,7 @@ stamp = { hash = "b3:4500e061e4435b08", by = "agent:claude-443", note = "Re-read
 stamp = { hash = "b3:5b9dc707978a0749", by = "agent:effect-packs", note = "effect packs drawn in the engine: model/mod.rs adds Graph::without_kinds (removes descriptors by ID, keeps the collection's filters of those kinds as an uninstalled kind's are kept); the Model bullet now names it beside with_kinds. Data-model dep changed only its video filter sentence." }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:3f1f7c7508832fc2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: the protocol README change is the too_large error, max_request_bytes and the 0.62 version paragraph; the graph's purpose doesn't touch the envelope and holds." }
+stamp = { hash = "b3:1fe2dd0fd4fc3920", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2: the protocol README's round-2 edit (the 256-byte echoed id) touches only the envelope; the graph's purpose doesn't." }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -3198,7 +3201,7 @@ stamp = { hash = "b3:5fb43febc7970009", by = "agent:ab9c156e", note = """#486 ro
 stamp = { hash = "b3:fc19c48180f9c975", by = "agent:builder-core", note = "#843: limits.rs's Caps limiter makes a growth past the memory or table cap a trap (CapReached, Error::MemoryLimit in error.rs), a memory starting above the cap fails the load the same way, and a growth past the module's own maximum still answers -1; the limits paragraph, the tests list and Not here (core now saves plugins and holds grants to the manifest; the data folder and file imports aren't anywhere) say so" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:3f1f7c7508832fc2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: the Envelope section's Message size paragraph says welcome advertises max_request_bytes (missing means 4 MiB), a message over it up to the frame limit is too_large with its id and nothing applied, and one over the frame limit closes with 1009; the error table's too_large row matches error.rs (size_bytes, limit_bytes) and the snapshots." }
+stamp = { hash = "b3:1fe2dd0fd4fc3920", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2: the Message size paragraph and the too_large table row now say the echoed id is a string of at most 256 bytes (longer is answered with no id, as malformed is), matching envelope.rs's MAX_ECHOED_ID; welcome's max_request_bytes, 4 MiB default, the frame limit's 1009 close, and the 0.62 error fixtures still hold." }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -4059,7 +4062,7 @@ stamp = { hash = "b3:e2b28a2df72d9e17" }
 stamp = { hash = "b3:901dd1ec57323bd4", by = "agent:blend-modes", note = "Added the blend tests paragraph (tests/blend.rs: every mode against a CPU reference, stacking, clipping, layers, 3D fringe) and the composite_1080p_blend bench; the existing test text is untouched by the Item field addition." }
 
 ["CRATE-jstream-server#design"."body"]
-stamp = { hash = "b3:6b926ea890ba63e8", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: Sessions' new Message size bullet (4 MiB request limit advertised in welcome, too_large with the request ID read from the envelope only, never in flight, 16 MiB frame limit closing with 1009 and a 2 s unread hold), Slow clients' memory bound, and the MCP table's -32000 too_large row and 413 over 16 MiB all match session.rs, lib.rs and mcp.rs; the serde dep is the envelope-only read." }
+stamp = { hash = "b3:26b12e32717aed1a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2 (B1): the Message size bullet now says only type and id are read through envelope.rs and an id over 256 bytes is not echoed in too_large or malformed, so a queued answer stays small, which makes Slow clients' bound (64 parsed requests plus one message of up to 16 MiB being read) true again; the MCP table row says id is null over 256 bytes; the 1009 close with the 2 s unread hold matches session.rs." }
 
 ["CRATE-jstream-server#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:9545fad569fc5ad9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "846a (#846 part a), whole PR, rebased onto main at 0.54: control's mock applies the tree rule and drop pass; the server forwards batches unchanged, so its design holds. Main's #941 keyframe live values (0.53) and #944 stats.tick chains (0.54) are kept beside it." }
@@ -4085,6 +4088,9 @@ stamp = { hash = "b3:51bdd8740daf42cb", by = "agent:ui-layouts", note = "New UI 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/devices.rs"]
 stamp = { hash = "b3:a6a4d994f0a43c7c", by = "agent:ui-layouts", note = "New UI settings subsection (calls, limits, the file, broken-file handling, served with pairing off); Sessions names the ui_settings calls the wrapper answers; dependencies mention the settings file." }
 
+["CRATE-jstream-server#design"."file:crates/jstream-server/src/envelope.rs"]
+stamp = { hash = "b3:7e1c40f2bf347e19", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2 (B1): the Message size bullet now says only type and id are read through envelope.rs and an id over 256 bytes is not echoed in too_large or malformed, so a queued answer stays small, which makes Slow clients' bound (64 parsed requests plus one message of up to 16 MiB being read) true again; the MCP table row says id is null over 256 bytes; the 1009 close with the 2 s unread hold matches session.rs." }
+
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/error.rs"]
 stamp = { hash = "b3:568a80e28081d7f9", by = "agent:claude", note = "WS liveness: Connection limits table gains liveness_timeout (45 s, pings every 15 s), bind refuses a zero ping_interval and a liveness_timeout not longer than it (LivenessTimeout); Sessions gains the Liveness bullet (close 1008 'no answer to pings in time', silence not counted while reads are paused) and drops 'not built yet'; checked against session.rs, config.rs and the three new tests" }
 
@@ -4092,13 +4098,13 @@ stamp = { hash = "b3:568a80e28081d7f9", by = "agent:claude", note = "WS liveness
 stamp = { hash = "b3:c6043f37c1183c3b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Logging gains the failed-credential limit (10 a minute, global, then one silencing line and a count with the next one), open question 6 narrowed to non-credential refusals; admission table and pairing text still hold" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/lib.rs"]
-stamp = { hash = "b3:e9a31576547fcfd9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: Sessions' new Message size bullet (4 MiB request limit advertised in welcome, too_large with the request ID read from the envelope only, never in flight, 16 MiB frame limit closing with 1009 and a 2 s unread hold), Slow clients' memory bound, and the MCP table's -32000 too_large row and 413 over 16 MiB all match session.rs, lib.rs and mcp.rs; the serde dep is the envelope-only read." }
+stamp = { hash = "b3:c18e3a23eccd09ce", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2 (B1): the Message size bullet now says only type and id are read through envelope.rs and an id over 256 bytes is not echoed in too_large or malformed, so a queued answer stays small, which makes Slow clients' bound (64 parsed requests plus one message of up to 16 MiB being read) true again; the MCP table row says id is null over 256 bytes; the 1009 close with the 2 s unread hold matches session.rs." }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/listener.rs"]
 stamp = { hash = "b3:3b79687f434f2902", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#354: limits table adds max_tcp_connections (128, every accepted stream incl. unauthenticated, keep-alive and upgraded WebSocket ones; closed unanswered when full), listener paragraph explains the permit held until drop and the once-per-run warn log, Sessions/Slow clients say 64 calls in flight (MAX_IN_FLIGHT) stop reading like REPLY_BACKLOG, MCP limits note TCP connections count, Logging adds the warn line. Checked against listener.rs accept loop, session.rs select guard and the two new tests; no wire or protocol change" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/mcp.rs"]
-stamp = { hash = "b3:ef73241912ffd310", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: Sessions' new Message size bullet (4 MiB request limit advertised in welcome, too_large with the request ID read from the envelope only, never in flight, 16 MiB frame limit closing with 1009 and a 2 s unread hold), Slow clients' memory bound, and the MCP table's -32000 too_large row and 413 over 16 MiB all match session.rs, lib.rs and mcp.rs; the serde dep is the envelope-only read." }
+stamp = { hash = "b3:d28236c8cc2149be", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2 (B1): the Message size bullet now says only type and id are read through envelope.rs and an id over 256 bytes is not echoed in too_large or malformed, so a queued answer stays small, which makes Slow clients' bound (64 parsed requests plus one message of up to 16 MiB being read) true again; the MCP table row says id is null over 256 bytes; the 1009 close with the 2 s unread hold matches session.rs." }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/pair.html"]
 stamp = { hash = "b3:31924fc017e3dee1", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
@@ -4113,10 +4119,10 @@ stamp = { hash = "b3:66c0cafeb37a1943", by = "agent:claude", note = "ADR-0047: t
 stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview frames bullet (binary() opened once after hello, FRAME_BUFFER 8, keyframe gate) matches preview.rs and session.rs" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/session.rs"]
-stamp = { hash = "b3:039105883f0570c0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: Sessions' new Message size bullet (4 MiB request limit advertised in welcome, too_large with the request ID read from the envelope only, never in flight, 16 MiB frame limit closing with 1009 and a 2 s unread hold), Slow clients' memory bound, and the MCP table's -32000 too_large row and 413 over 16 MiB all match session.rs, lib.rs and mcp.rs; the serde dep is the envelope-only read." }
+stamp = { hash = "b3:8ce0c2db2d2b727e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2 (B1): the Message size bullet now says only type and id are read through envelope.rs and an id over 256 bytes is not echoed in too_large or malformed, so a queued answer stays small, which makes Slow clients' bound (64 parsed requests plus one message of up to 16 MiB being read) true again; the MCP table row says id is null over 256 bytes; the 1009 close with the 2 s unread hold matches session.rs." }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:bedd3ed95acfecd7", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: Sessions' new Message size bullet (4 MiB request limit advertised in welcome, too_large with the request ID read from the envelope only, never in flight, 16 MiB frame limit closing with 1009 and a 2 s unread hold), Slow clients' memory bound, and the MCP table's -32000 too_large row and 413 over 16 MiB all match session.rs, lib.rs and mcp.rs; the serde dep is the envelope-only read." }
+stamp = { hash = "b3:c97bc9ce4618f06b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2 (B1): the Message size bullet now says only type and id are read through envelope.rs and an id over 256 bytes is not echoed in too_large or malformed, so a queued answer stays small, which makes Slow clients' bound (64 parsed requests plus one message of up to 16 MiB being read) true again; the MCP table row says id is null over 256 bytes; the 1009 close with the 2 s unread hold matches session.rs." }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/ui.rs"]
 stamp = { hash = "b3:09e0cbba67fc2339", by = "agent:claude", note = "ADR-0047: the pairing page (token-free GET /pair on TLS, linked from the UI's 401), the __Host-jstream_device cookie (Secure, HttpOnly, SameSite=Strict, 30 days, renewed at most daily, never the control token, one per request, same-origin fetches only), and Pairing off (no calls answered, /pair 404, no device token or cookie admitted) match pair_page.rs, gate.rs, devices.rs, ui.rs, admitted.rs and config.rs. Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): no server file changed since #265, and the ARCH#protocol additions (0.22 filters, 0.23 YouTube) don't touch admission; holds" }
@@ -4139,6 +4145,9 @@ stamp = { hash = "b3:51bdd8740daf42cb", by = "agent:ui-layouts", note = "Content
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/devices.rs"]
 stamp = { hash = "b3:a6a4d994f0a43c7c", by = "agent:ui-layouts", note = "Contents gain the UI settings module and the config's UI settings file; devices.rs only exposes create_private to the crate." }
 
+["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/envelope.rs"]
+stamp = { hash = "b3:7e1c40f2bf347e19", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2: the new envelope.rs module (type and id only, ids capped at 256 bytes) sits beside session.rs and mcp.rs; the purpose names no limits or modules it contradicts." }
+
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/error.rs"]
 stamp = { hash = "b3:568a80e28081d7f9", by = "agent:claude", note = "WS liveness: Contents now name the ping interval and liveness timeout in config.rs and the liveness pings in session.rs; the rest holds against the diff (new ServerError::LivenessTimeout is still a thiserror variant)" }
 
@@ -4146,13 +4155,13 @@ stamp = { hash = "b3:568a80e28081d7f9", by = "agent:claude", note = "WS liveness
 stamp = { hash = "b3:c6043f37c1183c3b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Gate entry now names the failed-credential log limit; rest of contents list unchanged by gate.rs change" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/lib.rs"]
-stamp = { hash = "b3:e9a31576547fcfd9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: lib.rs splits the limit into REQUEST_LIMIT and FRAME_LIMIT, session.rs and mcp.rs refuse oversized messages; the purpose section names no limit and still holds." }
+stamp = { hash = "b3:c18e3a23eccd09ce", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2: the new envelope.rs module (type and id only, ids capped at 256 bytes) sits beside session.rs and mcp.rs; the purpose names no limits or modules it contradicts." }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/listener.rs"]
 stamp = { hash = "b3:3b79687f434f2902", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#354: Listener bullet now names the max_tcp_connections cap (listener.rs closes a stream accepted beyond it) and Session bullet the MAX_IN_FLIGHT cap; config.rs gains max_tcp_connections (zero refused), lib.rs passes it to Limited; tests.rs adds tcp_connections_over_the_cap_are_dropped and calls_in_flight_per_connection_are_capped. Crate scope, layer and R-ARCH-003 unchanged" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/mcp.rs"]
-stamp = { hash = "b3:ef73241912ffd310", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: lib.rs splits the limit into REQUEST_LIMIT and FRAME_LIMIT, session.rs and mcp.rs refuse oversized messages; the purpose section names no limit and still holds." }
+stamp = { hash = "b3:d28236c8cc2149be", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2: the new envelope.rs module (type and id only, ids capped at 256 bytes) sits beside session.rs and mcp.rs; the purpose names no limits or modules it contradicts." }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/pair.html"]
 stamp = { hash = "b3:31924fc017e3dee1", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
@@ -4167,10 +4176,10 @@ stamp = { hash = "b3:66c0cafeb37a1943", by = "agent:claude", note = "ADR-0047: C
 stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): added the Preview frames (preview.rs) contents bullet, matching preview.rs's module doc; rest holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/session.rs"]
-stamp = { hash = "b3:039105883f0570c0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: lib.rs splits the limit into REQUEST_LIMIT and FRAME_LIMIT, session.rs and mcp.rs refuse oversized messages; the purpose section names no limit and still holds." }
+stamp = { hash = "b3:8ce0c2db2d2b727e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2: the new envelope.rs module (type and id only, ids capped at 256 bytes) sits beside session.rs and mcp.rs; the purpose names no limits or modules it contradicts." }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:bedd3ed95acfecd7", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: lib.rs splits the limit into REQUEST_LIMIT and FRAME_LIMIT, session.rs and mcp.rs refuse oversized messages; the purpose section names no limit and still holds." }
+stamp = { hash = "b3:c97bc9ce4618f06b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2: the new envelope.rs module (type and id only, ids capped at 256 bytes) sits beside session.rs and mcp.rs; the purpose names no limits or modules it contradicts." }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/ui.rs"]
 stamp = { hash = "b3:09e0cbba67fc2339", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
@@ -5403,7 +5412,7 @@ stamp = { hash = "b3:945ece8bed77c391", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:f21509931db029b9", by = "agent:effect-packs", note = "effect packs drawn in the engine: dep daemon usage only adds the --effects-dir row; the go-live steps don't use it; re-read, still holds." }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:6b926ea890ba63e8", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: the CLI table only adds too_large to exit 20, and the server README's size limits don't touch the go-live steps." }
+stamp = { hash = "b3:26b12e32717aed1a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2: the server README's id cap on refused messages doesn't touch any go-live step." }
 
 ["RUNBOOK-RELEASE#cut"."body"]
 stamp = { hash = "b3:29c05a3a4731dace", by = "agent:release-thread", note = "B1 fix: ui fails unless ls-remote reports the tag absent (exit 2), publish on a dispatched run creates the tag ref via the API (422 if it exists) and then uses --verify-tag like a pushed tag; step 3 and 4 say so, steps 1-2 apply to main's head on a dispatched run; rest of the section still matches the jobs" }
@@ -5574,7 +5583,7 @@ stamp = { hash = "b3:f3e3a293b719fe8d" }
 stamp = { hash = "b3:18c6a50ca7ccdbf6", by = "agent:acc756d9", note = "Re-read secrets: controls on main now say set_key fails where an app has no store (macOS Keychain built but unwired, Linux none); the ADR-0071 paragraph moved from proposed to accepted, nothing built, with the same risk and mitigations as the accepted ADR." }
 
 ["THREAT-MODEL#server"."body"]
-stamp = { hash = "b3:0f6a4e33d6ce2b1a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: the Limits bullet now says a message or MCP body over 4 MiB and up to 16 MiB is read and refused with too_large, and a larger one closes or is 413; session.rs reads only the envelope id and holds at most one such message per connection, as ADR-0074's consequences accept." }
+stamp = { hash = "b3:aeda0baa588bd9a8", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2 (B1): the Limits bullet says a message or body over 4 MiB up to 16 MiB is refused with too_large echoing at most a 256-byte id, so the 1024-reply backlog holds only small answers and one connection holds at most one oversized message being read, ADR-0074's accepted bound; envelope.rs builds nothing else of it." }
 
 ["THREAT-MODEL#server"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (#265): the gate bullet adds that the token may be a paired device's, accepted only on loopback until TLS, and that POST /api/v1/pair is the one request answered without a token, only while a code is open; matches gate.rs (devices_allowed) and pair.rs, and R-SEC-002's added loopback-or-TLS sentence; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
@@ -5595,13 +5604,13 @@ stamp = { hash = "b3:51bdd8740daf42cb", by = "agent:ui-layouts", note = "The UI 
 stamp = { hash = "b3:c6043f37c1183c3b", by = "agent:threat-model-covers", note = "Added covers (lib.rs, gate.rs, config.rs, listener.rs, session.rs, daemon token.rs and args.rs; #377). Checked against code: Host/Origin/token gate and subprotocol, BLAKE3 digests compared with Hash ==, 32-byte getrandom tokens, 127.0.0.1 bind with no bind flag, 4 MiB/128/32/64/16/10 s limits, failed-token log window 10 per 60 s (#501), 0600 token file. Device tokens: loopback or TLS listener, and there is none yet." }
 
 ["THREAT-MODEL#server"."file:crates/jstream-server/src/lib.rs"]
-stamp = { hash = "b3:e9a31576547fcfd9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: the Limits bullet now says a message or MCP body over 4 MiB and up to 16 MiB is read and refused with too_large, and a larger one closes or is 413; session.rs reads only the envelope id and holds at most one such message per connection, as ADR-0074's consequences accept." }
+stamp = { hash = "b3:c18e3a23eccd09ce", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2 (B1): the Limits bullet says a message or body over 4 MiB up to 16 MiB is refused with too_large echoing at most a 256-byte id, so the 1024-reply backlog holds only small answers and one connection holds at most one oversized message being read, ADR-0074's accepted bound; envelope.rs builds nothing else of it." }
 
 ["THREAT-MODEL#server"."file:crates/jstream-server/src/listener.rs"]
 stamp = { hash = "b3:3b79687f434f2902", by = "agent:threat-model-covers", note = "Added covers (lib.rs, gate.rs, config.rs, listener.rs, session.rs, daemon token.rs and args.rs; #377). Checked against code: Host/Origin/token gate and subprotocol, BLAKE3 digests compared with Hash ==, 32-byte getrandom tokens, 127.0.0.1 bind with no bind flag, 4 MiB/128/32/64/16/10 s limits, failed-token log window 10 per 60 s (#501), 0600 token file. Device tokens: loopback or TLS listener, and there is none yet." }
 
 ["THREAT-MODEL#server"."file:crates/jstream-server/src/session.rs"]
-stamp = { hash = "b3:039105883f0570c0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: the Limits bullet now says a message or MCP body over 4 MiB and up to 16 MiB is read and refused with too_large, and a larger one closes or is 413; session.rs reads only the envelope id and holds at most one such message per connection, as ADR-0074's consequences accept." }
+stamp = { hash = "b3:8ce0c2db2d2b727e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2 (B1): the Limits bullet says a message or body over 4 MiB up to 16 MiB is refused with too_large echoing at most a 256-byte id, so the 1024-reply backlog holds only small answers and one connection holds at most one oversized message being read, ADR-0074's accepted bound; envelope.rs builds nothing else of it." }
 
 ["THREAT-MODEL#vcam"."body"]
 stamp = { hash = "b3:fef61f887cb8f592", by = "agent:a2656", note = "re-read (#565 N2): the controls sentence now limits the guarantee to a camera registered by this step and to the copy; matches the accepted paragraph on pre-ADR-0066 registrations | merge: re-read after merging wave/m1-3 (e993e0e), resolving its conflict by hand: kept this branch's Controls on main (the admin-only Program Files copy) and Accepted, registration paragraphs, dropped the wave's 'not yet on main (#242)' paragraph that this PR resolves, folded #540's landed controls (a reused control mapping refused unless its owner and DACL are the sink's; textures and fence owner-checked) into Controls on main, and dropped the #356 gap #540 closed; the #563 hardware gap stays" }
