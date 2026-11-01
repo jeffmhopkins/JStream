@@ -2106,6 +2106,10 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
             outputs: vec![OutputId::new("out_main"), OutputId::new("out_rec")],
             reason: "the hardware encoder refused the session".into(),
         },
+        ProtocolError::TooLarge {
+            size_bytes: 5_767_168,
+            limit_bytes: 4_194_304,
+        },
         ProtocolError::Internal {
             reason: "render thread stopped".into(),
         },
@@ -2201,6 +2205,7 @@ pub(crate) fn server_messages() -> Vec<ServerMessage> {
             protocol: PROTOCOL_VERSION,
             client_id: ClientId::new("cli_7"),
             rev: Rev(12),
+            max_request_bytes: Some(4_194_304),
         }),
         ServerMessage::Response(Response {
             id: RequestId::new("r0"),

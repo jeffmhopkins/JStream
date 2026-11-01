@@ -39,6 +39,13 @@
 //! that is waiting ([`preview`](crate::preview)). It reads no binary messages: a client
 //! that sends one gets a `malformed` error.
 //!
+//! **Message size** (ADR-0074). A client message over [`REQUEST_LIMIT`] is refused with
+//! `too_large`, answering its `id` when the envelope's `id` can be read, and nothing else
+//! of it is parsed: it never reaches the session and never counts against
+//! [`MAX_IN_FLIGHT`]. The connection stays open. The WebSocket layer reads messages up to
+//! [`FRAME_LIMIT`](crate::FRAME_LIMIT); a larger one closes the connection with close code 1009. `welcome`
+//! advertises the request limit as `max_request_bytes`.
+//!
 //! **Slow clients.** The task never waits on the socket. What it sends goes into an
 //! [`Outbox`], and a writer future that owns the socket's sink sends it, one message at a
 //! time, while the task keeps reading the client and draining the session's events. So a
@@ -55,6 +62,8 @@
 //! [`MAX_IN_FLIGHT`] are in flight, the task reads nothing more until one completes, so a
 //! client can't pile up unbounded work in the session (#354).
 
+use crate::REQUEST_LIMIT;
+use crate::envelope::{Envelope, Id};
 use crate::preview::{self, Frames};
 use axum::extract::ws::{CloseFrame, Message, WebSocket, close_code};
 use futures_util::future::BoxFuture as SendFuture;
@@ -102,9 +111,10 @@ const REPLY_BACKLOG: usize = 1024;
 /// How many calls may be in flight on one connection (forwarded to the session and not
 /// answered yet) before the connection stops reading, until one completes (#354).
 ///
-/// Each one holds its parsed request, read from at most 4 MiB of message text, so a
-/// client that never waits for answers can make the server hold about 64 times the
-/// message limit, while a UI that pipelines its calls stays far below it.
+/// Each one holds its parsed request, read from at most [`REQUEST_LIMIT`] (4 MiB) of
+/// message text, so a client that never waits for answers can make the server hold
+/// about 64 times the request limit, while a UI that pipelines its calls stays far
+/// below it.
 pub(crate) const MAX_IN_FLIGHT: usize = 64;
 
 /// The connection ended (the client went away or a send failed).
@@ -207,7 +217,19 @@ pub(crate) async fn run(
                     silence.as_mut().reset(Instant::now() + liveness.timeout);
                 }
                 let text = match message {
+                    Some(Err(error)) if over_frame_limit(&error) => {
+                        break Ok(Some(close(close_code::SIZE, "the message is over the frame limit")));
+                    }
                     None | Some(Err(_)) | Some(Ok(Message::Close(_))) => break Err(Closed),
+                    Some(Ok(Message::Text(text))) if text.len() > REQUEST_LIMIT => {
+                        let id = request_id(text.as_str());
+                        outbox.push(too_large(id, text.len()));
+                        continue;
+                    }
+                    Some(Ok(Message::Binary(bytes))) if bytes.len() > REQUEST_LIMIT => {
+                        outbox.push(too_large(None, bytes.len()));
+                        continue;
+                    }
                     Some(Ok(Message::Text(text))) => text,
                     Some(Ok(Message::Binary(_))) => {
                         outbox.push(malformed(None, "the server reads no binary messages"));
@@ -238,6 +260,10 @@ pub(crate) async fn run(
                         Some(Ok(welcome)) => {
                             tracing::info!(client_id = %welcome.client_id, "handshake done");
                             ids.client_id = Some(welcome.client_id.clone());
+                            let welcome = Welcome {
+                                max_request_bytes: Some(REQUEST_LIMIT as u64),
+                                ..welcome
+                            };
                             if events.is_none() {
                                 events = Some(control.events());
                                 binary = Some(control.binary());
@@ -319,8 +345,21 @@ pub(crate) async fn run(
         // what the client hasn't read yet, the close frame and last replies included
         // (macOS does, #294). Best effort: the client may already be gone, or have
         // stopped reading.
+        //
+        // Not after a message over the frame limit: the WebSocket layer would go on
+        // buffering the rest of that message, however long, to read past it. Nothing
+        // more is read: the close frame is sent, and the socket is held, unread, for
+        // `CLOSE_TIMEOUT` so the client can take the close frame before the reset that
+        // closing over unread data sends, and then dropped.
+        let oversized = frame
+            .as_ref()
+            .is_some_and(|frame| frame.code == close_code::SIZE);
+        let started = Instant::now();
         let close = async {
             writer.finish(&mut outbox, frame).await?;
+            if oversized {
+                return Ok(());
+            }
             while let Some(Ok(message)) = incoming.next().await {
                 if matches!(message, Message::Close(_)) {
                     break;
@@ -330,6 +369,8 @@ pub(crate) async fn run(
         };
         if tokio::time::timeout(CLOSE_TIMEOUT, close).await.is_err() {
             tracing::info!("connection dropped: the client did not finish the close");
+        } else if oversized {
+            tokio::time::sleep_until(started + CLOSE_TIMEOUT).await;
         }
     }
 }
@@ -655,14 +696,39 @@ fn malformed(id: Option<RequestId>, reason: &str) -> ServerMessage {
     })
 }
 
-/// The request ID of a message that failed to parse, if it is a `request` whose `id` is
-/// still readable, so the client can match the error to its call.
+/// A `too_large` error, for a message of `size` bytes over [`REQUEST_LIMIT`].
+fn too_large(id: Option<RequestId>, size: usize) -> ServerMessage {
+    ServerMessage::Error(ErrorResponse {
+        id,
+        error: WireError::from(ProtocolError::TooLarge {
+            size_bytes: size as u64,
+            limit_bytes: REQUEST_LIMIT as u64,
+        }),
+    })
+}
+
+/// Whether a read failed because the message was over [`FRAME_LIMIT`](crate::FRAME_LIMIT).
+///
+/// axum doesn't re-export `tungstenite`'s error type, so its `Capacity` error is told
+/// by its message (`Space limit exceeded: Message too long: …`).
+/// `over_frame_limit_closes_with_1009` pins this against the `tungstenite` in the tree.
+fn over_frame_limit(error: &axum::Error) -> bool {
+    error.to_string().contains("Message too long")
+}
+
+/// The request ID of a message that failed to parse or was too large, if it is a
+/// `request` whose `id` is a readable string of at most
+/// [`MAX_ECHOED_ID`](crate::envelope::MAX_ECHOED_ID) bytes, so the client can match the
+/// error to its call. Only the envelope is read ([`Envelope`]), and the cap keeps what a
+/// queued error holds small (#981 review B1).
 fn request_id(text: &str) -> Option<RequestId> {
-    let value: serde_json::Value = serde_json::from_str(text).ok()?;
-    if value.get("type")?.as_str()? != "request" {
-        return None;
+    match Envelope::read(text.as_bytes())? {
+        Envelope {
+            is_request: true,
+            id: Some(Id::String(id)),
+        } => Some(RequestId::new(id)),
+        _ => None,
     }
-    Some(RequestId::new(value.get("id")?.as_str()?))
 }
 
 fn close(code: u16, reason: &str) -> CloseFrame {
@@ -854,5 +920,11 @@ mod tests {
         );
         assert_eq!(request_id(r#"{"type":"hello","id":"c7"}"#), None);
         assert_eq!(request_id("not json"), None);
+        assert_eq!(request_id(r#"["request","c7"]"#), None);
+        let long = "i".repeat(crate::envelope::MAX_ECHOED_ID + 1);
+        assert_eq!(
+            request_id(&format!(r#"{{"type":"request","id":"{long}"}}"#)),
+            None
+        );
     }
 }

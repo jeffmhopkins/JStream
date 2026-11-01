@@ -194,6 +194,7 @@ impl Control for MockControl {
                 protocol: PROTOCOL_VERSION,
                 client_id,
                 rev: state.collection.rev,
+                max_request_bytes: None,
             })
         } else {
             Err(ProtocolError::UnsupportedVersion {

@@ -8563,6 +8563,15 @@ source: crates/jstream-protocol/src/fixtures.rs
           "$ref": "#/$defs/ClientId",
           "description": "The identity this connection acts as: its undo history and audit-log entries are\nkeyed by it."
         },
+        "max_request_bytes": {
+          "description": "The request limit (0.62, ADR-0074): the most message text, in bytes, the server\nhandles in one client message. A message over it, up to the server's frame limit,\nis refused with `too_large` and the connection stays open. Only a server in front\nof the engine sets it; missing (an older server, or an engine with no server in\nfront) means 4 MiB.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "protocol": {
           "$ref": "#/$defs/ProtocolVersion",
           "description": "The protocol version the server speaks."
@@ -8880,6 +8889,33 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "The message was over the server's request limit (0.62, ADR-0074). The server read\nonly its envelope's `id`: nothing in it was applied, and the connection stays\nopen. Retrying the same message won't help: split the work, for example one\nfilter's `state` per batch. `Welcome.max_request_bytes` advertises the limit.",
+          "properties": {
+            "code": {
+              "const": "too_large",
+              "type": "string"
+            },
+            "limit_bytes": {
+              "description": "The server's request limit in bytes.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "size_bytes": {
+              "description": "The message's size in bytes.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "code",
+            "size_bytes",
+            "limit_bytes"
+          ],
+          "type": "object"
+        },
+        {
           "description": "The engine hit a bug or an unexpected condition. The request may be retried.",
           "properties": {
             "code": {
@@ -8950,5 +8986,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.55"
+  "title": "JStream protocol 0.62"
 }

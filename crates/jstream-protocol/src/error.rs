@@ -145,6 +145,17 @@ pub enum ProtocolError {
         /// What the encoder said when it refused the new session.
         reason: String,
     },
+    /// The message was over the server's request limit (0.62, ADR-0074). The server read
+    /// only its envelope's `id`: nothing in it was applied, and the connection stays
+    /// open. Retrying the same message won't help: split the work, for example one
+    /// filter's `state` per batch. `Welcome.max_request_bytes` advertises the limit.
+    #[error("the message is {size_bytes} bytes, over the {limit_bytes}-byte request limit")]
+    TooLarge {
+        /// The message's size in bytes.
+        size_bytes: u64,
+        /// The server's request limit in bytes.
+        limit_bytes: u64,
+    },
     /// The engine hit a bug or an unexpected condition. The request may be retried.
     #[error("internal error: {reason}")]
     Internal {
@@ -196,6 +207,7 @@ impl ProtocolError {
             ProtocolError::Unsupported { .. } => "unsupported",
             ProtocolError::Forbidden { .. } => "forbidden",
             ProtocolError::HardwareSessionLimit { .. } => "hardware_session_limit",
+            ProtocolError::TooLarge { .. } => "too_large",
             ProtocolError::Internal { .. } => "internal",
             ProtocolError::Unknown => "unknown",
         }

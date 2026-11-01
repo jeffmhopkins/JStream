@@ -610,7 +610,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
 
 - **Envelope:** JSON messages tagged by `type`. A `hello`/`welcome` handshake exchanges
   the protocol version, then each `request` (with a client-chosen `id`) gets exactly one
-  `response` or `error`, and `event`s arrive at any time.
+  `response` or `error`, and `event`s arrive at any time. A message over the server's
+  4 MiB request limit, which `welcome` advertises as `max_request_bytes`, is refused
+  with `too_large` and the connection stays open; one over its 16 MiB frame limit
+  closes it with code 1009 ([ADR-0074](adr/0074-too-large-requests.md), protocol 0.62).
 - **Edits** (`scene.create`, `item.set_transform`, `send.set`, …): typed, undoable,
   always sent in an atomic batch (of one or more), which carries the optional
   `expected_rev` and idempotency key ([R-API-004](RULES.md#R-API-004)). Each applied
