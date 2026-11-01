@@ -53,7 +53,8 @@ JStream folder instead (to run it from a USB stick), create an empty file named
 depends_on = ["docs/UI-FEATURES.md"]
 -->
 
-A new JStream starts empty. What the program shows (and every output sends) is the scene
+A new JStream starts empty, but for four sample labels (Intro / outro, Gameplay, Overlay
+and Sponsor) to rename, use or delete. What the program shows (and every output sends) is the scene
 on **program**, drawn on the canvas in the middle.
 
 1. In **Scenes**, right-click and choose **New scene**, then type its name.

@@ -13,10 +13,11 @@ use super::abi::{
     BUF_FLAG_TIMESTAMP_MASK, BUF_FLAG_TIMESTAMP_MONOTONIC, BUF_TYPE_VIDEO_CAPTURE,
     BUF_TYPE_VIDEO_CAPTURE_MPLANE, CAP_DEVICE_CAPS, CAP_STREAMING, CAP_VIDEO_CAPTURE,
     CAP_VIDEO_CAPTURE_MPLANE, COLORSPACE_BT2020, COLORSPACE_JPEG, COLORSPACE_REC709,
-    COLORSPACE_SMPTE170M, COLORSPACE_SRGB, Capability, Fract, FrmSizeStepwise, PIX_FMT_JPEG,
-    PIX_FMT_MJPEG, PIX_FMT_NV12, PIX_FMT_NV12M, PIX_FMT_YUV420, PIX_FMT_YUV420M, PIX_FMT_YUYV,
-    PixFormat, QUANTIZATION_FULL_RANGE, QUANTIZATION_LIM_RANGE, Timeval, YCBCR_ENC_601,
-    YCBCR_ENC_709, YCBCR_ENC_BT2020,
+    COLORSPACE_SMPTE170M, COLORSPACE_SRGB, Capability, Fract, FrmSizeStepwise, PIX_FMT_ABGR32,
+    PIX_FMT_JPEG, PIX_FMT_MJPEG, PIX_FMT_NV12, PIX_FMT_NV12M, PIX_FMT_RGBA32, PIX_FMT_RGBX32,
+    PIX_FMT_XBGR32, PIX_FMT_YUV420, PIX_FMT_YUV420M, PIX_FMT_YUYV, PixFormat,
+    QUANTIZATION_FULL_RANGE, QUANTIZATION_LIM_RANGE, Timeval, YCBCR_ENC_601, YCBCR_ENC_709,
+    YCBCR_ENC_BT2020,
 };
 use crate::hns_from_timespec;
 
@@ -24,16 +25,46 @@ use crate::hns_from_timespec;
 pub(crate) const DQBUF: &str = "VIDIOC_DQBUF";
 
 /// How the backend delivers a V4L2 pixel format, or `None` for one it doesn't: packed
-/// 4:2:2 (`YUYV`) converted to NV12, NV12 and I420 (`YU12`) as they are, and MJPEG
-/// (`MJPG`, or `JPEG` as some webcams name it) to the engine's decoder. The multi-planar
-/// API's `NV12M` and `YUV420M` (each plane in its own buffer plane) are delivered as NV12
-/// and I420.
+/// 4:2:2 (`YUYV`) converted to NV12, NV12 and I420 (`YU12`) as they are, 32-bit RGB with
+/// the alpha or padding byte last (`AR24` and `XR24` as BGRA, `AB24` and `XB24` as
+/// RGBA, as capture cards and `vivid` offer them) as they are, and MJPEG (`MJPG`, or
+/// `JPEG` as some webcams name it) to the engine's decoder. The multi-planar API's
+/// `NV12M` and `YUV420M` (each plane in its own buffer plane) are delivered as NV12 and
+/// I420. A capture's alpha means nothing to the engine, so padding is delivered as it
+/// is.
 pub(crate) fn encoding(fourcc: u32) -> Option<CaptureEncoding> {
     match fourcc {
         PIX_FMT_YUYV => Some(CaptureEncoding::Yuy2),
+        PIX_FMT_ABGR32 | PIX_FMT_XBGR32 => Some(CaptureEncoding::Raw(PixelFormat::Bgra8)),
+        PIX_FMT_RGBA32 | PIX_FMT_RGBX32 => Some(CaptureEncoding::Raw(PixelFormat::Rgba8)),
         PIX_FMT_MJPEG | PIX_FMT_JPEG => Some(CaptureEncoding::Mjpeg),
         PIX_FMT_NV12 | PIX_FMT_NV12M => Some(CaptureEncoding::Raw(PixelFormat::Nv12)),
         PIX_FMT_YUV420 | PIX_FMT_YUV420M => Some(CaptureEncoding::Raw(PixelFormat::I420)),
+        _ => None,
+    }
+}
+
+/// How the GPU path (`V4l2Devices::on_context`) reads a raw format's buffers: which
+/// buffer planes are imported as which texels, and the pass that makes them the RGBA
+/// frame render samples. `None` for a format it doesn't take, which opens on the CPU
+/// path.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum GpuLayout {
+    /// One plane of 4-byte pixels, B, G, R, A (or padding) in memory, copied as they are
+    /// with the alpha made opaque.
+    Bgra,
+    /// One plane of 4-byte pixels, R, G, B, A (or padding) in memory, likewise.
+    Rgba,
+    /// One plane of packed 4:2:2, `Y0 U Y1 V` per two pixels, converted to R'G'B'.
+    Yuyv,
+}
+
+/// The [`GpuLayout`] of a V4L2 pixel format.
+pub(crate) fn gpu_layout(fourcc: u32) -> Option<GpuLayout> {
+    match fourcc {
+        PIX_FMT_ABGR32 | PIX_FMT_XBGR32 => Some(GpuLayout::Bgra),
+        PIX_FMT_RGBA32 | PIX_FMT_RGBX32 => Some(GpuLayout::Rgba),
+        PIX_FMT_YUYV => Some(GpuLayout::Yuyv),
         _ => None,
     }
 }
@@ -203,7 +234,17 @@ pub(crate) fn color(pix: &PixFormat) -> ColorInfo {
 pub(crate) fn min_stride(encoding: CaptureEncoding, width: u32) -> usize {
     match encoding {
         CaptureEncoding::Yuy2 => width.div_ceil(2) as usize * 4,
+        CaptureEncoding::Raw(PixelFormat::Bgra8 | PixelFormat::Rgba8) => width as usize * 4,
         _ => width as usize,
+    }
+}
+
+/// The fewest bytes a buffer plane of `height` rows, `stride` bytes apart, each
+/// `row_bytes` long, holds: the last row needn't be padded. `None` on overflow.
+pub(crate) fn plane_bytes(stride: usize, row_bytes: usize, height: u32) -> Option<usize> {
+    match height {
+        0 => Some(0),
+        h => stride.checked_mul(h as usize - 1)?.checked_add(row_bytes),
     }
 }
 
@@ -234,9 +275,15 @@ pub(crate) fn raw_frame(
     }
     match (encoding, strides) {
         (CaptureEncoding::Yuy2, [stride]) => yuv::yuy2_to_nv12(DQBUF, planes[0], *stride, info),
-        (CaptureEncoding::Raw(format @ (PixelFormat::Nv12 | PixelFormat::I420)), [stride]) => {
-            yuv::copy_planar(DQBUF, planes[0], *stride, VideoFrameInfo { format, ..info })
-        }
+        (
+            CaptureEncoding::Raw(
+                format @ (PixelFormat::Nv12
+                | PixelFormat::I420
+                | PixelFormat::Bgra8
+                | PixelFormat::Rgba8),
+            ),
+            [stride],
+        ) => yuv::copy_planar(DQBUF, planes[0], *stride, VideoFrameInfo { format, ..info }),
         (CaptureEncoding::Raw(format @ (PixelFormat::Nv12 | PixelFormat::I420)), _) => {
             let separate: Vec<(&[u8], usize)> = planes
                 .iter()
@@ -320,13 +367,14 @@ mod tests {
     use super::super::abi::{
         BUF_FLAG_TIMESTAMP_MONOTONIC, BUF_TYPE_VIDEO_CAPTURE, BUF_TYPE_VIDEO_CAPTURE_MPLANE,
         CAP_DEVICE_CAPS, CAP_STREAMING, CAP_VIDEO_CAPTURE, CAP_VIDEO_CAPTURE_MPLANE, Capability,
-        Fract, FrmSizeStepwise, PIX_FMT_JPEG, PIX_FMT_MJPEG, PIX_FMT_NV12, PIX_FMT_NV12M,
-        PIX_FMT_YUV420, PIX_FMT_YUV420M, PIX_FMT_YUYV, PixFormat, Timeval, fourcc,
+        Fract, FrmSizeStepwise, PIX_FMT_ABGR32, PIX_FMT_JPEG, PIX_FMT_MJPEG, PIX_FMT_NV12,
+        PIX_FMT_NV12M, PIX_FMT_RGBA32, PIX_FMT_RGBX32, PIX_FMT_XBGR32, PIX_FMT_YUV420,
+        PIX_FMT_YUV420M, PIX_FMT_YUYV, PixFormat, Timeval, fourcc,
     };
     use super::{
-        Enumerated, buffer_planes, c_name, capture_type, color, encoding, formats, fourcc_for,
-        is_device_path, min_stride, node_number, period, plane_strides, pts, raw_frame,
-        stepwise_sizes,
+        Enumerated, GpuLayout, buffer_planes, c_name, capture_type, color, encoding, formats,
+        fourcc_for, gpu_layout, is_device_path, min_stride, node_number, period, plane_bytes,
+        plane_strides, pts, raw_frame, stepwise_sizes,
     };
     use crate::timebase;
 
@@ -358,8 +406,62 @@ mod tests {
             encoding(PIX_FMT_YUV420M),
             Some(CaptureEncoding::Raw(PixelFormat::I420))
         );
+        for (rgb, format) in [
+            (PIX_FMT_ABGR32, PixelFormat::Bgra8),
+            (PIX_FMT_XBGR32, PixelFormat::Bgra8),
+            (PIX_FMT_RGBA32, PixelFormat::Rgba8),
+            (PIX_FMT_RGBX32, PixelFormat::Rgba8),
+        ] {
+            assert_eq!(encoding(rgb), Some(CaptureEncoding::Raw(format)));
+        }
         assert_eq!(encoding(fourcc(b"H264")), None);
         assert_eq!(encoding(fourcc(b"RGB3")), None);
+        // Alpha first (`BA24`, `RA24`) isn't delivered.
+        assert_eq!(encoding(fourcc(b"BA24")), None);
+    }
+
+    /// The GPU path takes the 32-bit RGB formats, in their byte order, and YUYV; the
+    /// others open on the CPU path.
+    #[test]
+    fn the_gpu_path_takes_the_rgb_formats() {
+        assert_eq!(gpu_layout(PIX_FMT_ABGR32), Some(GpuLayout::Bgra));
+        assert_eq!(gpu_layout(PIX_FMT_XBGR32), Some(GpuLayout::Bgra));
+        assert_eq!(gpu_layout(PIX_FMT_RGBA32), Some(GpuLayout::Rgba));
+        assert_eq!(gpu_layout(PIX_FMT_RGBX32), Some(GpuLayout::Rgba));
+        assert_eq!(gpu_layout(PIX_FMT_YUYV), Some(GpuLayout::Yuyv));
+        for cpu in [PIX_FMT_MJPEG, PIX_FMT_YUV420, PIX_FMT_YUV420M] {
+            assert_eq!(gpu_layout(cpu), None);
+        }
+        assert_eq!(plane_bytes(16, 12, 3), Some(44), "the last row unpadded");
+        assert_eq!(plane_bytes(16, 12, 0), Some(0));
+        assert_eq!(plane_bytes(usize::MAX, 1, 3), None);
+    }
+
+    /// A 32-bit RGB frame is copied at its stride as BGRA or RGBA, and needs four bytes
+    /// a pixel.
+    #[test]
+    fn rgb_frames_are_copied_at_their_stride() {
+        let bgra = CaptureEncoding::Raw(PixelFormat::Bgra8);
+        assert_eq!(min_stride(bgra, 3), 12);
+        assert_eq!(
+            plane_strides(bgra, PIX_FMT_XBGR32, 2, &[0]),
+            Some(vec![8]),
+            "no stride from the driver"
+        );
+        let info = jstream_platform::media::VideoFrameInfo {
+            size: jstream_platform::media::FrameSize::new(2, 2).expect("size"),
+            format: PixelFormat::Nv12,
+            color: jstream_platform::media::ColorInfo::default(),
+            pts: MediaTime::new(0, timebase()),
+        };
+        let bytes: Vec<u8> = (0..20).collect();
+        let frame = raw_frame(bgra, &[&bytes], &[12], info).expect("a frame");
+        assert_eq!(frame.info().format, PixelFormat::Bgra8);
+        assert_eq!(frame.row(0, 1), Some(&bytes[12..20]));
+        assert!(
+            raw_frame(bgra, &[&bytes[..19]], &[12], info).is_err(),
+            "short"
+        );
     }
 
     #[test]

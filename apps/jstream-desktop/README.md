@@ -102,8 +102,8 @@ folder, and its log `logs\cef.log`.
   a USB stick ([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)). Both
   hosts find it through `jstream-platform`'s `paths` module
   ([jstream-platform › Purpose](../../crates/jstream-platform/README.md#purpose)).
-- **The collection** is `collection.json` in the data folder, created empty the first
-  time and saved on every change, so the next start opens where the last one stopped.
+- **The collection** is `collection.json` in the data folder, created the first time
+  with nothing in it but the prototype's four sample labels, and saved on every change, so the next start opens where the last one stopped.
 - **Logs.** `logs\jstream-desktop.log` in the data folder, replaced at each start by a
   new, user-only file (a protected DACL for SYSTEM and the user on Windows, mode `0600`
   on Unix, in a folder created `0700`, #780) and capped at 10 MiB, filtered by `RUST_LOG` (default `info`). A debug build also logs to
@@ -141,6 +141,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   pairing page or device cookie
   ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md)). On Windows the engine is live with the same wiring as the daemon (OS backends,
   keys in Credential Manager, an RTMP(S) publish opener); elsewhere it has no backends.
+  Everywhere it starts the engine's stats heartbeat, so the header's readout shows the
+  engine's load while nothing is live, and on Windows it hands the engine
+  `WindowsProcessCpu` for that readout's CPU share.
   When the app exits, the server closes its connections and the engine stops.
 - **The UI is read at run time.** The app registers its own URL scheme, `jstream`, and
   serves the bundle's files from a folder on each request, so the binary embeds nothing

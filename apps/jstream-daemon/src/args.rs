@@ -18,7 +18,8 @@ Options:
   --port <port>        the port to listen on, on 127.0.0.1 (default: 0, any
                        free port; the URL is printed at startup)
   --collection <path>  load the collection from this JSON file and save every
-                       change to it; created, empty, if it doesn't exist
+                       change to it; created, with only four sample labels,
+                       if it doesn't exist
                        (default: none, the collection starts empty every run)
   --output <id>        add a stopped placeholder output (repeatable)
   --plugin-dir <dir>   where installed WASM plugins and their grants are saved

@@ -8,12 +8,43 @@
 use crate::apply::{
     already_exists, blocked, check_id, check_index, check_name, invalid, not_found, wire_index,
 };
-use crate::model::{Folder, Label, Source, State};
+use crate::model::{Folder, Graph, Label, Source, State};
 use jstream_protocol::{
     Blocker, Edit, EntityKind, FolderId, LabelId, ProtocolError, SceneId, SceneMeta, SourceId,
     SourceMeta, check_color, check_icon,
 };
 use std::collections::BTreeSet;
+
+/// The labels a new collection starts with: the prototype's four samples
+/// (`DEFAULT_META.labels`), as ID, name, colour and icon.
+const SAMPLE_LABELS: [(&str, &str, &str, &str); 4] = [
+    ("lbl_intro_outro", "Intro / outro", "#E8A33D", "flag"),
+    ("lbl_gameplay", "Gameplay", "#4C8DFF", "gamepad"),
+    ("lbl_overlay", "Overlay", "#B07CFF", "layers"),
+    ("lbl_sponsor", "Sponsor", "#E86BA6", "sparkle"),
+];
+
+impl Graph {
+    /// This graph with the prototype's four sample labels, Intro / outro, Gameplay,
+    /// Overlay and Sponsor, when it has no labels; else unchanged. The revision stays
+    /// as it is: they are what a new collection starts with, not an edit, so there is
+    /// nothing to undo. They are ordinary labels, which the user can rename or delete.
+    #[must_use]
+    pub fn with_sample_labels(mut self) -> Graph {
+        if self.state.labels.is_empty() {
+            self.state.labels = SAMPLE_LABELS
+                .iter()
+                .map(|(id, name, color, icon)| Label {
+                    id: LabelId::new(*id),
+                    name: (*name).to_owned(),
+                    color: (*color).to_owned(),
+                    icon: Some((*icon).to_owned()),
+                })
+                .collect();
+        }
+        self
+    }
+}
 
 /// Applies the organisation edits and returns the edits that undo them. `None` for any
 /// other edit.
@@ -519,9 +550,10 @@ fn set_source_meta(
 
 #[cfg(test)]
 mod tests {
-    use crate::Graph;
+    use super::check_label;
+    use crate::{Graph, Label};
     use jstream_protocol::{
-        DeleteTarget, Edit, EntityKind, FolderId, LabelId, ProtocolError, Query, QueryResult,
+        DeleteTarget, Edit, EntityKind, FolderId, LabelId, ProtocolError, Query, QueryResult, Rev,
         SceneId, SceneMeta, SourceId, SourceKind, SourceMeta,
     };
 
@@ -823,6 +855,28 @@ mod tests {
             ]
         );
         apply_ok(&mut graph, edits);
+    }
+
+    #[test]
+    fn a_new_collection_gets_the_sample_labels_only_when_it_has_none() {
+        let seeded = Graph::new().with_sample_labels();
+        assert_eq!(seeded.rev(), Rev::default(), "seeding is not an edit");
+        let names: Vec<_> = seeded.state().labels().iter().map(Label::name).collect();
+        assert_eq!(names, ["Intro / outro", "Gameplay", "Overlay", "Sponsor"]);
+        for label in seeded.state().labels() {
+            check_label(label.name(), label.color(), label.icon(), 0).expect("a valid label");
+        }
+        // They are ordinary labels: one can be deleted like any other.
+        let mut graph = seeded.clone();
+        apply_ok(
+            &mut graph,
+            vec![Edit::LabelDelete {
+                label_id: LabelId::new("lbl_sponsor"),
+            }],
+        );
+        // A graph that has labels keeps its own.
+        let mine = fixture();
+        assert_eq!(mine.clone().with_sample_labels(), mine);
     }
 
     #[test]

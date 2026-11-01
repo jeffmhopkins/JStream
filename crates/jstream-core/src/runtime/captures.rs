@@ -4,9 +4,11 @@
 //! ([`CaptureKey`]), started with the source's [`CaptureOptions`], so two sources showing
 //! the same target run two captures of it. A source whose `show_cursor` is off asks for
 //! the pointer to be left out ([`CursorCapture::Hidden`]); the engine never draws it. A
-//! webcam or capture card is captured through the video-device backend, on the CPU path,
-//! in a format [`device_format`] picks, MJPEG decoded by the platform's capture decoder;
-//! sources showing the same device share its one capture, since a device opens once.
+//! webcam or capture card is captured through the video-device backend in a format
+//! [`device_format`] picks: on the GPU path when the backend has one
+//! ([`VideoDevices::on_context`]) and opens that format there, else on the CPU path,
+//! MJPEG always on the CPU path, decoded by the platform's capture decoder. Sources
+//! showing the same device share its one capture, since a device opens once.
 //!
 //! The render thread reads each capture's mailbox every tick and keeps its latest frame,
 //! a texture on the compositor's device or CPU RGBA8. Starting and stopping a capture
@@ -16,7 +18,8 @@
 //! R-RT-003). A capture that fails to start, or whose target goes away, keeps showing
 //! its last frame and is started again after [`RETRY_MS`]. When the render thread leaves
 //! the GPU path mid-run ([`RenderCaptures::leave_gpu`]), every display and window
-//! capture restarts on the CPU path. A webcam or capture card, already there, runs on.
+//! capture restarts on the CPU path, and so does a webcam or capture card on the GPU
+//! path. One already on the CPU path runs on.
 //!
 //! Each capture's frame size, which `source.sizes` reports for its sources (ADR-0022
 //! §4), goes back to the engine as a [`SizeChange`] on a channel the render thread never
@@ -45,12 +48,14 @@ use crate::snapshot::{CaptureFrame, CaptureImage, CaptureKey, Captures};
 pub(crate) const RETRY_MS: i64 = 2_000;
 
 /// The capture backend, and the same backend on the compositor's GPU device when it
-/// has a path there ([`Capture::on_context`]), the video-device backend, and the codecs
-/// that make its MJPEG decoders.
+/// has a path there ([`Capture::on_context`]), the video-device backend and the same on
+/// that device ([`VideoDevices::on_context`]), and the codecs that make its MJPEG
+/// decoders.
 pub(crate) struct Backends {
     pub(crate) cpu: Arc<dyn Capture>,
     pub(crate) gpu: Option<Arc<dyn Capture>>,
     pub(crate) devices: Arc<dyn VideoDevices>,
+    pub(crate) gpu_devices: Option<Arc<dyn VideoDevices>>,
     pub(crate) codecs: Arc<dyn Codecs>,
 }
 
@@ -64,14 +69,14 @@ enum Request {
     Start(CaptureKey, u32),
     /// Stop a capture: its stream is dropped there.
     Stop(Box<dyn CaptureStream>),
-    /// Drop the GPU backend: every later start is on the CPU path.
+    /// Drop the GPU backends: every later start is on the CPU path.
     CpuOnly,
 }
 
 /// A start's outcome, sent back to the render thread.
 struct Started {
     spec: CaptureKey,
-    stream: Option<Box<dyn CaptureStream>>,
+    stream: Option<Opened>,
     /// The epoch of the start: one from before the render thread left the GPU path is
     /// stopped again.
     epoch: u32,
@@ -108,6 +113,7 @@ pub(crate) fn spawn(
         thread: Some(thread),
         sizes: Some(sizes),
         on_gpu: false,
+        left_gpu: false,
         retry,
         ended: CaptureStats::default(),
         versions: 0,
@@ -123,7 +129,7 @@ fn capture_thread(mut backends: Backends, rx: &Receiver<Request>, tx: &Sender<St
     for request in rx {
         match request {
             Request::Start(spec, epoch) => {
-                let stream = match start(&backends, &spec) {
+                let stream = match start_on(&backends, &spec) {
                     Ok(stream) => {
                         failing.remove(&spec);
                         Some(stream)
@@ -146,21 +152,38 @@ fn capture_thread(mut backends: Backends, rx: &Receiver<Request>, tx: &Sender<St
                 }));
             }
             Request::Stop(stream) => drop(stream),
-            Request::CpuOnly => backends.gpu = None,
+            Request::CpuOnly => {
+                backends.gpu = None;
+                backends.gpu_devices = None;
+            }
         }
     }
 }
 
-/// Starts the capture of `spec`: on the GPU path when the backend has one and it
-/// starts, else on the CPU path. Fails with the reason when neither starts. A video
-/// device is opened on the CPU path ([`open_device`]).
+/// A started capture, and whether it is on the GPU path: one that is must be started
+/// again on the CPU path when the render thread leaves the GPU path.
+pub(crate) struct Opened {
+    pub(crate) stream: Box<dyn CaptureStream>,
+    pub(crate) gpu: bool,
+}
+
+/// [`start_on`]'s stream, for tests that only read it.
+#[cfg(test)]
 pub(crate) fn start(
     backends: &Backends,
     spec: &CaptureKey,
 ) -> Result<Box<dyn CaptureStream>, String> {
+    start_on(backends, spec).map(|opened| opened.stream)
+}
+
+/// Starts the capture of `spec`: on the GPU path when the backend has one and it
+/// starts, else on the CPU path. Fails with the reason when neither starts. A video
+/// device is opened as [`open_device`] says.
+fn start_on(backends: &Backends, spec: &CaptureKey) -> Result<Opened, String> {
     if let CaptureSpec::Device(id) = &spec.spec {
         return open_device(
             backends.devices.as_ref(),
+            backends.gpu_devices.as_deref(),
             backends.codecs.as_ref(),
             id.as_deref(),
         );
@@ -175,18 +198,19 @@ pub(crate) fn start(
         Some(gpu) => match gpu.start_with(&target, &options) {
             Ok(stream) => {
                 tracing::info!(capture = ?spec, "capture delivers GPU frames");
-                return Ok(stream);
+                return Ok(Opened { stream, gpu: true });
             }
             Err(err) => Some(err.to_string()),
         },
         None => None,
     };
+    let cpu = |stream| Opened { stream, gpu: false };
     match (backends.cpu.start_with(&target, &options), gpu_failed) {
         (Ok(stream), Some(gpu)) => {
             tracing::warn!(capture = ?spec, error = %gpu, "GPU capture did not start; capturing CPU frames");
-            Ok(stream)
+            Ok(cpu(stream))
         }
-        (Ok(stream), None) => Ok(stream),
+        (Ok(stream), None) => Ok(cpu(stream)),
         // Neither path started: one error for the caller to log, so a retry that
         // fails again is logged once.
         (Err(cpu), Some(gpu)) => Err(format!("{cpu} (GPU path: {gpu})")),
@@ -223,11 +247,19 @@ fn target(capture: &dyn Capture, spec: &CaptureSpec) -> Result<CaptureTarget, St
 /// Opens the video device `id`, or the first one listed, in the format
 /// [`device_format`] picks. An MJPEG format comes with the platform's capture decoder
 /// ([`Codecs::capture_decoder`]); without one, only uncompressed formats are chosen.
+///
+/// An uncompressed format is opened on `gpu`, the backend on the compositor's device,
+/// when there is one, and on `devices` when that fails (the device is closed again
+/// first: the failed open drops what it opened). The choice of format is the same
+/// either way, made from `devices`' list, so a device shows the same picture on both
+/// paths. A compressed one is always opened on `devices`, as its decoder delivers CPU
+/// frames.
 fn open_device(
     devices: &dyn VideoDevices,
+    gpu: Option<&dyn VideoDevices>,
     codecs: &dyn Codecs,
     id: Option<&str>,
-) -> Result<Box<dyn CaptureStream>, String> {
+) -> Result<Opened, String> {
     let id = match id {
         Some(id) => DeviceId::new(id),
         None => devices
@@ -273,9 +305,26 @@ fn open_device(
     } else {
         None
     };
-    devices
-        .open(&id, &format, decoder)
-        .map_err(|err| format!("opening {id}: {err}"))
+    let gpu_failed = match gpu {
+        Some(gpu) if !format.encoding.is_compressed() => match gpu.open(&id, &format, None) {
+            Ok(stream) => {
+                tracing::info!(device = %id, "the video device delivers GPU frames");
+                return Ok(Opened { stream, gpu: true });
+            }
+            Err(err) => Some(err.to_string()),
+        },
+        _ => None,
+    };
+    match (devices.open(&id, &format, decoder), gpu_failed) {
+        (Ok(stream), gpu_failed) => {
+            if let Some(err) = gpu_failed {
+                tracing::info!(device = %id, error = %err, "the video device did not open on the GPU path; capturing CPU frames");
+            }
+            Ok(Opened { stream, gpu: false })
+        }
+        (Err(err), Some(gpu)) => Err(format!("opening {id}: {err} (GPU path: {gpu})")),
+        (Err(err), None) => Err(format!("opening {id}: {err}")),
+    }
 }
 
 /// The format a webcam or capture card is opened in, from those it lists.
@@ -348,6 +397,10 @@ pub(crate) struct RenderCaptures {
     /// Whether the compositor is on the platform's GPU context, so GPU frames can be
     /// sampled. Off, a GPU frame is unusable.
     on_gpu: bool,
+    /// Whether the render thread has left the GPU path ([`Self::leave_gpu`]): a video
+    /// device whose start was asked for before, and comes back on the GPU path, is
+    /// stopped and started again on the CPU path.
+    left_gpu: bool,
     /// [`RETRY_MS`] on the media clock.
     retry: MediaTime,
     /// The counters of the streams that have stopped.
@@ -396,6 +449,8 @@ enum State {
     Running {
         stream: Box<dyn CaptureStream>,
         failing: bool,
+        /// Whether it is on the GPU path ([`Opened::gpu`]).
+        gpu: bool,
     },
     /// Not running since `at`; started again [`RETRY_MS`] later.
     Failed { at: MediaTime },
@@ -418,11 +473,16 @@ impl RenderCaptures {
     /// display and window capture that is running or starting. Never waits; the streams
     /// and the backend drop on that thread, which ends before the context goes
     /// ([`stop`](Self::stop)). Such a capture keeps no frame until its CPU stream
-    /// delivers one. A webcam or capture card is on the CPU path already: it runs on and
-    /// keeps its frame, and one still starting takes the answer it is waiting for, since
-    /// most devices open only once (#734).
+    /// delivers one. A webcam or capture card running on the GPU path is stopped and
+    /// started again the same way; the stop reaches the `jstream-capture` thread first,
+    /// so the device is closed before it is opened again. One on the CPU path runs on
+    /// and keeps its frame, and one still starting takes the answer it is waiting for,
+    /// since most devices open only once (#734): an answer on the GPU path is then
+    /// stopped and started again ([`Self::tick`]). One that failed keeps its last CPU
+    /// frame and starts again, on the CPU path, when it is due.
     pub(crate) fn leave_gpu(&mut self) {
         self.on_gpu = false;
+        self.left_gpu = true;
         let Some(requests) = self.requests.clone() else {
             self.release_frames();
             return;
@@ -431,8 +491,11 @@ impl RenderCaptures {
         self.epoch = self.epoch.wrapping_add(1);
         let mut slots = std::mem::take(&mut self.slots);
         for (spec, slot) in &mut slots {
-            if matches!(spec.spec, CaptureSpec::Device(_)) {
-                // Only a GPU frame uses the compositor's device; a device delivers none.
+            let on_gpu = matches!(slot.state, State::Running { gpu: true, .. });
+            if matches!(spec.spec, CaptureSpec::Device(_)) && !on_gpu {
+                // Only a GPU frame uses the compositor's device; a device on the CPU path
+                // delivers none, and one that failed starts again on the CPU path, keeping
+                // its last frame meanwhile.
                 if matches!(slot.frame, Some(Latest::Gpu(_))) {
                     slot.frame = None;
                 }
@@ -503,28 +566,41 @@ impl RenderCaptures {
         {
             match (self.slots.get_mut(&spec), stream) {
                 // Asked for before the GPU path was left: started again since.
-                (Some(slot), Some(stream)) if epoch != slot.epoch => {
-                    let _ = requests.send(Request::Stop(stream));
+                (Some(slot), Some(opened)) if epoch != slot.epoch => {
+                    let _ = requests.send(Request::Stop(opened.stream));
                 }
                 (Some(slot), None) if epoch != slot.epoch => {}
-                (Some(slot), Some(stream)) if matches!(slot.state, State::Starting) => {
+                // A video device asked for before the GPU path was left, which opened on
+                // it: closed, then opened again on the CPU path.
+                (Some(slot), Some(opened))
+                    if opened.gpu && self.left_gpu && matches!(slot.state, State::Starting) =>
+                {
+                    let _ = requests.send(Request::Stop(opened.stream));
+                    let _ = requests.send(Request::Start(spec.clone(), self.epoch));
+                    slot.epoch = self.epoch;
+                }
+                (Some(slot), Some(opened)) if matches!(slot.state, State::Starting) => {
                     slot.state = State::Running {
-                        stream,
+                        stream: opened.stream,
                         failing: false,
+                        gpu: opened.gpu,
                     };
                 }
                 (Some(slot), None) if matches!(slot.state, State::Starting) => {
                     slot.state = State::Failed { at: now };
                 }
                 // No longer wanted: stopped again.
-                (_, Some(stream)) => {
-                    let _ = requests.send(Request::Stop(stream));
+                (_, Some(opened)) => {
+                    let _ = requests.send(Request::Stop(opened.stream));
                 }
                 (_, None) => {}
             }
         }
         for (spec, slot) in &mut self.slots {
-            let State::Running { stream, failing } = &mut slot.state else {
+            let State::Running {
+                stream, failing, ..
+            } = &mut slot.state
+            else {
                 continue;
             };
             match stream.latest() {
@@ -808,20 +884,24 @@ impl Yuv {
 
 #[cfg(test)]
 mod tests {
-    use super::{Backends, MAX_DEVICE_PIXELS, device_format, rgba_from_surface, spawn, start};
+    use super::{
+        Backends, MAX_DEVICE_PIXELS, State, device_format, rgba_from_surface, spawn, start,
+        start_on,
+    };
     use crate::snapshot::{CaptureKey, Captures};
     use jstream_media::{FrameSize, PixelFormat, Timebase};
     use jstream_platform::fake::{
         FAKE_CAPTURE_CARD, FAKE_WEBCAM, FakeCapture, FakeClock, FakeCodecs, FakeVideoDevices,
     };
     use jstream_platform::{
-        AudioEncoder, AudioEncoderConfig, CaptureEncoding, CodecInfo, Codecs, MediaClock,
-        PlatformError, VideoDecoder, VideoDecoderConfig, VideoDeviceFormat, VideoEncoder,
-        VideoEncoderConfig,
+        AudioEncoder, AudioEncoderConfig, CaptureDecoder, CaptureEncoding, CaptureStream,
+        CodecInfo, Codecs, DeviceId, MediaClock, PlatformError, VideoDecoder, VideoDecoderConfig,
+        VideoDeviceFormat, VideoDeviceInfo, VideoDevices, VideoEncoder, VideoEncoderConfig,
     };
     use jstream_sources::CaptureSpec;
     use std::collections::BTreeSet;
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::{Duration, Instant};
 
     fn format(width: u32, height: u32, fps: u32, encoding: CaptureEncoding) -> VideoDeviceFormat {
@@ -911,6 +991,7 @@ mod tests {
             )),
             gpu: None,
             devices: Arc::new(devices.clone()),
+            gpu_devices: None,
             codecs,
         }
     }
@@ -1046,5 +1127,158 @@ mod tests {
             size_rx.recv().is_err(),
             "stopping closes the channel, sending nothing more"
         );
+    }
+
+    /// The fake devices "on the compositor's device": the same devices (clones share
+    /// them, so a device open on either path counts in `open_streams`), counting the
+    /// opens asked of it, and refusing every one when `refuse` is set.
+    #[derive(Clone)]
+    struct OnGpu {
+        devices: FakeVideoDevices,
+        opens: Arc<AtomicUsize>,
+        refuse: bool,
+    }
+
+    impl OnGpu {
+        fn new(devices: &FakeVideoDevices, refuse: bool) -> Self {
+            Self {
+                devices: devices.clone(),
+                opens: Arc::default(),
+                refuse,
+            }
+        }
+    }
+
+    impl VideoDevices for OnGpu {
+        fn devices(&self) -> Result<Vec<VideoDeviceInfo>, PlatformError> {
+            self.devices.devices()
+        }
+        fn formats(&self, device: &DeviceId) -> Result<Vec<VideoDeviceFormat>, PlatformError> {
+            self.devices.formats(device)
+        }
+        fn open(
+            &self,
+            device: &DeviceId,
+            format: &VideoDeviceFormat,
+            decoder: Option<Box<dyn CaptureDecoder>>,
+        ) -> Result<Box<dyn CaptureStream>, PlatformError> {
+            assert!(
+                !format.encoding.is_compressed() && decoder.is_none(),
+                "the GPU path is never asked for a compressed format"
+            );
+            self.opens.fetch_add(1, Ordering::Relaxed);
+            if self.refuse {
+                return Err(PlatformError::Unsupported {
+                    what: "this format on the GPU path".into(),
+                });
+            }
+            self.devices.open(device, format, None)
+        }
+    }
+
+    /// With a device backend on the compositor's device, an uncompressed format opens
+    /// there; MJPEG, decoded on the CPU, never asks it; and a format it refuses opens on
+    /// the CPU path instead, in the same format.
+    #[test]
+    fn a_device_opens_on_the_gpu_path_when_the_backend_there_takes_its_format() {
+        let clock = FakeClock::new(Timebase::MICROS);
+        let devices = FakeVideoDevices::new(clock.clone());
+        let webcam = CaptureKey::for_source(
+            CaptureSpec::Device(Some(FAKE_WEBCAM.into())),
+            jstream_protocol::SourceId::new("cam"),
+        );
+        let with: Arc<dyn Codecs> = Arc::new(FakeCodecs);
+        let without: Arc<dyn Codecs> = Arc::new(NoMjpeg);
+        for (codecs, refuse, gpu, asked, size) in [
+            (&without, false, true, 1, (640, 360)),
+            (&with, false, false, 0, (1280, 720)),
+            (&without, true, false, 1, (640, 360)),
+        ] {
+            let on_gpu = OnGpu::new(&devices, refuse);
+            let mut backends = backends(&clock, &devices, Arc::clone(codecs));
+            backends.gpu_devices = Some(Arc::new(on_gpu.clone()));
+            let mut opened = start_on(&backends, &webcam).expect("the device opens");
+            assert_eq!(opened.gpu, gpu, "refuse {refuse}, size {size:?}");
+            assert_eq!(on_gpu.opens.load(Ordering::Relaxed), asked);
+            assert_eq!(devices.open_streams(), 1, "opened once");
+            clock.advance(1_000);
+            let surface = opened.stream.latest().expect("latest").expect("a frame");
+            let got = rgba_from_surface(&surface, &mut Vec::new()).expect("a frame");
+            assert_eq!((got.width(), got.height()), size);
+            drop(opened);
+            assert_eq!(devices.open_streams(), 0);
+        }
+    }
+
+    /// Leaving the GPU path restarts a webcam that is on it on the CPU path, closed
+    /// before it is opened again: one running, and one still starting whose answer comes
+    /// from the GPU path.
+    #[test]
+    fn leaving_the_gpu_path_moves_a_webcam_on_it_to_the_cpu() {
+        let clock = FakeClock::new(Timebase::MICROS);
+        let devices = FakeVideoDevices::new(clock.clone());
+        let webcam = CaptureKey::for_source(
+            CaptureSpec::Device(Some(FAKE_WEBCAM.into())),
+            jstream_protocol::SourceId::new("cam"),
+        );
+        let wanted = BTreeSet::from([webcam.clone()]);
+        let on_cpu = |captures: &super::RenderCaptures| {
+            matches!(
+                captures.slots.get(&webcam).map(|slot| &slot.state),
+                Some(State::Running { gpu: false, .. })
+            ) && captures.frame(&webcam).is_some()
+        };
+        let on_gpu = |captures: &super::RenderCaptures| {
+            matches!(
+                captures.slots.get(&webcam).map(|slot| &slot.state),
+                Some(State::Running { gpu: true, .. })
+            ) && captures.frame(&webcam).is_some()
+        };
+        for left_while_starting in [false, true] {
+            let gpu = OnGpu::new(&devices, false);
+            let mut backends = backends(&clock, &devices, Arc::new(NoMjpeg));
+            backends.gpu_devices = Some(Arc::new(gpu.clone()));
+            let (size_tx, _sizes) = std::sync::mpsc::channel();
+            let mut captures =
+                spawn(backends, Timebase::MICROS, size_tx).expect("the capture thread starts");
+            captures.set_on_gpu(true);
+            let tick_until = |captures: &mut super::RenderCaptures,
+                              done: &dyn Fn(&super::RenderCaptures) -> bool|
+             -> bool {
+                let deadline = Instant::now() + Duration::from_secs(10);
+                while Instant::now() < deadline {
+                    clock.advance(1_000);
+                    captures.tick(&wanted, clock.now());
+                    assert!(devices.open_streams() <= 1, "the webcam opened twice");
+                    if done(captures) {
+                        return true;
+                    }
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                false
+            };
+            if left_while_starting {
+                // The start reaches the capture thread before the GPU backend is
+                // dropped, so it opens on the GPU path.
+                captures.tick(&wanted, clock.now());
+                captures.leave_gpu();
+            } else {
+                assert!(tick_until(&mut captures, &on_gpu), "on the GPU path");
+                captures.leave_gpu();
+                assert!(captures.frame(&webcam).is_none(), "restarted");
+            }
+            assert!(
+                tick_until(&mut captures, &on_cpu),
+                "on the CPU path, left while starting: {left_while_starting}"
+            );
+            assert_eq!(
+                gpu.opens.load(Ordering::Relaxed),
+                1,
+                "opened on the GPU once"
+            );
+            assert_eq!(devices.open_streams(), 1);
+            captures.stop();
+            assert_eq!(devices.open_streams(), 0);
+        }
     }
 }

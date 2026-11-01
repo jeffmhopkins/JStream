@@ -596,6 +596,7 @@ impl PreviewCapture {
                 cpu: Arc::clone(&self.capture),
                 gpu: None,
                 devices: Arc::clone(&self.devices),
+                gpu_devices: None,
                 codecs: Arc::clone(&self.codecs),
             },
             self.clock,

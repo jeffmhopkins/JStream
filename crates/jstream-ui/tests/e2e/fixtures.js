@@ -202,6 +202,24 @@ export async function meterTicks(page) {
   };
 }
 
+/** Lets a test send the page `stats.tick` events, which the mock engine never sends
+ * since it runs no pipeline: the page's WebSocket goes through a route that passes every
+ * message on, and the returned function sends `{ seq, drops, load }` as one tick. Call it
+ * before `connect`. */
+export async function statsTicks(page) {
+  let socket = null;
+  await page.routeWebSocket(/.*/, (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => server.send(message));
+    server.onMessage((message) => ws.send(message));
+    socket = ws;
+  });
+  return (tick) => {
+    if (!socket) throw new Error('the page has no socket yet');
+    socket.send(JSON.stringify({ type: 'event', event: { type: 'stats.tick', ...tick } }));
+  };
+}
+
 /** Records what the page sends: its WebSocket goes through a route that passes every
  * message on, and the returned `sent(type)` lists every object of that `type` (an edit
  * such as `scene.set_transitions`, or an action) in the requests so far, wherever it sits

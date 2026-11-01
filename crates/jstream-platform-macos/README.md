@@ -39,6 +39,8 @@ It has:
   AVFoundation and Core Audio's host times are on the same time line in Mach ticks, so
   `from_host_time` (and `hns_from_mach`, with the `mach_timebase_info` ratio) maps them.
   `now` never decreases, and doesn't allocate, lock or block.
+- **`MacosProcessCpu`** (`ProcessCpu`): the process's user and system time from
+  `getrusage(RUSAGE_SELF)`, for `stats.tick`'s load.
 - **`MacosVersion`**: the running release, read from `NSProcessInfo`, and parsed from
   strings. **`support_tier`** gives its ADR-0063 tier: Apple Silicon on a release Apple
   still patches (`MacosVersion::OLDEST_PATCHED`, 15 today, mirroring the

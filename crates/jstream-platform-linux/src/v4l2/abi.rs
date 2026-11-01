@@ -274,6 +274,19 @@ impl Buffer {
     }
 }
 
+/// `struct v4l2_exportbuffer`: one plane of a buffer, exported as a DMA-BUF
+/// (`VIDIOC_EXPBUF`). The driver writes the new descriptor into `fd`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct ExportBuffer {
+    pub(crate) type_: u32,
+    pub(crate) index: u32,
+    pub(crate) plane: u32,
+    pub(crate) flags: u32,
+    pub(crate) fd: i32,
+    pub(crate) reserved: [u32; 11],
+}
+
 // The 64-bit layouts. A 32-bit target would need its own (`timeval` and the unions
 // shrink, and with them the ioctl numbers), so the backend isn't built there.
 #[cfg(target_pointer_width = "64")]
@@ -290,6 +303,7 @@ const _: () = {
     assert!(size_of::<StreamParm>() == 204);
     assert!(size_of::<RequestBuffers>() == 20);
     assert!(size_of::<Buffer>() == 88);
+    assert!(size_of::<ExportBuffer>() == 64);
 };
 
 /// `_IOC(dir, 'V', nr, size)`.
@@ -306,6 +320,7 @@ pub(crate) const VIDIOC_S_FMT: c_ulong = ioc(READ | WRITE, 5, size_of::<Format>(
 pub(crate) const VIDIOC_REQBUFS: c_ulong = ioc(READ | WRITE, 8, size_of::<RequestBuffers>());
 pub(crate) const VIDIOC_QUERYBUF: c_ulong = ioc(READ | WRITE, 9, size_of::<Buffer>());
 pub(crate) const VIDIOC_QBUF: c_ulong = ioc(READ | WRITE, 15, size_of::<Buffer>());
+pub(crate) const VIDIOC_EXPBUF: c_ulong = ioc(READ | WRITE, 16, size_of::<ExportBuffer>());
 pub(crate) const VIDIOC_DQBUF: c_ulong = ioc(READ | WRITE, 17, size_of::<Buffer>());
 pub(crate) const VIDIOC_STREAMON: c_ulong = ioc(WRITE, 18, size_of::<i32>());
 pub(crate) const VIDIOC_STREAMOFF: c_ulong = ioc(WRITE, 19, size_of::<i32>());
@@ -364,6 +379,14 @@ pub(crate) const PIX_FMT_YUV420: u32 = fourcc(b"YU12");
 pub(crate) const PIX_FMT_NV12M: u32 = fourcc(b"NM12");
 /// `V4L2_PIX_FMT_YUV420M`: I420 with each plane in its own buffer plane.
 pub(crate) const PIX_FMT_YUV420M: u32 = fourcc(b"YM12");
+/// `V4L2_PIX_FMT_ABGR32` and `_XBGR32`: B, G, R and A (or padding) in memory, DRM's
+/// `ARGB8888` and `XRGB8888`.
+pub(crate) const PIX_FMT_ABGR32: u32 = fourcc(b"AR24");
+pub(crate) const PIX_FMT_XBGR32: u32 = fourcc(b"XR24");
+/// `V4L2_PIX_FMT_RGBA32` and `_RGBX32`: R, G, B and A (or padding) in memory, DRM's
+/// `ABGR8888` and `XBGR8888`.
+pub(crate) const PIX_FMT_RGBA32: u32 = fourcc(b"AB24");
+pub(crate) const PIX_FMT_RGBX32: u32 = fourcc(b"XB24");
 
 /// `V4L2_COLORSPACE_SMPTE170M`, `_REC709`, `_JPEG`, `_SRGB` and `_BT2020`.
 pub(crate) const COLORSPACE_SMPTE170M: u32 = 1;
@@ -435,6 +458,10 @@ mod tests {
         assert_eq!(VIDIOC_QUERYBUF, 0xc058_5609);
         assert_eq!(VIDIOC_QBUF, 0xc058_560f);
         assert_eq!(VIDIOC_DQBUF, 0xc058_5611);
+        assert_eq!(VIDIOC_EXPBUF, 0xc040_5610);
+        assert_eq!(offset_of!(ExportBuffer, plane), 8);
+        assert_eq!(offset_of!(ExportBuffer, flags), 12);
+        assert_eq!(offset_of!(ExportBuffer, fd), 16);
         assert_eq!(VIDIOC_STREAMON, 0x4004_5612);
         assert_eq!(VIDIOC_STREAMOFF, 0x4004_5613);
     }
@@ -474,6 +501,10 @@ mod tests {
         assert_eq!(PIX_FMT_YUV420, 0x3231_5559);
         assert_eq!(PIX_FMT_NV12M, 0x3231_4d4e);
         assert_eq!(PIX_FMT_YUV420M, 0x3231_4d59);
+        assert_eq!(PIX_FMT_ABGR32, 0x3432_5241);
+        assert_eq!(PIX_FMT_XBGR32, 0x3432_5258);
+        assert_eq!(PIX_FMT_RGBA32, 0x3432_4241);
+        assert_eq!(PIX_FMT_RGBX32, 0x3432_4258);
     }
 
     #[test]

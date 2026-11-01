@@ -3784,6 +3784,42 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "EngineLoad": {
+      "description": "The engine's load at one `stats.tick` (0.48): running totals since the engine\nstarted, beside the engine time they were read at.\n\nA client computes a rate from two ticks: the program's frame rate is the change in\n`program_frames` over the change in `elapsed_ms`, and the process's CPU use is the\nchange in `cpu_ms` over the change in `elapsed_ms` times `cpus` (100% when every\nlogical CPU is busy, as Windows' Task Manager counts it).\n\nA missing field parses as 0 or `None`, so a field added later can be left out by an\nolder sender (R-API-001). Unknown fields are ignored.",
+      "properties": {
+        "cpu_ms": {
+          "description": "CPU time the engine's process has used since it started, in milliseconds, on\nevery thread and in both user and kernel mode, or `None` where the host can't\nread it.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "cpus": {
+          "default": 0,
+          "description": "The logical CPUs the process can run on, or 0 when unknown.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "elapsed_ms": {
+          "default": 0,
+          "description": "Milliseconds since the engine started, on a monotonic clock, when the totals\nwere read.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "program_frames": {
+          "default": 0,
+          "description": "Frames the program stage has drawn since the engine started. It grows only\nwhile the program stage runs (while an output runs), at the canvas frame rate.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "EntityKind": {
       "description": "The kinds of object an error can name.",
       "oneOf": [
@@ -4118,11 +4154,22 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "A sample of the pipeline's drop counters (R-RT-004).\n\n`drops` is a running total since the engine started, not the count since the\nprevious tick. A client that misses one subtracts the last tick it did see.\n`seq` starts at 1 and increases by one per sample, so a gap means a missed tick\nand not a reset. The engine sends it when its control thread asks, about once a\nsecond once the media pipeline is running. Until event subscriptions exist, every\nclient receives it.",
+          "description": "A sample of the pipeline's drop counters (R-RT-004).\n\n`drops` is a running total since the engine started, not the count since the\nprevious tick. A client that misses one subtracts the last tick it did see.\n`seq` starts at 1 and increases by one per sample, so a gap means a missed tick\nand not a reset. The engine sends it when its control thread asks, about once a\nsecond once the media pipeline is running, and about once a second while it is\nidle when the host started the engine's heartbeat (0.48). Until event\nsubscriptions exist, every client receives it.",
           "properties": {
             "drops": {
               "$ref": "#/$defs/DropCounts",
               "description": "Running drop totals."
+            },
+            "load": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/EngineLoad"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The engine's load: how many frames the program drew and how much CPU time\nthe engine's process used, as running totals beside the time they were read\nat (0.48). An older engine leaves it out."
             },
             "seq": {
               "description": "Monotonic sample number, starting at 1.",
