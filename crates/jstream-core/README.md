@@ -464,7 +464,8 @@ state machine. Contents:
   leaving the latest collection and no temporary file), `scene.switch` and the program
   scene's rules (in `tests.rs`, the differential script and `studio.rs`), a snapshot
   that follows program, transitions and preview (`src/tests/transitions.rs`: preset
-  resolution, a fade that ends on the clock, a switch mid-transition, and a GPU
+  resolution, a fade that ends on the clock, an item's effects planned with the
+  scene once a transition onto it ends, a switch mid-transition, and a GPU
   snapshot mid-fade), keyframe scenes (`src/tests/keyframes.rs`: a variant drawing its
   parent's items with its overrides and following the parent, a `move` between a parent
   and its variant pairing by item where pairing by source would cross, and the
@@ -475,7 +476,10 @@ state machine. Contents:
   a view of the group, live values included, and a `move` moving that child between the
   two sides, flattened or, for a group placed in a box, inside the group's layer from
   one side's override to the other's or to the group's own value, and on from where it
-  is when a switch retargets the Move; `snapshot.rs` draws such a child where its
+  is when a switch retargets the Move, a group nested in that group moving inside its
+  own layer, a group under a scene chain and item effects, whose layers no track shows
+  are left out of the shot, and a child appearing or disappearing with the group item's
+  timing; `snapshot.rs` draws such a child where its
   track is at the frame's time; `activity.rs` silences what a keyframe hides in a group; `transition.rs` pairs a source placed twice by item), YouTube on `jstream-youtube`'s `FakeTransport` and fixtures
   (`src/tests/youtube.rs`: sign-in through a real loopback redirect, sign-out, the
   broadcast actions and lists, quota and refused tokens, a `youtube` output

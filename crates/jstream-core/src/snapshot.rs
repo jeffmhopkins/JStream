@@ -775,6 +775,9 @@ fn plan_inner(
             shot.scenes.clear();
             shot.frames.clear();
             shot.chains.clear();
+            // An item's box goes with its chain: a box left over would be found again
+            // without its effects' chain being planned (#960).
+            shot.boxes.clear();
             planner.wake = None;
         }
     }
