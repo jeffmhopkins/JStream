@@ -20,6 +20,7 @@ use crate::history::History;
 use crate::live::{Built, LiveHost, LiveSources, LoadedAsset};
 use crate::load::LoadMeter;
 use crate::lock;
+use crate::output_stats::{MeterGuard, OutputMeters, ReadSample};
 use crate::outputs::Outputs;
 use crate::plugins::kinds::{self as clap_kinds, ClapScan};
 use crate::preview::{
@@ -48,10 +49,10 @@ use jstream_platform::{
 use jstream_protocol::{
     Action, ActionResult, Batch, Call, CallResult, CaptureTargetKind, ClientId, DropCounts, Edit,
     EncoderProfile, EncoderSessionInfo, EngineLoad, EntityKind, Event, FilterChain, GestureId,
-    HistoryCall, HistoryDirection, IdempotencyKey, LiveOutcome, OutputId, OutputKind, OutputState,
-    PixelSize, PreviewSettings, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
-    RtmpTarget, SceneId, SecretString, SourceId, SourceSize, TransitionPresetId, TransitionStarted,
-    YoutubeAuth,
+    HistoryCall, HistoryDirection, IdempotencyKey, LiveOutcome, OutputHealth, OutputId, OutputKind,
+    OutputState, OutputStatsInfo, PixelSize, PreviewSettings, ProtocolError, Query, QueryResult,
+    RecordContainer, RequestId, Rev, RtmpTarget, SceneId, SecretString, SourceId, SourceSize,
+    TransitionPresetId, TransitionStarted, YoutubeAuth,
 };
 use jstream_sources::AudioScopes;
 use std::collections::{BTreeMap, BTreeSet};
@@ -117,6 +118,10 @@ struct Shared {
     /// When the engine started, the process CPU time and the idle heartbeat, for
     /// `stats.tick`'s load. Its lock is its own, never taken with the collection's.
     load: LoadMeter,
+    /// Each running output's live stats meter, for `stats.tick`'s `outputs` (protocol
+    /// 0.59). Its lock is its own: the stats thread takes it before the collection
+    /// lock, never with it.
+    output_meters: Arc<Mutex<OutputMeters>>,
     /// The WASM automation plugins installed this run (ADR-0069). On its own lock,
     /// never taken with the collection lock held, nor while a plugin runs.
     #[cfg(feature = "wasm-plugins")]
@@ -171,6 +176,7 @@ impl Default for Engine {
                 youtube: Mutex::new(None),
                 previews: PreviewHub::default(),
                 load: LoadMeter::default(),
+                output_meters: Arc::default(),
                 #[cfg(feature = "wasm-plugins")]
                 automation: crate::plugins::automation::Registry::default(),
             }),
@@ -599,6 +605,18 @@ impl Engine {
         {
             tracing::error!(error = %err, "stats heartbeat did not start");
         }
+    }
+
+    /// Meters `output_id`'s run, which began at `started`, in each `stats.tick` until
+    /// the returned guard drops (protocol 0.59).
+    pub(crate) fn add_output_meter(
+        &self,
+        output_id: OutputId,
+        started: Instant,
+        read: ReadSample,
+    ) -> MeterGuard {
+        let id = lock(&self.shared.output_meters).add(output_id, started, read);
+        MeterGuard::new(Arc::clone(&self.shared.output_meters), id)
     }
 
     /// The ledger the pipeline's [`DropGuard`](crate::drops::DropGuard) removes from.
@@ -2473,11 +2491,13 @@ fn emit_sampled(shared: &Shared, ledger: &Mutex<DropLedger>) {
     let sampled = drops::lock_ledger(ledger).sample();
     // Read before the collection lock: the CPU reader makes a system call.
     let cpu = shared.load.cpu_time();
+    // And the outputs' meters, whose lock is never taken with the collection's.
+    let outputs = lock(&shared.output_meters).sample(Instant::now());
     let mut wake = Vec::new();
     {
         let mut state = lock(&shared.state);
         let load = shared.load.load(state.render.drawn(), cpu);
-        state.emit_stats(sampled, load, &mut wake);
+        state.emit_stats(sampled, load, outputs, &mut wake);
     }
     for waker in wake {
         waker.wake();
@@ -3411,7 +3431,19 @@ impl State {
         }
     }
 
-    fn emit_stats(&mut self, drops: DropCounts, load: EngineLoad, wake: &mut Vec<Waker>) {
+    fn emit_stats(
+        &mut self,
+        drops: DropCounts,
+        load: EngineLoad,
+        mut outputs: Vec<OutputStatsInfo>,
+        wake: &mut Vec<Waker>,
+    ) {
+        // A live link that is down makes its output poor, whatever it lost.
+        for output in &mut outputs {
+            if self.outputs.state(&output.output_id) == Ok(OutputState::Reconnecting) {
+                output.health = OutputHealth::Poor;
+            }
+        }
         self.stats_seq = self.stats_seq.saturating_add(1);
         self.subscribers.emit(
             &Event::StatsTick {
@@ -3419,6 +3451,7 @@ impl State {
                 drops,
                 load: Some(load),
                 chains: Some(self.render.load().shot().chain_cost()),
+                outputs,
             },
             wake,
         );

@@ -231,7 +231,7 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   stream ends. A stream that ends means the engine went away, so it exits with code 3.
   When the server dropped events because the CLI read too slowly, it prints
   `events.dropped <count>`. A pipeline drop sample prints
-  `stats.tick seq <n> capture_frames <n> audio_frames <n> render_ticks <n> encode_frames <n> encode_blocks <n> output_packets <n>`, then `elapsed_ms <n> program_frames <n> cpus <n>` and `cpu_ms <n>` when the tick carries the engine's load (protocol 0.48) and the host reads CPU time.
+  `stats.tick seq <n> capture_frames <n> audio_frames <n> render_ticks <n> encode_frames <n> encode_blocks <n> output_packets <n>`, then `elapsed_ms <n> program_frames <n> cpus <n>` and `cpu_ms <n>` when the tick carries the engine's load (protocol 0.48) and the host reads CPU time, then for each running output (protocol 0.59) `output <id> uptime_ms <n> kbps <n> bytes <n> frames <n> dropped_frames <n> dropped_packets <n> health <waiting|good|fair|poor>`.
   Any other event, `meters.tick` among them, prints as its JSON.
 
 **MCP.** `jstream-cli mcp` is the stdio MCP proxy for an agent's MCP client to launch,

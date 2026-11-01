@@ -1,6 +1,6 @@
 // Shared polish: the toast after a duplicate, fold state remembered by title across
 // items and reloads, the Inspector's 3D section and type icon, and the View menu's
-// eleven panels, the three that wait on the engine saying what they wait on.
+// eleven panels, Live chat saying what it waits on.
 import { test, expect, connect, rev } from '../fixtures.js';
 
 function inspector(page) {
