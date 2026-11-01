@@ -296,8 +296,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   `scene.create_variant`'s scene, not its parent), as its commit's `item.set_geometry` does, with no revision until the drop, and leaves Main's box as it
   was. With the Backdrop and a second colour grouped in Main, the keyframe lists the
   group's children: a child's eye hides it there as one edit, a click selects it in
-  the keyframe, whose X field writes its override, its row's menu has Remove from scene
-  and Bring to front disabled and leaves the keyframe selected, Main still shows it as it was (where
+  the keyframe, whose X field writes its override, a Left crop is written there, its row's
+  menu has Remove from scene, Bring to front and Crop disabled and its Clear crop clears
+  that crop as one edit, leaving the keyframe selected, Main still shows it as it was (where
   a click opens the group's scene at its own box), and Reset to “Main” brings it back.
   The Inspector's Hotkey row binds F1 to Intro (which a second client
   sees), F1 on the canvas then puts Intro on program on both clients, binding F1 to

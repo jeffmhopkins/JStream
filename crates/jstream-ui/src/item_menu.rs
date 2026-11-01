@@ -676,6 +676,9 @@ struct Facts {
     audio: Option<bool>,
     /// Whether the scene is a keyframe scene, which shows its parent's items.
     keyframe: bool,
+    /// Whether the primary item is a child of a group in the keyframe scene's tree,
+    /// which the canvas draws no box for.
+    child: bool,
     /// Whether the primary item is a reference or a clone.
     sharing: Sharing,
 }
@@ -717,6 +720,7 @@ impl Facts {
             picture,
             audio: source.audio.as_ref().map(|a| a.enabled),
             keyframe: scene.variant_of.is_some(),
+            child: !scene.items.iter().any(|i| i.item_id == primary.item_id),
             sharing: Sharing::of(collection, primary),
         })
     }
@@ -1212,7 +1216,9 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
         move || crop_mode.update(|on| *on = !*on),
     )
     .hint("C")
-    .disabled_if(many);
+    // The canvas draws no box for a keyframe's group child, so crop mode has nothing
+    // to crop there; leaving it stays on.
+    .disabled_if(many || (facts.child && !crop_mode.get_untracked()));
     let duplicate = |label: &str, clone: bool| {
         let facts = Rc::clone(&facts);
         let scene = scene_id.clone();
@@ -1465,7 +1471,7 @@ mod tests {
         c.keyframe_children.insert("k".into(), vec![child]);
         let x = ids(&["x"]);
         let facts = Facts::of(&c, &SceneId::new("k"), &x).expect("the keyframe's child");
-        assert!(facts.keyframe);
+        assert!(facts.keyframe && facts.child);
         assert_eq!(facts.items, x);
         assert_eq!(
             facts.placed.len(),
@@ -1473,7 +1479,7 @@ mod tests {
             "its box, to place it in the keyframe"
         );
         let own = Facts::of(&c, &SceneId::new("grp"), &x).expect("the group's item");
-        assert!(!own.keyframe);
+        assert!(!own.keyframe && !own.child);
         // Main itself doesn't hold it.
         assert!(Facts::of(&c, &SceneId::new("main"), &x).is_none());
     }

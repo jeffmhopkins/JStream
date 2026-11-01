@@ -197,11 +197,21 @@ test('a keyframe overrides a group\'s children from their rows and the Inspector
   await expect.poll(() => rev(page)).toBe(start + 2);
   await expect(field(page, 'X')).toHaveValue('100');
 
-  // Its menu is the keyframe's: what would change Main's items is off.
+  // A crop written there too.
+  await field(page, 'Left').fill('24');
+  await field(page, 'Left').press('Enter');
+  await expect.poll(() => rev(page)).toBe(start + 3);
+  await expect(field(page, 'Left')).toHaveValue('24');
+
+  // Its menu is the keyframe's: what would change Main's items is off, Crop too (the
+  // canvas has no box for it), and Clear crop clears the keyframe's crop.
   await child.locator('.row-main').click({ button: 'right' });
   await expect(menu(page).getByRole('menuitem', { name: 'Remove from scene' })).toBeDisabled();
   await expect(menu(page).getByRole('menuitem', { name: 'Bring to front' })).toBeDisabled();
-  await page.keyboard.press('Escape');
+  await expect(menu(page).getByRole('menuitem', { name: 'Crop C', exact: true })).toBeDisabled();
+  await menu(page).getByRole('menuitem', { name: 'Clear crop' }).click();
+  await expect.poll(() => rev(page)).toBe(start + 4);
+  await expect(field(page, 'Left')).toHaveValue('0');
   await expect(scene(page, 'Keyframe 1')).toHaveClass(/selected/);
 
   // In Main the group's child is as it was.

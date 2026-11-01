@@ -211,10 +211,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (ADR-0049). The children of the groups in its tree (through groups only) list at its
   overrides too: their eye writes its override, a click selects one in the keyframe,
   where the Inspector's placement fields write its override, and its row's item menu
-  is the keyframe's, so its placement choices write the override and what is off below
-  is off for it too (#846, protocol 0.55); a plain nested scene's items still open
-  their own scene. The Transform panel's align and Clear crop work on the canvas's
-  boxes, so they leave such a child as it is. What would change the parent's items (Del, dragging rows, Add source,
+  is the keyframe's, so its placement choices (Center, Fit, Stretch, Reset rotation and
+  Clear crop, which `crop::clear` finds through `keyframe_child`) write the override and
+  what is off below is off for it too, with Crop, since the canvas draws no box for it
+  (#846, protocol 0.55); a plain nested scene's items still open their own scene. Every
+  Transform panel button but Clear crop works on the canvas's boxes, so it leaves such
+  a child as it is. What would change the parent's items (Del, dragging rows, Add source,
   New group, layer order, the duplicates, Remove, the blend mode, the reference or clone
   switch) is off there. The
   sources list shows the selected scene's items with the top of the stack first, each
