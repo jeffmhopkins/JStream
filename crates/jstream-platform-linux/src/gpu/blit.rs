@@ -10,7 +10,9 @@
 //! A ring can also convert as it draws ([`Pass`]): packed 4:2:2 (`YUYV`, imported as RGBA
 //! at half width, each texel `Y0 U Y1 V`) to R'G'B' with the frame's matrix and range, as
 //! the engine's CPU path converts NV12 (`jstream-core`'s `rgba_from_surface`): each chroma
-//! sample covers its two pixels, and limited range is scaled to full.
+//! sample covers its two pixels, and limited range is scaled to full; and NV12, its luma
+//! and chroma planes imported as `R8` and `RG8` textures, the same way, each chroma
+//! sample covering its 2x2 block.
 
 use std::sync::Arc;
 
@@ -96,6 +98,19 @@ fn fs(@builtin(position) at: vec4<f32>) -> @location(0) vec4<f32> {
 }
 ";
 
+/// [`Pass::Nv12`]'s fragment shader, after [`YUV`]: luma from the `R8` plane at the
+/// pixel, chroma from the `RG8` plane at half its coordinates.
+const NV12: &str = r"
+@group(0) @binding(2) var chroma: texture_2d<f32>;
+
+@fragment
+fn fs(@builtin(position) at: vec4<f32>) -> @location(0) vec4<f32> {
+    let p = vec2<u32>(at.xy);
+    let c = textureLoad(chroma, p / 2u, 0);
+    return rgb(textureLoad(source, p, 0).r, c.r, c.g);
+}
+";
+
 /// How a ring draws its source into a frame texture.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Pass {
@@ -103,6 +118,9 @@ pub(crate) enum Pass {
     Copy,
     /// Packed 4:2:2 in an RGBA texture of half the frame's width, converted to R'G'B'.
     Yuyv,
+    /// NV12's luma (`R8`, the frame's size) and chroma (`RG8`, half each way, rounded
+    /// up) planes, converted to R'G'B'.
+    Nv12,
 }
 
 impl Pass {
@@ -110,6 +128,7 @@ impl Pass {
         match self {
             Self::Copy => SHADER.to_owned(),
             Self::Yuyv => format!("{YUV}{YUYV}"),
+            Self::Nv12 => format!("{YUV}{NV12}"),
         }
     }
 
@@ -117,6 +136,7 @@ impl Pass {
     pub(crate) fn planes(self) -> usize {
         match self {
             Self::Copy | Self::Yuyv => 1,
+            Self::Nv12 => 2,
         }
     }
 }

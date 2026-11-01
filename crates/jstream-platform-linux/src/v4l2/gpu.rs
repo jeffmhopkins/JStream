@@ -14,7 +14,10 @@
 //! How each [`GpuLayout`] is imported and drawn ([`planes`]): the 32-bit RGB formats as
 //! `Bgra8Unorm` or `Rgba8Unorm`, copied as they are and made opaque; YUYV as
 //! `Rgba8Unorm` at half the width (each texel `Y0 U Y1 V`, two pixels), converted to
-//! R'G'B' with the frame's matrix and range ([`blit::Pass::Yuyv`]).
+//! R'G'B' with the frame's matrix and range ([`blit::Pass::Yuyv`]); NV12 as an `R8` luma
+//! plane and an `RG8` chroma plane at half the size each way (rounded up), the chroma
+//! after the luma's rows in the one buffer plane of `NV12` or in the second of `NV12M`,
+//! converted the same way ([`blit::Pass::Nv12`]).
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -33,7 +36,13 @@ use crate::gpu::{self, dmabuf};
 pub(crate) const COPY_WAIT: Duration = Duration::from_secs(1);
 
 /// The layouts the GPU path draws.
-const LAYOUTS: [GpuLayout; 3] = [GpuLayout::Bgra, GpuLayout::Rgba, GpuLayout::Yuyv];
+const LAYOUTS: [GpuLayout; 5] = [
+    GpuLayout::Bgra,
+    GpuLayout::Rgba,
+    GpuLayout::Yuyv,
+    GpuLayout::Nv12 { separate: false },
+    GpuLayout::Nv12 { separate: true },
+];
 
 /// The backend's GPU path: the context, and whether a stream on it failed.
 #[derive(Clone, Debug)]
@@ -70,6 +79,7 @@ fn plane_formats(layout: GpuLayout) -> &'static [wgpu::TextureFormat] {
     match layout {
         GpuLayout::Bgra => &[wgpu::TextureFormat::Bgra8Unorm],
         GpuLayout::Rgba | GpuLayout::Yuyv => &[wgpu::TextureFormat::Rgba8Unorm],
+        GpuLayout::Nv12 { .. } => &[wgpu::TextureFormat::R8Unorm, wgpu::TextureFormat::Rg8Unorm],
     }
 }
 
@@ -78,6 +88,7 @@ fn pass(layout: GpuLayout) -> Pass {
     match layout {
         GpuLayout::Bgra | GpuLayout::Rgba => Pass::Copy,
         GpuLayout::Yuyv => Pass::Yuyv,
+        GpuLayout::Nv12 { .. } => Pass::Nv12,
     }
 }
 
@@ -96,38 +107,59 @@ pub(crate) struct PlaneImport {
 }
 
 impl PlaneImport {
+    /// The bytes one of its rows holds.
+    fn row_bytes(&self) -> Option<usize> {
+        let texel = self.format.block_copy_size(None)? as usize;
+        (self.size.0 as usize).checked_mul(texel)
+    }
+
     /// The fewest bytes its buffer plane holds for it: its offset, then its rows.
     fn end(&self) -> Option<usize> {
-        let texel = self.format.block_copy_size(None)? as usize;
-        let row_bytes = (self.size.0 as usize).checked_mul(texel)?;
-        plane_bytes(self.stride as usize, row_bytes, self.size.1)?.checked_add(self.offset as usize)
+        plane_bytes(self.stride as usize, self.row_bytes()?, self.size.1)?
+            .checked_add(self.offset as usize)
     }
 }
 
 /// How `layout`'s frames of `size` pixels, each buffer plane's rows `strides[i]` bytes
 /// apart, are imported: one entry per image plane. `None` for a stride or size the import
-/// can't describe, or another number of buffer planes than the layout has.
+/// can't describe (rows shorter than a row's texels, an offset past `u32`), or another
+/// number of buffer planes than the layout has.
 pub(crate) fn planes(
     layout: GpuLayout,
     (width, height): (u32, u32),
     strides: &[usize],
 ) -> Option<Vec<PlaneImport>> {
     let stride = |i: usize| strides.get(i).and_then(|&s| u32::try_from(s).ok());
-    let one = |format, size| {
-        (strides.len() == 1).then_some(())?;
-        Some(vec![PlaneImport {
-            format,
+    let formats = plane_formats(layout);
+    let at = |plane: usize, size, buffer_plane: usize, offset| {
+        Some(PlaneImport {
+            format: formats[plane],
             size,
-            buffer_plane: 0,
-            offset: 0,
-            stride: stride(0)?,
-        }])
+            buffer_plane: u32::try_from(buffer_plane).ok()?,
+            offset,
+            stride: stride(buffer_plane)?,
+        })
     };
-    let format = plane_formats(layout)[0];
-    match layout {
-        GpuLayout::Bgra | GpuLayout::Rgba => one(format, (width, height)),
-        GpuLayout::Yuyv => one(format, (width.div_ceil(2), height)),
-    }
+    let half = (width.div_ceil(2), height.div_ceil(2));
+    let (buffer_planes, imports) = match layout {
+        GpuLayout::Bgra | GpuLayout::Rgba => (1, vec![at(0, (width, height), 0, 0)?]),
+        GpuLayout::Yuyv => (1, vec![at(0, (width.div_ceil(2), height), 0, 0)?]),
+        GpuLayout::Nv12 { separate: false } => {
+            // The chroma rows follow the luma's, at the luma's stride.
+            let offset = stride(0)?.checked_mul(height)?;
+            (
+                1,
+                vec![at(0, (width, height), 0, 0)?, at(1, half, 0, offset)?],
+            )
+        }
+        GpuLayout::Nv12 { separate: true } => {
+            (2, vec![at(0, (width, height), 0, 0)?, at(1, half, 1, 0)?])
+        }
+    };
+    let fits = imports
+        .iter()
+        .all(|p| p.row_bytes().is_some_and(|row| row <= p.stride as usize));
+    (strides.len() == buffer_planes && fits).then_some(imports)
 }
 
 /// One stream's GPU delivery: its ring and each driver buffer's planes, imported.
@@ -334,14 +366,14 @@ mod tests {
         }
     }
 
-    /// A texture of `format` and `size` holding `bytes`, tightly packed, as a driver
-    /// buffer's plane imported on the GPU path would be.
+    /// A texture of `import`'s format and size holding `bytes`, rows `import.stride`
+    /// apart, as a driver buffer's image plane imported on the GPU path would be.
     fn plane(
         context: &jstream_platform::GpuContext,
-        format: wgpu::TextureFormat,
-        (width, height): (u32, u32),
+        import: &PlaneImport,
         bytes: &[u8],
     ) -> wgpu::Texture {
+        let (format, (width, height)) = (import.format, import.size);
         let (device, queue) = (context.device(), context.queue());
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: None,
@@ -357,13 +389,12 @@ mod tests {
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
-        let texel = format.block_copy_size(None).expect("a plain format");
         queue.write_texture(
             texture.as_image_copy(),
             bytes,
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(width * texel),
+                bytes_per_row: Some(import.stride),
                 rows_per_image: None,
             },
             texture.size(),
@@ -436,7 +467,7 @@ mod tests {
                 planes
                     .iter()
                     .zip(bytes.iter())
-                    .map(|(p, b)| plane(context, p.format, p.size, b))
+                    .map(|(p, b)| plane(context, p, b))
                     .collect()
             })
             .collect();
@@ -455,11 +486,40 @@ mod tests {
     }
 
     /// The import of each layout: RGB at the frame's size, YUYV at half its width
-    /// (rounded up), at the driver's stride; another plane count or an unrepresentable
-    /// stride is refused.
+    /// (rounded up), NV12's chroma at half each way after its luma or in its own buffer
+    /// plane, at the driver's strides; another plane count, a stride short of a row, or
+    /// an unrepresentable stride or offset is refused.
     #[test]
     fn each_layout_imports_its_planes() {
-        use wgpu::TextureFormat::{Bgra8Unorm, Rgba8Unorm};
+        use wgpu::TextureFormat::{Bgra8Unorm, R8Unorm, Rg8Unorm, Rgba8Unorm};
+        let nv12 = GpuLayout::Nv12 { separate: false };
+        let nv12m = GpuLayout::Nv12 { separate: true };
+        assert_eq!(
+            planes(nv12, (641, 481), &[704]),
+            Some(vec![
+                first(R8Unorm, (641, 481), 704),
+                PlaneImport {
+                    offset: 704 * 481,
+                    ..first(Rg8Unorm, (321, 241), 704)
+                },
+            ])
+        );
+        assert_eq!(
+            planes(nv12m, (640, 480), &[640, 768]),
+            Some(vec![
+                first(R8Unorm, (640, 480), 640),
+                PlaneImport {
+                    buffer_plane: 1,
+                    ..first(Rg8Unorm, (320, 240), 768)
+                },
+            ])
+        );
+        // An odd width's chroma row is a byte longer than its luma stride.
+        assert_eq!(planes(nv12, (641, 480), &[641]), None);
+        assert_eq!(planes(nv12m, (640, 480), &[640]), None);
+        assert_eq!(planes(nv12, (640, 480), &[640, 640]), None);
+        assert_eq!(planes(nv12, (640, u32::MAX), &[640]), None);
+        assert_eq!(planes(GpuLayout::Rgba, (640, 480), &[2556]), None);
         assert_eq!(
             planes(GpuLayout::Bgra, (640, 480), &[2560]),
             Some(vec![first(Bgra8Unorm, (640, 480), 2560)])
@@ -662,13 +722,133 @@ mod tests {
         );
     }
 
+    /// The frame texture's rows, read back, `width` RGBA pixels each.
+    fn rows(context: &jstream_platform::GpuContext, texture: &wgpu::Texture) -> Vec<Vec<u8>> {
+        let (device, queue) = (context.device(), context.queue());
+        let height = texture.height();
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: 256 * u64::from(height),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let mut encoder = device.create_command_encoder(&Default::default());
+        encoder.copy_texture_to_buffer(
+            texture.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(256),
+                    rows_per_image: None,
+                },
+            },
+            texture.size(),
+        );
+        queue.submit([encoder.finish()]);
+        buffer
+            .slice(..)
+            .map_async(wgpu::MapMode::Read, |r| r.expect("maps"));
+        device
+            .poll(wgpu::PollType::Wait {
+                submission_index: None,
+                timeout: Some(Duration::from_secs(10)),
+            })
+            .expect("the readback completes");
+        let data = buffer.slice(..).get_mapped_range().expect("mapped");
+        let width = texture.width() as usize * 4;
+        data.chunks(256).map(|row| row[..width].to_vec()).collect()
+    }
+
+    /// On a software adapter: NV12, in one buffer plane or two, is converted to opaque
+    /// R'G'B' as the CPU path converts it, each pixel its own luma and its 2x2 block's
+    /// chroma; an odd size's last row and column take the last chroma sample.
+    #[test]
+    fn nv12_is_converted_as_the_cpu_path_converts_it() {
+        let Some(context) = context() else { return };
+        let path = path(&context);
+        let pts = MediaTime::new(0, timebase());
+        let color = ColorInfo {
+            space: ColorSpace::Bt709,
+            range: ColorRange::Limited,
+        };
+        // 3x3 pixels: luma rows of 4 bytes (one of padding), then 2x2 CbCr samples.
+        let luma = [[235, 16, 81, 0], [145, 41, 200, 0], [60, 110, 170, 0]];
+        let chroma = [[128, 128, 90, 240], [54, 34, 200, 100]];
+        let cbcr = |x: usize, y: usize| {
+            let row = chroma[y / 2];
+            (row[x / 2 * 2], row[x / 2 * 2 + 1])
+        };
+        let expected: Vec<Vec<u8>> = (0..3)
+            .map(|y| {
+                (0..3)
+                    .flat_map(|x| {
+                        let (cb, cr) = cbcr(x, y);
+                        reference(color, luma[y][x], cb, cr)
+                    })
+                    .collect()
+            })
+            .collect();
+        let luma_bytes = luma.concat();
+        let chroma_bytes = chroma.concat();
+        let whole = [&luma_bytes[..], &chroma_bytes[..]].concat();
+        for (layout, strides, buffer) in [
+            (
+                GpuLayout::Nv12 { separate: false },
+                &[4][..],
+                vec![&whole[..]],
+            ),
+            (
+                GpuLayout::Nv12 { separate: true },
+                &[4, 4][..],
+                vec![&luma_bytes[..], &chroma_bytes[..]],
+            ),
+        ] {
+            let mut deliver = deliver(
+                &context,
+                &path,
+                layout,
+                (3, 3),
+                color,
+                strides,
+                &[&[&luma_bytes, &chroma_bytes]],
+            );
+            let offsets = vec![0; buffer.len()];
+            let frame = deliver
+                .frame(0, &buffer, &offsets, pts)
+                .expect("converts")
+                .expect("a frame");
+            assert_eq!(frame.info().format, PixelFormat::Rgba8);
+            let got = rows(&context, frame.texture());
+            for (y, (got, expected)) in got.iter().zip(&expected).enumerate() {
+                assert!(
+                    close(got, expected),
+                    "{layout:?} row {y}: {got:?} vs {expected:?}"
+                );
+            }
+            // A buffer short of the chroma's last row is dropped.
+            let short: Vec<&[u8]> = buffer.iter().map(|b| &b[..b.len() - 1]).collect();
+            assert!(
+                deliver
+                    .frame(0, &short, &offsets, pts)
+                    .expect("dropped")
+                    .is_none(),
+                "{layout:?}"
+            );
+        }
+        assert!(!path.failed.load(Ordering::Acquire));
+    }
+
     /// A path is offered only by a device that imports some layout's planes.
     #[test]
     fn a_path_needs_linear_import() {
         let Some(context) = context() else { return };
         let shared = Shared::of(&context, "test").expect("ours");
-        let imports = shared.linear.contains(&wgpu::TextureFormat::Bgra8Unorm)
-            || shared.linear.contains(&wgpu::TextureFormat::Rgba8Unorm);
+        let imports = super::LAYOUTS.iter().any(|&layout| {
+            plane_formats(layout)
+                .iter()
+                .all(|f| shared.linear.contains(f))
+        });
         let path = GpuPath::new(Arc::clone(&shared));
         assert_eq!(path.is_some(), imports, "{:?}", shared.linear);
         if let Some(path) = path {

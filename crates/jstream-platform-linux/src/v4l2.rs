@@ -273,7 +273,8 @@ mod backend {
         /// This backend on `context`'s device, when [`LinuxGpu`](crate::LinuxGpu)
         /// opened it with DMA-BUF import of some format V4L2 buffers come in;
         /// `Ok(None)` when it imports none. It opens a format there when its buffers
-        /// import (32-bit RGB), and is `Unsupported` for the others, and for every
+        /// import (32-bit RGB, YUYV, NV12 and NV12M), and is `Unsupported` for the others
+        /// (I420, MJPEG), and for every
         /// format once a stream's GPU copy failed on that context.
         fn on_context(
             &self,
@@ -494,8 +495,8 @@ mod device_tests {
         drop(V4l2Devices::new().open(&id, &format, None).expect("reopen"));
     }
 
-    /// The GPU path: the first format the backend on the context opens delivers recent
-    /// RGBA GPU frames of its size, staged on the context's queue, and the device is free
+    /// The GPU path: on each device, the first size of each encoding the backend on the
+    /// context opens (RGB, YUYV, NV12) delivers recent RGBA GPU frames of that size, staged on the context's queue, and the device is free
     /// again once the stream drops. Run it with the Vulkan validation layer on
     /// (`VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation`) to check the imports.
     #[test]
@@ -510,9 +511,11 @@ mod device_tests {
             .expect("our context")
             .expect("the device imports LINEAR DMA-BUFs");
         let clock = MonotonicClock::new().expect("clock");
+        let mut opened = 0;
         for d in V4l2Devices::new().devices().expect("devices") {
+            let mut done = Vec::new();
             for format in V4l2Devices::new().formats(&d.id).expect("formats") {
-                if format.encoding.is_compressed() {
+                if format.encoding.is_compressed() || done.contains(&format.encoding) {
                     continue;
                 }
                 let Ok(mut stream) = on_gpu.open(&d.id, &format, None) else {
@@ -541,9 +544,10 @@ mod device_tests {
                         .open(&d.id, &format, None)
                         .expect("reopen on the CPU path"),
                 );
-                return;
+                done.push(format.encoding);
+                opened += 1;
             }
         }
-        panic!("no format opened on the GPU path");
+        assert!(opened > 0, "no format opened on the GPU path");
     }
 }
