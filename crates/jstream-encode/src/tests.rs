@@ -306,6 +306,23 @@ fn the_codec_follows_an_encoder_that_falls_back() {
     assert_eq!(session.codec(), &session.info().codec);
 }
 
+/// #965: a subscriber sees the fallback by its first packet, since the encoder falls
+/// back before it produces one, so an output can tell from its own subscription.
+#[test]
+fn a_subscription_sees_the_fallback_by_its_first_packet() {
+    let mut script = open_script();
+    script.software_at = Some(0);
+    let session = scripted_session(&script, 64);
+    let sub = session.subscribe();
+    assert!(sub.codec().hardware, "hardware until the first frame");
+    push_all(&session.input(), 0..3);
+    sub.recv().expect("a first packet");
+    assert!(!sub.codec().hardware);
+    assert_eq!(sub.codec().name, "Scripted software H.264");
+    assert!(sub.info().codec.hardware, "info keeps what was opened");
+    session.finish().unwrap();
+}
+
 #[test]
 fn a_full_input_queue_drops_and_counts() {
     let script = Script::default(); // gated: the encoder takes nothing yet

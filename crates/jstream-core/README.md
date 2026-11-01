@@ -393,8 +393,9 @@ state machine. Contents:
   hardware encoder for kept at `prefer` and failing as `action_failed`, and a start
   beside a stopping holder whose session is still closing refused as
   `hardware_session_limit` naming it, and the warning naming the output when `prefer`
-  opens in software, hardware refused or absent, and none for hardware or `avoid`
-  (`src/tests/cpu_pipeline/hardware_sessions.rs`), a
+  opens in software, hardware refused or absent, and none for hardware or `avoid`, and
+  one warning per output naming it when a hardware encoder falls back at its first
+  frame (`src/tests/cpu_pipeline/hardware_sessions.rs`), a
   virtual camera publishing the program as BGRA at the canvas size (fitted into a canvas of another size, started again after a stop, running beside
   a stream, refused without a camera in the backends or while another output uses
   it, a refused start keeping the sink, a failed publish failing only that output), a render panic failing both outputs, overload drops from a
@@ -1763,7 +1764,12 @@ naming the output it opens for, the encoder and why (`why_software`; #443 case 1
 the fallback is never silent; `output.status` reports `hardware` false. A hardware
 encoder that takes the session and then refuses its first frame no longer falls back
 either (its fallback is `prefer`'s only), but that comes after `output.start` has
-answered: the output settles `failed` with the encoder's reason, not this code.
+answered: the output settles `failed` with the encoder's reason, not this code. With
+no hardware session held, a `prefer` hardware encoder that refuses its first frame
+falls back to software on the platform (#443 case 3). Each output on that session
+then logs a warning naming itself and both encoders when its output thread gets its
+first video packet (`warn_fallback`, reading `Subscription::codec`; #965), beside the
+platform's warning with the refusal.
 
 **Video mixes.** The render thread keeps one frame per video mix the running sessions
 are fed from, each at its session's size, and counts base ticks (1/30 s). On a tick it
@@ -2618,8 +2624,10 @@ the collector rather than drop it. While the stage has no session and no virtual
 camera, or no mix is due on a tick, it draws nothing but still adopts the latest render
 snapshot. A virtual camera is fed the program at the canvas size on every tick, so that
 feed is drawn while a camera runs even if no session is on it; its video mix doesn't
-apply yet. Each output but a virtual
-camera has its own output thread that muxes; a virtual camera's thread converts and
+apply yet. Every pipeline thread starts under the
+`tracing` dispatcher of the call that starts it (`spawn`), so its events go where that
+call's do: the global subscriber in a host, a test's own in a test. Each output but a
+virtual camera has its own output thread that muxes; a virtual camera's thread converts and
 publishes what the render thread sends it through a tap, which the render thread takes
 from a channel like a session's input and hands to the collector when it leaves. An output leaving a session others still use takes what is queued for
 it and goes; the last one drains the encoders. The output thread muxes FLV and sends

@@ -230,7 +230,9 @@ The code is ported from spikes S1 to S3. This first cut has:
       which gets that frame (`FirstFrameFallback`, `codec/fallback.rs`). No packet has
       come out yet, so the stream sees one decoder configuration. It logs a warning
       through `tracing` (the crate's one logging dependency) naming both encoders and
-      the refusal, and `info()` then reports the software encoder. Once the hardware
+      the refusal, and `info()` then reports the software encoder. The encoder doesn't
+      know its outputs, so `jstream-core` logs one naming each output on the session
+      (#965). Once the hardware
       encoder has taken a frame, a refusal fails the session as before. `Require` and
       the GPU path have no software to fall back to. The logic is tested with fake
       encoders on every platform.

@@ -53,7 +53,9 @@ the encode thread's rules ([R-RT-002](../../docs/RULES.md#R-RT-002),
 - `VideoInput` / `AudioInput`: cloneable push handles. `push` never blocks.
 - `Subscription`: `recv`, `try_recv`, `recv_timeout`, each returning packets in decode
   order and then a `StreamEnd`; `info()`, per-subscriber `stats()`, and
-  `request_keyframe()` for a consumer that holds only its subscription.
+  `request_keyframe()` for a consumer that holds only its subscription. `codec()` is
+  the session's `codec()`: the encoder falls back before its first packet, so a
+  subscriber sees the fallback by the first packet it receives (#965).
 - `StreamInfo`: the `CodecInfo` that was opened plus `EncoderSettings` (the video or
   audio config it was opened with).
 - `VideoPath`: `Gpu`, or `Cpu` with the reason a given context was not used.
@@ -71,7 +73,8 @@ next regular one when the encoder can't force it; keyframe requests coalesce; `f
 drains; an encoder error and a panic reach every subscriber; dropping a session closes
 the streams and joins the thread; dropped audio blocks become silence, also when that
 silence is first refused as busy; the fan-out's
-keyframe resync; the registry; and one invariant, checked by snapshotting a video
+keyframe resync; the registry; the codec following an encoder that falls back, on the
+session and on a subscription by its first packet (#443, #965); and one invariant, checked by snapshotting a video
 session while another thread pushes, that must hold on every interleaving: a snapshot
 never shows more encoded, busy-dropped or published frames than received ones, nor
 more keyframes than packets (#709). `src/gpu_tests.rs` covers `open_on` on every
@@ -106,7 +109,8 @@ Handles talk to the thread through `std::sync::mpsc` channels, atomics and two s
 `OnceLock` cells only: a bounded channel for inputs, an unbounded one for new
 subscribers, atomic counters, and `finishing`/`aborting` flags, with a `Wake` message
 and `unpark` so a flag is seen without waiting out the interval. The encode thread sets
-the cells, the stream's end and the codec a fallback moved to (`VideoSession::codec`),
+the cells, the stream's end and the codec a fallback moved to (`VideoSession::codec`,
+`Subscription::codec`),
 and reading one never waits on it. `std` covers this; the workspace has no channel
 crate.
 

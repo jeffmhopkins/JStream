@@ -7,8 +7,8 @@
 //! holds its hardware session until it closes (#834). A new session that `prefer` opens
 //! in software logs a warning naming the output and why (#443 case 1).
 
-use super::super::{batch, block_on, connected, edits, output_call};
-use super::{TempDir, encoder_status, fakes, streaming_and_recording};
+use super::super::{batch, block_on, connected, edits, output_call, warnings, warnings_with};
+use super::{Fakes, TempDir, encoder_status, fakes, pump_until, streaming_and_recording};
 use crate::runtime::cpu_draw;
 use crate::{Engine, InProcessControl, RecordingPublish};
 use jstream_control::Control;
@@ -22,7 +22,6 @@ use jstream_protocol::{
     Edit, EncoderProfile, EncoderProfileId, HardwarePreference as ProfileHardware, OutputId,
     OutputKind, OutputState, ProtocolError, RateControl, RecordContainer, VideoCodec,
 };
-use std::fmt;
 use std::sync::Arc;
 use std::sync::Condvar;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -41,6 +40,9 @@ struct LimitedHardware {
     linger: Arc<Linger>,
     /// Whether `list` names the hardware encoder. A machine with none lists none.
     listed: bool,
+    /// Whether a hardware session refuses its first frame and falls back to software,
+    /// as a Windows MFT under `prefer` can (#443 case 3).
+    refuse_first: bool,
 }
 
 /// Keeps a closing hardware session open while held, as a teardown still releasing
@@ -96,6 +98,7 @@ impl LimitedHardware {
             asked: Arc::default(),
             linger: Arc::default(),
             listed: true,
+            refuse_first: false,
         }
     }
 
@@ -112,6 +115,8 @@ impl LimitedHardware {
 struct HardwareVideo {
     inner: Box<dyn VideoEncoder>,
     info: CodecInfo,
+    /// Falls back to software at its first frame, which `info` then reports.
+    refuse_first: bool,
     open: Arc<AtomicUsize>,
     linger: Arc<Linger>,
 }
@@ -133,6 +138,10 @@ impl VideoEncoder for HardwareVideo {
     }
 
     fn encode(&mut self, frame: VideoSurface) -> Result<(), PlatformError> {
+        if std::mem::take(&mut self.refuse_first) {
+            self.info.name = "Fake software H.264 encoder".into();
+            self.info.hardware = false;
+        }
         self.inner.encode(frame)
     }
 
@@ -200,6 +209,7 @@ impl Codecs for LimitedHardware {
         Ok(Box::new(HardwareVideo {
             inner,
             info,
+            refuse_first: self.refuse_first,
             open: Arc::clone(&self.open),
             linger: Arc::clone(&self.linger),
         }))
@@ -228,6 +238,8 @@ struct Both {
     rec: Result<(), Option<ProtocolError>>,
     control: InProcessControl,
     _engine: Engine,
+    /// The fake clock and audio, to move the pipeline on.
+    fakes: Fakes,
     _dir: TempDir,
 }
 
@@ -295,6 +307,7 @@ fn start_both_on(
         rec,
         control,
         _engine: engine,
+        fakes,
         _dir: dir,
     }
 }
@@ -495,54 +508,6 @@ fn a_stopping_holder_still_holds_its_hardware_session() {
     let _ = block_on(control.call(output_call("rec", false)));
 }
 
-/// The warnings logged while `run` runs on this thread, each as its message and fields.
-fn warnings<T>(run: impl FnOnce() -> T) -> (T, Vec<String>) {
-    use tracing::field::{Field, Visit};
-    use tracing::span::{Attributes, Id, Record};
-    use tracing::{Event, Level, Metadata, Subscriber};
-
-    #[derive(Clone, Default)]
-    struct Warnings(Arc<std::sync::Mutex<Vec<String>>>);
-
-    struct Text<'a>(&'a mut String);
-
-    impl Visit for Text<'_> {
-        fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
-            self.0.push_str(&format!("{}={value:?} ", field.name()));
-        }
-    }
-
-    impl Subscriber for Warnings {
-        fn enabled(&self, metadata: &Metadata<'_>) -> bool {
-            *metadata.level() == Level::WARN
-        }
-        fn new_span(&self, _: &Attributes<'_>) -> Id {
-            Id::from_u64(1)
-        }
-        fn record(&self, _: &Id, _: &Record<'_>) {}
-        fn record_follows_from(&self, _: &Id, _: &Id) {}
-        fn event(&self, event: &Event<'_>) {
-            let mut text = String::new();
-            event.record(&mut Text(&mut text));
-            self.0
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .push(text);
-        }
-        fn enter(&self, _: &Id) {}
-        fn exit(&self, _: &Id) {}
-    }
-
-    let logged = Warnings::default();
-    let out = tracing::subscriber::with_default(logged.clone(), run);
-    let logged = logged
-        .0
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .clone();
-    (out, logged)
-}
-
 /// The warnings among `logged` that say a `prefer` encoder opened in software.
 fn software_warnings(logged: &[String]) -> Vec<&String> {
     logged
@@ -610,4 +575,49 @@ fn hardware_or_avoid_warns_of_nothing() {
     assert_eq!(both.status("yt").1, Some(true), "yt opened hardware");
     assert_eq!(both.status("rec").1, Some(false));
     assert!(software_warnings(&logged).is_empty(), "{logged:?}");
+}
+
+/// A hardware encoder that refuses its first frame and falls back to software has each
+/// output on it warn once, naming itself and both encoders, when its output thread gets
+/// its first video packet (#965).
+#[test]
+fn a_first_frame_fallback_warns_naming_each_output() {
+    let codecs = LimitedHardware {
+        refuse_first: true,
+        ..LimitedHardware::new(2)
+    };
+    let fallback = |line: &&String| line.contains("refused its first frame");
+    let (both, logged) = warnings_with(|logged| {
+        let both = start_both("hw-warn-first", codecs, ProfileHardware::Prefer);
+        pump_until(&both.fakes.clock, &both.fakes.audio, || {
+            logged().iter().filter(fallback).count() >= 2
+        });
+        both
+    });
+    both.rec.clone().expect("rec on hardware, then software");
+    let warned: Vec<&String> = logged.iter().filter(fallback).collect();
+    assert_eq!(warned.len(), 2, "one per output: {logged:?}");
+    for output in ["yt", "rec"] {
+        assert!(
+            warned
+                .iter()
+                .any(|line| line.contains(&format!("output_id={output} "))),
+            "{output}: {warned:?}"
+        );
+    }
+    for line in &warned {
+        assert!(
+            line.contains("hardware=Fake hardware H.264 encoder "),
+            "{line}"
+        );
+        assert!(
+            line.contains("software=Fake software H.264 encoder "),
+            "{line}"
+        );
+    }
+    assert_eq!(
+        both.status("yt").1,
+        Some(false),
+        "yt reports software after it"
+    );
 }

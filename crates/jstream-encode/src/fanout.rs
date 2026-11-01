@@ -14,6 +14,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, TryRecvError, TrySendError};
 use std::time::Duration;
 
+use jstream_platform::CodecInfo;
 use jstream_platform::media::Packet;
 
 use crate::session::{Counters, Shared};
@@ -176,6 +177,15 @@ impl Subscription {
     /// (see the crate README's open questions).
     pub fn info(&self) -> &StreamInfo {
         &self.shared.info
+    }
+
+    /// The codec implementation encoding now, as
+    /// [`VideoSession::codec`](crate::VideoSession::codec) says: [`info`](Self::info)'s,
+    /// unless the encoder fell back to another one after it opened (a hardware video
+    /// encoder refusing its first frame, #443). The fallback comes before the encoder's
+    /// first packet, so it is set by the time this subscription receives one.
+    pub fn codec(&self) -> &CodecInfo {
+        self.shared.codec()
     }
 
     /// Waits for the next packet.
