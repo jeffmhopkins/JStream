@@ -76,12 +76,17 @@ fn unloaded(events: Vec<Event>) -> Vec<Event> {
         .into_iter()
         .map(|event| match event {
             Event::StatsTick {
-                seq, drops, chains, ..
+                seq,
+                drops,
+                chains,
+                outputs,
+                ..
             } => Event::StatsTick {
                 seq,
                 drops,
                 load: None,
                 chains,
+                outputs,
             },
             other => other,
         })
@@ -3164,6 +3169,7 @@ fn a_removed_drop_source_keeps_its_total() {
             },
             load: None,
             chains: Some(ChainCost::default()),
+            outputs: Vec::new(),
         }]
     );
 
@@ -3186,6 +3192,7 @@ fn a_removed_drop_source_keeps_its_total() {
             },
             load: None,
             chains: Some(ChainCost::default()),
+            outputs: Vec::new(),
         }],
         "the removed source stays at the total it had when it was removed"
     );
@@ -3203,6 +3210,7 @@ fn a_removed_drop_source_keeps_its_total() {
             },
             load: None,
             chains: Some(ChainCost::default()),
+            outputs: Vec::new(),
         }],
         "removing an unknown source changes nothing"
     );
@@ -4163,6 +4171,64 @@ mod cpu_pipeline {
         block_on(control.call(output_call("yt", false))).expect("output.stop");
     }
 
+    // --- Item: each running output's live stats (protocol 0.57).
+
+    /// While an output runs, each `stats.tick` lists it with what it has sent and its
+    /// uptime; once it stops, the tick leaves it out.
+    #[test]
+    fn a_running_output_is_in_each_stats_tick() {
+        let fakes = fakes();
+        let publish = RecordingPublish::new();
+        let engine = engine(
+            share(&fakes.backends),
+            cpu_draw(),
+            Box::new(publish.clone()),
+        );
+        let control = connected(&engine);
+        let mut events = control.events();
+        start(&control, &mut events);
+        let video_frames = || {
+            publish
+                .tags()
+                .iter()
+                .filter(|tag| tag.tag_type == TagType::Video && tag.body.get(1) == Some(&1))
+                .count()
+        };
+        assert!(wait_until(|| video_frames() >= 1), "no frame published");
+        let outputs = |events: &mut _| {
+            engine.emit_stats_tick();
+            drain(events)
+                .into_iter()
+                .filter_map(|event| match event {
+                    Event::StatsTick { outputs, .. } => Some(outputs),
+                    _ => None,
+                })
+                .next_back()
+                .expect("a stats.tick")
+        };
+        let running = outputs(&mut events);
+        assert_eq!(running.len(), 1, "{running:?}");
+        let yt = &running[0];
+        assert_eq!(yt.output_id, OutputId::new("yt"));
+        assert!(yt.frames >= 1, "{yt:?}");
+        assert!(yt.bytes > 0, "{yt:?}");
+        assert_eq!(yt.dropped_frames, 0, "{yt:?}");
+        assert!(
+            matches!(
+                yt.health,
+                jstream_protocol::OutputHealth::Good | jstream_protocol::OutputHealth::Fair
+            ),
+            "{yt:?}"
+        );
+
+        block_on(control.call(output_call("yt", false))).expect("output.stop");
+        assert_eq!(
+            outputs(&mut events),
+            Vec::new(),
+            "a stopped output is left out"
+        );
+    }
+
     // --- Item: a failed start's teardown does not overlap the next start.
 
     /// Fails its first tag, the FLV header the output thread sends before the start
@@ -4623,6 +4689,57 @@ mod cpu_pipeline {
             output_steps(&mut events),
             vec![OutputState::Stopping, OutputState::Stopped]
         );
+    }
+
+    /// While its link is down an output's stats say `poor`, count what the target
+    /// dropped, and stop counting bytes as sent (protocol 0.57).
+    #[test]
+    fn a_lost_link_makes_the_output_poor_in_its_stats() {
+        let fakes = fakes();
+        let link = Arc::new(Link::default());
+        let (engine, control, mut events) = flaky_start(&fakes, &link);
+        let yt = |events: &mut EventStream| {
+            engine.emit_stats_tick();
+            drain(events)
+                .into_iter()
+                .filter_map(|event| match event {
+                    Event::StatsTick { mut outputs, .. } => outputs.pop(),
+                    _ => None,
+                })
+                .next_back()
+                .expect("a stats.tick for yt")
+        };
+        let mut up = yt(&mut events);
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || {
+                up = yt(&mut events);
+                up.frames > 0
+            }),
+            "no frame counted as sent: {up:?}"
+        );
+        assert!(up.bytes > 0, "{up:?}");
+
+        link.down.store(true, Ordering::Release);
+        assert!(reaches(&control, &fakes, OutputState::Reconnecting));
+        let before = yt(&mut events).bytes;
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || link
+                .dropped
+                .load(Ordering::Acquire)
+                >= 2),
+            "nothing was dropped while the link was down"
+        );
+        let down = yt(&mut events);
+        assert_eq!(
+            down.health,
+            jstream_protocol::OutputHealth::Poor,
+            "{down:?}"
+        );
+        assert!(down.dropped_packets >= 2, "{down:?}");
+        assert_eq!(down.bytes, before, "bytes counted while the link was down");
+
+        link.down.store(false, Ordering::Release);
+        block_on(control.call(output_call("yt", false))).expect("output.stop");
     }
 
     /// Giving up reconnecting fails the output from `reconnecting`, as a publish

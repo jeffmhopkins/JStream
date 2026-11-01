@@ -68,9 +68,9 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Mixer](#mixer) | 7 | 6 | 0 | 0 | 0 | 1 |
 | [Outputs](#outputs) | 4 | 3 | 0 | 0 | 1 | 0 |
 | [Transitions](#transitions) | 6 | 6 | 0 | 0 | 0 | 0 |
-| [Stream stats, live chat, agent activity](#live-panels) | 4 | 1 | 0 | 0 | 3 | 0 |
+| [Stream stats, live chat, agent activity](#live-panels) | 4 | 1 | 1 | 0 | 2 | 0 |
 | [Keyboard](#keyboard) | 7 | 6 | 0 | 0 | 0 | 1 |
-| **Total** | **131** | **117** | **4** | **0** | **6** | **4** |
+| **Total** | **131** | **117** | **5** | **0** | **5** | **4** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -106,7 +106,7 @@ Spec: [workspace › header bar](../design/ui-prototype/spec-workspace.md#header
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
 | HD-01 | Brand and menu row | Accent square and "JStream", then File, Edit, View and Layout menus; one top menu open at a time, closed by any outside press. | ✅ | The prototype leaves File and Edit empty; the real ones hold the connection details and Disconnect, and Undo and Redo. The menus behave as a desktop menu bar: a click opens or closes one; while one is open, pointing at another menu opens it instead; Escape closes it. From the keyboard, Down, Enter or Space opens the focused menu at its first item (Up at its last), Up, Down, Home and End move through it, Left and Right move along the bar (opening the next menu while one is open), and Tab closes it. Keys with Ctrl, Alt or Meta are left to the hotkeys. |
-| HD-02 | View menu | Lists all 11 panels with "shown" or "add"; clicking hides a shown panel or adds a hidden one to its home zone. | ✅ | All eleven, in the prototype's order. Live chat and Stream stats wait on YouTube sign-in ([live panels](#live-panels)), so for now they say what they wait on. Beyond the prototype, a Projectors group under them opens the program or the multiview in a window or full screen ([DL-07](#dialogs)). |
+| HD-02 | View menu | Lists all 11 panels with "shown" or "add"; clicking hides a shown panel or adds a hidden one to its home zone. | ✅ | All eleven, in the prototype's order. Live chat waits on YouTube sign-in ([live panels](#live-panels)), so for now it says what it waits on; Stream stats shows an output's own stats without it. Beyond the prototype, a Projectors group under them opens the program or the multiview in a window or full screen ([DL-07](#dialogs)). |
 | HD-03 | Layout menu | "Layout: <name>", saved layouts with "current", "Save current layout as new", "Reset to default". | ✅ | |
 | HD-04 | Stats readout | Mono "60 fps · 0 dropped · CPU 3%". | ✅ | Built from `stats.tick`: the frame rate is the program's over the last tick's interval, and shows only while an output runs, since the program stage draws nothing otherwise; "N dropped" counts video frames dropped since the page connected; CPU is the engine process's share of every logical CPU, as Task Manager counts it, "<1%" below half a percent (protocol 0.48's `load`). The daemon and the desktop app tick about once a second while idle too. CPU shows on Windows and macOS; elsewhere the engine can't read it and the readout leaves it out. |
 | HD-05 | Privacy button | "Privacy" / "Privacy on" (red); blurs every output and mutes the mic; Pause toggles it. | ⏸ | Removed at the maintainer's request after the alpha: JStream has no privacy screen ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md) §4). Bringing it back is the maintainer's call. |
@@ -125,8 +125,9 @@ Spec: [workspace › dock zones and docking](../design/ui-prototype/spec-workspa
 The dock is built (`dock.rs`, `workspace.rs`) with the prototype's eleven panels: Scenes,
 Scene objects, Inspector (with the pairing panel under the properties), Transform,
 Filters, Live chat, Stream stats, Audio mixer, Outputs, Agent activity and Transitions
-(studio mode and the presets). Live chat and Stream stats say what they wait on until
-their rows are built ([live panels](#live-panels)).
+(studio mode and the presets). Live chat says what it waits on until its rows are built,
+and Stream stats shows the half of its row that needs no YouTube sign-in
+([live panels](#live-panels)).
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
@@ -137,7 +138,7 @@ their rows are built ([live panels](#live-panels)).
 | DK-05 | Close twice | × arms red on the first click, closes on the second; disarms after 3 s or when the pointer leaves. | ✅ | |
 | DK-06 | Drag to dock | Drag a tab onto a tab strip (group), a panel's half (split before or after), or a zone (append); empty zones show "Drop here" placeholders while dragging. | ✅ | Pointer drag rather than HTML drag and drop, which desktop webviews can intercept. Unlike the spec's `cursor: grab`, a tab keeps the arrow pointer, on the maintainer's alpha feedback; the grabbing hand shows only while it drags. |
 | DK-07 | Home zones | A panel added from the View menu goes to its home zone (Scenes and Scene objects left; Inspector, Transform, Filters, chat, stats and agent right; Mixer, Outputs and Transitions bottom). | ✅ | |
-| DK-08 | Editing and Live layouts | Editing is the default: left Scenes, Scene objects; right Inspector (weight 2), Filters+Transform; bottom Mixer, Outputs+Transitions. Live: Scenes; Mixer and Transitions under the canvas; chat, then stats+Outputs+Agent on the right. | 🟡 | Both built with the panels the UI has: Editing puts Filters and Transform in one group under the Inspector, Filters shown. Live puts Agent activity as a second tab beside Outputs; Live chat and Stream stats only say what they wait on, so Live leaves them out until the engine supports them. |
+| DK-08 | Editing and Live layouts | Editing is the default: left Scenes, Scene objects; right Inspector (weight 2), Filters+Transform; bottom Mixer, Outputs+Transitions. Live: Scenes; Mixer and Transitions under the canvas; chat, then stats+Outputs+Agent on the right. | 🟡 | Both built with the panels the UI has: Editing puts Filters and Transform in one group under the Inspector, Filters shown. Live puts Stream stats, Outputs and Agent activity as tabs in one group, Stream stats shown; Live chat only says what it waits on, so Live leaves it out until the engine supports it. |
 | DK-09 | "(modified)" and saving | Any move, close, resize or View toggle marks the layout "(modified)"; layouts can be saved as "My layout N" and reset. | ✅ | |
 | DK-10 | Layouts persist | Layouts survive a reload, the same on the desktop app and in a browser. | ✅ | The engine's server keeps the dock, saved layouts included, in its UI settings (`ui_settings.get`/`set`, [ADR-0084](adr/0084-ui-settings-kept-by-the-server.md)), in the data folder the desktop app and the daemon share. The browser keeps a copy too, shown first and used alone with no server in front, and a change the server never got (the page closed within the send delay) is sent on the next load rather than lost. Another open client picks up a change when its workspace next opens. |
 
@@ -391,7 +392,7 @@ Spec: [panels › stream stats](../design/ui-prototype/spec-panels.md#stream-sta
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| ST-01 | Stream stats | LIVE/READY pill and uptime, watching, likes, chat rate, dropped frames, stream health, 2-minute bitrate chart, details. | 🔒 | Y4 (YouTube health and audience stats); bitrate needs engine stats (D39). |
+| ST-01 | Stream stats | LIVE/READY pill and uptime, watching, likes, chat rate, dropped frames, stream health, 2-minute bitrate chart, details. | 🟡 | One output's own stats from `stats.tick`'s `outputs` (protocol 0.57): the pill, the output and its uptime; a Bitrate tile (against the profile's video plus audio rate, since the engine's bitrate counts both) and Dropped frames (with this run's share); the health the engine works out over ten seconds (Excellent, OK, Poor or Waiting); the two-minute bitrate chart with the target dashed; and the details (video and audio encoding, what was sent, other drops). It shows the picked output, else the first running stream. Not built: watching, likes and chat rate, YouTube's own health, latency and visibility, which need YouTube sign-in (Y4), and the chart's hover readout. |
 | CH-01 | Live chat | YouTube chat with badges and Super Chats, pinned message, composer. | 🔒 | Y4 (#363) and the OAuth client. |
 | CH-02 | Show on stream | Feature one message on stream. | 🔒 | Y4 (#363 draws the featured message). |
 | AG-01 | Agent activity | What MCP clients changed, newest first. | ✅ | `activity.list` (protocol 0.51, [ADR-0083](adr/0083-activity-log-over-the-protocol.md)): the engine's sentence for each call under the client's name and how long ago; JStream's own UIs are left out, a failed call shows its error code. |

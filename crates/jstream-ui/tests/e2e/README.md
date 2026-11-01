@@ -109,6 +109,12 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   the first `stats.tick`, the CPU share ("<1%") from the second while the program draws
   nothing, and "60 fps · 2 dropped · CPU 3%" once the load says it drew 60 frames in a
   second.
+- **Stream stats** (`stream-stats.spec.js`): added from the View menu, the panel says
+  there are no outputs; with a recording added it is READY with no uptime and shows
+  the default profile's H.264 at 2500 kbps; once the recording starts it is LIVE with
+  the no-data box, and the ticks the test sends give the uptime, the bitrate against
+  the target, the dropped share, Excellent then Poor, the chart and what was sent; a
+  stop puts it back to READY and Waiting.
 - **Docking** (`docking.spec.js`): the Editing layout's zones (Filters and Transform as
   tabs under the Inspector, Transitions as a tab beside Outputs), with empty zones hidden; the View
   menu hiding and adding a panel at the end of its home zone, and the layout marked
@@ -116,7 +122,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   which shows while dragging, docks it there; a lone panel collapses by its title,
   closes on a second click of its ×, and the Inspector doesn't collapse once it is alone
   in its zone; a splitter resizes a zone, and a saved layout and its sizes survive a reload;
-  the Layout menu switches to Live and resets to Editing.
+  the Layout menu switches to Live, with Stream stats, Outputs and Agent activity as
+  tabs on the right, and resets to Editing.
 - **Canvas** (`canvas.spec.js`): the selected scene's box is drawn where the seed put
   it, under the scene's caption; a click on the box selects its row in the sources list
   and shows the size readout, a click on empty canvas clears both, and selecting another

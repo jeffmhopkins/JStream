@@ -333,7 +333,7 @@ pub fn editing() -> Arrangement {
 }
 
 /// The layout for streaming: Scenes on the left, the mixer and Transitions under the
-/// canvas, and the outputs with Agent activity as a second tab on the right.
+/// canvas, and Stream stats with the outputs and Agent activity as tabs on the right.
 pub fn live() -> Arrangement {
     use PanelId::*;
     let mut sizes = SIZES;
@@ -347,7 +347,7 @@ pub fn live() -> Arrangement {
                 Zone::CanvasBottom,
                 vec![(vec![Mixer], 1.0), (vec![Transitions], 1.0)],
             ),
-            (Zone::Right, vec![(vec![Outputs, Agent], 1.0)]),
+            (Zone::Right, vec![(vec![Stats, Outputs, Agent], 1.0)]),
         ],
     )
 }
@@ -1011,7 +1011,7 @@ mod tests {
             vec![
                 (Zone::Left, vec![vec![Scenes]]),
                 (Zone::CanvasBottom, vec![vec![Mixer], vec![Transitions]]),
-                (Zone::Right, vec![vec![Outputs, Agent]]),
+                (Zone::Right, vec![vec![Stats, Outputs, Agent]]),
             ]
         );
         assert_eq!(dock.size(Zone::Left), 260.0);

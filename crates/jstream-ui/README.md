@@ -122,7 +122,10 @@ Contents ([Design](#design) explains the choices):
   and the scene's Transition in and out submenus the menus share
   (`override_submenu`); and
   `transform.rs`: `Transform`, the Transform panel (align, distribute and arrange the
-  selected items).
+  selected items); and `stats.rs`: `StreamStats`, the Stream stats panel (one output's
+  pill, uptime, bitrate, dropped frames, health, two-minute bitrate chart and details,
+  from `stats.tick`'s `outputs`), whose figures, chart and choice of output are tested
+  natively.
 - **Pairing** (`pairing.rs`): `Pairing`, the pairing panel under the properties in the
   Inspector, shown only when the server pairs devices (start pairing and show the code, list and
   revoke devices), and the calls behind it, tested natively against `MockEngine` and a
@@ -504,14 +507,20 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Scene objects (`Sources`), the Inspector (`Inspector`, with `Pairing` under it), the
   Transform, Filters, Live chat, Stream stats, Audio mixer, Outputs, Agent activity and
   Transitions (`StudioMode`); `panel_view` maps each to its component, and a new panel
-  adds a `PanelId` and a line there. Live chat and Stream stats wait on the engine
-  (YouTube sign-in), so they say what they wait on and neither is in a built-in layout.
+  adds a `PanelId` and a line there. Live chat waits on the engine (YouTube sign-in),
+  so it says what it waits on and is in no built-in layout. Stream stats
+  (`panels/stats.rs`) shows one output's live stats from `stats.tick`'s `outputs`
+  (protocol 0.57): the output picked in its menu, else the first running stream, the
+  first running output, then the first stream. It reads the outputs and profiles as
+  the Outputs panel does, keeps the last 120 `kbps` readings of each listed output for
+  the bitrate chart (an output a tick leaves out, or whose uptime went down, starts
+  over), and shows the YouTube-only tiles not at all.
   Agent activity (`panels/agent.rs`) lists what agents did from the engine's
   `activity.list` ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md)),
   leaving out JStream's own UIs, and asks again after each `state.changed`,
   `studio.changed`, `output.state_changed`, `live.ended` and `events.dropped`, and every
   5 seconds; the
-  Live layout shows it as a second tab beside Outputs. The
+  Live layout shows Stream stats, Outputs and it as tabs in one group. The
   panels' own `h2` headings are hidden, since the tab is the title. Narrow windows
   stack the zones, without splitters.
   - Each group keeps every tab's panel mounted and hides the inactive ones, so a tab
