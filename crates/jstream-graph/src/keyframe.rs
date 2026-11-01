@@ -76,6 +76,14 @@ pub(crate) fn set_effects(
     versions: Option<&[Option<u32>]>,
     at: usize,
 ) -> Result<Vec<Edit>, ProtocolError> {
+    // Another scene that isn't a keyframe: `target`'s reason would offer the item's own
+    // scene, which this edit refuses too.
+    if let (Some((si, _)), Some(vi)) = (state.item_index(item_id), state.scene_index(scene_id))
+        && si != vi
+        && state.scenes[vi].variant_of.is_none()
+    {
+        return Err(invalid(at, "scene_id", not_a_keyframe(scene_id, item_id)));
+    }
     let Some(vi) = target(state, item_id, Some(scene_id), at)? else {
         return Err(invalid(
             at,
@@ -287,6 +295,15 @@ fn clear(
         .into_iter()
         .map(|inverse| inverse_edit(scene_id, item_id, inverse))
         .collect())
+}
+
+/// Why `item.set_effects` refuses `scene_id`, a scene that is neither item `item_id`'s
+/// own nor a keyframe scene.
+fn not_a_keyframe(scene_id: &SceneId, item_id: &ItemId) -> String {
+    format!(
+        "scene `{scene_id}` is not a keyframe scene: name a keyframe scene whose tree holds \
+         item `{item_id}`"
+    )
 }
 
 /// The keyframe scene a placement edit with `scene_id` writes an override in, as its

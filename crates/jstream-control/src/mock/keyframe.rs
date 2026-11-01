@@ -257,6 +257,26 @@ impl Collection {
             Edit::ItemSetEffects {
                 scene_id, item_id, ..
             } => Some(match self.variant_target(item_id, Some(scene_id), at) {
+                // Another scene that isn't a keyframe, with the graph's reason.
+                Err(_)
+                    if self
+                        .items
+                        .get(item_id)
+                        .is_some_and(|i| &i.scene_id != scene_id)
+                        && self
+                            .scenes
+                            .iter()
+                            .any(|s| &s.id == scene_id && s.variant_of.is_none()) =>
+                {
+                    Err(invalid(
+                        at,
+                        "scene_id",
+                        format!(
+                            "scene `{scene_id}` is not a keyframe scene: name a keyframe \
+                             scene whose tree holds item `{item_id}`"
+                        ),
+                    ))
+                }
                 Ok(Some(vi)) => self.write_override(vi, item_id, edit, at),
                 Ok(None) => Err(invalid(
                     at,

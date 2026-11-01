@@ -476,7 +476,8 @@ state machine. Contents:
   snapshot mid-fade), keyframe scenes (`src/tests/keyframes.rs`: a variant drawing its
   parent's items with its overrides and following the parent, a `move` between a parent
   and its variant pairing by item where pairing by source would cross, and pairing an
-  item only where its overridden effects look the same on both sides, and the
+  item only where its overridden effects look the same on both sides, an undo of a
+  keyframe effects step refused once another client changed those effects, and the
   overrides a batch drops reported and restored by undo, with a no-op clear that is no
   undo step, and a live value on a keyframe scene shown only where the keyframe draws the
   item, the parent's own showing there through fields it doesn't override, committed as

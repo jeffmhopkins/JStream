@@ -1063,3 +1063,66 @@ fn the_keyframe_owner_refuses_what_isnt_a_keyframes_item() {
     }
     assert_eq!(field(&mut graph, cycle), "edits.0.settings.mask");
 }
+
+/// An undo of a keyframe effects step conflicts with another client's later filter edit
+/// on that keyframe's effects (ADR-0032, ADR-0088 §4): both touch the item's one effects
+/// property, so the undo can't silently drop it.
+#[test]
+fn a_keyframe_effects_undo_conflicts_with_a_later_filter_edit_there() {
+    let mut graph = family();
+    let item = FilterOwner::Item {
+        item_id: ItemId::new("i1"),
+    };
+    apply_ok(&mut graph, vec![tint_on(item, "own")]);
+    let kf = keyframe_owner("k", "i1");
+    // A's edit copies the item's effects; its inverse clears the override.
+    let a = apply_ok(
+        &mut graph,
+        vec![Edit::FilterSetSettings {
+            owner: kf.clone(),
+            filter_id: FilterId::new("own"),
+            patch: Settings([("amount".to_owned(), json!(0.5))].into_iter().collect()),
+        }],
+    );
+    // B adds a filter to the copy.
+    let b = apply_ok(&mut graph, vec![tint_on(kf.clone(), "more")]);
+    assert!(a.touched.conflicts_with(&b.touched), "A's step and B's");
+    let undo = apply_ok(&mut graph, a.inverse.edits.clone());
+    assert!(undo.touched.conflicts_with(&b.touched), "A's undo and B's");
+
+    // A whole write conflicts with a later filter edit, and with a later write.
+    let c = apply_ok(&mut graph, vec![set_effects("k", "i1", Vec::new())]);
+    let d = apply_ok(&mut graph, vec![tint_on(kf.clone(), "late")]);
+    assert!(c.touched.conflicts_with(&d.touched));
+    // Every filter edit on the keyframe owner touches it, not only the copying one.
+    for edit in [
+        Edit::FilterSetEnabled {
+            owner: kf.clone(),
+            filter_id: FilterId::new("late"),
+            enabled: false,
+        },
+        Edit::FilterReorder {
+            owner: kf.clone(),
+            filter_id: FilterId::new("late"),
+            index: 0,
+        },
+        Edit::FilterRemove {
+            owner: kf.clone(),
+            filter_id: FilterId::new("late"),
+        },
+    ] {
+        let e = apply_ok(&mut graph, vec![edit]);
+        assert!(c.touched.conflicts_with(&e.touched));
+    }
+    // The item's own effects are another property: no conflict there.
+    let own = apply_ok(
+        &mut graph,
+        vec![tint_on(
+            FilterOwner::Item {
+                item_id: ItemId::new("i1"),
+            },
+            "own2",
+        )],
+    );
+    assert!(!c.touched.conflicts_with(&own.touched));
+}

@@ -183,7 +183,10 @@ the batch **touched**.
   ([ADR-0088](../../docs/adr/0088-keyframe-scenes-override-item-effects.md)), is checked
   as `item.set_effects` checks its scene (on `owner`); where the keyframe follows the
   item, the edit first copies the item's own effects into its override, and its inverse
-  is then `item.clear_override` of `effects`. Its chain checks are an item's.
+  is then `item.clear_override` of `effects`. Its chain checks are an item's. Every
+  filter edit on it touches the item's effects property in the keyframe, the one
+  `item.set_effects` and `item.clear_override` of `effects` touch, so an undo of any of
+  them conflicts with another client's later change there (ADR-0032).
   `filter.add` checks, in order, the owner (a
   source, an output, the master stage, a scene or an item), the filter ID (non-empty,
   unused on the owner), that the owner has the chain (a source: video if its kind
@@ -205,6 +208,10 @@ the batch **touched**.
   describe can only come from a load (below); its settings stay as loaded,
   `filter.set_settings` on it is `invalid_argument` until the kind is described, and an
   undo or duplicate that would re-add it fails like any `filter.add` of an unknown kind.
+  So does any `item.set_effects` whose list holds one, since it is checked whole: a
+  `delete.plan` that clears a reference in another filter of that keyframe's overridden
+  effects, and an undo that writes such a list back (of `item.clear_override` of
+  `effects`, or of a removal that dropped the override), fail closed and change nothing.
   An item's effects go with it through `item.move` (which runs the cycle check on their
   references from the new scene) and `item.set_source`. A reference in a scene's filter blocks a delete as
   `filters.<filter_id>.<param>` of the scene, and one in an item's effect as
@@ -301,8 +308,9 @@ the batch **touched**.
   absent field changes nothing and has no inverse. `item.set_effects` writes the
   `effects` field whole (ADR-0088): at most 8 filters with unique IDs, each a known
   `video_filter` kind with its settings completed as `filter.add` completes them, then
-  the cycle check from the keyframe scene; the item's own scene is `invalid_argument` on
-  `scene_id`. `State::shown_items` and `State::items_through` draw an item with its
+  the cycle check from the keyframe scene; the item's own scene, and any other scene
+  that isn't a keyframe, are `invalid_argument` on `scene_id`, each with a reason of its
+  own that names a keyframe scene as the fix. `State::shown_items` and `State::items_through` draw an item with its
   overridden effects. An override names an item in the
   parent's tree (`State::tree_items`: its own, or a child of a group placed in it, at
   any depth, protocol 0.55, #846), and any other is refused. `item.add`, `item.move` into a variant

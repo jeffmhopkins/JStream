@@ -1301,6 +1301,18 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
             ),
         ),
         (
+            Batch::single(Edit::ItemSetEffects {
+                scene_id: SceneId::new("b"),
+                item_id: ItemId::new("i1"),
+                effects: Vec::new(),
+            }),
+            invalid(
+                "edits.0.scene_id",
+                "scene `b` is not a keyframe scene: name a keyframe scene whose tree holds item \
+                 `i1`",
+            ),
+        ),
+        (
             Batch::single(Edit::FilterRemove {
                 owner: FilterOwner::Item {
                     item_id: ItemId::new("ghost"),
