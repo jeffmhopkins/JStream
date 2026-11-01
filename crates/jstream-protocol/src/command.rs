@@ -1099,11 +1099,12 @@ pub enum Action {
     /// with the field `values.<n>.<field>`); a value that is not a live-adjustable
     /// setter (`item.set_transform`, `item.set_geometry`, `item.set_crop`), an empty or
     /// over-256 list, and a 17th open gesture are `invalid_argument`. Nothing in a
-    /// rejected message is applied. A value whose `scene_id` names a keyframe scene is
-    /// that keyframe's parameter, apart from the item's own: it shows only where the
-    /// keyframe draws the item, and the item's own value shows there only in a field the
-    /// keyframe doesn't override. The gesture ends with a batch carrying
-    /// `ends_gesture`, with `live.cancel`, or when its client's session ends.
+    /// rejected message is applied. A value whose `scene_id` names a keyframe scene is,
+    /// since 0.48 (refused before), that keyframe's parameter, apart from the item's
+    /// own: it shows only where the keyframe draws the item, and the item's own value
+    /// shows there only in a field the keyframe doesn't override. The gesture ends with
+    /// a batch carrying `ends_gesture`, with `live.cancel`, or when its client's session
+    /// ends.
     #[serde(rename = "live.set")]
     LiveSet {
         /// The gesture, chosen by the client and unique among its open gestures.

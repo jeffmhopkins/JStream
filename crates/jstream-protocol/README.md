@@ -183,8 +183,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.47 because the engine
-  draws, and so accepts, every blend mode
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.48 because the engine
+  takes live values on a keyframe scene (`live.set`, #846; no wire change); 0.47 made
+  it draw, and so accept, every blend mode
   ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md); no wire change); 0.46 added
   `preview.subscribe`'s `scene_id`, a preview stream of any scene, and its 16 streams a
   session ([Binary streams](#design)); 0.45 made scenes
@@ -1103,7 +1104,7 @@ named by a `gesture_id` it chooses, and sends its values as it goes:
   `values.<n>.<field>`. Any other edit (`values.<n>.type`), an empty list, more than 256
   values, or a 17th open gesture of the client is `invalid_argument`, and nothing in the
   message is applied. A value whose `scene_id` names a keyframe scene (refused with
-  `values.<n>.scene_id` from 0.39 until #846) is a parameter of that keyframe's, apart
+  `values.<n>.scene_id` from 0.39 to 0.47) is, since 0.48, a parameter of that keyframe's, apart
   from the item's own, so a gesture on each can be open at once. It shows only where the
   keyframe draws the item. Where the keyframe draws it, the item's own live value shows
   only in a field the keyframe doesn't override, as an edit to the parent would
