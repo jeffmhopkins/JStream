@@ -955,9 +955,13 @@ only when their effects are the same kinds with the same settings in order
 draw a hard-edged `vignette` and compare small text grids of the canvas, as the render
 crate's geometry goldens do: on a cropped item, against the same vignette on its source,
 whose corners the crop cuts away; on a scene, against one on each of its items; and on an
-item turned 90°, whose ellipse stands with its box. Not yet:
-`stats.tick`'s counts of these layers and passes (ADR-0065 §7), which need protocol
-fields.
+item turned 90°, whose ellipse stands with its box. Each `stats.tick` reports what
+they cost (ADR-0065 §7) in its `chains`: `Shot::chain_cost` walks the chain phase's
+steps (`schedule_chains`) and counts each scene chain as its canvas-sized composite
+plus one layer and pass per filter, and each item's effects as its box layer and pass
+plus one per effect, with each layer's texture bytes at the sizes `Chains` makes them
+(`Chain::layer_sizes`). It reads the plan the render hub holds, on the control side,
+so the render thread does no extra work; a source's own chain is not counted.
 
 A filter that reads an asset (`apply_lut`'s `lut`, a `.cube` file or a tiled PNG, and
 `image_mask`'s `image`, whose first frame is the mask) gets it through the live

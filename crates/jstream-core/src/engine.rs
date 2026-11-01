@@ -3332,6 +3332,7 @@ impl State {
             &Event::StatsTick {
                 seq: self.stats_seq,
                 drops,
+                chains: Some(self.render.load().shot().chain_cost()),
             },
             wake,
         );

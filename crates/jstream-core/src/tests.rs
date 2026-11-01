@@ -23,10 +23,10 @@ mod youtube;
 use crate::{DropSnapshot, Engine, FnDropSource, InProcessControl};
 use jstream_control::{Control, ControlError, EventStream, MockEngine};
 use jstream_protocol::{
-    Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, EntityKind, Event, GestureId,
-    Hello, IdempotencyKey, ItemId, KindCategory, OutputId, OutputState, PROTOCOL_VERSION,
-    PixelSize, ProtocolError, ProtocolVersion, Query, QueryResult, RequestId, Rev, SceneId,
-    SceneRole, SourceId, SourceKind, TransitionPresetId, TransitionStarted, parity,
+    Action, Batch, Call, CallResult, ChainCost, ClientId, DropCounts, Edit, EntityKind, Event,
+    GestureId, Hello, IdempotencyKey, ItemId, KindCategory, OutputId, OutputState,
+    PROTOCOL_VERSION, PixelSize, ProtocolError, ProtocolVersion, Query, QueryResult, RequestId,
+    Rev, SceneId, SceneRole, SourceId, SourceKind, TransitionPresetId, TransitionStarted, parity,
 };
 use std::future::Future;
 use std::pin::pin;
@@ -551,7 +551,13 @@ fn scene_filters_and_item_effects_are_taken() {
             item_id: ItemId::new("i"),
             source_id: SourceId::new("bg"),
             transform: None,
-            geometry: None,
+            geometry: Some(
+                jstream_protocol::ItemGeometry::try_new(
+                    jstream_protocol::Vec2::new(0.0, 0.0).expect("finite"),
+                    jstream_protocol::Size::try_new(320.0, 180.0).expect("positive"),
+                )
+                .expect("valid"),
+            ),
             opacity: None,
             blend: None,
         },
@@ -566,6 +572,9 @@ fn scene_filters_and_item_effects_are_taken() {
         },
     )
     .expect("set up");
+    engine
+        .set_source_frame(&SourceId::new("bg"), 1, 1, &[0, 0, 0, 255])
+        .expect("a frame for bg");
     let sharpen = |owner: FilterOwner| Edit::FilterAdd {
         owner,
         chain: FilterChain::Video,
@@ -594,6 +603,30 @@ fn scene_filters_and_item_effects_are_taken() {
         .expect("s");
     assert_eq!(s.filters.video.len(), 1);
     assert_eq!(s.items[0].effects.len(), 1);
+    // `stats.tick` counts what they add to each frame (ADR-0065 §7).
+    let mut events = control.events();
+    engine.emit_stats_tick();
+    let chains = drain(&mut events).into_iter().find_map(|event| match event {
+        Event::StatsTick { chains, .. } => chains,
+        _ => None,
+    });
+    let chains = chains.expect("a tick with its chain cost");
+    assert_eq!(
+        (chains.scene_chains, chains.scene_layers, chains.scene_passes),
+        (1, 2, 2),
+        "the scene's composite and its filter"
+    );
+    assert_eq!(
+        (chains.item_effects, chains.item_layers, chains.item_passes),
+        (1, 2, 2),
+        "the item's box and its effect"
+    );
+    let canvas = 1920 * 1080 * 8;
+    assert_eq!(
+        chains.layer_bytes,
+        2 * canvas + 2 * 320 * 180 * 8,
+        "two canvas-sized layers and two of the box"
+    );
     let ghost = FilterOwner::Item {
         item_id: ItemId::new("ghost"),
     };
@@ -2952,6 +2985,7 @@ fn a_removed_drop_source_keeps_its_total() {
                 render_ticks: 2,
                 ..DropCounts::default()
             },
+            chains: Some(ChainCost::default()),
         }]
     );
 
@@ -2972,6 +3006,7 @@ fn a_removed_drop_source_keeps_its_total() {
                 render_ticks: 4,
                 ..DropCounts::default()
             },
+            chains: Some(ChainCost::default()),
         }],
         "the removed source stays at the total it had when it was removed"
     );
@@ -2987,6 +3022,7 @@ fn a_removed_drop_source_keeps_its_total() {
                 render_ticks: 4,
                 ..DropCounts::default()
             },
+            chains: Some(ChainCost::default()),
         }],
         "removing an unknown source changes nothing"
     );

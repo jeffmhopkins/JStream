@@ -685,7 +685,7 @@ pub fn Outputs() -> impl IntoView {
                             panel.reload();
                         }
                     }
-                    Event::StatsTick { seq, drops } => {
+                    Event::StatsTick { seq, drops, .. } => {
                         health.try_update(|health| health.observe(seq, drops));
                     }
                     _ => {}

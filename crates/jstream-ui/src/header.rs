@@ -286,7 +286,7 @@ pub fn Header(
                             reload();
                         }
                     }
-                    Event::StatsTick { seq, drops } => {
+                    Event::StatsTick { seq, drops, .. } => {
                         dropped.try_update(|d| d.observe(seq, drops));
                     }
                     _ => {}

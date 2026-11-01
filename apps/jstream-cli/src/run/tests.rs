@@ -975,6 +975,7 @@ fn events_golden_dropped_notice() {
             encode_blocks: 0,
             output_packets: 3,
         },
+        chains: None,
     });
     let mut out = Vec::new();
     stream_events(events, Some(1), false, &mut out).expect("one event");

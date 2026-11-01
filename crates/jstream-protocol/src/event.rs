@@ -116,6 +116,11 @@ pub enum Event {
         seq: u64,
         /// Running drop totals.
         drops: DropCounts,
+        /// What the scene filter chains and item effects add to each frame: their
+        /// offscreen layers, GPU passes and the layers' texture bytes, as the current
+        /// render plan schedules them (ADR-0065 §7). An older engine leaves it out.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        chains: Option<ChainCost>,
     },
     /// A gesture's live values changed (ADR-0032): the newest value of each parameter
     /// that changed since the gesture's last `live.changed`, as setter edits. The engine
@@ -244,6 +249,42 @@ impl Event {
     }
 }
 
+/// What the video chains of scenes and items add to each frame the engine draws
+/// (ADR-0065 §7), as the current render plan schedules them: a gauge, not a running
+/// total.
+///
+/// A scene with an enabled video filter is composited once per frame into a
+/// canvas-sized layer, however many places show it, and each enabled filter then draws
+/// one pass into a layer of its own. An item with an enabled effect is drawn into one
+/// layer the size of its box plus the effects' outset, and each enabled effect then
+/// draws one pass into a layer of its own. An item placed in two scenes counts once for
+/// each. A filter of a kind the engine doesn't draw is bypassed and not counted. Every
+/// layer is `Rgba16Float`, 8 bytes a pixel. A source's own filters (ADR-0026) and the
+/// scenes a `scene_mask` reads are not counted.
+///
+/// A missing field parses as 0, so a field added later can be left out by an older
+/// sender (R-API-001). Unknown fields are ignored.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct ChainCost {
+    /// Scenes whose video chain runs each frame.
+    pub scene_chains: u32,
+    /// The offscreen layers those chains draw into: each scene's composite and one per
+    /// filter.
+    pub scene_layers: u32,
+    /// The GPU passes those chains draw: each scene's composite and one per filter.
+    pub scene_passes: u32,
+    /// Items whose effects run each frame, once for each scene that draws the item.
+    pub item_effects: u32,
+    /// The offscreen layers those effects draw into: each item's box and one per
+    /// effect.
+    pub item_layers: u32,
+    /// The GPU passes those effects draw: each item's box and one per effect.
+    pub item_passes: u32,
+    /// The texture memory of every layer above, in bytes.
+    pub layer_bytes: u64,
+}
+
 /// Running totals of frames and packets the pipeline has dropped since the engine
 /// started (R-RT-004).
 ///
@@ -335,6 +376,15 @@ mod tests {
                 encode_blocks: 6,
                 output_packets: 7,
             },
+            chains: Some(super::ChainCost {
+                scene_chains: 1,
+                scene_layers: 2,
+                scene_passes: 2,
+                item_effects: 1,
+                item_layers: 3,
+                item_passes: 3,
+                layer_bytes: 99_532_800,
+            }),
         };
         let value = serde_json::to_value(&event).expect("serializes");
         assert_eq!(
@@ -349,6 +399,15 @@ mod tests {
                     "encode_frames": 4,
                     "encode_blocks": 6,
                     "output_packets": 7,
+                },
+                "chains": {
+                    "scene_chains": 1,
+                    "scene_layers": 2,
+                    "scene_passes": 2,
+                    "item_effects": 1,
+                    "item_layers": 3,
+                    "item_passes": 3,
+                    "layer_bytes": 99_532_800u64,
                 }
             })
         );
@@ -374,7 +433,39 @@ mod tests {
                     capture_frames: 2,
                     ..super::DropCounts::default()
                 },
+                chains: None,
             }
         );
+    }
+
+    /// A tick with a partial `chains` parses, missing counts reading as 0, and a tick
+    /// without one leaves it out (R-API-001).
+    #[test]
+    fn stats_tick_chain_cost_is_optional() {
+        let parsed = serde_json::from_value::<Event>(json!({
+            "type": "stats.tick",
+            "seq": 5,
+            "drops": {},
+            "chains": {"item_effects": 2, "future_layers": 1}
+        }))
+        .expect("parses");
+        assert_eq!(
+            parsed,
+            Event::StatsTick {
+                seq: 5,
+                drops: super::DropCounts::default(),
+                chains: Some(super::ChainCost {
+                    item_effects: 2,
+                    ..super::ChainCost::default()
+                }),
+            }
+        );
+        let without = Event::StatsTick {
+            seq: 6,
+            drops: super::DropCounts::default(),
+            chains: None,
+        };
+        let value = serde_json::to_value(&without).expect("serializes");
+        assert_eq!(value.get("chains"), None);
     }
 }

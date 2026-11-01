@@ -30,8 +30,9 @@ use jstream_graph::{
 use jstream_media::{FrameSize, MediaTime, PixelFormat, Rounding, VideoFrame};
 use jstream_platform::{ContextKey, GpuFrame};
 use jstream_protocol::{
-    BlendMode, Canvas, Crop as ProtocolCrop, Edit, FilterChain, Glide, ItemGeometry, ItemId,
-    ItemTransition, ProtocolError, QueryResult, Rev, SceneId, SourceId, SourceKind, VideoMixId,
+    BlendMode, Canvas, ChainCost, Crop as ProtocolCrop, Edit, FilterChain, Glide, ItemGeometry,
+    ItemId, ItemTransition, ProtocolError, QueryResult, Rev, SceneId, SourceId, SourceKind,
+    VideoMixId,
 };
 use jstream_render::transition::{Endpoint, Track};
 use jstream_render::{
@@ -2199,7 +2200,68 @@ fn draw(
     })
 }
 
+/// The bytes of one pixel of an offscreen layer (`Rgba16Float`).
+const LAYER_PIXEL_BYTES: u64 = 8;
+
+/// The texture bytes of a layer of `width` by `height`.
+fn layer_bytes((width, height): (u32, u32)) -> u64 {
+    u64::from(width)
+        .saturating_mul(u64::from(height))
+        .saturating_mul(LAYER_PIXEL_BYTES)
+}
+
 impl Shot {
+    /// What the scene chains and item effects add to each frame (ADR-0065 §7), for
+    /// `stats.tick`: read from the chain phase's steps ([`schedule_chains`]), so it
+    /// counts what each frame runs once, before any mix draws. A scene's chain is its
+    /// canvas-sized composite and one layer and pass per filter; an item's effects are
+    /// its box's layer and pass and one per effect, at the sizes [`Chains`] makes them.
+    /// A source's chain and a scene a `scene_mask` reads are not counted.
+    pub(crate) fn chain_cost(&self) -> ChainCost {
+        let mut cost = ChainCost::default();
+        let canvas = (self.canvas.width, self.canvas.height);
+        for step in &self.chain_steps {
+            let ChainStep::Run(owner) = step else {
+                continue;
+            };
+            let Some(chain) = self.chains.get(owner) else {
+                continue;
+            };
+            let (input, layers, passes) = match owner {
+                ChainOwner::Scene(_) => {
+                    cost.scene_chains = cost.scene_chains.saturating_add(1);
+                    (canvas, &mut cost.scene_layers, &mut cost.scene_passes)
+                }
+                ChainOwner::Item(..) => {
+                    let Some(boxed) = self.boxes.get(owner) else {
+                        continue;
+                    };
+                    cost.item_effects = cost.item_effects.saturating_add(1);
+                    let [width, height] = boxed.boxed.layer;
+                    (
+                        (width, height),
+                        &mut cost.item_layers,
+                        &mut cost.item_passes,
+                    )
+                }
+                ChainOwner::Source(_) => continue,
+            };
+            let sizes = chain.layer_sizes(input.0, input.1);
+            // The composite or the box, then one per filter.
+            let count = u32::try_from(sizes.len())
+                .unwrap_or(u32::MAX)
+                .saturating_add(1);
+            *layers = layers.saturating_add(count);
+            *passes = passes.saturating_add(count);
+            let bytes = sizes
+                .into_iter()
+                .map(layer_bytes)
+                .fold(layer_bytes(input), u64::saturating_add);
+            cost.layer_bytes = cost.layer_bytes.saturating_add(bytes);
+        }
+        cost
+    }
+
     /// The collection's canvas (ADR-0022), which every scene is composited at.
     pub(crate) fn canvas(&self) -> Result<FrameSize, RenderError> {
         FrameSize::new(self.canvas.width, self.canvas.height).map_err(|_| RenderError::Invalid {

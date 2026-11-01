@@ -160,7 +160,7 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"event","event":{"type":"plugin.state_changed","plugin_id":"plg_1","state":"disabled","reason":"memory_limit"}}
 {"type":"event","event":{"type":"plugin.state_changed","plugin_id":"plg_1","state":"disabled","reason":"trap"}}
 {"type":"event","event":{"type":"plugin.state_changed","plugin_id":"plg_1","state":"disabled","reason":"needs_grant"}}
-{"type":"event","event":{"type":"stats.tick","seq":4,"drops":{"capture_frames":2,"audio_frames":5,"render_ticks":1,"encode_frames":4,"encode_blocks":6,"output_packets":7}}}
+{"type":"event","event":{"type":"stats.tick","seq":4,"drops":{"capture_frames":2,"audio_frames":5,"render_ticks":1,"encode_frames":4,"encode_blocks":6,"output_packets":7},"chains":{"scene_chains":1,"scene_layers":2,"scene_passes":2,"item_effects":1,"item_layers":3,"item_passes":3,"layer_bytes":99532800}}}
 {"type":"event","event":{"type":"live.changed","gesture_id":"drag_1","client_id":"cli_7","values":[{"type":"item.set_geometry","item_id":"itm_1","geometry":{"center":{"x":1600.0,"y":900.0},"size":{"width":480.0,"height":270.0},"fit_mode":"fit","rotation_deg":0.0,"tilt_deg":0.0,"turn_deg":0.0,"depth_px":0.0}},{"type":"item.set_crop","item_id":"itm_2","crop":{"left":4,"top":0,"right":4,"bottom":0}}]}}
 {"type":"event","event":{"type":"live.ended","gesture_id":"drag_1","client_id":"cli_7","outcome":"committed","rev":17}}
 {"type":"event","event":{"type":"live.ended","gesture_id":"drag_2","client_id":"cli_8","outcome":"cancelled"}}

@@ -200,6 +200,22 @@ impl Chain {
         }
     }
 
+    /// The size of the layer each filter draws into, first filter first, for an input
+    /// of `width` by `height`: what [`Chains::run_one`] makes, each filter's output size
+    /// carried through the ones before it.
+    pub(crate) fn layer_sizes(&self, width: u32, height: u32) -> Vec<(u32, u32)> {
+        let mut size = (width, height);
+        self.filters
+            .iter()
+            .map(|filter| {
+                if let Some(drawn) = VideoFilter::new(&filter.kind, &filter.settings) {
+                    size = drawn.output_size(size.0, size.1);
+                }
+                size
+            })
+            .collect()
+    }
+
     /// The size the chain draws for an input of `width` by `height`: the source's
     /// reported size once filtered (only aspect ratio changes it; a drop shadow, an
     /// outline or a glow draws within the frame, ADR-0065 §5).
@@ -1245,6 +1261,52 @@ mod tests {
             .map(|image| (image.width(), image.height()));
         drop(cache.end_frame(&compositor));
         assert_eq!(layer, Some((16, 9)), "the box of an unscaled 16x9 frame");
+    }
+
+    /// `stats.tick`'s chain cost (ADR-0065 §7) counts a scene's chain as its composite
+    /// and one layer and pass per filter, an item's effects as its box and one per
+    /// effect, at the sizes they draw at; a source's chain and a bypassed filter add
+    /// nothing.
+    #[test]
+    fn the_chain_cost_counts_scene_chains_and_item_effects() {
+        use jstream_protocol::ChainCost;
+
+        assert_eq!(shot(&graph(&[])).chain_cost(), ChainCost::default());
+        assert_eq!(
+            shot(&graph(&[("cam", true)])).chain_cost(),
+            ChainCost::default(),
+            "a source's own chain is not counted"
+        );
+        let mut bypassed = graph(&[]);
+        apply(&mut bypassed, vec![scene_red("main", false)]);
+        assert_eq!(shot(&bypassed).chain_cost(), ChainCost::default());
+
+        let mut both = graph(&[]);
+        let mut second = item_tint("cam", "#00ff00");
+        if let Edit::FilterAdd { filter_id, .. } = &mut second {
+            *filter_id = FilterId::new("tint_2");
+        }
+        apply(
+            &mut both,
+            vec![scene_red("main", true), item_tint("cam", "#ff0000"), second],
+        );
+        let planned = shot(&both);
+        let canvas = planned.canvas().expect("a canvas");
+        let canvas_bytes = u64::from(canvas.width()) * u64::from(canvas.height()) * 8;
+        let box_bytes = 16 * 9 * 8;
+        assert_eq!(
+            planned.chain_cost(),
+            ChainCost {
+                scene_chains: 1,
+                scene_layers: 2,
+                scene_passes: 2,
+                item_effects: 1,
+                item_layers: 3,
+                item_passes: 3,
+                layer_bytes: 2 * canvas_bytes + 3 * box_bytes,
+            },
+            "the scene's composite and grade; cam's 16x9 box and its two tints"
+        );
     }
 
     /// A box with a geometry gets a layer of that box's size in canvas pixels, however

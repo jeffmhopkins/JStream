@@ -1381,6 +1381,61 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "ChainCost": {
+      "description": "What the video chains of scenes and items add to each frame the engine draws\n(ADR-0065 §7), as the current render plan schedules them: a gauge, not a running\ntotal.\n\nA scene with an enabled video filter is composited once per frame into a\ncanvas-sized layer, however many places show it, and each enabled filter then draws\none pass into a layer of its own. An item with an enabled effect is drawn into one\nlayer the size of its box plus the effects' outset, and each enabled effect then\ndraws one pass into a layer of its own. An item placed in two scenes counts once for\neach. A filter of a kind the engine doesn't draw is bypassed and not counted. Every\nlayer is `Rgba16Float`, 8 bytes a pixel. A source's own filters (ADR-0026) and the\nscenes a `scene_mask` reads are not counted.\n\nA missing field parses as 0, so a field added later can be left out by an older\nsender (R-API-001). Unknown fields are ignored.",
+      "properties": {
+        "item_effects": {
+          "default": 0,
+          "description": "Items whose effects run each frame, once for each scene that draws the item.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "item_layers": {
+          "default": 0,
+          "description": "The offscreen layers those effects draw into: each item's box and one per\neffect.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "item_passes": {
+          "default": 0,
+          "description": "The GPU passes those effects draw: each item's box and one per effect.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "layer_bytes": {
+          "default": 0,
+          "description": "The texture memory of every layer above, in bytes.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "scene_chains": {
+          "default": 0,
+          "description": "Scenes whose video chain runs each frame.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "scene_layers": {
+          "default": 0,
+          "description": "The offscreen layers those chains draw into: each scene's composite and one per\nfilter.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "scene_passes": {
+          "default": 0,
+          "description": "The GPU passes those chains draw: each scene's composite and one per filter.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "Chord": {
       "description": "A key chord: zero or more modifiers then one key, joined by `+`, such as `Ctrl+KeyA`,\n`Ctrl+Shift+Digit1`, `F1` or `Pause`.\n\n- The modifiers are `Ctrl`, `Alt`, `Shift` and `Meta` (the Windows or Command key),\n  each at most once, in that order. A chord has exactly one spelling, so two chords\n  are the same keys exactly when their strings are equal.\n- The key is a W3C UI Events `KeyboardEvent.code` value from [`Chord::KEYS`]: the\n  physical key, whatever the keyboard layout, as browsers and the desktop host's\n  global-shortcut API both report it. Modifier keys themselves are not keys here.\n\nOn the wire it is a plain string. The protocol layer doesn't check it: the engine\nrejects one that isn't valid with `invalid_argument`, giving [`Chord::problem`]'s\nreason.",
       "type": "string"
@@ -4109,6 +4164,17 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "description": "A sample of the pipeline's drop counters (R-RT-004).\n\n`drops` is a running total since the engine started, not the count since the\nprevious tick. A client that misses one subtracts the last tick it did see.\n`seq` starts at 1 and increases by one per sample, so a gap means a missed tick\nand not a reset. The engine sends it when its control thread asks, about once a\nsecond once the media pipeline is running. Until event subscriptions exist, every\nclient receives it.",
           "properties": {
+            "chains": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ChainCost"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "What the scene filter chains and item effects add to each frame: their\noffscreen layers, GPU passes and the layers' texture bytes, as the current\nrender plan schedules them (ADR-0065 §7). An older engine leaves it out."
+            },
             "drops": {
               "$ref": "#/$defs/DropCounts",
               "description": "Running drop totals."

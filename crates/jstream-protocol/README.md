@@ -147,8 +147,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Events** (`event.rs`): `state.changed`, `output.state_changed`, `studio.changed`
   (program, preview and the transition a switch started), `privacy.changed` (deprecated),
   `source.size_changed`, `events.dropped`,
-  `stats.tick`, `meters.tick`, `youtube.status_changed`, `youtube.health_changed`,
-  `youtube.stats`, `live.changed`, `live.ended` and `plugin.state_changed`.
+  `stats.tick` (with `DropCounts` and `ChainCost`), `meters.tick`,
+  `youtube.status_changed`, `youtube.health_changed`, `youtube.stats`, `live.changed`, `live.ended` and `plugin.state_changed`.
 - **Plugins** (`plugin.rs`, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)): `PluginClass` (`read`,
   `edit`, `live`, `outputs`), `PLUGIN_SCOPES`, the table that places every command in
   one class or under "never", with `plugin_scope` and `plugin_classes` (a call's
@@ -1174,7 +1174,7 @@ After `welcome`, the server pushes every event to every client.
   ([jstream-server › Design](../jstream-server/README.md#design)). Answers are never
   dropped. The client re-reads what it shows with `state.get`, which carries `rev`.
   Added in 0.4.
-- `stats.tick {seq, drops}` is one sample of the pipeline's drop counters
+- `stats.tick {seq, drops, chains}` is one sample of the pipeline's drop counters
   ([R-RT-004](../../docs/RULES.md#R-RT-004)). `drops` is a running total since the
   engine started, not a delta, so a client that misses a tick subtracts the last one
   it did see. The fields are `capture_frames` (frames a capture mailbox replaced
@@ -1189,7 +1189,19 @@ After `welcome`, the server pushes every event to every client.
   starts at 1 and increases by one each sample. While an output is
   running, the pipeline's `jstream-stats` thread emits a tick about once a second;
   an idle engine emits none. A render tick that falls a whole period or more behind
-  the clock is skipped rather than drawn late, and counted in `render_ticks`. Until
+  the clock is skipped rather than drawn late, and counted in `render_ticks`. A tick
+  also carries `chains` (`ChainCost`), what scene filter chains and item effects add
+  to each frame as the current render plan schedules them
+  ([ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md) §7): a gauge, not
+  a running total. `scene_chains` counts the scenes whose video chain runs, and
+  `scene_layers` and `scene_passes` their offscreen layers and GPU passes (each scene's
+  canvas-sized composite and one per enabled filter); `item_effects` counts the items
+  whose effects run, once for each scene that draws the item, and `item_layers` and
+  `item_passes` theirs (each item's box layer and one per enabled effect);
+  `layer_bytes` is the texture memory of all those layers (`Rgba16Float`, 8 bytes a
+  pixel). A filter of a kind the engine doesn't draw is bypassed and not counted, nor
+  are a source's own chain and a `scene_mask`'s scene. An older engine leaves `chains`
+  out, and a count missing from it parses as 0. Until
   [open question 7](#open-questions) every client receives it. Added in 0.6. A late plugin block is an audio drop in
   `audio_frames` once the mixer counts it
   ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)); that host is not
