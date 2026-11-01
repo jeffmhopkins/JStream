@@ -1197,7 +1197,7 @@ stamp = { hash = "b3:4f0b3f117068e82b", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:cd070fd8dbcfb8ca", by = "agent:claude", note = "New bullet on fitting capture items matches run.rs fit_captures (CAPTURE_KINDS, one lazy state.get, unknown source and zero canvas left to the engine) and the tests in run/tests.rs; other bullets unaffected by args.rs's help-text line." }
 
 ["CRATE-jstream-cli#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:3b3ef26e9423422c", by = "agent:claude-window-picker", note = "capture targets still queries capture.targets and prints each target; only the test's expected lines changed, adding the mock's window, and the control README's mock list now names MOCK_WINDOW. Nothing here describes the mock's targets." }
+stamp = { hash = "b3:3b3ef26e9423422c", by = "agent:claude-window-picker", note = "capture targets still queries capture.targets and prints each target; the PR changed only run/tests.rs's expected lines, adding the mock's window, and the control README's mock list now names MOCK_WINDOW. CLI Design describes neither." }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/Cargo.toml"]
 stamp = { hash = "b3:e0012441d40d5541", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "Cargo.toml only moves the package version to version.workspace = true (0.1.0-alpha.1, the release version, docs/runbooks/release.md); the section names no version, so it still holds" }
@@ -1221,7 +1221,7 @@ stamp = { hash = "b3:27f4505ffe21a4f8" }
 stamp = { hash = "b3:7efd4121ffcbcf94", by = "agent:claude", note = "Re-read Design against args.rs/run.rs without privacy commands and the control README's mock change; nothing in it named privacy." }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/run/tests.rs"]
-stamp = { hash = "b3:6d46e3e3fdab6e28", by = "agent:claude-window-picker", note = "rustfmt reflowed the same test assertion; still only the mock's added window line, and the design text still holds." }
+stamp = { hash = "b3:6d46e3e3fdab6e28", by = "agent:claude-window-picker", note = "capture targets still queries capture.targets and prints each target; the PR changed only run/tests.rs's expected lines, adding the mock's window, and the control README's mock list now names MOCK_WINDOW. CLI Design describes neither." }
 
 ["CRATE-jstream-cli#purpose"."body"]
 stamp = { hash = "b3:d796b16e2013c42c", by = "agent:claude", note = "Running bullet now says an edit batch may read state.get first to fit capture items; args.rs gains a usage note, run.rs fit_captures/state, run/tests.rs three fit tests; the rest of the contents list holds." }
@@ -1248,7 +1248,7 @@ stamp = { hash = "b3:27f4505ffe21a4f8" }
 stamp = { hash = "b3:7efd4121ffcbcf94", by = "agent:claude", note = "Re-read Purpose against the removed privacy on/off/get commands, their output arms and privacy_golden; it never named them and still holds." }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/run/tests.rs"]
-stamp = { hash = "b3:6d46e3e3fdab6e28", by = "agent:claude-window-picker", note = "rustfmt reflowed the same test assertion; still only the mock's added window line, and the purpose text still holds." }
+stamp = { hash = "b3:6d46e3e3fdab6e28", by = "agent:claude-window-picker", note = "The window picker PR changed only the capture_targets test's expected output in run/tests.rs: the mock now lists a window after its display. The purpose text names no mock target, and still holds." }
 
 ["CRATE-jstream-cli#usage"."body"]
 stamp = { hash = "b3:f4f2bb9dd4822792", by = "agent:blend-modes", note = "item.set_blend's line now says the engine draws every mode (protocol 0.47); other commands unchanged." }
@@ -4119,7 +4119,7 @@ stamp = { hash = "b3:74de40ac9e96f421", by = "agent:claude", note = "WS liveness
 stamp = { hash = "b3:09e0cbba67fc2339", by = "agent:claude", note = "ADR-0047: Contents adds pair_page.rs and pair.html (GET /pair on a TLS listener), the gate's device-cookie check and renewal in gate.rs, ui.rs's /pair link on the 401, and config's tls flag and pairing switch, beside #265's devices.rs, pair.rs and admitted.rs; matches the modules (lib.rs declares pair_page next to preview). Rechecked after merging wave/m1 (#265's squash, then #316, #252, #291, #298, #223 and others, protocol now 0.23): wave/m1 changed no server file since #265; holds" }
 
 ["CRATE-jstream-sources#purpose"."body"]
-stamp = { hash = "b3:d2dbe6130563c3ae", by = "agent:claude-window-picker", note = "Only the protocol version in the capture_target sentence changed, to 0.50; the rest holds." }
+stamp = { hash = "b3:d2dbe6130563c3ae", by = "agent:claude-window-picker", note = "display and window's target is now ParamType::CaptureTarget of that kind (protocol 0.50; capture.rs, kinds.snap), and the display/window bullet says the type marks it as a capture.targets ID a UI lists to pick from; webcam's device stays a string." }
 
 ["CRATE-jstream-sources#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-sources"]
 stamp = { hash = "b3:0bb97280a0b3ee27", by = "agent:claude", note = "This branch's own change to the section's inputs, re-read entry by entry: ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap, so each ADR-0031 citation moved to ADR-0061 (Purpose's depends_on and its kinds, audio-path and media citations in the README; the doc comments of lib.rs incl. its Docs: line, image/decode.rs, media/mod.rs, registry.rs, scope/mod.rs, source.rs and text/raster.rs; ARCH crate map's jstream-sources row), each still holding there; media/player.rs changed only in a test (a_seek_past_an_unknown_end_plays_on_when_looping waits for two queued frames after the seek), which the section doesn't describe | merge: wave/m1-3 at 211fc58 (#707) brought #701's AudioScopes text (bus()/source() after a retain give an unfed, unlisted scope for keys not kept; the engine retains before building) and its scope/mod.rs change; that bullet matches scope/mod.rs; holds" }
@@ -4143,7 +4143,7 @@ stamp = { hash = "b3:234830343d1d1b94" }
 stamp = { hash = "b3:3a8e290c27be678c", by = "agent:claude", note = "browser bullet documents the local_network setting (advanced, off by default, youtube_chat never sets it); tests paragraph names the opt-in test; rest re-read and unchanged | merge: wave/m1-3's sync didn't touch the browser kind; the local_network setting (advanced, default off, never set by youtube_chat) and the tests/browser.rs list still match browser.rs" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/capture.rs"]
-stamp = { hash = "b3:04f0d33ce67de3c1", by = "agent:claude-window-picker", note = "display and window's target is now ParamType::CaptureTarget of that kind (capture.rs, kinds.snap); the README says the type marks it as a capture.targets ID for UIs to list. webcam's device stays a string." }
+stamp = { hash = "b3:04f0d33ce67de3c1", by = "agent:claude-window-picker", note = "display and window's target is now ParamType::CaptureTarget of that kind (protocol 0.50; capture.rs, kinds.snap), and the display/window bullet says the type marks it as a capture.targets ID a UI lists to pick from; webcam's device stays a string." }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/chat.rs"]
 stamp = { hash = "b3:d9f954241cf465a0", by = "agent:ui-parity", note = "Re-read against #749: Source::set_density (default None, source.rs) and the text kind (text/mod.rs, text/raster.rs) drawing at densities 1 to MAX_DENSITY (8, exported from lib.rs) with the same layout and an extent equal to its density-1 size, taken from the density-1 outlines, halving to fit the limits and keeping the density across updates; chat_message (chat.rs) draws at density 1 through the same renderer; the tests paragraph names the density tests in tests/text.rs and the styled-dense.png golden; depends_on names ADR-0073. The wave/m1-4 merge changed nothing in this crate." }
@@ -4311,10 +4311,10 @@ stamp = { hash = "b3:ee23c35acad1943b", by = "agent:claude-ui-features", note = 
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR. Body: the Crop bullet (crop mode from the tool, C or the menu; V, Move, Escape and a scene switch leave it; Alt crops on the box's handles; amber chrome and the ghost; the readout's crop, cropped and no source size yet, and with no size the box's handles resize as usual, review N1) and Layout::sized. crop.rs (new): Picture::of over ItemGeometry::content with flips and fill clipping, CropGesture in the rotated frame clamped to the extent and MIN_SIZE, settled, clear and readout. mod.rs: Action::Crop, single_handle (crop handles on the picture; without a picture the box's handles resize, with Alt too), on_move, end and cancel, the keys, the drawing and the toolbar. model.rs: CanvasItem.crop and source_size, Layout::sized and item, and the commit's crops after its geometries in one ends_gesture batch. live.rs: Values carries crops, so live.set sends item.set_crop beside item.set_geometry. transform.rs: rotate and from_local are pub(crate) for crop.rs, otherwise unchanged." }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:ae1c19cdf0fd67a4", by = "agent:claude-window-picker", note = "The form paragraph now says the field asks again on focus (list or text), is text until the first list or while the engine can't list targets, and a failed refresh keeps the last list; matches capture_target_input after review N3." }
+stamp = { hash = "b3:ae1c19cdf0fd67a4", by = "agent:claude-window-picker", note = "The properties form paragraph now describes the capture_target field: targets of its kind by name and size after Primary display or None, an unlisted current one as 'Window not open (<ID>)', asked again whenever the field gets focus, text until the first list or while the engine can't list targets, and a failed refresh keeping the last list; matches properties.rs and its unit test. The control dep's mock window is what the e2e test picks." }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:3b3ef26e9423422c", by = "agent:claude-window-picker", note = "The properties form paragraph now describes the capture_target list: targets of its kind by name and size after Primary display or None, an unlisted current one as 'Window not open', re-asked on focus, text until answered or when listing fails; matches properties.rs and its unit test. The mock dep's window is what the e2e test picks." }
+stamp = { hash = "b3:3b3ef26e9423422c", by = "agent:claude-window-picker", note = "The properties form paragraph now describes the capture_target field: targets of its kind by name and size after Primary display or None, an unlisted current one as 'Window not open (<ID>)', asked again whenever the field gets focus, text until the first list or while the engine can't list targets, and a failed refresh keeping the last list; matches properties.rs and its unit test. The control dep's mock window is what the e2e test picks." }
 
 ["CRATE-jstream-ui#design"."dep:docs/adr/0045-leptos-web-ui.md"]
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
@@ -4413,7 +4413,7 @@ stamp = { hash = "b3:4d043e3a6192c96f", by = "agent:ui-parity", note = "Whole PR
 stamp = { hash = "b3:62d7cf4981e80001", by = "agent:claude", note = "Re-read after the merge of #899 (scenes carry labels, ADR-0078, protocol 0.45), which doesn't touch the privacy removal, and after moving its ADR-0027 citations to ADR-0080 (same decision numbers, ADR-0027 now superseded); the section holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/properties.rs"]
-stamp = { hash = "b3:ed0c43359af13ff3", by = "agent:claude-window-picker", note = "The form paragraph now says the field asks again on focus (list or text), is text until the first list or while the engine can't list targets, and a failed refresh keeps the last list; matches capture_target_input after review N3." }
+stamp = { hash = "b3:ed0c43359af13ff3", by = "agent:claude-window-picker", note = "The properties form paragraph now describes the capture_target field: targets of its kind by name and size after Primary display or None, an unlisted current one as 'Window not open (<ID>)', asked again whenever the field gets focus, text until the first list or while the engine can't list targets, and a failed refresh keeping the last list; matches properties.rs and its unit test. The control dep's mock window is what the e2e test picks." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/scene_properties.rs"]
 stamp = { hash = "b3:ff8f62abec05429b", by = "agent:claude", note = "Re-read Design: the events bullet says JStream has no privacy screen (ADR-0080 §4) and the UI sends no privacy call; PrivacyReports, the Pause exceptions in the scene dialogs and the privacy CSS are gone, matching the sources and style.css. | kept from the merged side: FL-06: added the scene chain to the Filters bullet (selected scene with no item, keyframe → parent, show_filters, scene inputs that don't hold the scene), the scene row's Edit filters…, and the scene Properties dialog's filter column; rest matches the diff" }
@@ -4551,7 +4551,7 @@ stamp = { hash = "b3:4d043e3a6192c96f", by = "agent:ui-parity", note = "Whole PR
 stamp = { hash = "b3:62d7cf4981e80001", by = "agent:claude", note = "Re-read after the merge of #899 (scenes carry labels, ADR-0078, protocol 0.45), which doesn't touch the privacy removal, and after moving its ADR-0027 citations to ADR-0080 (same decision numbers, ADR-0027 now superseded); the section holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/properties.rs"]
-stamp = { hash = "b3:ed0c43359af13ff3", by = "agent:claude-window-picker", note = "properties.rs's capture-target field now also refreshes on focus as text and keeps the last list after a failed refresh (review N3); the purpose's naming of properties.rs as the form still holds." }
+stamp = { hash = "b3:ed0c43359af13ff3", by = "agent:claude-window-picker", note = "properties.rs adds the capture_target field (target_choices and capture_target_input): a select of capture.targets' targets of its kind, refreshed on focus, falling back to text, keeping the last list after a failed refresh; the purpose's naming of properties.rs as the properties form still holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/scene_properties.rs"]
 stamp = { hash = "b3:ff8f62abec05429b", by = "agent:claude", note = "Re-read Purpose: the header no longer lists the Privacy button or Pause, the Studio state has no privacy field, and the mixer marks no microphone, matching header.rs, store.rs, mixer.rs, canvas/mod.rs; scenes.rs and scene_properties.rs no longer special-case Pause. | kept from the merged side: FL-06: the crate's purpose is unchanged; scene filter chains reuse the Filters panel, menus and dialogs it lists" }
@@ -5619,13 +5619,13 @@ stamp = { hash = "b3:839c134d444e8af2", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:62d7cf4981e80001", by = "agent:claude", note = "The retargeting commit only moves ADR-0027 citations to ADR-0080 (same decision numbers §1-§3, since ADR-0080 restates them unchanged), now that ADR-0080 is accepted and ADR-0027 superseded; re-read, the text still holds." }
 
 ["UI-FEATURES#inspector"."body"]
-stamp = { hash = "b3:6efdb2aa6a8954e7", by = "agent:claude-window-picker", note = "The intro now says a display or window capture's target is picked from the list capture.targets reports, not typed; no row's status changed." }
+stamp = { hash = "b3:6efdb2aa6a8954e7", by = "agent:claude-window-picker", note = "The intro now says a display or window capture's target is picked from the list capture.targets reports, not typed, which properties.rs's capture_target field does (select by name and size, refreshed on focus, text fallback); no row's status changed." }
 
 ["UI-FEATURES#inspector"."file:crates/jstream-ui/src/panels/inspector.rs"]
 stamp = { hash = "b3:a982333443083977", by = "agent:blend-modes", note = "IN-07: the select's nine modes are all enabled, each sent as item.set_blend and drawn by the engine (0.47, ADR-0082). | merge: #923 changed only the scene header's TagButton name to a signal; IN-07 and the tag rows still hold | kept from the merged side: TagButton's name is a Signal<String> (into), and the Inspector's scene header passes Signal::derive(name), so its aria-label follows a rename; behaviour the docs describe (chips, tag button, popover) is unchanged; IN-01's header description holds" }
 
 ["UI-FEATURES#inspector"."file:crates/jstream-ui/src/panels/properties.rs"]
-stamp = { hash = "b3:ed0c43359af13ff3", by = "agent:claude-window-picker", note = "properties.rs changed only the capture-target field's refresh and failure handling (review N3); the Inspector intro's 'picked from a list of what capture.targets reports' still holds." }
+stamp = { hash = "b3:ed0c43359af13ff3", by = "agent:claude-window-picker", note = "The intro now says a display or window capture's target is picked from the list capture.targets reports, not typed, which properties.rs's capture_target field does (select by name and size, refreshed on focus, text fallback); no row's status changed." }
 
 ["UI-FEATURES#keyboard"."body"]
 stamp = { hash = "b3:55a3f15ec884cce5", by = "agent:ui-parity", note = "KB-05 ⬜→✅: the page's own clipboard (clipboard.rs) with Ctrl+C on the canvas, object rows and scene rows and Ctrl+V pasting references with placement settings and effects or duplicating a scene, nothing in a keyframe; the intro's 'the real UI makes them work' now covers Ctrl+V; KB-01's C (no Ctrl) is unchanged." }
