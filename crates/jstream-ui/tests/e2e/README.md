@@ -200,8 +200,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   in and out show, and a second selected item shows "+1". The mock engine doesn't
   implement `scene.set_transitions`, so choosing one isn't run.
 - **Filters** (`filters.spec.js`): with no item selected the panel shows the scene's
-  chain; with the Backdrop selected, its title, note, one video chain with its
-  count and the two rows, Blur struck through; the eye turning Blur on as one edit, a
+  chain; with the Backdrop selected, its title, note, one video chain of its source
+  (above the item's effects) with its count and the two rows, Blur struck through; the eye turning Blur on as one edit, a
   drag putting it above Sharpen as one more, and × removing Sharpen; Edit filters… in
   an item's menu selecting the item and showing the panel behind the Transform tab; the
   Add filter dialog from the panel and over the Properties dialog, which Escape leaves
@@ -224,6 +224,12 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   the item stays selected, selecting a scene going back to its chain, and the canvas
   margin's Edit scene filters… showing the shown scene's in place of the selected item's; and the scene Properties
   dialog listing the scene's chain, adding to it at once, which Cancel keeps.
+- **Item effects** (`effects.spec.js`): no effects section with no item selected; with
+  the Backdrop selected, "This item’s effects" with its note and an empty Effects chain
+  under the source's; with Vignette and Gain described, "+ Add effect…" offering only
+  Vignette, under Video · Style with its hint, for this item, with the item's foot, and
+  Add as one edit on the item while the source keeps its own two; the row's eye and ×
+  as one edit each; and selecting the scene again leaving the effects section out.
 - **Program and output chains** (`output-chains.spec.js`): the Outputs panel's Program
   output row ("master", "FX 0"), a recording's row under it with its state and FX
   button, and the footnote; the program's FX showing the master chain in the Filters

@@ -4368,7 +4368,7 @@ stamp = { hash = "b3:8207aab1afa325b5", by = "agent:claude", note = "The preview
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR. Body: the Crop bullet (crop mode from the tool, C or the menu; V, Move, Escape and a scene switch leave it; Alt crops on the box's handles; amber chrome and the ghost; the readout's crop, cropped and no source size yet, and with no size the box's handles resize as usual, review N1) and Layout::sized. crop.rs (new): Picture::of over ItemGeometry::content with flips and fill clipping, CropGesture in the rotated frame clamped to the extent and MIN_SIZE, settled, clear and readout. mod.rs: Action::Crop, single_handle (crop handles on the picture; without a picture the box's handles resize, with Alt too), on_move, end and cancel, the keys, the drawing and the toolbar. model.rs: CanvasItem.crop and source_size, Layout::sized and item, and the commit's crops after its geometries in one ends_gesture batch. live.rs: Values carries crops, so live.set sends item.set_crop beside item.set_geometry. transform.rs: rotate and from_local are pub(crate) for crop.rs, otherwise unchanged." }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:b348012b3f1dd1e7", by = "agent:ui-parity", note = "The projectors paragraph now says any single object's Pop out opens its source alone with its own filters, the query takes source:<id>, and a picture subscribes with source_id (0.56), as projector.rs's Target::Source, Request, subscribe and Picture do; item_menu.rs's pop_out match is what calls it." }
+stamp = { hash = "b3:44030a6a26d56ee4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#862, whole PR: the Filters bullet now says the panel shows the selected item's own effects (owner item, ADR-0065) under its source's chains, for an item with a picture, with the same rows and dialogs, read by Collection::chains from ItemInfo.effects, their scene picker leaving out scenes holding the item's scene, and the vignette under Style; checked against filters.rs and store.rs." }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:9545fad569fc5ad9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "846a (#846 part a), whole PR, rebased onto main at 0.54: control's mock applies the tree rule and drop pass; the UI README's keyframe banner text still holds (the UI for group-child keyframes follows, #846). Main's #941 keyframe live values (0.53) and #944 stats.tick chains (0.54) are kept beside it." }
@@ -4458,7 +4458,7 @@ stamp = { hash = "b3:44587926fc590102", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:658cfbcedd739684", by = "agent:ui-parity", note = "The projectors paragraph now says any single object's Pop out opens its source alone with its own filters, the query takes source:<id>, and a picture subscribes with source_id (0.56), as projector.rs's Target::Source, Request, subscribe and Picture do; item_menu.rs's pop_out match is what calls it." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/filters.rs"]
-stamp = { hash = "b3:94fb4a41811b693f", by = "agent:claude-clap-chains", note = "Re-read the Filters panel bullet against filter_type's new clap/ arm and the clap_plugins_are_offered_under_plugins test: added that the catalogue puts a CLAP kind under Plugins." }
+stamp = { hash = "b3:fa40b8cc2089d10e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#862, whole PR: the effects Memo in Filters shows Item owner Chains only when the shown owner is the item's source (no FX or scene pick) and owner_chains gives the item a picture; owner_scene_choices for an item uses holds_scene on its home scene; the Design text added for this matches." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/inspector.rs"]
 stamp = { hash = "b3:a982333443083977", by = "agent:blend-modes", note = "Inspector Blending lists the nine modes, each sent as item.set_blend and drawn by the engine since 0.47; inspector.rs no longer disables the non-normal options. | merge: #923 made the scene header's TagButton take a derived name signal; the Inspector Blending text is unaffected and still holds | kept from the merged side: TagButton's name is a Signal<String> (into), and the Inspector's scene header passes Signal::derive(name), so its aria-label follows a rename; behaviour the docs describe (chips, tag button, popover) is unchanged; the Inspector header text still holds" }
@@ -4509,7 +4509,7 @@ stamp = { hash = "b3:1091316418ee6580", by = "agent:ui-parity", note = "The proj
 stamp = { hash = "b3:076299ee126c849d" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/store.rs"]
-stamp = { hash = "b3:c09bd1eaa6bef5cf", by = "agent:claude", note = "Re-read Design: the events bullet says JStream has no privacy screen (ADR-0080 §4) and the UI sends no privacy call; PrivacyReports, the Pause exceptions in the scene dialogs and the privacy CSS are gone, matching the sources and style.css. Then: Re-read after the merge of #899 (scenes carry labels, ADR-0078, protocol 0.45), which doesn't touch the privacy removal, and after moving its ADR-0027 citations to ADR-0080 (same decision numbers, ADR-0027 now superseded); the section holds." }
+stamp = { hash = "b3:26dec02d0ce051b4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#862, whole PR: Collection::chains returns Option<Cow<FilterChains>>, borrowed for source, master, output and scene and an owned copy with the item's effects as video for an item; the Store bullet's 'chains to read any owner's' still holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/ui_settings.rs"]
 stamp = { hash = "b3:21cfe4851f757fa5", by = "agent:ui-layouts", note = "This branch: the docking bullet says the dock is kept under workspace.dock, with the jstream.dock.shared marker deciding the first step, and ui_settings.rs gained the N4 assertion that an unsent change wins over another device's dock. The merge: main added the AgentActivity panel and the header fps row; the bullet still holds." }
@@ -4518,10 +4518,10 @@ stamp = { hash = "b3:21cfe4851f757fa5", by = "agent:ui-layouts", note = "This br
 stamp = { hash = "b3:d16357f1626740e8", by = "agent:ui-layouts", note = "This branch: the docking bullet says the dock is kept under workspace.dock, with the jstream.dock.shared marker deciding the first step, and ui_settings.rs gained the N4 assertion that an unsent change wins over another device's dock. The merge: main added the AgentActivity panel and the header fps row; the bullet still holds. | kept from the merged side: Re-read Design against the PR's whole change: the docking bullet says Agent activity (panels/agent.rs) reads activity.list, leaves out JStream's own UIs, asks again after state.changed, studio.changed, output.state_changed, live.ended and events.dropped and every 5 seconds, and sits beside Outputs in the Live layout; only Live chat and Stream stats still wait. style.css adds the activity-log rules." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:1e9c018356bb1a40", by = "agent:claude", note = "Re-read Design against the PR's whole change: the docking bullet says Agent activity (panels/agent.rs) reads activity.list, leaves out JStream's own UIs, asks again after state.changed, studio.changed, output.state_changed, live.ended and events.dropped and every 5 seconds, and sits beside Outputs in the Live layout; only Live chat and Stream stats still wait. style.css adds the activity-log rules. | merge: Merged main's #930 (stats.tick load, 0.48), #933 (preview.subscribe of a draft source, 0.49) and #932 (the capture_target parameter type, 0.50): Design gains the header's load readout (#930), the draft-source preview (#933) and the capture-target picker (#932); this PR's Agent activity bullet (five events, 5 s poll, Live beside Outputs) and its style.css rules are unchanged. | kept from the merged side: Properties dialog gains the live-picture paragraph (draft-source stream, 0.49, on a tap channel from 2^31, follows the capture's settings, reopens on change without sending a subscribe whose channel was closed meanwhile, closes with the dialog, window hint); style.css adds the props-preview classes; app.rs, taps.rs and canvas/mod.rs as in #canvas." }
+stamp = { hash = "b3:3e9152d847384a1c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#862, whole PR: style.css adds .filters-effects (a bordered block under the chains), .filters-subtitle and gives .filters-effects-note the note style, all on existing tokens; nothing in Design describes these rules beyond the Filters behaviour, which holds." }
 
 ["CRATE-jstream-ui#purpose"."body"]
-stamp = { hash = "b3:6938a181c1c9d081", by = "agent:ui-parity", note = "Projectors bullet now names one source alone and pop_out_source (an object's Pop out) beside pop_out, as projector.rs and item_menu.rs have them; canvas/preview.rs and device_preview.rs only add source_id: None." }
+stamp = { hash = "b3:0a36324c88c33db6", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#862, whole PR: the Contents entry for filters.rs now says the natively tested owner helpers cover an item's effects too; the rest of Purpose (layer 3, the files listed) is unchanged by this PR and still holds." }
 
 ["CRATE-jstream-ui#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-ui"]
 stamp = { hash = "b3:8b72f650cbef12f9" }
@@ -4608,7 +4608,7 @@ stamp = { hash = "b3:44587926fc590102", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:658cfbcedd739684", by = "agent:ui-parity", note = "Projectors bullet now names one source alone and pop_out_source (an object's Pop out) beside pop_out, as projector.rs and item_menu.rs have them; canvas/preview.rs and device_preview.rs only add source_id: None." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/filters.rs"]
-stamp = { hash = "b3:94fb4a41811b693f", by = "agent:claude-clap-chains", note = "Re-read the Filters panel entry against filter_type's new clap/ arm and the clap_plugins_are_offered_under_plugins test: added that the catalogue puts a scanned CLAP plugin's clap/ kind under Plugins." }
+stamp = { hash = "b3:fa40b8cc2089d10e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#862, whole PR: filters.rs gains the item owner in owner_chains/name/note/foot/scene choices, the Effects section of Filters, chain_head/count_text/add_sub and the vignette in KNOWN; the Contents line naming Filters, Chains, AddFilter, FilterSettings and FilterDialogs still lists every public piece." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/inspector.rs"]
 stamp = { hash = "b3:a982333443083977", by = "agent:blend-modes", note = "inspector.rs only enabled the non-normal blend options; the purpose's Inspector summary (blending) still holds. | merge: #923 changed only the scene header's TagButton name to a signal; the Inspector summary still holds | kept from the merged side: TagButton's name is a Signal<String> (into), and the Inspector's scene header passes Signal::derive(name), so its aria-label follows a rename; behaviour the docs describe (chips, tag button, popover) is unchanged" }
@@ -4659,7 +4659,7 @@ stamp = { hash = "b3:1091316418ee6580", by = "agent:ui-parity", note = "Projecto
 stamp = { hash = "b3:076299ee126c849d" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/store.rs"]
-stamp = { hash = "b3:c09bd1eaa6bef5cf", by = "agent:claude", note = "Re-read after removing the privacy screen from the UI: the header list drops the Privacy button and Pause key, the Studio list drops the privacy state, the mixer drops the privacy mark, and the Inspector and scene Properties hotkey notes drop Pause. Then: Re-read after the merge of #899 (scenes carry labels, ADR-0078, protocol 0.45), which doesn't touch the privacy removal, and after moving its ADR-0027 citations to ADR-0080 (same decision numbers, ADR-0027 now superseded); the section holds." }
+stamp = { hash = "b3:26dec02d0ce051b4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#862, whole PR: store.rs's Collection::chains now returns a Cow and reads an item's effects as its video chain; Purpose names store.rs as Studio and the collection, which still holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/ui_settings.rs"]
 stamp = { hash = "b3:21cfe4851f757fa5", by = "agent:ui-layouts", note = "This branch: lib.rs adds the ui_settings module (get, set, first_step), and its tests gained the N4 assertion. The merge: main added the activity panel module beside it; the contents list holds." }
@@ -4706,8 +4706,11 @@ stamp = { hash = "b3:8eaa166c878b6436", by = "agent:claude-crop-ui", note = "Re-
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/docking.spec.js"]
 stamp = { hash = "b3:7066553d0af1519d", by = "agent:claude", note = "Re-read Harness: docking.spec.js only changed its Live-layout assertion; the mock daemon and fixtures are unchanged." }
 
+["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/effects.spec.js"]
+stamp = { hash = "b3:88e3fcc0abf0cfa7", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#862: the new effects.spec.js uses connect, describeKinds and rev from fixtures.js as the Harness describes them, and the seeded Backdrop in Main; no harness change is needed." }
+
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/filters.spec.js"]
-stamp = { hash = "b3:28d25b0a81bdd430", by = "agent:scene-filters", note = "FL-06: new scene-filters.spec.js and filters.spec.js's first test use the same seed and fixtures (describeKinds); the harness is unchanged" }
+stamp = { hash = "b3:99f146b5e0c1176c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#862: filters.spec.js only scopes its chain count to the source's chains (.filters-panel > .filter-chains), since the item's effects chain now shows too; the harness and its seed are unchanged and still hold." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/folders.spec.js"]
 stamp = { hash = "b3:26eb0f3f9d550cfc", by = "agent:ui-parity", note = "folders.spec.js (this PR): New folder from the panel and a folder menu named in place, drags into, out of and beside folders that a second client follows, folding at two depths, a search keeping open unfoldable folders, a folder refused inside its own child, F2 rename and Del on an empty folder; the first tree check after naming now polls (it read the list before the rename landed and failed 1 in 5 locally). The harness text (one daemon per test, connect, the mock) holds." }
@@ -4776,7 +4779,7 @@ stamp = { hash = "b3:e7d2b3325e5ac572", by = "agent:a2656", note = "Dependabot #
 stamp = { hash = "b3:063a37f95f399bff" }
 
 ["CRATE-jstream-ui-e2e#tests"."body"]
-stamp = { hash = "b3:7fc5b473f20bac22", by = "agent:ui-parity", note = "The Projectors entry now covers Backdrop's object row Pop out: Source in a window or full screen, opening a ?projector=source: page titled Source: Backdrop, as the new test asserts." }
+stamp = { hash = "b3:ff6a88a10b2c77c1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#862, whole PR: added the Item effects bullet for effects.spec.js and noted in Filters that the counted video chain is the source's, above the item's effects; checked both against the specs." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/canvas.spec.js"]
 stamp = { hash = "b3:0b33fafc1e51563f", by = "agent:claude", note = "canvas.spec.js's drag and nudge specs now poll the revision until it reaches startRev + 1 and startRev + 3 rather than reading it once (#848). The assertions are as strict as before, so the Canvas bullet (one edit ending the gesture, Ctrl+Z and Ctrl+Shift+Z reverse it, nudges and Ctrl+Z) still holds." }
@@ -4796,8 +4799,11 @@ stamp = { hash = "b3:8eaa166c878b6436", by = "agent:claude-crop-ui", note = "Re-
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/docking.spec.js"]
 stamp = { hash = "b3:7066553d0af1519d", by = "agent:claude", note = "Re-read Tests: the docking line 'the Layout menu switches to Live' still describes the test, which now expects Outputs and Agent activity on the right." }
 
+["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/effects.spec.js"]
+stamp = { hash = "b3:88e3fcc0abf0cfa7", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#862: effects.spec.js checks no effects section without an item, the Backdrop's empty Effects chain and note, Add effect offering only Vignette under Video · Style with its hint, the item sub and foot, Add as one edit while the source keeps Sharpen and Blur, eye and × as one edit each, and the scene leaving it out; the new bullet says this." }
+
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/filters.spec.js"]
-stamp = { hash = "b3:28d25b0a81bdd430", by = "agent:scene-filters", note = "FL-06: added the Scene filters bullet for scene-filters.spec.js and reworded filters.spec.js's opening (no item selected shows the scene's chain)" }
+stamp = { hash = "b3:99f146b5e0c1176c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#862: filters.spec.js now counts the source's chains only (sourceChains), the assertions unchanged otherwise; the Filters bullet says the counted chain is the source's above the item's effects." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/folders.spec.js"]
 stamp = { hash = "b3:26eb0f3f9d550cfc", by = "agent:ui-parity", note = "folders.spec.js (this PR): New folder from the panel and a folder menu named in place, drags into, out of and beside folders that a second client follows, folding at two depths, a search keeping open unfoldable folders, a folder refused inside its own child, F2 rename and Del on an empty folder; the first tree check after naming now polls (it read the list before the rename landed and failed 1 in 5 locally). The Scene folders entry in the test list matches." }
@@ -5220,7 +5226,7 @@ stamp = { hash = "b3:747acc8bf268e7d7", by = "agent:wave-owner", note = "merge: 
 stamp = { hash = "b3:398144f56857a7fb", by = "agent:ui-layouts", note = "Deps changed only in the layout rows and the desktop's layout file; going live is unchanged." }
 
 ["GETTING-STARTED#live"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:738b1051bbc6d550", by = "agent:ui-parity", note = "Re-read: the Pop out and menu changes in UI-FEATURES don't touch going live." }
+stamp = { hash = "b3:4fe3fa2c2ea32392", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#862: UI-FEATURES's change is item effects in the Filters panel (FL-09); the Outputs, stream key and Go Live steps here are untouched by it and still hold." }
 
 ["GETTING-STARTED#record"."body"]
 stamp = { hash = "b3:b21c49ef28545229", by = "agent:wave-owner", note = "merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: Recording (MP4) output with a file path, the header's Record/Stop recording (HD-07)" }
@@ -5229,7 +5235,7 @@ stamp = { hash = "b3:b21c49ef28545229", by = "agent:wave-owner", note = "merge: 
 stamp = { hash = "b3:398144f56857a7fb", by = "agent:ui-layouts", note = "Deps changed only in the layout rows and the desktop's layout file; recording is unchanged." }
 
 ["GETTING-STARTED#record"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:738b1051bbc6d550", by = "agent:ui-parity", note = "Re-read: the Pop out and menu changes in UI-FEATURES don't touch recording." }
+stamp = { hash = "b3:4fe3fa2c2ea32392", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#862: UI-FEATURES's change is item effects in the Filters panel (FL-09); adding a Recording output and Record/Stop recording are untouched and still hold." }
 
 ["GETTING-STARTED#requirements"."body"]
 stamp = { hash = "b3:33e39447d2457615", by = "agent:wave-owner", note = "merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: Windows 11 x64 build 22000 per README Platforms (fact min-windows-build), D3D12, Media Feature Pack on N editions (the desktop app's can't-start window), WebView2, no installer or admin per ADR-0066" }
@@ -5247,7 +5253,7 @@ stamp = { hash = "b3:67130f6f84b33399", by = "agent:wave-owner", note = "merge: 
 stamp = { hash = "b3:b6017b4690050254", by = "agent:ui-parity", note = "The projectors paragraph now says an object's Pop out shows its source on another screen, as CM-02, CM-04 and DL-07 now describe." }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:738b1051bbc6d550", by = "agent:ui-parity", note = "The projectors paragraph now says an object's Pop out shows its source on another screen, as CM-02, CM-04 and DL-07 now describe." }
+stamp = { hash = "b3:4fe3fa2c2ea32392", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#862: UI-FEATURES gains FL-09 (item effects) and notes pointing to it; this walkthrough of scenes, sources, canvas, mixer, studio mode, copy and pop out names nothing it changed, so it still holds." }
 
 ["GETTING-STARTED#trouble"."body"]
 stamp = { hash = "b3:cdea88ae9fde1c6f", by = "agent:wave-owner", note = '''merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: logs\jstream-desktop.log and cef.log, crash-*.txt with secrets redacted and never uploaded (R-SEC-004, desktop Usage), issue and private-advisory links (registered in external.toml), SECURITY.md''' }
@@ -5616,7 +5622,7 @@ stamp = { hash = "b3:a6c7eb53df7a75c8", by = "agent:claude", note = "#540's Cont
 stamp = { hash = "b3:74bf6ef3c1268700", by = "agent:claude", note = "merge: wave/m1-3 added the #242 Accepted paragraph (ADR-0066's Program Files copy, #561) and the gaps line naming #561; this branch's trust.rs, session.rs and frames.rs changes (#204: only the console session's block when several sessions are active) narrow which session block the DLL uses, and the controls on main, the owner check and the accepted risks still hold" }
 
 ["UI-FEATURES#beyond"."body"]
-stamp = { hash = "b3:95f8beda6a3ddb27", by = "agent:claude", note = "Adds the Properties dialog's live device picture, as in OBS (DL-02)." }
+stamp = { hash = "b3:15ab5ebf3b631342", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#862: added the Item effects bullet (one placement's own filters, after its crop, FL-09), which the prototype doesn't show; the other items are unchanged." }
 
 ["UI-FEATURES#beyond"."file:crates/jstream-ui/src/host.rs"]
 stamp = { hash = "b3:e374bf2e8d45cd98", by = "agent:vcam-optin-561", note = "re-read: host.rs vcam value renamed moved to outdated; 'virtual camera registration hints' still holds" }
@@ -5661,10 +5667,10 @@ stamp = { hash = "b3:8207aab1afa325b5", by = "agent:claude", note = "CV-03 holds
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR. Body: CV-04, CV-08 and CV-11 are done, and their notes match the code; CV-08 now says the box's handles resize as usual with no size (review N1). crop.rs gives the picture, the crop gesture, Clear crop's uncropped extent and the readout; mod.rs the crop mode, Alt crop, the amber chrome and ghost, the Crop tool and the pill texts; model.rs commits box and crop as one batch; live.rs streams item.set_crop live; store.rs supplies sizes from source.sizes and source.size_changed, with the canvas size for a nested scene, and leaves crop mode on a scene switch; transform.rs only makes rotate and from_local pub(crate)." }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/store.rs"]
-stamp = { hash = "b3:c09bd1eaa6bef5cf", by = "agent:claude", note = "Re-read: CV-17 is ⏸ with the blur and notice removed from canvas/mod.rs and store.rs; other rows unchanged. Then: The retargeting commit only moves ADR-0027 citations to ADR-0080 (same decision numbers §1-§3, since ADR-0080 restates them unchanged), now that ADR-0080 is accepted and ADR-0027 superseded; re-read, the text still holds." }
+stamp = { hash = "b3:26dec02d0ce051b4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#862: store.rs's only change is Collection::chains returning a Cow and reading an item's effects; the canvas reads no chains, so the canvas rows hold." }
 
 ["UI-FEATURES#dialogs"."body"]
-stamp = { hash = "b3:6f7f433bc26cdeb0", by = "agent:ui-parity", note = "DL-07 now says an object's Pop out opens its source alone through source_id (0.56), fitted as a covering item with its own filters, ending when the source is deleted; only the monitor list is left, so it stays 🟡." }
+stamp = { hash = "b3:f5c6ad4bc43e428c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#862: DL-05's owner list now includes an item's effects (FL-09), matching AddBody's item sub and foot in filters.rs; the other dialog rows are unchanged and hold." }
 
 ["UI-FEATURES#dialogs"."file:crates/jstream-ui/src/dialog.rs"]
 stamp = { hash = "b3:85f3ad4ab8f63257", by = "agent:ui-parity", note = "Re-read DL-01, DL-02 and DL-06 against dialog.rs (Enter blurs the field first), source_properties.rs (the dialog waits for a new source, OK sends only changes since opening) and add_source.rs (opens Properties after the batch is accepted); the notes now say so and DL-02 is built." }
@@ -5694,10 +5700,10 @@ stamp = { hash = "b3:9d070094949143f1", by = "agent:ui-layouts", note = "DK-10 i
 stamp = { hash = "b3:d16357f1626740e8", by = "agent:ui-layouts", note = "DK-10 is done: the engine's server keeps the dock and saved layouts (ui_settings, ADR-0084) in the data folder shared by desktop and daemon; the browser copy is shown first, and a change the server never got is sent on the next load rather than lost (review B2). | merge: Main left the docking rows alone apart from the panel list (activity panel); DK-10 is done with the server-kept dock (ADR-0084). | kept from the merged side: Re-read Docking against the PR's whole change: workspace.rs mounts AgentActivity for PanelId::Agent and dock.rs's Live layout puts Agent activity as a second tab beside Outputs; the intro no longer lists it among the panels that say what they wait on, and DK-08's note says Live shows it beside Outputs while Live chat and Stream stats stay out (still partial)." }
 
 ["UI-FEATURES#filters"."body"]
-stamp = { hash = "b3:508df9feee649004", by = "agent:claude-clap-chains", note = "Re-read FL-01 to FL-08 against filters.rs and the engine change: FL-08 is now built (each scanned plugin by name under Plugins, on source, program output and output chains, Windows live-audio run #912); FL-05 and FL-07 still hold." }
+stamp = { hash = "b3:6ecdab37a3b1eb9d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#862, whole PR: added FL-09 Item effects (built: the panel's This item's effects section, Effects chain, Add effect with item sub and foot, Effect on dialog title, keyframe and scene-picker behaviour, not in the Properties dialog), FL-01's note points to it, the intro names scene and item owners; FL-06's row already said built (#897) and still holds." }
 
 ["UI-FEATURES#filters"."file:crates/jstream-ui/src/panels/filters.rs"]
-stamp = { hash = "b3:94fb4a41811b693f", by = "agent:claude-clap-chains", note = "Re-read FL-01 to FL-08 against filters.rs and the engine change: FL-08 is now built (each scanned plugin by name under Plugins, on source, program output and output chains, Windows live-audio run #912); FL-05 and FL-07 still hold." }
+stamp = { hash = "b3:fa40b8cc2089d10e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#862, whole PR: filters.rs's item owner, effects section, chain_head/count_text/add_sub and the vignette in KNOWN under Style match FL-09 and DL-05 as written; FL-02 to FL-08 behaviour is unchanged." }
 
 ["UI-FEATURES#header"."body"]
 stamp = { hash = "b3:96535ef75d0b76a1", by = "agent:claude", note = "Re-read Header against the PR's whole change: HD-02 now says only Live chat and Stream stats wait (on YouTube sign-in), since Agent activity is built by this PR; the View menu itself is unchanged. | merge: Main's #930 made HD-04 (fps and CPU from stats.tick's load) done; re-read the merged section: HD-02's wording from this PR (only Live chat and Stream stats wait, on YouTube sign-in) still holds beside it. | kept from the merged side: HD-04 is now ✅: fps from the program's frames while an output runs, dropped since the page connected, CPU share of all logical CPUs with <1%, idle ticks from the daemon and desktop, CPU on Windows and macOS only; matches header.rs and the engine." }
@@ -5760,7 +5766,7 @@ stamp = { hash = "b3:d4a4f97d574a3b45", by = "agent:ui-parity", note = "sources.
 stamp = { hash = "b3:f53c79f86352ea0c", by = "agent:claude-labels", note = "Re-read: sources.rs swaps LabelPicker for TagButton plus a LabelPopover under the row, labels.rs adds the Tagged target and the per-panel manager, tree.rs takes the panel for Edit labels…; the OB rows don't describe labels and still hold." }
 
 ["UI-FEATURES#objects"."file:crates/jstream-ui/src/store.rs"]
-stamp = { hash = "b3:c09bd1eaa6bef5cf", by = "agent:claude", note = "Re-read: store.rs only lost the privacy state; the objects rows don't use it. Then: The retargeting commit only moves ADR-0027 citations to ADR-0080 (same decision numbers §1-§3, since ADR-0080 restates them unchanged), now that ADR-0080 is accepted and ADR-0027 superseded; re-read, the text still holds." }
+stamp = { hash = "b3:26dec02d0ce051b4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#862: store.rs's only change is Collection::chains returning a Cow and covering the item owner; Scene objects' OB-05 reads item.effects directly in sources.rs, unchanged, so the rows hold." }
 
 ["UI-FEATURES#outputs"."body"]
 stamp = { hash = "b3:75708dab90b4144f", by = "agent:program-output-chains", note = "OU-01, OU-02, OU-03 now built in outputs.rs: Program output row with master and blue FX N, output rows with state and FX N (blue when filtered), the footnote; OU-04 unchanged. | merge: The merge brought #871's OU-01 and OU-03 re-audit (🔒 to ⬜, the master filter owner in the protocol); resolved to this PR's rows, which build them: OU-01..03 ✅ with the Program output row, the output rows' FX N and the footnote in outputs.rs. OU-04 stays 🔒; holds. | kept from the merged side: Against wave/m1-5 at a0681ed: OU-01 and OU-03 move 🔒 to ⬜ on the master filter owner (D8p); Outputs 4 = 0/1/2/1/0." }
@@ -5778,19 +5784,19 @@ stamp = { hash = "b3:9495b7fc055a3f52", by = "agent:ui-parity", note = "scenes.r
 stamp = { hash = "b3:f53c79f86352ea0c", by = "agent:claude-labels", note = "Edited SC-08 and SC-09: scene rows carry chips and the hover tag button (scene.set_meta), the popover opens under the row with label-coloured boxes, the manager opens in the panel Edit labels… was chosen in, and both panels' filters have Labels · any of (ADR-0078). scenes.rs and tree.rs match." }
 
 ["UI-FEATURES#summary"."body"]
-stamp = { hash = "b3:5a2db9638e97a886", by = "agent:ui-parity", note = "Recounted: menus 8 = 8/0/0/0/0 with CM-02 and CM-04 ✅; dialogs unchanged in count (DL-07 stays 🟡 for the monitor list); totals 130 = 116/4/0/6/4." }
+stamp = { hash = "b3:d13de1d2a6fbfc2a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#862, whole PR: Filters is now 9 rows, 8 built and 1 partial with FL-09 added as built; the total is 131 rows, 115 built; recounted from the Filters table." }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#canvas"]
 stamp = { hash = "b3:f5aadff8b899ff8e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#941 (#846 part b), whole PR: only CV-16's note text changed (engine takes keyframe live values from 0.53); its status stays ✅, so the Canvas counts hold." }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#dialogs"]
-stamp = { hash = "b3:6f7f433bc26cdeb0", by = "agent:ui-parity", note = "Recounted: menus 8 = 8/0/0/0/0 with CM-02 and CM-04 ✅; dialogs unchanged in count (DL-07 stays 🟡 for the monitor list); totals 130 = 116/4/0/6/4." }
+stamp = { hash = "b3:f5c6ad4bc43e428c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#862: Dialogs only gains a mention of item effects (FL-09) in DL-05's owners; no row's status changed, so its 8 rows, 5 built, 2 partial, 1 needs-engine count holds." }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#docking"]
 stamp = { hash = "b3:3453ca690916b76a", by = "agent:ui-layouts", note = "Docking now 9 done and 1 partial (DK-10 moved to done), total 112 done and 7 partial. | merge: Main moved header and activity rows; merged totals are Header 9/7, Docking 10/9/1, Total 130/114/6/0/6/4, matching the table. | kept from the merged side: Re-read Summary against the PR's whole change: AG-01 is built, so the live panels row reads 1 done and 3 blocked and the totals 112 done and 6 blocked of 130; the header (HD-02) and docking (intro, DK-08) changes are wording, and DK-08 stays partial." }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#filters"]
-stamp = { hash = "b3:508df9feee649004", by = "agent:claude-clap-chains", note = "Recounted Filters after FL-08 moved from locked to built: 8 rows, 7 built, 1 partial, 0 locked; totals 130 rows, 105 built, 11 partial, 1 to build, 9 need the engine, 4 decision." }
+stamp = { hash = "b3:6ecdab37a3b1eb9d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#862: Filters gains FL-09 (built) and FL-01's note mentions it; the row counts in the Summary were updated to 9 rows, 8 built, 1 partial (FL-07)." }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#header"]
 stamp = { hash = "b3:96535ef75d0b76a1", by = "agent:claude", note = "Re-read Summary against the PR's whole change: AG-01 is built, so the live panels row reads 1 done and 3 blocked and the totals 112 done and 6 blocked of 130; the header (HD-02) and docking (intro, DK-08) changes are wording, and DK-08 stays partial. | merge: Merged main's #930 (stats.tick load, 0.48), #933 (preview.subscribe of a draft source, 0.49) and #932 (the capture_target parameter type, 0.50): HD-04 became done (#930), so with AG-01 from this PR the header row is 7/0/0/1/1 and the totals, recounted row by row, are 113 done, 7 partial, 6 blocked, 4 paused of 130; #932 and #933 change no counted row. | kept from the merged side: Recounted: the header has 7 ✅ and no 🟡 with HD-04 done; on main's base, totals 130 = 112/7/0/7/4." }
@@ -5841,7 +5847,7 @@ stamp = { hash = "b3:9609e7610c3e74a3", by = "agent:ui-parity", note = "WS-04 na
 stamp = { hash = "b3:4d043e3a6192c96f", by = "agent:ui-parity", note = "Whole PR against wave/m1-4: WS-05's note adds the mixer's vertical strips as a NumberField user (stacked, scrubbed up and down), matching number.rs's vertical prop; style.css adds the strip, column meter and flip-button rules in the WS-01 palette (--raised, --menu, --border, --line, --dim), so the theme rows' statuses stand." }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:1e9c018356bb1a40", by = "agent:claude", note = "Re-read Theme: style.css only adds the activity-log rules using existing tokens (--dim, --problem) and the IBM Plex Mono stack; no theme row changes. | merge: Merged main's #930 (stats.tick load, 0.48), #933 (preview.subscribe of a draft source, 0.49) and #932 (the capture_target parameter type, 0.50): #933 adds the device preview's style.css rules beside this PR's activity-log rules; both use the theme tokens, so the theme rows hold. | kept from the merged side: style.css adds only the Properties dialog's picture classes (props-preview, its canvas and note), built on the palette's variables; the theme rows hold." }
+stamp = { hash = "b3:3e9152d847384a1c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#862: style.css adds .filters-effects, .filters-subtitle and .filters-effects-note on the existing colour tokens (--border, --text, --muted); no theme token or shared control changes, so the theme rows hold." }
 
 ["UI-FEATURES#transform"."body"]
 stamp = { hash = "b3:94b5523166a74b43", by = "agent:claude-crop-ui", note = "Section intro and TF-04: Clear crop now also restores the uncropped box when the source size is known, through canvas::crop::clear." }
