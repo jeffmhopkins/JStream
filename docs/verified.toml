@@ -5316,7 +5316,7 @@ stamp = { hash = "b3:eca9b83cffae4953", by = "agent:release-thread", note = "B1 
 stamp = { hash = "b3:235da8cd91145094", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "New section: [workspace.package] version 0.1.0-alpha.1, taken by the five shipped apps (jstream-desktop, jstream-daemon, jstream-cli, jstream-vcam-windows, jstream-browser-helper) via version.workspace, checked with cargo metadata; libraries stay at 0.0.0; the daemon's and CLI's --version print CARGO_PKG_VERSION (daemon main.rs, cli run.rs); the 0.y.z pre-release scheme and the bump-PR with cargo update -w; text wrapped to 100 columns" }
 
 ["RUNBOOK-RELEASE#version"."file:Cargo.toml"]
-stamp = { hash = "b3:0d50e8cc38c4a11b", by = "agent:release-thread", note = "Cargo.toml bumps [workspace.package] version to 0.1.0-alpha.2 for the second alpha, with Cargo.lock updated by cargo update -w (the five shipped apps); the section names the scheme and the bump PR, not the current version, so it holds" }
+stamp = { hash = "b3:889978c60ac00b93", by = "agent:release-thread", note = "Cargo.toml bumps [workspace.package] version to 0.1.0-alpha.3 for the third alpha, with Cargo.lock updated by cargo update -w (the five shipped apps); the section names the scheme and the bump PR, not the current version, so it holds" }
 
 ["RUNBOOK-WAVES#current"."body"]
 stamp = { hash = "b3:f4c8d34998b1aa24", by = "agent:ab9c156e", note = "Re-read against #855: the paragraph now points PRs whose section inputs need different notes to --per-input --merge-file <notes.toml> --from wave/<name>, which DOCS#verification describes; the --merge, --note and --renote guidance still matches it." }
