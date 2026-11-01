@@ -31,6 +31,9 @@ impl Graph {
     /// - one `filter.set_settings` per remaining source filter whose settings do,
     ///   likewise, then one per remaining scene filter and item effect (ADR-0065 §3), in
     ///   scene order;
+    /// - one `item.set_effects` per remaining keyframe scene's override whose effects do
+    ///   (ADR-0088), in scene order and then item ID order, with each such parameter
+    ///   `null`;
     /// - `source.delete` for each `scene` source that shows a deleted scene;
     /// - `video_mix.update` for each video mix that shows a deleted scene, keeping its
     ///   name, resolution and rate and showing the program instead;
@@ -247,6 +250,48 @@ impl Graph {
                 patch,
             }
         }));
+        // A keyframe scene's overridden effects (ADR-0088): the whole list again, with
+        // each reference to a deleted object `null`. Not for a keyframe scene the batch
+        // deletes, nor an item it removes, whose overrides go with it.
+        for scene in state.scenes() {
+            if scene.variant_of.is_none() || variants.contains(&scene.id) {
+                continue;
+            }
+            for (item_id, o) in scene.overrides.iter() {
+                let Some(filters) = o.effects.as_ref().map(|chains| &chains.video) else {
+                    continue;
+                };
+                let removed = edits
+                    .iter()
+                    .any(|e| matches!(e, Edit::ItemRemove { item_id: gone } if gone == item_id));
+                if removed {
+                    continue;
+                }
+                let mut changed = false;
+                let mut effects = crate::keyframe::effects_info(filters);
+                for effect in &mut effects {
+                    let named: Vec<String> = effect
+                        .settings
+                        .references()
+                        .filter(|(_, r)| {
+                            deps::reference_node(r).is_some_and(|node| deleted.contains(&node))
+                        })
+                        .map(|(param, _)| param.to_owned())
+                        .collect();
+                    for param in named {
+                        effect.settings.insert(param, Value::Null);
+                        changed = true;
+                    }
+                }
+                if changed {
+                    edits.push(Edit::ItemSetEffects {
+                        scene_id: scene.id.clone(),
+                        item_id: item_id.clone(),
+                        effects,
+                    });
+                }
+            }
+        }
         edits.extend(
             shown_by
                 .into_iter()

@@ -119,6 +119,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("item.set_source", Class(E)),
     ("item.set_transition", Class(E)),
     ("item.clear_override", Class(E)),
+    ("item.set_effects", Class(E)),
     ("source.create", Class(E)),
     ("source.rename", Class(E)),
     ("source.set_settings", Class(E)),

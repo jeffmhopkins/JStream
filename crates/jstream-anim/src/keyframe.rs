@@ -3,8 +3,9 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
-/// One of the four fields a keyframe can override (ADR-0024 §2). Each is overridden
-/// whole: an overridden geometry replaces all of the parent's, angles included.
+/// One of the fields a keyframe can override (ADR-0024 §2, ADR-0088). Each is overridden
+/// whole: an overridden geometry replaces all of the parent's, angles included, and an
+/// overridden effects list all of the parent's effects.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Field {
     /// The item's placement on the canvas.
@@ -15,11 +16,19 @@ pub enum Field {
     Visible,
     /// Straight-alpha multiplier in `0..=1`.
     Opacity,
+    /// The item's effects, a whole list (ADR-0088).
+    Effects,
 }
 
 impl Field {
     /// Every field, in the order the protocol lists them.
-    pub const ALL: [Field; 4] = [Field::Geometry, Field::Crop, Field::Visible, Field::Opacity];
+    pub const ALL: [Field; 5] = [
+        Field::Geometry,
+        Field::Crop,
+        Field::Visible,
+        Field::Opacity,
+        Field::Effects,
+    ];
 
     /// The field's name on the wire, as `item.clear_override` will name it.
     pub fn name(self) -> &'static str {
@@ -28,11 +37,14 @@ impl Field {
             Field::Crop => "crop",
             Field::Visible => "visible",
             Field::Opacity => "opacity",
+            Field::Effects => "effects",
         }
     }
 }
 
-/// An item's keyable values: the parent's, or a variant's effective ones.
+/// An item's keyable values: the parent's, or a variant's effective ones. Its effects
+/// are not among them: [`Override::effects`] replaces them whole where it is set, and
+/// nothing animates them.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Props<G, C> {
     /// Its placement.
@@ -45,9 +57,11 @@ pub struct Props<G, C> {
     pub opacity: f32,
 }
 
-/// One field's value, as a placement edit addressed to a variant writes it.
+/// One field's value, as a placement edit addressed to a variant writes it, or
+/// `item.set_effects` for the effects. `E` is the effects list's type: `()` for a user
+/// that has none.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Value<G, C> {
+pub enum Value<G, C, E = ()> {
     /// A whole geometry.
     Geometry(G),
     /// A whole crop.
@@ -56,9 +70,11 @@ pub enum Value<G, C> {
     Visible(bool),
     /// Opacity, finite and within `0..=1`.
     Opacity(f32),
+    /// A whole effects list, checked by the graph before writing.
+    Effects(E),
 }
 
-impl<G, C> Value<G, C> {
+impl<G, C, E> Value<G, C, E> {
     /// The field this value is for.
     pub fn field(&self) -> Field {
         match self {
@@ -66,11 +82,12 @@ impl<G, C> Value<G, C> {
             Value::Crop(_) => Field::Crop,
             Value::Visible(_) => Field::Visible,
             Value::Opacity(_) => Field::Opacity,
+            Value::Effects(_) => Field::Effects,
         }
     }
 
     /// Why this value can't be stored, if it can't. Only opacity has a check here:
-    /// geometry and crop are checked by the same checks as the item's own placement
+    /// geometry, crop and effects are checked by the same checks as the item's own
     /// edits, which the graph runs before writing.
     pub fn problem(&self) -> Option<InvalidValue> {
         match self {
@@ -103,7 +120,7 @@ impl std::error::Error for InvalidValue {}
 
 /// The overrides a variant stores for one item. An absent field follows the parent.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Override<G, C> {
+pub struct Override<G, C, E = ()> {
     /// The overridden geometry, if any.
     pub geometry: Option<G>,
     /// The overridden crop, if any.
@@ -112,46 +129,52 @@ pub struct Override<G, C> {
     pub visible: Option<bool>,
     /// The overridden opacity, if any.
     pub opacity: Option<f32>,
+    /// The overridden effects, if any: the whole list, which replaces the parent's.
+    pub effects: Option<E>,
 }
 
-impl<G, C> Default for Override<G, C> {
+impl<G, C, E> Default for Override<G, C, E> {
     fn default() -> Self {
         Self {
             geometry: None,
             crop: None,
             visible: None,
             opacity: None,
+            effects: None,
         }
     }
 }
 
-impl<G: Clone, C: Clone> Override<G, C> {
+impl<G: Clone, C: Clone, E: Clone> Override<G, C, E> {
     /// Whether no field is overridden.
     pub fn is_empty(&self) -> bool {
         self.geometry.is_none()
             && self.crop.is_none()
             && self.visible.is_none()
             && self.opacity.is_none()
+            && self.effects.is_none()
     }
 
     /// The overridden value of `field`, if it is overridden.
-    pub fn get(&self, field: Field) -> Option<Value<G, C>> {
+    pub fn get(&self, field: Field) -> Option<Value<G, C, E>> {
         match field {
             Field::Geometry => self.geometry.clone().map(Value::Geometry),
             Field::Crop => self.crop.clone().map(Value::Crop),
             Field::Visible => self.visible.map(Value::Visible),
             Field::Opacity => self.opacity.map(Value::Opacity),
+            Field::Effects => self.effects.clone().map(Value::Effects),
         }
     }
 
     /// The overridden values, in [`Field::ALL`] order.
-    pub fn values(&self) -> impl Iterator<Item = Value<G, C>> + '_ {
+    pub fn values(&self) -> impl Iterator<Item = Value<G, C, E>> + '_ {
         Field::ALL.into_iter().filter_map(|f| self.get(f))
     }
 
     /// The item's effective values over `parent`: each overridden field takes the
     /// override, and every other field takes the parent's value as given, so it follows
-    /// the parent live (ADR-0049 §1).
+    /// the parent live (ADR-0049 §1). The effects are not in [`Props`]: read
+    /// [`Override::effects`].
     pub fn apply(&self, parent: &Props<G, C>) -> Props<G, C> {
         Props {
             geometry: self
@@ -165,31 +188,33 @@ impl<G: Clone, C: Clone> Override<G, C> {
     }
 
     /// Sets `value`'s field and returns the value it replaced.
-    fn set(&mut self, value: Value<G, C>) -> Option<Value<G, C>> {
+    fn set(&mut self, value: Value<G, C, E>) -> Option<Value<G, C, E>> {
         match value {
             Value::Geometry(g) => self.geometry.replace(g).map(Value::Geometry),
             Value::Crop(c) => self.crop.replace(c).map(Value::Crop),
             Value::Visible(v) => self.visible.replace(v).map(Value::Visible),
             Value::Opacity(o) => self.opacity.replace(o).map(Value::Opacity),
+            Value::Effects(e) => self.effects.replace(e).map(Value::Effects),
         }
     }
 
     /// Removes `field` and returns the value it held.
-    fn take(&mut self, field: Field) -> Option<Value<G, C>> {
+    fn take(&mut self, field: Field) -> Option<Value<G, C, E>> {
         match field {
             Field::Geometry => self.geometry.take().map(Value::Geometry),
             Field::Crop => self.crop.take().map(Value::Crop),
             Field::Visible => self.visible.take().map(Value::Visible),
             Field::Opacity => self.opacity.take().map(Value::Opacity),
+            Field::Effects => self.effects.take().map(Value::Effects),
         }
     }
 }
 
 /// The edit that undoes a write or a clear (ADR-0049 §2), for the same item.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Inverse<G, C> {
+pub enum Inverse<G, C, E = ()> {
     /// Write this value back: the field held it before.
-    Write(Value<G, C>),
+    Write(Value<G, C, E>),
     /// Clear this field: it was absent before (`item.clear_override`).
     Clear(Field),
 }
@@ -200,11 +225,11 @@ pub struct RestoreConflict<K>(pub K);
 
 /// A variant's overrides, keyed by item ID in ID order. Never stores an empty override.
 #[derive(Clone, Debug, PartialEq)]
-pub struct Keyframe<K, G, C> {
-    overrides: BTreeMap<K, Override<G, C>>,
+pub struct Keyframe<K, G, C, E = ()> {
+    overrides: BTreeMap<K, Override<G, C, E>>,
 }
 
-impl<K: Ord, G, C> Default for Keyframe<K, G, C> {
+impl<K: Ord, G, C, E> Default for Keyframe<K, G, C, E> {
     fn default() -> Self {
         Self {
             overrides: BTreeMap::new(),
@@ -212,7 +237,7 @@ impl<K: Ord, G, C> Default for Keyframe<K, G, C> {
     }
 }
 
-impl<K: Ord + Clone, G: Clone, C: Clone> Keyframe<K, G, C> {
+impl<K: Ord + Clone, G: Clone, C: Clone, E: Clone> Keyframe<K, G, C, E> {
     /// A keyframe that overrides nothing, so it looks exactly like its parent.
     pub fn new() -> Self {
         Self::default()
@@ -229,12 +254,12 @@ impl<K: Ord + Clone, G: Clone, C: Clone> Keyframe<K, G, C> {
     }
 
     /// The overrides for `item`, if it has any.
-    pub fn get(&self, item: &K) -> Option<&Override<G, C>> {
+    pub fn get(&self, item: &K) -> Option<&Override<G, C, E>> {
         self.overrides.get(item)
     }
 
     /// Every item with overrides, in ID order.
-    pub fn iter(&self) -> impl Iterator<Item = (&K, &Override<G, C>)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&K, &Override<G, C, E>)> {
         self.overrides.iter()
     }
 
@@ -250,7 +275,11 @@ impl<K: Ord + Clone, G: Clone, C: Clone> Keyframe<K, G, C> {
     /// Writes one field of `item`'s override (a placement edit addressed to this
     /// variant). Returns the edit that undoes it: clearing the field if it was absent,
     /// or writing the old value back. An invalid value changes nothing.
-    pub fn write(&mut self, item: K, value: Value<G, C>) -> Result<Inverse<G, C>, InvalidValue> {
+    pub fn write(
+        &mut self,
+        item: K,
+        value: Value<G, C, E>,
+    ) -> Result<Inverse<G, C, E>, InvalidValue> {
         if let Some(problem) = value.problem() {
             return Err(problem);
         }
@@ -262,11 +291,18 @@ impl<K: Ord + Clone, G: Clone, C: Clone> Keyframe<K, G, C> {
         })
     }
 
+    /// The overridden effects of `item`, to change in place, if it overrides them. A
+    /// change through it keeps the field overridden, so the override is never left
+    /// empty.
+    pub fn effects_mut(&mut self, item: &K) -> Option<&mut E> {
+        self.overrides.get_mut(item)?.effects.as_mut()
+    }
+
     /// Clears one field of `item`'s override (`item.clear_override`). Returns the
     /// write that undoes it, or `None` when the field was absent: that clear changes
     /// nothing and has no inverse (ADR-0049 §2). An item left with no field loses its
     /// entry.
-    pub fn clear(&mut self, item: &K, field: Field) -> Option<Inverse<G, C>> {
+    pub fn clear(&mut self, item: &K, field: Field) -> Option<Inverse<G, C, E>> {
         let entry = self.overrides.get_mut(item)?;
         let old = entry.take(field)?;
         if entry.is_empty() {
@@ -279,7 +315,7 @@ impl<K: Ord + Clone, G: Clone, C: Clone> Keyframe<K, G, C> {
     /// Returns the writes that undo it, item by item in ID order, each item's fields in
     /// [`Field::ALL`] order. They restore the keyframe in any order, since no two name
     /// the same field of the same item.
-    pub fn reset(&mut self) -> Vec<(K, Inverse<G, C>)> {
+    pub fn reset(&mut self) -> Vec<(K, Inverse<G, C, E>)> {
         let overrides = std::mem::take(&mut self.overrides);
         overrides
             .into_iter()
@@ -295,7 +331,7 @@ impl<K: Ord + Clone, G: Clone, C: Clone> Keyframe<K, G, C> {
     /// of the variant's tree does (ADR-0040 §1, ADR-0024 §2 on `item.remove`). Returns
     /// each dropped item's whole override, in ID order, for the edit's result and for
     /// [`Keyframe::restore`] in its inverse.
-    pub fn drop_unless(&mut self, mut keep: impl FnMut(&K) -> bool) -> Vec<(K, Override<G, C>)> {
+    pub fn drop_unless(&mut self, mut keep: impl FnMut(&K) -> bool) -> Vec<(K, Override<G, C, E>)> {
         let mut dropped = Vec::new();
         self.overrides.retain(|item, o| {
             let stays = keep(item);
@@ -310,7 +346,10 @@ impl<K: Ord + Clone, G: Clone, C: Clone> Keyframe<K, G, C> {
     /// Restores overrides that [`Keyframe::drop_unless`] dropped. Refused, changing
     /// nothing, if one of the items already has overrides (the inverse would overwrite a
     /// later edit). Empty overrides are skipped, so the keyframe still never stores one.
-    pub fn restore(&mut self, dropped: Vec<(K, Override<G, C>)>) -> Result<(), RestoreConflict<K>> {
+    pub fn restore(
+        &mut self,
+        dropped: Vec<(K, Override<G, C, E>)>,
+    ) -> Result<(), RestoreConflict<K>> {
         if let Some((item, _)) = dropped
             .iter()
             .find(|(item, _)| self.overrides.contains_key(item))
@@ -330,8 +369,8 @@ impl<K: Ord + Clone, G: Clone, C: Clone> Keyframe<K, G, C> {
     pub fn undo(
         &mut self,
         item: K,
-        inverse: Inverse<G, C>,
-    ) -> Result<Option<Inverse<G, C>>, InvalidValue> {
+        inverse: Inverse<G, C, E>,
+    ) -> Result<Option<Inverse<G, C, E>>, InvalidValue> {
         match inverse {
             Inverse::Write(v) => self.write(item, v).map(Some),
             Inverse::Clear(f) => Ok(self.clear(&item, f)),
@@ -345,7 +384,9 @@ mod tests {
 
     type G = (i32, i32);
     type C = u32;
-    type Kf = Keyframe<&'static str, G, C>;
+    /// An effects list: any value that isn't `Copy` stands in for the graph's.
+    type E = Vec<u8>;
+    type Kf = Keyframe<&'static str, G, C, E>;
 
     fn parent() -> Props<G, C> {
         Props {
@@ -491,9 +532,29 @@ mod tests {
     }
 
     #[test]
+    fn overridden_effects_change_in_place_and_undo_by_clearing() {
+        let mut kf = Kf::new();
+        assert_eq!(kf.effects_mut(&"a"), None, "nothing to change");
+        let inv = kf.write("a", Value::Effects(vec![1])).expect("valid");
+        assert_eq!(inv, Inverse::Clear(Field::Effects));
+        if let Some(effects) = kf.effects_mut(&"a") {
+            effects.push(2);
+        }
+        assert_eq!(
+            kf.get(&"a").and_then(|o| o.effects.clone()),
+            Some(vec![1, 2])
+        );
+        assert_eq!(
+            kf.clear(&"a", Field::Effects),
+            Some(Inverse::Write(Value::Effects(vec![1, 2])))
+        );
+        assert!(kf.is_empty());
+    }
+
+    #[test]
     fn field_names_match_the_wire() {
         let names: Vec<_> = Field::ALL.iter().map(|f| f.name()).collect();
-        assert_eq!(names, ["geometry", "crop", "visible", "opacity"]);
+        assert_eq!(names, ["geometry", "crop", "visible", "opacity", "effects"]);
     }
 
     /// A seeded walk of random writes, clears, resets, drops and restores: after every
@@ -515,10 +576,11 @@ mod tests {
             let item = items[next(4) as usize];
             match next(7) {
                 0..=2 => {
-                    let value = match next(4) {
+                    let value = match next(5) {
                         0 => Value::Geometry((next(5) as i32, next(5) as i32)),
                         1 => Value::Crop(next(5) as u32),
                         2 => Value::Visible(next(2) == 0),
+                        3 => Value::Effects(vec![0; next(3) as usize]),
                         _ => Value::Opacity(next(5) as f32 / 4.0),
                     };
                     let inv = kf.write(item, value).expect("valid");
@@ -527,7 +589,7 @@ mod tests {
                     assert_eq!(undone, before);
                 }
                 3 | 4 => {
-                    let field = Field::ALL[next(4) as usize];
+                    let field = Field::ALL[next(5) as usize];
                     let mut undone = kf.clone();
                     match kf.clear(&item, field) {
                         Some(inv) => {

@@ -232,7 +232,11 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   opens the Filter settings dialog titled "Effect on “Backdrop”" once the collection
   holds it, while the source keeps its own two; Sharpen added as a second effect, and
   dragged above the vignette as one reorder of the item's chain; the row's eye and × as
-  one edit each; and selecting the scene again leaving the effects section out.
+  one edit each; and selecting the scene again leaving the effects section out. In a
+  new keyframe of Main, the Backdrop's effects "in this keyframe", with the keyframe's
+  note and the note that they follow the item's; Sharpen added there as one edit, "For
+  this item of “Backdrop” in this keyframe", after which the keyframe has its own and
+  Main's item still has none; and Follow the item clearing them as one edit.
 - **Program and output chains** (`output-chains.spec.js`): the Outputs panel's Program
   output row ("master", "FX 0"), a recording's row under it with its state and FX
   button, and the footnote; the program's FX showing the master chain in the Filters

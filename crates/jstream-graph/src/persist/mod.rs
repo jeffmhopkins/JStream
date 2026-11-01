@@ -17,8 +17,8 @@ use crate::model::MASTER_NAME;
 use crate::{Graph, Placement, audio};
 use jstream_protocol::{
     Action, BlendMode, BusId, BusMonitor, Canvas, Chord, Crop, Easing, Edit, EncoderProfile,
-    EncoderProfileId, FilterChain, FilterId, FilterOwner, Finite32, FolderId, INITIAL_PRESET,
-    ItemGeometry, ItemId, ItemOverride, ItemTransform, ItemTransition, LabelId, OutputId,
+    EncoderProfileId, FilterChain, FilterId, FilterInfo, FilterOwner, Finite32, FolderId,
+    INITIAL_PRESET, ItemGeometry, ItemId, ItemTransform, ItemTransition, LabelId, OutputId,
     OutputKind, ProtocolError, Rev, SceneId, SceneMeta, SceneRole, Settings, SourceAudio, SourceId,
     SourceKind, SourceMeta, TransitionPresetId, VideoMix, VideoMixId,
 };
@@ -32,7 +32,7 @@ mod tests;
 /// The collection file's current `schema_version`. Bumping it ships a migration in the
 /// crate's private `MIGRATIONS` table and a fixture of the previous version that a test
 /// loads (R-API-003).
-pub const SCHEMA_VERSION: u32 = 2;
+pub const SCHEMA_VERSION: u32 = 3;
 
 /// The built-in `webcam` kind, which gained audio (its device's paired input) after
 /// collection files existed; see `rebuild_audio`.
@@ -48,7 +48,7 @@ type Migration = fn(&mut Value) -> Result<(), String>;
 
 /// `MIGRATIONS[n]` upgrades version `n + 1` to `n + 2`, so a file at version `v` runs
 /// `MIGRATIONS[v - 1..]`.
-const MIGRATIONS: [Migration; SCHEMA_VERSION as usize - 1] = [v1_to_v2];
+const MIGRATIONS: [Migration; SCHEMA_VERSION as usize - 1] = [v1_to_v2, v2_to_v3];
 
 /// Version 2 adds scene filters (`scenes[].filters`) and item effects (a non-empty
 /// `items[].effects`, ADR-0065). A version 1 file has no scene filters, and its items'
@@ -69,6 +69,24 @@ fn v1_to_v2(value: &mut Value) -> Result<(), String> {
             {
                 return Err("a version 1 item's `effects` must be empty".into());
             }
+        }
+    }
+    Ok(())
+}
+
+/// Version 3 adds a keyframe scene's overridden effects (`scenes[].overrides[].effects`,
+/// ADR-0088). A version 2 file has none, so it upgrades unchanged; one there is
+/// refused, as version 2 refused it.
+fn v2_to_v3(value: &mut Value) -> Result<(), String> {
+    let scenes = value.get("scenes").and_then(Value::as_array);
+    for scene in scenes.into_iter().flatten() {
+        let overrides = scene.get("overrides").and_then(Value::as_array);
+        if overrides
+            .into_iter()
+            .flatten()
+            .any(|o| o.get("effects").is_some())
+        {
+            return Err("a version 2 keyframe override has no `effects`".into());
         }
     }
     Ok(())
@@ -249,13 +267,36 @@ struct FileScene {
     variant_of: Option<SceneId>,
     /// A keyframe scene's overrides, in item ID order; omitted when there are none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    overrides: Vec<ItemOverride>,
+    overrides: Vec<FileOverride>,
     /// Its filters (ADR-0065, schema_version 2), a video chain; omitted when there are
     /// none.
     #[serde(default, skip_serializing_if = "FileChains::is_empty")]
     filters: FileChains,
     /// Bottom first.
     items: Vec<FileItem>,
+}
+
+/// What a keyframe scene overrides for one item: `state.get`'s `ItemOverride`, with
+/// each overridden effect's kind version, as a chain saves it.
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FileOverride {
+    item_id: ItemId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    geometry: Option<ItemGeometry>,
+    /// The 0.3 form, never with `geometry`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    transform: Option<ItemTransform>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    crop: Option<Crop>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    visible: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    opacity: Option<Finite32>,
+    /// The overridden effects (ADR-0088, schema_version 3), first first; omitted when
+    /// the keyframe follows the item's own. An empty list is an override.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    effects: Option<Vec<FileFilter>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -503,7 +544,18 @@ impl Graph {
                     overrides: scene
                         .overrides
                         .iter()
-                        .map(|(item_id, o)| crate::keyframe::to_info(item_id, o))
+                        .map(|(item_id, o)| {
+                            let info = crate::keyframe::to_info(item_id, o);
+                            FileOverride {
+                                item_id: info.item_id,
+                                geometry: info.geometry,
+                                transform: info.transform,
+                                crop: info.crop,
+                                visible: info.visible,
+                                opacity: info.opacity,
+                                effects: o.effects.as_ref().map(|e| self.file_filters(&e.video)),
+                            }
+                        })
                         .collect(),
                     filters: self.file_chains(&scene.filters),
                     items: scene
@@ -675,6 +727,25 @@ impl Graph {
                     &edit,
                     file_filter_version(&file, owner, *chain, filter_id),
                 ),
+                // A keyframe's overridden effects keep a missing kind's filter verbatim,
+                // as an item's own effects do (ADR-0088).
+                Edit::ItemSetEffects {
+                    scene_id,
+                    item_id,
+                    effects,
+                } if effects.iter().any(|f| !graph.kinds.contains_key(&f.kind)) => {
+                    let versions = override_versions(&file, scene_id, item_id);
+                    crate::keyframe::set_effects(
+                        &mut graph.state,
+                        &graph.kinds,
+                        scene_id,
+                        item_id,
+                        effects,
+                        Some(&versions),
+                        0,
+                    )
+                    .map(|_| ())
+                }
                 _ => graph.apply(std::slice::from_ref(&edit), None).map(|_| ()),
             };
             applied.map_err(|error| LoadError::Invalid {
@@ -998,10 +1069,18 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
             )?;
         }
     }
-    // After every item, since an override names an item in its parent's tree.
+    // After every item, since an override names an item in its parent's tree, and
+    // after every source, since an overridden effect may refer to one.
     for scene in &file.scenes {
         for o in &scene.overrides {
             let object = format!("scene `{}`", scene.id);
+            for filter in o.effects.iter().flatten() {
+                let of = format!(
+                    "filter `{}` of {object}'s override of `{}`",
+                    filter.id, o.item_id
+                );
+                check_kind_version(graph, &of, &filter.kind, filter.kind_version)?;
+            }
             for edit in override_edits(&scene.id, o) {
                 edits.push((object.clone(), edit));
             }
@@ -1095,8 +1174,9 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
     Ok(edits)
 }
 
-/// The placement edits addressed to the keyframe scene `scene_id` that write `o`.
-fn override_edits(scene_id: &SceneId, o: &ItemOverride) -> Vec<Edit> {
+/// The edits addressed to the keyframe scene `scene_id` that write `o`: the placement
+/// edits, then `item.set_effects`.
+fn override_edits(scene_id: &SceneId, o: &FileOverride) -> Vec<Edit> {
     let (item_id, scene_id) = (&o.item_id, Some(scene_id.clone()));
     let mut edits = Vec::new();
     if let Some(geometry) = o.geometry {
@@ -1130,11 +1210,39 @@ fn override_edits(scene_id: &SceneId, o: &ItemOverride) -> Vec<Edit> {
     if let Some(opacity) = o.opacity {
         edits.push(Edit::ItemSetOpacity {
             item_id: item_id.clone(),
-            scene_id,
+            scene_id: scene_id.clone(),
             opacity,
         });
     }
+    if let (Some(effects), Some(scene_id)) = (&o.effects, scene_id) {
+        edits.push(Edit::ItemSetEffects {
+            scene_id,
+            item_id: item_id.clone(),
+            effects: effects
+                .iter()
+                .map(|filter| FilterInfo {
+                    filter_id: filter.id.clone(),
+                    kind: filter.kind.clone(),
+                    enabled: filter.enabled,
+                    settings: filter.settings.clone(),
+                })
+                .collect(),
+        });
+    }
     edits
+}
+
+/// The kind versions `file` recorded for the overridden effects of `item_id` in the
+/// keyframe scene `scene_id`, in list order.
+fn override_versions(file: &File, scene_id: &SceneId, item_id: &ItemId) -> Vec<Option<u32>> {
+    file.scenes
+        .iter()
+        .filter(|s| &s.id == scene_id)
+        .flat_map(|s| &s.overrides)
+        .filter(|o| &o.item_id == item_id)
+        .flat_map(|o| o.effects.iter().flatten())
+        .map(|filter| filter.kind_version)
+        .collect()
 }
 
 /// Pushes the `filter.add`s that rebuild `chains` on `owner`, named `of` in errors,

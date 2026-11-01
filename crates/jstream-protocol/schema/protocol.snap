@@ -1787,6 +1787,16 @@ source: crates/jstream-protocol/src/fixtures.rs
           ],
           "description": "The overridden crop."
         },
+        "effects": {
+          "description": "The overridden effects, first first, which the keyframe draws in place of the\nitem's own (since 0.63, ADR-0088). An empty list is an override too: no effects\nthere.",
+          "items": {
+            "$ref": "#/$defs/FilterInfo"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "geometry": {
           "anyOf": [
             {
@@ -1957,6 +1967,37 @@ source: crates/jstream-protocol/src/fixtures.rs
             "scene_id",
             "item_id",
             "field"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Writes a keyframe scene's override of an item's effects, the whole list, which the\nkeyframe draws in place of the item's own (ADR-0088, since 0.63). `scene_id` must\nname a keyframe scene whose tree holds `item_id`, else `invalid_argument` on\n`scene_id` (`not_found` for a missing one): an item's own effects are edited with\n`filter.*`. Each entry is checked, and its settings completed, as `filter.add`\nchecks an item effect's; the field is `effects.<n>.<field>`. An empty list is an\noverride with no effects. One effect of the override is edited with `filter.*`\non the `keyframe` owner. Inverse: `item.set_effects` with the old list, or\n`item.clear_override` of `effects` when the keyframe didn't override it.",
+          "properties": {
+            "effects": {
+              "description": "The effects, first first: at most\n[`MAX_CHAIN_FILTERS`](crate::MAX_CHAIN_FILTERS), else `invalid_argument` on\n`effects`.",
+              "items": {
+                "$ref": "#/$defs/FilterInfo"
+              },
+              "type": "array"
+            },
+            "item_id": {
+              "$ref": "#/$defs/ItemId",
+              "description": "The item in the parent's tree."
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The keyframe scene."
+            },
+            "type": {
+              "const": "item.set_effects",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id",
+            "item_id",
+            "effects"
           ],
           "type": "object"
         },
@@ -4746,6 +4787,29 @@ source: crates/jstream-protocol/src/fixtures.rs
             "item_id"
           ],
           "type": "object"
+        },
+        {
+          "description": "An item's effects as a keyframe scene draws it (ADR-0088, since 0.63): the\nkeyframe's override of them, or the item's own while it has none. `scene_id` must\nname a keyframe scene whose tree holds `item_id`, else `invalid_argument` on\n`owner` (`not_found` for a missing one). A video chain only. The first edit while\nthe keyframe follows the item's own effects copies them into its override and\napplies there, and its inverse is `item.clear_override` of `effects`; later edits\nhave their usual inverses. The item's own effects never change.",
+          "properties": {
+            "item_id": {
+              "$ref": "#/$defs/ItemId",
+              "description": "The item in its parent's tree."
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The keyframe scene."
+            },
+            "type": {
+              "const": "keyframe",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id",
+            "item_id"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -5225,6 +5289,16 @@ source: crates/jstream-protocol/src/fixtures.rs
             }
           ],
           "description": "The overridden crop."
+        },
+        "effects": {
+          "description": "The overridden effects, first first, which the keyframe draws in place of the\nitem's own (since 0.63, ADR-0088). An empty list is an override too: no effects\nthere.",
+          "items": {
+            "$ref": "#/$defs/FilterInfo"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
         },
         "geometry": {
           "anyOf": [
@@ -5791,7 +5865,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       ]
     },
     "OverrideField": {
-      "description": "One of the four fields a keyframe scene can override. Each is overridden whole: a\nvariant that overrides `geometry` overrides all of it.",
+      "description": "One of the fields a keyframe scene can override. Each is overridden whole: a variant\nthat overrides `geometry` overrides all of it, and one that overrides `effects` the\nwhole list.",
       "oneOf": [
         {
           "const": "geometry",
@@ -5811,6 +5885,11 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "opacity",
           "description": "Its opacity (`item.set_opacity`).",
+          "type": "string"
+        },
+        {
+          "const": "effects",
+          "description": "Its effects, the whole list (`item.set_effects`, since 0.63, ADR-0088).",
           "type": "string"
         }
       ]
@@ -8950,5 +9029,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.55"
+  "title": "JStream protocol 0.63"
 }

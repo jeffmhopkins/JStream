@@ -1,6 +1,7 @@
 //! Keyframe scenes (ADR-0024 §2, ADR-0040 §1, ADR-0049): creating one, its overrides
 //! and their inverses, what it draws, the edits it refuses, the overrides an item's
-//! removal drops, deleting a parent, and the collection file.
+//! removal drops, deleting a parent, and the collection file; and a keyframe's override
+//! of an item's effects (ADR-0088).
 
 use super::{
     add, apply_err, apply_ok, blocker, blockers, fixture, invalid_reason, plan, scene_create,
@@ -8,10 +9,11 @@ use super::{
 };
 use crate::{Graph, Placement};
 use jstream_protocol::{
-    Crop, DeleteTarget, DroppedOverride, Edit, EntityKind, Finite32, FolderId, ItemGeometry,
-    ItemId, ItemOverride, ItemTransform, OverrideField, ProtocolError, SceneId, SceneRole, Size,
-    SourceId, Vec2,
+    Crop, DeleteTarget, DroppedOverride, Edit, EntityKind, FilterChain, FilterId, FilterInfo,
+    FilterOwner, Finite32, FolderId, ItemGeometry, ItemId, ItemOverride, ItemTransform,
+    OverrideField, ProtocolError, SceneId, SceneRole, Settings, Size, SourceId, Vec2,
 };
+use serde_json::{Value, json};
 
 fn variant(id: &str, of: &str) -> Edit {
     Edit::SceneCreateVariant {
@@ -208,6 +210,7 @@ fn writes_and_clears_have_the_inverses_adr_0049_gives() {
             crop: Some(crop),
             visible: Some(false),
             opacity: Some(Finite32::new(0.75).expect("finite")),
+            effects: None,
         }]
     );
     // "Reset keyframe": a batch of clears, undone as a batch.
@@ -347,6 +350,7 @@ fn removing_or_moving_an_item_out_drops_its_overrides_and_undo_restores_them() {
         crop: None,
         visible: None,
         opacity: None,
+        effects: None,
     };
     assert_eq!(
         applied.dropped_overrides,
@@ -630,4 +634,432 @@ fn keyframe_scenes_save_and_load() {
         .expect("the file loads");
     assert_eq!(loaded.state(), graph.state());
     assert_eq!(loaded.to_collection_json(), json);
+}
+
+/// A keyframe's override of an item's effects (ADR-0088): one `tint` per entry, with
+/// `amount` set and `mask` naming a scene, or the defaults.
+fn effects(entries: &[(&str, Option<f64>, Option<&str>)]) -> Vec<FilterInfo> {
+    entries
+        .iter()
+        .map(|(id, amount, mask)| {
+            let mut settings = Settings::new();
+            if let Some(amount) = amount {
+                settings.insert("amount", json!(amount));
+            }
+            if let Some(mask) = mask {
+                settings.insert("mask", json!({"type": "scene", "scene_id": mask}));
+            }
+            FilterInfo {
+                filter_id: FilterId::new(*id),
+                kind: "tint".into(),
+                enabled: true,
+                settings,
+            }
+        })
+        .collect()
+}
+
+fn set_effects(scene: &str, item: &str, list: Vec<FilterInfo>) -> Edit {
+    Edit::ItemSetEffects {
+        scene_id: SceneId::new(scene),
+        item_id: ItemId::new(item),
+        effects: list,
+    }
+}
+
+/// The IDs and `amount`s of the effects `scene` draws `item` with.
+fn shown_effects(graph: &Graph, scene: &str, item: &str) -> Vec<(String, f64)> {
+    let state = graph.state();
+    let scene = state.scene(&SceneId::new(scene)).expect("scene");
+    state
+        .shown_items(scene)
+        .iter()
+        .filter(|i| i.id().as_str() == item)
+        .flat_map(|i| i.effects().to_vec())
+        .map(|f| {
+            let amount = f.settings().get("amount").and_then(Value::as_f64);
+            (f.id().as_str().to_owned(), amount.unwrap_or(f64::NAN))
+        })
+        .collect()
+}
+
+#[test]
+fn a_keyframe_overrides_an_items_effects_whole_and_undoes_exactly() {
+    let mut graph = family();
+    let own = Edit::FilterAdd {
+        owner: FilterOwner::Item {
+            item_id: ItemId::new("i1"),
+        },
+        chain: FilterChain::Video,
+        filter_id: FilterId::new("own"),
+        kind: "tint".into(),
+        settings: Settings::new(),
+        enabled: None,
+        index: None,
+    };
+    apply_ok(&mut graph, vec![own]);
+    // Not overridden: the keyframe follows the item's own effects.
+    assert_eq!(shown_effects(&graph, "k", "i1"), [("own".into(), 1.0)]);
+
+    // The first write's inverse clears the field; its settings are completed.
+    let applied = apply_ok(
+        &mut graph,
+        vec![set_effects("k", "i1", effects(&[("kf", Some(0.25), None)]))],
+    );
+    assert_eq!(
+        applied.inverse.edits,
+        [clear("k", "i1", OverrideField::Effects)]
+    );
+    assert_eq!(shown_effects(&graph, "k", "i1"), [("kf".into(), 0.25)]);
+    assert_eq!(shown_effects(&graph, "a", "i1"), [("own".into(), 1.0)]);
+    assert_eq!(shown_effects(&graph, "k2", "i1"), [("own".into(), 1.0)]);
+    let stored = overrides(&graph, "k")[0]
+        .effects
+        .clone()
+        .expect("overridden");
+    assert_eq!(stored[0].settings.get("mask"), Some(&Value::Null));
+
+    // A second write's inverse writes the old list back.
+    let applied = apply_ok(
+        &mut graph,
+        vec![set_effects(
+            "k",
+            "i1",
+            effects(&[("kf", Some(0.5), None), ("kf2", None, None)]),
+        )],
+    );
+    assert_eq!(
+        applied.inverse.edits,
+        [set_effects("k", "i1", stored.clone())]
+    );
+    assert_eq!(
+        shown_effects(&graph, "k", "i1"),
+        [("kf".into(), 0.5), ("kf2".into(), 1.0)]
+    );
+
+    // An empty list is an override: no effects there.
+    apply_ok(&mut graph, vec![set_effects("k", "i1", Vec::new())]);
+    assert_eq!(shown_effects(&graph, "k", "i1"), []);
+    assert_eq!(overrides(&graph, "k")[0].effects, Some(Vec::new()));
+
+    // Clearing follows the item again, and undoes with the list it removed.
+    let applied = apply_ok(&mut graph, vec![clear("k", "i1", OverrideField::Effects)]);
+    assert_eq!(applied.inverse.edits, [set_effects("k", "i1", Vec::new())]);
+    assert_eq!(shown_effects(&graph, "k", "i1"), [("own".into(), 1.0)]);
+    assert!(overrides(&graph, "k").is_empty());
+}
+
+#[test]
+fn set_effects_refuses_what_an_item_effect_would() {
+    let mut graph = family();
+    let field = |graph: &mut Graph, edit: Edit| invalid_reason(apply_err(graph, vec![edit])).0;
+    // Only a keyframe scene: the item's own effects take `filter.*`.
+    assert_eq!(
+        field(&mut graph, set_effects("a", "i1", Vec::new())),
+        "edits.0.scene_id"
+    );
+    assert_eq!(
+        field(&mut graph, set_effects("b", "i1", Vec::new())),
+        "edits.0.scene_id"
+    );
+    assert_eq!(
+        apply_err(&mut graph, vec![set_effects("nope", "i1", Vec::new())]),
+        ProtocolError::NotFound {
+            entity: EntityKind::Scene,
+            id: "nope".into(),
+        }
+    );
+    let mut audio = effects(&[("g", None, None)]);
+    audio[0].kind = "gain".into();
+    assert_eq!(
+        field(&mut graph, set_effects("k", "i1", audio)),
+        "edits.0.effects.0.kind"
+    );
+    let mut missing = effects(&[("ok", None, None), ("m", None, None)]);
+    missing[1].kind = "nope".into();
+    assert_eq!(
+        field(&mut graph, set_effects("k", "i1", missing)),
+        "edits.0.effects.1.kind"
+    );
+    assert_eq!(
+        field(
+            &mut graph,
+            set_effects("k", "i1", effects(&[("x", None, None), ("x", None, None)]))
+        ),
+        "edits.0.effects.1.filter_id"
+    );
+    assert_eq!(
+        field(
+            &mut graph,
+            set_effects("k", "i1", effects(&[("x", Some(2.0), None)]))
+        ),
+        "edits.0.effects.0.settings.amount"
+    );
+    let nine: Vec<(String, Option<f64>, Option<&str>)> =
+        (0..9).map(|n| (format!("f{n}"), None, None)).collect();
+    let nine: Vec<(&str, Option<f64>, Option<&str>)> = nine
+        .iter()
+        .map(|(id, a, m)| (id.as_str(), *a, *m))
+        .collect();
+    assert_eq!(
+        field(&mut graph, set_effects("k", "i1", effects(&nine))),
+        "edits.0.effects"
+    );
+    // A reference that would close a cycle through the keyframe scene.
+    assert_eq!(
+        field(
+            &mut graph,
+            set_effects("k", "i1", effects(&[("x", None, Some("k"))]))
+        ),
+        "edits.0.effects.0.settings.mask"
+    );
+    // Filter edits still refuse a keyframe scene as their owner (ADR-0065 §3).
+    let on_keyframe = Edit::FilterAdd {
+        owner: FilterOwner::Scene {
+            scene_id: SceneId::new("k"),
+        },
+        chain: FilterChain::Video,
+        filter_id: FilterId::new("x"),
+        kind: "tint".into(),
+        settings: Settings::new(),
+        enabled: None,
+        index: None,
+    };
+    assert_eq!(field(&mut graph, on_keyframe), "edits.0.owner");
+}
+
+#[test]
+fn an_overridden_effects_reference_blocks_a_delete_that_the_plan_clears() {
+    let mut graph = family();
+    apply_ok(
+        &mut graph,
+        vec![set_effects(
+            "k",
+            "i1",
+            effects(&[("kf", Some(0.5), Some("b"))]),
+        )],
+    );
+    let delete_b = Edit::SceneDelete {
+        scene_id: SceneId::new("b"),
+    };
+    assert_eq!(
+        blockers(apply_err(&mut graph, vec![delete_b])),
+        [
+            blocker(EntityKind::Source, "sb", "kind.scene_id"),
+            blocker(EntityKind::Scene, "k", "overrides.i1.effects.kf.mask"),
+        ]
+    );
+    let edits = plan(
+        &graph,
+        DeleteTarget::Scene {
+            scene_id: SceneId::new("b"),
+        },
+    );
+    let cleared = effects(&[("kf", Some(0.5), None)]);
+    let mut cleared_mask = cleared.clone();
+    cleared_mask[0].settings.insert("mask", Value::Null);
+    assert!(
+        edits.contains(&set_effects("k", "i1", cleared_mask)),
+        "{edits:?}"
+    );
+    apply_ok(&mut graph, edits);
+    assert_eq!(shown_effects(&graph, "k", "i1"), [("kf".into(), 0.5)]);
+}
+
+#[test]
+fn an_items_removal_drops_its_overridden_effects_and_undo_restores_them() {
+    let mut graph = family();
+    apply_ok(
+        &mut graph,
+        vec![set_effects("k", "i1", effects(&[("kf", None, None)]))],
+    );
+    let applied = apply_ok(
+        &mut graph,
+        vec![Edit::ItemRemove {
+            item_id: ItemId::new("i1"),
+        }],
+    );
+    let dropped = &applied.dropped_overrides;
+    assert_eq!(dropped.len(), 1);
+    assert_eq!(
+        dropped[0].dropped.effects.as_ref().map(Vec::len),
+        Some(1),
+        "the dropped override carries its effects"
+    );
+    // Deleting the keyframe scene also undoes with its overridden effects.
+    let mut graph = family();
+    apply_ok(
+        &mut graph,
+        vec![set_effects("k", "i1", effects(&[("kf", None, None)]))],
+    );
+    apply_ok(
+        &mut graph,
+        vec![Edit::SceneDelete {
+            scene_id: SceneId::new("k"),
+        }],
+    );
+}
+
+#[test]
+fn overridden_effects_save_and_load() {
+    let mut graph = family();
+    apply_ok(
+        &mut graph,
+        vec![
+            set_effects("k", "i1", effects(&[("kf", Some(0.5), Some("b"))])),
+            set_effects("k", "i2", Vec::new()),
+            set_opacity("i2", Some("k"), 0.5),
+        ],
+    );
+    let json = graph.to_collection_json();
+    let loaded = super::graph()
+        .with_collection_json(&json)
+        .expect("the file loads");
+    assert_eq!(loaded.state(), graph.state());
+    assert_eq!(loaded.to_collection_json(), json);
+}
+
+#[test]
+fn an_overridden_effect_of_a_missing_kind_loads_and_saves_as_it_was() {
+    let mut graph = family();
+    apply_ok(
+        &mut graph,
+        vec![set_effects(
+            "k",
+            "i1",
+            effects(&[("kf", Some(0.5), None), ("x", None, None)]),
+        )],
+    );
+    let json = graph.to_collection_json();
+    let without = super::graph().without_kinds(["tint"]);
+    // Every other `tint` would be refused too, so only the override holds one.
+    let loaded = without
+        .with_collection_json(&json)
+        .expect("the file loads without the kind");
+    assert_eq!(loaded.to_collection_json(), json);
+    assert_eq!(
+        overrides(&loaded, "k")[0].effects.as_ref().map(Vec::len),
+        Some(2)
+    );
+}
+
+fn keyframe_owner(scene: &str, item: &str) -> FilterOwner {
+    FilterOwner::Keyframe {
+        scene_id: SceneId::new(scene),
+        item_id: ItemId::new(item),
+    }
+}
+
+fn tint_on(owner: FilterOwner, id: &str) -> Edit {
+    Edit::FilterAdd {
+        owner,
+        chain: FilterChain::Video,
+        filter_id: FilterId::new(id),
+        kind: "tint".into(),
+        settings: Settings::new(),
+        enabled: None,
+        index: None,
+    }
+}
+
+/// The `keyframe` owner edits one effect of a keyframe's override (ADR-0088): the first
+/// edit copies the item's own effects and undoes by clearing the override, later ones
+/// undo as on any owner, and the item's own effects never change.
+#[test]
+fn filter_edits_on_the_keyframe_owner_copy_the_items_effects_first() {
+    let mut graph = family();
+    let item = FilterOwner::Item {
+        item_id: ItemId::new("i1"),
+    };
+    apply_ok(&mut graph, vec![tint_on(item, "own")]);
+    let kf = keyframe_owner("k", "i1");
+    let applied = apply_ok(
+        &mut graph,
+        vec![Edit::FilterSetSettings {
+            owner: kf.clone(),
+            filter_id: FilterId::new("own"),
+            patch: Settings([("amount".to_owned(), json!(0.5))].into_iter().collect()),
+        }],
+    );
+    assert_eq!(
+        applied.inverse.edits,
+        [clear("k", "i1", OverrideField::Effects)]
+    );
+    assert_eq!(shown_effects(&graph, "k", "i1"), [("own".into(), 0.5)]);
+    assert_eq!(shown_effects(&graph, "a", "i1"), [("own".into(), 1.0)]);
+
+    // Later edits have the usual inverses, on the same owner.
+    let applied = apply_ok(&mut graph, vec![tint_on(kf.clone(), "more")]);
+    assert_eq!(
+        applied.inverse.edits,
+        [Edit::FilterRemove {
+            owner: kf.clone(),
+            filter_id: FilterId::new("more"),
+        }]
+    );
+    apply_ok(
+        &mut graph,
+        vec![
+            Edit::FilterReorder {
+                owner: kf.clone(),
+                filter_id: FilterId::new("more"),
+                index: 0,
+            },
+            Edit::FilterSetEnabled {
+                owner: kf.clone(),
+                filter_id: FilterId::new("own"),
+                enabled: false,
+            },
+            Edit::FilterRemove {
+                owner: kf.clone(),
+                filter_id: FilterId::new("more"),
+            },
+        ],
+    );
+    assert_eq!(shown_effects(&graph, "k", "i1"), [("own".into(), 0.5)]);
+    assert!(
+        !graph
+            .state()
+            .scene(&SceneId::new("k"))
+            .and_then(|k| graph.state().shown_items(k).into_iter().next())
+            .is_some_and(|i| i.effects()[0].enabled()),
+        "switched off in the keyframe"
+    );
+    assert_eq!(shown_effects(&graph, "a", "i1"), [("own".into(), 1.0)]);
+}
+
+#[test]
+fn the_keyframe_owner_refuses_what_isnt_a_keyframes_item() {
+    let mut graph = family();
+    apply_ok(&mut graph, vec![add("b", "ib", "cam")]);
+    let field = |graph: &mut Graph, edit: Edit| invalid_reason(apply_err(graph, vec![edit])).0;
+    assert_eq!(
+        field(&mut graph, tint_on(keyframe_owner("a", "i1"), "x")),
+        "edits.0.owner",
+        "not a keyframe scene"
+    );
+    assert_eq!(
+        field(&mut graph, tint_on(keyframe_owner("k", "ib"), "x")),
+        "edits.0.owner",
+        "not in the keyframe's tree"
+    );
+    assert_eq!(
+        apply_err(&mut graph, vec![tint_on(keyframe_owner("k", "nope"), "x")]),
+        ProtocolError::NotFound {
+            entity: EntityKind::Item,
+            id: "nope".into(),
+        }
+    );
+    let mut audio = tint_on(keyframe_owner("k", "i1"), "x");
+    if let Edit::FilterAdd { chain, kind, .. } = &mut audio {
+        *chain = FilterChain::Audio;
+        *kind = "gain".into();
+    }
+    assert_eq!(field(&mut graph, audio), "edits.0.chain");
+    // A reference through the keyframe owner is an edge of the keyframe scene.
+    let mut cycle = tint_on(keyframe_owner("k", "i1"), "x");
+    if let Edit::FilterAdd { settings, .. } = &mut cycle {
+        settings.insert("mask", json!({"type": "scene", "scene_id": "k"}));
+    }
+    assert_eq!(field(&mut graph, cycle), "edits.0.settings.mask");
 }

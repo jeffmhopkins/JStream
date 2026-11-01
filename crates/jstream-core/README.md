@@ -196,7 +196,9 @@ state machine. Contents:
   draw it (`plan`, `compose`, each with the live values), and `video.snapshot`, the program mix
   read back as a PNG on the engine's own snapshot thread, which owns the snapshot
   compositor. A keyframe scene draws its parent's items at their effective values
-  (`State::shown_items`), so it follows every edit to the parent; so does what the
+  (`State::shown_items`), effects included where it overrides them
+  ([ADR-0088](../../docs/adr/0088-keyframe-scenes-override-item-effects.md)), so it
+  follows every edit to the parent; so does what the
   scene reaches for audio (`activity.rs`). A group in its tree whose children it
   overrides (#846) is planned as a view of the group through the keyframe, with its
   own layer, chains and boxes, under an internal scene ID (`view_id`, a control
@@ -473,7 +475,8 @@ state machine. Contents:
   scene once a transition onto it ends, a switch mid-transition, and a GPU
   snapshot mid-fade), keyframe scenes (`src/tests/keyframes.rs`: a variant drawing its
   parent's items with its overrides and following the parent, a `move` between a parent
-  and its variant pairing by item where pairing by source would cross, and the
+  and its variant pairing by item where pairing by source would cross, and pairing an
+  item only where its overridden effects look the same on both sides, and the
   overrides a batch drops reported and restored by undo, with a no-op clear that is no
   undo step, and a live value on a keyframe scene shown only where the keyframe draws the
   item, the parent's own showing there through fields it doesn't override, committed as
@@ -1032,7 +1035,8 @@ items.
 An item's effects (ADR-0065 §5, in v1 under
 [ADR-0068](../../docs/adr/0068-item-effects-in-v1.md)) run over its box, once per frame,
 as the scene that draws the item draws it: a keyframe scene's items have chains of
-their own, at their effective values. The chain phase draws the item into
+their own, at their effective values, with the keyframe's own effects where it
+overrides them (ADR-0088). The chain phase draws the item into
 `GpuKey::ItemBox`, a layer the size of its planned box plus the effects' outset on
 every side, in canvas pixels. The outset is the sum of their kinds' `max_outset_px`; no
 built-in kind declares one yet. A layer longer than 8192 pixels on a side is scaled

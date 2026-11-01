@@ -204,7 +204,12 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   inverse, so undo restores the overrides; the batch result's `dropped_overrides` stays
   empty. `state.get` reports each keyframe scene's `variant_of` and `overrides`, and
   `live.set` takes a value addressed to one as a parameter of that keyframe's, apart
-  from the item's own, as the engine does (protocol 0.53, #846);
+  from the item's own, as the engine does (protocol 0.53, #846). A keyframe overrides
+  an item's effects too
+  ([ADR-0088](../../docs/adr/0088-keyframe-scenes-override-item-effects.md)), through
+  `item.set_effects` (checking only the list's length and its IDs) and the `filter.*`
+  edits on the `keyframe` owner, which copy the item's own effects first where the
+  keyframe follows them, with the graph's inverses;
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing

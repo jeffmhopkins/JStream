@@ -46,6 +46,8 @@ enum Prop {
     Visible,
     /// An item's alpha multiplier (ADR-0023).
     Opacity,
+    /// A keyframe scene's override of an item's effects, the whole list (ADR-0088).
+    Effects,
     /// An item's blend mode.
     Blend,
     /// An item's stacking position.
@@ -143,8 +145,13 @@ impl Touched {
                     OverrideField::Crop => Prop::Crop,
                     OverrideField::Visible => Prop::Visible,
                     OverrideField::Opacity => Prop::Opacity,
+                    OverrideField::Effects => Prop::Effects,
                 };
                 self.prop(Object::Item(item_id.clone()), prop);
+            }
+            // The whole list is one property, as `item.clear_override` of `effects` keys it.
+            Edit::ItemSetEffects { item_id, .. } => {
+                self.prop(Object::Item(item_id.clone()), Prop::Effects);
             }
             Edit::SceneRename { scene_id, .. } => {
                 self.prop(Object::Scene(scene_id.clone()), Prop::Name);
@@ -340,6 +347,10 @@ impl Touched {
                         self.uses.insert(Object::Scene(scene_id.clone()));
                     }
                     FilterOwner::Item { item_id } => {
+                        self.uses.insert(Object::Item(item_id.clone()));
+                    }
+                    FilterOwner::Keyframe { scene_id, item_id } => {
+                        self.uses.insert(Object::Scene(scene_id.clone()));
                         self.uses.insert(Object::Item(item_id.clone()));
                     }
                     // The master stage always exists.

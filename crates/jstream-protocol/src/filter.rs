@@ -59,6 +59,19 @@ pub enum FilterOwner {
         /// The item.
         item_id: ItemId,
     },
+    /// An item's effects as a keyframe scene draws it (ADR-0088, since 0.63): the
+    /// keyframe's override of them, or the item's own while it has none. `scene_id` must
+    /// name a keyframe scene whose tree holds `item_id`, else `invalid_argument` on
+    /// `owner` (`not_found` for a missing one). A video chain only. The first edit while
+    /// the keyframe follows the item's own effects copies them into its override and
+    /// applies there, and its inverse is `item.clear_override` of `effects`; later edits
+    /// have their usual inverses. The item's own effects never change.
+    Keyframe {
+        /// The keyframe scene.
+        scene_id: SceneId,
+        /// The item in its parent's tree.
+        item_id: ItemId,
+    },
 }
 
 impl FilterOwner {
@@ -69,7 +82,8 @@ impl FilterOwner {
             FilterOwner::Master
             | FilterOwner::Output { .. }
             | FilterOwner::Scene { .. }
-            | FilterOwner::Item { .. } => None,
+            | FilterOwner::Item { .. }
+            | FilterOwner::Keyframe { .. } => None,
         }
     }
 }

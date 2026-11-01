@@ -542,7 +542,7 @@ pub fn owner_chains(collection: &Collection, owner: &FilterOwner) -> (bool, bool
                 .is_some_and(|o| output_has_audio(&o.kind)),
         ),
         FilterOwner::Scene { .. } => (true, false),
-        FilterOwner::Item { item_id } => (
+        FilterOwner::Item { item_id } | FilterOwner::Keyframe { item_id, .. } => (
             collection
                 .item(item_id)
                 .and_then(|(_, item)| collection.source(&item.source_id))
@@ -564,10 +564,12 @@ pub fn owner_name(collection: &Collection, owner: &FilterOwner) -> String {
         FilterOwner::Scene { scene_id } => collection
             .scene(scene_id)
             .map_or_else(|| scene_id.to_string(), |s| s.name.clone()),
-        FilterOwner::Item { item_id } => collection.item(item_id).map_or_else(
-            || item_id.to_string(),
-            |(_, item)| collection.source_name(&item.source_id),
-        ),
+        FilterOwner::Item { item_id } | FilterOwner::Keyframe { item_id, .. } => {
+            collection.item(item_id).map_or_else(
+                || item_id.to_string(),
+                |(_, item)| collection.source_name(&item.source_id),
+            )
+        }
         _ => String::new(),
     }
 }
@@ -582,6 +584,9 @@ pub fn owner_note(collection: &Collection, owner: &FilterOwner) -> &'static str 
         FilterOwner::Output { .. } => "Only this output, after the program filters. No sound.",
         FilterOwner::Scene { .. } => "Scene filters apply to the whole scene, top to bottom.",
         FilterOwner::Item { .. } => "Only this item, after its crop, top to bottom.",
+        FilterOwner::Keyframe { .. } => {
+            "Only this item in this keyframe, after its crop, top to bottom."
+        }
         _ => "Applies everywhere this source appears, top to bottom.",
     }
 }
@@ -593,6 +598,7 @@ fn owner_foot(owner: &FilterOwner) -> &'static str {
         FilterOwner::Output { .. } => "Applies to this output only, after the program filters.",
         FilterOwner::Scene { .. } => "Applies to the whole scene.",
         FilterOwner::Item { .. } => "Applies to this item only, after its crop.",
+        FilterOwner::Keyframe { .. } => "Applies to this item in this keyframe only.",
         _ => "Applies everywhere this source appears.",
     }
 }
@@ -602,6 +608,7 @@ fn owner_foot(owner: &FilterOwner) -> &'static str {
 fn add_sub(owner: &FilterOwner, name: &str) -> String {
     match owner {
         FilterOwner::Item { .. } => format!("For this item of “{name}”"),
+        FilterOwner::Keyframe { .. } => format!("For this item of “{name}” in this keyframe"),
         _ => format!("For “{name}”"),
     }
 }
@@ -636,6 +643,52 @@ pub fn scene_owner(collection: &Collection, scene_id: &SceneId) -> FilterOwner {
     FilterOwner::Scene { scene_id }
 }
 
+/// The owner of item `item_id`'s effects as scene `scene_id` shows it (FL-09): its own
+/// ([`FilterOwner::Item`]), or in a keyframe scene that shows it the keyframe's
+/// ([`FilterOwner::Keyframe`]), with whether the keyframe overrides them (ADR-0088).
+/// `None` when the item has no picture, so no effects.
+pub fn effects_owner(
+    collection: &Collection,
+    scene_id: Option<&SceneId>,
+    item_id: &ItemId,
+) -> Option<(FilterOwner, Option<bool>)> {
+    let keyframe = scene_id.filter(|scene_id| {
+        collection.is_keyframe(scene_id)
+            && collection
+                .chains(&FilterOwner::Keyframe {
+                    scene_id: (*scene_id).clone(),
+                    item_id: item_id.clone(),
+                })
+                .is_some()
+    });
+    let (owner, overridden) = match keyframe {
+        Some(scene_id) => {
+            let overridden = collection.scene(scene_id).is_some_and(|scene| {
+                scene
+                    .overrides
+                    .iter()
+                    .any(|o| &o.item_id == item_id && o.effects.is_some())
+            });
+            (
+                FilterOwner::Keyframe {
+                    scene_id: scene_id.clone(),
+                    item_id: item_id.clone(),
+                },
+                Some(overridden),
+            )
+        }
+        None => (
+            FilterOwner::Item {
+                item_id: item_id.clone(),
+            },
+            None,
+        ),
+    };
+    owner_chains(collection, &owner)
+        .0
+        .then_some((owner, overridden))
+}
+
 /// Whether `scene_id`'s picture holds `inner`'s: it is `inner`, a keyframe of a scene that
 /// holds it, or it places a nested scene that does.
 fn holds_scene(collection: &Collection, scene_id: &SceneId, inner: &SceneId) -> bool {
@@ -667,7 +720,8 @@ fn holds_scene(collection: &Collection, scene_id: &SceneId, inner: &SceneId) -> 
 /// The scenes a scene-input filter on `owner` may use (F8). For a scene's chain, every
 /// scene whose picture doesn't hold the scene itself; for an item's effects, every scene
 /// whose picture doesn't hold the item's scene, since the reference is an edge from that
-/// scene (ADR-0065 §3); for any other owner, [`scene_choices`]'.
+/// scene (ADR-0065 §3), and for its effects in a keyframe every scene whose picture
+/// doesn't hold the keyframe (ADR-0088); for any other owner, [`scene_choices`]'.
 pub fn owner_scene_choices(
     collection: &Collection,
     owner: &FilterOwner,
@@ -689,6 +743,11 @@ pub fn owner_scene_choices(
                 .map(|s| (s.scene_id.clone(), s.name.clone()))
                 .collect()
         }
+        FilterOwner::Keyframe { scene_id, .. } => collection
+            .listed_scenes()
+            .filter(|s| !holds_scene(collection, &s.scene_id, scene_id))
+            .map(|s| (s.scene_id.clone(), s.name.clone()))
+            .collect(),
         _ => scene_choices(collection, editing, &own_source(owner)),
     }
 }
@@ -831,6 +890,7 @@ fn describe_all(
 pub fn Filters() -> impl IntoView {
     let studio = expect_context::<Studio>();
     let dialogs = expect_context::<FilterDialogs>();
+    let session = expect_context::<SessionContext>();
     let selected = Memo::new(move |_| studio.selection.with(|s| (s.scene.clone(), s.item.clone())));
     // Selecting another item or scene shows its chains again.
     Effect::new(move |before: Option<(Option<SceneId>, Option<ItemId>)>| {
@@ -872,16 +932,18 @@ pub fn Filters() -> impl IntoView {
     });
     let chains =
         Memo::new(move |_| shown.with(|s| s.as_ref().map(|(chains, _, o)| (o.clone(), *chains))));
-    // The selected item's own effects (ADR-0065), under its source's chains, while the
-    // panel shows that source's and the item has a picture.
+    // The selected item's effects (ADR-0065), under its source's chains, while the
+    // panel shows that source's and the item has a picture: in a keyframe scene, as the
+    // keyframe shows them, with whether it overrides them (ADR-0088).
     let effects = Memo::new(move |_| {
         let source = shown.with(|s| matches!(s, Some((_, _, FilterOwner::Source { .. }))));
-        let (_, item) = selected.get();
-        let owner = FilterOwner::Item { item_id: item? };
-        let video = studio
-            .collection
-            .with(|c| c.as_ref().is_some_and(|c| owner_chains(c, &owner).0));
-        (source && video).then_some(owner)
+        let (scene, item) = selected.get();
+        let item = item?;
+        let effects = studio.collection.with(|c| {
+            c.as_ref()
+                .and_then(|c| effects_owner(c, scene.as_ref(), &item))
+        });
+        effects.filter(|_| source)
     });
     view! {
         <section class="panel filters-panel">
@@ -926,21 +988,65 @@ pub fn Filters() -> impl IntoView {
                 })
             }}
             {move || {
-                effects.get().map(|owner| {
+                effects.get().map(|(owner, overridden)| {
                     let add = {
                         let owner = owner.clone();
                         move |_| dialogs.add(owner.clone())
                     };
+                    let subtitle = if overridden.is_some() {
+                        "This item’s effects in this keyframe"
+                    } else {
+                        "This item’s effects"
+                    };
+                    // In a keyframe: whether it follows the item's own effects, and a
+                    // button that follows them again.
+                    let follow = overridden.map(|overridden| {
+                        let owner = owner.clone();
+                        let follow = move |_| {
+                            let FilterOwner::Keyframe { scene_id, item_id } = owner.clone() else {
+                                return;
+                            };
+                            if let Some(s) = session.get() {
+                                studio.apply(
+                                    &s,
+                                    vec![Edit::ItemClearOverride {
+                                        scene_id,
+                                        item_id,
+                                        field: jstream_control::protocol::OverrideField::Effects,
+                                    }],
+                                );
+                            }
+                        };
+                        if overridden {
+                            view! {
+                                <p class="filters-keyframe">
+                                    "This keyframe has its own effects for this item. "
+                                    <button type="button" class="filters-follow" on:click=follow>
+                                        "Follow the item"
+                                    </button>
+                                </p>
+                            }
+                            .into_any()
+                        } else {
+                            view! {
+                                <p class="filters-keyframe">
+                                    "Follows the item’s own effects. A change here gives this keyframe its own."
+                                </p>
+                            }
+                            .into_any()
+                        }
+                    });
                     view! {
                         <div class="filters-effects">
                             <div class="filters-titles">
-                                <span class="filters-subtitle">"This item’s effects"</span>
+                                <span class="filters-subtitle">{subtitle}</span>
                                 <span class="filters-effects-note">
                                     {studio.collection.with_untracked(|c| {
                                         c.as_ref().map(|c| owner_note(c, &owner)).unwrap_or_default()
                                     })}
                                 </span>
                             </div>
+                            {follow}
                             <Chains owner=owner.clone() video=true audio=false in_place=true />
                             <button type="button" class="filters-add" on:click=add>"+ Add effect…"</button>
                         </div>
@@ -1029,7 +1135,10 @@ pub fn Chains(
             }
         }
     };
-    let effects = matches!(owner, FilterOwner::Item { .. });
+    let effects = matches!(
+        owner,
+        FilterOwner::Item { .. } | FilterOwner::Keyframe { .. }
+    );
     let chain = move |which: FilterChain| {
         let (title, icon, empty) = chain_head(effects, which);
         let list = Memo::new(move |_| chains.with(|c| c.chain(which).to_vec()));
@@ -1468,7 +1577,12 @@ fn SettingsBody(target: Target, close: impl Fn() + Copy + Send + Sync + 'static)
             .unwrap_or_default()
     });
     let (icon, sub) = match chain {
-        FilterChain::Video if matches!(target.owner, FilterOwner::Item { .. }) => {
+        FilterChain::Video
+            if matches!(
+                target.owner,
+                FilterOwner::Item { .. } | FilterOwner::Keyframe { .. }
+            ) =>
+        {
             ("monitor", format!("Effect on “{owner_name}”"))
         }
         FilterChain::Video => ("monitor", format!("Video filter on “{owner_name}”")),
@@ -1736,7 +1850,9 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
     let none = match &owner {
         FilterOwner::Source { .. } => "The engine lists no filters for this source.",
         FilterOwner::Scene { .. } => "The engine lists no filters for this scene.",
-        FilterOwner::Item { .. } => "The engine lists no effects for this item.",
+        FilterOwner::Item { .. } | FilterOwner::Keyframe { .. } => {
+            "The engine lists no effects for this item."
+        }
         _ => "The engine lists no filters for this output.",
     };
     let owner = StoredValue::new(owner);
@@ -2528,6 +2644,150 @@ mod tests {
         assert_eq!(count_text(true, 1), "1 effect");
         assert_eq!(count_text(true, 3), "3 effects");
         assert_eq!(count_text(false, 0), "0 filters");
+    }
+
+    /// An item's effects in a keyframe scene (FL-09, ADR-0088): the keyframe's owner, which
+    /// reads the item's own effects until the keyframe overrides them, and whose scene
+    /// inputs leave out every scene whose picture holds the keyframe.
+    #[test]
+    fn a_keyframe_shows_an_items_effects_as_it_overrides_them() {
+        use jstream_control::protocol::{
+            Crop, Finite32, ItemInfo, ItemOverride, ItemTransform, PlacementForm, SceneRole,
+        };
+        let vignette = FilterInfo {
+            filter_id: FilterId::new("v"),
+            kind: "vignette".into(),
+            enabled: true,
+            settings: Settings::new(),
+        };
+        let item = ItemInfo {
+            item_id: "i-cam".into(),
+            source_id: "cam".into(),
+            placement: PlacementForm::Legacy,
+            transform: ItemTransform::IDENTITY,
+            geometry: None,
+            crop: Crop::NONE,
+            visible: true,
+            effects: vec![vignette.clone()],
+            opacity: Finite32::ONE,
+            blend: Default::default(),
+            transition: jstream_control::protocol::ItemTransition::default(),
+        };
+        let scene = |id: &str, variant_of: Option<&str>, overrides: Vec<ItemOverride>| {
+            let items = match variant_of {
+                None if id == "main" => vec![item.clone()],
+                None => Vec::new(),
+                Some(_) => crate::store::shown_items(std::slice::from_ref(&item), &overrides),
+            };
+            SceneInfo {
+                overrides,
+                filters: Default::default(),
+                variant_of: variant_of.map(SceneId::new),
+                scene_id: id.into(),
+                name: id.to_uppercase(),
+                role: SceneRole::Scene,
+                folder: None,
+                meta: Default::default(),
+                items,
+                transition_in: None,
+                transition_out: None,
+            }
+        };
+        let own = |effects: Option<Vec<FilterInfo>>| ItemOverride {
+            item_id: "i-cam".into(),
+            geometry: None,
+            transform: None,
+            crop: None,
+            visible: None,
+            opacity: None,
+            effects,
+        };
+        let collection = Collection {
+            scenes: vec![
+                scene("main", None, Vec::new()),
+                scene("follows", Some("main"), Vec::new()),
+                scene("bare", Some("main"), vec![own(Some(Vec::new()))]),
+                scene("other", None, Vec::new()),
+            ],
+            sources: vec![SourceInfo {
+                source_id: SourceId::new("cam"),
+                name: "Camera".into(),
+                kind: SourceKind::Builtin {
+                    kind: "color".into(),
+                },
+                settings: Settings::new(),
+                duplicated_from: None,
+                audio: None,
+                filters: Default::default(),
+                meta: Default::default(),
+            }],
+            ..Collection::default()
+        };
+        let keyframe = |scene: &str| FilterOwner::Keyframe {
+            scene_id: SceneId::new(scene),
+            item_id: ItemId::new("i-cam"),
+        };
+        let cam = ItemId::new("i-cam");
+        // In its own scene, or with no scene, the item's own effects.
+        let item_owner = FilterOwner::Item {
+            item_id: cam.clone(),
+        };
+        assert_eq!(
+            effects_owner(&collection, Some(&SceneId::new("main")), &cam),
+            Some((item_owner.clone(), None))
+        );
+        assert_eq!(
+            effects_owner(&collection, None, &cam),
+            Some((item_owner, None))
+        );
+        // A keyframe that follows the item reads its own effects.
+        assert_eq!(
+            effects_owner(&collection, Some(&SceneId::new("follows")), &cam),
+            Some((keyframe("follows"), Some(false)))
+        );
+        let chains = collection
+            .chains(&keyframe("follows"))
+            .expect("its effects");
+        assert_eq!(chains.video, [vignette]);
+        // One that overrides them with none reads none.
+        assert_eq!(
+            effects_owner(&collection, Some(&SceneId::new("bare")), &cam),
+            Some((keyframe("bare"), Some(true)))
+        );
+        let chains = collection.chains(&keyframe("bare")).expect("its effects");
+        assert!(chains.video.is_empty());
+        // A scene that isn't a keyframe, or one that doesn't show the item, has none.
+        assert!(collection.chains(&keyframe("main")).is_none());
+        assert!(collection.chains(&keyframe("other")).is_none());
+        let owner = keyframe("follows");
+        assert_eq!(owner_chains(&collection, &owner), (true, false));
+        assert_eq!(owner_name(&collection, &owner), "Camera");
+        assert_eq!(
+            owner_note(&collection, &owner),
+            "Only this item in this keyframe, after its crop, top to bottom."
+        );
+        assert_eq!(
+            owner_foot(&owner),
+            "Applies to this item in this keyframe only."
+        );
+        assert_eq!(
+            add_sub(&owner, "Camera"),
+            "For this item of “Camera” in this keyframe"
+        );
+        // Its scene inputs leave out only what holds the keyframe: itself.
+        let mut names: Vec<String> = owner_scene_choices(&collection, &owner, None)
+            .into_iter()
+            .map(|(_, name)| name)
+            .collect();
+        names.sort();
+        let mut want: Vec<String> = collection
+            .listed_scenes()
+            .filter(|s| s.scene_id != SceneId::new("follows"))
+            .map(|s| s.name.clone())
+            .collect();
+        want.sort();
+        assert_eq!(names, want);
+        assert!(names.contains(&"MAIN".to_string()), "{names:?}");
     }
 
     /// The vignette is a Style filter with the prototype's kind of hint (#862).

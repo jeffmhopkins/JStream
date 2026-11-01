@@ -960,6 +960,37 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Writes a keyframe scene's override of an item's effects, the whole list, which the\nkeyframe draws in place of the item's own (ADR-0088, since 0.63). `scene_id` must\nname a keyframe scene whose tree holds `item_id`, else `invalid_argument` on\n`scene_id` (`not_found` for a missing one): an item's own effects are edited with\n`filter.*`. Each entry is checked, and its settings completed, as `filter.add`\nchecks an item effect's; the field is `effects.<n>.<field>`. An empty list is an\noverride with no effects. One effect of the override is edited with `filter.*`\non the `keyframe` owner. Inverse: `item.set_effects` with the old list, or\n`item.clear_override` of `effects` when the keyframe didn't override it.",
+                "properties": {
+                  "effects": {
+                    "description": "The effects, first first: at most\n[`MAX_CHAIN_FILTERS`](crate::MAX_CHAIN_FILTERS), else `invalid_argument` on\n`effects`.",
+                    "items": {
+                      "$ref": "#/$defs/FilterInfo"
+                    },
+                    "type": "array"
+                  },
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item in the parent's tree."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The keyframe scene."
+                  },
+                  "type": {
+                    "const": "item.set_effects",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "item_id",
+                  "effects"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Renames a scene. Inverse: `scene.rename` back to the previous name.",
                 "properties": {
                   "name": {
@@ -2868,6 +2899,33 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "A filter in one of a source's chains. Unique within its source, not across\nsources, so a duplicated source keeps its filters' IDs (ADR-0026).",
             "type": "string"
           },
+          "FilterInfo": {
+            "description": "One filter, as `source.list`, `output.list` and `state.get` report it.",
+            "properties": {
+              "enabled": {
+                "description": "Whether it runs. A disabled filter is bypassed and keeps its settings.",
+                "type": "boolean"
+              },
+              "filter_id": {
+                "$ref": "#/$defs/FilterId",
+                "description": "Its ID, unique within its owner's chains."
+              },
+              "kind": {
+                "description": "Its kind, as `kind.list` reports it.",
+                "type": "string"
+              },
+              "settings": {
+                "$ref": "#/$defs/Settings",
+                "description": "Its settings: every parameter of its kind. Omitted for a kind without\nparameters."
+              }
+            },
+            "required": [
+              "filter_id",
+              "kind",
+              "enabled"
+            ],
+            "type": "object"
+          },
           "FilterOwner": {
             "description": "What owns a filter chain. Serialized with an internal `type` tag. Sources, the master\nstage, outputs, scenes and items own chains so far; buses may be further variants.",
             "oneOf": [
@@ -2952,6 +3010,29 @@ source: crates/jstream-mcp/src/tests.rs
                 },
                 "required": [
                   "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "An item's effects as a keyframe scene draws it (ADR-0088, since 0.63): the\nkeyframe's override of them, or the item's own while it has none. `scene_id` must\nname a keyframe scene whose tree holds `item_id`, else `invalid_argument` on\n`owner` (`not_found` for a missing one). A video chain only. The first edit while\nthe keyframe follows the item's own effects copies them into its override and\napplies there, and its inverse is `item.clear_override` of `effects`; later edits\nhave their usual inverses. The item's own effects never change.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item in its parent's tree."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The keyframe scene."
+                  },
+                  "type": {
+                    "const": "keyframe",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
                   "item_id"
                 ],
                 "type": "object"
@@ -3336,7 +3417,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "OverrideField": {
-            "description": "One of the four fields a keyframe scene can override. Each is overridden whole: a\nvariant that overrides `geometry` overrides all of it.",
+            "description": "One of the fields a keyframe scene can override. Each is overridden whole: a variant\nthat overrides `geometry` overrides all of it, and one that overrides `effects` the\nwhole list.",
             "oneOf": [
               {
                 "const": "geometry",
@@ -3356,6 +3437,11 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "opacity",
                 "description": "Its opacity (`item.set_opacity`).",
+                "type": "string"
+              },
+              {
+                "const": "effects",
+                "description": "Its effects, the whole list (`item.set_effects`, since 0.63, ADR-0088).",
                 "type": "string"
               }
             ]
@@ -4876,6 +4962,29 @@ source: crates/jstream-mcp/src/tests.rs
                   "item_id"
                 ],
                 "type": "object"
+              },
+              {
+                "description": "An item's effects as a keyframe scene draws it (ADR-0088, since 0.63): the\nkeyframe's override of them, or the item's own while it has none. `scene_id` must\nname a keyframe scene whose tree holds `item_id`, else `invalid_argument` on\n`owner` (`not_found` for a missing one). A video chain only. The first edit while\nthe keyframe follows the item's own effects copies them into its override and\napplies there, and its inverse is `item.clear_override` of `effects`; later edits\nhave their usual inverses. The item's own effects never change.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item in its parent's tree."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The keyframe scene."
+                  },
+                  "type": {
+                    "const": "keyframe",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "item_id"
+                ],
+                "type": "object"
               }
             ]
           },
@@ -6248,6 +6357,37 @@ source: crates/jstream-mcp/src/tests.rs
                   "scene_id",
                   "item_id",
                   "field"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Writes a keyframe scene's override of an item's effects, the whole list, which the\nkeyframe draws in place of the item's own (ADR-0088, since 0.63). `scene_id` must\nname a keyframe scene whose tree holds `item_id`, else `invalid_argument` on\n`scene_id` (`not_found` for a missing one): an item's own effects are edited with\n`filter.*`. Each entry is checked, and its settings completed, as `filter.add`\nchecks an item effect's; the field is `effects.<n>.<field>`. An empty list is an\noverride with no effects. One effect of the override is edited with `filter.*`\non the `keyframe` owner. Inverse: `item.set_effects` with the old list, or\n`item.clear_override` of `effects` when the keyframe didn't override it.",
+                "properties": {
+                  "effects": {
+                    "description": "The effects, first first: at most\n[`MAX_CHAIN_FILTERS`](crate::MAX_CHAIN_FILTERS), else `invalid_argument` on\n`effects`.",
+                    "items": {
+                      "$ref": "#/$defs/FilterInfo"
+                    },
+                    "type": "array"
+                  },
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item in the parent's tree."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The keyframe scene."
+                  },
+                  "type": {
+                    "const": "item.set_effects",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "item_id",
+                  "effects"
                 ],
                 "type": "object"
               },
@@ -8160,6 +8300,33 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "A filter in one of a source's chains. Unique within its source, not across\nsources, so a duplicated source keeps its filters' IDs (ADR-0026).",
             "type": "string"
           },
+          "FilterInfo": {
+            "description": "One filter, as `source.list`, `output.list` and `state.get` report it.",
+            "properties": {
+              "enabled": {
+                "description": "Whether it runs. A disabled filter is bypassed and keeps its settings.",
+                "type": "boolean"
+              },
+              "filter_id": {
+                "$ref": "#/$defs/FilterId",
+                "description": "Its ID, unique within its owner's chains."
+              },
+              "kind": {
+                "description": "Its kind, as `kind.list` reports it.",
+                "type": "string"
+              },
+              "settings": {
+                "$ref": "#/$defs/Settings",
+                "description": "Its settings: every parameter of its kind. Omitted for a kind without\nparameters."
+              }
+            },
+            "required": [
+              "filter_id",
+              "kind",
+              "enabled"
+            ],
+            "type": "object"
+          },
           "FilterOwner": {
             "description": "What owns a filter chain. Serialized with an internal `type` tag. Sources, the master\nstage, outputs, scenes and items own chains so far; buses may be further variants.",
             "oneOf": [
@@ -8244,6 +8411,29 @@ source: crates/jstream-mcp/src/tests.rs
                 },
                 "required": [
                   "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "An item's effects as a keyframe scene draws it (ADR-0088, since 0.63): the\nkeyframe's override of them, or the item's own while it has none. `scene_id` must\nname a keyframe scene whose tree holds `item_id`, else `invalid_argument` on\n`owner` (`not_found` for a missing one). A video chain only. The first edit while\nthe keyframe follows the item's own effects copies them into its override and\napplies there, and its inverse is `item.clear_override` of `effects`; later edits\nhave their usual inverses. The item's own effects never change.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item in its parent's tree."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The keyframe scene."
+                  },
+                  "type": {
+                    "const": "keyframe",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
                   "item_id"
                 ],
                 "type": "object"
@@ -8628,7 +8818,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "OverrideField": {
-            "description": "One of the four fields a keyframe scene can override. Each is overridden whole: a\nvariant that overrides `geometry` overrides all of it.",
+            "description": "One of the fields a keyframe scene can override. Each is overridden whole: a variant\nthat overrides `geometry` overrides all of it, and one that overrides `effects` the\nwhole list.",
             "oneOf": [
               {
                 "const": "geometry",
@@ -8648,6 +8838,11 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "opacity",
                 "description": "Its opacity (`item.set_opacity`).",
+                "type": "string"
+              },
+              {
+                "const": "effects",
+                "description": "Its effects, the whole list (`item.set_effects`, since 0.63, ADR-0088).",
                 "type": "string"
               }
             ]
@@ -9158,7 +9353,7 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Runs one `item` operation: set `op.type` to one of `item.clear_override` (edit), `item.add` (edit), `item.remove` (edit), `item.move` (edit), `item.set_transform` (edit), `item.set_geometry` (edit), `item.set_visible` (edit), `item.set_opacity` (edit), `item.set_blend` (edit), `item.reorder` (edit), `item.set_source` (edit), `item.set_crop` (edit), `item.set_transition` (edit), `item.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `item` operation: set `op.type` to one of `item.clear_override` (edit), `item.set_effects` (edit), `item.add` (edit), `item.remove` (edit), `item.move` (edit), `item.set_transform` (edit), `item.set_geometry` (edit), `item.set_visible` (edit), `item.set_opacity` (edit), `item.set_blend` (edit), `item.reorder` (edit), `item.set_source` (edit), `item.set_crop` (edit), `item.set_transition` (edit), `item.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "BlendMode": {
@@ -9244,6 +9439,37 @@ source: crates/jstream-mcp/src/tests.rs
               "top",
               "right",
               "bottom"
+            ],
+            "type": "object"
+          },
+          "FilterId": {
+            "description": "A filter in one of a source's chains. Unique within its source, not across\nsources, so a duplicated source keeps its filters' IDs (ADR-0026).",
+            "type": "string"
+          },
+          "FilterInfo": {
+            "description": "One filter, as `source.list`, `output.list` and `state.get` report it.",
+            "properties": {
+              "enabled": {
+                "description": "Whether it runs. A disabled filter is bypassed and keeps its settings.",
+                "type": "boolean"
+              },
+              "filter_id": {
+                "$ref": "#/$defs/FilterId",
+                "description": "Its ID, unique within its owner's chains."
+              },
+              "kind": {
+                "description": "Its kind, as `kind.list` reports it.",
+                "type": "string"
+              },
+              "settings": {
+                "$ref": "#/$defs/Settings",
+                "description": "Its settings: every parameter of its kind. Omitted for a kind without\nparameters."
+              }
+            },
+            "required": [
+              "filter_id",
+              "kind",
+              "enabled"
             ],
             "type": "object"
           },
@@ -9444,7 +9670,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "OverrideField": {
-            "description": "One of the four fields a keyframe scene can override. Each is overridden whole: a\nvariant that overrides `geometry` overrides all of it.",
+            "description": "One of the fields a keyframe scene can override. Each is overridden whole: a variant\nthat overrides `geometry` overrides all of it, and one that overrides `effects` the\nwhole list.",
             "oneOf": [
               {
                 "const": "geometry",
@@ -9465,6 +9691,11 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "opacity",
                 "description": "Its opacity (`item.set_opacity`).",
                 "type": "string"
+              },
+              {
+                "const": "effects",
+                "description": "Its effects, the whole list (`item.set_effects`, since 0.63, ADR-0088).",
+                "type": "string"
               }
             ]
           },
@@ -9477,6 +9708,11 @@ source: crates/jstream-mcp/src/tests.rs
           "SceneId": {
             "description": "A scene in the collection.",
             "type": "string"
+          },
+          "Settings": {
+            "additionalProperties": true,
+            "description": "A source's (or later a filter's) settings: parameter ID to value.\n\nThe values follow the kind's descriptor (`kind.describe`). The engine validates every\nedit against it and stores the complete map, so a reported map holds every parameter\nof the kind.",
+            "type": "object"
           },
           "Size": {
             "description": "A width and height, in canvas pixels.\n\nBoth components are [`Finite32`]. A non-positive component is rejected by\n[`ItemGeometry::validate`], not stored as a flip.",
@@ -9601,6 +9837,37 @@ source: crates/jstream-mcp/src/tests.rs
                   "scene_id",
                   "item_id",
                   "field"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Writes a keyframe scene's override of an item's effects, the whole list, which the\nkeyframe draws in place of the item's own (ADR-0088, since 0.63). `scene_id` must\nname a keyframe scene whose tree holds `item_id`, else `invalid_argument` on\n`scene_id` (`not_found` for a missing one): an item's own effects are edited with\n`filter.*`. Each entry is checked, and its settings completed, as `filter.add`\nchecks an item effect's; the field is `effects.<n>.<field>`. An empty list is an\noverride with no effects. One effect of the override is edited with `filter.*`\non the `keyframe` owner. Inverse: `item.set_effects` with the old list, or\n`item.clear_override` of `effects` when the keyframe didn't override it.",
+                "properties": {
+                  "effects": {
+                    "description": "The effects, first first: at most\n[`MAX_CHAIN_FILTERS`](crate::MAX_CHAIN_FILTERS), else `invalid_argument` on\n`effects`.",
+                    "items": {
+                      "$ref": "#/$defs/FilterInfo"
+                    },
+                    "type": "array"
+                  },
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item in the parent's tree."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The keyframe scene."
+                  },
+                  "type": {
+                    "const": "item.set_effects",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "item_id",
+                  "effects"
                 ],
                 "type": "object"
               },
@@ -11111,6 +11378,37 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Writes a keyframe scene's override of an item's effects, the whole list, which the\nkeyframe draws in place of the item's own (ADR-0088, since 0.63). `scene_id` must\nname a keyframe scene whose tree holds `item_id`, else `invalid_argument` on\n`scene_id` (`not_found` for a missing one): an item's own effects are edited with\n`filter.*`. Each entry is checked, and its settings completed, as `filter.add`\nchecks an item effect's; the field is `effects.<n>.<field>`. An empty list is an\noverride with no effects. One effect of the override is edited with `filter.*`\non the `keyframe` owner. Inverse: `item.set_effects` with the old list, or\n`item.clear_override` of `effects` when the keyframe didn't override it.",
+                "properties": {
+                  "effects": {
+                    "description": "The effects, first first: at most\n[`MAX_CHAIN_FILTERS`](crate::MAX_CHAIN_FILTERS), else `invalid_argument` on\n`effects`.",
+                    "items": {
+                      "$ref": "#/$defs/FilterInfo"
+                    },
+                    "type": "array"
+                  },
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item in the parent's tree."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The keyframe scene."
+                  },
+                  "type": {
+                    "const": "item.set_effects",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "item_id",
+                  "effects"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Renames a scene. Inverse: `scene.rename` back to the previous name.",
                 "properties": {
                   "name": {
@@ -13019,6 +13317,33 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "A filter in one of a source's chains. Unique within its source, not across\nsources, so a duplicated source keeps its filters' IDs (ADR-0026).",
             "type": "string"
           },
+          "FilterInfo": {
+            "description": "One filter, as `source.list`, `output.list` and `state.get` report it.",
+            "properties": {
+              "enabled": {
+                "description": "Whether it runs. A disabled filter is bypassed and keeps its settings.",
+                "type": "boolean"
+              },
+              "filter_id": {
+                "$ref": "#/$defs/FilterId",
+                "description": "Its ID, unique within its owner's chains."
+              },
+              "kind": {
+                "description": "Its kind, as `kind.list` reports it.",
+                "type": "string"
+              },
+              "settings": {
+                "$ref": "#/$defs/Settings",
+                "description": "Its settings: every parameter of its kind. Omitted for a kind without\nparameters."
+              }
+            },
+            "required": [
+              "filter_id",
+              "kind",
+              "enabled"
+            ],
+            "type": "object"
+          },
           "FilterOwner": {
             "description": "What owns a filter chain. Serialized with an internal `type` tag. Sources, the master\nstage, outputs, scenes and items own chains so far; buses may be further variants.",
             "oneOf": [
@@ -13103,6 +13428,29 @@ source: crates/jstream-mcp/src/tests.rs
                 },
                 "required": [
                   "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "An item's effects as a keyframe scene draws it (ADR-0088, since 0.63): the\nkeyframe's override of them, or the item's own while it has none. `scene_id` must\nname a keyframe scene whose tree holds `item_id`, else `invalid_argument` on\n`owner` (`not_found` for a missing one). A video chain only. The first edit while\nthe keyframe follows the item's own effects copies them into its override and\napplies there, and its inverse is `item.clear_override` of `effects`; later edits\nhave their usual inverses. The item's own effects never change.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item in its parent's tree."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The keyframe scene."
+                  },
+                  "type": {
+                    "const": "keyframe",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
                   "item_id"
                 ],
                 "type": "object"
@@ -13483,7 +13831,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "OverrideField": {
-            "description": "One of the four fields a keyframe scene can override. Each is overridden whole: a\nvariant that overrides `geometry` overrides all of it.",
+            "description": "One of the fields a keyframe scene can override. Each is overridden whole: a variant\nthat overrides `geometry` overrides all of it, and one that overrides `effects` the\nwhole list.",
             "oneOf": [
               {
                 "const": "geometry",
@@ -13503,6 +13851,11 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "opacity",
                 "description": "Its opacity (`item.set_opacity`).",
+                "type": "string"
+              },
+              {
+                "const": "effects",
+                "description": "Its effects, the whole list (`item.set_effects`, since 0.63, ADR-0088).",
                 "type": "string"
               }
             ]

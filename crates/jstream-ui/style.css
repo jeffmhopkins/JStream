@@ -1242,6 +1242,8 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .filters-effects { display: flex; flex-direction: column; gap: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
 .filters-subtitle { font-size: 13px; font-weight: 600; color: var(--text); }
 .filters-add { align-self: flex-start; padding: 6px 12px; background: var(--menu); border: 1px solid var(--border); border-radius: 6px; color: var(--text); }
+.filters-keyframe { margin: 0; font-size: 11px; color: var(--muted); }
+.filters-follow { padding: 0; background: none; border: 0; color: var(--accent); font-size: 11px; text-decoration: underline; cursor: pointer; }
 .filter-chains { display: flex; flex-direction: column; gap: 12px; }
 .filter-chain-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; color: var(--text-soft); }
 .filter-chain-title { font-size: 11px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; }

@@ -229,6 +229,7 @@ fn a_batch_reports_the_overrides_it_drops_and_undo_restores_them() {
         crop: None,
         visible: None,
         opacity: Some(opacity),
+        effects: None,
     };
     assert_eq!(
         dropped,
@@ -889,5 +890,52 @@ fn a_child_appears_and_disappears_inside_a_group_with_its_timing() {
     assert_eq!(
         inside(&engine),
         [("g1".into(), "pair", group), ("g2".into(), "appear", group)]
+    );
+}
+
+/// A Move between two members of a family pairs an item only where its effects look the
+/// same on both sides (ADR-0088, ADR-0081): `a1`, whose effects keyframe `k` overrides,
+/// disappears and appears; `a2`, which follows the item's own on both sides, pairs.
+#[test]
+fn a_move_within_a_family_pairs_an_item_only_with_the_same_effects() {
+    let engine = family();
+    let control = connected(&engine);
+    apply(
+        &control,
+        vec![
+            move_preset(),
+            Edit::ItemSetEffects {
+                scene_id: SceneId::new("k"),
+                item_id: ItemId::new("a1"),
+                effects: vec![jstream_protocol::FilterInfo {
+                    filter_id: jstream_protocol::FilterId::new("sharp"),
+                    kind: "sharpen".into(),
+                    enabled: true,
+                    settings: Settings::default(),
+                }],
+            },
+        ],
+    );
+    switch(&control, "a", None);
+    switch(&control, "k", Some("move"));
+    let tracks = engine
+        .render_hub()
+        .load()
+        .shot()
+        .tracks()
+        .expect("a transition runs");
+    let kinds: Vec<&str> = tracks
+        .iter()
+        .map(|track| match track {
+            Track::Pair { .. } => "pair",
+            Track::Appear { .. } => "appear",
+            Track::Disappear { .. } => "disappear",
+        })
+        .collect();
+    let pairs = kinds.iter().filter(|k| **k == "pair").count();
+    assert_eq!(pairs, 1, "only a2 pairs: {kinds:?}");
+    assert!(
+        kinds.contains(&"appear") && kinds.contains(&"disappear"),
+        "{kinds:?}"
     );
 }

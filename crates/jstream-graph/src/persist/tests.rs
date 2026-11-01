@@ -15,9 +15,14 @@ use serde_json::{Value, json};
 /// migration upgrades it, and a fixture of the new version is added beside it.
 const V1: &str = include_str!("fixtures/v1.json");
 
-/// A collection file at schema version 2, the current one: version 1 with scene
-/// filters and item effects (ADR-0065). The same rule applies once version 3 exists.
+/// A collection file at schema version 2: version 1 with scene filters and item effects
+/// (ADR-0065). It must keep loading as version 1 must.
 const V2: &str = include_str!("fixtures/v2.json");
+
+/// A collection file at schema version 3, the current one: version 2 with a keyframe
+/// scene that overrides an item's effects (ADR-0088). The same rule applies once
+/// version 4 exists.
+const V3: &str = include_str!("fixtures/v3.json");
 
 /// The parity fixture's `webcam`, and `color`, whose `follow` parameter refers to
 /// another source.
@@ -142,6 +147,42 @@ fn v2_graph() -> Graph {
     graph
 }
 
+/// The v2 fixture's collection, plus keyframe scene `k` of `a`, which overrides item
+/// `i3`'s opacity and its effects with a `frame` tinted by `z_base` (ADR-0088), in one
+/// more batch: rev 4.
+fn v3_graph() -> Graph {
+    let mut graph = v2_graph();
+    let applied = graph.apply(
+        &[
+            Edit::SceneCreateVariant {
+                scene_id: SceneId::new("k"),
+                variant_of: SceneId::new("a"),
+                name: "A, close".into(),
+            },
+            Edit::ItemSetOpacity {
+                item_id: ItemId::new("i3"),
+                scene_id: Some(SceneId::new("k")),
+                opacity: jstream_protocol::Finite32::new(0.75).expect("finite"),
+            },
+            Edit::ItemSetEffects {
+                scene_id: SceneId::new("k"),
+                item_id: ItemId::new("i3"),
+                effects: vec![jstream_protocol::FilterInfo {
+                    filter_id: FilterId::new("close"),
+                    kind: "frame".into(),
+                    enabled: false,
+                    settings: [("tint", json!({"type": "source", "source_id": "z_base"}))]
+                        .into_iter()
+                        .collect(),
+                }],
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    graph
+}
+
 fn color(id: &str, follow: Option<&str>) -> Edit {
     let follow = follow.map_or(Value::Null, |id| json!({"type": "source", "source_id": id}));
     Edit::SourceCreate {
@@ -200,9 +241,18 @@ fn edit_file(edit: impl FnOnce(&mut Value)) -> String {
 
 #[test]
 fn the_fixture_is_what_the_collection_saves() {
-    assert_eq!(v2_graph().to_collection_json(), V2);
+    assert_eq!(v3_graph().to_collection_json(), V3);
 }
 
+#[test]
+fn the_v3_fixture_loads_exactly() {
+    let expected = v3_graph();
+    let loaded = load(V3);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(4)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+/// Version 2 upgrades unchanged: it has no overridden effects.
 #[test]
 fn the_v2_fixture_loads_exactly() {
     let expected = v2_graph();
@@ -1267,4 +1317,27 @@ fn a_scene_in_a_missing_folder_is_refused() {
         }
         other => panic!("expected a refusal, got {other:?}"),
     }
+}
+
+/// A version 2 file has no overridden effects (ADR-0088): its migration refuses one,
+/// and upgrades every other override unchanged.
+#[test]
+fn a_version_2_override_has_no_effects() {
+    let mut value: Value = serde_json::from_str(V3).unwrap_or_default();
+    value["schema_version"] = json!(2);
+    let k = value["scenes"]
+        .as_array()
+        .and_then(|scenes| scenes.iter().position(|s| s["id"] == "k"))
+        .expect("the v3 fixture has keyframe scene `k`");
+    assert_eq!(
+        load(&value.to_string()).map(|g| g.rev()),
+        Err(LoadError::Migration {
+            from: 2,
+            reason: "a version 2 keyframe override has no `effects`".into()
+        })
+    );
+    value["scenes"][k]["overrides"][0]
+        .as_object_mut()
+        .map(|o| o.remove("effects"));
+    assert_eq!(load(&value.to_string()).map(|g| g.rev()), Ok(Rev(4)));
 }

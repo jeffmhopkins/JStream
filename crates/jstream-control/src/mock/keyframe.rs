@@ -4,12 +4,16 @@
 //! `item.clear_override`, and the overrides an item leaving its parent's tree drops, with
 //! the checks, errors and inverses of `jstream-graph`'s `keyframe` module. As there, an
 //! override names an item in the parent's tree (its own, or a child of a group placed in
-//! it, at any depth), and is written and cleared one field at a time.
+//! it, at any depth), and is written and cleared one field at a time. `item.set_effects`
+//! writes the effects field, a whole list (ADR-0088), with the graph's checks that need
+//! no kind descriptor: the IDs, their uniqueness and the list's length. Like the rest of
+//! the mock it stores the settings as given.
 
 use super::{Collection, already_exists, check_id, check_name, invalid, not_found};
 use jstream_protocol::{
-    Blocker, Crop, Edit, EntityKind, Finite32, ItemGeometry, ItemId, ItemOverride, ItemTransform,
-    OverrideField, ProtocolError, SceneId, SceneRole, SourceKind,
+    Blocker, Crop, Edit, EntityKind, FilterChains, FilterInfo, Finite32, ItemGeometry, ItemId,
+    ItemOverride, ItemTransform, MAX_CHAIN_FILTERS, OverrideField, ProtocolError, SceneId,
+    SceneRole, Settings, SourceKind,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -24,12 +28,14 @@ pub(super) enum Placement {
 
 /// What a keyframe scene overrides for one item: each field is absent while it follows
 /// the parent. An override with no field set is never stored.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub(super) struct Override {
     geometry: Option<Placement>,
     crop: Option<Crop>,
     visible: Option<bool>,
     opacity: Option<Finite32>,
+    /// The effects, a whole video chain (ADR-0088).
+    effects: Option<FilterChains>,
 }
 
 impl Override {
@@ -72,12 +78,27 @@ impl Override {
         }
         if let Some(opacity) = self.opacity {
             edits.push(Edit::ItemSetOpacity {
-                item_id,
-                scene_id,
+                item_id: item_id.clone(),
+                scene_id: scene_id.clone(),
                 opacity,
             });
         }
+        if let (Some(effects), Some(scene_id)) = (&self.effects, scene_id) {
+            edits.push(Edit::ItemSetEffects {
+                scene_id,
+                item_id,
+                effects: effects.video.clone(),
+            });
+        }
         edits
+    }
+
+    /// The settings of every overridden effect, for the delete checks.
+    pub(super) fn effect_settings(&self) -> impl Iterator<Item = &Settings> {
+        self.effects
+            .iter()
+            .flat_map(|e| &e.video)
+            .map(|f| &f.settings)
     }
 
     /// Only `field` of this override.
@@ -88,6 +109,7 @@ impl Override {
             OverrideField::Crop => only.crop = self.crop,
             OverrideField::Visible => only.visible = self.visible,
             OverrideField::Opacity => only.opacity = self.opacity,
+            OverrideField::Effects => only.effects = self.effects.clone(),
         }
         only
     }
@@ -99,6 +121,7 @@ impl Override {
             OverrideField::Crop => self.crop = None,
             OverrideField::Visible => self.visible = None,
             OverrideField::Opacity => self.opacity = None,
+            OverrideField::Effects => self.effects = None,
         }
     }
 
@@ -108,6 +131,7 @@ impl Override {
         self.crop = other.crop.or(self.crop);
         self.visible = other.visible.or(self.visible);
         self.opacity = other.opacity.or(self.opacity);
+        self.effects = other.effects.or(self.effects.take());
     }
 
     /// The field `edit` writes, as an override of that field alone, and the field.
@@ -134,6 +158,13 @@ impl Override {
                 o.opacity = Some(*opacity);
                 OverrideField::Opacity
             }
+            Edit::ItemSetEffects { effects, .. } => {
+                o.effects = Some(FilterChains {
+                    video: effects.clone(),
+                    audio: Vec::new(),
+                });
+                OverrideField::Effects
+            }
             _ => return None,
         };
         Some((o, field))
@@ -154,6 +185,7 @@ impl Override {
             crop: self.crop,
             visible: self.visible,
             opacity: self.opacity,
+            effects: self.effects.as_ref().map(|e| e.video.clone()),
         }
     }
 }
@@ -167,7 +199,7 @@ pub(super) type Overrides = BTreeMap<ItemId, Override>;
 fn inverse(
     scene_id: &SceneId,
     item_id: &ItemId,
-    before: Override,
+    before: &Override,
     field: OverrideField,
 ) -> Vec<Edit> {
     let back = before.only(field).write_edits(scene_id, item_id);
@@ -221,6 +253,21 @@ impl Collection {
                 Ok(None) => None,
                 Err(error) => Some(Err(error)),
             },
+            // Only a keyframe scene: an item's own effects take `filter.*` (ADR-0088).
+            Edit::ItemSetEffects {
+                scene_id, item_id, ..
+            } => Some(match self.variant_target(item_id, Some(scene_id), at) {
+                Ok(Some(vi)) => self.write_override(vi, item_id, edit, at),
+                Ok(None) => Err(invalid(
+                    at,
+                    "scene_id",
+                    format!(
+                        "scene `{scene_id}` is item `{item_id}`'s own scene: edit its own \
+                             effects with `filter.*`, and name a keyframe scene here"
+                    ),
+                )),
+                Err(error) => Err(error),
+            }),
             _ => None,
         }
     }
@@ -287,7 +334,7 @@ impl Collection {
         let Some(o) = overrides.get_mut(item_id) else {
             return Ok(Vec::new());
         };
-        let before = *o;
+        let before = o.clone();
         if before.only(field).is_empty() {
             return Ok(Vec::new());
         }
@@ -402,6 +449,7 @@ impl Collection {
                 super::geometry_view(geometry, at)?;
             }
             Edit::ItemSetOpacity { opacity, .. } => super::check_opacity(*opacity, at)?,
+            Edit::ItemSetEffects { effects, .. } => check_effects(effects, at)?,
             _ => {}
         }
         let Some((written, field)) = Override::of_edit(edit) else {
@@ -409,9 +457,9 @@ impl Collection {
         };
         let scene = &mut self.scenes[vi];
         let o = scene.overrides.entry(item_id.clone()).or_default();
-        let before = *o;
+        let before = o.clone();
         o.merge(written);
-        Ok(inverse(&scene.id, item_id, before, field))
+        Ok(inverse(&scene.id, item_id, &before, field))
     }
 
     /// Drops every override whose item is no longer in its keyframe scene's tree
@@ -445,6 +493,58 @@ impl Collection {
             }
         }
         restore
+    }
+
+    /// Checks the `keyframe` filter owner as the graph does (ADR-0088), and while the
+    /// keyframe scene follows the item's own effects copies them into its override.
+    /// Returns whether it copied them: the edit's inverse is then `item.clear_override`.
+    pub(super) fn copy_effects(
+        &mut self,
+        scene_id: &SceneId,
+        item_id: &ItemId,
+        at: usize,
+    ) -> Result<bool, ProtocolError> {
+        let vi = self.existing_scene(scene_id)?;
+        let Some(item) = self.items.get(item_id) else {
+            return Err(not_found(EntityKind::Item, item_id.as_str()));
+        };
+        let own = item.effects.clone();
+        let Some(parent) = self.scenes[vi].variant_of.clone() else {
+            return Err(invalid(
+                at,
+                "owner",
+                format!(
+                    "scene `{scene_id}` is not a keyframe scene: an item's own effects take \
+                     the `item` owner"
+                ),
+            ));
+        };
+        self.check_parent_item(&parent, item_id, at, "owner")?;
+        let o = self.scenes[vi]
+            .overrides
+            .entry(item_id.clone())
+            .or_default();
+        if o.effects.is_some() {
+            return Ok(false);
+        }
+        o.effects = Some(own);
+        Ok(true)
+    }
+
+    /// A keyframe scene's override of an item's effects, which [`Self::copy_effects`]
+    /// made, to edit.
+    pub(super) fn keyframe_effects(
+        &mut self,
+        scene_id: &SceneId,
+        item_id: &ItemId,
+    ) -> Option<&mut FilterChains> {
+        self.scenes
+            .iter_mut()
+            .find(|s| s.id == *scene_id)?
+            .overrides
+            .get_mut(item_id)?
+            .effects
+            .as_mut()
     }
 
     /// The keyframe scenes of `scene_id`, as the blockers of its delete.
@@ -481,6 +581,31 @@ impl Collection {
         self.scene_index(scene_id)
             .is_some_and(|si| self.scenes[si].variant_of.is_some())
     }
+}
+
+/// The checks of an overridden effects list that need no kind descriptor, with the
+/// graph's fields: its length, and each entry's ID, non-empty and unique.
+fn check_effects(effects: &[FilterInfo], at: usize) -> Result<(), ProtocolError> {
+    if effects.len() > MAX_CHAIN_FILTERS {
+        return Err(invalid(
+            at,
+            "effects",
+            format!("a chain holds at most {MAX_CHAIN_FILTERS} filters"),
+        ));
+    }
+    let mut ids = BTreeSet::new();
+    for (n, entry) in effects.iter().enumerate() {
+        let field = format!("effects.{n}.filter_id");
+        check_id(entry.filter_id.as_str(), at, &field)?;
+        if !ids.insert(&entry.filter_id) {
+            return Err(invalid(
+                at,
+                &field,
+                format!("filter `{}` is in the list twice", entry.filter_id),
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// A keyframe scene's overrides as `state.get` reports them, in item ID order.

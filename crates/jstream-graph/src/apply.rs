@@ -362,7 +362,7 @@ fn apply_edit(
     at: usize,
     running: &BTreeSet<OutputId>,
 ) -> Result<Vec<Edit>, ProtocolError> {
-    if let Some(applied) = keyframe::apply(state, edit, at) {
+    if let Some(applied) = keyframe::apply(state, kinds, edit, at) {
         return applied;
     }
     if let Some(applied) = crate::encoder::apply(state, edit, at) {

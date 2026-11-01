@@ -41,7 +41,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   implementation agrees.
 - **Commands** (`command.rs`): `Edit` (`scene.create`, `scene.create_variant`,
   `scene.rename`, `scene.delete`,
-  `scene.reorder`, `scene.set_role`, `item.clear_override`, `item.add`, `item.remove`, `item.reorder`,
+  `scene.reorder`, `scene.set_role`, `item.clear_override`, `item.set_effects`, `item.add`, `item.remove`, `item.reorder`,
   `item.move`, `item.set_geometry`, `item.set_transform` (deprecated), `item.set_crop`,
   `item.set_visible`, `item.set_source`, `item.set_opacity`, `item.set_blend`,
   `canvas.set_size`, `source.create`, `source.rename`, `source.set_settings`,
@@ -69,7 +69,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   optional `ends_gesture` commits a gesture; and the `Command`/`CommandClass`
   classification view.
 - **Filters** (`filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
-  `FilterOwner` (tagged `type`: `source`, `master`, `output`, `scene` and `item`),
+  `FilterOwner` (tagged `type`: `source`, `master`, `output`, `scene`, `item` and
+  `keyframe`),
   `FilterChain` (`video`, `audio`), `FilterInfo` and `FilterChains`, the chains
   `SourceInfo`, `OutputInfo` and `SceneInfo` report (`ItemInfo.effects` is one video
   chain), and `MAX_CHAIN_FILTERS` (8). `MasterInfo` (`query.rs`) is the
@@ -124,7 +125,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Keyframe scenes** (`keyframe.rs`, [ADR-0024](../../docs/adr/0024-scene-structure.md)
   §2, [ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)):
   `ItemOverride`, what a keyframe scene overrides for one item as `SceneInfo.overrides`
-  reports it, `OverrideField`, the field `item.clear_override` removes, and
+  reports it (its `effects` since 0.63), `OverrideField`, the field `item.clear_override` removes, and
   `DroppedOverride`, an override a batch dropped.
 - **YouTube** (`youtube.rs`, [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)):
   `YoutubeAuth`, `BroadcastInfo`, `StreamInfo` and the enums they carry, mirroring the
@@ -187,8 +188,12 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.55 because a keyframe
-  scene overrides the children of the groups in its parent's tree (#846; no wire
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.63 because a keyframe
+  scene overrides an item's effects
+  ([ADR-0088](../../docs/adr/0088-keyframe-scenes-override-item-effects.md):
+  `ItemOverride.effects`, `OverrideField`'s `effects`, `item.set_effects` and the
+  `keyframe` filter owner); 0.55 made a keyframe
+  scene override the children of the groups in its parent's tree (#846; no wire
   change); 0.54 added `stats.tick`'s `chains`, what scene filter chains and item effects
   add to each frame (`ChainCost`); 0.53 made the engine take live values on a keyframe scene (`live.set`,
   #846; no wire change); 0.52 added
@@ -452,7 +457,8 @@ keeps the addressing of the edit it undoes.
 - A variant has no items of its own. It shows its parent's items, at the parent's
   current values except for the fields it overrides: `geometry` (whole, as one
   `item.set_geometry` or `item.set_transform` writes it, reported as `geometry` or, for
-  the 0.3 form, `transform`), `crop`, `visible` and `opacity`. `SceneInfo.overrides`
+  the 0.3 form, `transform`), `crop`, `visible`, `opacity` and, since 0.63, `effects`
+  (below). `SceneInfo.overrides`
   lists them in item ID order, as `ItemOverride`s with at least one field set (omitted
   when there are none). An override names an item in the parent's tree: one of the
   parent's own, or, since 0.55, a child of a group (role `group`) the parent places, at
@@ -479,6 +485,20 @@ keeps the addressing of the edit it undoes.
   batch result lists each as a `DroppedOverride {scene_id, item_id, ...fields}`
   (`dropped_overrides`, omitted when there are none), and the inverse restores them
   after the item is back.
+- **Effects** (0.63, [ADR-0088](../../docs/adr/0088-keyframe-scenes-override-item-effects.md)):
+  an override's `effects` is a whole list of `FilterInfo` that the variant draws the
+  item with in place of its own effects; an empty list draws none.
+  `item.set_effects { scene_id, item_id, effects }` writes it whole, each filter checked
+  and its settings completed as `filter.add` does (at most 8, unique IDs, a known
+  `video_filter` kind); naming the item's own scene, or one that isn't its keyframe, is
+  `invalid_argument` on `edits.N.scene_id`. The `filter.*` edits also take the owner
+  `{"type":"keyframe","scene_id":…,"item_id":…}`, the item's effects as that keyframe
+  shows them, with the same errors on `edits.N.owner`: where the keyframe follows the
+  item, the edit first copies the item's own effects into the override, and its
+  inverse is then `item.clear_override` of `effects`. References in an overridden
+  effect are edges of the keyframe scene; a blocker names them as
+  `overrides.<item_id>.effects.<filter_id>.<param>` of that scene, and `delete.plan`
+  clears them with `item.set_effects`.
 - A variant depends on its parent: `scene.delete` of a parent is refused while it has
   variants (blockers with field `variant_of`), and `delete.plan` of a parent deletes its
   variants, and the `scene` sources that show them, before it.
@@ -663,7 +683,8 @@ report them, each omitted while empty, so an older server's answer parses as non
 `video_filter` descriptor's optional `max_outset_px` is the most the kind draws beyond
 each edge of its input at any settings, which pads an item's effects layer. A scene's
 or an item's audio chain is `invalid_argument` on `edits.N.chain`, and a keyframe scene
-as the owner on `edits.N.owner`, since it shows its parent's filters. References in
+as the `scene` owner on `edits.N.owner`, since it shows its parent's filters (an item's
+effects in a keyframe take the `keyframe` owner, 0.63). References in
 them are edges of the scene, or of the item's scene: a blocker names them as
 `filters.<filter_id>.<param>` of the scene or `effects.<filter_id>.<param>` of the item.
 The engine runs a scene's filters on its composite and an item's effects over its box,

@@ -2168,14 +2168,21 @@ impl Collection {
                 .chain(filters.map(|f| &f.settings))
                 .any(refers)
         });
-        // A scene's filters and an item's effects refer too (ADR-0065 §3).
+        // A scene's filters and an item's effects refer too (ADR-0065 §3), and so do a
+        // keyframe scene's overridden effects (ADR-0088).
         let scenes = self.scenes.iter().map(|s| &s.filters);
         let items = self.items.values().map(|i| &i.effects);
+        let overridden = self
+            .scenes
+            .iter()
+            .flat_map(|s| s.overrides.values())
+            .flat_map(keyframe::Override::effect_settings);
         sources
             || scenes
                 .chain(items)
                 .flat_map(|chains| chains.video.iter().chain(&chains.audio))
                 .any(|f| refers(&f.settings))
+            || overridden.into_iter().any(refers)
     }
 
     /// Every source, ordered by ID, as queries report them.
@@ -3958,6 +3965,123 @@ mod tests {
             let got = query(&*control, call.clone()).map_err(|error| error.protocol().cloned());
             assert_eq!(got, expected.map_err(Some), "{call:?}");
         }
+    }
+
+    /// A keyframe scene's override of an item's effects, as `jstream-graph` keeps it
+    /// (ADR-0088): `item.set_effects` writes the whole list, the parent's item keeps its
+    /// own, only a keyframe scene takes it, and undo restores what each edit changed.
+    #[test]
+    fn a_keyframe_scene_overrides_an_items_effects() {
+        use jstream_protocol::{FilterId, FilterInfo, OverrideField};
+        let scene = |control: &dyn Control, id: &str| match state(control) {
+            QueryResult::StateGet { scenes, .. } => scenes
+                .into_iter()
+                .find(|s| s.scene_id.as_str() == id)
+                .expect("the scene"),
+            other => panic!("not state.get: {other:?}"),
+        };
+        let vignette = |id: &str| FilterInfo {
+            filter_id: FilterId::new(id),
+            kind: "vignette".into(),
+            enabled: true,
+            settings: Default::default(),
+        };
+        let set = |scene: &str, effects: Vec<FilterInfo>| Edit::ItemSetEffects {
+            scene_id: SceneId::new(scene),
+            item_id: ItemId::new("i1"),
+            effects,
+        };
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let setup = Batch {
+            edits: vec![
+                create("a"),
+                webcam(),
+                add("a", "i1", "webcam"),
+                Edit::SceneCreateVariant {
+                    scene_id: SceneId::new("k"),
+                    variant_of: SceneId::new("a"),
+                    name: "K".into(),
+                },
+            ],
+            ..Batch::single(create("unused"))
+        };
+        assert!(batch(&*control, setup).is_ok());
+        let before = state(&*control);
+        assert!(batch(&*control, Batch::single(set("k", vec![vignette("v")]))).is_ok());
+        let k = scene(&*control, "k");
+        assert_eq!(k.overrides[0].effects, Some(vec![vignette("v")]));
+        assert!(scene(&*control, "a").items[0].effects.is_empty());
+        // A second write, then an empty list, each undone to the one before.
+        assert!(batch(&*control, Batch::single(set("k", Vec::new()))).is_ok());
+        assert_eq!(scene(&*control, "k").overrides[0].effects, Some(Vec::new()));
+        assert!(undo(&*control).is_ok());
+        assert_eq!(
+            scene(&*control, "k").overrides[0].effects,
+            Some(vec![vignette("v")])
+        );
+        let clear = Edit::ItemClearOverride {
+            scene_id: SceneId::new("k"),
+            item_id: ItemId::new("i1"),
+            field: OverrideField::Effects,
+        };
+        assert!(batch(&*control, Batch::single(clear)).is_ok());
+        assert!(scene(&*control, "k").overrides.is_empty());
+        assert!(undo(&*control).is_ok());
+        assert!(undo(&*control).is_ok());
+        assert_eq!(state(&*control), before);
+
+        let field = |edit: Edit| match batch(&*control, Batch::single(edit)) {
+            Err(error) => match error.protocol() {
+                Some(ProtocolError::InvalidArgument { field, .. }) => field.clone(),
+                other => panic!("not invalid_argument: {other:?}"),
+            },
+            Ok(rev) => panic!("applied at {rev:?}"),
+        };
+        assert_eq!(field(set("a", Vec::new())), "edits.0.scene_id");
+        assert_eq!(
+            field(set("k", vec![vignette("v"), vignette("v")])),
+            "edits.0.effects.1.filter_id"
+        );
+        let nine = (0..9).map(|n| vignette(&format!("v{n}"))).collect();
+        assert_eq!(field(set("k", nine)), "edits.0.effects");
+
+        // One effect at a time through the `keyframe` owner: the first edit copies the
+        // item's own effects, and undo clears the override again.
+        let owner = jstream_protocol::FilterOwner::Keyframe {
+            scene_id: SceneId::new("k"),
+            item_id: ItemId::new("i1"),
+        };
+        let add = |owner: jstream_protocol::FilterOwner, id: &str| Edit::FilterAdd {
+            owner,
+            chain: jstream_protocol::FilterChain::Video,
+            filter_id: FilterId::new(id),
+            kind: "vignette".into(),
+            settings: Default::default(),
+            enabled: None,
+            index: None,
+        };
+        let own = jstream_protocol::FilterOwner::Item {
+            item_id: ItemId::new("i1"),
+        };
+        assert!(batch(&*control, Batch::single(add(own, "mine"))).is_ok());
+        let before = state(&*control);
+        assert!(batch(&*control, Batch::single(add(owner.clone(), "kf"))).is_ok());
+        let ids: Vec<String> = scene(&*control, "k").overrides[0]
+            .effects
+            .iter()
+            .flatten()
+            .map(|f| f.filter_id.to_string())
+            .collect();
+        assert_eq!(ids, ["mine", "kf"]);
+        assert_eq!(scene(&*control, "a").items[0].effects.len(), 1);
+        assert!(undo(&*control).is_ok());
+        assert_eq!(state(&*control), before);
+        let not_keyframe = jstream_protocol::FilterOwner::Keyframe {
+            scene_id: SceneId::new("a"),
+            item_id: ItemId::new("i1"),
+        };
+        assert_eq!(field(add(not_keyframe, "x")), "edits.0.owner");
     }
 
     /// Keyframe scenes as `jstream-graph` keeps them (ADR-0049): a variant shows its

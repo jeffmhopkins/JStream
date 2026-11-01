@@ -277,6 +277,13 @@ fn describe_edit(edit: &Edit, state: &State) -> String {
         Edit::ItemClearOverride { item_id, .. } => {
             format!("Reset a keyframe override of {}", item(state, item_id))
         }
+        Edit::ItemSetEffects {
+            scene_id, item_id, ..
+        } => format!(
+            "Changed the effects of {} in keyframe {}",
+            item(state, item_id),
+            scene(state, scene_id)
+        ),
         Edit::SourceCreate { name, .. } => format!("Created source {}", quote(name)),
         Edit::SourceRename { source_id, name } => format!(
             "Renamed source {} to {}",
@@ -587,6 +594,11 @@ fn owner_name(state: &State, owner: &FilterOwner) -> String {
         FilterOwner::Output { output_id } => format!("output {}", quote(output_id.as_str())),
         FilterOwner::Scene { scene_id } => format!("scene {}", scene(state, scene_id)),
         FilterOwner::Item { item_id } => item(state, item_id),
+        FilterOwner::Keyframe { scene_id, item_id } => format!(
+            "{} in keyframe {}",
+            item(state, item_id),
+            scene(state, scene_id)
+        ),
         _ => "an object".to_owned(),
     }
 }

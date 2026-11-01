@@ -245,9 +245,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
     of `scene.create`, `source.create`, `item.add` and `item.move`.
   - A **keyframe scene** (variant) is a real scene with `variant_of` naming its parent,
     which is not itself a variant. It has no items of its own: it shows the parent's
-    items with per-item `overrides` of placement, visibility and opacity (an absent
-    field follows the parent); everything else, including the background, follows the
-    parent. A variant can be on program, nested and hotkeyed. The cycle check counts the
+    items with per-item `overrides` of placement, crop, visibility, opacity and effects
+    (the whole list, [ADR-0088](adr/0088-keyframe-scenes-override-item-effects.md); an
+    absent field follows the parent); everything else, including the background and its
+    scene filters, follows the parent. A variant can be on program, nested and hotkeyed. The cycle check counts the
     variant → parent edge. Deleting a parent is rejected while it has variants.
   - Placement edits take an optional `scene_id`: absent or the item's own scene changes
     the item; a variant writes that variant's override; `item.clear_override` removes one.
@@ -300,7 +301,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   ([ADR-0065](adr/0065-scene-chains-and-item-effects.md); item effects are in v1 under
   [ADR-0068](adr/0068-item-effects-in-v1.md)). A reference in them is an edge of the
   scene, so it counts for cycles and blocks deleting its target. A keyframe scene has
-  none of its own. The engine runs a scene's filters on its composite, and an item's
+  no scene filters of its own, but may override an item's effects, the `keyframe` owner
+  of `filter.*` and `item.set_effects` (ADR-0088), whose references are its edges. The engine runs a scene's filters on its composite, and an item's
   effects over its box in a layer grown by their outset, before its opacity and blend.
 - **Settings:** a source's `settings`, each filter's, and each transition preset's are a
   map of values described by its kind's descriptor, which the engine reports and
@@ -620,7 +622,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   ([ADR-0024](adr/0024-scene-structure.md), protocol 0.12). Since 0.39,
   `scene.create_variant` makes a keyframe scene, `item.clear_override` removes one
   field of its override, `state.get` reports `variant_of` and `overrides`, and a batch
-  result lists the overrides it dropped (`dropped_overrides`, ADR-0040 §1).
+  result lists the overrides it dropped (`dropped_overrides`, ADR-0040 §1). Since 0.63,
+  `item.set_effects` writes a keyframe's override of an item's effects whole, and the
+  `filter.*` edits take the `keyframe` owner to change them one filter at a time
+  ([ADR-0088](adr/0088-keyframe-scenes-override-item-effects.md)).
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
   0.9, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
@@ -885,7 +890,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 749 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 767 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking
@@ -1177,7 +1182,9 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   for new collection state (encoder profiles, hotkey bindings, transition presets and
   settings, folders, labels and organisation metadata, keyframe scenes' `variant_of` and
   `overrides`) is omitted when empty or at its default (for presets, a new collection's one `cut`), so a file without it is still
-  valid at the same `schema_version`. `jstream-core`
+  valid at the same `schema_version`. Scene filters and item effects (version 2) and a
+  keyframe override's `effects` (version 3, ADR-0088) bumped it instead, each with a
+  migration that refuses the new field in an older file. `jstream-core`
   loads the file the host names and replaces it atomically after every change.
 - **Asset files** named in settings are stored relative to the collection folder or the
   app asset folder when they are under one, so a moved or portable setup still finds them.

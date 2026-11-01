@@ -12,7 +12,7 @@
 use crate::audio::{AudioFollow, BusMonitor};
 use crate::encoder::EncoderProfile;
 use crate::error::EntityKind;
-use crate::filter::{FilterChain, FilterOwner};
+use crate::filter::{FilterChain, FilterInfo, FilterOwner};
 use crate::finite::Finite32;
 use crate::geometry::ItemGeometry;
 use crate::hotkey::Chord;
@@ -89,6 +89,26 @@ pub enum Edit {
         item_id: ItemId,
         /// The field to clear.
         field: OverrideField,
+    },
+    /// Writes a keyframe scene's override of an item's effects, the whole list, which the
+    /// keyframe draws in place of the item's own (ADR-0088, since 0.63). `scene_id` must
+    /// name a keyframe scene whose tree holds `item_id`, else `invalid_argument` on
+    /// `scene_id` (`not_found` for a missing one): an item's own effects are edited with
+    /// `filter.*`. Each entry is checked, and its settings completed, as `filter.add`
+    /// checks an item effect's; the field is `effects.<n>.<field>`. An empty list is an
+    /// override with no effects. One effect of the override is edited with `filter.*`
+    /// on the `keyframe` owner. Inverse: `item.set_effects` with the old list, or
+    /// `item.clear_override` of `effects` when the keyframe didn't override it.
+    #[serde(rename = "item.set_effects")]
+    ItemSetEffects {
+        /// The keyframe scene.
+        scene_id: SceneId,
+        /// The item in the parent's tree.
+        item_id: ItemId,
+        /// The effects, first first: at most
+        /// [`MAX_CHAIN_FILTERS`](crate::MAX_CHAIN_FILTERS), else `invalid_argument` on
+        /// `effects`.
+        effects: Vec<FilterInfo>,
     },
     /// Renames a scene. Inverse: `scene.rename` back to the previous name.
     #[serde(rename = "scene.rename")]
@@ -984,6 +1004,7 @@ impl Edit {
             Edit::SceneCreate { .. } => "scene.create",
             Edit::SceneCreateVariant { .. } => "scene.create_variant",
             Edit::ItemClearOverride { .. } => "item.clear_override",
+            Edit::ItemSetEffects { .. } => "item.set_effects",
             Edit::SceneRename { .. } => "scene.rename",
             Edit::SceneSetRole { .. } => "scene.set_role",
             Edit::SceneDelete { .. } => "scene.delete",

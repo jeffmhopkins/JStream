@@ -1274,6 +1274,32 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 "item `i1` has no audio chain: its effects are video only",
             ),
         ),
+        // A keyframe's override of an item's effects needs a keyframe scene (ADR-0088).
+        (
+            Batch::single(Edit::FilterRemove {
+                owner: FilterOwner::Keyframe {
+                    scene_id: SceneId::new("a"),
+                    item_id: ItemId::new("i1"),
+                },
+                filter_id: FilterId::new("e"),
+            }),
+            invalid(
+                "edits.0.owner",
+                "scene `a` is not a keyframe scene: an item's own effects take the `item` owner",
+            ),
+        ),
+        (
+            Batch::single(Edit::ItemSetEffects {
+                scene_id: SceneId::new("a"),
+                item_id: ItemId::new("i1"),
+                effects: Vec::new(),
+            }),
+            invalid(
+                "edits.0.scene_id",
+                "scene `a` is item `i1`'s own scene: edit its own effects with `filter.*`, and \
+                 name a keyframe scene here",
+            ),
+        ),
         (
             Batch::single(Edit::FilterRemove {
                 owner: FilterOwner::Item {

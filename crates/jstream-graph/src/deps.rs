@@ -2,7 +2,8 @@
 //! rejection (ADR-0025, docs/adr/0025-typed-settings-kind-descriptors.md).
 //!
 //! The edges are: a scene depends on each source its items place, and a keyframe scene
-//! on its parent (ADR-0024 §2); a `scene` source
+//! on its parent (ADR-0024 §2) and on what its overridden effects' settings refer to
+//! (ADR-0088); a `scene` source
 //! depends on the scene it shows; and a source depends on every scene, source and bus
 //! its settings, or its filters' settings (ADR-0026), refer to. [`edges`] lists what a
 //! node depends on, for the cycle check, and [`blockers`] lists what depends on a node,
@@ -41,11 +42,17 @@ fn edges(state: &State, node: &Node) -> Vec<Node> {
         Node::Scene(id) => state
             .scene(id)
             .map(|s| {
+                let overridden = s
+                    .overrides
+                    .iter()
+                    .flat_map(|(_, o)| o.effects.iter().flat_map(|chains| &chains.video));
                 let filters = s
                     .filters
                     .all()
                     .chain(s.items.iter().flat_map(|i| i.effects.all()))
-                    .flat_map(|(_, filter)| filter.settings.references())
+                    .map(|(_, filter)| filter)
+                    .chain(overridden)
+                    .flat_map(|filter| filter.settings.references())
                     .filter_map(|(_, reference)| reference_node(&reference));
                 s.items
                     .iter()
@@ -146,7 +153,9 @@ fn dfs(
 /// order), the `scene` sources that show a
 /// scene (ID order), every settings value that refers to the target (source ID order;
 /// the source's own settings in parameter order, then each filter's, in chain order, as
-/// `filters.<filter_id>.<param>`), then the video mixes that show a scene (ID order). A
+/// `filters.<filter_id>.<param>`; then each scene's filters, its items' effects and a
+/// keyframe scene's overridden effects), then the video mixes that show a scene (ID
+/// order). A
 /// bus is held only by settings values (its sends go with it). `delete.plan` removes
 /// exactly these, and points those mixes at the program.
 ///
@@ -234,6 +243,23 @@ pub(crate) fn blockers(state: &State, target: &Node) -> Vec<Blocker> {
                             entity,
                             id: id.to_owned(),
                             field: format!("{prefix}.{}.{param}", filter.id),
+                        }),
+                );
+            }
+        }
+        // A keyframe scene's overridden effects (ADR-0088), in item ID order, each list
+        // in order: `overrides.<item_id>.effects.<filter_id>.<param>`.
+        for (item_id, o) in scene.overrides.iter() {
+            for filter in o.effects.iter().flat_map(|chains| &chains.video) {
+                out.extend(
+                    filter
+                        .settings
+                        .references()
+                        .filter(|(_, r)| reference_node(r).as_ref() == Some(target))
+                        .map(|(param, _)| Blocker {
+                            entity: EntityKind::Scene,
+                            id: scene.id.as_str().to_owned(),
+                            field: format!("overrides.{item_id}.effects.{}.{param}", filter.id),
                         }),
                 );
             }

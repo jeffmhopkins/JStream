@@ -8,6 +8,10 @@
 //! item have a video chain only (ADR-0065), whose references the mock's delete checks
 //! follow; it has no keyframe scenes, so it never refuses a variant owner, and it runs
 //! no cycle check.
+//!
+//! The `keyframe` owner, a keyframe scene's override of an item's effects (ADR-0088),
+//! takes the graph's checks of it, and its first edit copies the item's own effects
+//! into the override and undoes by clearing it, as the graph's does.
 
 use super::{
     Collection, already_exists, check_id, check_index, invalid, not_found, unimplemented_by_mock,
@@ -25,6 +29,26 @@ impl Collection {
         edit: Edit,
         at: usize,
     ) -> Result<Vec<Edit>, ProtocolError> {
+        // A keyframe's override of an item's effects copies them first (ADR-0088).
+        if let Some(FilterOwner::Keyframe { scene_id, item_id }) = owner_of(&edit) {
+            let (scene_id, item_id) = (scene_id.clone(), item_id.clone());
+            let copied = self.copy_effects(&scene_id, &item_id, at)?;
+            let inverse = self.apply_owned_filter(edit, at)?;
+            return Ok(if copied {
+                vec![Edit::ItemClearOverride {
+                    scene_id,
+                    item_id,
+                    field: jstream_protocol::OverrideField::Effects,
+                }]
+            } else {
+                inverse
+            });
+        }
+        self.apply_owned_filter(edit, at)
+    }
+
+    /// Applies a `filter.*` edit whose owner's chains exist.
+    fn apply_owned_filter(&mut self, edit: Edit, at: usize) -> Result<Vec<Edit>, ProtocolError> {
         match edit {
             Edit::FilterAdd {
                 owner,
@@ -127,6 +151,9 @@ impl Collection {
                 .get_mut(item_id)
                 .map(|item| &mut item.effects)
                 .ok_or_else(|| not_found(EntityKind::Item, item_id.as_str())),
+            FilterOwner::Keyframe { scene_id, item_id } => self
+                .keyframe_effects(scene_id, item_id)
+                .ok_or_else(|| not_found(EntityKind::Item, item_id.as_str())),
             _ => Err(unimplemented_by_mock("this filter owner")),
         }
     }
@@ -189,7 +216,14 @@ impl Collection {
                 filter.filter_id.as_str(),
             ));
         }
-        self.check_chain(&owner, chain, at)?;
+        // A keyframe's override of an item's effects has the item's chains (ADR-0088).
+        let chain_owner = match &owner {
+            FilterOwner::Keyframe { item_id, .. } => FilterOwner::Item {
+                item_id: item_id.clone(),
+            },
+            other => other.clone(),
+        };
+        self.check_chain(&chain_owner, chain, at)?;
         let filters = chain_mut(self.chains(&owner)?, chain);
         if filters.len() >= MAX_CHAIN_FILTERS {
             return Err(invalid(
@@ -282,7 +316,10 @@ fn check_no_references(
 ) -> Result<(), ProtocolError> {
     if matches!(
         owner,
-        FilterOwner::Source { .. } | FilterOwner::Scene { .. } | FilterOwner::Item { .. }
+        FilterOwner::Source { .. }
+            | FilterOwner::Scene { .. }
+            | FilterOwner::Item { .. }
+            | FilterOwner::Keyframe { .. }
     ) {
         return Ok(());
     }
@@ -313,6 +350,18 @@ fn restore(
         settings: filter.settings,
         enabled: (!filter.enabled).then_some(false),
         index,
+    }
+}
+
+/// The owner a `filter.*` edit addresses.
+fn owner_of(edit: &Edit) -> Option<&FilterOwner> {
+    match edit {
+        Edit::FilterAdd { owner, .. }
+        | Edit::FilterRemove { owner, .. }
+        | Edit::FilterSetEnabled { owner, .. }
+        | Edit::FilterSetSettings { owner, .. }
+        | Edit::FilterReorder { owner, .. } => Some(owner),
+        _ => None,
     }
 }
 

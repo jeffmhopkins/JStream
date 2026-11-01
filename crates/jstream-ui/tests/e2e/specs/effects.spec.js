@@ -3,7 +3,9 @@
 // rows work as a chain's. They belong to the one placement, not to its source. The mock
 // engine lists and describes no kinds, so the page's socket answers for Vignette (with the
 // core kind's four settings, so it opens the Filter settings dialog), Sharpen and Gain
-// (`describeKinds`).
+// (`describeKinds`). In a keyframe scene the panel shows the item's effects as the keyframe
+// shows them: they follow the item's own until a change gives the keyframe its own, and
+// Follow the item clears that override (ADR-0088).
 import { test, expect, connect, describeKinds, rev } from '../fixtures.js';
 
 /** The centre of `locator`, or a point `dy` from its top. */
@@ -121,4 +123,53 @@ test('an item\'s effects are its own: added, reordered, turned off and removed u
   await page.locator('.scenes-panel li.row').filter({ hasText: 'Main' }).locator('.row-main').click();
   await expect(panel(page).locator('.filters-title')).toHaveText('Main');
   await expect(effects(page)).toHaveCount(0);
+});
+
+test('a keyframe gives an item its own effects, and follows the item\'s again', async ({ page, daemon }) => {
+  await describeKinds(page, KINDS);
+  await connect(page, daemon);
+  const sceneRow = (name) => page.locator('.scenes-panel li.row').filter({ hasText: name }).locator('.row-main');
+  const backdrop = page.locator('.sources-panel li.row').filter({ hasText: 'Backdrop' }).locator('.row-main');
+  await sceneRow('Main').click({ button: 'right' });
+  await page.getByRole('menu', { name: 'Context menu' }).getByRole('menuitem', { name: 'New keyframe' }).click();
+  await expect(page.locator('.scenes-panel li.row').filter({ hasText: 'Keyframe 1' })).toHaveClass(/selected/);
+
+  await backdrop.click();
+  await expect(effects(page).locator('.filters-subtitle')).toHaveText('This item’s effects in this keyframe');
+  await expect(effects(page).locator('.filters-effects-note')).toHaveText(
+    'Only this item in this keyframe, after its crop, top to bottom.',
+  );
+  await expect(effects(page).locator('.filters-keyframe')).toHaveText(
+    'Follows the item’s own effects. A change here gives this keyframe its own.',
+  );
+  await expect(effects(page).locator('.filter-chain-count')).toHaveText('0 effects');
+
+  // An effect added here is the keyframe's: one edit, which copies the item's first.
+  await effects(page).getByRole('button', { name: '+ Add effect…' }).click();
+  const add = page.getByRole('dialog', { name: 'Add filter' });
+  await expect(add.locator('.modal-sub')).toHaveText('For this item of “Backdrop” in this keyframe');
+  await add.getByRole('listbox', { name: 'Filter type' }).getByRole('option').filter({ hasText: 'Sharpen' }).click();
+  await expect(add.locator('.add-filter-foot')).toHaveText('Applies to this item in this keyframe only.');
+  const start = await rev(page);
+  await add.getByRole('button', { name: 'Add filter' }).click();
+  await expect(add).toBeHidden();
+  await expect(effectRows(page).locator('.filter-name')).toHaveText(['Sharpen']);
+  expect(await rev(page)).toBe(start + 1);
+  await expect(effects(page).locator('.filters-keyframe')).toContainText('This keyframe has its own effects for this item.');
+
+  // Main's item keeps none.
+  await sceneRow('Main').click();
+  await backdrop.click();
+  await expect(effects(page).locator('.filters-subtitle')).toHaveText('This item’s effects');
+  await expect(effects(page).locator('.filters-keyframe')).toHaveCount(0);
+  await expect(effects(page).locator('.filter-chain-count')).toHaveText('0 effects');
+
+  // Follow the item clears the keyframe's, as one edit.
+  await sceneRow('Keyframe 1').click();
+  await backdrop.click();
+  await expect(effectRows(page).locator('.filter-name')).toHaveText(['Sharpen']);
+  await effects(page).getByRole('button', { name: 'Follow the item' }).click();
+  await expect(effects(page).locator('.filter-chain-count')).toHaveText('0 effects');
+  await expect(effects(page).locator('.filters-keyframe')).toContainText('Follows the item’s own effects.');
+  expect(await rev(page)).toBe(start + 2);
 });
