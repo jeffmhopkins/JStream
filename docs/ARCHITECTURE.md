@@ -691,8 +691,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   no server in front answers `unsupported`.
 - **Plugins** (protocol 0.35, [ADR-0069](adr/0069-wasm-plugin-limits-and-capabilities.md)): the actions
   `plugin.install`, `plugin.grant` and `plugin.enable` install a WASM automation plugin
-  with what a person grants it, change the grant and re-enable it; they are for a person,
-  so no MCP tool, plugin or hotkey carries them. The event `plugin.state_changed` reports
+  with what a person grants it, change the grant and re-enable it, and the query
+  `plugin.list` (0.58) lists the installed plugins with what each manifest asks for and
+  what was granted; they are for a person, so no MCP tool, plugin or hotkey carries
+  them. The event `plugin.state_changed` reports
   a plugin enabled or disabled, with why the engine disabled it. Likewise
   `effect.enable` (0.61, #349) is for a person: it re-enables an effect-pack kind the
   engine quarantined because a GPU device loss was blamed on it, which the event

@@ -111,7 +111,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `live.list`, `capture.targets`,
-  `source.sizes` and `activity.list`, with `QueryResult`
+  `source.sizes`, `activity.list` and `plugin.list`, with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
   `CaptureTargetInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
   (`activity.rs` holds the last, with `MAX_ACTIVITY_ENTRIES` and
@@ -162,7 +162,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `PluginDenial` no grant overrides), `PluginGrant` (the classes, hosts and folders a
   person grants, with `check`, which returns the `forbidden` error, and `problem`),
   `settings_reach` and `Reach` (the hosts and files a settings map names),
-  `plugin_may_bind`, `PluginState` and `PluginDisabledReason` ([Plugins](#design)).
+  `plugin_may_bind`, `PluginState`, `PluginDisabledReason`, and `PluginInfo` and
+  `PluginRequest`, what `plugin.list` reports ([Plugins](#design)).
 - **Preview streams** (`preview.rs`, [ADR-0045](../../docs/adr/0045-leptos-web-ui.md)):
   `PreviewCodec` (`h264`, `jpeg`), `PreviewSettings` (`preview.subscribe`'s fields with
   their defaults and range checks, which the engine applies), `PreviewDraft` (its
@@ -193,8 +194,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.61 because a GPU device
   loss is blamed on the effect-pack kinds that drew before it, which are quarantined
   until a person re-enables them (#349: the `gpu.device_lost` event, `KindSummary`'s
-  `quarantined` and the `effect.enable` action, [Effect quarantine](#design)); 0.57
-  added `stats.tick`'s `outputs`, each running output's live stats (`OutputStatsInfo`); 0.56
+  `quarantined` and the `effect.enable` action, [Effect quarantine](#design)); 0.58
+  added the `plugin.list` query, the installed WASM plugins with what each manifest asks
+  for and what a person granted ([Plugins](#design)); 0.57 added
+  `stats.tick`'s `outputs`, each running output's live stats (`OutputStatsInfo`); 0.56
   added `preview.subscribe`'s `source_id`, a stream of one of the collection's sources alone
   (a projector of the source); 0.55 made a keyframe
   scene override the children of the groups in its parent's tree (#846; no wire
@@ -993,6 +996,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
   collection state, so no `rev`. Added in 0.21 (see *Pairing* below).
 - `ui_settings.get {key}`: the UI setting kept under `key`, or no `value` when there is
   none. Not collection state, so no `rev`. Added in 0.52 (see *UI settings* below).
+- `plugin.list`: the installed WASM automation plugins, ordered by ID. Not collection
+  state, so no `rev`. Added in 0.58 (see *Plugins* below).
 - `delete.plan {target}`: the batch that deletes a scene, source or bus (`target` is
   `{"type":"scene","scene_id":…}`, `{"type":"source","source_id":…}` or, since 0.24,
   `{"type":"bus","bus_id":…}`), or a folder or label (`{"type":"folder","folder_id":…}`,
@@ -1440,6 +1445,15 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   `plugin`; an engine that can't run plugins
   answers `plugin.install` with `unsupported`, as the mock and an engine built without
   its `wasm-plugins` feature do.
+- **`plugin.list`** lists the installed plugins for a person, ordered by ID, each a
+  `PluginInfo`: `plugin_id`, `state` and `reason` as `plugin.state_changed` gives them,
+  `remote_name`, `path` (its package, as installed), `request` (what its manifest asks
+  for, a `PluginRequest`: `{classes, hosts, folders}`, with `folders` true when it wants
+  folders a person picks) and `grant`. For a plugin disabled as `needs_grant`, `request`
+  is the update's, which a `plugin.grant` acknowledges. A plugin being enabled is listed
+  as it was until it loads. Like the actions, it is a person's: no MCP tool carries it
+  and no plugin is granted it. An engine that runs no plugins, the mock among them,
+  lists none.
 - **`plugin.state_changed {plugin_id, state, reason?, remote_name?}`** reports a plugin
   `enabled` or `disabled`. The engine disables a plugin that runs past a limit or traps
   (`reason`: `cpu_limit`, `memory_limit`, `trap`), or whose update asks for more than

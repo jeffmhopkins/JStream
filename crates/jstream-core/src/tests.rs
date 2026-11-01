@@ -6725,3 +6725,18 @@ fn batches_and_actions_are_audited() {
         "{line}"
     );
 }
+
+/// #974 B1: an engine with no plugin installed lists none, with or without the
+/// `wasm-plugins` feature (run with `--no-default-features` for the build without it),
+/// as the protocol promises, rather than failing the query.
+#[test]
+fn plugin_list_is_empty_until_a_plugin_is_installed() {
+    let engine = Engine::new();
+    let control = connected(&engine);
+    assert_eq!(
+        query(&control, Query::PluginList).expect("plugin.list"),
+        QueryResult::PluginList {
+            plugins: Vec::new()
+        }
+    );
+}

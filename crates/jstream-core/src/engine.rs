@@ -1198,13 +1198,20 @@ impl Engine {
         Executed::Ready(Box::new(result))
     }
 
-    /// `plugin.install`, `plugin.grant` and `plugin.enable`, or `None` for any other call
+    /// `plugin.install`, `plugin.grant`, `plugin.enable` and `plugin.list`, or `None` for any other call
     /// or without the `wasm-plugins` feature. They run with no engine lock held: a plugin
     /// loads, and may call back into the engine, while its install waits.
     #[cfg(feature = "wasm-plugins")]
     fn plugin_call(&self, call: &Call) -> Option<Result<CallResult, ProtocolError>> {
         match call {
             Call::Action { action } => crate::plugins::automation::action(self, action),
+            Call::Query {
+                query: Query::PluginList,
+            } => Some(Ok(CallResult::Query {
+                result: QueryResult::PluginList {
+                    plugins: crate::plugins::automation::list(self),
+                },
+            })),
             _ => None,
         }
     }
@@ -3195,6 +3202,11 @@ impl State {
                 Query::DeviceList | Query::UiSettingsGet { .. } => {
                     return Err(served_by_the_server(query.name()));
                 }
+                // Built without the `wasm-plugins` feature, no plugin is ever installed.
+                // With it, `Engine::execute` answers it before taking the collection lock.
+                Query::PluginList => QueryResult::PluginList {
+                    plugins: Vec::new(),
+                },
                 Query::ActivityList { after_seq, limit } => QueryResult::ActivityList {
                     now_ms: activity_log::unix_ms(std::time::SystemTime::now()),
                     entries: self.activity.list(*after_seq, *limit),

@@ -233,7 +233,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md));
 - `plugin.install` answered with `unsupported`, since the mock can't run a plugin, and
   `plugin.grant` and `plugin.enable` with `not_found` (entity `plugin`), as the engine
-  answers them for a plugin that isn't installed: none ever is in the mock;
+  answers them for a plugin that isn't installed: none ever is in the mock, so
+  `plugin.list` lists none;
 - `effect.enable` answered with `invalid_argument` on `kind_id`, as an engine that loads
   no effect packs answers it: the mock quarantines nothing;
 - the stream-key actions with the engine's checks and errors. `output.set_key` answers
