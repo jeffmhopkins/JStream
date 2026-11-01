@@ -1382,7 +1382,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       ]
     },
     "ChainCost": {
-      "description": "What the video chains of scenes and items add to each frame the engine draws\n(ADR-0065 §7), as the current render plan schedules them: a gauge, not a running\ntotal.\n\nA scene with an enabled video filter is composited once per frame into a\ncanvas-sized layer, however many places show it, and each enabled filter then draws\none pass into a layer of its own. An item with an enabled effect is drawn into one\nlayer the size of its box plus the effects' outset, and each enabled effect then\ndraws one pass into a layer of its own. An item placed in two scenes counts once for\neach. A filter of a kind the engine doesn't draw is bypassed and not counted. Every\nlayer is `Rgba16Float`, 8 bytes a pixel. A source's own filters (ADR-0026) and the\nscenes a `scene_mask` reads are not counted.\n\nA missing field parses as 0, so a field added later can be left out by an older\nsender (R-API-001). Unknown fields are ignored.",
+      "description": "What the video chains of scenes and items add to each frame the engine draws\n(ADR-0065 §7), as the current render plan schedules them: a gauge, not a running\ntotal.\n\nA scene with an enabled video filter is composited once per frame into a\ncanvas-sized layer, however many places show it, and each enabled filter then draws\none pass into a layer of its own. An item with an enabled effect is drawn into one\nlayer the size of its box plus the effects' outset, and each enabled effect then\ndraws one pass into a layer of its own. An item placed in two scenes counts once for\neach. A filter of a kind the engine doesn't draw is bypassed and not counted. Every\nlayer is `Rgba16Float`, 8 bytes a pixel. Not counted: a source's own filters\n(ADR-0026), the scenes a `scene_mask` reads, and the canvas-sized layer a nested\nscene without a chain is drawn into for an item with effects that shows it (it takes\nthe place of the layer the scene would be drawn into anyway).\n\nA missing field parses as 0, so a field added later can be left out by an older\nsender (R-API-001). Unknown fields are ignored.",
       "properties": {
         "item_effects": {
           "default": 0,
@@ -4173,7 +4173,7 @@ source: crates/jstream-protocol/src/fixtures.rs
                   "type": "null"
                 }
               ],
-              "description": "What the scene filter chains and item effects add to each frame: their\noffscreen layers, GPU passes and the layers' texture bytes, as the current\nrender plan schedules them (ADR-0065 §7; 0.48). An older engine leaves it\nout."
+              "description": "What the scene filter chains and item effects add to each frame: their\noffscreen layers, GPU passes and the layers' texture bytes, as the current\nrender plan schedules them (ADR-0065 §7; 0.54). An older engine leaves it\nout."
             },
             "drops": {
               "$ref": "#/$defs/DropCounts",
@@ -8682,5 +8682,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.48"
+  "title": "JStream protocol 0.54"
 }
