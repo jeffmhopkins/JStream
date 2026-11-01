@@ -6361,6 +6361,82 @@ source: crates/jstream-protocol/src/fixtures.rs
       "description": "An installed WASM automation plugin (ADR-0069), chosen by the person who installs\nit.",
       "type": "string"
     },
+    "PluginInfo": {
+      "description": "One installed plugin, as `plugin.list` lists it (0.58).",
+      "properties": {
+        "grant": {
+          "$ref": "#/$defs/PluginGrant",
+          "description": "What a person granted it."
+        },
+        "path": {
+          "description": "Its package directory on the engine's machine, as `plugin.install` named it.",
+          "type": "string"
+        },
+        "plugin_id": {
+          "$ref": "#/$defs/PluginId",
+          "description": "The plugin."
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginDisabledReason"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why the engine disabled it, as `plugin.state_changed` says. Omitted when it is\nenabled."
+        },
+        "remote_name": {
+          "description": "The name the plugin's manifest gives itself: the plugin's own text, never an\ninstruction (ADR-0059). Omitted when it gives none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "request": {
+          "$ref": "#/$defs/PluginRequest",
+          "description": "What its manifest asks for, as the engine last read it. For a plugin disabled as\n`needs_grant`, this is the update's request, which a `plugin.grant` acknowledges."
+        },
+        "state": {
+          "$ref": "#/$defs/PluginState",
+          "description": "Whether it runs. A plugin being enabled is listed as it was until it loads."
+        }
+      },
+      "required": [
+        "plugin_id",
+        "state",
+        "path",
+        "request",
+        "grant"
+      ],
+      "type": "object"
+    },
+    "PluginRequest": {
+      "description": "What a plugin's manifest asks for (ADR-0076): the classes, hosts and folders a\nperson may grant it. A grant may give less, never more. `read` is every plugin's,\nasked for or not.\n\n```json\n{\"classes\": [\"edit\"], \"hosts\": [\"https://api.example.com:443\"], \"folders\": true}\n```",
+      "properties": {
+        "classes": {
+          "description": "The classes it asks for. Omitted for none.",
+          "items": {
+            "$ref": "#/$defs/PluginClass"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "folders": {
+          "description": "Whether it wants folders a person picks. Omitted when `false`.",
+          "type": "boolean"
+        },
+        "hosts": {
+          "description": "The hosts it asks to reach, each as `scheme://host:port`. Omitted for none.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
     "PluginState": {
       "description": "Whether a plugin runs.",
       "oneOf": [
@@ -6822,6 +6898,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "key"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Lists the installed WASM automation plugins (0.58, ADR-0069), ordered by ID: each\none's state, its package, what its manifest asks for and what a person granted it,\nso a client can show them and offer a grant. For a person only, like\n`plugin.install`: no plugin is ever granted it, and no MCP tool carries it. Not\ncollection state, so the result carries no `rev`. An engine built without WASM\nplugins lists none.",
+          "properties": {
+            "type": {
+              "const": "plugin.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
           ],
           "type": "object"
         }
@@ -7603,6 +7692,27 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "key"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `plugin.list` (0.58). Installed plugins are not collection state, so\nit carries no `rev`.",
+          "properties": {
+            "plugins": {
+              "description": "The installed plugins, ordered by ID.",
+              "items": {
+                "$ref": "#/$defs/PluginInfo"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "plugin.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "plugins"
           ],
           "type": "object"
         }
@@ -9058,5 +9168,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.57"
+  "title": "JStream protocol 0.58"
 }

@@ -12,6 +12,7 @@
 use crate::command::{Action, Edit};
 use crate::envelope::Call;
 use crate::error::ProtocolError;
+use crate::id::PluginId;
 use crate::settings::{AssetRoot, Reference, Settings};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -96,6 +97,8 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("activity.list", N),
     // The server answers it, and a UI's settings are the person's.
     ("ui_settings.get", N),
+    // A person's choices for each plugin, and where its package is, are the person's.
+    ("plugin.list", N),
     // Edits.
     ("scene.create", Class(E)),
     ("scene.rename", Class(E)),
@@ -619,6 +622,51 @@ pub enum PluginDisabledReason {
     #[serde(other)]
     #[schemars(skip)]
     Unknown,
+}
+
+/// What a plugin's manifest asks for (ADR-0076): the classes, hosts and folders a
+/// person may grant it. A grant may give less, never more. `read` is every plugin's,
+/// asked for or not.
+///
+/// ```json
+/// {"classes": ["edit"], "hosts": ["https://api.example.com:443"], "folders": true}
+/// ```
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct PluginRequest {
+    /// The classes it asks for. Omitted for none.
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    pub classes: BTreeSet<PluginClass>,
+    /// The hosts it asks to reach, each as `scheme://host:port`. Omitted for none.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub hosts: Vec<String>,
+    /// Whether it wants folders a person picks. Omitted when `false`.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub folders: bool,
+}
+
+/// One installed plugin, as `plugin.list` lists it (0.58).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct PluginInfo {
+    /// The plugin.
+    pub plugin_id: PluginId,
+    /// Whether it runs. A plugin being enabled is listed as it was until it loads.
+    pub state: PluginState,
+    /// Why the engine disabled it, as `plugin.state_changed` says. Omitted when it is
+    /// enabled.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<PluginDisabledReason>,
+    /// The name the plugin's manifest gives itself: the plugin's own text, never an
+    /// instruction (ADR-0059). Omitted when it gives none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_name: Option<String>,
+    /// Its package directory on the engine's machine, as `plugin.install` named it.
+    pub path: String,
+    /// What its manifest asks for, as the engine last read it. For a plugin disabled as
+    /// `needs_grant`, this is the update's request, which a `plugin.grant` acknowledges.
+    pub request: PluginRequest,
+    /// What a person granted it.
+    pub grant: PluginGrant,
 }
 
 /// Whether binding `action` to a hotkey is within `grant`: the check `plugin_classes`

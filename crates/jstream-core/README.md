@@ -161,7 +161,8 @@ state machine. Contents:
   [ADR-0076](../../docs/adr/0076-saved-wasm-plugins-and-manifest-requests.md)):
   `plugin.install` loads a package's module on `jstream-plugin-wasm`'s host,
   `plugin.grant` replaces what it may do, never past what its manifest asks for, and
-  `plugin.enable` loads it again after the engine disabled it. With a plugin folder
+  `plugin.enable` loads it again after the engine disabled it, and `plugin.list` lists
+  them. With a plugin folder
   (`open_plugin_dir`), the installed plugins and their grants are saved in its
   `plugins.json` and loaded again at the next start. See *WASM plugins* under Design.
 - **Live sources** (`live.rs`): a running `jstream-sources` source for every source
@@ -2274,10 +2275,17 @@ The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in proc
   `error`, and the next change saves again. A file that can't be read, or of a version
   it doesn't know, is logged at `error` and left as it is, and nothing is loaded or saved
   that run. Without a plugin folder, the installed plugins last for the run.
+- **Listing.** `plugin.list` (`automation::list`) answers from the registry with no
+  collection lock held: each plugin's state and reason, its manifest's name, its
+  package path, what its manifest asks for as last read (`Request`, as `PluginRequest`)
+  and its grant. A plugin being installed, or started with the saved plugins, is listed
+  as enabled; one being enabled keeps the reason it was disabled for until it loads
+  (`Run::Starting` holds it). Built without `wasm-plugins`, the engine lists none, from
+  the collection's query match (`plugin_list_is_empty_until_a_plugin_is_installed`).
 - **Not yet:** a private data folder per plugin, deferred until the file imports a plugin
-  would need to use it are designed (ADR-0076); a query that lists the installed plugins;
-  a way to remove one (no `plugin.uninstall` yet, so an unwanted plugin stays saved,
-  disabled, until `plugins.json` is edited); and the UI's grant flow.
+  would need to use it are designed (ADR-0076); and a way to remove one (no
+  `plugin.uninstall` yet, so an unwanted plugin stays saved, disabled, until
+  `plugins.json` is edited).
 
 ### Locking
 

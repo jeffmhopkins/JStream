@@ -19,6 +19,7 @@ use crate::live::GestureInfo;
 use crate::mix::VideoMixInfo;
 use crate::organise::{FolderInfo, LabelInfo, SceneMeta, SourceMeta};
 use crate::output::OutputInfo;
+use crate::plugin::PluginInfo;
 use crate::settings::Settings;
 use crate::transition::{ItemTransition, TransitionsInfo};
 use crate::youtube::{
@@ -203,6 +204,14 @@ pub enum Query {
         /// The setting's key.
         key: String,
     },
+    /// Lists the installed WASM automation plugins (0.58, ADR-0069), ordered by ID: each
+    /// one's state, its package, what its manifest asks for and what a person granted it,
+    /// so a client can show them and offer a grant. For a person only, like
+    /// `plugin.install`: no plugin is ever granted it, and no MCP tool carries it. Not
+    /// collection state, so the result carries no `rev`. An engine built without WASM
+    /// plugins lists none.
+    #[serde(rename = "plugin.list")]
+    PluginList,
 }
 
 /// What a `delete.plan` deletes: a scene, a source, (since 0.24) a bus, a folder or a
@@ -268,6 +277,7 @@ impl Query {
             Query::DeviceList => "device.list",
             Query::ActivityList { .. } => "activity.list",
             Query::UiSettingsGet { .. } => "ui_settings.get",
+            Query::PluginList => "plugin.list",
         }
     }
 }
@@ -566,6 +576,13 @@ pub enum QueryResult {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         value: Option<serde_json::Value>,
     },
+    /// The result of `plugin.list` (0.58). Installed plugins are not collection state, so
+    /// it carries no `rev`.
+    #[serde(rename = "plugin.list")]
+    PluginList {
+        /// The installed plugins, ordered by ID.
+        plugins: Vec<PluginInfo>,
+    },
 }
 
 impl QueryResult {
@@ -597,6 +614,7 @@ impl QueryResult {
             QueryResult::DeviceList { .. } => "device.list",
             QueryResult::ActivityList { .. } => "activity.list",
             QueryResult::UiSettingsGet { .. } => "ui_settings.get",
+            QueryResult::PluginList { .. } => "plugin.list",
         }
     }
 }
