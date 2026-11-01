@@ -113,7 +113,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `source.sizes` and `activity.list`, with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
   `CaptureTargetInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
-  (`activity.rs` holds the last, with `MAX_ACTIVITY_ENTRIES`). `state.get` carries the `Canvas`, and
+  (`activity.rs` holds the last, with `MAX_ACTIVITY_ENTRIES` and
+  `MAX_ACTIVITY_SUMMARY_CHARS`). `state.get` carries the `Canvas`, and
   `ItemInfo`
   the item's `placement` form and its `geometry`, `SceneInfo` a scene's transition
   overrides, `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
@@ -942,7 +943,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `error` when it failed, and `summary`, one English sentence the engine writes from the
   collection just before the call ran ("Switched to “Desktop + Cam”", "Mic gain −1.5 →
   −3.0 dB"). The sentence names objects and gives numeric, on/off and enum values only,
-  never settings, targets or keys. The engine keeps the last 100 in memory; `limit`
+  never settings, targets or keys, and is cut to 256 characters
+  (`MAX_ACTIVITY_SUMMARY_CHARS`). The engine keeps the last 100 in memory; `limit`
   (default and most 100) and `after_seq` (only newer entries) narrow the answer, which
   also carries the engine's clock as `now_ms`. No event announces an entry yet: a client
   that shows the log asks again with `after_seq`. Runtime state, so no `rev`. WASM
