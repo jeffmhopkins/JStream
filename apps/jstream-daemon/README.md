@@ -38,7 +38,7 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   creates the file with a new random token, and names the device file beside it
   ([Design](#design)).
 - **Serving** (`serve.rs`): builds the engine (with the audit log, the `--collection`
-  file, the plugin folder and the placeholder outputs; on Windows a live one, through `live.rs`, that scans
+  file, the plugin folder, the effect packs folder and the placeholder outputs; on Windows a live one, through `live.rs`, that scans
   the CLAP plugins, and with the `cef` feature also opens browser sources, and on
   macOS a live one on the macOS backends built so far, [Design](#design)), installs the signal handlers that stop it, then binds the server
   with MCP on, the UI settings file in the data directory and, with `--ui-dir`, the web
@@ -117,6 +117,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | `--token-file <path>` | The control token file. Default: the `JSTREAM_TOKEN_FILE` environment variable, which `jstream-cli` reads too. One of them is required. |
 | `--port <port>` | The port on `127.0.0.1`. Default `0`: the OS picks a free one, and the URL line says which. |
 | `--collection <path>` | Loads the collection from this JSON file and saves every change to it, so the next run starts where this one stopped. Created, holding an empty collection with the four sample labels (Intro / outro, Gameplay, Overlay, Sponsor), if it doesn't exist. Default: none, the collection starts empty and is lost on exit. |
+| `--effects-dir <dir>` | The folder of WGSL effect packs, one pack folder each, that the engine loads at startup and reloads when they change (`Engine::watch_effect_packs`, [jstream-core › Design](../../crates/jstream-core/README.md#design)). Each effect is a video filter kind, `<pack>/<effect>`. A missing folder holds no packs, and is watched for packs to appear. Default: `effects` in the platform data directory; without a data directory, no packs load. |
 | `--plugin-dir <dir>` | Where installed WASM plugins and their grants are saved (`plugins.json`) and loaded from at startup, created if missing ([ADR-0076](../../docs/adr/0076-saved-wasm-plugins-and-manifest-requests.md)). A file there that can't be read, or that a newer version wrote, is logged at `error` and left as it is, and plugins aren't loaded or saved that run. Default: `plugins` in the platform data directory; without a data directory, plugins aren't saved. |
 | `--ui-dir <dir>` | Serves the web UI's built files (`trunk build`'s `dist`) from this directory at `http://127.0.0.1:<port>/`. The browser asks for a user name and password: the password is the token (see **Web UI** below). A path that isn't a directory fails with exit code 1, before the token or collection file is written. Default: no UI. |
 | `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. On Windows and macOS it has no target, so starting it fails: create outputs with `output.create` instead. |
@@ -423,6 +424,11 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   credential stores and the browser, because a saved plugin keeps a handle to the engine
   as it is then and must act through its media host; it does the rest
   ([jstream-core › Design](../../crates/jstream-core/README.md#design), *WASM plugins*).
+- **Effect packs** (`main.rs`, `serve.rs`). `main` fills in `--effects-dir`'s default
+  the same way (`paths::EFFECTS_DIR` in the data directory), so the daemon's tests watch
+  no folder. `serve::engine` calls `Engine::watch_effect_packs` once the engine is built,
+  on every platform: packs are drawn by the compositor, which needs no platform
+  backend.
 - **Browser sources** (`serve.rs`, feature `cef`, Windows only). Built with
   `--features cef`, the daemon gives the engine `jstream-browser`'s CEF backend
   (`Engine::with_browser`), so `browser` sources open their pages

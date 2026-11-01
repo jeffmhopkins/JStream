@@ -28,6 +28,7 @@ mod audit;
 mod chain;
 mod collection;
 mod drops;
+mod effect_packs;
 mod engine;
 mod events;
 mod filter_assets;
