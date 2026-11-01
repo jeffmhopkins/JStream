@@ -1,15 +1,22 @@
 //! The GPU copy of a captured frame (ARCH › GPU pipeline, steps 1 and 2): an imported
 //! DMA-BUF is drawn into a ring of the stream's own textures, cropped and, for the
 //! formats whose fourth byte is padding, made opaque. A ring texture is the frame
-//! render samples, so the PipeWire buffer can go back to the compositor as soon as the
-//! copy is done.
+//! render samples, so the PipeWire or V4L2 buffer can go back to its producer as soon as
+//! the copy is done.
 //!
 //! The frame textures are `Rgba8UnormSrgb`, the format render imports, and are drawn
 //! through an `Rgba8Unorm` view from an UNORM source, so the bytes move unchanged.
+//!
+//! A ring can also convert as it draws ([`Pass`]): packed 4:2:2 (`YUYV`, imported as RGBA
+//! at half width, each texel `Y0 U Y1 V`) to R'G'B' with the frame's matrix and range, as
+//! the engine's CPU path converts NV12 (`jstream-core`'s `rgba_from_surface`): each chroma
+//! sample covers its two pixels, and limited range is scaled to full.
 
 use std::sync::Arc;
 
-use jstream_platform::media::{ColorInfo, FrameSize, MediaTime, PixelFormat, VideoFrameInfo};
+use jstream_platform::media::{
+    ColorInfo, ColorRange, ColorSpace, FrameSize, MediaTime, PixelFormat, VideoFrameInfo,
+};
 use jstream_platform::{GpuFrame, PlatformError};
 
 use super::{QueueOrder, Shared};
@@ -43,6 +50,107 @@ fn fs(@builtin(position) at: vec4<f32>) -> @location(0) vec4<f32> {
 }
 ";
 
+/// The YCbCr to R'G'B' conversion shared by the converting passes. `range` is the luma
+/// offset and scale, then the chroma scale and offset; `coef` is Cr to R, Cb to G, Cr to
+/// G and Cb to B.
+const YUV: &str = r"
+struct Params {
+    origin: vec2<u32>,
+    opaque: u32,
+    pad: u32,
+    range: vec4<f32>,
+    coef: vec4<f32>,
+}
+
+@group(0) @binding(0) var source: texture_2d<f32>;
+@group(0) @binding(1) var<uniform> params: Params;
+
+@vertex
+fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
+    let x = f32((i << 1u) & 2u);
+    let y = f32(i & 2u);
+    return vec4<f32>(x * 2.0 - 1.0, 1.0 - y * 2.0, 0.0, 1.0);
+}
+
+fn rgb(y: f32, cb: f32, cr: f32) -> vec4<f32> {
+    let l = (y - params.range.x) * params.range.y;
+    let u = (cb - params.range.w) * params.range.z;
+    let v = (cr - params.range.w) * params.range.z;
+    let c = vec3<f32>(
+        l + params.coef.x * v,
+        l - params.coef.y * u - params.coef.z * v,
+        l + params.coef.w * u,
+    );
+    return vec4<f32>(clamp(c, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
+}
+";
+
+/// [`Pass::Yuyv`]'s fragment shader, after [`YUV`]: output pixel x reads texel x / 2,
+/// its first luma when x is even and its second when odd, and the texel's chroma.
+const YUYV: &str = r"
+@fragment
+fn fs(@builtin(position) at: vec4<f32>) -> @location(0) vec4<f32> {
+    let p = vec2<u32>(at.xy);
+    let t = textureLoad(source, vec2<u32>(p.x / 2u, p.y), 0);
+    return rgb(select(t.r, t.b, (p.x & 1u) == 1u), t.g, t.a);
+}
+";
+
+/// How a ring draws its source into a frame texture.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Pass {
+    /// Copied as it is, cropped, opaque when the fourth byte is padding.
+    Copy,
+    /// Packed 4:2:2 in an RGBA texture of half the frame's width, converted to R'G'B'.
+    Yuyv,
+}
+
+impl Pass {
+    fn shader(self) -> String {
+        match self {
+            Self::Copy => SHADER.to_owned(),
+            Self::Yuyv => format!("{YUV}{YUYV}"),
+        }
+    }
+
+    /// How many source textures it reads.
+    pub(crate) fn planes(self) -> usize {
+        match self {
+            Self::Copy | Self::Yuyv => 1,
+        }
+    }
+}
+
+/// The parameters [`YUV`] converts with, for frames in `color`: the luma offset and
+/// scale, the chroma scale and offset, then Cr to R, Cb to G, Cr to G and Cb to B, in the
+/// shader's 0 to 1 code values. The same matrices and ranges as the engine's CPU path.
+pub(crate) fn yuv_params(color: ColorInfo) -> [f32; 8] {
+    let (kr, kb) = match color.space {
+        ColorSpace::Bt601 => (0.299, 0.114),
+        ColorSpace::Bt2020 => (0.2627, 0.0593),
+        _ => (0.2126, 0.0722),
+    };
+    let kg = 1.0 - kr - kb;
+    let (y_offset, y_scale, c_scale) = match color.range {
+        ColorRange::Full => (0.0, 1.0, 1.0),
+        ColorRange::Limited => (16.0 / 255.0, 255.0 / 219.0, 255.0 / 224.0),
+    };
+    [
+        y_offset,
+        y_scale,
+        c_scale,
+        128.0 / 255.0,
+        2.0 * (1.0 - kr),
+        2.0 * kb * (1.0 - kb) / kg,
+        2.0 * kr * (1.0 - kr) / kg,
+        2.0 * (1.0 - kb),
+    ]
+}
+
+/// The size of the parameters buffer: the origin, opacity and padding words, then
+/// [`yuv_params`].
+const PARAMS: usize = 48;
+
 /// One ring texture and its hold. The hold's strong count says whether a frame still
 /// uses the texture.
 struct Slot {
@@ -66,6 +174,7 @@ pub(crate) struct Source<'a> {
 /// One capture stream's copy pipeline and ring. Used by its capture thread only.
 pub(crate) struct Ring {
     shared: Arc<Shared>,
+    pass: Pass,
     pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
     params: wgpu::Buffer,
@@ -77,6 +186,7 @@ pub(crate) struct Ring {
 impl std::fmt::Debug for Ring {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Ring")
+            .field("pass", &self.pass)
             .field("size", &self.size)
             .field("slots", &self.slots.len())
             .finish_non_exhaustive()
@@ -84,38 +194,47 @@ impl std::fmt::Debug for Ring {
 }
 
 impl Ring {
-    /// The pipeline, on the context's device. Its textures are allocated on the first
-    /// copy, at the frame's size.
+    /// The copying pipeline, on the context's device. Its textures are allocated on the
+    /// first copy, at the frame's size.
     pub(crate) fn new(shared: Arc<Shared>) -> Self {
+        Self::with_pass(shared, Pass::Copy)
+    }
+
+    /// The pipeline drawing as `pass` says, on the context's device.
+    pub(crate) fn with_pass(shared: Arc<Shared>, pass: Pass) -> Self {
         let device = &shared.device;
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("jstream capture copy"),
-            source: wgpu::ShaderSource::Wgsl(SHADER.into()),
+            source: wgpu::ShaderSource::Wgsl(pass.shader().into()),
         });
+        let texture = |binding| wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                view_dimension: wgpu::TextureViewDimension::D2,
+                multisampled: false,
+            },
+            count: None,
+        };
+        // The first source, the parameters, then any further sources from binding 2.
+        let mut entries = vec![
+            texture(0),
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+        ];
+        entries.extend((2..).take(pass.planes() - 1).map(texture));
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("jstream capture copy"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-            ],
+            entries: &entries,
         });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("jstream capture copy"),
@@ -149,12 +268,13 @@ impl Ring {
         });
         let params = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("jstream capture copy"),
-            size: 16,
+            size: PARAMS as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         Self {
             shared,
+            pass,
             pipeline,
             layout,
             params,
@@ -226,7 +346,50 @@ impl Ring {
         source: Source<'_>,
         pts: MediaTime,
     ) -> Result<Option<(GpuFrame, wgpu::SubmissionIndex)>, PlatformError> {
-        let (x, y, width, height) = source.visible;
+        self.draw(
+            &[source.texture],
+            source.visible,
+            source.padded,
+            ColorInfo::default(),
+            pts,
+        )
+    }
+
+    /// Converts a YCbCr frame of `size` pixels in `color`, its source textures `planes`
+    /// as the ring's [`Pass`] reads them, into a free slot, as [`copy`](Self::copy)
+    /// does.
+    ///
+    /// # Errors
+    /// [`PlatformError::Unsupported`] for an empty size, or another number of planes
+    /// than the pass reads.
+    pub(crate) fn convert(
+        &mut self,
+        planes: &[&wgpu::Texture],
+        (width, height): (u32, u32),
+        color: ColorInfo,
+        pts: MediaTime,
+    ) -> Result<Option<(GpuFrame, wgpu::SubmissionIndex)>, PlatformError> {
+        self.draw(planes, (0, 0, width, height), true, color, pts)
+    }
+
+    fn draw(
+        &mut self,
+        planes: &[&wgpu::Texture],
+        visible: (u32, u32, u32, u32),
+        padded: bool,
+        color: ColorInfo,
+        pts: MediaTime,
+    ) -> Result<Option<(GpuFrame, wgpu::SubmissionIndex)>, PlatformError> {
+        if planes.len() != self.pass.planes() {
+            return Err(PlatformError::Unsupported {
+                what: format!(
+                    "{} source textures for a {:?} pass",
+                    planes.len(),
+                    self.pass
+                ),
+            });
+        }
+        let (x, y, width, height) = visible;
         let size = FrameSize::new(width, height).map_err(|e| PlatformError::Unsupported {
             what: format!("a captured frame of {width}x{height}: {e}"),
         })?;
@@ -236,27 +399,41 @@ impl Ring {
         };
         let device = &self.shared.device;
         let queue = &self.shared.queue;
-        let mut params = [0u8; 16];
+        let mut params = [0u8; PARAMS];
         params[0..4].copy_from_slice(&x.to_ne_bytes());
         params[4..8].copy_from_slice(&y.to_ne_bytes());
-        params[8..12].copy_from_slice(&u32::from(source.padded).to_ne_bytes());
+        params[8..12].copy_from_slice(&u32::from(padded).to_ne_bytes());
+        for (at, value) in (16..).step_by(4).zip(yuv_params(color)) {
+            params[at..at + 4].copy_from_slice(&value.to_ne_bytes());
+        }
         queue.write_buffer(&self.params, 0, &params);
-        let view = source
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
+        let views: Vec<wgpu::TextureView> = planes
+            .iter()
+            .map(|t| t.create_view(&wgpu::TextureViewDescriptor::default()))
+            .collect();
+        let mut entries = vec![
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&views[0]),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: self.params.as_entire_binding(),
+            },
+        ];
+        entries.extend(
+            views[1..]
+                .iter()
+                .zip(2..)
+                .map(|(view, binding)| wgpu::BindGroupEntry {
+                    binding,
+                    resource: wgpu::BindingResource::TextureView(view),
+                }),
+        );
         let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("jstream capture copy"),
             layout: &self.layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: self.params.as_entire_binding(),
-                },
-            ],
+            entries: &entries,
         });
         let slot = &self.slots[at];
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {

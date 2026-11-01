@@ -256,7 +256,8 @@ mod backend {
                     &streaming,
                     layout,
                     (width, height),
-                    strides()?[0],
+                    color(&pix),
+                    &strides()?,
                 )?),
                 _ => return Err(unsupported()),
             };
