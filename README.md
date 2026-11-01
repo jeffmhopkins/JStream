@@ -51,16 +51,16 @@ in, and **What's left** lists each unfinished item with the steps it still needs
 |---|---|---|---|---|
 | [M0: Foundation and risk spikes](ROADMAP.md#m0) | `██████████` 100% | 11 | 0 | 0 |
 | [M1a: Thin slice to YouTube](ROADMAP.md#m1) | `██████████` 100% | 18 | 0 | 0 |
-| [M1b: Scenes and mixing](ROADMAP.md#m1) | `██████████` 97% | 38 | 0 | 1 |
+| [M1b: Scenes and mixing](ROADMAP.md#m1) | `██████████` 100% | 39 | 0 | 0 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `█████████░` 91% | 10 | 0 | 1 |
 | [M2: UI](ROADMAP.md#m2) | `█████████░` 93% | 26 | 0 | 2 |
 | [M3: Depth and reach](ROADMAP.md#m3) | `████░░░░░░` 38% | 6 | 0 | 10 |
 
-116 of 130 items are merged; 12 of those still wait on a run on Windows hardware.
+117 of 130 items are merged; 12 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 26 items, by next step: 🔨 build 15, 🧪 Windows run 10, 👤 maintainer 1</summary>
+<summary><b>What's left</b>: 25 items, by next step: 🔨 build 14, 🧪 Windows run 10, 👤 maintainer 1</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
@@ -71,7 +71,6 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | C4c | Webcam source (CPU path, MJPEG on Windows, paired audio) | M1b | 🧪 Windows run | landed with wave/m1-3 (#754); a Windows run with a webcam and its paired microphone is still pending (#673 covers the MJPEG webcam) | #654, #658, #726 |
 | C5 | Audio sources | M1b | 🧪 Windows run | the WASAPI device tests on real devices (#778, item 18 of the Windows hardware pass) | #238 |
 | C8 | Browser source (CEF) | M1b | 🔨 build, then 🧪 Windows run | the Windows runs #335 (steps 1 to 4) and #336 passed; #341 passed except its refused-request count (2, not 1), so page_check needs to name the refused URLs, then a rerun; Ctrl-C with CEF running skips the graceful stop (#436), a fix to build, then #335's step 5 runs again | #283, #289, #298, #326 |
-| V0 | Video filter chain runtime | M1b | 🔨 build | part 1 runs the built-in kinds, part 2 loads apply_lut and image_mask assets, part 3 gives scene_mask its scene, part 4 pools scratch layers and each draw's uniform buffers (#712, #718, landed with wave/m1-4, #810), and #730 uploads LUT tables directly; then effect-pack kinds. No bounds inset: on a source chain shadow, outline and glow draw within the frame (ADR-0065 §5) | #595, #607, #626, #712, #717, #718, #730 |
 | D9 | Audio monitoring: a bus's monitor device and tap point | M1b | 🧪 Windows run | ADR-0028 gives a bus a monitor, a device and a tap point before or after its filters (decision register D22). #801 is the mixer's monitor taps and player, #816 the protocol's bus monitor and bus.set_monitor (0.42), and #822 the engine playing it on its device, all landed with wave/m1-5 (#877); the mixer's Hear: before or after FX row (MX-05) can then be built. #822 ran only against the simulated player and the fake device, so a run on a real output device (WASAPI, Core Audio, PipeWire) is still owed: playback, drift steering and an unplug mid-stream | #801, #816, #822 |
 | G2 | vcam media source DLL | M1c | 🧪 Windows run | the pacing rerun (#777, with item 6 of the Windows hardware pass) | #174, #195, #200, #229 |
 | G3c | --register-vcam | M1c | 🧪 Windows run | Windows run (#563) | #235, #565 |
@@ -141,7 +140,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 </details>
 
 <details>
-<summary><b>M1b</b> Scenes and mixing: 38 of 39 merged</summary>
+<summary><b>M1b</b> Scenes and mixing: 39 of 39 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -173,7 +172,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | D2 | Buses and send matrix | ✅ merged | #192 |
 | D4 | No-allocation test | ✅ merged | #191 |
 | D7b | Filter chains in the mixer | ✅ merged | #231 |
-| V0 | Video filter chain runtime | ⏳ planned: part 1 runs the built-in kinds, part 2 loads apply_lut and image_mask assets, part 3 gives scene_mask its scene, part 4 pools scratch layers and each draw's uniform buffers (#712, #718, landed with wave/m1-4, #810), and #730 uploads LUT tables directly; then effect-pack kinds. No bounds inset: on a source chain shadow, outline and glow draw within the frame (ADR-0065 §5) | #595, #607, #626, #712, #717, #718, #730 |
+| V0 | Video filter chain runtime | ✅ merged: part 1 runs the built-in kinds, part 2 loads apply_lut and image_mask assets, part 3 gives scene_mask its scene, part 4 pools scratch layers and each draw's uniform buffers (#712, #718, landed with wave/m1-4, #810), and #730 uploads LUT tables directly; effect-pack kinds are drawn, with the packs folder watched by the engine (#971). No bounds inset: on a source chain shadow, outline and glow draw within the frame (ADR-0065 §5) | #595, #607, #626, #712, #717, #718, #730, #971 |
 | D5 | Audio in the protocol | ✅ merged | #240 |
 | D6 | when_shown activity gain | ✅ merged | #299 |
 | E1 | Render snapshots, GPU lifetime | ✅ merged | #172, #215 |
