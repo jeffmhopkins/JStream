@@ -13,11 +13,11 @@ use crate::target::{broadcast_id_problem, record_path_problem, rtmp_url_problem}
 use crate::touched::Touched;
 use jstream_anim::Value as KeyValue;
 use jstream_protocol::{
-    Batch, Blocker, Canvas, Crop, DroppedOverride, Edit, EntityKind, Finite32, GeometryError,
-    HotkeyBinding, ItemGeometry, ItemId, ItemTransform, ItemTransition, KindCategory,
-    KindDescriptor, Media, OutputId, OutputKind, ParamDescriptor, ParamType, ProtocolError,
-    RecordContainer, Reference, Rev, RtmpTarget, SceneId, SceneMeta, Settings, SourceAudio,
-    SourceId, SourceKind,
+    Batch, Blocker, BusId, Canvas, Crop, DroppedOverride, Edit, EntityKind, Finite32,
+    GeometryError, HotkeyBinding, ItemGeometry, ItemId, ItemTransform, ItemTransition,
+    KindCategory, KindDescriptor, Media, OutputId, OutputKind, ParamDescriptor, ParamType,
+    ProtocolError, RecordContainer, Reference, Rev, RtmpTarget, SceneId, SceneMeta, Settings,
+    SourceAudio, SourceId, SourceKind,
 };
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -897,6 +897,7 @@ fn apply_edit(
                     encoder_profile: None,
                     filters: Chains::default(),
                     video_mix: None,
+                    audio_bus: BusId::master(),
                 },
             );
             Ok(vec![Edit::OutputDelete {
@@ -944,6 +945,12 @@ fn apply_edit(
                 inverse.push(Edit::OutputSetVideoMix {
                     output_id: output.id.clone(),
                     mix_id: Some(mix_id),
+                });
+            }
+            if !output.audio_bus.is_master() {
+                inverse.push(Edit::OutputSetAudioBuses {
+                    output_id: output.id.clone(),
+                    audio_buses: vec![output.audio_bus.clone()],
                 });
             }
             inverse.extend(crate::filter::restore_output(&output));

@@ -654,6 +654,7 @@ fn outputs_are_created_retargeted_and_deleted_with_exact_inverses() {
                 encoder_profile: None,
                 filters: Default::default(),
                 video_mix: None,
+                audio_buses: vec![BusId::master()],
             }],
         }
     );
@@ -761,6 +762,7 @@ fn a_recording_output_is_created_and_deleted_with_exact_inverses() {
                 encoder_profile: None,
                 filters: Default::default(),
                 video_mix: None,
+                audio_buses: vec![BusId::master()],
             }],
         }
     );
@@ -1326,7 +1328,7 @@ mod property {
         let owner = |source: String| jstream_protocol::FilterOwner::Source {
             source_id: SourceId::new(source),
         };
-        match rng.below(68) {
+        match rng.below(69) {
             0 => scene_create(&pool(rng, "s")),
             1 => Edit::SceneRename {
                 scene_id: SceneId::new(scene(rng)),
@@ -1771,6 +1773,11 @@ mod property {
                     favourite: rng.below(2) == 0,
                 },
             },
+            // Sometimes two buses or none, which are refused.
+            67 => Edit::OutputSetAudioBuses {
+                output_id: OutputId::new(output(rng)),
+                audio_buses: (0..[1, 1, 1, 0, 2][rng.below(5)]).map(|_| bus(rng)).collect(),
+            },
             _ => Edit::CanvasSetSize {
                 width: u32::try_from(rng.below(3000)).expect("fits"),
                 height: 720,
@@ -1903,6 +1910,7 @@ mod property {
             "label.reorder",
             "label.delete",
             "source.set_meta",
+            "output.set_audio_buses",
         ]
         .into();
         assert_eq!(applied_names, all);

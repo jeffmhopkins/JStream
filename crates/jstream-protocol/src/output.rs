@@ -8,7 +8,7 @@
 //! event or error, or in a `Debug` print. A read reports only whether a key is set.
 
 use crate::filter::FilterChains;
-use crate::id::{EncoderProfileId, OutputId, VideoMixId};
+use crate::id::{BusId, EncoderProfileId, OutputId, VideoMixId};
 use schemars::JsonSchema;
 use serde::de::{self, Unexpected, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -231,6 +231,23 @@ pub struct OutputInfo {
     /// at the engine's canvas size and base rate, as from a server older than 0.28.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub video_mix: Option<VideoMixId>,
+    /// The buses whose audio it carries (`output.set_audio_buses`, since 0.61), one per
+    /// audio track, in track order: for now always one, as every output writes one
+    /// audio track. The master stage's audio chain runs on each of them before the
+    /// output's own chain (ADR-0080 §1). Absent means `["master"]`, as from a server
+    /// older than 0.61; a virtual camera, which has no audio, always reports that.
+    #[serde(default = "master_only", skip_serializing_if = "is_master_only")]
+    pub audio_buses: Vec<BusId>,
+}
+
+/// The audio buses of an output that names none: the master bus only.
+fn master_only() -> Vec<BusId> {
+    vec![BusId::master()]
+}
+
+/// Whether `buses` is the master bus only, which the wire leaves out.
+fn is_master_only(buses: &[BusId]) -> bool {
+    buses.len() == 1 && buses[0].is_master()
 }
 
 /// A secret string, such as a stream key sent by a client to the engine, or the

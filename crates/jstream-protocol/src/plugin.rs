@@ -154,6 +154,8 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("video_mix.update", N),
     ("video_mix.delete", N),
     ("output.set_video_mix", N),
+    // Like the other output edits: what an output sends is never a plugin's to change.
+    ("output.set_audio_buses", N),
     // Transition edits are in `edit` (ADR-0069 S2 names them); their settings are
     // checked for reach like a source's.
     ("transition.create", Class(E)),

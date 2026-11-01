@@ -1,7 +1,8 @@
 //! Audio in the collection (ADR-0028): each audio source's settings, the buses, and the
 //! sends from sources into buses. The `source.set_audio`, `bus.*` and `send.*` edits,
-//! and what `source.create`, `source.duplicate` and `source.delete` do to a source's
-//! audio.
+//! `output.set_audio_buses`, and what `source.create`, `source.duplicate` and
+//! `source.delete` do to a source's audio. An output that carries a bus blocks its
+//! delete, as a settings reference does.
 //!
 //! Buses never feed other buses (ADR-0028), and a send always runs from a source into a
 //! bus, so the audio graph can't have a cycle. Keys, which can close one, come with the
@@ -11,8 +12,8 @@ use crate::apply::{already_exists, blocked, check_id, check_name, invalid, not_f
 use crate::deps::{self, Node};
 use crate::model::{Bus, MAX_BUSES, State};
 use jstream_protocol::{
-    AudioFollow, BusId, BusMonitor, Edit, EntityKind, Finite32, KindDescriptor, ProtocolError,
-    SourceAudio, SourceId, SourceKind, gain_db_problem,
+    AudioFollow, BusId, BusMonitor, Edit, EntityKind, Finite32, KindDescriptor, OutputId,
+    ProtocolError, SourceAudio, SourceId, SourceKind, gain_db_problem,
 };
 use std::collections::BTreeMap;
 
@@ -175,6 +176,10 @@ pub(crate) fn apply(
             gain_db,
         } => set_send(state, source_id, bus_id, *gain_db, at),
         Edit::SendRemove { source_id, bus_id } => remove_send(state, source_id, bus_id, at),
+        Edit::OutputSetAudioBuses {
+            output_id,
+            audio_buses,
+        } => set_output_buses(state, output_id, audio_buses, at),
         _ => return None,
     })
 }
@@ -280,6 +285,46 @@ fn create_bus(
         .buses
         .insert(id.clone(), Bus::new(id.clone(), name.to_owned()));
     Ok(vec![Edit::BusDelete { bus_id: id.clone() }])
+}
+
+/// `output.set_audio_buses`: an output with audio carries one bus that exists, since
+/// every output writes one audio track.
+fn set_output_buses(
+    state: &mut State,
+    output_id: &OutputId,
+    buses: &[BusId],
+    at: usize,
+) -> Result<Vec<Edit>, ProtocolError> {
+    let output = state
+        .outputs
+        .get(output_id)
+        .ok_or_else(|| not_found(EntityKind::Output, output_id.as_str()))?;
+    let [bus_id] = buses else {
+        return Err(invalid(
+            at,
+            "audio_buses",
+            "an output carries exactly one bus: it writes one audio track",
+        ));
+    };
+    if !output.has_audio() {
+        return Err(invalid(
+            at,
+            "audio_buses",
+            format!("output `{output_id}` has no audio: a virtual camera sends video only"),
+        ));
+    }
+    if !state.buses.contains_key(bus_id) {
+        return Err(not_found(EntityKind::Bus, bus_id.as_str()));
+    }
+    let output = state
+        .outputs
+        .get_mut(output_id)
+        .ok_or_else(|| not_found(EntityKind::Output, output_id.as_str()))?;
+    let old = std::mem::replace(&mut output.audio_bus, bus_id.clone());
+    Ok(vec![Edit::OutputSetAudioBuses {
+        output_id: output_id.clone(),
+        audio_buses: vec![old],
+    }])
 }
 
 fn existing_bus<'a>(state: &'a mut State, id: &BusId) -> Result<&'a mut Bus, ProtocolError> {
