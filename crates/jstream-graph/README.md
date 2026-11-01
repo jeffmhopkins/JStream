@@ -277,8 +277,9 @@ the batch **touched**.
   back. The placement edits (`item.set_geometry`, `item.set_transform`, `item.set_crop`,
   `item.set_visible`, `item.set_opacity`)
   take an optional `scene_id`: absent or the item's own scene changes the item, a
-  keyframe scene of the item's scene writes its override, any other scene is
-  `invalid_argument`, and the inverse keeps the addressing.
+  keyframe scene whose tree holds the item (its scene's, or one whose parent reaches
+  the item's group through groups it places, at any depth) writes its override, any
+  other scene is `invalid_argument`, and the inverse keeps the addressing.
 - **Keyframe scenes** (`keyframe.rs`, [ADR-0024](../../docs/adr/0024-scene-structure.md)
   §2, [ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)):
   `scene.create_variant` appends a variant of a scene that isn't one, undone by

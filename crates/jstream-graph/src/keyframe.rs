@@ -114,8 +114,9 @@ fn clear(
 
 /// The keyframe scene a placement edit with `scene_id` writes an override in, as its
 /// index, or `None` when the edit changes the item itself (`scene_id` absent or the
-/// item's own scene). A scene that is neither the item's own nor one of its scene's
-/// keyframe scenes is `invalid_argument`, and a missing one `not_found`.
+/// item's own scene). A scene that is neither the item's own nor a keyframe scene whose
+/// tree holds the item (its scene's, or one whose parent reaches the item's group, at
+/// any depth) is `invalid_argument`, and a missing one `not_found`.
 pub(crate) fn target(
     state: &State,
     item_id: &ItemId,
@@ -140,8 +141,8 @@ pub(crate) fn target(
             at,
             "scene_id",
             format!(
-                "item `{item_id}` is in scene `{}`; name that scene or one of its keyframe \
-                 scenes",
+                "item `{item_id}` is in scene `{}`; name that scene or a keyframe scene \
+                 whose tree holds it",
                 state.scenes[si].id
             ),
         )),

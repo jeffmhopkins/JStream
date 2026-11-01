@@ -274,7 +274,7 @@ fn a_keyframe_scene_refuses_what_it_cant_hold() {
         folder_id: Some(FolderId::new("f")),
     };
     assert_eq!(refused(&mut graph, folder).0, "edits.0.scene_id");
-    // Only the item's own scene and its keyframe scenes can be named.
+    // Only the item's own scene and a keyframe scene whose tree holds it can be named.
     assert_eq!(
         refused(&mut graph, set_visible("i1", Some("b"), false)).0,
         "edits.0.scene_id"

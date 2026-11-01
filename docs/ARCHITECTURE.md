@@ -384,8 +384,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   protocol 0.34. Scenes have
   a `role` (`scene` or `group`, set by `scene.create` or `scene.set_role`), and `item.move` moves an item
   to another scene keeping its id, under the same cycle check. The placement edits take
-  an optional `scene_id` (protocol 0.12): the item's own scene, or one of its keyframe
-  scenes (protocol 0.39). Keyframe scenes (`scene.create_variant`) are built with their
+  an optional `scene_id` (protocol 0.12): the item's own scene, or a keyframe scene
+  whose tree holds it (protocol 0.39; a group's child since 0.55). Keyframe scenes (`scene.create_variant`) are built with their
   per-item overrides of the items in the parent's tree (its own, and a group's
   children at any depth), `item.clear_override`, the overrides an edit that takes an
   item out of the tree drops (reported in the batch result and restored by undo), their parent's delete blocked by them and its `delete.plan` deleting them

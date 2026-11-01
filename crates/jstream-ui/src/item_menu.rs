@@ -534,6 +534,22 @@ pub fn ungroup_edits(collection: &Collection, item_id: &ItemId) -> Option<Result
                 }),
         );
     }
+    // Each keyframe scene of the parent keeps drawing the items where it drew them
+    // through the group, at its own values of the group and of each item (#846).
+    for keyframe in collection
+        .scenes
+        .iter()
+        .filter(|s| s.variant_of.as_ref() == Some(&parent.scene_id))
+    {
+        match keyframe_edits(
+            (item, &nested.items, carry),
+            (&keyframe.scene_id, &keyframe.overrides),
+            collection.canvas,
+        ) {
+            Ok(more) => edits.extend(more),
+            Err(kept) => return Some(Err(kept)),
+        }
+    }
     edits.push(Edit::ItemRemove {
         item_id: item_id.clone(),
     });
@@ -546,6 +562,68 @@ pub fn ungroup_edits(collection: &Collection, item_id: &ItemId) -> Option<Result
         });
     }
     Some(Ok(edits))
+}
+
+/// The overrides keyframe scene `keyframe` needs once the group `group` is ungrouped,
+/// so each of its `children` draws there where the keyframe drew it through the group:
+/// the box its own value of the group carries the child's value onto, and hidden when
+/// it showed the group or the child hidden. Each is written only where the keyframe
+/// would otherwise draw the child differently, following the parent's new values
+/// (ADR-0049 §1). `carry` is the parent's own carry of the group. [`Kept::Look`] when
+/// the keyframe's value of the group, or of a child, can't be carried.
+fn keyframe_edits(
+    (group, children, carry): (&ItemInfo, &[ItemInfo], Option<Carry>),
+    (keyframe, overrides): (&SceneId, &[jstream_control::protocol::ItemOverride]),
+    canvas: Canvas,
+) -> Result<Vec<Edit>, Kept> {
+    let shown = |item: &ItemInfo| {
+        crate::store::shown_items(std::slice::from_ref(item), overrides)
+            .pop()
+            .unwrap_or_else(|| item.clone())
+    };
+    let own = |item: &ItemId| overrides.iter().find(|o| &o.item_id == item);
+    let group_there = shown(group);
+    let carry_there = Carry::of(&group_there, canvas)?;
+    let mut edits = Vec::new();
+    for child in children {
+        let there = shown(child);
+        let placed =
+            own(&child.item_id).is_some_and(|o| o.geometry.is_some() || o.transform.is_some());
+        // Where the keyframe drew it, and where it would draw it after the ungroup.
+        let before = match carry_there {
+            Some(c) => Some(c.apply(&there)?),
+            None => there.geometry,
+        };
+        let after = if placed {
+            there.geometry
+        } else {
+            match carry {
+                Some(c) => Some(c.apply(child)?),
+                None => child.geometry,
+            }
+        };
+        if before != after {
+            let geometry = before.ok_or(Kept::Look)?;
+            edits.push(Edit::ItemSetGeometry {
+                item_id: child.item_id.clone(),
+                scene_id: Some(keyframe.clone()),
+                geometry,
+            });
+        }
+        let shown_before = group_there.visible && there.visible;
+        let shown_after = match own(&child.item_id).and_then(|o| o.visible) {
+            Some(visible) => visible,
+            None => group.visible && child.visible,
+        };
+        if shown_before != shown_after {
+            edits.push(Edit::ItemSetVisible {
+                item_id: child.item_id.clone(),
+                scene_id: Some(keyframe.clone()),
+                visible: shown_before,
+            });
+        }
+    }
+    Ok(edits)
 }
 
 /// What the menu needs to know about the selection.
@@ -1519,6 +1597,85 @@ mod tests {
             g.fit_mode = FitMode::Stretch;
         }
         assert_eq!(at(wide), Err(Kept::Look));
+    }
+
+    /// B1 on #947: a keyframe scene of the parent keeps drawing each item where it drew
+    /// it through the group: its override of an item is carried by the group's
+    /// placement, its own value of the group carries the items it doesn't override, and
+    /// a group it hides hides them there. Nothing is written where it would follow.
+    #[test]
+    fn ungrouping_carries_a_keyframe_scenes_view_of_the_items() {
+        use jstream_control::protocol::ItemOverride;
+        let kids = || {
+            vec![
+                boxed("x", "logo", 960.0, 540.0, 200.0, 100.0, 0.0),
+                boxed("y", "copy", 1060.0, 640.0, 100.0, 100.0, 30.0),
+            ]
+        };
+        let none = |item: &str| ItemOverride {
+            item_id: ItemId::new(item),
+            geometry: None,
+            transform: None,
+            crop: None,
+            visible: None,
+            opacity: None,
+        };
+        let at = |group: ItemInfo, overrides: Vec<ItemOverride>| {
+            let mut c = grouped(vec![group], kids());
+            let mut keyframe = c.scenes[0].clone();
+            keyframe.scene_id = "k".into();
+            keyframe.variant_of = Some("main".into());
+            keyframe.items = Vec::new();
+            keyframe.overrides = overrides;
+            c.scenes.push(keyframe);
+            ungroup_edits(&c, &ItemId::new("g1"))
+                .expect("a nested scene")
+                .expect("carried")
+        };
+        let in_k = |edits: &[Edit]| -> Vec<String> {
+            edits
+                .iter()
+                .filter_map(|e| match e {
+                    Edit::ItemSetGeometry {
+                        item_id,
+                        scene_id: Some(scene),
+                        geometry,
+                    } if scene.as_str() == "k" => Some(format!(
+                        "{item_id} at {} {} {}x{} {}",
+                        geometry.center.x.get(),
+                        geometry.center.y.get(),
+                        geometry.size.width.get(),
+                        geometry.size.height.get(),
+                        geometry.rotation_deg.get()
+                    )),
+                    Edit::ItemSetVisible {
+                        item_id,
+                        scene_id: Some(scene),
+                        visible,
+                    } if scene.as_str() == "k" => Some(format!("{item_id} visible {visible}")),
+                    _ => None,
+                })
+                .collect()
+        };
+        let half = || boxed("g1", "grp_src", 480.0, 270.0, 960.0, 540.0, 0.0);
+        // k moved x inside the half-size group: the group's placement carries it.
+        let mut x = none("x");
+        x.geometry = boxed("x", "logo", 960.0, 540.0, 400.0, 200.0, 0.0).geometry;
+        assert_eq!(in_k(&at(half(), vec![x])), ["x at 480 270 200x100 0"]);
+        // k puts the group back over the canvas: its items stay where k drew them.
+        let mut g = none("g1");
+        g.geometry = boxed("g1", "grp_src", 960.0, 540.0, 1920.0, 1080.0, 0.0).geometry;
+        assert_eq!(
+            in_k(&at(half(), vec![g])),
+            ["x at 960 540 200x100 0", "y at 1060 640 100x100 30"]
+        );
+        // k hides the group: its items are hidden there.
+        let mut hidden = none("g1");
+        hidden.visible = Some(false);
+        let edits = at(half(), vec![hidden]);
+        assert_eq!(in_k(&edits), ["x visible false", "y visible false"]);
+        // A keyframe with no say over the group or its items gets nothing.
+        assert!(in_k(&at(half(), Vec::new())).is_empty());
     }
 
     /// N10 on #871: the Fit scale of a box of another shape, the axis swap for a
