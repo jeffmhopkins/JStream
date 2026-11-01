@@ -57,10 +57,10 @@ in, and **What's left** lists each unfinished item with the steps it still needs
 | [M2: UI](ROADMAP.md#m2) | `██████████` 96% | 27 | 0 | 1 |
 | [M3: Depth and reach](ROADMAP.md#m3) | `████░░░░░░` 38% | 6 | 0 | 10 |
 
-117 of 130 items are merged; 12 of those still wait on a run on Windows hardware.
+118 of 130 items are merged; 12 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 25 items, by next step: 🔨 build 14, 🧪 Windows run 10, 👤 maintainer 1</summary>
+<summary><b>What's left</b>: 24 items, by next step: 🔨 build 13, 🧪 Windows run 10, 👤 maintainer 1</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
