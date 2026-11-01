@@ -478,7 +478,8 @@ impl RenderCaptures {
     /// so the device is closed before it is opened again. One on the CPU path runs on
     /// and keeps its frame, and one still starting takes the answer it is waiting for,
     /// since most devices open only once (#734): an answer on the GPU path is then
-    /// stopped and started again ([`Self::tick`]).
+    /// stopped and started again ([`Self::tick`]). One that failed keeps its last CPU
+    /// frame and starts again, on the CPU path, when it is due.
     pub(crate) fn leave_gpu(&mut self) {
         self.on_gpu = false;
         self.left_gpu = true;
@@ -490,12 +491,11 @@ impl RenderCaptures {
         self.epoch = self.epoch.wrapping_add(1);
         let mut slots = std::mem::take(&mut self.slots);
         for (spec, slot) in &mut slots {
-            let on_cpu = matches!(slot.state, State::Running { gpu: false, .. });
-            if matches!(spec.spec, CaptureSpec::Device(_))
-                && (on_cpu || matches!(slot.state, State::Starting))
-            {
+            let on_gpu = matches!(slot.state, State::Running { gpu: true, .. });
+            if matches!(spec.spec, CaptureSpec::Device(_)) && !on_gpu {
                 // Only a GPU frame uses the compositor's device; a device on the CPU path
-                // delivers none.
+                // delivers none, and one that failed starts again on the CPU path, keeping
+                // its last frame meanwhile.
                 if matches!(slot.frame, Some(Latest::Gpu(_))) {
                     slot.frame = None;
                 }

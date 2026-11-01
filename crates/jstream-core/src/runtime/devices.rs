@@ -18,8 +18,9 @@
 //! count them twice.
 //!
 //! The program stage's backend on the GPU context is a second view of the same devices
-//! ([`VideoDevices::on_context`]): it opens a device that isn't open on the platform's GPU
-//! path, and shares one that is, on either path. Only a capture on the context can read
+//! ([`VideoDevices::on_context`]): it opens a device that isn't open yet on the
+//! platform's GPU path, shares one open on the GPU path, and refuses one open on the CPU
+//! path (`Unsupported`), which the caller then shares through the CPU view. Only a capture on the context can read
 //! GPU frames; the preview's can't. So when a capture through the CPU view joins a device
 //! open on the GPU path, the device is moved to the CPU path in place: its GPU stream is
 //! closed and the device opened again on the CPU backend in the same format, under the
@@ -75,8 +76,10 @@ impl VideoDevices for SharedVideoDevices {
     /// GPU path in the GPU view.
     ///
     /// # Errors
-    /// The backend's, when it doesn't open, and when a device can't be opened again on
-    /// the CPU path; that device is then lost for every reader.
+    /// The backend's, when it doesn't open; [`PlatformError::DeviceLost`] when a device
+    /// can't be opened again on the CPU path, as every reader then reports; and
+    /// [`PlatformError::Unsupported`] in the GPU view for a device open on the CPU path,
+    /// which the caller then opens through the CPU view.
     fn open(
         &self,
         device: &DeviceId,
@@ -89,6 +92,13 @@ impl VideoDevices for SharedVideoDevices {
             let mut state = lock(&shared.state);
             if state.lost.is_none() && state.on_gpu && self.gpu.is_none() {
                 move_to_cpu(self.inner.as_ref(), device, shared.format, &mut state)?;
+            }
+            if state.lost.is_none() && !state.on_gpu && self.gpu.is_some() {
+                // Its frames are CPU frames: the caller opens it through the CPU view,
+                // and shares it there.
+                return Err(PlatformError::Unsupported {
+                    what: format!("{device} on the GPU path: it is open on the CPU path"),
+                });
             }
             if state.lost.is_none() {
                 if shared.format != *format {
@@ -157,8 +167,8 @@ impl VideoDevices for SharedVideoDevices {
 /// Moves a device open on the GPU path to the CPU path, under its lock: closes its GPU
 /// stream (the device opens once), then opens it on `cpu` in the same `format`. Its
 /// counters carry on from where the GPU stream's ended, and the frame waiting in its
-/// slot, a GPU frame, is dropped. A device that doesn't open again is lost, for every
-/// reader.
+/// slot, a GPU frame, is dropped. A device that doesn't open again is lost
+/// ([`PlatformError::DeviceLost`]), for every reader.
 fn move_to_cpu(
     cpu: &dyn VideoDevices,
     device: &DeviceId,
@@ -175,9 +185,15 @@ fn move_to_cpu(
             state.stream = stream;
             Ok(())
         }
+        // `DeviceLost`, which every reader reports, so each capture stops and is
+        // opened afresh later (`CaptureStream::latest`'s contract).
         Err(err) => {
-            state.lost = Some(err.clone());
-            Err(err)
+            let lost = PlatformError::DeviceLost {
+                what: device.to_string(),
+                reason: format!("it did not open again on the CPU path: {err}"),
+            };
+            state.lost = Some(lost.clone());
+            Err(lost)
         }
     }
 }
@@ -459,27 +475,32 @@ mod tests {
             "counted across the move"
         );
         assert_eq!(preview.stats().frames_captured, 1);
-        // On the CPU path now: another GPU-view open shares it, opening nothing.
-        let third = on_gpu.open(&id, &format, None).expect("shares");
+        // On the CPU path now: the GPU view refuses it, opening nothing, so the caller
+        // shares it through the CPU view.
+        let refused = |result: Result<_, PlatformError>| {
+            matches!(result, Err(PlatformError::Unsupported { .. }))
+        };
+        assert!(refused(on_gpu.open(&id, &format, None).map(drop)));
         assert_eq!(gpu.opens.load(Ordering::Relaxed), 1);
         assert_eq!(fake.open_streams(), 1);
-        drop((program, preview, third));
+        drop((program, preview));
         assert_eq!(fake.open_streams(), 0);
 
-        // Opened through the CPU view first, the GPU view shares it as it is.
+        // Opened through the CPU view first, the GPU view refuses it likewise.
         let first = shared.open(&id, &format, None).expect("opens");
-        let second = on_gpu.open(&id, &format, None).expect("shares");
+        assert!(refused(on_gpu.open(&id, &format, None).map(drop)));
         assert_eq!(
             gpu.opens.load(Ordering::Relaxed),
             1,
             "not opened on the GPU"
         );
         assert_eq!(fake.open_streams(), 1);
-        drop((first, second));
+        drop(first);
     }
 
-    /// A device that doesn't open again on the CPU path is lost for every reader, and
-    /// the join that moved it fails.
+    /// A device that doesn't open again on the CPU path is `DeviceLost` for every
+    /// reader, so each capture stops and opens it afresh later (B1), and the join that
+    /// moved it fails the same way.
     #[test]
     fn a_device_that_does_not_reopen_on_the_cpu_is_lost() {
         let (_clock, fake, shared) = setup();
@@ -493,8 +514,11 @@ mod tests {
             .open(&id, &format, None)
             .expect("opens on the GPU");
         fake.unplug(&id);
-        assert!(shared.open(&id, &format, None).is_err());
+        let lost = |result: Result<_, PlatformError>| {
+            matches!(result, Err(PlatformError::DeviceLost { .. }))
+        };
+        assert!(lost(shared.open(&id, &format, None).map(drop)));
         assert_eq!(fake.open_streams(), 0, "the GPU stream closed");
-        assert!(program.latest().is_err());
+        assert!(lost(program.latest().map(drop)));
     }
 }
