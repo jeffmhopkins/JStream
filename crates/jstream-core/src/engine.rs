@@ -410,6 +410,8 @@ impl Engine {
             let mut state = lock(&self.shared.state);
             let state = &mut *state;
             state.graph = graph;
+            // A new collection, not an edit: its revisions may repeat the old one's.
+            state.source_copies.clear();
             state.outputs.sync(state.graph.state());
             // Program is not saved: the loaded collection's first scene goes on it, with
             // no event, as no client is connected yet (ADR-0030).
@@ -2676,6 +2678,9 @@ struct State {
     /// What each source with an open preview stream draws alone, planned and replaced
     /// as `scene_shots` are: read by the preview thread alone.
     source_shots: Arc<BTreeMap<SourceId, Arc<RenderSnapshot>>>,
+    /// The copy of the collection each previewed source is planned on, kept while the
+    /// collection's revision holds (#969 N2).
+    source_copies: snapshot::SourceCopies,
     /// How many `stats.tick` events this engine has emitted. The next one uses this plus one.
     stats_seq: u64,
     /// Every client's open live-value gestures (ADR-0032), and the committed values the
@@ -3304,6 +3309,7 @@ impl State {
             studio,
             scene_shots,
             source_shots,
+            source_copies,
             shared,
             ..
         } = self;
@@ -3366,7 +3372,12 @@ impl State {
         }
         // Each previewed source alone, after the program's plan too.
         let mut shots = BTreeMap::new();
-        for source_id in previews.iter().flat_map(|shared| shared.previews.sources()) {
+        let previewed: BTreeSet<SourceId> = previews
+            .iter()
+            .flat_map(|shared| shared.previews.sources())
+            .collect();
+        source_copies.retain(&previewed);
+        for source_id in previewed {
             if graph.state().source(&source_id).is_none() {
                 if let Some(shared) = &previews {
                     shared
@@ -3376,6 +3387,7 @@ impl State {
                 continue;
             }
             let Some(source) = snapshot::plan_source(
+                source_copies,
                 graph,
                 &source_id,
                 &mut |id| match frames.get(id) {
