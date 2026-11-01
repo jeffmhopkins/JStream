@@ -212,7 +212,9 @@ state machine. Contents:
   track and the transition's start, sampled when the pass is drawn, through the
   group's chain and its item's effects. The layers either side planned for the group,
   with their chains and boxes, are then left out of the shot unless another track
-  reads them (`Shot::keep_read`), so they don't run each frame. A switch mid-Move
+  reads them (`Shot::keep_read`), so they don't run each frame. A `scene` video mix
+  that shows one of those scenes plans it again in full, chain and boxes, since the
+  mixes are planned after the transition (#961). A switch mid-Move
   holds the children where they are on screen and moves them on from there.
   `Shot::chain_cost` is what its
   scene chains and item effects add to each frame, for `stats.tick`'s `chains`.
