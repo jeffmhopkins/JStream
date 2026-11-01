@@ -965,8 +965,8 @@ id = "WA1"
 milestone = "M3"
 title = "WASM automation plugins"
 status = "planned"
-prs = [486, 623, 642, 722, 725, 839, 843]
-note = "WASM host #486 landed with wave/m3-2 (#663); its wall-time deadlines #623, the cap of 50 commands a second #722, the 1,000-event queue #725 and the wire half #642 (protocol 0.35) landed with wave/m3-3 (#786); the engine side part 1, installing, granting, events, forbidden and disabling (#839, ADR-0075), and part 2, saving installed plugins, grants held to the manifest's classes and hosts, needs_grant, memory_limit and the MCP state-text line (#843, ADR-0076), landed with wave/m3-5 (#854); the UI's grant flow and a query listing the plugins follow, and a private data folder waits for its own design with the file imports it needs"
+prs = [486, 623, 642, 722, 725, 839, 843, 974]
+note = "WASM host #486 landed with wave/m3-2 (#663); its wall-time deadlines #623, the cap of 50 commands a second #722, the 1,000-event queue #725 and the wire half #642 (protocol 0.35) landed with wave/m3-3 (#786); the engine side part 1, installing, granting, events, forbidden and disabling (#839, ADR-0075), and part 2, saving installed plugins, grants held to the manifest's classes and hosts, needs_grant, memory_limit and the MCP state-text line (#843, ADR-0076), landed with wave/m3-5 (#854); the plugin.list query and the UI's Plugins section with its grant dialog are in review (#974, protocol 0.59); removing a plugin and a private data folder wait, the folder for its own design with the file imports it needs"
 needs = ["build"]
 
 [[item]]
