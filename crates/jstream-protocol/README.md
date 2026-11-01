@@ -183,8 +183,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.47 because the engine
-  draws, and so accepts, every blend mode
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.48 because of
+  `stats.tick`'s `chains`, what scene filter chains and item effects add to each frame
+  (`ChainCost`); 0.47 made the engine draw, and so accept, every blend mode
   ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md); no wire change); 0.46 added
   `preview.subscribe`'s `scene_id`, a preview stream of any scene, and its 16 streams a
   session ([Binary streams](#design)); 0.45 made scenes
@@ -1201,7 +1202,7 @@ After `welcome`, the server pushes every event to every client.
   `layer_bytes` is the texture memory of all those layers (`Rgba16Float`, 8 bytes a
   pixel). A filter of a kind the engine doesn't draw is bypassed and not counted, nor
   are a source's own chain and a `scene_mask`'s scene. An older engine leaves `chains`
-  out, and a count missing from it parses as 0. Until
+  out, and a count missing from it parses as 0. `chains` was added in 0.48. Until
   [open question 7](#open-questions) every client receives it. Added in 0.6. A late plugin block is an audio drop in
   `audio_frames` once the mixer counts it
   ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)); that host is not

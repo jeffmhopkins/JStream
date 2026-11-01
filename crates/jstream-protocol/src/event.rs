@@ -118,7 +118,8 @@ pub enum Event {
         drops: DropCounts,
         /// What the scene filter chains and item effects add to each frame: their
         /// offscreen layers, GPU passes and the layers' texture bytes, as the current
-        /// render plan schedules them (ADR-0065 §7). An older engine leaves it out.
+        /// render plan schedules them (ADR-0065 §7; 0.48). An older engine leaves it
+        /// out.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         chains: Option<ChainCost>,
     },

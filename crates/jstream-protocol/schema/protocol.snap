@@ -4173,7 +4173,7 @@ source: crates/jstream-protocol/src/fixtures.rs
                   "type": "null"
                 }
               ],
-              "description": "What the scene filter chains and item effects add to each frame: their\noffscreen layers, GPU passes and the layers' texture bytes, as the current\nrender plan schedules them (ADR-0065 §7). An older engine leaves it out."
+              "description": "What the scene filter chains and item effects add to each frame: their\noffscreen layers, GPU passes and the layers' texture bytes, as the current\nrender plan schedules them (ADR-0065 §7; 0.48). An older engine leaves it\nout."
             },
             "drops": {
               "$ref": "#/$defs/DropCounts",
@@ -8682,5 +8682,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.47"
+  "title": "JStream protocol 0.48"
 }
