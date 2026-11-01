@@ -617,3 +617,226 @@ fn a_move_within_a_family_moves_an_unflattened_groups_children() {
         ]
     );
 }
+
+/// The `move` preset, 400 ms and linear.
+fn move_preset() -> Edit {
+    Edit::TransitionCreate {
+        preset_id: TransitionPresetId::new("move"),
+        name: "Move".into(),
+        kind: "move".into(),
+        duration_ms: 400,
+        easing: Easing::Linear,
+        settings: Settings::default(),
+    }
+}
+
+/// A `sharpen` on `owner`'s video chain, as filter `id`.
+fn sharpen(owner: jstream_protocol::FilterOwner, id: &str) -> Edit {
+    Edit::FilterAdd {
+        owner,
+        chain: jstream_protocol::FilterChain::Video,
+        filter_id: jstream_protocol::FilterId::new(id),
+        kind: "sharpen".into(),
+        settings: Settings::default(),
+        enabled: None,
+        index: None,
+    }
+}
+
+/// A group in a nested group moves inside it too (ADR-0049 §3): a Move between two
+/// members of a family moves the outer group's children inside its layer, and the
+/// inner group's children inside the inner group's, with the outer group item's
+/// progress.
+#[test]
+fn a_move_within_a_family_moves_a_nested_groups_children() {
+    let engine = family();
+    family_with_group(&engine);
+    let control = connected(&engine);
+    apply(
+        &control,
+        vec![
+            move_preset(),
+            // `g` in a box, so it moves as one image, holding the group `h` over the
+            // whole of it, which holds `h1`.
+            geometry("ag", None, 960.0),
+            Edit::SceneCreate {
+                scene_id: SceneId::new("h"),
+                name: "H".into(),
+                role: Some(jstream_protocol::SceneRole::Group),
+            },
+            Edit::SourceCreate {
+                source_id: SourceId::new("sh"),
+                name: "H".into(),
+                kind: SourceKind::Scene {
+                    scene_id: SceneId::new("h"),
+                },
+                settings: Settings::default(),
+                duplicated_from: None,
+            },
+            add("h", "h1", "red"),
+            geometry("h1", None, 200.0),
+            add("g", "gh", "sh"),
+            geometry("g1", Some("k"), 800.0),
+            geometry("h1", Some("k"), 700.0),
+        ],
+    );
+    switch(&control, "a", None);
+    switch(&control, "k", Some("move"));
+    let moves: Vec<(String, f32, f32)> = moving(&engine)
+        .into_iter()
+        .map(|(item, from, to, duration)| {
+            assert_eq!(duration, 400.0, "{item} follows the group item");
+            (item, from, to)
+        })
+        .collect();
+    assert_eq!(
+        moves,
+        [
+            ("g1".into(), 300.0, 800.0),
+            ("gh".into(), 960.0, 960.0),
+            ("h1".into(), 200.0, 700.0),
+        ],
+        "g's children inside g, then h's inside h"
+    );
+}
+
+/// A group drawn through its own scene chain and its item's effects, with a child that
+/// has effects of its own, moves its children inside its layer and is drawn through
+/// both again (ADR-0049 §3, ADR-0065). The layers each side planned for the group are
+/// not shown, so their chains and boxes are left out of the shot and don't run each
+/// frame: only the moving layer's chain and boxes are counted.
+#[test]
+fn a_move_within_a_family_moves_a_chained_groups_children_and_runs_only_whats_shown() {
+    use jstream_protocol::FilterOwner;
+    let engine = family();
+    family_with_group(&engine);
+    let control = connected(&engine);
+    apply(
+        &control,
+        vec![
+            move_preset(),
+            sharpen(
+                FilterOwner::Scene {
+                    scene_id: SceneId::new("g"),
+                },
+                "grade",
+            ),
+            sharpen(
+                FilterOwner::Item {
+                    item_id: ItemId::new("ag"),
+                },
+                "outer",
+            ),
+            sharpen(
+                FilterOwner::Item {
+                    item_id: ItemId::new("g1"),
+                },
+                "inner",
+            ),
+            geometry("g1", Some("k"), 800.0),
+        ],
+    );
+    switch(&control, "a", None);
+    switch(&control, "k", Some("move"));
+    let hub = engine.render_hub();
+    let shot = hub.load();
+    let shot = shot.shot();
+    assert_eq!(moving(&engine), [("g1".into(), 300.0, 800.0, 400.0)]);
+    let tracks = shot.tracks().expect("a transition runs");
+    assert!(
+        tracks
+            .iter()
+            .all(|track| matches!(track, Track::Pair { .. })),
+        "the group pairs as one item: {tracks:?}"
+    );
+    let view = crate::snapshot::group_view(&SceneId::new("g"), &SceneId::new("k"));
+    assert!(
+        shot.scene_chain(&SceneId::new("g")).is_none(),
+        "the old side's"
+    );
+    assert!(shot.scene_chain(&view).is_none(), "the new side's");
+    let ag = ItemId::new("ag");
+    assert!(shot.item_chain(&SceneId::new("a"), &ag).is_none());
+    assert!(shot.item_chain(&SceneId::new("k"), &ag).is_none());
+    let cost = shot.chain_cost();
+    assert_eq!(
+        (cost.scene_chains, cost.item_effects),
+        (1, 2),
+        "the moving layer's chain, its box, and g1's: {cost:?}"
+    );
+}
+
+/// A child only one side of a Move within a family draws appears or disappears inside
+/// the group's layer with the group item's timing, not its own (ADR-0049 §3).
+#[test]
+fn a_child_appears_and_disappears_inside_a_group_with_its_timing() {
+    use jstream_protocol::ItemTransition;
+    use jstream_render::transition::Timing;
+    let engine = family();
+    family_with_group(&engine);
+    let control = connected(&engine);
+    let delayed = |item: &str, delay_ms: u32| Edit::ItemSetTransition {
+        item_id: ItemId::new(item),
+        transition: ItemTransition {
+            delay_ms,
+            ..ItemTransition::default()
+        },
+    };
+    apply(
+        &control,
+        vec![
+            move_preset(),
+            geometry("ag", None, 960.0),
+            add("g", "g2", "red"),
+            geometry("g2", None, 400.0),
+            delayed("ag", 100),
+            delayed("g2", 50),
+            geometry("g1", Some("k"), 800.0),
+            Edit::ItemSetVisible {
+                item_id: ItemId::new("g2"),
+                scene_id: Some(SceneId::new("k")),
+                visible: false,
+            },
+        ],
+    );
+    let group = Timing {
+        delay_ms: 100.0,
+        duration_ms: 400.0,
+        easing: Easing::Linear,
+    };
+    let inside = |engine: &Engine| -> Vec<(String, &'static str, Timing)> {
+        engine
+            .render_hub()
+            .load()
+            .shot()
+            .moving()
+            .into_iter()
+            .map(|(item, track)| {
+                let (kind, timing) = match track {
+                    Track::Pair { timing, .. } => ("pair", timing),
+                    Track::Appear { timing, .. } => ("appear", timing),
+                    Track::Disappear { timing, .. } => ("disappear", timing),
+                };
+                (item.to_string(), kind, timing)
+            })
+            .collect()
+    };
+    switch(&control, "a", None);
+    switch(&control, "k", Some("move"));
+    assert_eq!(
+        inside(&engine),
+        [
+            ("g2".into(), "disappear", group),
+            ("g1".into(), "pair", group)
+        ],
+        "a leaving child is drawn below the arriving ones"
+    );
+    // Cut back to the parent and on to `k`, then Move from `k` to the parent.
+    switch(&control, "a", None);
+    switch(&control, "k", None);
+    switch(&control, "a", Some("move"));
+    assert_eq!(
+        inside(&engine),
+        [("g1".into(), "pair", group), ("g2".into(), "appear", group)]
+    );
+}
