@@ -2217,9 +2217,10 @@ are UTC, RFC 3339 to the millisecond, formatted without a date crate.
 `Engine::with_collection_file(path)` loads the collection from `path`
 (`jstream-graph`'s `Graph::with_collection_json`, checked against the engine's kinds)
 and replaces the engine's collection and `rev` with it; the outputs' runtime state
-follows, so a loaded output is `stopped`. With no file at `path` it saves the current,
-empty, collection there at once, so an unwritable path fails at startup rather than at
-the first change. A file that doesn't read or load is refused with
+follows, so a loaded output is `stopped`. With no file at `path` it saves the current
+collection there at once, with `Graph::with_sample_labels`'s four labels when it has
+none, still at its `rev`, and keeps that as the engine's collection, so the file and the
+engine agree and an unwritable path fails at startup rather than at the first change. A file that doesn't read or load is refused with
 `CollectionFileError` (`Read`, `Load` or `Create`, each naming the path but never the
 contents) and left as it is. It is configured before `connect`, like the other
 builders.

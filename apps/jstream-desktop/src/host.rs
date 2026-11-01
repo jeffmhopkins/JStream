@@ -128,7 +128,8 @@ fn new_token() -> anyhow::Result<String> {
 }
 
 /// The engine the app runs: the collection in `collection` (created the first time,
-/// holding only the four sample labels), saved on every change, with `audit` recording every batch and action.
+/// holding only the four sample labels), saved on every change, with `audit` recording
+/// every batch and action.
 ///
 /// On Windows it is live, as the daemon's is: the OS backends, stream keys in
 /// Credential Manager, and RTMP(S) publishing on `output.start`, plus the virtual
