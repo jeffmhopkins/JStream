@@ -3032,6 +3032,11 @@ impl State {
                 Query::DeviceList | Query::UiSettingsGet { .. } => {
                     return Err(served_by_the_server(query.name()));
                 }
+                // Built without the `wasm-plugins` feature, no plugin is ever installed.
+                // With it, `Engine::execute` answers it before taking the collection lock.
+                Query::PluginList => QueryResult::PluginList {
+                    plugins: Vec::new(),
+                },
                 Query::ActivityList { after_seq, limit } => QueryResult::ActivityList {
                     now_ms: activity_log::unix_ms(std::time::SystemTime::now()),
                     entries: self.activity.list(*after_seq, *limit),

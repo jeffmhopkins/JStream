@@ -665,14 +665,20 @@ fn GrantDialog(section: Section, plugin: PluginInfo) -> impl IntoView {
             </label>
         }
     });
-    let name = display_name(&plugin);
-    let sub = format!("{} · {}", plugin.plugin_id, plugin.path);
+    // The title is the app's own; the plugin's name, its own text, is quoted under it
+    // with its ID and path, so a name can't pass for the dialog's chrome (#974 N1).
+    let sub = format!(
+        "“{}” · {} · {}",
+        display_name(&plugin),
+        plugin.plugin_id,
+        plugin.path
+    );
     view! {
         <Modal label="Plugin permissions" class="plugin-dialog" cancel=cancel>
             <div class="modal-header">
                 <div class="modal-titles">
-                    <h2 class="modal-title">{name}</h2>
-                    <span class="modal-sub mono">{sub}</span>
+                    <h2 class="modal-title">"Plugin permissions"</h2>
+                    <span class="modal-sub">{sub}</span>
                 </div>
                 <button type="button" class="modal-close" aria-label="Close" on:click=move |_| cancel()>"×"</button>
             </div>

@@ -602,7 +602,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   plugin asks for the package folder and an ID, suggested from the folder's name
   (`plg_<name>`, numbered when taken) until it is typed, and sends `plugin.install`
   with no grant beyond `read`; when the manifest asks for more, the grant dialog opens
-  next. The grant dialog offers only what the manifest asks for: `read`, ticked and
+  next. The grant dialog, titled "Plugin permissions" with the plugin's name quoted
+  under it beside its ID and path, so a name can't pass for the dialog's own text,
+  offers only what the manifest asks for: `read`, ticked and
   fixed, then each class asked for with what it lets the plugin do, each host, and,
   when it asks for folders, a box of absolute paths, one a line. Its OK sends
   `plugin.grant` with the ticked choices; for a plugin off as `needs_grant` it reads
