@@ -762,7 +762,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
 - **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops, chains}`, `meters.tick`,
   `source.size_changed` (protocol 0.40), …).
   `stats.tick` (protocol 0.6) carries the pipeline's running drop totals
-  ([R-RT-004](RULES.md#R-RT-004)), and `meters.tick` (protocol 0.19, about ten a second
+  ([R-RT-004](RULES.md#R-RT-004)) and what scene filter chains and item effects add to
+  each frame ([ADR-0065](adr/0065-scene-chains-and-item-effects.md) §7), and `meters.tick` (protocol 0.19, about ten a second
   while the mixer runs) every source's and bus's levels and the master's loudness,
   which `audio.reset_loudness` restarts; the fields are in
   [jstream-protocol › Design](../crates/jstream-protocol/README.md#design).

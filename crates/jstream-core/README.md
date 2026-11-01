@@ -190,7 +190,8 @@ state machine. Contents:
   read back as a PNG on the engine's own snapshot thread, which owns the snapshot
   compositor. A keyframe scene draws its parent's items at their effective values
   (`State::shown_items`), so it follows every edit to the parent; so does what the
-  scene reaches for audio (`activity.rs`).
+  scene reaches for audio (`activity.rs`). `Shot::chain_cost` is what its scene chains
+  and item effects add to each frame, for `stats.tick`'s `chains`.
 - **Studio** (`studio.rs`): which scene is on program and which on preview, and the
   transition running onto program, runtime state under the collection lock that
   `scene.switch` and `studio.set_preview` set and `studio.get` reads
