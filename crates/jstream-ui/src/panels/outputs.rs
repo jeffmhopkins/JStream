@@ -255,7 +255,7 @@ pub fn take_key(typed: String) -> Option<SecretString> {
 }
 
 /// The edit that has `output_id` carry the bus a select's `value` names: one audio track
-/// (`output.set_audio_buses`, protocol 0.61), applied from the output's next start.
+/// (`output.set_audio_buses`, protocol 0.60), applied from the output's next start.
 pub fn bus_edit(output_id: OutputId, value: &str) -> Edit {
     Edit::OutputSetAudioBuses {
         output_id,

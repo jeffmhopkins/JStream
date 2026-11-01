@@ -118,7 +118,7 @@ the batch **touched**.
   delete also names what it removed), the objects created or deleted, the objects used
   (an item's scene and source, both sources of an `item.set_source`, a `scene`
   source's scene, a duplicate's original, the scene an `item.move` names, the profile
-  an `output.set_encoder` names, the mix an `output.set_video_mix` names, a `scene`
+  an `output.set_encoder` names, the mix an `output.set_video_mix` names, the bus an `output.set_audio_buses` names, a `scene`
   mix's scene, a send's source and bus, the preset a scene override or
   `transition.set_default` names, the labels a `source.set_meta` or `scene.set_meta`
   puts on), the properties set (names, a scene's role, an
@@ -149,10 +149,11 @@ the batch **touched**.
 - **References are never left dangling.** `source.delete` is rejected while an item
   places the source or a setting refers to it, `scene.delete` while a `scene`
   source or a video mix shows the scene or a setting refers to it, and `bus.delete`
-  while a setting refers to the bus (a `waveform` or `spectrum` drawing it, #362). The
+  while a setting refers to the bus (a `waveform` or `spectrum` drawing it, #362) or an
+  output carries it. The
   `invalid_argument` lists every blocker in `blockers` (`deps::blockers`, the reverse
-  of the cycle check's edges, plus the mixes): the item (`source_id`), the `scene`
-  source (`kind.scene_id`), the mix (`mix.input.scene_id`), the setting
+  of the cycle check's edges, plus the mixes and outputs): the item (`source_id`), the `scene`
+  source (`kind.scene_id`), the mix (`mix.input.scene_id`), the output (`audio_buses`), the setting
   (`settings.<param>`) or a filter's setting (`filters.<filter_id>.<param>`). The client removes them first, in the same batch if it likes,
   or sends the batch `delete.plan` returns. Rejecting rather than cascading keeps each
   edit's effect, and its inverse, limited to the object it names.
@@ -264,6 +265,10 @@ the batch **touched**.
   (`not_found`), then checks the monitor with the protocol's `BusMonitor::problem`
   (`invalid_argument` on `monitor.<field>`); a device is never looked up, and its
   inverse is the previous monitor, or none.
+  `output.set_audio_buses` checks the output (`not_found`), that the list names exactly
+  one bus (an output writes one audio track), that the output carries audio (a virtual
+  camera doesn't), then the bus (`not_found`), and is undone by the previous bus. It
+  needs no running check: the engine reads an output's bus at its start.
   `send.set` and `send.remove` check the source, then the bus (`not_found`), then that
   the source has a channel (a `scene` source sends nothing of its own). Every gain is
   checked with the protocol's `gain_db_problem` (−100 to +24 dB). A send always runs
@@ -359,7 +364,8 @@ placing any deleted source are removed, settings references to anything deleted 
 to `null` (one `source.set_settings` per source, and one `filter.set_settings` per
 filter), the video mixes that show a deleted scene are pointed at the program
 (`video_mix.update`), and the target's own delete comes last. The plan also lists the
-hotkey bindings those deletes remove. A bus's plan only clears references (its
+hotkey bindings those deletes remove. A bus's plan clears references and moves the
+outputs that carry the bus to the master (`output.set_audio_buses`; its
 `bus.delete` takes its sends); the master's is `invalid_argument`.
 Sources come ordered by ID, scenes in
 display order, items bottom first, outputs, encoder profiles, video mixes and buses
@@ -388,7 +394,8 @@ and `visible`, its `opacity` and `blend` only when they differ from 1 and
 when it names a deleted source, and `filters`, omitted while both chains are empty: each
 filter with its `kind_version` and settings, and `enabled` only when false), outputs ordered by ID (each with its
 `encoder_profile`, omitted for the default, its `filters` as a source's, and its
-`video_mix`, omitted for the program), encoder profiles (`encoders`) ordered by ID,
+`video_mix`, omitted for the program, and its `audio_bus`, omitted for the master and
+set once every bus exists), encoder profiles (`encoders`) ordered by ID,
 omitted when there are none, video mixes (`video_mixes`) ordered by ID, omitted when
 there are none, `buses` (omitted while the master is the only one and at its defaults;
 each bus's `monitor` omitted for none)

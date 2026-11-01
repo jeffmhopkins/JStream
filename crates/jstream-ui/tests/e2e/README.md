@@ -103,7 +103,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   or go live until its key is set; the key field empties on save and the key never
   appears in the page; go live and end stream; the header's Record starts and stops a
   recording; clearing the key; deleting; editing the
-  server URL and choosing an encoder profile, both read back by a fresh page; a second
+  server URL and choosing an encoder profile, both read back by a fresh page; a
+  recording's Audio select moving it to another bus, read back by a fresh page; a second
   client sees outputs created, started and deleted.
 - **Header stats** (`header-stats.spec.js`): the readout shows the dropped count from
   the first `stats.tick`, the CPU share ("<1%") from the second while the program draws
