@@ -1247,7 +1247,7 @@ impl Running {
         // the session closes.
         let last = AtomicU64::new(0);
         Box::new(move || {
-            let (bytes, frames) = sent.read();
+            let (bytes, frames, link_lost_frames) = sent.read();
             let video_sub = *lock(&stats.video_subscriber);
             let audio_sub = *lock(&stats.audio_subscriber);
             let encoded = match video.as_ref().and_then(Weak::upgrade) {
@@ -1265,6 +1265,7 @@ impl Running {
                     .dropped
                     .saturating_add(own.load(Ordering::Relaxed))
                     .saturating_add(link.load(Ordering::Relaxed)),
+                link_lost_frames,
             }
         })
     }
@@ -3827,7 +3828,8 @@ fn output_loop(job: OutputJob) {
 }
 
 /// Counts a packet the muxer `taken` in `sent`, unless the live link is down: the
-/// publish target drops it then, and counts it with the link's drops.
+/// publish target drops it then, and counts it with the link's drops. A video frame
+/// lost that way is also counted for the health (#994).
 fn count_sent(
     sent: &SentCounters,
     packet: &jstream_media::Packet,
@@ -3835,8 +3837,13 @@ fn count_sent(
     link: LinkState,
     video: bool,
 ) {
-    if taken && link == LinkState::Active {
+    if !taken {
+        return;
+    }
+    if link == LinkState::Active {
         sent.add(packet.data().len(), video);
+    } else if video {
+        sent.lose_on_link();
     }
 }
 
