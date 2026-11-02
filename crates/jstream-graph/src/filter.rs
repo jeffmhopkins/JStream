@@ -1,7 +1,8 @@
 //! Filter chains: the `filter.*` edits (ADR-0026, docs/adr/0026-source-filter-chains.md).
 //!
-//! A source has a video chain and an audio chain. The master stage and each output that
-//! carries audio have an audio chain (ADR-0080); their video chains wait for video mixes.
+//! A source has a video chain and an audio chain. The master stage and every output have
+//! a video chain, and the master stage and each output that carries audio an audio
+//! chain (ADR-0080).
 //! A filter's kind is a filter kind of its chain, and its settings are checked and
 //! completed against the kind's descriptor exactly as a source's are (ADR-0025). Scene
 //! and source references in a source's filter settings are edges of that source
@@ -12,7 +13,10 @@
 //! A scene and an item own a video chain each (ADR-0065): a scene's filters and an
 //! item's effects. A keyframe scene owns none, since it shows its parent's. References in
 //! them are edges of the scene, or of the item's scene, so they run the cycle check and
-//! block deletes as a source's do.
+//! block deletes as a source's do. The `keyframe` owner names a keyframe scene's
+//! override of an item's effects (ADR-0088): the first edit copies the item's own into
+//! the override, and its inverse clears the override; its references are edges of the
+//! keyframe scene.
 
 use crate::apply::{
     Kinds, already_exists, check_id, check_index, check_value, complete_settings, invalid,
@@ -21,7 +25,7 @@ use crate::apply::{
 use crate::deps::{self, Node};
 use crate::model::{Chains, Filter, Item, MAX_CHAIN_FILTERS, Output, Scene, Source, State};
 use jstream_protocol::{
-    Edit, EntityKind, FilterChain, FilterId, FilterOwner, KindCategory, KindDescriptor,
+    Edit, EntityKind, FilterChain, FilterId, FilterOwner, ItemId, KindCategory, KindDescriptor,
     ProtocolError, Reference, SceneId, Settings, SourceKind,
 };
 use serde_json::Value;
@@ -34,11 +38,59 @@ pub(crate) fn apply(
     edit: &Edit,
     at: usize,
 ) -> Option<Result<Vec<Edit>, ProtocolError>> {
-    if let Some(owner) = edit_owner(edit)
-        && let Err(error) = check_not_variant(state, owner, at)
-    {
+    let owner = edit_owner(edit)?;
+    if let FilterOwner::Keyframe { scene_id, item_id } = owner {
+        return Some(keyframe_edit(state, kinds, edit, scene_id, item_id, at));
+    }
+    if let Err(error) = check_not_variant(state, owner, at) {
         return Some(Err(error));
     }
+    dispatch(state, kinds, edit, at)
+}
+
+/// Applies a `filter.*` edit on the `keyframe` owner (ADR-0088): while keyframe scene
+/// `scene_id` follows `item_id`'s own effects, it first copies them into its override,
+/// and the edit's inverse is then `item.clear_override` of `effects`.
+fn keyframe_edit(
+    state: &mut State,
+    kinds: &Kinds,
+    edit: &Edit,
+    scene_id: &SceneId,
+    item_id: &ItemId,
+    at: usize,
+) -> Result<Vec<Edit>, ProtocolError> {
+    let vi = crate::keyframe::effects_target(state, scene_id, item_id, at)?;
+    let follows = state.scenes[vi]
+        .overrides
+        .get(item_id)
+        .and_then(|o| o.effects.as_ref())
+        .is_none();
+    if follows {
+        let own = state
+            .item(item_id)
+            .map(|(_, item)| item.effects.clone())
+            .unwrap_or_default();
+        crate::keyframe::write(state, vi, item_id, jstream_anim::Value::Effects(own), at)?;
+    }
+    let inverse = dispatch(state, kinds, edit, at).unwrap_or_else(|| Err(unknown_owner()))?;
+    if follows {
+        return Ok(vec![Edit::ItemClearOverride {
+            scene_id: scene_id.clone(),
+            item_id: item_id.clone(),
+            field: jstream_protocol::OverrideField::Effects,
+        }]);
+    }
+    Ok(inverse)
+}
+
+/// Applies a `filter.*` edit whose owner was checked, and returns its inverse; `None`
+/// for any other edit.
+fn dispatch(
+    state: &mut State,
+    kinds: &Kinds,
+    edit: &Edit,
+    at: usize,
+) -> Option<Result<Vec<Edit>, ProtocolError>> {
     Some(match edit {
         Edit::FilterAdd { .. } => add(state, kinds, edit, at),
         Edit::FilterRemove { owner, filter_id } => remove(state, owner, filter_id),
@@ -109,11 +161,11 @@ pub(crate) fn restore_effects(item: &Item) -> Vec<Edit> {
     restore_chains(&owner, &item.effects)
 }
 
-/// The scene whose edges a filter on `owner` adds to: a scene's own, an item's scene;
-/// `None` for any other owner.
+/// The scene whose edges a filter on `owner` adds to: a scene's own, an item's scene, a
+/// keyframe scene for its override of an item's effects; `None` for any other owner.
 fn owner_scene<'a>(state: &'a State, owner: &'a FilterOwner) -> Option<&'a SceneId> {
     match owner {
-        FilterOwner::Scene { scene_id } => Some(scene_id),
+        FilterOwner::Scene { scene_id } | FilterOwner::Keyframe { scene_id, .. } => Some(scene_id),
         FilterOwner::Item { item_id } => state
             .item_index(item_id)
             .map(|(si, _)| &state.scenes[si].id),
@@ -200,6 +252,25 @@ fn chains<'a>(state: &'a State, owner: &FilterOwner) -> Result<&'a Chains, Proto
             .item_index(item_id)
             .map(|(si, ii)| &state.scenes[si].items[ii].effects)
             .ok_or_else(|| not_found(EntityKind::Item, item_id.as_str())),
+        // The keyframe's override, or the item's own effects while it follows them.
+        FilterOwner::Keyframe { scene_id, item_id } => {
+            let scene = state
+                .scene(scene_id)
+                .ok_or_else(|| not_found(EntityKind::Scene, scene_id.as_str()))?;
+            match scene
+                .overrides
+                .get(item_id)
+                .and_then(|o| o.effects.as_ref())
+            {
+                Some(effects) => Ok(effects),
+                None => chains(
+                    state,
+                    &FilterOwner::Item {
+                        item_id: item_id.clone(),
+                    },
+                ),
+            }
+        }
         _ => Err(unknown_owner()),
     }
 }
@@ -228,7 +299,25 @@ fn chains_mut<'a>(
             Some((si, ii)) => Ok(&mut state.scenes[si].items[ii].effects),
             None => Err(not_found(EntityKind::Item, item_id.as_str())),
         },
+        // `keyframe_edit` copies the item's effects into the override first.
+        FilterOwner::Keyframe { scene_id, item_id } => state
+            .scene_index(scene_id)
+            .and_then(|si| state.scenes[si].overrides.effects_mut(item_id))
+            .ok_or_else(|| ProtocolError::Internal {
+                reason: "invariant: a keyframe's effects are copied before an edit".into(),
+            }),
         _ => Err(unknown_owner()),
+    }
+}
+
+/// The owner whose chains `owner` has: for a keyframe's override of an item's effects,
+/// the item's (ADR-0088); else `owner` itself.
+fn chain_owner(owner: &FilterOwner) -> FilterOwner {
+    match owner {
+        FilterOwner::Keyframe { item_id, .. } => FilterOwner::Item {
+            item_id: item_id.clone(),
+        },
+        other => other.clone(),
     }
 }
 
@@ -242,9 +331,9 @@ fn unknown_owner() -> ProtocolError {
 /// Checks that `owner` has `chain`, or `invalid_argument` on `chain`. A source has a
 /// video chain if its kind produces video, and an audio chain if it produces audio and
 /// is not a `scene` source (ADR-0026 §1); a kind the graph doesn't describe has neither.
-/// The master stage and an output that carries audio have an audio chain; their video
-/// chains wait for video mixes (ADR-0080). A scene and an item have a video chain only
-/// (ADR-0065 §1).
+/// The master stage and every output have a video chain, and the master stage and an
+/// output that carries audio an audio chain (ADR-0080). A scene and an item have a
+/// video chain only (ADR-0065 §1).
 fn check_chain(
     state: &State,
     kinds: &Kinds,
@@ -277,11 +366,11 @@ fn check_chain(
                 ))
             }
         }
-        (FilterOwner::Master | FilterOwner::Output { .. }, FilterChain::Video) => missing(
-            "the master stage's and outputs' video chains are not available yet; only \
-             their audio chains hold filters"
-                .into(),
-        ),
+        (FilterOwner::Output { output_id }, FilterChain::Video) => match state.output(output_id) {
+            None => Err(not_found(EntityKind::Output, output_id.as_str())),
+            Some(_) => Ok(()),
+        },
+        (FilterOwner::Master, FilterChain::Video) => Ok(()),
         (FilterOwner::Output { output_id }, FilterChain::Audio) => match state.output(output_id) {
             None => Err(not_found(EntityKind::Output, output_id.as_str())),
             Some(output) if output.has_audio() => Ok(()),
@@ -313,7 +402,10 @@ fn check_no_references(
 ) -> Result<(), ProtocolError> {
     if matches!(
         owner,
-        FilterOwner::Source { .. } | FilterOwner::Scene { .. } | FilterOwner::Item { .. }
+        FilterOwner::Source { .. }
+            | FilterOwner::Scene { .. }
+            | FilterOwner::Item { .. }
+            | FilterOwner::Keyframe { .. }
     ) {
         return Ok(());
     }
@@ -457,7 +549,7 @@ fn add(
     if filters.find(filter_id).is_some() {
         return Err(already_exists(EntityKind::Filter, filter_id.as_str()));
     }
-    check_chain(state, kinds, owner, chain, at)?;
+    check_chain(state, kinds, &chain_owner(owner), chain, at)?;
     let len = filters.chain(chain).len();
     if len >= MAX_CHAIN_FILTERS {
         return Err(invalid(

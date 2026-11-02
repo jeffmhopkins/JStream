@@ -1694,6 +1694,7 @@ mod tests {
             crop: None,
             visible: None,
             opacity: None,
+            effects: None,
         };
         let at = |group: ItemInfo, overrides: Vec<ItemOverride>| {
             let mut c = grouped(vec![group], kids());

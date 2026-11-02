@@ -1,6 +1,6 @@
 //! `cargo xtask`: repository automation.
 //!
-//! Docs: docs/ARCHITECTURE.md#repo-layout, docs/DOCS.md#bootstrap, docs/DOCS.md#governance, docs/DOCS.md#dependency-lint, docs/ARCHITECTURE.md#packaging
+//! Docs: docs/ARCHITECTURE.md#repo-layout, docs/DOCS.md#bootstrap, docs/DOCS.md#governance, docs/DOCS.md#dependency-lint, docs/ARCHITECTURE.md#packaging, apps/jstream-daemon/README.md#receiver-e2e
 
 #![forbid(unsafe_code)]
 #![allow(
@@ -10,6 +10,7 @@
 
 mod dist;
 mod docs;
+mod e2e_stream;
 mod governance;
 mod lint_deps;
 
@@ -33,6 +34,14 @@ fn main() -> ExitCode {
             Ok(false) => ExitCode::FAILURE,
             Err(e) => {
                 eprintln!("xtask docs: {e:#}");
+                ExitCode::from(2)
+            }
+        },
+        Some("e2e-stream") => match e2e_stream::run(&args[1..], &root) {
+            Ok(true) => ExitCode::SUCCESS,
+            Ok(false) => ExitCode::FAILURE,
+            Err(e) => {
+                eprintln!("xtask e2e-stream: {e:#}");
                 ExitCode::from(2)
             }
         },
@@ -77,6 +86,10 @@ fn main() -> ExitCode {
                 (
                     "docs merge-main",
                     "merge origin/main [--from wave/<name>]; stamp-only conflicts take its side, then list stale sections",
+                ),
+                (
+                    "e2e-stream",
+                    "stream to a local ffmpeg RTMP server and probe it (Linux): [--openh264 <library>]",
                 ),
                 (
                     "governance",

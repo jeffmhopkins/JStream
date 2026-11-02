@@ -372,6 +372,11 @@ fn pump_until_reported(
 /// caught at their thread's boundary instead of killing the thread silently. Both
 /// clients see the output settle `failed`, the error event the protocol has for a
 /// fatal pipeline error, and the engine still runs a later command.
+///
+/// The mixer's panic is raised on the mixer thread as it calls `Mixer::poll` (reading
+/// the clock for the call's `now`), inside the `catch_unwind` that wraps the whole mix
+/// loop, so a panic in `Mixer::poll` itself unwinds through the same boundary. Nothing
+/// a test can reach runs inside `Mixer::poll`'s body: its filters are jstream-audio's own.
 #[test]
 fn rt_panic_is_reported() {
     let clock = FakeClock::new(Timebase::MICROS);

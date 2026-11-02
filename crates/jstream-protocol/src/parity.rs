@@ -1243,15 +1243,21 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
             },
             invalid("edits.6.chain", "a chain holds at most 8 filters"),
         ),
-        // The master stage and outputs (ADR-0080): audio chains only, on an output
-        // that exists.
+        // The master stage and outputs (ADR-0080): since 0.60 every output has a video
+        // chain, on an output that exists.
         (
-            Batch::single(gain_on(FilterOwner::Master, "v", FilterChain::Video, 0.0)),
-            invalid(
-                "edits.0.chain",
-                "the master stage's and outputs' video chains are not available yet; only \
-                 their audio chains hold filters",
-            ),
+            Batch::single(gain_on(
+                FilterOwner::Output {
+                    output_id: OutputId::new("ghost"),
+                },
+                "v",
+                FilterChain::Video,
+                0.0,
+            )),
+            ProtocolError::NotFound {
+                entity: EntityKind::Output,
+                id: "ghost".into(),
+            },
         ),
         // A scene's filters and an item's effects (0.43, ADR-0065): a video chain only,
         // on a scene or item that exists.
@@ -1281,6 +1287,44 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
             invalid(
                 "edits.0.chain",
                 "item `i1` has no audio chain: its effects are video only",
+            ),
+        ),
+        // A keyframe's override of an item's effects needs a keyframe scene (ADR-0088).
+        (
+            Batch::single(Edit::FilterRemove {
+                owner: FilterOwner::Keyframe {
+                    scene_id: SceneId::new("a"),
+                    item_id: ItemId::new("i1"),
+                },
+                filter_id: FilterId::new("e"),
+            }),
+            invalid(
+                "edits.0.owner",
+                "scene `a` is not a keyframe scene: an item's own effects take the `item` owner",
+            ),
+        ),
+        (
+            Batch::single(Edit::ItemSetEffects {
+                scene_id: SceneId::new("a"),
+                item_id: ItemId::new("i1"),
+                effects: Vec::new(),
+            }),
+            invalid(
+                "edits.0.scene_id",
+                "scene `a` is item `i1`'s own scene: edit its own effects with `filter.*`, and \
+                 name a keyframe scene here",
+            ),
+        ),
+        (
+            Batch::single(Edit::ItemSetEffects {
+                scene_id: SceneId::new("b"),
+                item_id: ItemId::new("i1"),
+                effects: Vec::new(),
+            }),
+            invalid(
+                "edits.0.scene_id",
+                "scene `b` is not a keyframe scene: name a keyframe scene whose tree holds item \
+                 `i1`",
             ),
         ),
         (

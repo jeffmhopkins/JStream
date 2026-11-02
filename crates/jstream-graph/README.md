@@ -40,7 +40,8 @@ protocol's types (`Overrides`).
   ([ADR-0040](../../docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)
   §3), and the `transitions`: the presets, keyed by ID, and the default. A binding
   always names objects that exist. A new state holds one preset, `cut`, as its default.
-  Each `Output` has its own `Chains` too; only their audio chains hold filters so far.
+  Each `Output` has its own `Chains` too: a video chain, and an audio chain when it
+  carries audio.
 - `Source`: a single shared instance with an ID, a name, a `SourceKind` (`builtin` by
   kind ID, or `scene`, a nested scene) and its `Settings`: every parameter of its kind,
   or none for a `scene` source. `item.add` places an existing source by reference,
@@ -123,7 +124,8 @@ the batch **touched**.
   mix's scene, a send's source and bus, the preset a scene override or
   `transition.set_default` names, the labels a `source.set_meta` or `scene.set_meta`
   puts on), the properties set (names, a scene's role, an
-  item's placement, crop, visibility, opacity, blend, index and source, each settings
+  item's placement, crop, visibility, opacity, blend, effects in a keyframe, index and
+  source, each settings
   parameter, a filter's switch, settings parameters and index, an output's target,
   encoder and mix choices, a profile's encoding, a mix's spec, each audio field a
   `source.set_audio` or `bus.set_fader` sets, a bus's monitor, a send's gain, a preset's fields, a
@@ -177,12 +179,22 @@ the batch **touched**.
   ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md)). Each is undone by
   the previous value, and removing an item restores both.
 - **Filters** (`filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
-  every filter edit first refuses a keyframe scene as the owner (`invalid_argument` on
-  `owner`: it shows its parent's filters). `filter.add` checks, in order, the owner (a
+  every filter edit first refuses a keyframe scene as a `scene` owner (`invalid_argument`
+  on `owner`: it shows its parent's filters). The `keyframe` owner, an item's effects as
+  a keyframe scene shows them
+  ([ADR-0088](../../docs/adr/0088-keyframe-scenes-override-item-effects.md)), is checked
+  as `item.set_effects` checks its scene (on `owner`); where the keyframe follows the
+  item, the edit first copies the item's own effects into its override, and its inverse
+  is then `item.clear_override` of `effects`. Its chain checks are an item's. Every
+  filter edit on it touches the item's effects property in the keyframe, the one
+  `item.set_effects` and `item.clear_override` of `effects` touch, so an undo of any of
+  them conflicts with another client's later change there (ADR-0032).
+  `filter.add` checks, in order, the owner (a
   source, an output, the master stage, a scene or an item), the filter ID (non-empty,
   unused on the owner), that the owner has the chain (a source: video if its kind
   produces video, audio if it produces audio and it is not a `scene` source; the master
-  and an output that carries audio: audio only, ADR-0080; a scene and an item: video
+  and every output: video, and audio for the master and an output that carries audio,
+  ADR-0080, an output that doesn't exist being `not_found`; a scene and an item: video
   only, [ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md)), that the
   chain has room, that the kind is a filter kind of that chain (`kind`), that a master
   or output filter's settings hold no reference (a scene, source, bus or asset), the
@@ -199,11 +211,19 @@ the batch **touched**.
   describe can only come from a load (below); its settings stay as loaded,
   `filter.set_settings` on it is `invalid_argument` until the kind is described, and an
   undo or duplicate that would re-add it fails like any `filter.add` of an unknown kind.
+  So does any `item.set_effects` whose list holds one, since it is checked whole: a
+  `delete.plan` that clears a reference in another filter of that keyframe's overridden
+  effects, and an undo that writes such a list back (of `item.clear_override` of
+  `effects`, or of a removal that dropped the override), fail closed and change nothing.
   An item's effects go with it through `item.move` (which runs the cycle check on their
   references from the new scene) and `item.set_source`. A reference in a scene's filter blocks a delete as
   `filters.<filter_id>.<param>` of the scene, and one in an item's effect as
   `effects.<filter_id>.<param>` of the item; `delete.plan` clears them with
-  `filter.set_settings` unless it deletes that scene or removes that item anyway.
+  `filter.set_settings` unless it deletes that scene or removes that item anyway. One in
+  a keyframe's overridden effect blocks it as
+  `overrides.<item_id>.effects.<filter_id>.<param>` of the keyframe scene, and the plan
+  clears it with one `item.set_effects` per keyframe, unless it deletes that keyframe or
+  removes that item anyway.
 - **Outputs** (`target.rs` checks the URL): `output.create` and `output.set_target`
   reject, with `invalid_argument` and a fixed reason that never repeats the URL, one
   that isn't an `rtmp://` or `rtmps://` server URL with a host and an application
@@ -294,7 +314,13 @@ the batch **touched**.
   `scene.delete`. A placement edit addressed to it writes one field of its override
   through `Keyframe::write`, after the same checks as the item's own edit, and is undone
   by `item.clear_override` of the field or by the old value. `item.clear_override` of an
-  absent field changes nothing and has no inverse. An override names an item in the
+  absent field changes nothing and has no inverse. `item.set_effects` writes the
+  `effects` field whole (ADR-0088): at most 8 filters with unique IDs, each a known
+  `video_filter` kind with its settings completed as `filter.add` completes them, then
+  the cycle check from the keyframe scene; the item's own scene, and any other scene
+  that isn't a keyframe, are `invalid_argument` on `scene_id`, each with a reason of its
+  own that names a keyframe scene as the fix. `State::shown_items` and `State::items_through` draw an item with its
+  overridden effects. An override names an item in the
   parent's tree (`State::tree_items`: its own, or a child of a group placed in it, at
   any depth, protocol 0.55, #846), and any other is refused. `item.add`, `item.move` into a variant
   and `scene.set_folder` of one are refused. After every edit of a batch,
@@ -341,7 +367,8 @@ the batch **touched**.
   and the delete's inverse ends with a `hotkey.set` for each, after the object is back.
   The touched set names the hotkey, and the objects a `hotkey.set` action names as used.
 - **No cycles** (`deps.rs`). One function lists every dependency edge: a scene depends
-  on the sources its items place, a keyframe scene on its parent, a `scene` source on its
+  on the sources its items place, a keyframe scene on its parent and on what its
+  overridden effects refer to, a `scene` source on its
   scene, and a source on the
   scenes, sources and buses its settings, or its filters' settings, refer to. A bus
   depends on nothing, so an edge into one never closes a cycle; it only holds the bus
@@ -415,8 +442,9 @@ orders, each omitted when empty. A scene's `folder`, `labels`, `icon`, `color`,
 `favourite` and `show_in_multiview`, and a source's `labels` and `favourite`, are each omitted while
 they have their default, so a collection without them saves as it did before they
 existed and needs no schema bump. A keyframe scene writes `variant_of` and its
-`overrides` in item ID order, each omitted for any other scene, so it needs no schema
-bump either. Loading creates the folders top level first, then
+`overrides` in item ID order, each omitted for any other scene, so it needed no schema
+bump either. An override's `effects` (ADR-0088), written with each filter's
+`kind_version` and omitted while the keyframe follows the item, is `schema_version` 3. Loading creates the folders top level first, then
 sets each nested one's parent, so a folder may come before its parent in the file;
 labels come before the scenes and sources that carry them. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
@@ -424,9 +452,10 @@ carry one ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Reading and writing the 
 the engine's; this crate does no I/O.
 - **Loading** (`Graph::with_collection_json`) parses the JSON, refuses a
   `schema_version` it has no path from (missing, 0, or newer), runs the forward
-  migrations from the file's version (`MIGRATIONS[n]` upgrades `n + 1` to `n + 2`; the
-  one so far, 1 to 2, adds scene `filters` and item `effects`, which a version 1 file
-  has none of, so it changes nothing and refuses a version 1 file that holds either),
+  migrations from the file's version (`MIGRATIONS[n]` upgrades `n + 1` to `n + 2`: 1 to
+  2 adds scene `filters` and item `effects`, which a version 1 file has none of, so it
+  changes nothing and refuses a version 1 file that holds either, and 2 to 3 adds a
+  keyframe override's `effects` the same way),
   and refuses unknown fields in the file's own objects, so a newer field is never
   silently dropped by the next save. Scene filters and item effects are added after
   every scene, item and source, so their references find what they name.
@@ -440,7 +469,8 @@ the engine's; this crate does no I/O.
   settings refer to, then its labels and favourite), then every source's filters, then
   items in their placement form with their crop and visibility, opacity, blend and
   transition settings, then the keyframe scenes' overrides as placement edits addressed
-  to them, then encoder profiles, then the presets and the default (the
+  to them (and `item.set_effects` for their effects, keeping a filter of an unknown
+  kind as an item's own effect keeps one), then encoder profiles, then the presets and the default (the
   initial `cut` is updated in place when the file has it, and deleted when it doesn't),
   then each scene's overrides, then video mixes, then outputs with their profiles, mixes
   and filters, then the master's filters, then each source's audio and the sends (with a
@@ -571,9 +601,10 @@ no error quotes a credential-like value placed where a number, key or tag belong
 
 Planned, and kept possible by the private fields of the model types:
 
-- **More chains:** filter chains on buses, and video chains on the master and outputs
-  ([ADR-0026](../../docs/adr/0026-source-filter-chains.md),
-  [ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)); keyframe
+- **More chains:** filter chains on buses
+  ([ADR-0026](../../docs/adr/0026-source-filter-chains.md)); references in the master's
+  and outputs' filters
+  ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)); keyframe
   overrides of item effects (ADR-0065).
 - **Kind versions.** The engine's kinds come from `jstream-sources`. The collection file
   records each source's kind version but refuses a mismatch: settings migrations per

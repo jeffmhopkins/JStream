@@ -84,7 +84,10 @@ modification time and size (or absence, so a named shader that appears later is 
 and reloads a folder whose stamp changed. Other files in the folder (a `.git`, notes)
 are never read. A poll reports kinds added, changed or removed, for `kind.changed`, and
 the errors of packs that failed. A failed reload keeps the last good version live and is
-reported once. A second folder with a pack ID that is already loaded is refused, and
+reported once. A load that panics (naga, on untrusted WGSL) is caught around that one
+pack and reported as `PackError::Panicked`, a failed load like any other, so the other
+packs keep loading and the poll keeps every change it found; a test loads one pack with
+a loader that panics. A second folder with a pack ID that is already loaded is refused, and
 retried in the poll that frees the ID (the first folder removed, or its pack renamed).
 Polling needs no dependency and behaves the same on every file system. The cost is the
 poll's latency, and an edit that keeps a file's size within the file system's timestamp

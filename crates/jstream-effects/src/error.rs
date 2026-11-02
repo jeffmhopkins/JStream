@@ -64,4 +64,13 @@ pub enum PackError {
         /// The folder that has it.
         first: PathBuf,
     },
+    /// Loading the pack panicked: naga, parsing or validating its WGSL, is the part
+    /// that can. The pack counts as one that failed to load.
+    #[error("{}: loading the pack panicked: {message}", path.display())]
+    Panicked {
+        /// The pack's manifest.
+        path: PathBuf,
+        /// The panic's message, or `<not a string>` when its payload isn't one.
+        message: String,
+    },
 }

@@ -41,7 +41,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   implementation agrees.
 - **Commands** (`command.rs`): `Edit` (`scene.create`, `scene.create_variant`,
   `scene.rename`, `scene.delete`,
-  `scene.reorder`, `scene.set_role`, `item.clear_override`, `item.add`, `item.remove`, `item.reorder`,
+  `scene.reorder`, `scene.set_role`, `item.clear_override`, `item.set_effects`, `item.add`, `item.remove`, `item.reorder`,
   `item.move`, `item.set_geometry`, `item.set_transform` (deprecated), `item.set_crop`,
   `item.set_visible`, `item.set_source`, `item.set_opacity`, `item.set_blend`,
   `canvas.set_size`, `source.create`, `source.rename`, `source.set_settings`,
@@ -64,13 +64,15 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`,
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
-  `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`), with
+  `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`,
+  `effect.enable`), with
   `Action::named_objects` and `Action::bind_problem`,
   which every implementation uses to check and follow a hotkey's action; `Batch`, whose
   optional `ends_gesture` commits a gesture; and the `Command`/`CommandClass`
   classification view.
 - **Filters** (`filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
-  `FilterOwner` (tagged `type`: `source`, `master`, `output`, `scene` and `item`),
+  `FilterOwner` (tagged `type`: `source`, `master`, `output`, `scene`, `item` and
+  `keyframe`),
   `FilterChain` (`video`, `audio`), `FilterInfo` and `FilterChains`, the chains
   `SourceInfo`, `OutputInfo` and `SceneInfo` report (`ItemInfo.effects` is one video
   chain), and `MAX_CHAIN_FILTERS` (8). `MasterInfo` (`query.rs`) is the
@@ -125,7 +127,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Keyframe scenes** (`keyframe.rs`, [ADR-0024](../../docs/adr/0024-scene-structure.md)
   §2, [ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)):
   `ItemOverride`, what a keyframe scene overrides for one item as `SceneInfo.overrides`
-  reports it, `OverrideField`, the field `item.clear_override` removes, and
+  reports it (its `effects` since 0.63), `OverrideField`, the field `item.clear_override` removes, and
   `DroppedOverride`, an override a batch dropped.
 - **YouTube** (`youtube.rs`, [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)):
   `YoutubeAuth`, `BroadcastInfo`, `StreamInfo` and the enums they carry, mirroring the
@@ -153,7 +155,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `stats.tick` (with `DropCounts`, `EngineLoad`, `ChainCost` and each running output's
   `OutputStatsInfo` and `OutputHealth`), `meters.tick`,
   `youtube.status_changed`, `youtube.health_changed`,
-  `youtube.stats`, `live.changed`, `live.ended` and `plugin.state_changed`.
+  `youtube.stats`, `live.changed`, `live.ended`, `plugin.state_changed` and
+  `gpu.device_lost`.
 - **Plugins** (`plugin.rs`, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)): `PluginClass` (`read`,
   `edit`, `live`, `outputs`), `PLUGIN_SCOPES`, the table that places every command in
   one class or under "never", with `plugin_scope` and `plugin_classes` (a call's
@@ -193,7 +196,20 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.64 because the engine's
   `compressor` audio filter kind takes a sidechain `key`, a `source` reference it ducks
   under (ADR-0028; no wire change: `kind.describe` reports the new parameter and the
-  engine accepts it); 0.59 made outputs carry
+  engine accepts it); 0.63 made a keyframe
+  scene override an item's effects
+  ([ADR-0088](../../docs/adr/0088-keyframe-scenes-override-item-effects.md):
+  `ItemOverride.effects`, `OverrideField`'s `effects`, `item.set_effects` and the
+  `keyframe` filter owner); 0.62 added the
+  `too_large` error and `Welcome.max_request_bytes`, a message over the server's request
+  limit refused with the connection kept open
+  ([ADR-0074](../../docs/adr/0074-too-large-requests.md)); 0.61 blamed a GPU device
+  loss on the effect-pack kinds that drew before it, which are quarantined
+  until a person re-enables them (#349: the `gpu.device_lost` event, `KindSummary`'s
+  `quarantined` and the `effect.enable` action, [Effect quarantine](#design)); 0.60
+  made the master stage and every output take video filters on their `video` chain
+  (ADR-0080; no wire change: earlier minors refused them with `invalid_argument` on
+  `chain`); 0.59 made outputs carry
   audio buses: `OutputInfo.audio_buses`, the `output.set_audio_buses` edit, and an
   output as a `bus.delete` blocker ([Audio](#design)); 0.58 added the
   `plugin.list` query, the installed WASM plugins with what each manifest asks for and
@@ -343,6 +359,17 @@ After the handshake, the client sends `request`s. Each carries an `id` the clien
 chooses, and the server answers each request with exactly one `response` or `error`
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
+**Message size** ([ADR-0074](../../docs/adr/0074-too-large-requests.md)). A server in
+front of the engine handles client messages of up to its request limit, which `welcome`
+advertises as `max_request_bytes` (0.62; missing from an older server, which means
+4 MiB). A message over it, up to the server's higher frame limit, is refused with
+`too_large` (`size_bytes`, `limit_bytes`), answering the request's `id` when the server
+can read one, a string of at most 256 bytes (a longer one is answered with no `id`, as
+is a `malformed` message's): nothing in it is applied, and the connection stays open. A message over
+the frame limit closes the connection with close code 1009. A client splits work that
+doesn't fit, a batch of `state` writes one filter per batch, and reads server messages
+of at least the frame limit.
+
 ```json
 {"type":"hello","protocol":{"major":0,"minor":37},"client_name":"jstream-cli"}
 {"type":"welcome","protocol":{"major":0,"minor":37},"client_id":"cli_7","rev":12}
@@ -465,7 +492,8 @@ keeps the addressing of the edit it undoes.
 - A variant has no items of its own. It shows its parent's items, at the parent's
   current values except for the fields it overrides: `geometry` (whole, as one
   `item.set_geometry` or `item.set_transform` writes it, reported as `geometry` or, for
-  the 0.3 form, `transform`), `crop`, `visible` and `opacity`. `SceneInfo.overrides`
+  the 0.3 form, `transform`), `crop`, `visible`, `opacity` and, since 0.63, `effects`
+  (below). `SceneInfo.overrides`
   lists them in item ID order, as `ItemOverride`s with at least one field set (omitted
   when there are none). An override names an item in the parent's tree: one of the
   parent's own, or, since 0.55, a child of a group (role `group`) the parent places, at
@@ -492,6 +520,20 @@ keeps the addressing of the edit it undoes.
   batch result lists each as a `DroppedOverride {scene_id, item_id, ...fields}`
   (`dropped_overrides`, omitted when there are none), and the inverse restores them
   after the item is back.
+- **Effects** (0.63, [ADR-0088](../../docs/adr/0088-keyframe-scenes-override-item-effects.md)):
+  an override's `effects` is a whole list of `FilterInfo` that the variant draws the
+  item with in place of its own effects; an empty list draws none.
+  `item.set_effects { scene_id, item_id, effects }` writes it whole, each filter checked
+  and its settings completed as `filter.add` does (at most 8, unique IDs, a known
+  `video_filter` kind); naming the item's own scene, or one that isn't its keyframe, is
+  `invalid_argument` on `edits.N.scene_id`. The `filter.*` edits also take the owner
+  `{"type":"keyframe","scene_id":…,"item_id":…}`, the item's effects as that keyframe
+  shows them, with the same errors on `edits.N.owner`: where the keyframe follows the
+  item, the edit first copies the item's own effects into the override, and its
+  inverse is then `item.clear_override` of `effects`. References in an overridden
+  effect are edges of the keyframe scene; a blocker names them as
+  `overrides.<item_id>.effects.<filter_id>.<param>` of that scene, and `delete.plan`
+  clears them with `item.set_effects`.
 - A variant depends on its parent: `scene.delete` of a parent is refused while it has
   variants (blockers with field `variant_of`), and `delete.plan` of a parent deletes its
   variants, and the `scene` sources that show them, before it.
@@ -673,10 +715,15 @@ From 0.29 the master stage and each output own chains too
 `{"type":"master"}` and `{"type":"output","output_id":…}` and the same edits. The
 master's audio chain runs on every bus that feeds an output, after that bus's own chain;
 an output's runs after it, for that output only, and gives the output its own audio
-encode from its next start (edits to a chain it started with apply live). Only their
-audio chains hold filters so far: a video filter is `invalid_argument` on
-`edits.N.chain` until video mixes run them, and so is an audio filter on an output that
-carries no audio (a `virtual_cam`). A missing output is `not_found` with entity
+encode from its next start (edits to a chain it started with apply live). From 0.60
+their video chains take filters too (earlier minors refused them with
+`invalid_argument` on `edits.N.chain`): the master's runs once per frame on each mix an
+output draws, and an output's after it, for that output only. A stream or recording
+with a video filter, even a disabled one, gets its own render pass and encoder session
+from its next start (`output.status` reports it `dedicated`); a virtual camera has a
+video chain only, and with a filter gets a render pass of its own but no encoder
+session. An audio filter on an output that carries no audio (a `virtual_cam`) is
+`invalid_argument` on `edits.N.chain`. A missing output is `not_found` with entity
 `output`. Their filters can't hold a reference yet (a scene, source, bus or asset;
 `invalid_argument` on the parameter), since the delete checks follow only a source's
 references. `output.delete`'s
@@ -693,7 +740,8 @@ report them, each omitted while empty, so an older server's answer parses as non
 `video_filter` descriptor's optional `max_outset_px` is the most the kind draws beyond
 each edge of its input at any settings, which pads an item's effects layer. A scene's
 or an item's audio chain is `invalid_argument` on `edits.N.chain`, and a keyframe scene
-as the owner on `edits.N.owner`, since it shows its parent's filters. References in
+as the `scene` owner on `edits.N.owner`, since it shows its parent's filters (an item's
+effects in a keyframe take the `keyframe` owner, 0.63). References in
 them are edges of the scene, or of the item's scene: a blocker names them as
 `filters.<filter_id>.<param>` of the scene or `effects.<filter_id>.<param>` of the item.
 The engine runs a scene's filters on its composite and an item's effects over its box,
@@ -1351,6 +1399,8 @@ After `welcome`, the server pushes every event to every client.
   [YouTube](#design).
 - `plugin.state_changed {plugin_id, state, reason?, remote_name?}` (0.35) is described
   under [Plugins](#design).
+- `gpu.device_lost {cause, blamed, quarantined, recovering}` (0.61) is described under
+  [Effect quarantine](#design).
 
 ### YouTube
 
@@ -1479,6 +1529,26 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   name the plugin's manifest gives itself: the plugin's text, never an instruction
   ([ADR-0059](../../docs/adr/0059-mcp-annotations-and-remote-text.md)).
 
+### Effect quarantine
+
+A WGSL effect pack is validated, not bounded: a shader that loops too long can hang the
+GPU, and the OS resets the device (#349,
+[ADR-0087](../../docs/adr/0087-effect-quarantine-after-gpu-device-loss.md)). Since 0.61:
+- **`gpu.device_lost {cause, blamed, quarantined, recovering}`** reports a lost device
+  on the program stage. `blamed` lists the effect-pack kinds drawn in the frames before
+  the loss (empty when none was, and the loss had another cause), `quarantined` the
+  kinds the loss turned off: the blamed ones, or every kind of a pack blamed for a
+  second loss in one run. `recovering` is `false` when the engine stopped opening new
+  devices and the outputs fail. Runtime state, with no `rev`; agents see it.
+- **`KindSummary.quarantined`**, in `kind.list`, marks a quarantined kind (omitted
+  when `false`, so an older server's list reads as none). A quarantined kind's filters
+  are bypassed, as a filter whose pack isn't loaded is, until a person re-enables it.
+  The quarantine lasts across restarts and isn't lifted by editing the pack.
+- **`effect.enable {kind_id}`** lifts a kind's quarantine, and its pack's. It succeeds
+  for a kind that isn't quarantined, and is `invalid_argument` on `kind_id` for one no
+  loaded pack has and no quarantine names. It is for a person, like `plugin.enable`: no
+  MCP tool carries it, no plugin is granted it and no hotkey binds it.
+
 ### Errors
 
 `ProtocolError` is a `thiserror` enum ([R-RS-003](../../docs/RULES.md#R-RS-003)). On the
@@ -1501,6 +1571,7 @@ people and agents. Clients match on `code`, never on `message`.
 | `unsupported` | A valid call this implementation doesn't serve (the pairing calls without a server in front, 0.21; the `plugin.*` calls from an engine that hosts no plugins, 0.35; the deprecated `privacy.set`, [ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)) | `call` |
 | `forbidden` | A plugin's call is outside its grant, or is never granted to a plugin; it never reaches the engine (0.35) | `call`, `reason` |
 | `hardware_session_limit` | `output.start` couldn't open a hardware video encoder while other outputs held hardware sessions, so the hardware session limit is taken to be reached; there is no fallback to software (0.44, [ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md) §3) | `outputs` (the holders, sorted), `reason` (the encoder's refusal) |
+| `too_large` | The message was over the server's request limit (`Welcome.max_request_bytes`, 4 MiB); only its `id` was read (echoed when it is at most 256 bytes), nothing was applied, and the connection stays open. Retrying won't help: split the work (0.62, [ADR-0074](../../docs/adr/0074-too-large-requests.md)) | `size_bytes`, `limit_bytes` |
 | `internal` | An engine bug or unexpected condition; may be retried | `reason` |
 
 An error that isn't tied to a request (a failed handshake, or a message too broken to

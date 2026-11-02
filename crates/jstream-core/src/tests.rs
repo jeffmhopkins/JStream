@@ -674,6 +674,39 @@ fn scene_filters_and_item_effects_are_taken() {
     );
 }
 
+/// A pack update made before a blame but installed after it is ignored, so the blamed
+/// kind stays quarantined.
+#[test]
+fn a_pack_update_older_than_a_blame_does_not_lift_its_quarantine() {
+    use crate::effect_packs::test_pack::{self, KIND, Temp};
+    use crate::effect_packs::{Blame, Packs};
+
+    let temp = Temp::new("stale-update");
+    test_pack::write(&temp.pack(), test_pack::MUL);
+    let mut packs = Packs::new(temp.0.clone());
+    let engine = Engine::new();
+    engine.install_effects(packs.poll().expect("the pack loads"));
+    // A reload's update, made before the loss but installed after the blame's: the race
+    // that installing under the packs' lock rules out (#976 round 2, B4).
+    std::fs::write(temp.pack().join("mul.wgsl"), test_pack::BLUE).expect("edit");
+    let stale = packs.poll().expect("the pack reloads");
+    assert!(stale.effects.contains_key(KIND));
+    let Blame { update, .. } = packs.blame(&[KIND.to_owned()].into());
+    let blamed = update.expect("the blame quarantines the kind");
+    assert!(!blamed.effects.contains_key(KIND));
+    engine.install_effects(blamed);
+    engine.install_effects(stale);
+    let control = connected(&engine);
+    let Ok(QueryResult::KindList { kinds }) = query(&control, Query::KindList) else {
+        panic!("kind.list");
+    };
+    let kind = kinds
+        .iter()
+        .find(|k| k.kind_id == KIND)
+        .expect("the blame's update described the kind");
+    assert!(kind.quarantined, "the older update was ignored");
+}
+
 /// The effect packs in the folder the engine watches become `video_filter` kinds, which a
 /// video chain takes; a pack removed from the folder takes its kinds out of `kind.list`.
 #[test]
@@ -5484,6 +5517,68 @@ mod cpu_pipeline {
         assert_eq!(found.get(1).map(String::as_str), Some("moov"), "{found:?}");
         assert!(found.iter().any(|name| name == "moof"), "{found:?}");
         block_on(control.call(output_call("yt", false))).expect("yt stop");
+    }
+
+    /// A recording with a video chain of its own (ADR-0080 §2) never shares: it gets an
+    /// encoder session of its own, which `output.status` reports as dedicated, beside
+    /// the stream's, and frames reach both.
+    #[test]
+    fn an_output_with_a_video_chain_gets_its_own_session() {
+        let dir = TempDir::new("own-video");
+        let path = dir.join("show.mp4");
+        let fakes = fakes();
+        let publish = RecordingPublish::new();
+        let (engine, control, mut events) =
+            streaming_and_recording(&fakes, cpu_draw(), &publish, &path);
+        batch(
+            &control,
+            edits(vec![Edit::FilterAdd {
+                owner: jstream_protocol::FilterOwner::Output {
+                    output_id: OutputId::new("rec"),
+                },
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new("grade"),
+                kind: "color_correction".into(),
+                settings: jstream_protocol::Settings::new(),
+                enabled: Some(false),
+                index: None,
+            }]),
+        )
+        .expect("filter.add");
+        drain(&mut events);
+
+        block_on(control.call(output_call("yt", true))).expect("yt start");
+        block_on(control.call(output_call("rec", true))).expect("rec start");
+        let (state, encoder, sessions, _) = encoder_status(&control, "rec");
+        assert_eq!(state, OutputState::Active);
+        assert_eq!(
+            encoder,
+            Some(EncoderSessionInfo {
+                profile_id: None,
+                shared_with: vec![],
+                hardware: false,
+                dedicated: true,
+            }),
+            "a disabled filter still counts"
+        );
+        assert_eq!(sessions, 2);
+        let (_, encoder, _, _) = encoder_status(&control, "yt");
+        assert_eq!(
+            encoder.map(|encoder| (encoder.shared_with, encoder.dedicated)),
+            Some((vec![], false))
+        );
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || {
+                engine
+                    .output_stats_of(&OutputId::new("rec"))
+                    .is_some_and(|stats| stats.video_subscriber.delivered >= 30)
+                    && video_tags(&publish) >= 30
+            }),
+            "media never reached both outputs"
+        );
+        block_on(control.call(output_call("rec", false))).expect("rec stop");
+        block_on(control.call(output_call("yt", false))).expect("yt stop");
+        assert_eq!(encoder_status(&control, "yt").2, 0);
     }
 
     /// A recording on a bus other than the master (`output.set_audio_buses`) gets an

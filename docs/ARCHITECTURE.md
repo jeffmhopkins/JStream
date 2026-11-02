@@ -99,7 +99,7 @@ JStream/
 ├── tests/                  # cross-crate scenario + golden tests
 ├── spikes/                 # M0 technical spikes (throwaway, not workspace members)
 ├── design/                 # UI design references (prototype source); not normative
-├── xtask/                  # docs, lint-deps, governance, dist (the portable zip), gen-schema, golden
+├── xtask/                  # docs, lint-deps, governance, dist (the portable zip), e2e-stream, gen-schema, golden
 ├── docs/
 │   ├── ARCHITECTURE.md  RULES.md  DOCS.md
 │   ├── external.toml       # external resources we rely on (URL + what we rely on)
@@ -245,9 +245,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
     of `scene.create`, `source.create`, `item.add` and `item.move`.
   - A **keyframe scene** (variant) is a real scene with `variant_of` naming its parent,
     which is not itself a variant. It has no items of its own: it shows the parent's
-    items with per-item `overrides` of placement, visibility and opacity (an absent
-    field follows the parent); everything else, including the background, follows the
-    parent. A variant can be on program, nested and hotkeyed. The cycle check counts the
+    items with per-item `overrides` of placement, crop, visibility, opacity and effects
+    (the whole list, [ADR-0088](adr/0088-keyframe-scenes-override-item-effects.md); an
+    absent field follows the parent); everything else, including the background and its
+    scene filters, follows the parent. A variant can be on program, nested and hotkeyed. The cycle check counts the
     variant → parent edge. Deleting a parent is rejected while it has variants.
   - Placement edits take an optional `scene_id`: absent or the item's own scene changes
     the item; a variant writes that variant's override; `item.clear_override` removes one.
@@ -291,16 +292,18 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   bypassed. The audio chain runs on the source's input before its fader. The master
   stage and each output own `filters { video, audio }` too, edited with the same
   `filter.*` edits under the owners `master` and `output`
-  ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md)); only their audio chains
-  hold filters until video mixes run the video ones, and their filters can't hold a
-  reference (a scene, source, bus or asset) yet. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
+  ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md)): every output has a
+  video chain (the virtual camera's is its only one) and the master stage and each
+  output that carries audio an audio chain, and their filters can't hold a reference
+  (a scene, source, bus or asset) yet. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
   multiplier in [0, 1]) and `blend` (default `normal`; every mode is drawn,
   [ADR-0082](adr/0082-blend-modes-drawn.md)). A scene's `filters` and a placement's `effects[]` are video filter
   chains, the owners `scene` and `item` of `filter.*`
   ([ADR-0065](adr/0065-scene-chains-and-item-effects.md); item effects are in v1 under
   [ADR-0068](adr/0068-item-effects-in-v1.md)). A reference in them is an edge of the
   scene, so it counts for cycles and blocks deleting its target. A keyframe scene has
-  none of its own. The engine runs a scene's filters on its composite, and an item's
+  no scene filters of its own, but may override an item's effects, the `keyframe` owner
+  of `filter.*` and `item.set_effects` (ADR-0088), whose references are its edges. The engine runs a scene's filters on its composite, and an item's
   effects over its box in a layer grown by their outset, before its opacity and blend.
 - **Settings:** a source's `settings`, each filter's, and each transition preset's are a
   map of values described by its kind's descriptor, which the engine reports and
@@ -340,14 +343,14 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   outputs whose video chain is empty share one encoder session when they have the same
   `(video_mix, encoder_profile)`, the master stage counting as part of the mix. An
   output with a video chain, even one holding only disabled filters, gets its own render
-  pass and session, keyed by its output ID. An output's own audio chain, or a bus other
-  than the master (`output.set_audio_buses`), gives it its own audio encode and never
-  affects video sharing. Hardware session caps differ by GPU
+  pass and session, keyed by its output ID; a virtual camera, which encodes nothing,
+  gets the render pass only and is never reported dedicated. An output's own audio
+  chain, or a bus other than the master (`output.set_audio_buses`), gives it its own
+  audio encode and never affects video sharing. Hardware session caps differ by GPU
   vendor, so the engine reports, per output, whether it shares and with which outputs
   and whether its session is its own, plus the sessions in use. It does not guess the
-  caps. Outputs carry no video chain until filters land, so for now every output shares
-  by `(video_mix, encoder_profile)`; the engine already keys and draws an output with a
-  chain on its own.
+  caps. A chain added to a running output that started without one takes effect at its
+  next start.
 - **No privacy screen** ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md)
   §4): nothing covers the outputs or mutes the microphones on a switch. Muting a source
   and switching scenes do that job.
@@ -445,11 +448,12 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   source: an edit that would close a cycle of keys, or key a source on itself, is
   refused, and a key blocks deleting the source it names. The engine routes these into the program stage's mixer while it
   runs, and plays each bus's monitor on its device (one it can't open stays silent and
-  is retried).
+  is retried). Each output's audio bus (protocol 0.59, `output.set_audio_buses`) and
+  its filter chains are saved with it.
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
   and hotkey bindings (protocol 0.25), as the organisation bullet above describes.
   Not yet: settings migrations between kind versions (a source saved at another
-  version is refused on load), `background`, output audio buses and chains, the `YouTube` kind, a virtual
+  version is refused on load), `background`, the `YouTube` kind, a virtual
   camera's video mix (it always shows the program), and everything outside `sources`,
   `scenes`, `outputs`, `encoders`, `video_mixes`, `audio`, `folders`, `labels`,
   `hotkeys` and `transitions`. The collection file saves everything built so far,
@@ -614,7 +618,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
 
 - **Envelope:** JSON messages tagged by `type`. A `hello`/`welcome` handshake exchanges
   the protocol version, then each `request` (with a client-chosen `id`) gets exactly one
-  `response` or `error`, and `event`s arrive at any time.
+  `response` or `error`, and `event`s arrive at any time. A message over the server's
+  4 MiB request limit, which `welcome` advertises as `max_request_bytes`, is refused
+  with `too_large` and the connection stays open; one over its 16 MiB frame limit
+  closes it with code 1009 ([ADR-0074](adr/0074-too-large-requests.md), protocol 0.62).
 - **Edits** (`scene.create`, `item.set_transform`, `send.set`, …): typed, undoable,
   always sent in an atomic batch (of one or more), which carries the optional
   `expected_rev` and idempotency key ([R-API-004](RULES.md#R-API-004)). Each applied
@@ -624,7 +631,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   ([ADR-0024](adr/0024-scene-structure.md), protocol 0.12). Since 0.39,
   `scene.create_variant` makes a keyframe scene, `item.clear_override` removes one
   field of its override, `state.get` reports `variant_of` and `overrides`, and a batch
-  result lists the overrides it dropped (`dropped_overrides`, ADR-0040 §1).
+  result lists the overrides it dropped (`dropped_overrides`, ADR-0040 §1). Since 0.63,
+  `item.set_effects` writes a keyframe's override of an item's effects whole, and the
+  `filter.*` edits take the `keyframe` owner to change them one filter at a time
+  ([ADR-0088](adr/0088-keyframe-scenes-override-item-effects.md)).
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
   0.9, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
@@ -650,7 +660,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   [ADR-0080](adr/0080-program-master-and-output-chains-v2.md), protocol 0.29). Since 0.43
   the owners `scene` and `item`, `SceneInfo.filters`, `ItemInfo.effects` and a
   descriptor's `max_outset_px` are in the protocol
-  ([ADR-0065](adr/0065-scene-chains-and-item-effects.md)). The engine runs both.
+  ([ADR-0065](adr/0065-scene-chains-and-item-effects.md)). The engine runs both. Since
+  0.60 the master stage's and outputs' video chains take filters too (ADR-0080).
   `source.set_audio`, `bus.create`, `bus.rename`, `bus.set_fader`, `bus.delete`,
   `send.set` and `send.remove` edit sources' audio, the buses and the send matrix
   ([ADR-0028](adr/0028-audio-model-v2.md), protocol 0.19), and `bus.set_monitor` a
@@ -702,7 +713,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `plugin.list` (0.58) lists the installed plugins with what each manifest asks for and
   what was granted; they are for a person, so no MCP tool, plugin or hotkey carries
   them. The event `plugin.state_changed` reports
-  a plugin enabled or disabled, with why the engine disabled it. A plugin calls the API
+  a plugin enabled or disabled, with why the engine disabled it. Likewise
+  `effect.enable` (0.61, #349) is for a person: it re-enables an effect-pack kind the
+  engine quarantined because a GPU device loss was blamed on it, which the event
+  `gpu.device_lost` reports and `kind.list` marks (`quarantined`). A plugin calls the API
   through a scoped `Control` that checks each call against its grant, using
   `jstream-protocol`'s table of every command's class (`read`, `edit`, `live`, `outputs`
   or never), and the hosts and files a call's settings name against the grant's hosts
@@ -885,7 +899,10 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   the `events` feed: YouTube is for people, through
   the UI ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md) §3). The same
   holds for the `plugin.*` ops and events: only a person installs or grants a plugin
-  (ADR-0069 G1).
+  (ADR-0069 G1). And for the `effect.*` ops: only a person re-enables an effect pack
+  quarantined after a GPU device loss
+  ([ADR-0087](adr/0087-effect-quarantine-after-gpu-device-loss.md) §4), though the
+  `gpu.device_lost` event that reports it reaches agents.
 - **Events** reach agents through the `events` tool, which returns the engine's events
   after a cursor from a bounded buffer and reports any it dropped
   ([ADR-0036](adr/0036-mcp-events-polling-tool.md)). The high-rate `stats.tick` is kept
@@ -898,7 +915,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 764 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 788 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking
@@ -1053,12 +1070,16 @@ context device fails its outputs at once instead
 ([jstream-core › Runtime](../crates/jstream-core/README.md#runtime)); the NV12 pass
 reports the loss as an error rather than panicking. The third loss within
 60 s fails the output instead. Each loss is logged and counted in the output's stats
+([jstream-core › Design](../crates/jstream-core/README.md#design)). Each loss is blamed
+on the effect-pack kinds the shot being drawn draws, which are quarantined (their
+filters bypassed, and the whole pack after a second loss blamed on one of its effects
+in a run) until a person re-enables them with `effect.enable`, and reported in the
+engine event `gpu.device_lost` (protocol 0.61). The quarantine is kept in the packs
+folder, across restarts and pack edits
 ([jstream-core › Design](../crates/jstream-core/README.md#design)). Not built yet: the
-engine event for a loss (a protocol change), attributing a loss to the effect pack that
-was drawing, quarantining that pack, and the GPU-time guard (timestamp queries that
-quarantine an effect whose pass runs over half the frame budget for 30 frames running,
-before Windows' TDR fires). The engine draws pack kinds now
-([jstream-core › Design](../crates/jstream-core/README.md#design)), so these can be built.
+GPU-time guard (timestamp queries that quarantine an effect whose pass runs over half
+the frame budget for 30 frames running, before Windows' TDR fires), and a forced TDR on
+Windows hardware, which only a hardware run can check.
 
 **Transitions** ([ADR-0029](adr/0029-transitions.md), with
 [ADR-0052](adr/0052-transition-mechanics-and-studio-preview.md)'s mechanics). A Move is not a texture blend:
@@ -1098,8 +1119,10 @@ plus an `effect.toml` manifest.
 **Output path** ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md)), for each
 output: mix → master video chain → the output's own video chain → colour conversion
 (step 4) → encoder. The render plan has a master node per consumed mix and a node per
-output with a video chain. Built so far: the sharing key's output part. The master and
-output video chains are not built yet (their audio chains are, protocol 0.29).
+output with a video chain. Both chains run at the canvas size over the mix's layer
+(`GpuKey::Mixed`), the master's once per frame per mix however many outputs draw it,
+and the result is fitted into the output's frame; a frame with neither chain draws as
+before. Built: the audio chains in protocol 0.29, the video chains in 0.60.
 
 <a id="browser-source"></a>
 ## Browser source
@@ -1190,7 +1213,9 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   for new collection state (encoder profiles, hotkey bindings, transition presets and
   settings, folders, labels and organisation metadata, keyframe scenes' `variant_of` and
   `overrides`, an output's `audio_bus`) is omitted when empty or at its default (for presets, a new collection's one `cut`), so a file without it is still
-  valid at the same `schema_version`. `jstream-core`
+  valid at the same `schema_version`. Scene filters and item effects (version 2) and a
+  keyframe override's `effects` (version 3, ADR-0088) bumped it instead, each with a
+  migration that refuses the new field in an older file. `jstream-core`
   loads the file the host names and replaces it atomically after every change.
 - **Asset files** named in settings are stored relative to the collection folder or the
   app asset folder when they are under one, so a moved or portable setup still finds them.
