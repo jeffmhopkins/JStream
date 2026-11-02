@@ -70,7 +70,7 @@ pub enum PackError {
     Panicked {
         /// The pack's manifest.
         path: PathBuf,
-        /// The panic's message, when it has one.
+        /// The panic's message, or `<not a string>` when its payload isn't one.
         message: String,
     },
 }

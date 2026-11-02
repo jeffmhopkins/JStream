@@ -682,6 +682,22 @@ fn a_pack_that_panics_fails_alone() {
     assert!(watcher.effect("neo/scanlines").is_some());
 }
 
+/// A pack whose load panics with a payload that isn't a string says so.
+#[test]
+fn a_panic_without_a_message_is_named() {
+    let temp = Temp::new("panic-any");
+    retro(&temp.0.join("retro"), MANIFEST, SCANLINES);
+    let mut watcher =
+        PackWatcher::with_loader(&temp.0, PRELUDE, |_, _| std::panic::panic_any(42_u32));
+    let changes = watcher.poll();
+    assert!(
+        matches!(&changes.errors[..], [PackError::Panicked { message, .. }] if message == "<not a string>"),
+        "{:?}",
+        changes.errors
+    );
+    assert!(changes.kinds.is_empty());
+}
+
 /// The test compositor, or `None` (a skip) where no adapter exists outside CI.
 fn compositor() -> Option<jstream_render::Compositor> {
     match jstream_render::Compositor::open(jstream_render::OpenOptions::headless()) {

@@ -212,7 +212,7 @@ fn load_caught(load: Loader, dir: &Path, prelude: &str) -> Result<Pack, PackErro
             .downcast_ref::<&str>()
             .map(|s| (*s).to_owned())
             .or_else(|| panic.downcast_ref::<String>().cloned())
-            .unwrap_or_default();
+            .unwrap_or_else(|| "<not a string>".to_owned());
         Err(PackError::Panicked {
             path: dir.join(MANIFEST),
             message,
