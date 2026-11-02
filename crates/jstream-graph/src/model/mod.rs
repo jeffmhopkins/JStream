@@ -83,8 +83,9 @@ pub use jstream_protocol::MAX_CHAIN_FILTERS;
 
 /// A keyframe scene's overrides of its parent's items (ADR-0049 §1): per item, the
 /// fields it sets, each a whole value. An overridden geometry is always a
-/// [`Placement::Geometry`].
-pub type Overrides = jstream_anim::Keyframe<ItemId, Placement, Crop>;
+/// [`Placement::Geometry`]. Overridden effects are [`Chains`] whose audio chain is
+/// always empty, which the keyframe draws in place of the item's own (ADR-0088).
+pub type Overrides = jstream_anim::Keyframe<ItemId, Placement, Crop, Chains>;
 
 /// The scene graph of one collection, its revision, and the kinds it can create.
 ///
@@ -403,7 +404,7 @@ impl State {
 
     /// The items of `scene` as the keyframe scene `keyframe` shows them: the parent's
     /// own, or a group's in its tree (ADR-0024 §2, ADR-0040 §2), each at its effective
-    /// values.
+    /// values, its effects included (ADR-0088).
     pub fn items_through<'a>(scene: &'a Scene, keyframe: &'a Scene) -> Vec<Cow<'a, Item>> {
         scene
             .items
@@ -419,6 +420,8 @@ impl State {
                         // An override's opacity was checked to be in [0, 1] when it
                         // was written; the parent's is kept if it somehow isn't.
                         opacity: Finite32::new(props.opacity).unwrap_or(item.opacity),
+                        // Overridden effects replace the item's own, whole (ADR-0088).
+                        effects: o.effects.clone().unwrap_or_else(|| item.effects.clone()),
                         ..item.clone()
                     })
                 }

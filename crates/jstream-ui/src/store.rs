@@ -134,8 +134,8 @@ impl Collection {
     }
 
     /// The chains `owner` has, or `None` if it doesn't exist. An item's effects are its
-    /// video chain (ADR-0065 §4), so they come back as a copy; every other owner's are
-    /// borrowed.
+    /// video chain (ADR-0065 §4), so they come back as a copy, as do its effects in a
+    /// keyframe scene; every other owner's are borrowed.
     pub fn chains(&self, owner: &FilterOwner) -> Option<Cow<'_, FilterChains>> {
         match owner {
             FilterOwner::Source { source_id } => {
@@ -154,6 +154,19 @@ impl Collection {
                     audio: Vec::new(),
                 })
             }),
+            // As the keyframe shows the item: its override, else the item's own
+            // (ADR-0088).
+            FilterOwner::Keyframe { scene_id, item_id } => self
+                .is_keyframe(scene_id)
+                .then(|| self.item_in(Some(scene_id), item_id))
+                .flatten()
+                .filter(|(scene, _)| &scene.scene_id == scene_id)
+                .map(|(_, item)| {
+                    Cow::Owned(FilterChains {
+                        video: item.effects.clone(),
+                        audio: Vec::new(),
+                    })
+                }),
             _ => None,
         }
     }
@@ -213,7 +226,7 @@ impl Collection {
     }
 
     /// Whether `scene_id` names a keyframe scene, where only its items' geometry, crop,
-    /// visibility and opacity can change (ADR-0049).
+    /// visibility, opacity and effects can change (ADR-0049, ADR-0088).
     pub fn is_keyframe(&self, scene_id: &SceneId) -> bool {
         self.scene(scene_id)
             .is_some_and(|scene| scene.variant_of.is_some())
@@ -506,6 +519,9 @@ pub fn shown_items(parent: &[ItemInfo], overrides: &[ItemOverride]) -> Vec<ItemI
             if let Some(opacity) = o.opacity {
                 item.opacity = opacity;
             }
+            if let Some(effects) = &o.effects {
+                item.effects = effects.clone();
+            }
             item
         })
         .collect()
@@ -526,6 +542,7 @@ pub fn reset_edits(scene: &SceneInfo) -> Vec<Edit> {
                 (o.crop.is_some(), OverrideField::Crop),
                 (o.visible.is_some(), OverrideField::Visible),
                 (o.opacity.is_some(), OverrideField::Opacity),
+                (o.effects.is_some(), OverrideField::Effects),
             ]
             .into_iter()
             .filter(|(set, _)| *set)
