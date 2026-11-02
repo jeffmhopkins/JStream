@@ -5486,6 +5486,68 @@ mod cpu_pipeline {
         block_on(control.call(output_call("yt", false))).expect("yt stop");
     }
 
+    /// A recording with a video chain of its own (ADR-0080 §2) never shares: it gets an
+    /// encoder session of its own, which `output.status` reports as dedicated, beside
+    /// the stream's, and frames reach both.
+    #[test]
+    fn an_output_with_a_video_chain_gets_its_own_session() {
+        let dir = TempDir::new("own-video");
+        let path = dir.join("show.mp4");
+        let fakes = fakes();
+        let publish = RecordingPublish::new();
+        let (engine, control, mut events) =
+            streaming_and_recording(&fakes, cpu_draw(), &publish, &path);
+        batch(
+            &control,
+            edits(vec![Edit::FilterAdd {
+                owner: jstream_protocol::FilterOwner::Output {
+                    output_id: OutputId::new("rec"),
+                },
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new("grade"),
+                kind: "color_correction".into(),
+                settings: jstream_protocol::Settings::new(),
+                enabled: Some(false),
+                index: None,
+            }]),
+        )
+        .expect("filter.add");
+        drain(&mut events);
+
+        block_on(control.call(output_call("yt", true))).expect("yt start");
+        block_on(control.call(output_call("rec", true))).expect("rec start");
+        let (state, encoder, sessions, _) = encoder_status(&control, "rec");
+        assert_eq!(state, OutputState::Active);
+        assert_eq!(
+            encoder,
+            Some(EncoderSessionInfo {
+                profile_id: None,
+                shared_with: vec![],
+                hardware: false,
+                dedicated: true,
+            }),
+            "a disabled filter still counts"
+        );
+        assert_eq!(sessions, 2);
+        let (_, encoder, _, _) = encoder_status(&control, "yt");
+        assert_eq!(
+            encoder.map(|encoder| (encoder.shared_with, encoder.dedicated)),
+            Some((vec![], false))
+        );
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || {
+                engine
+                    .output_stats_of(&OutputId::new("rec"))
+                    .is_some_and(|stats| stats.video_subscriber.delivered >= 30)
+                    && video_tags(&publish) >= 30
+            }),
+            "media never reached both outputs"
+        );
+        block_on(control.call(output_call("rec", false))).expect("rec stop");
+        block_on(control.call(output_call("yt", false))).expect("yt stop");
+        assert_eq!(encoder_status(&control, "yt").2, 0);
+    }
+
     /// A recording on a bus other than the master (`output.set_audio_buses`) gets an
     /// output tap on that bus and its own audio encode, while its video still shares the
     /// stream's session; its file finishes. While it runs it can't move off `vod`, so
