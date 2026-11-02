@@ -960,6 +960,10 @@ pub struct Output {
     /// Its own chains, after the master stage (ADR-0080 §2).
     pub(crate) filters: Chains,
     pub(crate) video_mix: Option<VideoMixId>,
+    /// The bus whose audio it carries: the master by default. The protocol's
+    /// `audio_buses` is a list, one bus per audio track, and every output writes one
+    /// audio track so far.
+    pub(crate) audio_bus: BusId,
 }
 
 impl Output {
@@ -996,6 +1000,18 @@ impl Output {
     /// The video mix it shows, or `None` for the program at the engine's canvas size.
     pub fn video_mix(&self) -> Option<&VideoMixId> {
         self.video_mix.as_ref()
+    }
+
+    /// The buses whose audio it carries, one per audio track, in track order: one so
+    /// far, the master unless `output.set_audio_buses` chose another. A virtual camera,
+    /// which has no audio, always carries the master.
+    pub fn audio_buses(&self) -> &[BusId] {
+        std::slice::from_ref(&self.audio_bus)
+    }
+
+    /// The bus its one audio track carries.
+    pub fn audio_bus(&self) -> &BusId {
+        &self.audio_bus
     }
 
     /// Whether its own video filter chain has any filters. Such an output gets its own

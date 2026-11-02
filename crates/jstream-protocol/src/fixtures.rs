@@ -377,6 +377,10 @@ pub(crate) fn edits() -> Vec<Edit> {
             output_id: OutputId::new("out_yt"),
             mix_id: None,
         },
+        Edit::OutputSetAudioBuses {
+            output_id: OutputId::new("out_rec"),
+            audio_buses: vec![BusId::new("bus_vod")],
+        },
         Edit::VideoMixDelete {
             mix_id: VideoMixId::new("mix_old"),
         },
@@ -881,6 +885,7 @@ fn output_infos() -> Vec<OutputInfo> {
                 }],
             },
             video_mix: Some(VideoMixId::new("mix_cam")),
+            audio_buses: vec![BusId::new("bus_vod")],
         },
         OutputInfo {
             output_id: OutputId::new("out_yt"),
@@ -888,6 +893,7 @@ fn output_infos() -> Vec<OutputInfo> {
             encoder_profile: None,
             filters: FilterChains::default(),
             video_mix: None,
+            audio_buses: vec![BusId::master()],
         },
     ]
 }

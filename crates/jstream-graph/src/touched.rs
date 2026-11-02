@@ -62,6 +62,8 @@ enum Prop {
     Encoding,
     /// The video mix an output shows.
     MixChoice,
+    /// The buses an output carries.
+    BusChoice,
     /// A video mix's input, resolution and rate.
     Mix,
     /// Whether a filter runs.
@@ -273,6 +275,15 @@ impl Touched {
                 self.prop(Object::Output(output_id.clone()), Prop::MixChoice);
                 if let Some(mix_id) = mix_id {
                     self.uses.insert(Object::VideoMix(mix_id.clone()));
+                }
+            }
+            Edit::OutputSetAudioBuses {
+                output_id,
+                audio_buses,
+            } => {
+                self.prop(Object::Output(output_id.clone()), Prop::BusChoice);
+                for bus_id in audio_buses {
+                    self.uses.insert(Object::Bus(bus_id.clone()));
                 }
             }
             Edit::FolderCreate {

@@ -383,6 +383,20 @@ fn describe_edit(edit: &Edit, state: &State) -> String {
                 quote(output_id.as_str())
             )
         }
+        Edit::OutputSetAudioBuses {
+            output_id,
+            audio_buses,
+        } => match audio_buses.as_slice() {
+            [bus_id] => format!(
+                "Output {} now carries {}",
+                quote(output_id.as_str()),
+                named(state.bus(bus_id).map(|b| b.name()), bus_id.as_str())
+            ),
+            _ => format!(
+                "Changed the audio buses of output {}",
+                quote(output_id.as_str())
+            ),
+        },
         Edit::CanvasSetSize { width, height } => format!("Set the canvas to {width}×{height}"),
         Edit::EncoderCreate { name, .. } => format!("Created encoder profile {}", quote(name)),
         Edit::EncoderUpdate { name, .. } => format!("Changed encoder profile {}", quote(name)),

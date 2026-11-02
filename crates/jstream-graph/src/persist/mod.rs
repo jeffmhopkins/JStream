@@ -407,6 +407,9 @@ struct FileOutput {
     /// The video mix the output shows; omitted for none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     video_mix: Option<VideoMixId>,
+    /// The bus whose audio the output carries; omitted for the master.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    audio_bus: Option<BusId>,
 }
 
 #[derive(Serialize, Deserialize, PartialEq)]
@@ -572,6 +575,7 @@ impl Graph {
                     encoder_profile: output.encoder_profile.clone(),
                     filters: self.file_chains(&output.filters),
                     video_mix: output.video_mix.clone(),
+                    audio_bus: (!output.audio_bus.is_master()).then(|| output.audio_bus.clone()),
                 })
                 .collect(),
             encoders: state
@@ -1104,6 +1108,18 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
         &mut edits,
     )?;
     rebuild_audio(graph, file, &mut edits);
+    // Once every bus exists.
+    for output in &file.outputs {
+        if let Some(bus_id) = &output.audio_bus {
+            edits.push((
+                format!("output `{}`", output.id),
+                Edit::OutputSetAudioBuses {
+                    output_id: output.id.clone(),
+                    audio_buses: vec![bus_id.clone()],
+                },
+            ));
+        }
+    }
     for hotkey in &file.hotkeys {
         edits.push((
             format!("hotkey `{}`", hotkey.chord),

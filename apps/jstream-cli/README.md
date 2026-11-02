@@ -111,7 +111,7 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `source.create`'s `duplicated_from` and the filter edits. `source.set_settings`,
   `source.create` with settings, `encoder.create`, `encoder.update`, `encoder.delete`,
   `output.set_encoder`, `video_mix.create`, `video_mix.update`, `video_mix.delete`,
-  `output.set_video_mix` and the `filter.*` edits need a JSON argument form the CLI
+  `output.set_video_mix`, `output.set_audio_buses` and the `filter.*` edits need a JSON argument form the CLI
   doesn't have yet, so a
   source it creates gets its kind's defaults and an output it creates the engine's
   default encoder and the program (MCP and the WebSocket API take them). `item.add` of a

@@ -13,11 +13,11 @@ use crate::target::{broadcast_id_problem, record_path_problem, rtmp_url_problem}
 use crate::touched::Touched;
 use jstream_anim::Value as KeyValue;
 use jstream_protocol::{
-    Batch, Blocker, Canvas, Crop, DroppedOverride, Edit, EntityKind, Finite32, GeometryError,
-    HotkeyBinding, ItemGeometry, ItemId, ItemTransform, ItemTransition, KindCategory,
-    KindDescriptor, Media, OutputId, OutputKind, ParamDescriptor, ParamType, ProtocolError,
-    RecordContainer, Reference, Rev, RtmpTarget, SceneId, SceneMeta, SceneOptions, Settings,
-    SourceAudio, SourceId, SourceKind,
+    Batch, Blocker, BusId, Canvas, Crop, DroppedOverride, Edit, EntityKind, Finite32,
+    GeometryError, HotkeyBinding, ItemGeometry, ItemId, ItemTransform, ItemTransition,
+    KindCategory, KindDescriptor, Media, OutputId, OutputKind, ParamDescriptor, ParamType,
+    ProtocolError, RecordContainer, Reference, Rev, RtmpTarget, SceneId, SceneMeta, SceneOptions,
+    Settings, SourceAudio, SourceId, SourceKind,
 };
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -70,8 +70,9 @@ impl Graph {
     }
 
     /// [`apply`](Self::apply), for an engine whose outputs in `running` are running: an
-    /// `output.delete` of one of them fails with `invalid_argument` (field
-    /// `edits.<n>.output_id`), in edit order like any other failure. Whether an output
+    /// `output.delete` of one of them, or an `output.set_audio_buses` moving one to
+    /// another bus, fails with `invalid_argument` (field `edits.<n>.output_id`), in edit
+    /// order like any other failure. Whether an output
     /// runs is runtime state, which the graph doesn't hold, so the engine passes it.
     pub fn apply_with_running(
         &mut self,
@@ -377,7 +378,7 @@ fn apply_edit(
     if let Some(applied) = crate::transition::apply(state, kinds, edit, at) {
         return applied;
     }
-    if let Some(applied) = crate::audio::apply(state, edit, at) {
+    if let Some(applied) = crate::audio::apply(state, edit, at, running) {
         return applied;
     }
     if let Some(applied) = crate::hotkey::apply(state, edit, at) {
@@ -904,6 +905,7 @@ fn apply_edit(
                     encoder_profile: None,
                     filters: Chains::default(),
                     video_mix: None,
+                    audio_bus: BusId::master(),
                 },
             );
             Ok(vec![Edit::OutputDelete {
@@ -951,6 +953,12 @@ fn apply_edit(
                 inverse.push(Edit::OutputSetVideoMix {
                     output_id: output.id.clone(),
                     mix_id: Some(mix_id),
+                });
+            }
+            if !output.audio_bus.is_master() {
+                inverse.push(Edit::OutputSetAudioBuses {
+                    output_id: output.id.clone(),
+                    audio_buses: vec![output.audio_bus.clone()],
                 });
             }
             inverse.extend(crate::filter::restore_output(&output));

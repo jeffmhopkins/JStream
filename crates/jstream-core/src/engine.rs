@@ -1630,7 +1630,7 @@ impl Engine {
                 });
             }
             let key = encode_key(&state.graph, &output_id);
-            let own_audio = has_audio_chain(&state.graph, &output_id);
+            let own_audio = encodes_own_audio(&state.graph, &output_id);
             let publish = match (
                 own_target(&state.graph, &output_id),
                 youtube_broadcast(&state.graph, &output_id),
@@ -2077,6 +2077,18 @@ impl Engine {
         lock(&self.shared.state).routing.hosted()
     }
 
+    /// How many master CLAP filters each bus other than the master runs on hosts of its
+    /// own (ADR-0086), and the bus each output tap reads, for tests.
+    #[cfg(test)]
+    pub(crate) fn routed_bus_hosted(
+        &self,
+    ) -> (
+        BTreeMap<jstream_protocol::BusId, usize>,
+        BTreeMap<OutputId, jstream_protocol::BusId>,
+    ) {
+        lock(&self.shared.state).routing.bus_hosted()
+    }
+
     /// How the program stage fares with audio source `source_id`, for tests.
     #[cfg(test)]
     pub(crate) fn audio_status(
@@ -2207,15 +2219,15 @@ fn encode_key(graph: &Graph, output_id: &OutputId) -> EncodeKey {
     (MixKey { owner, ..mix }, profile_id, profile)
 }
 
-/// Whether `output_id` starts with its own audio encode: it has an audio chain
-/// (ADR-0080), even one whose filters are all off, so switching one on later changes
-/// nothing but the chain. A chain added to a running output takes effect at its next
+/// Whether `output_id` starts with its own audio encode, from a tap on its bus: it has
+/// an audio chain (ADR-0080), even one whose filters are all off, so switching one on
+/// later changes nothing but the chain, or it carries a bus other than the master. A
+/// chain added to a running output, or another bus chosen, takes effect at its next
 /// start.
-fn has_audio_chain(graph: &Graph, output_id: &OutputId) -> bool {
-    graph
-        .state()
-        .output(output_id)
-        .is_some_and(|output| !output.filters().chain(FilterChain::Audio).is_empty())
+fn encodes_own_audio(graph: &Graph, output_id: &OutputId) -> bool {
+    graph.state().output(output_id).is_some_and(|output| {
+        !output.filters().chain(FilterChain::Audio).is_empty() || !output.audio_bus().is_master()
+    })
 }
 
 /// Where an output the engine sends to itself goes, rather than to a publish target

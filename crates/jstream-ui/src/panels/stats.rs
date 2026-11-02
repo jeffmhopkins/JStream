@@ -617,6 +617,7 @@ mod tests {
                 encoder_profile: None,
                 filters: FilterChains::default(),
                 video_mix: None,
+                audio_buses: vec![jstream_control::protocol::BusId::master()],
             },
             state,
             key_set: true,
