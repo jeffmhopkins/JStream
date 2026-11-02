@@ -5,7 +5,7 @@
 // live picture gets its descriptor from the page's socket (`describeKinds`).
 import { test, expect, connect, describeKinds, openAddSource, rev } from '../fixtures.js';
 
-/** The rows of the Scene objects panel. */
+/** The rows of the Sources panel. */
 function rows(page) {
   return page.locator('.sources-panel li.row');
 }

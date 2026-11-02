@@ -1,7 +1,7 @@
-//! What the Scenes and Scene objects panels share (spec-panels.md 1 and 2): the search
-//! box and the favourites and labels filter over their rows, the rows' favourite star, and
-//! reordering rows by dragging them, before or after another row or into a container
-//! row such as a folder. The filters' matching and a drop's new position are plain
+//! What the Scenes and Sources panels share (spec-panels.md 1 and 2): the search
+//! box and the favourites and labels filter over their rows, the rows' favourite star,
+//! the tool bar under the rows, and reordering rows by dragging them, before or after
+//! another row or into a container row such as a folder. The filters' matching and a drop's new position are plain
 //! functions, tested natively.
 //!
 //! Docs: docs/UI-FEATURES.md#scenes, docs/UI-FEATURES.md#objects
@@ -13,6 +13,7 @@ use crate::store::Studio;
 use jstream_control::protocol::LabelId;
 use leptos::prelude::*;
 use leptos::wasm_bindgen::JsCast;
+use std::rc::Rc;
 
 /// A row's left padding for its depth in the tree: 18 px a level (spec-panels.md S10).
 pub fn indent(depth: usize) -> String {
@@ -93,7 +94,7 @@ pub fn matches(search: &str, name: &str) -> bool {
 /// (ADR-0078), so both trees pass it.
 #[component]
 pub fn SearchBar(
-    /// What the rows are, for the placeholder: "scenes" or "objects".
+    /// What the rows are, for the placeholder: "scenes" or "sources".
     what: &'static str,
     /// The filter it edits.
     filter: Filter,
@@ -238,6 +239,86 @@ pub fn SearchBar(
                     </div>
                 </Show>
             </div>
+        </div>
+    }
+}
+
+/// One button of a panel's [`ToolBar`].
+#[derive(Clone)]
+pub struct Tool {
+    /// Its name, read out and shown as its tooltip.
+    pub label: &'static str,
+    /// Its icon's name ([`crate::icons::path`]).
+    pub icon: &'static str,
+    /// Whether it is off.
+    pub disabled: Signal<bool>,
+    /// What a click does.
+    pub run: Rc<dyn Fn()>,
+}
+
+impl Tool {
+    /// A button named `label` with the icon `icon`, off while `disabled` holds, that
+    /// runs `run`.
+    pub fn new(
+        label: &'static str,
+        icon: &'static str,
+        disabled: impl Fn() -> bool + Send + Sync + 'static,
+        run: impl Fn() + 'static,
+    ) -> Tool {
+        Tool {
+            label,
+            icon,
+            disabled: Signal::derive(disabled),
+            run: Rc::new(run),
+        }
+    }
+}
+
+/// The bar of icon buttons under a panel's rows (UI-FEATURES SC-11, OB-10): add,
+/// remove, properties, filters, and one step up or down, as OBS lays them out under its
+/// Scenes and Sources lists. A gap follows the second and the fourth button. It stays at
+/// the bottom of the panel, and in view while the rows scroll.
+#[component]
+pub fn ToolBar(
+    /// What the bar acts on, read out: "Scene tools" or "Source tools".
+    label: &'static str,
+    /// Its buttons, left to right.
+    tools: Vec<Tool>,
+) -> impl IntoView {
+    let buttons = tools
+        .into_iter()
+        .enumerate()
+        .map(|(at, tool)| {
+            let Tool {
+                label,
+                icon,
+                disabled,
+                run,
+            } = tool;
+            view! {
+                <button
+                    type="button"
+                    class="tool"
+                    class:gap=at == 2 || at == 4
+                    title=label
+                    aria-label=label
+                    disabled=move || disabled.get()
+                    on:click=move |_| run()
+                >
+                    <Icon name=icon size=15 />
+                </button>
+            }
+        })
+        .collect_view();
+    // A right-click on the bar opens no panel menu: the bar isn't the panel's empty space.
+    view! {
+        <div
+            class="tool-bar"
+            role="toolbar"
+            aria-label=label
+            on:contextmenu=|event: leptos::ev::MouseEvent| event.stop_propagation()
+        >
+            {buttons}
         </div>
     }
 }

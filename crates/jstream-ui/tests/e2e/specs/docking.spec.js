@@ -36,7 +36,7 @@ async function centre(locator) {
 
 test('the Editing layout docks every panel, and the View menu hides and adds them', async ({ page, daemon }) => {
   await connect(page, daemon);
-  await expect(zone(page, 'Left sidebar').getByRole('tab')).toHaveText(['Scenes', 'Scene objects']);
+  await expect(zone(page, 'Left sidebar').getByRole('tab')).toHaveText(['Scenes', 'Sources']);
   await expect(zone(page, 'Right sidebar').getByRole('tab')).toHaveText(['Inspector', 'Filters', 'Transform']);
   await expect(zone(page, 'Bottom dock').getByRole('tab')).toHaveText(['Audio mixer', 'Outputs', 'Transitions']);
   // Empty zones are hidden until a panel is dragged.
@@ -81,7 +81,7 @@ test('a tab dragged onto a strip joins its group, and onto a zone starts one', a
   await page.mouse.move(target.x, target.y, { steps: 8 });
   await page.mouse.up();
   await expect(right.getByRole('tab')).toHaveText(['Scenes']);
-  await expect(zone(page, 'Left sidebar').getByRole('tab')).toHaveText(['Scene objects']);
+  await expect(zone(page, 'Left sidebar').getByRole('tab')).toHaveText(['Sources']);
   await expect(zone(page, 'Top dock')).toBeHidden();
 });
 

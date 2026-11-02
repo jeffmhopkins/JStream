@@ -87,15 +87,18 @@ export async function rev(page) {
   return Number(await page.locator('header.app-header').getAttribute('data-rev'));
 }
 
-/** Opens the Add source dialog from the Scene objects panel's right-click menu, on the
+/** Opens the Add source dialog from the Sources panel's right-click menu, on the
  * Scene type with `scene: true`, and returns it. */
 export async function openAddSource(page, { scene = false } = {}) {
   // Just under the last row, on the panel's own space: a right-click on a row opens the
   // item's menu instead.
   const panel = page.locator('.sources-panel');
   const box = await panel.boundingBox();
-  const last = await panel.locator('li.row').last().boundingBox();
-  const y = last ? last.y + last.height + 6 - box.y : box.height - 12;
+  // With no rows, on the empty scene's hint: the tool bar at the bottom opens no menu.
+  const rows = panel.locator('li.row');
+  const anchor = (await rows.count()) > 0 ? rows.last() : panel.locator('.placeholder');
+  const last = await anchor.boundingBox();
+  const y = last.y + last.height + 6 - box.y;
   await panel.click({ button: 'right', position: { x: 12, y } });
   await page
     .getByRole('menu', { name: 'Context menu' })

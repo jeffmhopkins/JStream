@@ -1,4 +1,4 @@
-//! The Scene objects panel (spec-panels.md 2): the selected scene's items, top of the
+//! The Sources panel (spec-panels.md 2's Scene objects panel): the selected scene's items, top of the
 //! stack first, under the `In “<scene>”, top to bottom` caption and the search box and
 //! favourites and labels filter. Each row shows its source's type icon and name (in
 //! italics when the source is placed in other scenes too), the chips of its labels, a
@@ -12,7 +12,9 @@
 //! the dragged item into it (`item.move`). A right-click on a row opens the
 //! selected items' menu (`item_menu.rs`), plus deleting the source everywhere through
 //! `delete.plan`, and one on the panel's empty space opens the panel's menu, whose Add
-//! source opens the Add source dialog (`add_source.rs`).
+//! source opens the Add source dialog (`add_source.rs`). The tool bar under the rows
+//! (OB-10) adds a source, removes the selected items, opens the primary one's Properties
+//! or Filters, and moves the selection one step up or down the stack.
 //!
 //! A keyframe scene lists its parent's items as it shows them (ADR-0049): the eye
 //! writes the keyframe's override, and what would change the parent's items (Del,
@@ -34,7 +36,9 @@ use crate::panels::labels::{
     LabelChips, LabelEditor, LabelManager, LabelPopover, TagButton, TagPopover, Tagged, carried,
 };
 use crate::panels::scenes::RenameField;
-use crate::panels::tree::{Filter, Reorder, SearchBar, Side, Star, dropped_at, indent};
+use crate::panels::tree::{
+    Filter, Reorder, SearchBar, Side, Star, Tool, ToolBar, dropped_at, indent,
+};
 use crate::store::{Collection, Studio, apply, plan_delete, plan_summary};
 use jstream_control::protocol::{
     DeleteTarget, Edit, FilterId, FilterInfo, ItemId, LabelId, Reference, SceneId, SceneRole,
@@ -845,10 +849,105 @@ pub fn Sources() -> impl IntoView {
         );
     };
 
+    // The tool bar (OB-10) acts on the selected items of the shown scene, top first.
+    let chosen = move || {
+        let Some(scene_id) = scene() else {
+            return Vec::new();
+        };
+        studio.collection.with(|c| {
+            let Some(order) = c.as_ref().and_then(|c| c.scene(&scene_id)) else {
+                return Vec::new();
+            };
+            studio.selection.with(|s| {
+                order
+                    .items
+                    .iter()
+                    .rev()
+                    .map(|i| i.item_id.clone())
+                    .filter(|id| s.contains(id))
+                    .collect::<Vec<ItemId>>()
+            })
+        })
+    };
+    let restack = move |layer: item_menu::Layer| {
+        let Some(scene_id) = scene() else { return };
+        let items = chosen();
+        let order: Vec<ItemId> = studio.collection.with_untracked(|c| {
+            c.as_ref()
+                .and_then(|c| c.scene(&scene_id))
+                .map(|s| s.items.iter().map(|i| i.item_id.clone()).collect())
+                .unwrap_or_default()
+        });
+        let edits: Vec<Edit> = item_menu::restack(&order, &items, layer)
+            .into_iter()
+            .map(|(item_id, index)| Edit::ItemReorder { item_id, index })
+            .collect();
+        if let Some(s) = session.get()
+            && !edits.is_empty()
+        {
+            studio.apply(&s, edits);
+        }
+    };
+    let primary = move || chosen().into_iter().next();
+    let tools = vec![
+        Tool::new(
+            "Add source",
+            "plus",
+            move || adder.is_none() || scene().is_none() || in_keyframe(),
+            move || {
+                if let (Some(adder), Some(scene_id)) = (adder, scene()) {
+                    adder.open(scene_id, false);
+                }
+            },
+        ),
+        Tool::new(
+            "Remove from scene",
+            "trash",
+            move || item_cx.is_none() || chosen().is_empty() || in_keyframe(),
+            move || {
+                if let Some(cx) = item_cx {
+                    cx.remove(&chosen());
+                }
+            },
+        ),
+        Tool::new(
+            "Properties",
+            "gear",
+            move || item_cx.is_none() || chosen().len() != 1,
+            move || {
+                if let (Some(cx), Some(id)) = (item_cx, primary()) {
+                    cx.properties(id);
+                }
+            },
+        ),
+        Tool::new(
+            "Filters",
+            "sliders",
+            move || item_cx.is_none() || chosen().len() != 1,
+            move || {
+                if let (Some(cx), Some(id)) = (item_cx, primary()) {
+                    cx.filters(id);
+                }
+            },
+        ),
+        Tool::new(
+            "Move up",
+            "up",
+            move || chosen().is_empty() || in_keyframe(),
+            move || restack(item_menu::Layer::Forward),
+        ),
+        Tool::new(
+            "Move down",
+            "down",
+            move || chosen().is_empty() || in_keyframe(),
+            move || restack(item_menu::Layer::Backward),
+        ),
+    ];
+
     view! {
         <section class="panel sources-panel tree-panel" on:contextmenu=on_context>
             <h2>"Sources"</h2>
-            <SearchBar what="objects" filter=filter labels=PanelId::Objects />
+            <SearchBar what="sources" filter=filter labels=PanelId::Objects />
             {move || manager.is_some_and(|m| m.shown_in(PanelId::Objects)).then(|| view! { <LabelEditor /> })}
             <Confirm pending=pending confirm=confirm_delete />
             <Show
@@ -875,7 +974,11 @@ pub fn Sources() -> impl IntoView {
                 {move || {
                     let none = all_rows().is_empty();
                     if none {
-                        Some(view! { <p class="placeholder">"This scene is empty."</p> }.into_any())
+                        Some(view! {
+                            <p class="placeholder">
+                                "No sources yet. Click + below, or right-click here, to add one."
+                            </p>
+                        }.into_any())
                     } else if shown_rows().is_empty() {
                         Some(view! { <p class="placeholder">"Nothing matches these filters."</p> }.into_any())
                     } else {
@@ -883,6 +986,7 @@ pub fn Sources() -> impl IntoView {
                     }
                 }}
             </Show>
+            <ToolBar label="Source tools" tools=tools />
         </section>
     }
 }

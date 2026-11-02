@@ -1,4 +1,4 @@
-// The Scenes and Scene objects panels: the seed's scenes and items, a click switching
+// The Scenes and Sources panels: the seed's scenes and items, a click switching
 // program (or, in studio mode, preview), renaming a scene with F2 and reordering rows by dragging, the search box and the
 // favourites filter, showing and hiding an item, placing an existing source through the
 // Add source dialog and removing it with Del, and a second client seeing the changes.
@@ -108,7 +108,7 @@ test('the search box and the favourites filter narrow the rows', async ({ page, 
   const search = page.getByRole('textbox', { name: 'Search scenes' });
   await search.fill('MAI');
   await expect(sceneNames(page)).toHaveText(['Main']);
-  const filter = page.locator('.scenes-panel').getByRole('button', { name: 'Filter' });
+  const filter = page.locator('.scenes-panel').getByRole('button', { name: 'Filter', exact: true });
   await expect(filter.locator('.tree-filter-count')).toHaveText('1');
   await search.fill('nothing like it');
   await expect(page.locator('.scenes-panel')).toContainText('Nothing matches these filters.');
@@ -125,7 +125,7 @@ test('the search box and the favourites filter narrow the rows', async ({ page, 
   await expect(sceneNames(page)).toHaveText(['Intro', 'Main']);
   await expect(filter.locator('.tree-filter-count')).toHaveCount(0);
 
-  const objects = page.getByRole('textbox', { name: 'Search objects' });
+  const objects = page.getByRole('textbox', { name: 'Search sources' });
   await objects.fill('back');
   await expect(items(page)).toHaveCount(1);
   await objects.fill('zzz');

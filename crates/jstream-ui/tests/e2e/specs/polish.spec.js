@@ -73,7 +73,7 @@ test('the View menu lists all eleven panels, and adds one that waits on the engi
   await page.locator('header.app-header').getByRole('button', { name: 'View' }).click();
   const view = page.getByRole('menu', { name: 'View' });
   await expect(view.getByRole('menuitemcheckbox')).toHaveText([
-    /Scenes/, /Scene objects/, /Inspector/, /Transform/, /Filters/, /Live chat/, /Stream stats/,
+    /Scenes/, /Sources/, /Inspector/, /Transform/, /Filters/, /Live chat/, /Stream stats/,
     /Audio mixer/, /Outputs/, /Agent activity/, /Transitions/,
   ]);
   const chat = view.getByRole('menuitemcheckbox', { name: /Live chat/ });
