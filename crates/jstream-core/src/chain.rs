@@ -2060,6 +2060,63 @@ mod tests {
         );
     }
 
+    /// A pack filter drawn only on the master stage or only on an output's is still in
+    /// `Shot::pack_kinds`, so a device loss while it draws blames it (#349, ADR-0080); a
+    /// disabled one on either stage isn't.
+    #[test]
+    fn pack_kinds_count_the_master_and_output_stages() {
+        use crate::effect_packs::test_pack::{self, KIND, Temp};
+
+        let temp = Temp::new("stages");
+        let assets = FilterAssets::new().with_effects(Arc::new(
+            [(KIND.to_owned(), test_pack::effect(&temp, test_pack::MUL))]
+                .into_iter()
+                .collect(),
+        ));
+        let pack = |owner: FilterOwner, id: &str| Edit::FilterAdd {
+            owner,
+            chain: FilterChain::Video,
+            filter_id: FilterId::new(id),
+            kind: KIND.into(),
+            settings: Settings::default(),
+            enabled: None,
+            index: None,
+        };
+        let enable = |owner: FilterOwner, id: &str, enabled: bool| Edit::FilterSetEnabled {
+            owner,
+            filter_id: FilterId::new(id),
+            enabled,
+        };
+        let mut g = graph(&[("cam", true)]).with_kinds([test_pack::descriptor()]);
+        apply(
+            &mut g,
+            vec![
+                record("rec"),
+                pack(FilterOwner::Master, "m"),
+                pack(output("rec"), "o"),
+                enable(output("rec"), "o", false),
+            ],
+        );
+        let kinds =
+            |g: &Graph| -> Vec<String> { shot_with(g, &assets).pack_kinds().into_iter().collect() };
+        // The source's chain is built in, so only the master stage counts here.
+        assert_eq!(kinds(&g), [KIND], "the master stage's filter");
+
+        apply(
+            &mut g,
+            vec![
+                enable(FilterOwner::Master, "m", false),
+                enable(output("rec"), "o", true),
+            ],
+        );
+        let shot = shot_with(&g, &assets);
+        assert_eq!(shot.stage_chain(&ChainOwner::Master(None)), None);
+        assert_eq!(kinds(&g), [KIND], "the output stage's filter");
+
+        apply(&mut g, vec![enable(output("rec"), "o", false)]);
+        assert!(kinds(&g).is_empty(), "disabled on both stages");
+    }
+
     /// Draws each of `views` of `shot` at its size in one cache frame, as the render
     /// thread draws a tick's frames, and reads back each one's top-left pixel.
     fn draw_views(

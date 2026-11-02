@@ -302,6 +302,12 @@ pub fn filter_name(kinds: &[KindSummary], kind_id: &str) -> String {
         .map_or_else(|| kind_id.to_owned(), |k| k.name.clone())
 }
 
+/// Whether `kind.list` marks `kind_id` quarantined: an effect-pack kind a GPU device
+/// loss was blamed on, bypassed until a person re-enables it (ADR-0087).
+pub fn quarantined(kinds: &[KindSummary], kind_id: &str) -> bool {
+    kinds.iter().any(|k| k.kind_id == kind_id && k.quarantined)
+}
+
 /// The filter kinds to offer for an owner with these chains: every filter kind
 /// `kind.list` reported for them, video first, in the catalogue's group order and the
 /// prototype's order within a group, then by name.
@@ -1292,6 +1298,45 @@ fn Row(
         })
     });
     let how = move || descriptor.with(|d| d.as_ref().map_or(Opens::Nothing, opens));
+    let held = {
+        let kind = filter.kind.clone();
+        Memo::new(move |_| {
+            studio
+                .kinds
+                .with(|k| quarantined(k.as_deref().unwrap_or_default(), &kind))
+        })
+    };
+    let reenable = {
+        let kind = filter.kind.clone();
+        move |event: leptos::ev::MouseEvent| {
+            event.stop_propagation();
+            if let Some(s) = session.get() {
+                studio.enable_effect(&s, kind.clone());
+            }
+        }
+    };
+    let reenable_label = format!("Re-enable {name}");
+    let held_view = move || {
+        held.get().then(|| {
+            view! {
+                <span
+                    class="badge quarantined"
+                    title="Bypassed: a GPU device loss was blamed on this effect"
+                >
+                    "quarantined"
+                </span>
+                <button
+                    type="button"
+                    class="filter-reenable"
+                    aria-label=reenable_label.clone()
+                    on:click=reenable.clone()
+                    on:dblclick=|event| event.stop_propagation()
+                >
+                    "Re-enable"
+                </button>
+            }
+        })
+    };
     let send = move |edit: Edit| {
         if let Some(s) = session.get() {
             studio.apply(&s, vec![edit]);
@@ -1424,6 +1469,7 @@ fn Row(
         <li
             class="filter"
             class:off=!enabled
+            class:quarantined=move || held.get()
             class:open=is_open
             class:drop-before=drop_side(Side::Before)
             class:drop-after=drop_side(Side::After)
@@ -1448,6 +1494,7 @@ fn Row(
                     <Icon name=if enabled { "eye" } else { "eye-off" } size=14 />
                 </button>
                 <span class="filter-name">{name.clone()}</span>
+                {held_view}
                 {summary_view}
                 {move || caret().map(|c| view! { <span class="filter-caret" aria-hidden="true">{c}</span> })}
                 <button
@@ -2192,6 +2239,22 @@ mod tests {
             version: 1,
             quarantined: false,
         }
+    }
+
+    /// Only a kind `kind.list` marks quarantined shows the badge and its Re-enable; a
+    /// kind it doesn't list isn't quarantined.
+    #[test]
+    fn a_quarantined_kind_is_marked() {
+        let mut held = kind_summary("fx/blur", "Blur", KindCategory::VideoFilter);
+        held.quarantined = true;
+        let kinds = [
+            held,
+            kind_summary("fx/glow", "Glow", KindCategory::VideoFilter),
+        ];
+        assert!(quarantined(&kinds, "fx/blur"));
+        assert!(!quarantined(&kinds, "fx/glow"));
+        assert!(!quarantined(&kinds, "fx/gone"));
+        assert!(!quarantined(&[], "fx/blur"));
     }
 
     fn param(id: &str, label: &str, ty: ParamType, default: Value) -> ParamDescriptor {

@@ -64,13 +64,13 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Scene objects panel](#objects) | 9 | 9 | 0 | 0 | 0 | 0 |
 | [Inspector](#inspector) | 10 | 10 | 0 | 0 | 0 | 0 |
 | [Transform panel](#transform) | 4 | 4 | 0 | 0 | 0 | 0 |
-| [Filters](#filters) | 9 | 9 | 0 | 0 | 0 | 0 |
+| [Filters](#filters) | 10 | 10 | 0 | 0 | 0 | 0 |
 | [Mixer](#mixer) | 7 | 6 | 0 | 0 | 0 | 1 |
 | [Outputs](#outputs) | 4 | 3 | 0 | 0 | 1 | 0 |
 | [Transitions](#transitions) | 6 | 6 | 0 | 0 | 0 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 1 | 1 | 0 | 2 | 0 |
 | [Keyboard](#keyboard) | 7 | 6 | 0 | 0 | 0 | 1 |
-| **Total** | **131** | **118** | **4** | **0** | **5** | **4** |
+| **Total** | **132** | **119** | **4** | **0** | **5** | **4** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -323,6 +323,7 @@ chain (FL-06), and so does each item: its effects (FL-09,
 | FL-07 | Program and output chains | Master chain on the program output, one chain per output. | ✅ | An FX button ([OU-01](#outputs), [OU-02](#outputs), [MX-01](#mixer)) shows the program output's (`{"type":"master"}`) or an output's chains in the panel, titled "Program output" or the output's ID with the prototype's note ("Master chain: applies to everything leaving JStream.", "Only this output, after the program filters.", and "No sound." for the virtual camera, which has a video chain only). Video and Audio chains, rows, Add filter and the settings dialog work as on a source's. The engine runs the master's video chain on every output's frame and an output's own after it ([ARCH › GPU pipeline](ARCHITECTURE.md#gpu-pipeline)); the canvas shows the mix before them. Add filter leaves out what the engine refuses there: a kind whose settings name a scene, a source, a bus or a file is listed but can't be added ("A filter on an output can’t use a scene, a source or a file yet."). For an output with no video filter yet it states the cost first (ADR-0080 §3): "A video filter gives this output its own GPU pass and encoder session, even while the filter is off. Encoder sessions in use now: N." (for the virtual camera, which opens no encoder session: "A video filter gives the virtual camera its own GPU pass, even while the filter is off; it opens no encoder session."), adding "It takes effect the next time this output starts." while it runs. Selecting another item or scene, or an item's Edit filters…, shows the selection's chains again: the item's source's, or with no item the scene's ([FL-06](#filters)). |
 | FL-08 | CLAP plugin filter | Host a CLAP audio effect. | ✅ | [ADR-0035](adr/0035-clap-plugins-out-of-process.md): each effect the engine's scan finds is its own kind, `clap/<plugin id>`, so the Add filter dialog lists each plugin by name under Plugins with the hint "A CLAP audio effect", rather than the prototype's one "CLAP plugin" with a Plugin select. It goes on any audio chain: a source's, the program output's and an output's ([FL-07](#filters)); on the program output's the plugin runs once for each bus an output carries ([ADR-0086](adr/0086-master-clap-filter-one-host-per-output-bus.md)), so every output hears it. Its settings are the plugin's parameters, from the kind's descriptor (FL-05). The live-audio run on Windows is #912. |
 | FL-09 | Item effects | One placement's own video chain, after its crop. | ✅ | Beyond the prototype, which has no item effects ([ADR-0065](adr/0065-scene-chains-and-item-effects.md), the `item` owner, `ItemInfo.effects`). Under the selected item's source's chains, the Filters panel shows "This item’s effects" with "Only this item, after its crop, top to bottom.", an "Effects" chain ("No effects.", "N effects") and "+ Add effect…", for an item whose source has a picture, while no FX button's or scene's pick is shown. Rows, the Add filter dialog (video kinds only, "For this item of “Backdrop”", foot "Applies to this item only, after its crop.") and the settings dialog ("Effect on “Backdrop”") work as on a source's chain. In a keyframe scene they are the item's effects there (the `keyframe` owner, [ADR-0088](adr/0088-keyframe-scenes-override-item-effects.md)): "This item’s effects in this keyframe" with "Only this item in this keyframe, after its crop, top to bottom.", and either "Follows the item’s own effects. A change here gives this keyframe its own." or "This keyframe has its own effects for this item." with a Follow the item button, which clears the override; the Add filter dialog says "For this item of “Backdrop” in this keyframe" and "Applies to this item in this keyframe only.", and the scene picker leaves out the scenes whose picture holds the keyframe. Reset to the parent clears it with the other overrides. On an item's effects the Uses the scene picker offers the scenes whose picture doesn't hold the item's scene. The Properties dialog shows the source's chains only. |
+| FL-10 | Quarantined effect | A filter whose effect-pack kind is quarantined says so, and a person can turn it back on. | ✅ | Beyond the prototype ([ADR-0087](adr/0087-effect-quarantine-after-gpu-device-loss.md)): a row whose kind `kind.list` marks `quarantined` shows a "quarantined" badge and a Re-enable button, which sends `effect.enable` and reads `kind.list` again; a `gpu.device_lost` that quarantined kinds reads it again too. |
 
 <a id="mixer"></a>
 ## Mixer
@@ -461,6 +462,8 @@ not remove them; they move into the prototype's look.
   dialog, before OK, as in OBS ([DL-02](#dialogs)).
 - Item effects: one placement's own filters, after its crop, in the Filters panel
   ([FL-09](#filters)).
+- Quarantined effects: a filter whose effect-pack kind a GPU device loss quarantined
+  shows a badge and a Re-enable button ([FL-10](#filters)).
 
 <a id="plan"></a>
 ## Delivery plan

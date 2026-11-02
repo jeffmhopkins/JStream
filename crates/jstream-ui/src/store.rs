@@ -763,6 +763,33 @@ impl Studio {
         self.kinds.set(Some(kinds));
     }
 
+    /// Re-enables the quarantined effect-pack kind `kind_id` with `effect.enable`
+    /// (ADR-0087), then re-reads the kinds, since no event reports a lifted quarantine.
+    /// A failure shows in the problem bar.
+    pub fn enable_effect(&self, session: &Session, kind_id: String) {
+        let studio = *self;
+        let session = session.clone();
+        spawn_local(async move { studio.lift(&session, kind_id).await });
+    }
+
+    /// [`Studio::enable_effect`], awaited.
+    async fn lift(&self, session: &Session, kind_id: String) {
+        let action = Action::EffectEnable { kind_id };
+        match session.control.call(Call::Action { action }).await {
+            Ok(_) => self.relist_kinds(session).await,
+            Err(error) => self.report(&error),
+        }
+    }
+
+    /// Re-reads the kinds with `kind.list`. A failure shows in the problem bar and keeps
+    /// the kinds read before.
+    async fn relist_kinds(&self, session: &Session) {
+        match list_kinds(session).await {
+            Ok(kinds) => self.kinds.set(Some(kinds)),
+            Err(error) => self.report(&error),
+        }
+    }
+
     /// Follows one engine event.
     pub fn on_event(&self, session: &Session, event: &Event) {
         match event {
@@ -793,6 +820,12 @@ impl Studio {
                 preview_scene,
                 ..
             } => self.studio_changed(program_scene.clone(), preview_scene.clone()),
+            // The kinds it quarantined are marked in `kind.list` now.
+            Event::GpuDeviceLost { quarantined, .. } if !quarantined.is_empty() => {
+                let studio = *self;
+                let session = session.clone();
+                spawn_local(async move { studio.relist_kinds(&session).await });
+            }
             _ => {}
         }
     }
@@ -1054,8 +1087,9 @@ mod tests {
     };
     use crate::session::Session;
     use jstream_control::protocol::{
-        Batch, Call, CallResult, Edit, Hello, ItemId, OverrideField, Query, QueryResult, Response,
-        SceneId, SceneRole, Settings, SourceId, SourceKind, SourceSize, Welcome,
+        Action, Batch, Call, CallResult, Edit, Hello, ItemId, KindCategory, KindSummary,
+        OverrideField, ProtocolError, Query, QueryResult, RequestId, Response, SceneId, SceneRole,
+        Settings, SourceId, SourceKind, SourceSize, Welcome,
     };
     use jstream_control::{BoxFuture, Control, ControlError, EventStream, MockEngine};
     use leptos::prelude::*;
@@ -1556,6 +1590,108 @@ mod tests {
             problem.contains("the engine closed the connection"),
             "{problem:?}"
         );
+    }
+
+    /// An engine holding `fx/blur` quarantined until `effect.enable` lifts it, which
+    /// refuses the action when `refuse`.
+    struct Quarantine {
+        held: std::sync::Mutex<bool>,
+        enabled: std::sync::Mutex<Vec<String>>,
+        refuse: bool,
+    }
+
+    impl Quarantine {
+        fn session(refuse: bool) -> (Session, Rc<Quarantine>) {
+            let engine = MockEngine::new();
+            let welcome = now(Session::open(Rc::new(engine.connect())))
+                .unwrap_or_else(|e| panic!("hello failed: {e}"))
+                .welcome;
+            let control = Rc::new(Quarantine {
+                held: std::sync::Mutex::new(true),
+                enabled: std::sync::Mutex::new(Vec::new()),
+                refuse,
+            });
+            let session = Session {
+                control: control.clone(),
+                welcome,
+            };
+            (session, control)
+        }
+    }
+
+    impl Control for Quarantine {
+        fn hello(&self, _: Hello) -> BoxFuture<'_, Result<Welcome, ControlError>> {
+            panic!("the session is already open")
+        }
+
+        fn call(&self, call: Call) -> BoxFuture<'_, Result<Response, ControlError>> {
+            let held = &mut *self.held.lock().expect("not poisoned");
+            let result = match call {
+                Call::Action {
+                    action: Action::EffectEnable { kind_id },
+                } if self.refuse => Err(ControlError::from(ProtocolError::invalid_argument(
+                    "kind_id",
+                    format!("no effect pack has a kind `{kind_id}`"),
+                ))),
+                Call::Action {
+                    action: Action::EffectEnable { kind_id },
+                } => {
+                    *held = false;
+                    self.enabled.lock().expect("not poisoned").push(kind_id);
+                    Ok(CallResult::action())
+                }
+                Call::Query {
+                    query: Query::KindList,
+                } => Ok(CallResult::Query {
+                    result: QueryResult::KindList {
+                        kinds: vec![KindSummary {
+                            kind_id: "fx/blur".into(),
+                            category: KindCategory::VideoFilter,
+                            name: "Blur".into(),
+                            version: 1,
+                            quarantined: *held,
+                        }],
+                    },
+                }),
+                other => panic!("unexpected call {other:?}"),
+            };
+            Box::pin(std::future::ready(result.map(|result| Response {
+                id: RequestId::new("req_1"),
+                result,
+            })))
+        }
+
+        fn events(&self) -> EventStream {
+            Box::pin(futures_util::stream::empty())
+        }
+    }
+
+    /// Re-enabling a quarantined effect sends `effect.enable` for its kind and re-reads
+    /// the kinds, so its badge goes; a refusal shows in the problem bar and keeps the
+    /// kinds read before.
+    #[test]
+    fn re_enabling_an_effect_lifts_its_quarantine() {
+        let held = |studio: &Studio| {
+            studio.kinds.with_untracked(|k| {
+                crate::panels::filters::quarantined(k.as_deref().unwrap_or_default(), "fx/blur")
+            })
+        };
+        let (session, engine) = Quarantine::session(false);
+        let studio = Studio::new();
+        studio.take_kinds(now(list_kinds(&session)));
+        assert!(held(&studio));
+        now(studio.lift(&session, "fx/blur".into()));
+        assert_eq!(*engine.enabled.lock().expect("not poisoned"), ["fx/blur"]);
+        assert!(!held(&studio), "the kinds were read again");
+        assert_eq!(studio.problem.get_untracked(), None);
+
+        let (session, _) = Quarantine::session(true);
+        let studio = Studio::new();
+        studio.take_kinds(now(list_kinds(&session)));
+        now(studio.lift(&session, "fx/blur".into()));
+        assert!(held(&studio), "still quarantined");
+        let problem = studio.problem.get_untracked().unwrap_or_default();
+        assert!(problem.contains("no effect pack has"), "{problem:?}");
     }
 
     #[test]
