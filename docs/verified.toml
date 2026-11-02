@@ -1524,7 +1524,7 @@ stamp = { hash = "b3:a11f36eed7640478", by = "agent:bus-outputs", note = "Audio 
 stamp = { hash = "b3:a6653bb00099d7e7", by = "agent:claude", note = "Re-read after the merge of #899 (scenes carry labels, ADR-0078, protocol 0.45), which doesn't touch the privacy removal, and after moving its ADR-0027 citations to ADR-0080 (same decision numbers, ADR-0027 now superseded); the section holds." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/automation.rs"]
-stamp = { hash = "b3:b3b8cda57498c83f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Whole PR (#977, #978): WASM manifest names go through plugin_text, which now also drops bidi formatting; plugin.grant acknowledges the request plugin.list last showed its client (ADR-0090), no wire change; re-read: Package, Updates and Listing bullets edited to say both; Session and lock bullets still hold" }
+stamp = { hash = "b3:f11462df1d38138c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Whole PR (#977, #978): WASM manifest names go through plugin_text, which now also drops bidi formatting; plugin.grant acknowledges the request plugin.list last showed its client (ADR-0090), no wire change; re-read after the saved-name test waits for the save: Package, Updates, Saving and Listing bullets hold" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/collection.rs"]
 stamp = { hash = "b3:132b3ff949216077", by = "agent:claude-labels", note = "tests/collection.rs: a_missing_file_is_created_with_the_sample_labels checks the four names, no scenes and rev 0; the tests list in Design names it." }
@@ -1716,7 +1716,7 @@ stamp = { hash = "b3:a11f36eed7640478", by = "agent:bus-outputs", note = "Re-rea
 stamp = { hash = "b3:a6653bb00099d7e7", by = "agent:claude", note = "Re-read after the merge of #899 (scenes carry labels, ADR-0078, protocol 0.45), which doesn't touch the privacy removal, and after moving its ADR-0027 citations to ADR-0080 (same decision numbers, ADR-0027 now superseded); the section holds." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/automation.rs"]
-stamp = { hash = "b3:b3b8cda57498c83f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Whole PR (#977, #978): WASM manifest names go through plugin_text, which now also drops bidi formatting; plugin.grant acknowledges the request plugin.list last showed its client (ADR-0090), no wire change; re-read: the WASM plugins and Engine bullets still hold" }
+stamp = { hash = "b3:f11462df1d38138c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Whole PR (#977, #978): WASM manifest names go through plugin_text, which now also drops bidi formatting; plugin.grant acknowledges the request plugin.list last showed its client (ADR-0090), no wire change; re-read after the saved-name test waits for the save: WASM plugins and Engine bullets still hold" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/collection.rs"]
 stamp = { hash = "b3:132b3ff949216077", by = "agent:claude-labels", note = "tests/collection.rs: the missing-file test now checks the sample labels; the bullet's description of the module holds." }
