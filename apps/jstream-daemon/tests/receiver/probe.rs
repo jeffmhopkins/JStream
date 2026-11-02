@@ -18,14 +18,17 @@ pub fn free_port() -> u16 {
         .port()
 }
 
-/// Whether something listens on loopback `port`, from `/proc/net/tcp`. Connecting to
-/// find out would use up the receiver's one accept.
+/// Whether the receiver on loopback `port` is up, from `/proc/net/tcp`: listening, or
+/// already holding a connection there. Connecting to find out would use up its one
+/// accept, and a publisher that is reconnecting can take that accept, which closes the
+/// listening socket, between two looks.
 fn listening(port: u16) -> bool {
-    let wanted = format!("0100007F:{port:04X}");
+    let local = format!("0100007F:{port:04X}");
     std::fs::read_to_string("/proc/net/tcp").is_ok_and(|table| {
         table.lines().skip(1).any(|line| {
-            let mut fields = line.split_whitespace().skip(1);
-            fields.next() == Some(wanted.as_str()) && fields.nth(1) == Some("0A")
+            let fields: Vec<&str> = line.split_whitespace().collect();
+            // `sl local remote st ...`: 0A is LISTEN, 01 ESTABLISHED.
+            fields.get(1) == Some(&local.as_str()) && matches!(fields.get(3), Some(&"0A" | &"01"))
         })
     })
 }
@@ -100,8 +103,6 @@ pub struct Probe {
     pub video_codec: String,
     pub width: u64,
     pub height: u64,
-    /// `r_frame_rate`, as a number.
-    pub fps: f64,
     pub audio_codec: Option<String>,
     pub sample_rate: Option<u64>,
     pub channels: Option<u64>,
@@ -112,6 +113,34 @@ pub struct Probe {
 }
 
 impl Probe {
+    /// The video's frame rate, from the median time between its packets. ffprobe's
+    /// `r_frame_rate` is a guess that one late frame can turn into a finer rate, and an
+    /// average would count the ticks the render loop skips while lavapipe opens.
+    pub fn measured_fps(&self) -> f64 {
+        let mut gaps: Vec<f64> = self
+            .video_packets
+            .windows(2)
+            .map(|w| w[1].0 - w[0].0)
+            .collect();
+        gaps.sort_by(f64::total_cmp);
+        match gaps.get(gaps.len() / 2) {
+            Some(median) if *median > 0.0 => 1.0 / median,
+            _ => 0.0,
+        }
+    }
+
+    /// The video packets from each keyframe to the next.
+    pub fn keyframe_spacing(&self) -> Vec<usize> {
+        let keys: Vec<usize> = self
+            .video_packets
+            .iter()
+            .enumerate()
+            .filter(|(_, (_, key))| *key)
+            .map(|(i, _)| i)
+            .collect();
+        keys.windows(2).map(|w| w[1] - w[0]).collect()
+    }
+
     /// The seconds between consecutive keyframes.
     pub fn keyframe_gaps(&self) -> Vec<f64> {
         let keys: Vec<f64> = self
@@ -132,16 +161,6 @@ fn run(command: &mut Command) -> std::process::Output {
         String::from_utf8_lossy(&output.stderr)
     );
     output
-}
-
-fn ratio(text: &str) -> f64 {
-    match text.split_once('/') {
-        Some((n, d)) => {
-            let (n, d): (f64, f64) = (n.parse().unwrap_or(0.0), d.parse().unwrap_or(1.0));
-            if d == 0.0 { 0.0 } else { n / d }
-        }
-        None => text.parse().unwrap_or(0.0),
-    }
 }
 
 /// Probes `file`'s streams, duration and video packets.
@@ -182,7 +201,6 @@ pub fn probe(file: &Path) -> Probe {
         video_codec: text(&video["codec_name"]).unwrap_or_default(),
         width: video["width"].as_u64().unwrap_or(0),
         height: video["height"].as_u64().unwrap_or(0),
-        fps: ratio(video["r_frame_rate"].as_str().unwrap_or("0")),
         audio_codec: text(&audio["codec_name"]),
         sample_rate: audio["sample_rate"].as_str().and_then(|s| s.parse().ok()),
         channels: audio["channels"].as_u64(),

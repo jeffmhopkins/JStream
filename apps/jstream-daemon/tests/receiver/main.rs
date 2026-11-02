@@ -10,7 +10,7 @@
 //! pump keeps level with real time, so the encoders and the server see a live pace.
 //!
 //! The H.264 encoder is Cisco's OpenH264, the product's Linux software encoder, when
-//! `JSTREAM_E2E_OPENH264` names its library (CI downloads Cisco's release). Otherwise
+//! `JSTREAM_E2E_OPENH264` names its library (`--openh264` of the xtask). Otherwise
 //! it is `x264.rs`'s stand-in, `ffmpeg`'s libx264 in a child process.
 //!
 //! The tests are `#[ignore]`d: they need `ffmpeg`, `ffprobe` and a Vulkan adapter, which
@@ -559,8 +559,8 @@ async fn a_stream_reaches_a_real_receiver_with_its_encoder_settings_and_stats() 
             "kbps is the bytes sent over the interval: {measured:.0} vs {b:?}"
         );
         assert!(
-            b.kbps > 0 && b.kbps <= 1_200,
-            "under 800 + 128 kbit/s: {b:?}"
+            b.kbps > 0 && b.kbps <= 1_000,
+            "at most the profile's 800 + 128 kbit/s, with a little slack: {b:?}"
         );
         assert_eq!(b.health, OutputHealth::Good, "{b:?}");
     }
@@ -582,7 +582,7 @@ async fn a_stream_reaches_a_real_receiver_with_its_encoder_settings_and_stats() 
         (p.width, p.height),
         (u64::from(CANVAS.0), u64::from(CANVAS.1))
     );
-    assert!(close(p.fps, 30.0, 0.5), "{p:?}");
+    assert!(close(p.measured_fps(), 30.0, 1.0), "{p:?}");
     assert_eq!(p.audio_codec.as_deref(), Some("aac"), "{p:?}");
     assert_eq!(
         (p.sample_rate, p.channels),
@@ -598,11 +598,20 @@ async fn a_stream_reaches_a_real_receiver_with_its_encoder_settings_and_stats() 
         Some(true),
         "{p:?}"
     );
-    let gaps = p.keyframe_gaps();
-    assert!(gaps.len() >= 3, "{gaps:?}");
+    // The profile's interval is in frames (one second's worth), so it is checked in
+    // frames, then in seconds from the second keyframe on: the render loop skips ticks
+    // while lavapipe draws its first frames on a slow machine, which stretches the
+    // first gap. Those are engine-wide `render_ticks` drops, not the output's.
+    let spacing = p.keyframe_spacing();
+    assert!(spacing.len() >= 3, "{spacing:?}");
     assert!(
-        gaps.iter().all(|g| close(*g, 1.0, 0.05)),
-        "a keyframe every second: {gaps:?}"
+        spacing.iter().all(|n| *n == 30),
+        "a keyframe every 30 frames: {spacing:?}"
+    );
+    let gaps = p.keyframe_gaps();
+    assert!(
+        gaps[1..].iter().all(|g| close(*g, 1.0, 0.1)),
+        "a keyframe every second once running: {gaps:?}"
     );
     let rgb = pixel(&file, 2.0, 160, 90);
     assert!(near(rgb, [255, 0, 0]), "the canvas is red: {rgb:?}");
@@ -682,7 +691,7 @@ async fn a_vertical_mix_with_an_output_filter_beside_a_wide_stream() {
 
     let p = probe(&wide);
     assert_eq!((p.width, p.height), (320, 180), "{p:?}");
-    assert!(close(p.fps, 30.0, 0.5), "{p:?}");
+    assert!(close(p.measured_fps(), 30.0, 1.0), "{p:?}");
     let rgb = pixel(&wide, 1.5, 160, 90);
     assert!(near(rgb, [255, 0, 0]), "the wide stream is red: {rgb:?}");
 
@@ -690,7 +699,10 @@ async fn a_vertical_mix_with_an_output_filter_beside_a_wide_stream() {
     eprintln!("vertical received: {p:?}");
     assert_eq!(p.video_codec, "h264", "{p:?}");
     assert_eq!((p.width, p.height), (180, 320), "{p:?}");
-    assert!(close(p.fps, 15.0, 0.5), "half the base rate: {p:?}");
+    assert!(
+        close(p.measured_fps(), 15.0, 1.0),
+        "half the base rate: {p:?}"
+    );
     assert_eq!(p.audio_codec.as_deref(), Some("aac"), "{p:?}");
     let middle = pixel(&tall, 1.5, 90, 160);
     assert!(
@@ -750,8 +762,9 @@ async fn an_output_on_another_bus_carries_that_bus() {
 
 /// The receiver goes away mid-stream and comes back: the output reports
 /// `reconnecting` with health `poor`, its uptime keeps counting, and once the server
-/// listens again it reconnects on its own, goes `active` and stops being `poor`, and
-/// the new connection carries a decodable stream that opens on a keyframe with audio.
+/// listens again it reconnects on its own and goes `active`, staying `poor` while the
+/// outage's lost video is inside the health's window, and the new connection carries a
+/// decodable stream that opens on a keyframe with audio.
 #[ignore = "needs ffmpeg, ffprobe and a Vulkan adapter: cargo xtask e2e-stream"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_stream_reconnects_after_the_receiver_restarts() {
@@ -799,12 +812,15 @@ async fn a_stream_reconnects_after_the_receiver_restarts() {
         "the uptime kept counting through the outage: {stats:#?}"
     );
     let last = stats.last().expect("a tick");
-    // The outage's losses are packets the publish target dropped, not encoder frame
-    // drops, so within ten seconds of it the health is `fair`, not `good`.
-    assert!(
-        matches!(last.health, OutputHealth::Fair | OutputHealth::Good),
-        "no longer poor once reconnected: {last:?}"
+    // The video lost in the outage is still inside the health's ten-second window, so
+    // the output stays `poor` after it reconnects (#994). Those frames are counted in
+    // `dropped_packets`, not `dropped_frames`.
+    assert_eq!(
+        last.health,
+        OutputHealth::Poor,
+        "the outage's lost video still counts: {last:?}"
     );
+    assert_eq!(last.dropped_frames, 0, "{last:?}");
     assert!(
         last.dropped_packets > 0,
         "the outage's packets were counted: {last:?}"

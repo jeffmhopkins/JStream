@@ -135,8 +135,8 @@ when it is installed, and runs them one at a time, in about half a minute. They 
   at the profile's interval, and AAC stereo at 48 kHz with the microphone in it. The
   decoded pixels match the scene, and the file is as long as the frames the stats
   counted. Each `stats.tick` entry for the output has a rising uptime, growing totals,
-  a bitrate that matches the bytes sent between ticks and stays under the profile, no
-  drops, and health `good`. The uptime counts from `output.start` and starts again at
+  a bitrate that matches the bytes sent between ticks and stays at most a little above
+  the profile's, no drops, and health `good`. The uptime counts from `output.start` and starts again at
   the next one.
 - **A vertical mix with an output filter.** A wide stream and a 180x320, half-rate
   stream run together. The vertical stream has a hue shift on its own video chain
@@ -146,8 +146,9 @@ when it is installed, and runs them one at a time, in about half a minute. They 
   on a bus with no sends is silent, until a send into that bus.
 - **A reconnect.** The server goes away mid-stream. The output reports `reconnecting`
   with health `poor`, and its uptime keeps counting. Once the server is back, the output
-  reconnects by itself, goes `active` and is no longer `poor`. The new connection opens
-  on a keyframe, with audio.
+  reconnects by itself and goes `active`. It stays `poor` while the video lost in the
+  outage is inside the health's ten-second window (#994). The new connection opens on a
+  keyframe, with audio.
 
 They don't cover what needs hardware or another OS: VA-API, NVENC, QSV, AMF, Media
 Foundation and VideoToolbox, the virtual camera, real capture devices, or the platform

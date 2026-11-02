@@ -29,8 +29,9 @@ use jstream_platform::{
 /// The name the stand-in lists under.
 pub const NAME: &str = "ffmpeg libx264 (test stand-in)";
 
-/// Frames queued for the writer thread before `can_accept` says no.
-const QUEUE: usize = 8;
+/// Frames in flight (queued for the writer, in the pipe or in ffmpeg) before
+/// `can_accept` says no; also the writer's queue.
+const QUEUE: usize = 16;
 
 pub fn info() -> CodecInfo {
     CodecInfo {
@@ -279,7 +280,10 @@ impl VideoEncoder for X264 {
     }
 
     fn can_accept(&self) -> bool {
-        self.frames.is_some()
+        // Frames sent whose access unit hasn't come back: the writer's queue, the pipe
+        // and ffmpeg's own delay. `encode` refuses only past the writer's queue, so
+        // saying no here first holds frames back instead of dropping them.
+        self.frames.is_some() && self.pending.len() < QUEUE
     }
 
     fn encode(&mut self, frame: VideoSurface) -> Result<(), PlatformError> {
