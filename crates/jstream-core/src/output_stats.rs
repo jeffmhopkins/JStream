@@ -69,8 +69,9 @@ pub(crate) struct OutputSample {
     pub(crate) frames: u64,
     pub(crate) dropped_frames: u64,
     pub(crate) dropped_packets: u64,
-    /// Video frames the publish target dropped while its link was down: counted in
-    /// `dropped_packets`, and as lost frames by the health only.
+    /// Video frames handed over while the link was not active, counted as lost frames
+    /// by the health only: those the publish target dropped are also in
+    /// `dropped_packets`, and those it delivered on a link not yet stable are in neither.
     pub(crate) link_lost_frames: u64,
 }
 
