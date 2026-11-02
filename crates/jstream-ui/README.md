@@ -589,7 +589,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   titled "Stop the output to change its bus", as the engine refuses the move. A virtual
   camera's card has none. A card's Video select picks the mix it shows
   (`output.set_video_mix`), or "Program, canvas size" for none; a running output takes
-  it when it next starts. Under the cards (`encoders.rs`), Encoders and Video mixes list
+  it when it next starts. A virtual camera's card has no Video select either, as the
+  camera always shows the program at the canvas size. Under the cards (`encoders.rs`), Encoders and Video mixes list
   each profile and mix with a line on what it encodes or shows, and a form makes one
   (`encoder.create`, `video_mix.create`, with the first free `enc_N` or `mix_N`) or edits
   it (`encoder.update`, `video_mix.update`). The form checks the draft with the

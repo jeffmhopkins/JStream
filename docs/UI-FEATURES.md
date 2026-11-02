@@ -444,8 +444,8 @@ not remove them; they move into the prototype's look.
 - Delete plans: deleting a scene, source or bus shows what else it takes.
 - Outputs: creating stream, recording and virtual camera outputs, the write-only stream
   key, per-output start and stop, the encoder profile, video mix and audio bus each
-  output uses (its card's Encoder, Video and Audio selects; the bus only while it is
-  stopped), virtual camera registration hints, and the pipeline's health line.
+  output uses (its card's Encoder, Video and Audio selects, which a virtual camera's
+  card doesn't have; the bus only while it is stopped), virtual camera registration hints, and the pipeline's health line.
 - Encoder profiles and video mixes, under the output cards (`encoders.rs`): each listed
   with what it encodes or shows, made or edited in a form checked as the engine checks
   it, and deleted once no output uses it. A profile has the video codec (H.264, HEVC or

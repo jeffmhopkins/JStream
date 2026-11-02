@@ -1060,6 +1060,7 @@ fn OutputCard(panel: Panel, output_id: OutputId) -> impl IntoView {
                 </p>
                 {panel.vcam.hint().map(|hint| view! { <p class="hint">{hint}</p> })}
             </Show>
+            <Show when=move || !is_vcam()>
             <label class="encoder">
                 "Video"
                 <select
@@ -1094,7 +1095,6 @@ fn OutputCard(panel: Panel, output_id: OutputId) -> impl IntoView {
                     </For>
                 </select>
             </label>
-            <Show when=move || !is_vcam()>
             <label class="encoder">
                 "Encoder"
                 <select on:change=choose_encoder>
