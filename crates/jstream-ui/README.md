@@ -135,8 +135,8 @@ Contents ([Design](#design) explains the choices):
   stub that answers them as the server does.
 - **Plugins** (`plugins.rs`): `Plugins`, the WASM automation plugins section under the
   pairing panel in the Inspector, with its install and grant dialogs, the calls behind
-  them, and `GrantForm`, `suggested_id`, `not_granted` and the row texts, tested
-  natively.
+  them, and `GrantForm`, `ListGate` (no `plugin.list` while the grant dialog is open),
+  `suggested_id`, `not_granted` and the row texts, tested natively.
 - **Canvas** (`canvas/`): the canvas editor. It draws the selected scene's item boxes
   over that scene's live picture (the program mix while it is on program), edits their geometry with the pointer and the keyboard, and undoes and
   redoes ([Canvas](#canvas)).
