@@ -16,16 +16,33 @@ pub const CLAP_KIND_PREFIX: &str = "clap/";
 /// The most characters of a plugin's text that reach clients.
 const MAX_PLUGIN_TEXT: usize = 128;
 
-/// Text a plugin chose (a name, a parameter's name or module), as clients and agents
-/// may read it (#351): control characters become spaces, it is trimmed, and cut to
-/// [`MAX_PLUGIN_TEXT`] characters. Clients render it as text only.
+/// Text a plugin chose (a CLAP plugin's name, a parameter's name or module, a WASM
+/// plugin's manifest name), as clients and agents may read it (#351, #977): control
+/// characters and bidirectional formatting characters become spaces, it is trimmed, and
+/// cut to [`MAX_PLUGIN_TEXT`] characters. Clients render it as text only.
 pub(crate) fn plugin_text(text: &str) -> String {
     let text: String = text
         .chars()
-        .map(|c| if c.is_control() { ' ' } else { c })
+        .map(|c| {
+            if c.is_control() || is_bidi_format(c) {
+                ' '
+            } else {
+                c
+            }
+        })
         .take(MAX_PLUGIN_TEXT)
         .collect();
     text.trim().to_owned()
+}
+
+/// Whether `c` is one of Unicode's bidirectional formatting characters (the marks, the
+/// embeddings and overrides, and the isolates), which can make text read in another
+/// order than it is stored.
+fn is_bidi_format(c: char) -> bool {
+    matches!(
+        c,
+        '\u{061C}' | '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'
+    )
 }
 
 /// How deep a scan looks below each search directory, as CLAP's search is recursive.
@@ -277,6 +294,16 @@ mod tests {
         assert!(!kind.name.chars().any(char::is_control));
         assert_eq!(kind.params[0].label, "Parameter 1");
         assert_eq!(kind.params[0].group.as_deref(), Some("Out"));
+    }
+
+    #[test]
+    fn plugin_text_drops_bidi_formatting() {
+        // An override that would show "evil.exe" as "exe.live", and each other mark,
+        // embedding and isolate.
+        let text = "\u{202E}exe.live\u{202C} a\u{200E}b\u{200F}c\u{061C}d\u{202A}e\u{202B}f\u{202D}g\u{2066}h\u{2067}i\u{2068}j\u{2069}";
+        assert_eq!(plugin_text(text), "exe.live  a b c d e f g h i j");
+        // Other text is kept as is, right-to-left letters included.
+        assert_eq!(plugin_text("  שלום Gain  "), "שלום Gain");
     }
 
     #[test]

@@ -294,7 +294,16 @@ engine's memory, not the block. Parameter descriptions with an unusable range or
 repeated id are dropped; a parameter change coming back (a control message or the
 block's ring) must name a described parameter and be finite and in range; a saved
 state over 2 MiB is ignored; and plugin-chosen names are made plain text and capped
-before they reach the UI, agents or the log (#351).
+before they reach the UI, agents or the log (#351). A WASM plugin's manifest `name` is
+treated the same way, and both drop bidirectional formatting characters (#977). A
+person's `plugin.grant` acknowledges the manifest request their client was last listed
+(#978, [ADR-0090](../adr/0090-a-grant-acknowledges-the-request-its-client-saw.md)). For
+a client that sends no `plugin.list` while its grant dialog is open and grants only once
+every list it sent has been answered and shown, that is the request the dialog showed,
+so an update loaded meanwhile still asks for its grant. The jstream UI does both: it
+holds re-reads back while the dialog is open, and keeps OK disabled while a list is on
+its way, so a list sent before the dialog opened redraws it first. A client that re-lists
+with its dialog open, or grants with a list unanswered, acknowledges its latest list.
 
 **Gaps:**
 - WASM (#348): [ADR-0069](../adr/0069-wasm-plugin-limits-and-capabilities.md) decided
