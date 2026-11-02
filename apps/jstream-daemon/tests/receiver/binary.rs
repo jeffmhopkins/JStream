@@ -199,7 +199,7 @@ async fn the_daemon_binary_streams_on_its_linux_backends() {
     .await;
     // The start is accepted, and then the pipeline opens its encoders: either it goes
     // active, or it fails and says why.
-    let mut failed = started.as_ref().err().map(|e| match e.protocol() {
+    let failed = started.as_ref().err().map(|e| match e.protocol() {
         Some(ProtocolError::ActionFailed { reason }) => reason.clone(),
         _ => format!("{e}"),
     });
@@ -215,7 +215,13 @@ async fn the_daemon_binary_streams_on_its_linux_backends() {
             Event::OutputStateChanged { output_id, state } if output_id.as_str() == "live" => {
                 match state {
                     OutputState::Active => active = true,
-                    OutputState::Failed => failed = Some(String::from("failed")),
+                    // The start was accepted and failed later: no reason comes with the
+                    // event, so say where to look rather than blame the encoder.
+                    OutputState::Failed => panic!(
+                        "the output failed after `output.start` was accepted; the reason is \
+                         in the daemon's log, {}",
+                        dir.join("logs").display()
+                    ),
                     _ => {}
                 }
             }

@@ -196,7 +196,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | `--effects-dir <dir>` | The folder of WGSL effect packs, one pack folder each, that the engine loads at startup and reloads when they change (`Engine::watch_effect_packs`, [jstream-core › Design](../../crates/jstream-core/README.md#design)). Each effect is a video filter kind, `<pack>/<effect>`. A missing folder holds no packs, and is watched for packs to appear. Default: `effects` in the platform data directory; without a data directory, no packs load. |
 | `--plugin-dir <dir>` | Where installed WASM plugins and their grants are saved (`plugins.json`) and loaded from at startup, created if missing ([ADR-0076](../../docs/adr/0076-saved-wasm-plugins-and-manifest-requests.md)). A file there that can't be read, or that a newer version wrote, is logged at `error` and left as it is, and plugins aren't loaded or saved that run. Default: `plugins` in the platform data directory; without a data directory, plugins aren't saved. |
 | `--ui-dir <dir>` | Serves the web UI's built files (`trunk build`'s `dist`) from this directory at `http://127.0.0.1:<port>/`. The browser asks for a user name and password: the password is the token (see **Web UI** below). A path that isn't a directory fails with exit code 1, before the token or collection file is written. Default: no UI. |
-| `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. On Windows and macOS it has no target, so starting it fails: create outputs with `output.create` instead. |
+| `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. Where the daemon is live (Windows, macOS and 64-bit Linux) it has no target, so starting it fails: create outputs with `output.create` instead. |
 | `--log-dir <dir>` | Where the log files, crash reports and the audit log go, created (with its parents) if missing. Default: `logs` in the platform data directory (see **Log files** below). |
 | `--log-level <spec>` | The log filter, in `RUST_LOG`'s syntax, which it overrides. |
 | `--youtube-client <path>` | Windows, for developers: a Google OAuth client to use for YouTube sign-in instead of JStream's built-in one, the JSON Google Cloud gives for a "Desktop app" client (see **YouTube** below). Default: the `JSTREAM_YOUTUBE_CLIENT_ID` and `JSTREAM_YOUTUBE_CLIENT_SECRET` environment variables, else the built-in client. |
@@ -287,12 +287,17 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   or a secret set without an ID, is a startup failure (exit 1); the message names the
   file but never its contents or the secret
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
-- **Going live (Windows and macOS).** `output.create` with an RTMP(S) server URL, then
-  `output.set_key` (stored in Windows Credential Manager, or the login keychain on
-  macOS), then `output.start`
-  connects and streams. A start fails with `action_failed` and a reason that says what
-  to fix when the output has no target (a `--output` placeholder), no stream key, or
-  the key can't be read. Elsewhere, `output.start` only steps the placeholder state
+- **Going live (Windows, macOS and 64-bit Linux).** `output.create` with an RTMP(S)
+  server URL, then `output.set_key` (stored in Windows Credential Manager, the login
+  keychain on macOS, or on Linux the Secret Service, else the `0600` file
+  `~/.config/jstream/secrets`, [ADR-0071](../../docs/adr/0071-linux-secret-store.md)),
+  then `output.start` connects and streams. A start fails with `action_failed` and a
+  reason that says what to fix when the output has no target (a `--output`
+  placeholder), no stream key, or the key can't be read. On Linux it also fails, naming
+  both ways to get one, when the machine has no H.264 encoder: neither VA-API nor
+  Cisco's OpenH264, which is downloaded on the user's request
+  ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)). Elsewhere
+  (32-bit Linux and other Unixes), `output.start` only steps the placeholder state
   machine and `output.set_key` fails: there is no key store.
 - **Media Foundation (Windows).** On a Windows without Media Foundation (an N or KN
   edition without the Media Feature Pack, or Windows Server without its "Server Media
@@ -408,7 +413,8 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   startup. Creating them asks for no permission: that happens when a pipeline first
   uses them.
 - **Live on Linux** (`serve.rs`, 64-bit, as `LinuxBackends` is). Under
-  `cfg(target_os = "linux")` the engine gets the `jstream-platform-linux` backends
+  `cfg(all(target_os = "linux", target_pointer_width = "64"))` the engine gets the
+  `jstream-platform-linux` backends
   (`linux_backends`, [ADR-0060](../../docs/adr/0060-linux-platform-support.md)):
   - `LinuxBackends` for the session `Session::from_env` reports: `MonotonicClock`,
     `PortalCapture` (its restore tokens in the data directory's `capture-tokens`
@@ -436,8 +442,9 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   is JStream's own encoder. Creating the backends lists the audio devices and probes
   the VA-API render nodes, and opens nothing else: the portal is asked when a pipeline
   first captures. A headless machine has no screen capture, but streams every other
-  source. Startup fails only when neither PipeWire nor ALSA can be used; the error names
-  both reasons and how to fix them.
+  source. Startup fails when neither PipeWire nor ALSA can be used (the error names both
+  reasons and how to fix them), when there is no config folder for the key store, or
+  when the media clock can't be read.
 - **Elsewhere** (32-bit Linux and other Unixes) there are no backends yet, so outputs
   stay the placeholder state machine
   ([jstream-core › Design](../../crates/jstream-core/README.md#design)).

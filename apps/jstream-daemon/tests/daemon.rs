@@ -94,6 +94,12 @@ fn daemon() -> Command {
     command.env_remove("JSTREAM_TOKEN_FILE");
     command.env_remove("RUST_LOG");
     command.env_remove("XDG_DATA_HOME");
+    // Off the developer's desktop session: on Linux the daemon is live, so it would
+    // otherwise list their PipeWire devices and move its key store's file into their
+    // keyring (ADR-0071), and `XDG_CONFIG_HOME` would name their real config folder.
+    command.env_remove("XDG_CONFIG_HOME");
+    command.env_remove("XDG_RUNTIME_DIR");
+    command.env_remove("DBUS_SESSION_BUS_ADDRESS");
     command.env_remove("JSTREAM_YOUTUBE_CLIENT_ID");
     command.env_remove("JSTREAM_YOUTUBE_CLIENT_SECRET");
     command.env("HOME", &home);
