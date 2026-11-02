@@ -790,6 +790,27 @@ pub fn Scenes() -> impl IntoView {
                     .collection
                     .with_untracked(|c| c.as_ref().and_then(|c| folder_of(c, &id)));
                 let scene_folder = folder.clone();
+                // Whether a multiview shows it, set here as in Scene properties (DL-03).
+                let multiview = {
+                    let id = id.clone();
+                    let meta = studio.collection.with_untracked(|c| {
+                        c.as_ref()
+                            .and_then(|c| c.scene(&id))
+                            .map(|s| s.meta.clone())
+                    });
+                    let on = meta.as_ref().is_some_and(|m| m.show_in_multiview);
+                    Entry::item("Show in multiview", move || {
+                        if let Some(mut meta) = meta.clone() {
+                            meta.show_in_multiview = !on;
+                            send_all(vec![Edit::SceneSetMeta {
+                                scene_id: id.clone(),
+                                meta,
+                            }]);
+                        }
+                    })
+                    .checked(on)
+                };
+                let copy_id = id.clone();
                 menus.open(
                     &event,
                     vec![
@@ -826,11 +847,26 @@ pub fn Scenes() -> impl IntoView {
                             );
                         }),
                         crate::projector::pop_out(studio, Some(id.clone())),
+                        multiview,
                         Entry::Sep,
                         Entry::item("New scene", move || new_scene(scene_folder.clone())),
                         Entry::item("New keyframe", move || new_keyframe(keyframe_id.clone())),
                         Entry::item("New folder", move || new_folder(folder.clone())),
                         Entry::Sep,
+                        Entry::item("Copy", move || {
+                            if let Some(p) = pasting {
+                                p.copy_scene(&copy_id);
+                            }
+                        })
+                        .hint("Ctrl+C")
+                        .disabled_if(pasting.is_none()),
+                        Entry::item("Paste scene", move || {
+                            if let Some(p) = pasting {
+                                p.paste_scene();
+                            }
+                        })
+                        .hint("Ctrl+V")
+                        .disabled_if(!pasting.is_some_and(|p| p.clipboard.scene().is_some())),
                         {
                             let id = id.clone();
                             Entry::item("Duplicate scene", move || {
