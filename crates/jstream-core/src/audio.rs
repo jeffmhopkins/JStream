@@ -734,6 +734,9 @@ impl AudioRouting {
                 }
             }
             input.set_gain_db(audio.gain_db.get());
+            // Muted by its sends, its block still sounds; a compressor keyed on it must
+            // hear the mute (ADR-0028).
+            input.set_key_silenced(audio.muted);
             // Off, the program stage closes the source's input (`crate::audio_sources`);
             // until it has, the input is silent and unmetered here. A mute keeps the
             // sends but silences them, so the input's post-fader meter still reads
@@ -1015,6 +1018,8 @@ mod tests {
         // Muted: the send is kept but silent, and the input itself still plays to its
         // meter.
         assert_eq!(input.send(vod), Some(0.0));
+        // ... and a compressor keyed on it hears the mute.
+        assert!(input.key_silenced());
         // Following `when_shown` with no scene on program, it is not heard.
         assert_eq!(input.activity_gain(), 0.0);
         assert!((input.gain() - 1.995).abs() < 1e-3, "{}", input.gain());
@@ -1036,6 +1041,7 @@ mod tests {
         routing.sync(graph.state(), None, &inputs);
         let send = input.send(vod).expect("a send to vod");
         assert!((send - 0.501).abs() < 1e-3, "{send}");
+        assert!(!input.key_silenced());
 
         // Off mutes the input and drops its meter; deleting the bus removes its mixer bus.
         apply(

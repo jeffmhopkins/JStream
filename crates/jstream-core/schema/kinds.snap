@@ -822,6 +822,15 @@ source: crates/jstream-core/src/kinds.rs
         "default": 0.0,
         "label": "Makeup gain",
         "live": true
+      },
+      {
+        "id": "key",
+        "type": "source",
+        "media": "audio",
+        "default": null,
+        "label": "Duck under",
+        "description": "Another source whose sound drives the compressor instead of this one's, after its fader and mute: this source ducks while that one plays, such as music under a microphone. Nothing ducks while that source is muted or not playing. Changing it rebuilds the filter.",
+        "live": false
       }
     ]
   },

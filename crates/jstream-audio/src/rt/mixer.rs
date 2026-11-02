@@ -161,6 +161,10 @@ struct Slot {
     block: Box<[[f32; 2]]>,
     /// The activity gain applied to `block` at the end of the previous block.
     activity_now: f32,
+    /// How many keys deep it is: 0 for an input no keyed filter of its chain reads,
+    /// else one more than the deepest input it reads. Inputs run in this order, so a
+    /// key's block is ready before a filter reads it.
+    depth: usize,
 }
 
 #[derive(Debug)]
@@ -216,6 +220,51 @@ pub struct Mixer {
     bus_latency: usize,
     /// The master chain's latency, frames: the same on every bus.
     master_latency: usize,
+}
+
+/// The block of the input with id `id` among `inputs`, or an empty one (silence to a
+/// keyed filter) when it isn't there or is silenced as a key.
+fn key_block(inputs: &[Slot], id: u64) -> &[[f32; 2]] {
+    inputs
+        .iter()
+        .find(|slot| slot.id == id)
+        .filter(|slot| {
+            !slot
+                .shared
+                .key_silenced
+                .load(std::sync::atomic::Ordering::Relaxed)
+        })
+        .map_or(&[], |slot| &slot.block[..])
+}
+
+/// Puts `inputs` in key order: each input after every input its chain's keyed filters
+/// read (ADR-0028), so their blocks are ready first. Never allocates: depths relax in at
+/// most `inputs.len()` passes, which also bounds a cycle the engine should have refused.
+fn order_by_keys(inputs: &mut [Slot]) {
+    for slot in inputs.iter_mut() {
+        slot.depth = 0;
+    }
+    for _ in 0..inputs.len() {
+        let mut moved = false;
+        for i in 0..inputs.len() {
+            let depth = inputs[i]
+                .chain
+                .keys()
+                .filter_map(|key| inputs.iter().find(|slot| slot.id == key))
+                .map(|key| key.depth + 1)
+                .max()
+                .unwrap_or(0)
+                .min(inputs.len());
+            if depth > inputs[i].depth {
+                inputs[i].depth = depth;
+                moved = true;
+            }
+        }
+        if !moved {
+            break;
+        }
+    }
+    inputs.sort_unstable_by_key(|slot| slot.depth);
 }
 
 impl Mixer {
@@ -498,7 +547,10 @@ impl Mixer {
                 sum.fill([0.0; 2]);
             }
         }
-        for slot in inputs.iter_mut() {
+        for i in 0..inputs.len() {
+            // The inputs before this one have run: a key among them is ready.
+            let (done, rest) = inputs.split_at_mut(i);
+            let slot = &mut rest[0];
             let rep = slot.ring.read(frame, scratch);
             slot.ring.set_read_pos(end);
             if rep.started {
@@ -507,7 +559,7 @@ impl Mixer {
                     .add((n - rep.valid.min(n)) as u64);
             }
             let comp = input_latency - slot.chain.latency().min(input_latency);
-            slot.chain.process(scratch, comp);
+            slot.chain.process(scratch, comp, |id| key_block(done, id));
             let target = slot.shared.gain.effective();
             apply_gain(scratch, slot.gain_now, target);
             slot.gain_now = target;
@@ -540,7 +592,7 @@ impl Mixer {
             // fader and mute: only the filters differ between the two monitor taps.
             pre.copy_from_slice(sum);
             let comp = bus_latency - bus.chain.latency().min(bus_latency);
-            bus.chain.process(sum, comp);
+            bus.chain.process(sum, comp, |id| key_block(inputs, id));
             let target = bus.shared.gain.effective();
             apply_gain(sum, bus.gain_now, target);
             apply_gain(pre, bus.gain_now, target);
@@ -584,7 +636,7 @@ impl Mixer {
                 bus.fed = true;
             }
             post.copy_from_slice(sum);
-            bus.master.process(post, 0);
+            bus.master.process(post, 0, |id| key_block(inputs, id));
             zero_non_finite(post);
         }
         // Slot 0 is the master.
@@ -597,7 +649,8 @@ impl Mixer {
             } else {
                 tap.block.fill([0.0; 2]);
             }
-            tap.chain.process(&mut tap.block, 0);
+            tap.chain
+                .process(&mut tap.block, 0, |id| key_block(inputs, id));
             zero_non_finite(&mut tap.block);
             tap.pts = Some(pts.saturating_sub(tap.chain.latency() as i64));
         }
@@ -651,6 +704,7 @@ impl Mixer {
                         chain,
                         block,
                         activity_now: activity,
+                        depth: 0,
                     });
                 }
                 Command::Remove(id) => self.retire_id(id),
@@ -755,6 +809,7 @@ impl Mixer {
             }
         }
         if changed {
+            order_by_keys(&mut self.inputs);
             self.input_latency = self
                 .inputs
                 .iter()
@@ -1546,6 +1601,88 @@ mod tests {
             Err(AudioError::Removed)
         ));
         assert_eq!(m.latency_frames(), 0);
+    }
+
+    /// A keyed compressor ducks its input under another input's block from the same
+    /// mix, whichever was added first, on an input's chain and on a bus's; a muted key
+    /// ducks nothing, and a removed key reads as silence (ADR-0028's sidechain keys).
+    #[test]
+    fn a_keyed_compressor_ducks_under_another_input() {
+        use crate::filter::CompressorParams;
+        use crate::{FilterParams, FilterSpec};
+        let duck = CompressorParams {
+            threshold_db: -40.0,
+            ratio: 100.0,
+            knee_db: 0.0,
+            attack_ms: 0.0,
+            release_ms: 0.0,
+            makeup_db: 0.0,
+        };
+        let mut m = Mixer::new(config(480)).unwrap();
+        // The music is added first, so it would run before its key without the order.
+        let (mut music, cm) = m.add_input(stereo48()).unwrap();
+        let (mut voice, cv) = m.add_input(stereo48()).unwrap();
+        feed(&mut music, 0.25, 0.25, 1.0);
+        feed(&mut voice, 0.5, 0.5, 1.0);
+        // Only the music is heard on the master.
+        cv.set_send(BusId::MASTER, 0.0);
+        let keyed = cm
+            .add_filter(FilterSpec::KeyedCompressor {
+                params: duck,
+                key: Some(cv.id()),
+            })
+            .unwrap();
+        let mut out = vec![0.0; 960];
+        let mut frame = 40_000;
+        let mut mix = |m: &mut Mixer, out: &mut [f32]| {
+            m.mix(frame, out).unwrap();
+            frame += 480;
+        };
+        mix(&mut m, &mut out);
+        mix(&mut m, &mut out);
+        // The voice at −6 dBFS is 34 dB over: ducked by about 34 dB.
+        let ducked = out[0].abs();
+        assert!(ducked < 0.25 * 0.05, "ducked under the voice: {ducked}");
+
+        // A muted voice keys nothing: its block is silent.
+        cv.set_muted(true);
+        mix(&mut m, &mut out);
+        mix(&mut m, &mut out);
+        assert_frames(&out, [0.25, 0.25], "a muted key ducks nothing");
+        cv.set_muted(false);
+        mix(&mut m, &mut out);
+        mix(&mut m, &mut out);
+        assert!(out[0].abs() < 0.25 * 0.05, "ducked again");
+        // Silenced as a key (the engine's mute by sends), it keys nothing either.
+        cv.set_key_silenced(true);
+        mix(&mut m, &mut out);
+        mix(&mut m, &mut out);
+        assert_frames(&out, [0.25, 0.25], "a key silenced ducks nothing");
+        cv.set_key_silenced(false);
+
+        // On a bus: the music sends to it, the voice doesn't.
+        assert!(keyed.remove());
+        let bus = m.add_bus().unwrap();
+        cm.set_send(bus.id(), 1.0);
+        cm.set_send(BusId::MASTER, 0.0);
+        bus.add_filter(FilterSpec::KeyedCompressor {
+            params: duck,
+            key: Some(cv.id()),
+        })
+        .unwrap();
+        mix(&mut m, &mut out);
+        mix(&mut m, &mut out);
+        let on_bus = m.bus_block(bus.id()).unwrap()[0].abs();
+        assert!(on_bus < 0.25 * 0.05, "the bus is ducked: {on_bus}");
+
+        // The key gone, the filter reads silence.
+        assert!(cv.remove());
+        mix(&mut m, &mut out);
+        mix(&mut m, &mut out);
+        let open = m.bus_block(bus.id()).unwrap()[0];
+        assert!((open - 0.25).abs() < 1e-4, "no key, no ducking: {open}");
+        // Its parameters are a compressor's.
+        let _ = FilterParams::Compressor(duck);
     }
 
     /// A chain with latency (a limiter's look-ahead) delays the other inputs and buses

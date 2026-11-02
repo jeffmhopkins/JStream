@@ -82,6 +82,9 @@ pub(crate) struct InputShared {
     /// The activity gain, 0..=1, applied after the fader and meter and before the sends
     /// (ADR-0028's audio that follows the program).
     pub(crate) activity: AtomicF32,
+    /// Whether a keyed filter reading this input hears silence instead of its block
+    /// ([`InputControl::set_key_silenced`](crate::InputControl::set_key_silenced)).
+    pub(crate) key_silenced: AtomicBool,
     /// The input's row of the send matrix (post-fader).
     pub(crate) sends: Sends,
     pub(crate) meter: Meter,
@@ -111,6 +114,7 @@ impl InputShared {
         Self {
             gain: GainParam::new(),
             activity: AtomicF32::new(1.0),
+            key_silenced: AtomicBool::new(false),
             sends: Sends::new(),
             meter: Meter::default(),
             packets: Counter::default(),

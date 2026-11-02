@@ -33,7 +33,9 @@ outputs that encode their own audio, and each bus's output before the master cha
 monitoring. Each input has an activity gain (audio that
 follows the program) before its sends. A bus monitor (ADR-0028's D22) hears the bus before or after its filters and
 plays on an output device through a monitor player; `jstream-core` opens one for each
-bus monitor in the collection (protocol 0.42) while the program stage runs. Sidechain keys in the mixer come later. The true-peak and loudness meters
+bus monitor in the collection (protocol 0.42) while the program stage runs. A
+compressor in any chain can take another input as its sidechain key, for ducking
+(ADR-0028); the mixer runs keys first. The true-peak and loudness meters
 ([Meters](#meters)) exist as DSP but don't run in the mixer yet; `jstream-core`'s
 mixer thread runs them on the master block the mixer returns.
 
@@ -73,8 +75,8 @@ stamped on the clock, and no device is the master.
   from what the Program mix shows. It ramps over one block with the sends, and a new
   input starts at 1.
 - `InputControl::add_filter` / `insert_filter` and the same on `BusControl` add a
-  filter (`FilterSpec`: gain, noise gate, compressor, limiter or delay, built at the
-  engine rate) to the chain, and return a `FilterControl` whose `set(FilterParams)`
+  filter (`FilterSpec`: gain, noise gate, compressor, keyed compressor, limiter or
+  delay, built at the engine rate) to the chain, and return a `FilterControl` whose `set(FilterParams)`
   edits it and `remove` removes it. They go through the command queue like inputs. At
   most 8 filters and 100 ms of latency per chain. `insert_host_filter(index, memory)`
   on `InputControl`, `BusControl`, `MasterControl` and `OutputTapControl` adds a CLAP
@@ -117,7 +119,15 @@ stamped on the clock, and no device is the master.
   after its chain, fader, mute and activity gain and before its sends: what that input
   contributes to the mix before each send's gain, which `jstream-core` draws for a
   `waveform` or `spectrum` source that names the source (ADR-0028 defines a sidechain
-  key's signal at the same point).
+  key's signal at the same point, and a keyed compressor reads it there).
+- `FilterSpec::KeyedCompressor { params, key }` is a compressor that detects on
+  `key`'s `input_block` for the same block instead of its own signal: ADR-0028's
+  sidechain key, so music ducks under a mic. `FilterParams::Compressor` edits it.
+  `key: None`, a removed key input, and a key that would only run later (a cycle,
+  which the engine refuses) read as silence, so nothing ducks.
+  `InputControl::set_key_silenced(true)` makes the input read as silence to every
+  keyed filter while its own block keeps sounding: `jstream-core` sets it while a
+  source is muted by turning its sends off.
 - `Mixer::monitor_block(bus, tap)` reads what a monitor on `bus` hears in the last block
   mixed, at its `MonitorTap`: `PostFilters` is `bus_block`, and `PreFilters` is the bus's
   sum before its filter chain, through the same fader and mute (so only the filters
@@ -147,7 +157,7 @@ stamped on the clock, and no device is the master.
 - `meter::TruePeakMeter` and `meter::LoudnessMeter`: the true-peak and BS.1770 loudness
   meters, not yet run by the mixer ([Meters](#meters)).
 - `filter::AudioFilter` and its kernels `Gain`, `NoiseGate`, `Compressor` (with a
-  sidechain key, which the mixer's chains don't offer yet), `Limiter` and `Delay`
+  sidechain key, run in a chain as `FilterSpec::KeyedCompressor`), `Limiter` and `Delay`
   ([Filters](#filters)).
 
 **Errors** (`AudioError`): an invalid configuration (including a loudness meter's
@@ -184,6 +194,9 @@ not start. No variant allocates.
   input and bus lines up, and `pts` moves back by the total, then returns when they are
   removed), a delay filter's output stamped later by its delay, and the limits and
   rejected edits;
+- sidechain keys: an input's keyed compressor ducking it under another input that
+  runs after it in the slot order, nothing ducked while the key is muted, silenced as a
+  key or removed, and a bus chain keyed on an input;
 - monitor taps: a bus before its filters and after them, both through its fader and
   mute and before the master chain, silent when muted, and gone with the bus;
 - monitors (`monitor.rs`): a 48 kHz device playing the bus at its level with no
@@ -376,6 +389,17 @@ value the mixer applies with the kernel's own setter, after the control plane ha
 checked its kind and range. The control plane keeps a record of each chain's filters
 for that check, so it never reads the mixer's copy. Inserting or removing a filter
 takes effect at a block edge without a crossfade.
+
+**Sidechain keys** (ADR-0028). A keyed compressor names the input whose block drives
+its detector. After applying a block's commands, when an input or filter changed, the
+mixer gives each input a depth one more than its deepest key's, relaxed in at most one
+pass per input, and sorts the inputs by it in place (`sort_unstable_by_key`, no
+allocation), so every key runs before the inputs keyed on it. A cycle leaves its
+inputs at the cap and reads as silence to whichever runs first: the engine refuses
+cycles, so this only keeps a bad edit from mattering. An input's chain reads its key's
+`input_block` from the inputs already run this block, and a bus chain from any input.
+A key that is gone, silenced as a key (`key_silenced`) or not yet run is an empty
+block, which the compressor reads as silence.
 
 **Latency compensation.** Each chain's latency is the sum of its filters' (the
 limiters' look-ahead; a `Delay` filter is a deliberate shift and counts 0, per
@@ -615,13 +639,12 @@ The mixer runs them in each input's and bus's chain, with their latency compensa
 ([Real-time design](#realtime)). `tests/no_alloc.rs` runs all five under the
 allocation check: the gate and compressor on an input, gain, delay and limiter on the
 master bus's own chain, a limiter on another bus and input, gain, limiter and
-compressor in the master chain and an output tap's chain, and a keyed compressor on the
-mixed block.
+compressor in the master chain and an output tap's chain, keyed compressors on two
+inputs (a chain of keys three inputs long), and a keyed compressor on the mixed block.
 
 The master chain and output taps run the same kernels.
 
-**Not yet:** sidechain keys in the mixer's chains, and their settings in kind
-descriptors and the protocol. The kernels' cost in the mixer is measured in
+The kernels' cost in the mixer is measured in
 [Real-time design](#realtime) ([R-RT-005](../../docs/RULES.md#R-RT-005)).
 
 <a id="follow-ups"></a>
@@ -634,7 +657,8 @@ descriptors and the protocol. The kernels' cost in the mixer is measured in
   list changes through the command queue in [Real-time design](#realtime), not through
   an `arc-swap` snapshot, and so do buses; sends are atomics per input and bus slot.
   Filters change through the same queue. The snapshot ARCH gives each subsystem, for
-  the rest of the audio graph (keys and their processing order), is still later.
+  the rest of the audio graph, is still later; the order keys impose is kept by the
+  mixer itself (*Sidechain keys* in [Real-time design](#realtime)).
 - **A panic in `on_packet` or `Mixer::poll`**
   ([R-RT-006](../../docs/RULES.md#R-RT-006)). Nothing in this crate catches one or
   mutes the bus. The test R-RT-006 names, `scenarios::rt_panic_is_reported`, doesn't
@@ -645,8 +669,7 @@ descriptors and the protocol. The kernels' cost in the mixer is measured in
   thread that calls it, which must catch a panic there, mute the bus and raise the
   error event. `rt_panic_is_reported` lands with that engine thread.
 - **The rest of the audio model** ([ADR-0028](../../docs/adr/0028-audio-model-v2.md)):
-  sidechain keys in the mixer's chains (the compressor
-  has one; the mixer needs the key's source processed first), running the true-peak and
+  running the true-peak and
   loudness meters in the mixer (for the
   master bus and subscribed buses and sources) with their meter-stream fields and
   `audio.reset_loudness`, and monitor devices that play `bus_block`; and render-side
