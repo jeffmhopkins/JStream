@@ -288,6 +288,9 @@ struct Rig {
     _engine: Arc<Engine>,
     control: InProcessControl,
     events: Arc<Mutex<Vec<Event>>>,
+    /// Per output, how many of its `stats.tick` entries there were when it last
+    /// started, so [`Rig::stream_for`] counts only the run in progress.
+    starts: Mutex<std::collections::HashMap<String, usize>>,
     video_encoder: &'static str,
     _fakes: Fakes,
     _pump: Pump,
@@ -324,6 +327,7 @@ impl Rig {
             _engine: engine,
             control,
             events,
+            starts: Mutex::default(),
             video_encoder,
             _fakes: fakes,
             _pump: pump,
@@ -370,6 +374,11 @@ impl Rig {
     }
 
     async fn start(&self, id: &str) {
+        let before = self.stats(id).len();
+        self.starts
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(id.to_owned(), before);
         self.action(Action::OutputStart {
             output_id: OutputId::new(id),
         })
@@ -454,11 +463,21 @@ impl Rig {
         }
     }
 
-    /// Waits for the output to have sent `seconds` of video by its own stats.
+    /// Waits for the output to have sent `seconds` of video by its own stats, in the run
+    /// since its last [`start`](Self::start). An earlier run's last entry doesn't count:
+    /// it would end the wait before a restarted output sent anything.
     async fn stream_for(&self, id: &str, seconds: u64) {
+        let since = self
+            .starts
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(id)
+            .copied()
+            .unwrap_or(0);
         self.until(&format!("{seconds} s of {id}"), |rig| {
             rig.stats(id)
-                .last()
+                .get(since..)
+                .and_then(<[OutputStatsInfo]>::last)
                 .is_some_and(|s| s.frames >= seconds * 30)
         })
         .await;
