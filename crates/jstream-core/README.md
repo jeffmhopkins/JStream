@@ -37,7 +37,9 @@ state machine. Contents:
   and `start_stats_heartbeat` (`stats.tick`'s load, below); `open_plugin_dir`
   (where installed WASM plugins are saved, ADR-0076), called once the engine is built;
   `scan_clap_plugins` adds the CLAP filter kinds; `watch_effect_packs` loads and
-  hot-reloads the WGSL effect packs (video filter kinds, below);
+  hot-reloads the WGSL effect packs (video filter kinds, below), and
+  `HANDLED_PANIC_THREADS` names the pack load thread, whose panics the engine catches,
+  for the apps' crash hook to leave out (#999);
   `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
   frame of a source; `output_stats` reads a running output's pipeline counters
   (`output_stats_of` names the output); `output_kind` reads a
@@ -1013,7 +1015,9 @@ X1). `Engine::watch_effect_packs(root)` watches a folder of pack folders with
 `jstream-effect-packs` thread polls every 500 ms while the engine lives. It is called
 once; a second call is logged and ignored. A pack whose load panics (naga parsing or
 validating untrusted WGSL) is one that failed to load: the watcher catches the panic
-around that pack, so the other packs keep loading and hot-reloading. Each effect is a
+around that pack, so the other packs keep loading and hot-reloading. The load runs on
+`jstream_effects::LOAD_THREAD`, which `HANDLED_PANIC_THREADS` lists, so the apps' crash
+hook writes no report for it (#999). Each effect is a
 `video_filter` kind, `<pack>/<effect>`, added to the graph's kinds, so `kind.list` and
 `kind.describe` report it and a video chain, a scene's or an item's effects take it. A
 poll that changes kinds applies them under the collection lock (`Graph::without_kinds`
@@ -1519,7 +1523,9 @@ revision it was made at (`SourceCopies`, `source_copies`), and made again only o
 revision has moved on: the collection changes only through edits, which move it, so a
 re-plan with no edit (a new frame, an installed asset, a timed wake) copies nothing,
 and loading a collection file forgets every copy. A source no longer previewed lets its
-copy go at the next re-plan. Its shots are kept beside the scenes'
+copy go at the next re-plan. The cost is memory: each previewed source keeps a whole
+copy of the collection (its state and kind descriptors, not the undo history) while a
+stream shows it, so the copies grow with the collection times the sources previewed. Its shots are kept beside the scenes'
 (`source_shots`), replaced only when what they draw changed, and read by the preview
 thread alone, which captures what they show as it does a draft's. Like a scene stream
 it looks its source up quietly, so it never makes the source shown or heard, and a

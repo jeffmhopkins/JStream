@@ -23,8 +23,8 @@ shadows a built-in kind ([ADR-0025](../../docs/adr/0025-typed-settings-kind-desc
 It depends on [`jstream-protocol`](../jstream-protocol/README.md) for kind descriptors and
 settings, [`jstream-render`](../jstream-render/README.md#filters) for the filter harness
 that draws an effect, `naga` (the exact version wgpu pins, with only `wgsl-in`) for WGSL, `toml`,
-`serde`/`serde_json`, `thiserror` and `tracing`. It opens no GPU device of its own, starts
-no threads and has no `unsafe`.
+`serde`/`serde_json`, `thiserror` and `tracing`. It opens no GPU device of its own and has
+no `unsafe`. Its one thread is each pack load's, below.
 
 **The manifest.** A `[pack]` table (`id`, `name`, optional `description`) and one or more
 `[[effect]]` tables (`id`, `name`, `version`, `shader`, optional `renames`), each with its
@@ -84,8 +84,10 @@ modification time and size (or absence, so a named shader that appears later is 
 and reloads a folder whose stamp changed. Other files in the folder (a `.git`, notes)
 are never read. A poll reports kinds added, changed or removed, for `kind.changed`, and
 the errors of packs that failed. A failed reload keeps the last good version live and is
-reported once. A load that panics (naga, on untrusted WGSL) is caught around that one
-pack and reported as `PackError::Panicked`, a failed load like any other, so the other
+reported once. Each pack loads on a scoped thread of its own named `LOAD_THREAD`
+(`jstream-pack-load`), joined before the poll goes on (or on the poll's own thread if it
+can't start). A load that panics (naga, on untrusted WGSL) is caught there, around that
+one pack, and reported as `PackError::Panicked`, a failed load like any other, so the other
 packs keep loading and the poll keeps every change it found; a test loads one pack with
 a loader that panics. A second folder with a pack ID that is already loaded is refused, and
 retried in the poll that frees the ID (the first folder removed, or its pack renamed).

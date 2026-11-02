@@ -32,7 +32,10 @@ Contents:
   `fn(&str)`) a redacted line naming the report. The crate itself never prints
   ([R-RS-005](../../docs/RULES.md#R-RS-005)); both apps write that line to stderr.
   The newest 10 reports are kept (`MAX_REPORTS`); other files in the folder, such as log
-  files and the audit log, are never touched.
+  files and the audit log, are never touched. A panic on a thread named in
+  `Program::handled` writes no report and calls no `notify`: the app's own code catches
+  that thread's panics and reports them (#999). Both apps pass
+  `jstream_core::HANDLED_PANIC_THREADS`, the effect-pack load thread.
 - `install_creating(dir, program, secrets, notify, create)` is `install` with the app's
   own `CreateFile` making each report (a new file, `AlreadyExists` if the name is taken,
   so the hook tries the next one). On Windows `create_new` leaves a report its folder's
