@@ -1,6 +1,6 @@
 //! Labels (spec-panels.md S4, S7, S8, S20 and I1): the chips a scene's or source's rows
 //! and the Inspector's header show, the popover under the row that puts labels on or
-//! takes them off, and the label manager, an inline card in the Scenes or Scene objects
+//! takes them off, and the label manager, an inline card in the Scenes or Sources
 //! panel, whichever "Edit labels…" was chosen from, that names, colours, gives icons to,
 //! adds and deletes labels. Labels are collection state (ADR-0024 §4): sources carry
 //! them, so a reference shares its original's, and scenes carry them too (ADR-0078).
@@ -199,7 +199,7 @@ pub fn carried(collection: &Collection, ids: &[LabelId]) -> Vec<LabelInfo> {
 }
 
 /// Where the label manager is open, provided as context by the shell: "Edit labels…"
-/// opens it in the Scenes panel for a scene, and in the Scene objects panel for a
+/// opens it in the Scenes panel for a scene, and in the Sources panel for a
 /// source, as the prototype opens it in the tree it was chosen from.
 #[derive(Clone, Copy)]
 pub struct LabelManager {
@@ -217,7 +217,7 @@ impl LabelManager {
         }
     }
 
-    /// Opens the manager in `panel` (Scenes or Scene objects) and shows that panel.
+    /// Opens the manager in `panel` (Scenes or Sources) and shows that panel.
     pub fn open(&self, panel: PanelId) {
         self.shown.set(Some(panel));
         if let Some(dock) = self.dock {

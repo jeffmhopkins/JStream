@@ -1,5 +1,5 @@
 // The right-click menus and the Add source dialog: the canvas's menus on the frame and on
-// the margin, the Scene objects panel's menu, moving through a menu with the keyboard,
+// the margin, the Sources panel's menu, moving through a menu with the keyboard,
 // and adding through the dialog. The mock engine lists no kinds, so the dialog offers the
 // Color type of the seed's Backdrop (placed again, not created) and Scene; creating a
 // source of a new kind is covered natively.
@@ -13,6 +13,13 @@ function menu(page) {
 /** The labels of the open menu's items, in order. */
 async function labels(page) {
   return menu(page).locator('.ctx-label').allTextContents();
+}
+
+/** The open menu's or submenu's entry labelled `name` exactly, whatever its role or hint. */
+function entry(page, name) {
+  return page
+    .locator('.context-menu .ctx-item')
+    .filter({ has: page.locator('.ctx-label').getByText(name, { exact: true }) });
 }
 
 /** Where canvas point (`x`, `y`) is on the screen. */
@@ -85,7 +92,7 @@ test('the arrow keys move through a menu, and a press outside closes it', async 
   await expect(menu(page)).toBeHidden();
 });
 
-test('the Scene objects panel adds a source as a reference', async ({ page, daemon }) => {
+test('the Sources panel adds a source as a reference', async ({ page, daemon }) => {
   await connect(page, daemon);
   const dialog = await openAddSource(page);
   await expect(dialog.getByText('Into “Main”')).toBeVisible();
@@ -132,7 +139,7 @@ test('a scene is nested once, and a nested one is not offered again', async ({ p
   await expect(dialog).toBeHidden();
 });
 
-/** The rows of the Scene objects panel, top of the stack first. */
+/** The rows of the Sources panel, top of the stack first. */
 function rows(page) {
   return page.locator('.sources-panel li.row');
 }
@@ -150,20 +157,22 @@ test('an item row has the item menu, which restacks and arranges', async ({ page
   await placeBackdropAgain(page);
   await rows(page).first().click({ button: 'right' });
   expect(await labels(page)).toEqual([
+    'Rename',
+    'Visible',
     'Properties…',
     'Edit filters…',
     'Labels',
     'Pop out',
     'Reference to original',
     'Independent clone',
+    'Copy',
+    'Paste',
     'Bring to front',
     'Bring forward',
     'Send backward',
     'Send to back',
-    'Center on canvas',
-    'Fit to canvas',
-    'Stretch to canvas',
-    'Reset rotation',
+    'Transform',
+    'Blending',
     'Clear crop',
     'Crop',
     'Duplicate as reference',
@@ -181,9 +190,10 @@ test('an item row has the item menu, which restacks and arranges', async ({ page
   await expect.poll(() => rev(page)).toBe(startRev + 1);
   await expect(rows(page).last()).toHaveClass(/selected/);
 
-  // Stretch to canvas, from the row's menu again.
+  // Stretch to canvas, from the row's menu's Transform submenu.
   await rows(page).last().click({ button: 'right' });
-  await menu(page).getByRole('menuitem', { name: 'Stretch to canvas' }).click();
+  await entry(page, 'Transform').hover();
+  await entry(page, 'Stretch to canvas').click();
   await expect(page.locator('.stage-overlay .readout text')).toHaveText('1920 × 1080');
 });
 
@@ -385,4 +395,86 @@ test('an arrow key pressed before the next menu is drawn still moves along the b
   await page.keyboard.press('ArrowLeft');
   await expect(dropdown('File').getByRole('menuitem', { name: 'Disconnect' })).toBeFocused();
   await expect(dropdown('Edit')).toHaveCount(0);
+});
+
+test('the item menu renames, hides, blends, copies and pastes, as OBS\'s does', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  const item = (name) => entry(page, name);
+
+  // Rename opens the row's name, as F2 does.
+  await rows(page).first().click({ button: 'right' });
+  await item('Rename').click();
+  await expect(page.locator('.sources-panel input.rename')).toBeFocused();
+  await page.keyboard.press('Escape');
+
+  // Visible is checked; choosing it hides the item, and again shows it.
+  await rows(page).first().click({ button: 'right' });
+  await expect(item('Visible')).toHaveAttribute('aria-checked', 'true');
+  let at = await rev(page);
+  await item('Visible').click();
+  await expect.poll(() => rev(page)).toBe(at + 1);
+  await rows(page).first().click({ button: 'right' });
+  await expect(item('Visible')).toHaveAttribute('aria-checked', 'false');
+  await item('Visible').click();
+  await expect.poll(() => rev(page)).toBe(at + 2);
+
+  // Blending lists the modes, Normal checked; Multiply sets it, as the Inspector shows.
+  await rows(page).first().click({ button: 'right' });
+  await item('Blending').hover();
+  await expect(item('Normal')).toHaveAttribute('aria-checked', 'true');
+  at = await rev(page);
+  await item('Multiply').click();
+  await expect.poll(() => rev(page)).toBe(at + 1);
+  await rows(page).first().click({ button: 'right' });
+  await item('Blending').hover();
+  await expect(item('Multiply')).toHaveAttribute('aria-checked', 'true');
+  await page.keyboard.press('Escape');
+
+  // Paste is off until Copy fills the clipboard; then it places the source again.
+  await rows(page).first().click({ button: 'right' });
+  await expect(item('Paste')).toBeDisabled();
+  await item('Copy').click();
+  await rows(page).first().click({ button: 'right' });
+  await item('Paste').click();
+  await expect(rows(page)).toHaveCount(2);
+});
+
+test('the scene menu copies and pastes the scene, and sets whether a multiview shows it', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  const scenes = page.locator('.scenes-panel li.row');
+  const item = (name) => entry(page, name);
+  await scenes.filter({ hasText: 'Intro' }).locator('.row-main').click({ button: 'right' });
+  await expect(item('Paste scene')).toBeDisabled();
+  const on = await item('Show in multiview').getAttribute('aria-checked');
+  const at = await rev(page);
+  await item('Show in multiview').click();
+  await expect.poll(() => rev(page)).toBe(at + 1);
+  await scenes.filter({ hasText: 'Intro' }).locator('.row-main').click({ button: 'right' });
+  await expect(item('Show in multiview')).toHaveAttribute('aria-checked', on === 'true' ? 'false' : 'true');
+  await item('Copy').click();
+  await scenes.filter({ hasText: 'Intro' }).locator('.row-main').click({ button: 'right' });
+  await item('Paste scene').click();
+  await expect(scenes).toHaveCount(3);
+});
+
+test('the Add source dialog\'s search narrows the types, and says so when none match', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  const dialog = await openAddSource(page);
+  const types = dialog.getByRole('listbox', { name: 'Source type' }).getByRole('option');
+  const all = await types.count();
+  const search = dialog.getByRole('textbox', { name: 'Search source types' });
+  // By name, in any case: the Color type, picked, with its description.
+  await search.fill('COLOR');
+  await expect(types).toHaveText(['Color']);
+  await expect(types.first()).toHaveAttribute('aria-selected', 'true');
+  await expect(dialog.locator('.add-desc')).toHaveText('A solid fill. Handy as a mask or matte.');
+  // By description: "nest" finds Scene.
+  await search.fill('nest');
+  await expect(types).toHaveText(['Scene']);
+  await search.fill('zebra');
+  await expect(types).toHaveCount(0);
+  await expect(dialog.locator('.add-types .placeholder')).toHaveText('No source type matches.');
+  await expect(dialog.getByRole('button', { name: 'Add', exact: true })).toBeDisabled();
+  await search.fill('');
+  await expect(types).toHaveCount(all);
 });

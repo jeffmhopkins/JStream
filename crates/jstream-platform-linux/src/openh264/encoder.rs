@@ -4,13 +4,19 @@
 //! unit (or none, for a skipped frame) before the call returns, already Annex B with start
 //! codes. It never reorders, so a packet's `dts` is its `pts`. Input is CPU frames in
 //! I420, passed to the library as they are, or NV12, whose chroma is split into two
-//! planes first (the library takes only I420).
+//! planes first (the library takes only I420). RGBA and BGRA, which the engine's
+//! compositor reads back, go through the platforms' shared converter to BT.709 limited
+//! NV12 first (`jstream_platform::nv12`), so the pixels match every other encoder's.
 
 use std::ffi::{c_int, c_void};
 use std::ptr::NonNull;
 use std::sync::Arc;
 
-use jstream_platform::media::{Codec, MediaTime, Packet, PixelFormat, Rounding, Timebase};
+use jstream_platform::media::{
+    Codec, ColorInfo, MediaTime, Packet, PixelFormat, Rounding, Timebase, VideoFrame,
+    VideoFrameInfo,
+};
+use jstream_platform::nv12::{RgbOrder, rgb_to_nv12};
 use jstream_platform::{
     CodecInfo, CodecRole, PlatformError, RateControl, VideoEncoder, VideoEncoderConfig,
     VideoSurface,
@@ -45,6 +51,9 @@ pub struct OpenH264Encoder {
     config: VideoEncoderConfig,
     /// Scratch U and V planes for NV12 input, allocated once.
     chroma: [Vec<u8>; 2],
+    /// For RGBA or BGRA input: the NV12 frame each one is converted into, allocated
+    /// once.
+    converted: Option<VideoFrame>,
     /// Where the library describes each frame's output.
     out: Box<FrameBsInfo>,
     packets: Vec<Packet>,
@@ -80,6 +89,16 @@ fn os(call: &'static str, rc: c_int) -> PlatformError {
     }
 }
 
+/// Where red, green and blue sit in `format`, for the input formats that are converted
+/// to NV12 first; `None` for the ones the library takes.
+fn rgb_order(format: PixelFormat) -> Option<RgbOrder> {
+    match format {
+        PixelFormat::Rgba8 => Some(RgbOrder::Rgba),
+        PixelFormat::Bgra8 => Some(RgbOrder::Bgra),
+        _ => None,
+    }
+}
+
 /// Bits per second from kilobits, within `int`.
 fn bps(kbps: u32) -> Result<c_int, PlatformError> {
     kbps.checked_mul(1000)
@@ -94,7 +113,7 @@ fn bps(kbps: u32) -> Result<c_int, PlatformError> {
 ///
 /// # Errors
 /// [`PlatformError::Unsupported`] for a codec other than H.264, an input format other
-/// than NV12 or I420, an odd frame size, a keyframe interval of 0, a bit rate that
+/// than NV12, I420, RGBA or BGRA, an odd frame size, a keyframe interval of 0, a bit rate that
 /// doesn't fit, or a VBR peak below its target.
 pub(super) fn params(config: &VideoEncoderConfig) -> Result<EncParamBase, PlatformError> {
     if config.codec != Codec::H264 {
@@ -102,10 +121,13 @@ pub(super) fn params(config: &VideoEncoderConfig) -> Result<EncParamBase, Platfo
             what: format!("{:?} encoding with OpenH264 (H.264 only)", config.codec),
         });
     }
-    if !matches!(config.input_format, PixelFormat::Nv12 | PixelFormat::I420) {
+    if !matches!(
+        config.input_format,
+        PixelFormat::Nv12 | PixelFormat::I420 | PixelFormat::Rgba8 | PixelFormat::Bgra8
+    ) {
         return Err(PlatformError::Unsupported {
             what: format!(
-                "{:?} input to OpenH264 (NV12 or I420 only)",
+                "{:?} input to OpenH264 (NV12, I420, RGBA or BGRA only)",
                 config.input_format
             ),
         });
@@ -172,10 +194,26 @@ impl OpenH264Encoder {
             .filter(|_| rc == 0)
             .ok_or_else(|| os("WelsCreateSVCEncoder", rc))?;
         let chroma_len = (config.size.width() / 2) as usize * (config.size.height() / 2) as usize;
-        let chroma = if config.input_format == PixelFormat::Nv12 {
+        let converts = rgb_order(config.input_format).is_some();
+        let chroma = if config.input_format == PixelFormat::Nv12 || converts {
             [vec![0; chroma_len], vec![0; chroma_len]]
         } else {
             [Vec::new(), Vec::new()]
+        };
+        let converted = if converts {
+            Some(
+                VideoFrame::zeroed(VideoFrameInfo {
+                    size: config.size,
+                    format: PixelFormat::Nv12,
+                    color: ColorInfo::default(),
+                    pts: MediaTime::new(0, Timebase::MILLIS),
+                })
+                .map_err(|e| PlatformError::Unsupported {
+                    what: format!("an NV12 frame for OpenH264's RGB input: {e}"),
+                })?,
+            )
+        } else {
+            None
         };
         // From here on, `Drop` uninitialises and destroys the encoder.
         let mut this = Self {
@@ -184,6 +222,7 @@ impl OpenH264Encoder {
             info: openh264_encoder_info(),
             config: *config,
             chroma,
+            converted,
             out: FrameBsInfo::zeroed(),
             packets: Vec::new(),
             keyframe_requested: false,
@@ -395,7 +434,24 @@ impl VideoEncoder for OpenH264Encoder {
                 ),
             });
         }
-        self.encode_cpu(&frame)
+        let Some(order) = rgb_order(info.format) else {
+            return self.encode_cpu(&frame);
+        };
+        // RGBA or BGRA: into the NV12 scratch, then encoded from there.
+        let mut converted = self.converted.take().ok_or(PlatformError::InvalidState {
+            what: "OpenH264Encoder::encode",
+            state: "no NV12 frame for RGB input",
+        })?;
+        let result = (|| {
+            let plane = frame.plane(0).ok_or(PlatformError::Unsupported {
+                what: "an RGB frame missing its plane".into(),
+            })?;
+            rgb_to_nv12(plane.data(), plane.stride(), order, &mut converted)?;
+            converted.set_pts(info.pts);
+            self.encode_cpu(&converted)
+        })();
+        self.converted = Some(converted);
+        result
     }
 
     fn poll(&mut self, out: &mut Vec<Packet>) -> Result<(), PlatformError> {

@@ -39,7 +39,7 @@ async function onScreen(page, x, y) {
   return { x: Math.round(x * m.a + m.e), y: Math.round(y * m.d + m.f) };
 }
 
-/** The seed's Backdrop row in Scene objects. */
+/** The seed's Backdrop row in Sources. */
 function backdrop(page) {
   return page.locator('.sources-panel li.row').filter({ hasText: 'Backdrop' });
 }

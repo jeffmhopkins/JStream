@@ -22,7 +22,7 @@ impl ColorKind {
                     live: true,
                     ..param(
                         "color",
-                        "Colour",
+                        "Color",
                         ParamType::Color { alpha: true },
                         json!("#000000ff"),
                     )
@@ -30,7 +30,7 @@ impl ColorKind {
                 param("width", "Width", size(), json!(1920)),
                 param("height", "Height", size(), json!(1080)),
             ],
-            ..kind("color", "Colour", true, false)
+            ..kind("color", "Color", true, false)
         })
     }
 }
@@ -116,7 +116,7 @@ fn color(settings: &Settings) -> Result<[u8; 4], SourceError> {
         .and_then(parse_color)
         .ok_or_else(|| SourceError::Setting {
             param: "color".into(),
-            reason: "must be a colour as `#rrggbb` or `#rrggbbaa`".into(),
+            reason: "must be a color as `#rrggbb` or `#rrggbbaa`".into(),
         })
 }
 
@@ -136,7 +136,7 @@ fn fill(size: FrameSize, rgba: [u8; 4]) -> Result<VideoFrame, SourceError> {
     let pixels =
         usize::try_from(u64::from(size.width()) * u64::from(size.height())).map_err(|_| {
             jstream_media::MediaError::Overflow {
-                what: "a colour frame",
+                what: "a color frame",
             }
         })?;
     Ok(rgba_frame(

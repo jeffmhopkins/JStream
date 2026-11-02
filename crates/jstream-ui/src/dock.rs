@@ -202,7 +202,7 @@ impl PanelId {
     pub fn title(self) -> &'static str {
         match self {
             PanelId::Scenes => "Scenes",
-            PanelId::Objects => "Scene objects",
+            PanelId::Objects => "Sources",
             PanelId::Inspector => "Inspector",
             PanelId::Mixer => "Audio mixer",
             PanelId::Outputs => "Outputs",
@@ -311,7 +311,7 @@ pub struct Layout {
 /// outer right.
 const SIZES: [f64; 8] = [260.0, 140.0, 300.0, 140.0, 170.0, 340.0, 190.0, 280.0];
 
-/// The default layout: Scenes over Scene objects on the left, the inspector over the
+/// The default layout: Scenes over Sources on the left, the inspector over the
 /// Filters and Transform panels (one group, Filters shown) on the right, and the mixer and
 /// the outputs (with Transitions as a second tab) along the bottom.
 pub fn editing() -> Arrangement {

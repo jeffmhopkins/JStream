@@ -1,7 +1,7 @@
 //! Copy and paste (KB-05, decision register D43). The clipboard is the page's own, not
-//! the system's: Ctrl+C on the canvas or a Scene objects row copies the selected items,
-//! and on a scene row copies the scene. Ctrl+V, or Paste in the empty canvas's and the
-//! Scene objects panel's menus, places the copied items' sources again in the shown
+//! the system's: Ctrl+C on the canvas or a Sources row, or the item menu's Copy, copies
+//! the selected items, and on a scene row (or its menu's Copy) copies the scene. Ctrl+V,
+//! or Paste in the item menu and the empty canvas's and the Sources panel's menus, places the copied items' sources again in the shown
 //! scene as references, each with the copied item's box, crop, visibility, opacity,
 //! blend, transition settings and effects. Into the scene they came from they land 40
 //! pixels right and down, as a duplicate does. Ctrl+V in the Scenes panel, or Paste

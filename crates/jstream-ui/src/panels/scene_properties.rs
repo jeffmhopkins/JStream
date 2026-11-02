@@ -127,7 +127,7 @@ pub fn scene_edits(
         .map(str::trim)
         .filter(|b| !b.is_empty());
     if background.is_some_and(|b| parse_rgba(b).is_none()) {
-        return Err("The background colour must be #rrggbb or #rrggbbaa.".into());
+        return Err("The background color must be #rrggbb or #rrggbbaa.".into());
     }
     if (draft.include_audio, background) != (before.include_audio, before.background.as_deref()) {
         let mut options = collection

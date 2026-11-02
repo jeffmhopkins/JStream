@@ -298,8 +298,16 @@ It has:
   pairing, so a paired microphone is one the engine can open. It holds the clock, portal
   capture (with a restore-token folder when given), the paired video devices, the audio
   backend and `VaapiCodecs`; `into_backends` adds the GPU interop and media decoders the
-  host supplies (`LinuxGpu` is this crate's GPU interop; it has no media decoders yet)
-  for the engine's `Backends`.
+  host supplies (`LinuxGpu` is this crate's GPU interop, and `NoMediaDecoders` the
+  stand-in until it has media decoders) for the engine's `Backends`. The daemon builds
+  its live engine this way.
+- **`NoMediaDecoders`** (`MediaDecoders`, `unbuilt.rs`): refuses every file as
+  `Unsupported`, naming [ADR-0072](../../docs/adr/0072-linux-media-file-decoding.md), so
+  a host builds a complete `Backends` and a media-file source fails with that reason
+  while the rest of the engine runs.
+- **`LinuxProcessCpu`** (`ProcessCpu`, `process.rs`): the process's CPU time from
+  `clock_gettime(CLOCK_PROCESS_CPUTIME_ID)`, user and system on every thread, for
+  `stats.tick`'s load.
 - **`probe_encoders`** opens each DRM render node (`/dev/dri/renderD*`) through libva and
   libva-drm, and records the best H.264 profile (High, then Main, then Constrained
   Baseline) its driver offers, then HEVC Main, each with its encode entry point (full,
@@ -365,7 +373,10 @@ It has:
   values, taken from Cisco's server by the `openh264-download` test; a pin without them
   makes `install` refuse before any request is made. **`HttpsFetch`** is the real `Fetch`:
   one `GET` over rustls with the OS trust store, no redirects. **`OpenH264Encoder`**
-  (`VideoEncoder`) takes CPU NV12 or I420 frames of even size, CBR or VBR (a peak at
+  (`VideoEncoder`) takes CPU NV12, I420, RGBA or BGRA frames of even size (RGBA and
+  BGRA, which the engine's compositor reads back, go through
+  `jstream_platform::nv12`'s shared converter to BT.709 limited NV12 first, into one
+  frame allocated when the encoder opens, so they match every other platform's pixels), CBR or VBR (a peak at
   least the target, set on its one spatial layer; OpenH264 enforces it only by skipping
   frames, which is off, so VBR encodes at the target rate) and a keyframe interval of at
   least one frame, and encodes each frame synchronously (camera real-time mode, no frame skipping, the configured
@@ -392,10 +403,10 @@ The engine starts each display and window source's capture with `start_with` and
 It calls `forget_source` when the source is deleted.
 
 Not here yet, in roughly the order they follow:
-- media-file decoders, which `LinuxBackends` leaves to the host;
-- an app keeping its stream keys and OAuth tokens in `LinuxSecrets`, the protocol field
-  that tells the UI the secret store's fallback is active, and the `jstream.toml`
-  setting that turns the fallback off (ADR-0071 §4, §5).
+- media-file decoders (ADR-0072), for which `NoMediaDecoders` stands in;
+- an app keeping its OAuth tokens in `LinuxSecrets` (the daemon keeps its stream keys
+  there), the protocol field that tells the UI the secret store's fallback is active,
+  and the `jstream.toml` setting that turns the fallback off (ADR-0071 §4, §5).
 
 The virtual camera is out of scope (`Backends::vcam` is `None` on Linux).
 

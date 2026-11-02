@@ -57,9 +57,10 @@ A new JStream starts empty, but for four sample labels (Intro / outro, Gameplay,
 and Sponsor) to rename, use or delete. What the program shows (and every output sends) is the scene
 on **program**, drawn on the canvas in the middle.
 
-1. In **Scenes**, right-click and choose **New scene**, then type its name.
-2. In **Scene objects**, right-click and choose **Add source…**. Pick a type: display or
-   window capture, a webcam, an audio input (your microphone), a media file, an image, a
+1. In **Scenes**, click **+** under the list (or right-click and choose **New scene**),
+   then type its name.
+2. In **Sources**, click **+** under the list (or right-click and choose **Add source…**).
+   Pick a type, or type in the search box to find one: display or window capture, a webcam, an audio input (your microphone), a media file, an image, a
    browser page, text, a colour, or an audio visualiser. Name it and press **Create**
    (or pick an existing source to reuse it); its properties open, so you can choose the
    display or window from the list of those open now, the device or the file. A display,
@@ -75,8 +76,10 @@ on **program**, drawn on the canvas in the middle.
    a click puts the scene on preview instead, and the button on its row, or
    **Transition** in the Transitions panel, takes it live.
 
-Ctrl+C and Ctrl+V copy sources from one scene to another, and **Duplicate scene** on a
-scene's right-click menu (or Ctrl+C then Ctrl+V on its row) copies the whole scene. A
+Ctrl+C and Ctrl+V (or **Copy** and **Paste** on a source's right-click menu) copy
+sources from one scene to another, and **Duplicate scene** on a scene's right-click menu
+(or **Copy** then **Paste scene**, or Ctrl+C then Ctrl+V on its row) copies the whole
+scene. A
 scene's **Properties** (double-click its row) also set the colour it is drawn over,
 which shows wherever no item covers it.
 
@@ -84,10 +87,10 @@ Panels can be moved, hidden and brought back from the **View** menu; **Layout** 
 and resets arrangements.
 
 To watch a scene, a source, the program or a multiview on another screen, choose
-**Pop out** on a scene's or an object's right-click menu, or a projector under **View**: each opens in a window of its
+**Pop out** on a scene's or a source's right-click menu, or a projector under **View**: each opens in a window of its
 own, or full screen. Drag a window to the monitor you want and double-click it to fill
-that screen; Esc closes it. A multiview tiles the scenes whose Properties have **Show
-in multiview** checked.
+that screen; Esc closes it. A multiview tiles the scenes with **Show in multiview** checked, in their
+Properties or on their right-click menu.
 
 <a id="live"></a>
 ## Going live

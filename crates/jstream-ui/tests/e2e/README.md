@@ -38,8 +38,9 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   Basic, the token as the password, as a person's browser does when the daemon serves
   the UI; the connect form's token field can then stay empty. `connect` opens the page
   and connects; `disconnect` disconnects through the header's File menu;
-  `openAddSource` opens the Add source dialog from the Scene objects panel's menu, by a
-  right-click just under its last row, and
+  `openAddSource` opens the Add source dialog from the Sources panel's menu, by a
+  right-click just under its last row (or under the empty scene's hint, since the tool
+  bar at the panel's foot opens no menu), and
   `nestScene` nests a scene through it; `rev` reads the revision the header last heard
   of; `showPanel` makes sure a docked panel's tab is the shown one; `describeKinds`
   routes the page's WebSocket so that `kind.list` and `kind.describe` answer for the
@@ -93,6 +94,14 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   name, not the scene) and Del removing one; selecting an item opens its properties. The mock engine lists no kinds and makes
   no delete plans, so new-kind sources, the properties form's fields and deletes are
   tested natively.
+- **Tool bars** (`tool-bars.spec.js`): the Scenes bar's arrows moving the selected
+  scene up and back down, off at either end; Add scene making a scene with its name
+  open, whose empty Sources list says how to add one; Scene properties and Scene
+  filters on the selected scene, and both off, with the arrows, for a keyframe, as Add source is. The Sources bar with nothing selected (only Add source
+  on); Add source opening the dialog, placing the Backdrop again; the arrows restacking
+  the selected item, each off at its end of the stack; Properties and Filters on it; Remove from scene taking it out. A
+  right-click on a bar opens no menu, and the panel menu still opens on an empty scene.
+  Delete scene needs `delete.plan`, so it is tested natively.
 - **Scene folders** (`folders.spec.js`): New folder from the panel's and a folder's menu,
   named in place; drags into a folder's middle, out beside a top-level row and before a
   folder, which a second client follows; folding by the caret at two depths; a search
@@ -163,12 +172,18 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 - **Menus and Add source** (`menus.spec.js`): the canvas's right-click menu on the
   frame (its items, Paste disabled, turning snapping off and Select all) and on the
   margin, which Escape closes; the arrow keys move through a menu, skipping a disabled
-  item and wrapping, Enter chooses, and a press outside closes it; the Scene objects
+  item and wrapping, Enter chooses, and a press outside closes it; the Sources
   panel's menu opens the Add source dialog, whose types start with the seed's audio
   inputs, and its Color type places the seed's Backdrop again as a reference 40 px
   down and right, selected (the mock lists no kinds, so Color can't create); a scene nests once and isn't offered again, and the backdrop
-  cancels the dialog. An item row's menu lists the item menu's lines and Delete source everywhere…, Send to back
-  restacks in one edit and Stretch to canvas fills the canvas; on the canvas the menu
+  cancels the dialog. Its search box narrows the types by name ("COLOR" leaves Color,
+  picked) or description ("nest" leaves Scene), shows "No source type matches." with
+  Add disabled when none match, and an empty search lists them all again. An item row's menu lists the item menu's lines and Delete source everywhere…, Send to back
+  restacks in one edit and Stretch to canvas, from the Transform submenu, fills the
+  canvas; the item menu's Rename opens the row's name, Visible hides and shows the item
+  with its check following, Blending's Multiply replaces the checked Normal, and Paste
+  stays off until Copy, then places the source again; a scene row's Show in multiview
+  toggles its check, and Copy then Paste scene adds a copy of the scene; on the canvas the menu
   ends with Select all, Duplicate as clone adds "Backdrop copy" selected, two selected
   items get a counted head with the duplicates disabled, and Remove from scene removes
   both; a placement of a shared source switches to an independent clone and back to a
@@ -291,7 +306,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   docked in the Right sidebar the strips start vertical, 64px wide, and the button
   flips them back; and, with `meterTicks`, the vertical meters filling upwards and the
   master strip's loudness and true-peak warning, announced only once over 0 dBTP.
-- **Labels** (`labels.spec.js`): the label manager, opened from the Scene objects
+- **Labels** (`labels.spec.js`): the label manager, opened from the Sources
   panel's filter, adding a label (its icon picker open on the tag), renaming it,
   choosing an icon and a colour, a second label taking the next swatch, and Done; a
   row's tag popover putting a label on the Backdrop and staying open, the row's and the

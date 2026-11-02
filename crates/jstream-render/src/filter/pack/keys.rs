@@ -80,7 +80,7 @@ pub(super) fn chroma_descriptor() -> KindDescriptor {
                 "similarity",
                 "Similarity",
                 400,
-                "How far in chroma from the key colour is removed, in thousandths.",
+                "How far in chroma from the key color is removed, in thousandths.",
             ),
             thousandths(
                 "smoothness",
@@ -109,7 +109,7 @@ pub(super) fn color_descriptor() -> KindDescriptor {
                 "similarity",
                 "Similarity",
                 80,
-                "How far in RGB from the key colour is removed, in thousandths.",
+                "How far in RGB from the key color is removed, in thousandths.",
             ),
             thousandths(
                 "smoothness",

@@ -86,13 +86,14 @@ Contents ([Design](#design) explains the choices):
   ungrouping they send, tested natively), `clipboard.rs` (copy and paste, KB-05: the
   page's own clipboard of items or a scene, and the batches Paste, Paste scene and
   Duplicate scene send, tested natively), `dialog.rs` (`Modal`,
-  the modal dialog frame) and `icons.rs` (`Icon`, the prototype's stroke icons).
+  the modal dialog frame) and `icons.rs` (`Icon`, the prototype's stroke icons, plus
+  the tool bars' own).
 - **Panels** (`panels/`): the scene list (`scenes.rs`, with its folders: the rows each
-  level shows and the edits a drop sends are tested natively), the sources list
-  (`sources.rs`), what those two share (`tree.rs`: the search box, the favourites and
-  labels filter, the star and drag reordering, with the matching and the drop's index
+  level shows and the edits a drop or the tool bar's arrows send are tested natively),
+  the sources list (`sources.rs`), what those two share (`tree.rs`: the search box, the
+  favourites and labels filter, the star, the tool bar and drag reordering, with the matching and the drop's index
   tested natively), labels (`labels.rs`: the chips, the tag button and its popover, the label manager
-  and the `LabelManager` context that opens it in the Scenes or Scene objects panel,
+  and the `LabelManager` context that opens it in the Scenes or Sources panel,
   with the edits they send to a scene or a source tested natively), the Inspector (`inspector.rs`: the selected item's box, 3D, crop,
   blending, scene switches and settings, or the selected scene's objects, uses and transitions, in
   sections whose folds `Folds` remembers by title), the
@@ -203,8 +204,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   item that left the scene is dropped, the next selected one becoming primary. The
   canvas edits the same scene and selects the same items, so a click on a box selects
   its row and opens its properties, and every selected item's row is highlighted.
-- **Scenes and sources.** The Scenes and Scene objects panels are the prototype's
-  trees (spec-panels.md 1 and 2). The scene list shows each
+- **Scenes and sources.** The Scenes and Sources panels are the prototype's
+  trees (spec-panels.md 1 and 2; the prototype calls the second Scene objects), each
+  with OBS's tool bar under its rows (`tree.rs`'s `ToolBar`: add, remove, properties,
+  filters, one step up and one down), which stays at the panel's foot while the rows
+  scroll. The scene list shows each
   folder level's folders in folder order, then its scenes in display order (ADR-0064),
   indented by depth, with a caret that folds a folder, and leaves out groups (ADR-0024). It marks the program scene
   "program". A click selects a scene and puts it on program (`scene.switch`, naming no
@@ -274,8 +278,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   sources lists their panels' menus, and a scene row its scene's (Show in preview,
   Rename, Transition in and out, Properties…, New scene, New keyframe, New folder and
   Delete scene work, as do a folder's own menu's, and Edit filters… shows the scene's
-  chain in the Filters panel; Pop out opens the scene in a projector window, and
-  Duplicate scene sends `clipboard.rs`'s copy of it). The
+  chain in the Filters panel; Pop out opens the scene in a projector window, Show in
+  multiview toggles the scene's flag (`scene.set_meta`), Copy and Paste scene do what
+  Ctrl+C and Ctrl+V do, and Duplicate scene sends `clipboard.rs`'s copy of it). A
+  Sources row's menu for one item starts with Rename, as F2. The
   Transition in and out submenus,
   on a scene row and on the canvas margin for the scene it shows
   (`studio::override_submenu`), start with "Default (<the default preset>)", checked
@@ -289,9 +295,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   unless it was selected and opens `item_menu.rs`'s menu for the selection: Properties
   (the Properties dialog), for one item a Labels submenu (each label checked while the
   source carries it, with its colour as the swatch, then Edit labels…), the Audio check
-  (`source.set_audio`), layer order
-  (`item.reorder`s that keep the selected items' order), Center, Fit and Stretch to
-  canvas and Reset rotation (`item.set_geometry`), Clear crop (`item.set_crop`, with
+  (`source.set_audio`), the Visible check (`item.set_visible`), Copy and Paste, layer order
+  (`item.reorder`s that keep the selected items' order), a Transform submenu of Center,
+  Fit and Stretch to canvas and Reset rotation (`item.set_geometry`), a Blending submenu
+  (`item.set_blend`), Clear crop (`item.set_crop`, with
   each item's uncropped extent as its box while its source's size is known), Crop
   (crop mode, for one item), Duplicate as reference
   (`item.add` of the same source, 40 pixels down and right, just above the original)
@@ -323,8 +330,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   backdrop cancel, and Enter presses the button marked `data-primary`. The Add source
   dialog (`panels/add_source.rs`, opened through `AddSourceDialog` context) lists the
   source kinds `kind.list` reports, under the prototype's groups, names, icons and
-  descriptions, plus the kinds of placed sources it didn't report, which can be
-  placed again but not created, and Scene. "Create new" sends `source.create` and
+  descriptions (Display capture's says "A whole monitor or screen.", naming no one
+  platform's API), plus the kinds of placed sources it didn't report, which can be
+  placed again but not created, and Scene. A search box above the list narrows it by
+  name, description or group (`type_matches`, tested natively), keeping the pick while
+  it is shown, else the first match. "Create new" sends `source.create` and
   `item.add` as one batch, with a box of the prototype's native size for the type,
   centred and scaled down to fit the canvas (ADR-0022's `fit` keeps the picture's
   aspect within it). An existing source is placed again 40 pixels right of and below
@@ -536,7 +546,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the canvas, outer columns, full-width top and bottom, sidebars, and above and below
   the canvas. A zone stacks groups (columns top to bottom, rows side by side); a group
   shows one panel with its title, or tabs. Panels are the prototype's eleven: Scenes,
-  Scene objects (`Sources`), the Inspector (`Inspector`, with `Pairing` and `Plugins` under it), the
+  Sources (`Sources`), the Inspector (`Inspector`, with `Pairing` and `Plugins` under it), the
   Transform, Filters, Live chat, Stream stats, Audio mixer, Outputs, Agent activity and
   Transitions (`StudioMode`); `panel_view` maps each to its component, and a new panel
   adds a `PanelId` and a line there. Live chat waits on the engine (YouTube sign-in),

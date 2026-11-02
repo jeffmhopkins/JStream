@@ -26,7 +26,7 @@ impl WaveformKind {
                 param("height", "Height", size(), json!(160)),
                 live(param(
                     "color",
-                    "Colour",
+                    "Color",
                     ParamType::Color { alpha: true },
                     json!("#ffffffff"),
                 )),

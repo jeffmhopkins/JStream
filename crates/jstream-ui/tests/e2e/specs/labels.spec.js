@@ -1,4 +1,4 @@
-// Labels: the label manager in the Scene objects panel (new, rename, colour, icon,
+// Labels: the label manager in the Sources panel (new, rename, colour, icon,
 // delete), a row's tag popover putting a label on the seed's Backdrop, the row's and the
 // Inspector's chips, the filter's labels, and the item menu's Labels submenu with each
 // label's colour in its swatch column; then the same on a scene (ADR-0078): the manager
@@ -18,9 +18,9 @@ function manager(page) {
   return objects(page).getByRole('group', { name: 'Labels' });
 }
 
-/** Opens the label manager from the Scene objects panel's filter. */
+/** Opens the label manager from the Sources panel's filter. */
 async function openManager(page) {
-  await objects(page).getByRole('button', { name: 'Filter' }).click();
+  await objects(page).getByRole('button', { name: 'Filter', exact: true }).click();
   await objects(page).getByRole('button', { name: 'Edit labels…' }).click();
   await expect(manager(page)).toBeVisible();
 }
@@ -105,7 +105,7 @@ test('a label goes on a source, shows as chips, filters rows and comes off', asy
   await expect(head.getByRole('button', { name: 'Labels for Backdrop' })).toBeVisible();
 
   // The filter's labels keep only rows that carry one; the count counts it.
-  await objects(page).getByRole('button', { name: 'Filter' }).click();
+  await objects(page).getByRole('button', { name: 'Filter', exact: true }).click();
   await objects(page).locator('.tree-pop').getByRole('button', { name: 'Overlay' }).click();
   await expect(objects(page).locator('.tree-filter-count')).toHaveText('1');
   await expect(objects(page).locator('li.row')).toHaveCount(1);
@@ -139,7 +139,7 @@ test('deleting a label takes it off its sources in one edit', async ({ page, dae
 
   // A label checked in the filter leaves it when deleted, so no row stays hidden.
   const rows = await objects(page).locator('li.row').count();
-  await objects(page).getByRole('button', { name: 'Filter' }).click();
+  await objects(page).getByRole('button', { name: 'Filter', exact: true }).click();
   await objects(page).locator('.tree-pop').getByRole('button', { name: 'New label' }).click();
   await expect(objects(page).locator('li.row')).toHaveCount(1);
   await page.keyboard.press('Escape');
@@ -158,7 +158,7 @@ test('a label goes on a scene from its row, and the Scenes panel filters and man
   await connect(page, daemon);
   const scenes = page.locator('.scenes-panel');
   // "Edit labels…" in the Scenes panel's filter opens the manager there.
-  await scenes.getByRole('button', { name: 'Filter' }).click();
+  await scenes.getByRole('button', { name: 'Filter', exact: true }).click();
   await scenes.getByRole('button', { name: 'Edit labels…' }).click();
   const sceneManager = scenes.getByRole('group', { name: 'Labels' });
   await expect(sceneManager).toBeVisible();
@@ -196,13 +196,13 @@ test('a label goes on a scene from its row, and the Scenes panel filters and man
   await expect(head.getByRole('button', { name: 'Labels for Intro' })).toBeVisible();
 
   // The Scenes panel's filter keeps the scenes carrying a checked label.
-  await scenes.getByRole('button', { name: 'Filter' }).click();
+  await scenes.getByRole('button', { name: 'Filter', exact: true }).click();
   await scenes.locator('.tree-pop').getByRole('button', { name: 'Intro / outro' }).click();
   await expect(scenes.locator('li.row')).toHaveCount(1);
   await scenes.getByRole('button', { name: 'Clear' }).click();
 
   // Deleting the label takes it off the scene in the same edit.
-  await scenes.getByRole('button', { name: 'Filter' }).click();
+  await scenes.getByRole('button', { name: 'Filter', exact: true }).click();
   await scenes.getByRole('button', { name: 'Edit labels…' }).click();
   at = await rev(page);
   await sceneManager.getByRole('button', { name: 'Delete label Intro / outro' }).click();
