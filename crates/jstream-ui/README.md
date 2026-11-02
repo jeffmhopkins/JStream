@@ -135,8 +135,10 @@ Contents ([Design](#design) explains the choices):
   stub that answers them as the server does.
 - **Plugins** (`plugins.rs`): `Plugins`, the WASM automation plugins section under the
   pairing panel in the Inspector, with its install and grant dialogs, the calls behind
-  them, and `GrantForm`, `suggested_id`, `not_granted` and the row texts, tested
-  natively.
+  them, and `GrantForm`, `ListGate` (no `plugin.list` while the grant dialog is open,
+  and no grant while a list is on its way), `suggested_id`, `not_granted` and the row
+  texts, tested natively, the section's re-reads and grants against a fake engine that
+  notes each list.
 - **Canvas** (`canvas/`): the canvas editor. It draws the selected scene's item boxes
   over that scene's live picture (the program mix while it is on program), edits their geometry with the pointer and the keyboard, and undoes and
   redoes ([Canvas](#canvas)).
@@ -661,7 +663,17 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **Plugins** (WA1, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md),
   [ADR-0076](../../docs/adr/0076-saved-wasm-plugins-and-manifest-requests.md)). The
   Plugins section reads `plugin.list` when it opens and shows once that answers; it
-  re-reads after each of its calls and on `plugin.state_changed` and `events.dropped`.
+  re-reads after each of its calls and on `plugin.state_changed` and `events.dropped`,
+  except while the grant dialog is open (`ListGate`). The engine takes a grant to
+  acknowledge the request this client was last listed
+  ([ADR-0090](../../docs/adr/0090-a-grant-acknowledges-the-request-its-client-saw.md)),
+  and the section makes that the request the dialog shows: a re-read waits until the
+  dialog closes (failed grants included) and goes out once then, and the dialog's OK,
+  and so Enter, is disabled while any list is on its way. A list sent before the dialog
+  opened that answers another request for its plugin draws the dialog again with it, so
+  the redraw always lands before OK can act. When the enable after a grant fails
+  because the plugin now asks for more, the dialog closes, the list is read again, and
+  the dialog opens on what it asks for now with the engine's reason.
   Each plugin shows its manifest's name (the plugin's own text, shown as data), its
   state with why it is off, its ID and package path, what its manifest asks for that
   isn't granted, Permissions…, and Turn on (`plugin.enable`) when it is off. Install
