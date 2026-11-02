@@ -135,8 +135,10 @@ Contents ([Design](#design) explains the choices):
   stub that answers them as the server does.
 - **Plugins** (`plugins.rs`): `Plugins`, the WASM automation plugins section under the
   pairing panel in the Inspector, with its install and grant dialogs, the calls behind
-  them, and `GrantForm`, `suggested_id`, `not_granted` and the row texts, tested
-  natively.
+  them, and `GrantForm`, `ListGate` (no `plugin.list` while the grant dialog is open,
+  and no grant while a list is on its way), `suggested_id`, `not_granted` and the row
+  texts, tested natively, the section's re-reads and grants against a fake engine that
+  notes each list, or fails one.
 - **Canvas** (`canvas/`): the canvas editor. It draws the selected scene's item boxes
   over that scene's live picture (the program mix while it is on program), edits their geometry with the pointer and the keyboard, and undoes and
   redoes ([Canvas](#canvas)).
@@ -352,7 +354,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   screen's size in device pixels, at most 1920×1080, at 30 fps. The multiview shows
   program (with preview beside it while the page's studio mode, read from the browser's
   storage and followed as the workspace changes it, is on) over up to 8 scenes that are not groups and are marked "Show in
-  multiview", red-framed on program and green on preview. A double click fills the
+  multiview" (in the scene Properties dialog), red-framed on program and green on preview. A double click fills the
   screen (the Fullscreen API) or leaves it, Escape closes a projector that isn't full
   screen, and the pointer and the hint at the bottom hide after 2 s without moving. A
   window the browser doesn't open is reported in the problem bar; a full-screen one in
@@ -448,17 +450,21 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   ends the stream shows why.
 - **The scene Properties dialog** (`scene_properties.rs`) opens from a double click on a
   scene row, the row menu's Properties…, the canvas margin's Scene properties… and a
-  nested scene's item. It edits a draft of the name, Transition in and out and the
-  hotkey: the hotkey field takes the next key press as a chord (the modifiers in the
+  nested scene's item. It edits a draft of the name, Transition in and out, the
+  hotkey, the Background color, Show in multiview and Include its audio when nested: the hotkey field takes the next key press as a chord (the modifiers in the
   protocol's order, then the key's `code`; Backspace or Delete clears it, Tab,
   Escape and Enter keep their dialog meaning). OK sends what changed as one batch:
-  `scene.rename`, `scene.set_transitions`, and `hotkey.clear` of the old chord before
+  `scene.rename`, `scene.set_transitions`, `scene.set_meta` (the scene's labels, icon,
+  colour and favourite kept as the collection has them at OK), `scene.set_options` (the
+  nested audio switch and the background, [ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)),
+  and `hotkey.clear` of the old chord before
   `hotkey.set` of the new one, bound to a `scene.switch` with the preset the old binding
-  named (none for a first hotkey). A chord bound already is refused before sending, with
-  what it runs. The scene's hotkey is the first binding
-  whose action switches to it. Defaults clears the overrides and the hotkey. The engine
-  has no scene background colour, multiview or scene-wide "include its audio", so the
-  dialog leaves them out. On the right, in the source Properties dialog's shell, are the
+  named (none for a first hotkey). A chord bound already, or a background that isn't
+  `#rrggbb` or `#rrggbbaa`, is refused before sending, the chord with what it runs.
+  The background is a colour swatch, which keeps an alpha the text gives, beside the
+  text, blank for none; a keyframe scene's shows its parent's and is disabled. The scene's hotkey is the first binding
+  whose action switches to it. Defaults clears the overrides, the hotkey and the
+  background and checks both switches. Duplicate scene copies the scene's options with it. On the right, in the source Properties dialog's shell, are the
   scene's filters: the Filters panel's rows on its video chain, which apply at once (a
   keyframe shows its parent's).
 - **Filters** ([UI features › filters](../../docs/UI-FEATURES.md#filters)). The
@@ -469,7 +475,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   its settings come from the kind's descriptor, read once per kind and kept; a kind the
   engine doesn't describe shows its name alone. A filter with three settings or fewer
   opens the properties form under its row, any other opens the Filter settings dialog,
-  and a double-click always does; each field's change is a one-parameter
+  and a double-click always does: in the Filters panel, the panel opens the dialog of
+  the row the double-click's first click landed on (`double_click_target`, within
+  800 ms), as that click's fold can scroll the row from under the second, which
+  toggles nothing, and a first click anywhere else in the panel forgets that row (#984);
+  each field's change is a one-parameter
   `filter.set_settings`. The dialog applies every change at once and, on Cancel, Escape
   or the backdrop, sends one batch putting back the settings and the switch it opened
   with, including each one it sent whose change the engine hasn't reported yet; an
@@ -657,7 +667,18 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **Plugins** (WA1, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md),
   [ADR-0076](../../docs/adr/0076-saved-wasm-plugins-and-manifest-requests.md)). The
   Plugins section reads `plugin.list` when it opens and shows once that answers; it
-  re-reads after each of its calls and on `plugin.state_changed` and `events.dropped`.
+  re-reads after each of its calls and on `plugin.state_changed` and `events.dropped`,
+  except while the grant dialog is open (`ListGate`). The engine takes a grant to
+  acknowledge the request this client was last listed
+  ([ADR-0090](../../docs/adr/0090-a-grant-acknowledges-the-request-its-client-saw.md)),
+  and the section makes that the request the dialog shows: a re-read waits until the
+  dialog closes (failed grants included) and goes out once then, and the dialog's OK,
+  and so Enter, is disabled while any list is on its way. A list sent before the dialog
+  opened that answers another request for its plugin draws the dialog again with it, so
+  the redraw always lands before OK can act. When the enable after a grant fails,
+  for example because the plugin now asks for more or its module traps on load, the
+  dialog closes, the list is read again, and the dialog opens on what it asks for now
+  with the engine's reason.
   Each plugin shows its manifest's name (the plugin's own text, shown as data), its
   state with why it is off, its ID and package path, what its manifest asks for that
   isn't granted, Permissions…, and Turn on (`plugin.enable`) when it is off. Install

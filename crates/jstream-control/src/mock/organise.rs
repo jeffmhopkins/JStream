@@ -52,6 +52,9 @@ impl Collection {
                 folder_id,
             } => self.set_folder(scene_id, folder_id.as_ref()),
             Edit::SceneSetMeta { scene_id, meta } => self.set_scene_meta(scene_id, meta, at),
+            Edit::SceneSetOptions { scene_id, options } => {
+                self.set_scene_options(scene_id, options, at)
+            }
             Edit::LabelCreate {
                 label_id,
                 name,
@@ -269,6 +272,30 @@ impl Collection {
         Ok(vec![Edit::SceneSetFolder {
             scene_id: scene_id.clone(),
             folder_id: old,
+        }])
+    }
+
+    fn set_scene_options(
+        &mut self,
+        scene_id: &SceneId,
+        options: &jstream_protocol::SceneOptions,
+        at: usize,
+    ) -> Result<Vec<Edit>, ProtocolError> {
+        let si = self.existing_scene(scene_id)?;
+        if let Some((name, reason)) = options.problem() {
+            return Err(invalid(at, name, reason));
+        }
+        if options.background.is_some() && self.scenes[si].variant_of.is_some() {
+            return Err(invalid(
+                at,
+                "background",
+                "a keyframe scene shows its parent's background",
+            ));
+        }
+        let old = std::mem::replace(&mut self.scenes[si].options, options.clone());
+        Ok(vec![Edit::SceneSetOptions {
+            scene_id: scene_id.clone(),
+            options: old,
         }])
     }
 

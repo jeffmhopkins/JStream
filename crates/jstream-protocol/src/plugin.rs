@@ -107,6 +107,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("scene.reorder", Class(E)),
     ("scene.set_folder", Class(E)),
     ("scene.set_meta", Class(E)),
+    ("scene.set_options", Class(E)),
     ("scene.set_transitions", Class(E)),
     ("scene.create_variant", Class(E)),
     ("item.add", Class(E)),
@@ -668,7 +669,8 @@ pub struct PluginInfo {
     /// Its package directory on the engine's machine, as `plugin.install` named it.
     pub path: String,
     /// What its manifest asks for, as the engine last read it. For a plugin disabled as
-    /// `needs_grant`, this is the update's request, which a `plugin.grant` acknowledges.
+    /// `needs_grant`, this is the update's request, which a `plugin.grant` from the
+    /// client it was listed to then acknowledges.
     pub request: PluginRequest,
     /// What a person granted it.
     pub grant: PluginGrant,

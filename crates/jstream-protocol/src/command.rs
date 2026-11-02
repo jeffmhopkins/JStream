@@ -26,6 +26,7 @@ use crate::organise::{SceneMeta, SourceMeta};
 use crate::output::{OutputKind, RtmpTarget, SecretString};
 use crate::plugin::PluginGrant;
 use crate::preview::{PreviewCodec, PreviewDraft};
+use crate::query::SceneOptions;
 use crate::settings::Settings;
 use crate::transition::{Easing, ItemTransition};
 use crate::youtube::{BroadcastPrivacy, BroadcastTransition};
@@ -731,6 +732,19 @@ pub enum Edit {
         #[serde(flatten)]
         meta: SceneMeta,
     },
+    /// Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the
+    /// Mixer when it is nested, and its background colour. Every field left out takes
+    /// its default. A keyframe scene has options of its own, except a background, which
+    /// it shows from its parent. `invalid` for a background that isn't a colour, or one
+    /// on a keyframe scene. Inverse: `scene.set_options` with the previous options.
+    #[serde(rename = "scene.set_options")]
+    SceneSetOptions {
+        /// The scene to change.
+        scene_id: SceneId,
+        /// The new options.
+        #[serde(flatten)]
+        options: SceneOptions,
+    },
     /// Adds a label, last in label order (ADR-0024 §4). Rejected with `invalid_argument`
     /// for an empty name, a colour that isn't `#rrggbb`, or an icon checked as
     /// `scene.set_meta`'s. Inverse: `label.delete`.
@@ -1075,6 +1089,7 @@ impl Edit {
             Edit::FolderDelete { .. } => "folder.delete",
             Edit::SceneSetFolder { .. } => "scene.set_folder",
             Edit::SceneSetMeta { .. } => "scene.set_meta",
+            Edit::SceneSetOptions { .. } => "scene.set_options",
             Edit::LabelCreate { .. } => "label.create",
             Edit::LabelUpdate { .. } => "label.update",
             Edit::LabelReorder { .. } => "label.reorder",
@@ -1405,10 +1420,12 @@ pub enum Action {
     },
     /// Replaces an installed plugin's grant, widening or narrowing it (0.35), never past
     /// what its manifest asks for (`invalid_argument`, as for `plugin.install`). The
-    /// person grants it knowing what the manifest asks for now, so a plugin disabled
-    /// because an update asks for more (`needs_grant`) can then be re-enabled. For a
-    /// person only, like `plugin.install`. Fails with `not_found` (entity `plugin`) for a
-    /// plugin that isn't installed.
+    /// person grants it knowing what `plugin.list` last showed their client the manifest
+    /// asks for (what it asks for now, if their client never listed it), so a plugin
+    /// disabled because an update asks for more (`needs_grant`) can then be re-enabled.
+    /// An update loaded after that list isn't acknowledged, and one that asks for more
+    /// still waits as `needs_grant`. For a person only, like `plugin.install`. Fails with
+    /// `not_found` (entity `plugin`) for a plugin that isn't installed.
     #[serde(rename = "plugin.grant")]
     PluginGrant {
         /// The plugin.

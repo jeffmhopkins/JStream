@@ -1030,3 +1030,108 @@ fn a_plugin_cant_list_the_plugins() {
         Err(ProtocolError::Forbidden { .. })
     ));
 }
+
+/// #978: a person's grant acknowledges the request their client was shown, not an update
+/// another client's `plugin.enable` loaded since, so that update still waits for a grant.
+#[test]
+fn a_grant_acknowledges_only_the_request_its_client_was_shown() {
+    let engine = Engine::new();
+    let person = connected(&engine);
+    let other = connected(&engine);
+    let mut events = person.events();
+    let package_dir = package("seen_request", TRAPS, None);
+    call(
+        &person,
+        install("plg_s", &package_dir, PluginGrant::default()),
+    )
+    .expect("installs");
+    assert_eq!(next_state(&mut events).1, PluginState::Enabled);
+    call(&person, create_scene("a")).expect("applies");
+    assert_eq!(next_state(&mut events).1, PluginState::Disabled);
+
+    // The person's dialog shows what it asks for: nothing.
+    assert_eq!(listed(&person)[0].request, PluginRequest::default());
+    // Meanwhile an update asks for `edit`, and another client's enable loads it.
+    fs::write(package_dir.join(MANIFEST_FILE), ASKS_EDIT).expect("manifest written");
+    assert!(matches!(
+        call(&other, enable("plg_s")),
+        Err(ProtocolError::ActionFailed { .. })
+    ));
+    assert_eq!(
+        next_state(&mut events).2,
+        Some(PluginDisabledReason::NeedsGrant)
+    );
+
+    // The person's grant goes through, but doesn't acknowledge `edit`, which they never saw.
+    call(&person, regrant("plg_s", PluginGrant::default())).expect("regrants");
+    match call(&person, enable("plg_s")) {
+        Err(ProtocolError::ActionFailed { reason }) => {
+            assert!(reason.contains("`edit`"), "{reason}");
+        }
+        other => panic!("not action_failed: {other:?}"),
+    }
+    // Once their client is shown the update, their grant acknowledges it.
+    let plugins = listed(&person);
+    assert_eq!(plugins[0].request.classes, [PluginClass::Edit].into());
+    assert_eq!(plugins[0].reason, Some(PluginDisabledReason::NeedsGrant));
+    call(&person, regrant("plg_s", PluginGrant::default())).expect("regrants");
+    assert_eq!(call(&person, enable("plg_s")), Ok(CallResult::action()));
+    assert_eq!(next_state(&mut events).1, PluginState::Enabled);
+}
+
+/// #977: a manifest's name reaches clients as plain text, capped as a CLAP plugin's is,
+/// and a name with nothing left is no name.
+#[test]
+fn a_manifest_name_reaches_clients_plain_and_capped() {
+    let engine = Engine::new();
+    let person = connected(&engine);
+    let mut events = person.events();
+    let name = format!("\u{202E}Gain\n\u{1b}[2J{}", "x".repeat(500));
+    let manifest = serde_json::json!({ "name": name }).to_string();
+    let named = package("plain_name", IDLE, Some(&manifest));
+    call(&person, install("plg_a", &named, PluginGrant::default())).expect("installs");
+    let (_, state, _, remote_name) = next_state(&mut events);
+    assert_eq!(state, PluginState::Enabled);
+    let remote_name = remote_name.expect("a name");
+    // 128 characters kept, then the space the override became trimmed.
+    assert_eq!(remote_name.chars().count(), 127, "{remote_name}");
+    assert!(remote_name.starts_with("Gain  [2J"), "{remote_name}");
+    assert_eq!(listed(&person)[0].remote_name, Some(remote_name));
+
+    let blank_manifest = serde_json::json!({ "name": " \u{202E}\n\t " }).to_string();
+    let blank = package("blank_name", IDLE, Some(&blank_manifest));
+    call(&person, install("plg_b", &blank, PluginGrant::default())).expect("installs");
+    assert_eq!(next_state(&mut events).3, None);
+    assert_eq!(listed(&person)[1].remote_name, None);
+}
+
+/// #977: a name in an edited plugins file is made plain too, before the package is read
+/// again.
+#[test]
+fn a_saved_name_is_made_plain_when_loaded() {
+    let dir = plugin_dir("saved_name");
+    let package_dir = package("saved_name", TRAPS, None);
+    {
+        let engine = opened(&dir);
+        let person = connected(&engine);
+        let mut events = person.events();
+        call(
+            &person,
+            install("plg_n", &package_dir, PluginGrant::default()),
+        )
+        .expect("installs");
+        assert_eq!(next_state(&mut events).1, PluginState::Enabled);
+        call(&person, create_scene("a")).expect("applies");
+        assert_eq!(next_state(&mut events).1, PluginState::Disabled);
+        // Saved as disabled, so the next start doesn't read its package again.
+        eventually("the disabled plugin saved", || {
+            saved(&dir)["plugins"][0]["disabled"] == "trap"
+        });
+    }
+    let mut file = saved(&dir);
+    file["plugins"][0]["name"] = "\u{2067}Evil\u{7}".into();
+    fs::write(dir.join(PLUGINS_FILE), file.to_string()).expect("plugins file written");
+    let engine = opened(&dir);
+    let person = connected(&engine);
+    assert_eq!(listed(&person)[0].remote_name.as_deref(), Some("Evil"));
+}

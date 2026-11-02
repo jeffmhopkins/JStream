@@ -132,9 +132,13 @@ The tests need `ffmpeg`, `ffprobe` and a Vulkan adapter, which
 when it is installed, and runs them one at a time, in about half a minute. They check:
 
 - **A stream on an encoder profile.** H.264 at the canvas size and 30 fps, a keyframe
-  at the profile's interval, and AAC stereo at 48 kHz with the microphone in it. The
-  decoded pixels match the scene, and the file is as long as the frames the stats
-  counted. Each `stats.tick` entry for the output has a rising uptime, growing totals,
+  every 30 frames, which from the second keyframe on is a second apart within 0.1 s,
+  stretched by at most the render ticks the run skipped (#1012), and AAC stereo at 48 kHz with the microphone in it. The
+  decoded pixels match the scene, and the file holds the frames the stats counted and
+  lasts as long as their timestamps span. That span, in ticks, is those frames plus the
+  render ticks the engine skipped over the run (`stats.tick` drops), within a second, so
+  a runner stall, which stretches the wall-clock pts and counts skipped ticks rather
+  than frames, doesn't fail it (#1007, #1010). Each `stats.tick` entry for the output has a rising uptime, growing totals,
   a bitrate that matches the bytes sent between ticks and stays at most a little above
   the profile's, no drops, and health `good`. The uptime counts from `output.start` and starts again at
   the next one.
@@ -242,8 +246,8 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   and the directories keep what they inherit.
 - **Crash reports.** A panic writes `crash-<UTC time>-<pid>-<n>.txt` into the log
   directory and prints `crash report: <path>` to stderr; the newest 10 are kept. An
-  effect pack whose shader panics the validator writes none: it is logged as a pack
-  that failed to load.
+  effect pack whose shader panics the validator writes none (unless its load thread
+  can't start): it is logged as a pack that failed to load.
   Nothing is uploaded ([R-SEC-004](../../docs/RULES.md#R-SEC-004)): attach the report
   to a bug report yourself. What it holds is in [Design](#design).
 - **Stopping.** Ctrl-C (SIGINT) or SIGTERM on Unix, Ctrl-C or Ctrl-Break on Windows:

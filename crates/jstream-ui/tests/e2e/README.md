@@ -269,8 +269,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   opening in place, a setting there as one more edit; on the output, Sharpen showing
   the first video filter's cost note, then its own Gain, counted on its FX button
   alone, whose eye and × edit the output's chain, not the master's; and the master's
-  filter in the Filter settings dialog on a double-click (the dblclick event alone, as
-  the panel scrolls), whose Remove deletes it.
+  filter in the Filter settings dialog on a real double-click, which opens it even
+  though the first click's toggle scrolls the taller panel (#984), and whose Remove
+  deletes it.
 - **Mixer** (`mixer.spec.js`, on the Audio mixer tab): the master card counting the
   seed's two channels, its Hear button enabled, its "FX 0" showing the program
   output's chain in the Filters panel, and its button (with its tooltip) unfolding the
@@ -342,7 +343,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   checks "Default (Cut)", lists the Cut preset with its kind, and sends
   `scene.set_transitions`, and Manage presets… shows the Transitions tab; a double click
   opens the scene's Properties dialog, whose hotkey field takes a chord, clears on
-  Backspace, and with a new name is saved by OK and read back by the dialog; the canvas margin's Scene properties… opens it for the shown scene; the
+  Backspace, and with a new name, a background colour with alpha, and Show in multiview and Include its audio when nested unchecked is saved by OK and read
+  back by the dialog (the swatch showing the colour without its alpha); the canvas margin's Scene properties… opens it for the shown scene; the
   Inspector's Scene switches send `item.set_transition` with the whole settings. The
   mock engine refuses the transition edits after the page has sent them.
 - **Projectors** (`projectors.spec.js`): the View menu's Program in a window opens a

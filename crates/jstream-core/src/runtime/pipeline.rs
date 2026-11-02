@@ -3827,9 +3827,14 @@ fn output_loop(job: OutputJob) {
     sink.finish();
 }
 
-/// Counts a packet the muxer `taken` in `sent`, unless the live link is down: the
-/// publish target drops it then, and counts it with the link's drops. A video frame
-/// lost that way is also counted for the health (#994).
+/// Counts a packet the muxer `taken` in `sent`, unless the link is not active: the
+/// publish target then drops it and counts it with the link's drops, or delivers it on
+/// a link that came back but isn't stable yet. A video frame either way is counted as
+/// lost for the health, so a flapping server stays `poor` (#994). `link` is the state
+/// the previous pass read, so this pass's packets count by the link before it changed,
+/// video and audio alike: those of the pass in which the link drops as sent, and the
+/// video frame of the pass in which it becomes `active` again as lost, though it
+/// reached the server.
 fn count_sent(
     sent: &SentCounters,
     packet: &jstream_media::Packet,
@@ -4853,5 +4858,36 @@ mod tests {
         };
         assert!(err.contains("did not open"), "{err}");
         drop(release);
+    }
+
+    /// `count_sent` counts what the muxer took as sent while the link is active, and a
+    /// video frame taken on any other link as lost for the health (#998 N6).
+    #[test]
+    fn count_sent_splits_sent_from_link_lost() {
+        use super::{LinkState, SentCounters, count_sent};
+        let at = MediaTime::zero(Timebase::MICROS);
+        let packet =
+            jstream_media::Packet::new(Codec::H264, true, at, at, vec![0u8; 7]).expect("packet");
+        let links = [
+            LinkState::Active,
+            LinkState::Reconnecting,
+            LinkState::Failed,
+        ];
+        for link in links {
+            for taken in [false, true] {
+                for video in [false, true] {
+                    let sent = SentCounters::default();
+                    count_sent(&sent, &packet, taken, link, video);
+                    let want = match (taken, link == LinkState::Active, video) {
+                        (false, _, _) => (0, 0, 0),
+                        (true, true, false) => (7, 0, 0),
+                        (true, true, true) => (7, 1, 0),
+                        (true, false, false) => (0, 0, 0),
+                        (true, false, true) => (0, 0, 1),
+                    };
+                    assert_eq!(sent.read(), want, "{link:?} taken={taken} video={video}");
+                }
+            }
+        }
     }
 }

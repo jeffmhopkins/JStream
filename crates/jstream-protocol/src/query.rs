@@ -787,6 +787,10 @@ pub struct SceneInfo {
     /// Its organisation metadata, each field omitted while it has its default.
     #[serde(flatten)]
     pub meta: SceneMeta,
+    /// What `scene.set_options` sets (since 0.65), each field omitted while it has its
+    /// default, so missing (also from an older server) parses as the defaults.
+    #[serde(flatten)]
+    pub options: SceneOptions,
     /// The scene this one is a keyframe scene of (ADR-0024 §2, protocol 0.39), whose
     /// items it shows. Omitted for a scene that is not a variant.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -805,6 +809,69 @@ pub struct SceneInfo {
     /// Its items, in stacking order: the first is at the bottom. Always empty for a
     /// keyframe scene, which shows its parent's.
     pub items: Vec<ItemInfo>,
+}
+
+/// A scene's options (ADR-0089): what `scene.set_options` sets, and what `state.get`
+/// reports beside the scene's other fields. Each field left out takes its default, so a
+/// scene with none set reports none of them. A keyframe scene has its own.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct SceneOptions {
+    /// Whether its sources reach the Mixer through the nested scene sources that show
+    /// it. Off, a scene placed inside another adds none of its audio there, whatever
+    /// those sources' own `audio.enabled`; it changes nothing while the scene itself is
+    /// on program. A group is only reached through nesting, so on a group it leaves
+    /// out its children's audio wherever the group shows. Omitted for `true`, the
+    /// default.
+    #[serde(skip_serializing_if = "is_true")]
+    pub include_audio: bool,
+    /// Its background colour (ADR-0024 §4, ADR-0089 §4, since 0.65): sRGB `#rrggbb`, or
+    /// `#rrggbbaa` with straight alpha, drawn under its items wherever the scene is
+    /// drawn, nested or not. Omitted for none, the default, which is transparent: where
+    /// a video mix shows a transparent pixel, the output is black. A keyframe scene
+    /// shows its parent's, so `scene.set_options` refuses one of its own, and a group
+    /// draws none: it is part of the scene that holds it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub background: Option<String>,
+}
+
+impl Default for SceneOptions {
+    fn default() -> Self {
+        SceneOptions {
+            include_audio: true,
+            background: None,
+        }
+    }
+}
+
+impl SceneOptions {
+    /// Whether every field has its default.
+    pub fn is_default(&self) -> bool {
+        *self == SceneOptions::default()
+    }
+
+    /// The background as straight RGBA8, or `None` without one or when it isn't a
+    /// colour.
+    pub fn background_rgba(&self) -> Option<[u8; 4]> {
+        self.background
+            .as_deref()
+            .and_then(crate::organise::parse_rgba)
+    }
+
+    /// The first field that isn't valid, and why: a background that isn't a colour.
+    pub fn problem(&self) -> Option<(&'static str, String)> {
+        let background = self.background.as_deref()?;
+        crate::organise::parse_rgba(background).is_none().then(|| {
+            (
+                "background",
+                "must be a colour as `#rrggbb` or `#rrggbbaa`".into(),
+            )
+        })
+    }
+}
+
+fn is_true(value: &bool) -> bool {
+    *value
 }
 
 /// One item, a placement of a source in a scene, as `item.list` and `state.get` report

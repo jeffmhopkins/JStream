@@ -406,6 +406,20 @@ impl Rig {
             .collect()
     }
 
+    /// The render ticks skipped so far, engine-wide, by the latest `stats.tick` (0 before
+    /// the first). The totals run for the engine's life, so a run's skips are the
+    /// difference across it.
+    fn render_ticks(&self) -> u64 {
+        self.events()
+            .into_iter()
+            .rev()
+            .find_map(|event| match event {
+                Event::StatsTick { drops, .. } => Some(drops.render_ticks),
+                _ => None,
+            })
+            .unwrap_or(0)
+    }
+
     /// Every `stats.tick` entry for the output, oldest first.
     fn stats(&self, id: &str) -> Vec<OutputStatsInfo> {
         self.events()
@@ -516,6 +530,7 @@ async fn a_stream_reaches_a_real_receiver_with_its_encoder_settings_and_stats() 
         .await;
 
     let receiver = Receiver::start(port, KEY, &dir.join("live.flv"));
+    let skipped_before = rig.render_ticks();
     let started = Instant::now();
     rig.start("live").await;
     rig.until("live active", |rig| {
@@ -533,6 +548,8 @@ async fn a_stream_reaches_a_real_receiver_with_its_encoder_settings_and_stats() 
     let streamed = started.elapsed().as_secs_f64();
     let stats = rig.stats("live");
     rig.stop("live").await;
+    // The stop's final tick, before `stopped`, holds the run's last skips.
+    let skipped = rig.render_ticks() - skipped_before;
     let file = receiver.finish();
 
     // The stats, tick by tick.
@@ -589,9 +606,34 @@ async fn a_stream_reaches_a_real_receiver_with_its_encoder_settings_and_stats() 
         (Some(48_000), Some(2)),
         "{p:?}"
     );
+    // The file is checked against the stats by its frame count, and its duration by
+    // the frames' own timestamps. The pts are wall clock and a stalled tick is counted
+    // in `render_ticks`, not `frames`, so a runner stall lengthens the file without
+    // adding frames: `frames / 30` is not its duration then (#1007), but the frames
+    // plus the ticks skipped over the run are, within a second (#1010).
     assert!(
-        close(p.duration, last.frames as f64 / 30.0, 1.0),
-        "the file holds what the stats counted: {p:?} vs {last:?}"
+        close(p.video_packets.len() as f64, last.frames as f64, 30.0),
+        "the file holds the frames the stats counted, within a tick: {} vs {last:?}",
+        p.video_packets.len()
+    );
+    let span = match (p.video_packets.first(), p.video_packets.last()) {
+        (Some((start, _)), Some((end, _))) => end - start + 1.0 / 30.0,
+        _ => 0.0,
+    };
+    assert!(
+        close(p.duration, span, 1.0),
+        "the file lasts as long as its frames: {span:.3} s vs {p:?}"
+    );
+    let ticks = p.video_packets.len() as f64 + skipped as f64;
+    eprintln!(
+        "{span:.3} s of video: {} frames and {skipped} skipped ticks",
+        p.video_packets.len()
+    );
+    assert!(
+        close(span * 30.0, ticks, 30.0),
+        "the frames and the skipped ticks fill the file's span: {span:.3} s, {} frames, \
+         {skipped} skipped ticks",
+        p.video_packets.len()
     );
     assert_eq!(
         p.video_packets.first().map(|(_, k)| *k),
@@ -601,7 +643,11 @@ async fn a_stream_reaches_a_real_receiver_with_its_encoder_settings_and_stats() 
     // The profile's interval is in frames (one second's worth), so it is checked in
     // frames, then in seconds from the second keyframe on: the render loop skips ticks
     // while lavapipe draws its first frames on a slow machine, which stretches the
-    // first gap. Those are engine-wide `render_ticks` drops, not the output's.
+    // first gap. Those are engine-wide `render_ticks` drops, not the output's. A runner
+    // stall later on stretches the gaps it falls in the same way, by the ticks it
+    // skipped, which `stats.tick` doesn't place in time (#1012). So each gap is a second
+    // within 0.1 s plus at most the run's skipped ticks, and together the gaps stretch
+    // by no more than those ticks: with none skipped, each is a second within 0.1 s.
     let spacing = p.keyframe_spacing();
     assert!(spacing.len() >= 3, "{spacing:?}");
     assert!(
@@ -609,9 +655,16 @@ async fn a_stream_reaches_a_real_receiver_with_its_encoder_settings_and_stats() 
         "a keyframe every 30 frames: {spacing:?}"
     );
     let gaps = p.keyframe_gaps();
+    let stall = skipped as f64 / 30.0;
     assert!(
-        gaps[1..].iter().all(|g| close(*g, 1.0, 0.1)),
-        "a keyframe every second once running: {gaps:?}"
+        gaps[1..].iter().all(|g| *g >= 0.9 && *g <= 1.1 + stall),
+        "a keyframe every second once running, or later by the {skipped} skipped ticks: \
+         {gaps:?}"
+    );
+    let stretch: f64 = gaps[1..].iter().map(|g| g - 1.0).sum();
+    assert!(
+        stretch <= stall + 0.1,
+        "the gaps stretch by at most the {skipped} skipped ticks: {stretch:.3} s, {gaps:?}"
     );
     let rgb = pixel(&file, 2.0, 160, 90);
     assert!(near(rgb, [255, 0, 0]), "the canvas is red: {rgb:?}");

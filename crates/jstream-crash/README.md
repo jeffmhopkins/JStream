@@ -35,7 +35,10 @@ Contents:
   files and the audit log, are never touched. A panic on a thread named in
   `Program::handled` writes no report and calls no `notify`: the app's own code catches
   that thread's panics and reports them (#999). Both apps pass
-  `jstream_core::HANDLED_PANIC_THREADS`, the effect-pack load thread.
+  `jstream_core::HANDLED_PANIC_THREADS`, the effect-pack load thread. The limit: a
+  `Drop` that panics while a handled thread unwinds aborts the process, and neither
+  panic writes a report: the hook skips every panic on that thread, and nothing
+  catches either.
 - `install_creating(dir, program, secrets, notify, create)` is `install` with the app's
   own `CreateFile` making each report (a new file, `AlreadyExists` if the name is taken,
   so the hook tries the next one). On Windows `create_new` leaves a report its folder's

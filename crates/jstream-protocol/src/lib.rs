@@ -83,7 +83,7 @@ pub use live::{
 };
 pub use mix::{MixInput, MixResolution, VideoMix, VideoMixInfo};
 pub use organise::{
-    FolderInfo, LabelInfo, MAX_ICON_LEN, SceneMeta, SourceMeta, check_color, check_icon,
+    FolderInfo, LabelInfo, MAX_ICON_LEN, SceneMeta, SourceMeta, check_color, check_icon, parse_rgba,
 };
 pub use output::{
     OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString,
@@ -100,7 +100,7 @@ pub use preview::{
 };
 pub use query::{
     CaptureTargetInfo, CaptureTargetKind, DeleteTarget, DeviceInfo, ItemInfo, MasterInfo,
-    PixelSize, Query, QueryResult, SceneInfo, SceneSummary, SourceInfo, SourceSize,
+    PixelSize, Query, QueryResult, SceneInfo, SceneOptions, SceneSummary, SourceInfo, SourceSize,
 };
 pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};

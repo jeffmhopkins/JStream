@@ -137,7 +137,7 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   in the CLI either, and neither are the transition edits (`transition.*`,
   `scene.set_transitions`, `item.set_transition`) or the folder, label and metadata
   edits (`folder.*`, `label.*`, `scene.set_folder`, `scene.set_meta`,
-  `source.set_meta`).
+  `scene.set_options`, `source.set_meta`).
   `item.set_source <item-id> <source-id>` switches an item to another source.
   `item.set_opacity <item-id> <0..1>` and `item.set_blend <item-id> <mode>` set an
   item's opacity and blend mode; the engine draws every mode (protocol 0.47).

@@ -968,7 +968,7 @@ impl Engine {
     /// Drops `client_id`'s undo and redo history and expires its open gestures: its
     /// session ended (ADR-0032). Each gesture's parameters show their collection values
     /// again, `live.ended` (`expired`) goes out after any values not sent yet, and each
-    /// gets an audit entry.
+    /// gets an audit entry. What `plugin.list` showed it is forgotten too.
     pub(crate) fn forget_client(&self, client_id: &ClientId) {
         let mut wake = Vec::new();
         let (ended, rev, client_name) = {
@@ -992,6 +992,8 @@ impl Engine {
         };
         wake_all(wake);
         self.audit_gestures(ended, rev, &client_name);
+        #[cfg(feature = "wasm-plugins")]
+        crate::plugins::automation::forget(self, client_id);
     }
 
     /// Records one audit entry for each gesture in `ended`, which ended at `rev`
@@ -1111,7 +1113,7 @@ impl Engine {
             } => Some(output_id.clone()),
             _ => None,
         };
-        let result = if let Some(result) = self.plugin_call(&call) {
+        let result = if let Some(result) = self.plugin_call(client_id, &call) {
             result
         } else if let Call::Action {
             action: Action::EffectEnable { kind_id },
@@ -1204,14 +1206,18 @@ impl Engine {
     /// or without the `wasm-plugins` feature. They run with no engine lock held: a plugin
     /// loads, and may call back into the engine, while its install waits.
     #[cfg(feature = "wasm-plugins")]
-    fn plugin_call(&self, call: &Call) -> Option<Result<CallResult, ProtocolError>> {
+    fn plugin_call(
+        &self,
+        client_id: &ClientId,
+        call: &Call,
+    ) -> Option<Result<CallResult, ProtocolError>> {
         match call {
-            Call::Action { action } => crate::plugins::automation::action(self, action),
+            Call::Action { action } => crate::plugins::automation::action(self, client_id, action),
             Call::Query {
                 query: Query::PluginList,
             } => Some(Ok(CallResult::Query {
                 result: QueryResult::PluginList {
-                    plugins: crate::plugins::automation::list(self),
+                    plugins: crate::plugins::automation::list(self, client_id),
                 },
             })),
             _ => None,
@@ -1219,7 +1225,7 @@ impl Engine {
     }
 
     #[cfg(not(feature = "wasm-plugins"))]
-    fn plugin_call(&self, _: &Call) -> Option<Result<CallResult, ProtocolError>> {
+    fn plugin_call(&self, _: &ClientId, _: &Call) -> Option<Result<CallResult, ProtocolError>> {
         None
     }
 
@@ -1772,14 +1778,10 @@ impl Engine {
             match state.outputs.begin(&output_id, true) {
                 Ok(step) => {
                     // What this run's frames are drawn as, for `stats.tick`'s output
-                    // stage: its session's mix and owner, or a camera's program frame.
-                    let mix = match &publish {
-                        Target::Vcam(..) => None,
-                        _ => key.0.mix.clone(),
-                    };
-                    state
-                        .started_frames
-                        .insert(output_id.clone(), (mix, key.0.owner.clone()));
+                    // stage: its session's mix (the program for a camera, `shown_mix`)
+                    // and owner.
+                    let frames = (key.0.mix.clone(), key.0.owner.clone());
+                    state.started_frames.insert(output_id.clone(), frames);
                     emit_output(&mut state, &output_id, step, &mut wake);
                 }
                 Err(err) => {
@@ -2280,8 +2282,8 @@ fn encode_key(graph: &Graph, output_id: &OutputId) -> EncodeKey {
         .encoding_of(output_id)
         .unwrap_or(EncoderProfile::DEFAULT);
     let mix = output
-        .and_then(|output| output.video_mix())
-        .and_then(|id| state.video_mix(id))
+        .and_then(|output| crate::snapshot::shown_mix(state, output))
+        .and_then(|id| state.video_mix(&id))
         .map_or(MixKey::PROGRAM, |mix| {
             let spec = mix.mix();
             MixKey {
@@ -2956,8 +2958,8 @@ impl State {
     /// edits no longer apply after one,
     /// fails with `undo_conflict` and is dropped, so the next undo reaches the step
     /// before it. Edits that fail only because an output is running (an output the step
-    /// would delete) fail with the graph's error, and the step stays: stop the output
-    /// and retry.
+    /// would delete, or move to another bus) fail with the graph's error, and the step
+    /// stays: stop the output and retry.
     fn history(
         &mut self,
         client_id: &ClientId,

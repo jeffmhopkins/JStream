@@ -189,9 +189,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `internal`, and its refused deletes carry no `blockers`, except a folder's, a
   label's and a scene's with keyframe scenes. The folder, label and metadata edits
   ([ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4: `folder.*`, `label.*`,
-  `scene.set_folder`, `scene.set_meta` and `source.set_meta`, in `mock/organise.rs`)
-  make the graph's checks with the protocol's own `check_color`, `check_icon` and
-  `SceneMeta::problem`: a missing parent, folder or label, a folder inside itself, a
+  `scene.set_folder`, `scene.set_meta`, `scene.set_options` and `source.set_meta`, in `mock/organise.rs`)
+  make the graph's checks with the protocol's own `check_color`, `check_icon`,
+  `SceneMeta::problem` and `SceneOptions::problem` (and refuse a keyframe scene's own
+  background): a missing parent, folder or label, a folder inside itself, a
   label listed twice, and no deleting a folder that holds a scene or folder or a label a
   source or scene carries (with the graph's `blockers`; scenes carry labels since
   [ADR-0078](../../docs/adr/0078-scenes-carry-labels.md)). Reads report the folders, labels and

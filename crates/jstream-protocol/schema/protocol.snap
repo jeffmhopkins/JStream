@@ -488,7 +488,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Replaces an installed plugin's grant, widening or narrowing it (0.35), never past\nwhat its manifest asks for (`invalid_argument`, as for `plugin.install`). The\nperson grants it knowing what the manifest asks for now, so a plugin disabled\nbecause an update asks for more (`needs_grant`) can then be re-enabled. For a\nperson only, like `plugin.install`. Fails with `not_found` (entity `plugin`) for a\nplugin that isn't installed.",
+          "description": "Replaces an installed plugin's grant, widening or narrowing it (0.35), never past\nwhat its manifest asks for (`invalid_argument`, as for `plugin.install`). The\nperson grants it knowing what `plugin.list` last showed their client the manifest\nasks for (what it asks for now, if their client never listed it), so a plugin\ndisabled because an update asks for more (`needs_grant`) can then be re-enabled.\nAn update loaded after that list isn't acknowledged, and one that asks for more\nstill waits as `needs_grant`. For a person only, like `plugin.install`. Fails with\n`not_found` (entity `plugin`) for a plugin that isn't installed.",
           "properties": {
             "grant": {
               "$ref": "#/$defs/PluginGrant",
@@ -3318,6 +3318,35 @@ source: crates/jstream-protocol/src/fixtures.rs
             },
             "type": {
               "const": "scene.set_meta",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the\nMixer when it is nested, and its background colour. Every field left out takes\nits default. A keyframe scene has options of its own, except a background, which\nit shows from its parent. `invalid` for a background that isn't a colour, or one\non a keyframe scene. Inverse: `scene.set_options` with the previous options.",
+          "properties": {
+            "background": {
+              "description": "Its background colour (ADR-0024 §4, ADR-0089 §4, since 0.65): sRGB `#rrggbb`, or\n`#rrggbbaa` with straight alpha, drawn under its items wherever the scene is\ndrawn, nested or not. Omitted for none, the default, which is transparent: where\na video mix shows a transparent pixel, the output is black. A keyframe scene\nshows its parent's, so `scene.set_options` refuses one of its own, and a group\ndraws none: it is part of the scene that holds it.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "include_audio": {
+              "description": "Whether its sources reach the Mixer through the nested scene sources that show\nit. Off, a scene placed inside another adds none of its audio there, whatever\nthose sources' own `audio.enabled`; it changes nothing while the scene itself is\non program. A group is only reached through nesting, so on a group it leaves\nout its children's audio wherever the group shows. Omitted for `true`, the\ndefault.",
+              "type": "boolean"
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene to change."
+            },
+            "type": {
+              "const": "scene.set_options",
               "type": "string"
             }
           },
@@ -6590,7 +6619,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         "request": {
           "$ref": "#/$defs/PluginRequest",
-          "description": "What its manifest asks for, as the engine last read it. For a plugin disabled as\n`needs_grant`, this is the update's request, which a `plugin.grant` acknowledges."
+          "description": "What its manifest asks for, as the engine last read it. For a plugin disabled as\n`needs_grant`, this is the update's request, which a `plugin.grant` from the\nclient it was listed to then acknowledges."
         },
         "state": {
           "$ref": "#/$defs/PluginState",
@@ -8099,6 +8128,13 @@ source: crates/jstream-protocol/src/fixtures.rs
     "SceneInfo": {
       "description": "One scene with its items, as `state.get` reports it.",
       "properties": {
+        "background": {
+          "description": "Its background colour (ADR-0024 §4, ADR-0089 §4, since 0.65): sRGB `#rrggbb`, or\n`#rrggbbaa` with straight alpha, drawn under its items wherever the scene is\ndrawn, nested or not. Omitted for none, the default, which is transparent: where\na video mix shows a transparent pixel, the output is black. A keyframe scene\nshows its parent's, so `scene.set_options` refuses one of its own, and a group\ndraws none: it is part of the scene that holds it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "color": {
           "description": "The scene's colour, sRGB as `#rrggbb`. Omitted for none.",
           "type": [
@@ -8131,6 +8167,10 @@ source: crates/jstream-protocol/src/fixtures.rs
             "string",
             "null"
           ]
+        },
+        "include_audio": {
+          "description": "Whether its sources reach the Mixer through the nested scene sources that show\nit. Off, a scene placed inside another adds none of its audio there, whatever\nthose sources' own `audio.enabled`; it changes nothing while the scene itself is\non program. A group is only reached through nesting, so on a group it leaves\nout its children's audio wherever the group shows. Omitted for `true`, the\ndefault.",
+          "type": "boolean"
         },
         "items": {
           "description": "Its items, in stacking order: the first is at the bottom. Always empty for a\nkeyframe scene, which shows its parent's.",

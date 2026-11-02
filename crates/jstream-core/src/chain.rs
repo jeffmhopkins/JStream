@@ -2062,6 +2062,75 @@ mod tests {
         );
     }
 
+    /// A virtual camera always draws the program at the canvas size, so its own chain is
+    /// planned over the program's master stage even when it names a video mix, and its
+    /// frame runs it (#1006).
+    #[test]
+    fn a_virtual_camera_naming_a_mix_runs_its_own_chain_over_the_program() {
+        let mut g = graph(&[]);
+        let vertical = VideoMixId::new("vertical");
+        let cam = OutputId::new("cam");
+        apply(
+            &mut g,
+            vec![
+                Edit::VideoMixCreate {
+                    mix_id: vertical.clone(),
+                    name: "Vertical".into(),
+                    mix: jstream_protocol::VideoMix {
+                        input: jstream_protocol::MixInput::Program,
+                        resolution: jstream_protocol::MixResolution {
+                            width: 1080,
+                            height: 1920,
+                        },
+                        fps_divisor: 1,
+                    },
+                },
+                Edit::OutputCreate {
+                    output_id: cam.clone(),
+                    kind: OutputKind::VirtualCam,
+                },
+                Edit::OutputSetVideoMix {
+                    output_id: cam.clone(),
+                    mix_id: Some(vertical),
+                },
+                multiply(output("cam"), "o", "#ff0000"),
+            ],
+        );
+        let plain = shot(&g);
+        assert_eq!(
+            plain
+                .stage_chain(&ChainOwner::Output(cam.clone()))
+                .map(|chain| &chain.input),
+            Some(&GpuKey::Mixed(None)),
+            "the camera's chain reads the program, not the mix it names"
+        );
+        apply(&mut g, vec![multiply(FilterOwner::Master, "m", "#ff00ff")]);
+        let staged = shot(&g);
+        assert_eq!(
+            staged
+                .stage_chain(&ChainOwner::Output(cam.clone()))
+                .map(|chain| &chain.input),
+            Some(&GpuKey::Filtered(ChainOwner::Master(None))),
+        );
+
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let canvas = staged.canvas().expect("canvas");
+        let pixels = draw_views(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            &staged,
+            &[(snapshot::View::output(None, Some(&cam)), canvas)],
+        );
+        assert_eq!(
+            pixels,
+            [RED],
+            "the master's and the camera's chains both ran"
+        );
+    }
+
     /// `stats.tick`'s chain cost counts the output stage for the running outputs only
     /// (ADR-0080): each staged mix's canvas-sized layer and its master chain once,
     /// however many outputs get it, and each output's own chain; an output with neither
@@ -2244,6 +2313,69 @@ mod tests {
             .collect();
         drop(cache.end_frame(compositor));
         pixels
+    }
+
+    /// The program scene's background is in the mix the output stage filters (ADR-0089
+    /// §4): an output with a master chain draws the background through it, where nothing
+    /// covers it, and one with none draws it as it is.
+    #[test]
+    fn the_output_stage_filters_the_programs_background() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let mut g = Graph::new().with_kinds(crate::kinds::builtin());
+        apply(
+            &mut g,
+            vec![
+                Edit::SceneCreate {
+                    scene_id: SceneId::new("main"),
+                    name: "Main".into(),
+                    role: None,
+                },
+                Edit::SceneSetOptions {
+                    scene_id: SceneId::new("main"),
+                    options: jstream_protocol::SceneOptions {
+                        background: Some("#ff00ff".into()),
+                        ..jstream_protocol::SceneOptions::default()
+                    },
+                },
+                record("rec"),
+            ],
+        );
+        let magenta = [255, 0, 255, 255];
+        let plain = shot(&g);
+        let canvas = plain.canvas().expect("canvas");
+        let pixels = draw_views(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            &plain,
+            &[(
+                snapshot::View::output(None, Some(&OutputId::new("rec"))),
+                canvas,
+            )],
+        );
+        assert_eq!(pixels, [magenta], "no chain: the background as it is");
+
+        apply(&mut g, vec![multiply(FilterOwner::Master, "m", "#0000ff")]);
+        let staged = shot(&g);
+        let pixels = draw_views(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            &staged,
+            &[
+                (snapshot::View::default(), canvas),
+                (
+                    snapshot::View::output(None, Some(&OutputId::new("rec"))),
+                    canvas,
+                ),
+            ],
+        );
+        assert_eq!(
+            pixels,
+            [magenta, [0, 0, 255, 255]],
+            "the editing canvas shows the background, the output it filtered"
+        );
     }
 
     /// The master stage's chain shows on every output's frame and not before it (the

@@ -24,15 +24,15 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use jstream_graph::{
-    Filter, Graph, Item as GraphItem, Placement as GraphPlacement, Scene as GraphScene, Source,
-    State,
+    Filter, Graph, Item as GraphItem, Output as GraphOutput, Placement as GraphPlacement,
+    Scene as GraphScene, Source, State,
 };
 use jstream_media::{FrameSize, MediaTime, PixelFormat, Rounding, VideoFrame};
 use jstream_platform::{ContextKey, GpuFrame};
 use jstream_protocol::{
     BlendMode, Canvas, ChainCost, Crop as ProtocolCrop, Edit, FilterChain, Glide, ItemGeometry,
-    ItemId, ItemTransition, OutputId, ProtocolError, QueryResult, Rev, SceneId, SceneRole,
-    SourceId, SourceKind, VideoMixId,
+    ItemId, ItemTransition, OutputId, OutputKind, ProtocolError, QueryResult, Rev, SceneId,
+    SceneRole, SourceId, SourceKind, VideoMixId,
 };
 use jstream_render::transition::{Endpoint, Track};
 use jstream_render::{
@@ -438,6 +438,10 @@ pub(crate) struct Shot {
     /// The scene on program (ADR-0030). `None` when the collection has no scene.
     program: Option<SceneId>,
     scenes: BTreeMap<SceneId, Vec<Placed>>,
+    /// The background each copied scene has, by scene, straight sRGB (ADR-0089 §4): a
+    /// keyframe scene's is its parent's, and a group, or a group's view, has none. A
+    /// scene without one isn't here, and is transparent.
+    backgrounds: BTreeMap<SceneId, Color>,
     /// The frames the copied scenes place, by source.
     frames: BTreeMap<SourceId, Frame>,
     /// The video chains of the sources they place that have one (ADR-0026), and of the
@@ -479,6 +483,26 @@ pub(crate) struct Shot {
 struct Transitioning {
     start: MediaTime,
     tracks: Vec<(GpuKey, Track)>,
+    /// The backgrounds it fades between, from the scene it leaves to the one it shows,
+    /// over `end_ms`.
+    backgrounds: (Color, Color),
+    end_ms: f32,
+}
+
+impl Transitioning {
+    /// The background shown under its tracks at `at`: the scene it leaves's, mixed
+    /// toward the shown scene's as the transition runs.
+    fn background(&self, at: MediaTime) -> Color {
+        let (from, to) = self.backgrounds;
+        if from == to || self.end_ms <= 0.0 {
+            return to;
+        }
+        match transition::elapsed_ms(self.start, at) / self.end_ms {
+            t if t >= 1.0 => to,
+            t if t <= 0.0 => from,
+            t => from.mix(to, t),
+        }
+    }
 }
 
 impl Default for Shot {
@@ -488,6 +512,7 @@ impl Default for Shot {
             canvas: Canvas::default(),
             program: None,
             scenes: BTreeMap::new(),
+            backgrounds: BTreeMap::new(),
             frames: BTreeMap::new(),
             chains: BTreeMap::new(),
             passes: Vec::new(),
@@ -504,6 +529,15 @@ impl Default for Shot {
 }
 
 impl Shot {
+    /// What the copied scene `id` clears to under its items: its background, or
+    /// transparent.
+    fn background(&self, id: &SceneId) -> Color {
+        self.backgrounds
+            .get(id)
+            .copied()
+            .unwrap_or(Color::TRANSPARENT)
+    }
+
     /// The passes that draw `mix`: the program's for `None`, for a mix that shows the
     /// program or the preview (which is the program until studio mode exists), and for a
     /// mix the collection no longer has.
@@ -705,6 +739,7 @@ impl PartialEq for Shot {
             && self.program == other.program
             && self.mixes == other.mixes
             && self.scenes == other.scenes
+            && self.backgrounds == other.backgrounds
             && self.frames == other.frames
             && self.chains == other.chains
             && self.captures == other.captures
@@ -943,9 +978,20 @@ fn plan_inner(
                 .into_iter()
                 .map(|(visual, track)| (key(&visual.image, &shot), track))
                 .collect();
+            let to = planner
+                .background(&running.to)
+                .unwrap_or(Color::TRANSPARENT);
+            // What was on screen when a transition was cut short has no background of
+            // its own: the shown scene's stands in.
+            let from = match &running.from {
+                transition::From::Scene(from) => planner.background(from),
+                transition::From::OnScreen(_) => Some(to),
+            };
             shot.transition = Some(Transitioning {
                 start: running.start,
                 tracks,
+                backgrounds: (from.unwrap_or(Color::TRANSPARENT), to),
+                end_ms: planned.end_ms,
             });
             shot.passes = schedule_tracks(&shot);
         } else {
@@ -1033,8 +1079,8 @@ fn plan_inner(
 
 /// The output stage's video chains (ADR-0080): the master stage's over the program and
 /// over each video mix, when it has an enabled filter, and each output's own over what
-/// the master stage made of the mix it shows, as its encoder session is keyed
-/// (`engine::encode_key`): its mix if the collection has it, else the program.
+/// the master stage made of the mix it shows ([`shown_mix`]), as its encoder session is
+/// keyed (`engine::encode_key`).
 fn plan_stages(state: &State, assets: &FilterAssets) -> BTreeMap<ChainOwner, Chain> {
     let master = state.master().chain(FilterChain::Video);
     let mut stages = BTreeMap::new();
@@ -1046,7 +1092,7 @@ fn plan_stages(state: &State, assets: &FilterAssets) -> BTreeMap<ChainOwner, Cha
         }
     }
     for output in state.outputs() {
-        let mix = output_mix(state, output.id());
+        let mix = shown_mix(state, output);
         let master_owner = ChainOwner::Master(mix.clone());
         let input = if stages.contains_key(&master_owner) {
             GpuKey::Filtered(master_owner)
@@ -1062,12 +1108,16 @@ fn plan_stages(state: &State, assets: &FilterAssets) -> BTreeMap<ChainOwner, Cha
     stages
 }
 
-/// The mix `output_id` shows, as its encoder session is keyed (`engine::encode_key`): its
-/// mix if the collection has it, else `None`, the program.
-fn output_mix(state: &State, output_id: &OutputId) -> Option<VideoMixId> {
-    state
-        .output(output_id)
-        .and_then(|output| output.video_mix())
+/// The video mix an output's frames are drawn from, as its encoder session is keyed
+/// (`engine::encode_key`) and its output stage planned ([`plan_stages`]): its mix if the
+/// collection has it, else the program (`None`). A virtual camera always shows the
+/// program at the canvas size, whatever mix it names (#1006).
+pub(crate) fn shown_mix(state: &State, output: &GraphOutput) -> Option<VideoMixId> {
+    if matches!(output.kind(), OutputKind::VirtualCam) {
+        return None;
+    }
+    output
+        .video_mix()
         .filter(|id| state.video_mix(id).is_some())
         .cloned()
 }
@@ -1236,6 +1286,21 @@ impl<'a> Planner<'a, '_> {
         } else {
             scene_id.clone()
         }
+    }
+
+    /// The background the planned scene `id` draws under its items, if it has one: a
+    /// keyframe scene shows its parent's, and a group none, since it is drawn in the
+    /// scene that holds it (ADR-0089 §4).
+    fn background(&self, id: &SceneId) -> Option<Color> {
+        let (scene, _) = self.drawn(id)?;
+        if scene.role() == SceneRole::Group {
+            return None;
+        }
+        let scene = scene
+            .variant_of()
+            .and_then(|parent| self.state.scene(parent))
+            .unwrap_or(scene);
+        scene.options().background_rgba().map(Color::from_rgba8)
     }
 
     /// The keyframe scene whose overrides the planned scene `id` shows, if any.
@@ -1819,6 +1884,9 @@ impl<'a> Planner<'a, '_> {
             }
         }
         out.scenes.insert(id.clone(), placed);
+        if let Some(background) = self.background(id) {
+            out.backgrounds.insert(id.clone(), background);
+        }
         if let Some(chain) = self.scene_chain(id) {
             self.add_chain(ChainOwner::Scene(id.clone()), chain, out);
         }
@@ -1970,6 +2038,9 @@ struct Pass {
     /// Where the pass draws: its [`GpuKey::Layer`]. The last pass, the program scene,
     /// draws to the output instead.
     key: GpuKey,
+    /// What the pass clears to, under its layers: the scene's background, or
+    /// transparent.
+    background: Color,
     layers: Vec<Layer>,
 }
 
@@ -2142,6 +2213,8 @@ fn schedule(shot: &Shot, program: &SceneId) -> Vec<Pass> {
             scene: program.clone(),
             depth: 0,
             key: GpuKey::Layer(program.clone(), 0),
+            // The chain's output has the background in it already.
+            background: Color::TRANSPARENT,
             layers,
         }];
     }
@@ -2356,6 +2429,7 @@ fn visit_into(
         scene: id.clone(),
         depth,
         key,
+        background: shot.background(id),
         layers,
     });
 }
@@ -3313,32 +3387,35 @@ pub(crate) fn compose(
         let mut items: Vec<Item<'_>> = Vec::new();
         for pass in nested {
             fill_items(&mut items, (cache, chains), pass, (at, canvas), live);
-            compositor.render_into(
-                &scene(canvas, Color::TRANSPARENT, &items),
-                image(&pass.key)?,
-            )?;
+            compositor.render_into(&scene(canvas, pass.background, &items), image(&pass.key)?)?;
         }
-        match (root, tracks) {
+        // Where the mix shows a transparent pixel, the output is black (ADR-0024 §4).
+        let clear = match (root, tracks) {
             (_, Some(transition)) => {
                 fill_tracks(&mut items, (cache, chains), transition, canvas, at);
+                transition.background(at)
             }
             (Some(root), None) => {
                 fill_items(&mut items, (cache, chains), root, (at, canvas), live);
+                root.background
             }
-            (None, None) => items.clear(),
+            (None, None) => {
+                items.clear();
+                Color::TRANSPARENT
+            }
         }
+        .over_black();
         match &stage {
             Some(stage) => {
-                compositor
-                    .render_into(&scene(canvas, Color::BLACK, &items), image(&stage.mixed)?)?;
+                compositor.render_into(&scene(canvas, clear, &items), image(&stage.mixed)?)?;
             }
             None if direct => {
-                let shown = scene(output, Color::BLACK, &items);
+                let shown = scene(output, clear, &items);
                 return compositor.render(&shown, readback);
             }
             None => {
                 let layer = image(&GpuKey::Program)?;
-                compositor.render_into(&scene(canvas, Color::BLACK, &items), layer)?;
+                compositor.render_into(&scene(canvas, clear, &items), layer)?;
                 let placed = [fitted(layer, canvas, output)];
                 let shown = scene(output, Color::BLACK, &placed);
                 return compositor.render(&shown, readback);
@@ -3444,7 +3521,7 @@ fn run_chains(
                 let Some(layer) = cache.get(&pass.key) else {
                     continue;
                 };
-                compositor.render_into(&scene(canvas, Color::TRANSPARENT, &items), layer)?;
+                compositor.render_into(&scene(canvas, pass.background, &items), layer)?;
             }
         }
     }
@@ -4149,6 +4226,95 @@ pub(crate) mod tests {
         }
     }
 
+    /// A scene's background is planned with it, a keyframe scene draws its parent's and
+    /// a group none (ADR-0089 §4); a transition fades from one background to the other.
+    #[test]
+    fn a_keyframe_draws_its_parents_background_and_a_transition_fades_it() {
+        use super::{FilterAssets, Transitioning, plan_scene};
+        use jstream_graph::Graph;
+        use jstream_protocol::{Edit, SceneOptions};
+        use jstream_render::Color;
+
+        let mut graph = Graph::default();
+        graph
+            .apply(
+                &[
+                    Edit::SceneCreate {
+                        scene_id: SceneId::new("main"),
+                        name: "Main".into(),
+                        role: None,
+                    },
+                    Edit::SceneCreateVariant {
+                        scene_id: SceneId::new("k"),
+                        variant_of: SceneId::new("main"),
+                        name: "Keyframe".into(),
+                    },
+                    Edit::SceneSetOptions {
+                        scene_id: SceneId::new("main"),
+                        options: SceneOptions {
+                            background: Some("#ff000080".into()),
+                            ..SceneOptions::default()
+                        },
+                    },
+                ],
+                None,
+            )
+            .expect("edits");
+        graph
+            .apply(
+                &[
+                    Edit::SceneCreate {
+                        scene_id: SceneId::new("g"),
+                        name: "Group".into(),
+                        role: Some(jstream_protocol::SceneRole::Group),
+                    },
+                    Edit::SceneSetOptions {
+                        scene_id: SceneId::new("g"),
+                        options: SceneOptions {
+                            background: Some("#00ff00".into()),
+                            ..SceneOptions::default()
+                        },
+                    },
+                ],
+                None,
+            )
+            .expect("a group");
+        let group = plan_scene(
+            &graph,
+            &SceneId::new("g"),
+            &mut |_| None,
+            &FilterAssets::default(),
+        );
+        let pass = group.shot.passes.last().map(|pass| pass.background);
+        assert_eq!(pass, Some(Color::TRANSPARENT), "a group has none");
+        let half_red = Color::from_rgba8([255, 0, 0, 128]);
+        for program in ["main", "k"] {
+            let planned = plan_scene(
+                &graph,
+                &SceneId::new(program),
+                &mut |_| None,
+                &FilterAssets::default(),
+            );
+            let pass = planned.shot.passes.last().map(|pass| pass.background);
+            assert_eq!(pass, Some(half_red), "{program}");
+        }
+
+        let fading = Transitioning {
+            start: zero(),
+            tracks: Vec::new(),
+            backgrounds: (Color::BLACK, Color::rgb(1.0, 0.0, 0.0)),
+            end_ms: 1000.0,
+        };
+        let at = |ms: i64| MediaTime::new(ms, Timebase::new(1, 1000).expect("valid"));
+        assert_eq!(fading.background(zero()), Color::BLACK);
+        assert_eq!(fading.background(at(1000)), Color::rgb(1.0, 0.0, 0.0));
+        let middle = fading.background(at(500));
+        assert!(
+            middle.r > 0.5 && middle.r < 1.0 && middle.a == 1.0,
+            "{middle:?}"
+        );
+    }
+
     /// A previewed source is planned on a copy of the collection made once per
     /// revision: planning it again at the same revision reuses the copy, and an edit
     /// makes a new one that shows the edit (#969 N2).
@@ -4418,6 +4584,38 @@ pub(crate) mod tests {
         for (x, y) in [(10, 10), (310, 190), (330, 170), (650, 350), (900, 600)] {
             assert_eq!(at(&rgba, x, y), RED, "({x}, {y})");
         }
+    }
+
+    /// A scene's background fills its canvas under its items wherever it is drawn
+    /// (ADR-0024 §4): the nested `a`'s red fills the quarter it is placed at, over the
+    /// program's blue. A background with alpha shows over black where a mix shows it.
+    #[test]
+    fn a_scene_draws_its_background_nested_or_not() {
+        use jstream_render::Color;
+        let quarter = Placement::Legacy(LegacyTransform {
+            scale: [0.5, 0.5],
+            ..LegacyTransform::IDENTITY
+        });
+        let mut shot = shot(vec![("program", vec![nest("a", quarter)]), ("a", vec![])]);
+        let blue = Color::rgb(0.0, 0.0, 1.0);
+        shot.backgrounds.insert(SceneId::new("program"), blue);
+        shot.backgrounds
+            .insert(SceneId::new("a"), Color::rgb(1.0, 0.0, 0.0));
+        shot.passes = schedule(&shot, &SceneId::new("program"));
+        let Some(rgba) = snap(&shot) else { return };
+        assert_eq!(at(&rgba, 10, 10), RED);
+        assert_eq!(at(&rgba, 630, 350), RED);
+        for (x, y) in [(650, 10), (10, 370), (1270, 710)] {
+            assert_eq!(at(&rgba, x, y), [0, 0, 255, 255], "({x}, {y})");
+        }
+        // Half blue over black is 0.5 in linear light, sRGB 188.
+        shot.backgrounds
+            .insert(SceneId::new("program"), Color { a: 0.5, ..blue });
+        shot.passes = schedule(&shot, &SceneId::new("program"));
+        let Some(rgba) = snap(&shot) else { return };
+        let [r, g, b, a] = at(&rgba, 1000, 600);
+        assert_eq!((r, g, a), (0, 0, 255));
+        assert!(b.abs_diff(188) <= 1, "{b}");
     }
 
     /// An item's opacity multiplies its alpha, and the result blends in linear light: half

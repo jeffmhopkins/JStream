@@ -101,7 +101,16 @@ state machine. Contents:
   the `audio_filter` kinds `gain`, `noise_gate`, `compressor`, `limiter` and `delay`,
   one per `jstream-audio` kernel, the mapping from a filter's settings to the kernel's
   `FilterSpec` and `FilterParams`, and `Chain`, which keeps one mixer input's, the
-  master's or an output tap's filters in line with its owner's audio chain. A CLAP
+  master's or an output tap's filters in line with its owner's audio chain. A
+  `compressor`'s `key` ("Duck under", a `source` reference to an audio source, not
+  live) is ADR-0028's sidechain key: the program stage's audio sources thread resolves
+  it to the key source's mixer input once every input is open (`resolve_keys`), and
+  builds the filter as a `FilterSpec::KeyedCompressor` on it, so the source ducks
+  while the key plays. A key that names no playing input reads as silence. Setting,
+  clearing or re-resolving it rebuilds the filter. A master or output filter holds no
+  reference yet, so only a source's compressor has a key; the graph refuses a key on
+  its own source and a cycle of keys as it refuses any reference cycle, and a key blocks
+  deleting the source it names. A CLAP
   filter's plugin host (`ClapHosts`) runs on the program stage's
   `jstream-audio-sources` thread for every chain: a source's chain is kept there too,
   and the master's and the output taps' chains, which the routing keeps under the
@@ -116,8 +125,8 @@ state machine. Contents:
     stepped one is an `int`, any other a `float`, both with the plugin's range; hidden,
     read-only and bypass parameters and ones without a finite range are left out. When
     two files offer one plugin id, the first found wins. A plugin's names reach clients
-    through `plugin_text` (#351): control characters become spaces, trimmed, at most 128
-    characters. The scan returns a `ClapScan`
+    through `plugin_text` (#351, #977): control and bidirectional formatting characters
+    become spaces, trimmed, at most 128 characters. The scan returns a `ClapScan`
     with each kind's file and plugin id, and the files that failed. Kinds stay until
     the engine ends. It is slow, so a host calls it on a worker thread; the engine's
     lock is held only to add the kinds and hand the audio thread a `ClapCatalog` (the
@@ -443,7 +452,8 @@ state machine. Contents:
   a device that isn't there, and closed once taken away or when the output stops
   (`a_bus_monitor_plays_its_bus_on_its_device_while_an_output_runs`)), the audio filter kinds
   and their kernels (`filters.rs`: defaults, range edges, and a chain updated in place
-  or rebuilt on a real mixer, and new settings a full command queue refuses kept off
+  or rebuilt on a real mixer, a keyed compressor rebuilt when its key is set, resolved
+  or cleared, and new settings a full command queue refuses kept off
   the record and tried again; a CLAP filter bypassed until its fake host is ready, kept
   on the same host when the chain is rebuilt, kept on a crashed host's block until the
   restart, a missing plugin reported once, a running host told to stop when its filter
@@ -763,7 +773,8 @@ collection lock:
   naming the first such entry, nothing applied, and the step dropped. Edits that
   pass the check but no longer apply also fail with `undo_conflict`, naming the latest
   entry by another client, and drop the step. Edits that fail only because an output
-  is running (undoing `output.create` while it runs) answer the graph's own
+  is running (undoing `output.create` while it runs, or a running output's
+  `output.set_audio_buses`, which would move it to another bus) answer the graph's own
   `invalid_argument` and keep the step for a retry once it is stopped; with no other
   client's entry to blame, any other failure does too. The log is pruned to the oldest
   `since` of any kept step. Only when there is no conflict does the copy replace the
@@ -924,9 +935,13 @@ scene into its items only when it and they are all `normal`.
 then placed like any image. The shot is scheduled inside out: each nested scene is
 one pass into its own layer (`Compositor::render_into`), which stays on the GPU as
 premultiplied linear `Rgba16Float` (no sRGB round trip, no readback) and is kept for
-the next frame while the program still nests it. A nested scene has no background yet, so it is transparent where it
-draws nothing and the scene under it shows through; the program scene is drawn over
-opaque black. A scene placed more than once at the same depth is composited once.
+the next frame while the program still nests it. Each pass clears to its scene's
+background ([ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md) §4; a
+keyframe scene's is its parent's, and a group has none), so a nested scene without one is transparent where it
+draws nothing and the scene under it shows through; the program scene's pass clears to
+its background over opaque black (`Color::over_black`). While a transition runs, its
+tracks are drawn over the two scenes' backgrounds mixed by the time since it started
+(`Transitioning::background`). A scene placed more than once at the same depth is composited once.
 Depth is bounded: the program scene is depth 0, and a scene source more than 8
 levels below it draws nothing (logged at `debug`). A scene with a scene filter
 (ADR-0065) is composited once per frame at depth 0 wherever it shows, so the count
@@ -1017,7 +1032,8 @@ once; a second call is logged and ignored. A pack whose load panics (naga parsin
 validating untrusted WGSL) is one that failed to load: the watcher catches the panic
 around that pack, so the other packs keep loading and hot-reloading. The load runs on
 `jstream_effects::LOAD_THREAD`, which `HANDLED_PANIC_THREADS` lists, so the apps' crash
-hook writes no report for it (#999). Each effect is a
+hook writes no report for it (#999), unless its load thread can't start: the load then
+runs on the poll thread, still caught, and its panic writes a report. Each effect is a
 `video_filter` kind, `<pack>/<effect>`, added to the graph's kinds, so `kind.list` and
 `kind.describe` report it and a video chain, a scene's or an item's effects take it. A
 poll that changes kinds applies them under the collection lock (`Graph::without_kinds`
@@ -1106,8 +1122,8 @@ into for an item's effects (it takes the place of the layer it would be drawn in
 anyway). The output stage (below) runs only for an output's frame, so the engine hands
 `chain_cost` each running output (`Outputs::running`) as its frames are drawn since
 its latest `output.start` (`State::started_frames`): its session's mix and owner, the
-`MixKey` of its `EncodeKey`, or the program and its owner for a virtual camera, which
-is always drawn as the program. A filter or mix set on a running output so waits for
+`MixKey` of its `EncodeKey` (`shown_mix`, the program for a virtual camera, which is
+always drawn as the program). A filter or mix set on a running output so waits for
 its next start, as the frame does. It counts what `Shot::stage_of` gives each frame:
 each staged mix's canvas-sized `GpuKey::Mixed` layer and composite pass and its master
 chain's layers and passes once, however many outputs get the mix, as `Chains::stage`
@@ -1119,8 +1135,10 @@ Planning the program stage's shot (not a preview's) copies the master stage's vi
 chain into `Shot::stages` once for the program and once for each video mix, keyed
 `ChainOwner::Master(mix)` over `GpuKey::Mixed(mix)`, and each output's own chain,
 keyed `ChainOwner::Output(id)`, over the master chain's output for the mix it shows
-(its mix if the collection has it, else the program, as its encoder session is keyed),
-or over the mix itself when the master chain is empty. The render thread draws each
+(`snapshot::shown_mix`: its mix if the collection has it, else the program, as its
+encoder session is keyed; a virtual camera, drawn as the program at the canvas size, is
+always planned over the program, whatever mix it names, #1006), or over the mix itself
+when the master chain is empty. The render thread draws each
 output's frame with `View::output(mix, owner)`, `owner` being the output whose session
 is its own. When the frame's mix has a master chain or its owner a chain of its own,
 `compose` draws the mix at the canvas size into `GpuKey::Mixed` instead of straight to
@@ -1693,10 +1711,16 @@ the desktop app start it; tests and an embedding host call `emit_stats_tick` as 
 
 Each tick also lists every running output's live stats (protocol 0.57;
 `output_stats.rs`). The output thread counts each packet the muxer takes while the
-publish link is up into its `SentCounters` (two relaxed atomic adds: the bytes, and a
+publish link is `active` into its `SentCounters` (two relaxed atomic adds: the bytes, and a
 frame for video), so a link that is down sends nothing and its tags count as the
-link's drops instead. A video frame handed over while the link is down also adds to a
-third counter, which only the health reads (#994). `output.start` registers an `OutputMeter` for the run once it is
+link's drops instead. A link that came back but isn't stable yet is still
+`reconnecting`: its packets reach the server, but they aren't counted as sent either.
+A video frame handed over while the link isn't `active` also adds to a third counter,
+which only the health reads (#994), so a flapping server stays `poor`. The link state
+is the one the output thread's previous pass read, so a pass's packets count by the
+link before it changed, in both directions: every packet of the pass in which the link
+drops, video and audio, counts as sent, and the video frame of the pass in which it
+becomes `active` again counts as lost, though it reached the server. `output.start` registers an `OutputMeter` for the run once it is
 armed, with its uptime counted from when the engine received the `output.start`
 (before the start waits for an earlier one, opens the destination and starts the
 program stage), whose read gathers those counts with the output's drops: its video encode
@@ -1709,8 +1733,8 @@ never with it. Each meter keeps the samples of the last ten seconds: `kbps` is t
 bytes since the previous sample over the time between them, and `health` compares the
 newest sample with the one at the window's start (`waiting` until a video frame was
 sent, `good` with nothing new lost, `poor` with 2% or more of the video frames lost,
-`fair` otherwise). Lost video frames there are the `dropped_frames` and the frames lost
-on a down link, so an outage keeps the output `poor` until it leaves the window, not
+`fair` otherwise). Lost video frames there are the `dropped_frames` and the frames
+handed over while the link isn't `active`, so an outage keeps the output `poor` until it leaves the window, not
 just while it reconnects. Under the collection lock the engine then makes an output that is
 `reconnecting` `poor`. The stop drops the meter with the output's drop guard, so the
 next tick leaves the output out. A virtual camera output has no meter yet.
@@ -1733,7 +1757,9 @@ brings the mixer in line with the collection under the collection lock:
 - every bus's fader and mute, the master's on `Mixer::bus`;
 - for each source with a mixer input, its fader and a send into each mixer bus as the
   collection's sends say, removing the others. A `muted` source keeps its sends at
-  silence, so its post-fader meter still reads, as ADR-0028's mute requires. A source
+  silence, so its post-fader meter still reads, as ADR-0028's mute requires, and its
+  input is silenced as a key (`set_key_silenced`), so a compressor keyed on it ducks
+  nothing while it is muted. A source
   whose audio is off has no input, since the program stage closes it; until it has,
   the routing mutes it and leaves it out of `meters.tick`. The
   inputs are the ones the program stage's audio sources thread lists in `Routed` as it
@@ -1745,9 +1771,12 @@ brings the mixer in line with the collection under the collection lock:
   inputs are not sources and keep sending to the master at unity.
 - each such input's activity gain (`activity.rs`, ADR-0028's "shown"): 1 for a source
   that follows `always`; for a `when_shown` one, `min(1, Σ w)` over the roots that
-  reach it through visible items and nested scene sources whose audio is on. The roots
-  are the program scene (weight 1) and every nested scene source whose audio is on and
-  follows `always` (weight 1 each). The mixer applies it after the input's fader and
+  reach it through visible items and nested scene sources whose audio is on, into
+  scenes whose `include_audio` option is on
+  ([ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)). The roots are the
+  program scene (weight 1, whatever its own `include_audio`) and every nested scene
+  source whose audio is on, whose scene's `include_audio` is on, and that follows
+  `always` (weight 1 each). The mixer applies it after the input's fader and
   meter, scaling every send, and ramps to it over one block, so a cut never clicks
   and the meter still reads a source that is off program. `scene.switch` and a batch
   that moves program sync too, after program is reconciled;
@@ -2296,7 +2325,10 @@ The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in proc
 
 - **Package.** `plugin.install`'s `path` is an absolute directory on the engine's machine
   holding `plugin.wasm` and, optionally, `manifest.json`, a JSON object. Its `name`, a
-  string, is the plugin's own text: `plugin.state_changed` carries it as `remote_name`.
+  string, is the plugin's own text: `plugin.state_changed` carries it as `remote_name`,
+  made plain as a CLAP plugin's name is (`kinds::plugin_text`: control and bidirectional
+  formatting characters become spaces, trimmed, cut to 128 characters), and none when
+  nothing is left. A name read from `plugins.json` is made plain the same way.
   What it asks for (`Request`) is its `classes` (capability classes), `hosts` (as
   `scheme://host:port`) and `folders` (true for folders a person picks), each optional.
   Other manifest fields are ignored. Like the ABI, the layout is version 0.
@@ -2350,7 +2382,12 @@ The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in proc
   the plugin, at install or with `plugin.grant`. One that asks for more stays disabled
   as `needs_grant` (`plugin.state_changed` says so when the reason changes), and
   `plugin.enable` answers `action_failed` naming what is new; a `plugin.grant`
-  acknowledges what it asks for now, and the plugin can be enabled after it. One that
+  acknowledges what `plugin.list` last showed its client (`Entry::seen`, forgotten when
+  the session ends, never saved), or what it asks for now from a client that never
+  listed it, and the plugin can be enabled after it. An update another client's
+  `plugin.enable` loaded since that list isn't acknowledged, so one that asks for more
+  still waits as `needs_grant`
+  ([ADR-0090](../../docs/adr/0090-a-grant-acknowledges-the-request-its-client-saw.md)). One that
   asks for less has its grant narrowed to match. A running plugin keeps the module it
   loaded.
 - **Saving.** `open_plugin_dir(dir)` creates `dir` if missing and reads its
@@ -2371,9 +2408,10 @@ The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in proc
 - **Listing.** `plugin.list` (`automation::list`) answers from the registry with no
   collection lock held: each plugin's state and reason, its manifest's name, its
   package path, what its manifest asks for as last read (`Request`, as `PluginRequest`)
-  and its grant. A plugin being installed, or started with the saved plugins, is listed
-  as enabled; one being enabled keeps the reason it was disabled for until it loads
-  (`Run::Starting` holds it). Built without `wasm-plugins`, the engine lists none, from
+  and its grant. It notes that request as what the calling client was shown. A plugin
+  being installed, or started with the saved plugins, is listed as enabled; one being
+  enabled keeps the reason it was disabled for until it loads (`Run::Starting` holds
+  it). Built without `wasm-plugins`, the engine lists none, from
   the collection's query match (`plugin_list_is_empty_until_a_plugin_is_installed`).
 - **Not yet:** a private data folder per plugin, deferred until the file imports a plugin
   would need to use it are designed (ADR-0076); and a way to remove one (no

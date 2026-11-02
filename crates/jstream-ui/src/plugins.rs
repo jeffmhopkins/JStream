@@ -5,17 +5,25 @@
 //!   no grant beyond `read`, `plugin.grant` replaces a grant and `plugin.enable` turns a
 //!   disabled plugin back on. They are a person's calls: no plugin or agent can make
 //!   them. The section re-reads the list after each of its calls and on every
-//!   `plugin.state_changed`.
+//!   `plugin.state_changed`, except while the grant dialog is open ([`ListGate`]).
 //! - **The grant dialog** offers exactly what the plugin's manifest asks for, each
 //!   class with what it lets the plugin do, each host, and the folders a person picks
 //!   when it asks for folders. `read` is always granted and can't be unticked. It opens
 //!   by itself after an install whose manifest asks for more than `read`, and its OK
 //!   also enables a plugin disabled as `needs_grant`, since granting is what that plugin
-//!   waits for.
+//!   waits for. The engine takes a grant to acknowledge the request its client was last
+//!   listed (ADR-0090), and [`ListGate`] makes that the request the dialog shows: while
+//!   the dialog is open the section sends no `plugin.list` (a re-read it would have made
+//!   waits until the dialog closes), and OK, and so Enter, stays disabled while a list
+//!   is on its way. A list sent before the dialog opened that answers a different
+//!   request for its plugin draws the dialog again before OK can act. When the enable
+//!   after a grant fails, for example because the plugin now asks for more or its module
+//!   traps on load, the dialog opens again on what it asks for now, with the engine's
+//!   reason.
 //! - **The plugin's name** comes from its manifest: the plugin's own text, shown as data
 //!   and never followed (ADR-0059). The ID and the package path are shown beside it.
 //!
-//! Docs: crates/jstream-ui/README.md#design, docs/adr/0076-saved-wasm-plugins-and-manifest-requests.md
+//! Docs: crates/jstream-ui/README.md#design, docs/adr/0076-saved-wasm-plugins-and-manifest-requests.md, docs/adr/0090-a-grant-acknowledges-the-request-its-client-saw.md
 
 use crate::app::SessionContext;
 use crate::dialog::Modal;
@@ -274,6 +282,58 @@ pub async fn enable(control: &dyn Control, plugin_id: PluginId) -> Result<(), St
         .map_err(|e| e.to_string())
 }
 
+/// When the section may send `plugin.list`, and when the grant dialog's OK may act
+/// (#978, ADR-0090). The engine notes each list as what this client was shown, and a
+/// grant acknowledges the last one. So no list goes out while the grant dialog shows a
+/// request: one wanted then waits, and is sent once when the dialog closes. And OK waits
+/// while a list is on its way, so a list sent before the dialog opened has drawn it again
+/// with what it answers before a grant can go out.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ListGate {
+    /// The grant dialog is open.
+    open: bool,
+    /// A list was wanted while it was open.
+    deferred: bool,
+    /// Lists sent and not answered yet.
+    in_flight: u32,
+}
+
+impl ListGate {
+    /// The grant dialog opens.
+    pub fn open(&mut self) {
+        self.open = true;
+    }
+
+    /// Whether a wanted list may be sent now; if not, it is sent when the dialog closes.
+    pub fn may_list(&mut self) -> bool {
+        if self.open {
+            self.deferred = true;
+        }
+        !self.open
+    }
+
+    /// The grant dialog closes: whether the list it held back is due now.
+    pub fn close(&mut self) -> bool {
+        self.open = false;
+        std::mem::take(&mut self.deferred)
+    }
+
+    /// A list goes out.
+    pub fn sent(&mut self) {
+        self.in_flight += 1;
+    }
+
+    /// A list was answered, or failed.
+    pub fn answered(&mut self) {
+        self.in_flight = self.in_flight.saturating_sub(1);
+    }
+
+    /// Whether the grant dialog's OK may act: no list is on its way.
+    pub fn may_grant(&self) -> bool {
+        self.in_flight == 0
+    }
+}
+
 /// The section's state, shared by its parts. Every field is `Copy`.
 #[derive(Clone, Copy)]
 struct Section {
@@ -282,24 +342,126 @@ struct Section {
     problem: RwSignal<Option<String>>,
     /// The install dialog, open while set.
     installing: RwSignal<bool>,
-    /// The plugin whose grant dialog is open.
-    granting: RwSignal<Option<PluginId>>,
+    /// The plugin whose grant dialog is open, as the dialog shows it. Set and cleared
+    /// through [`Section::open_grant`] and [`Section::close_grant`], which keep `gate`.
+    granting: RwSignal<Option<PluginInfo>>,
+    /// What the grant dialog shows went wrong.
+    grant_problem: RwSignal<Option<String>>,
+    gate: RwSignal<ListGate>,
 }
 
 impl Section {
-    /// Re-reads the plugins.
+    /// Re-reads the plugins. Only for when the grant dialog is closed: otherwise
+    /// [`Section::refresh`]. While it is on its way the grant dialog's OK waits.
     async fn reload(self) -> Option<Vec<PluginInfo>> {
         let session = self.session.get()?;
-        match list(&*session.control).await {
+        self.gate.try_update(ListGate::sent);
+        let listed = list(&*session.control).await;
+        let read = match listed {
             Ok(plugins) => {
+                // A list sent before the dialog opened, answering another request for its
+                // plugin, draws the dialog again, so it shows what the engine noted.
+                let redraw = self
+                    .granting
+                    .try_get_untracked()
+                    .flatten()
+                    .and_then(|shown| {
+                        plugins
+                            .iter()
+                            .find(|p| p.plugin_id == shown.plugin_id)
+                            .filter(|p| (&p.request, p.reason) != (&shown.request, shown.reason))
+                            .cloned()
+                    });
                 self.plugins.try_set(plugins.clone());
+                if let Some(plugin) = redraw {
+                    self.granting.try_set(Some(plugin));
+                }
                 Some(plugins)
             }
             Err(problem) => {
                 self.problem.try_set(Some(problem));
                 None
             }
+        };
+        self.gate.try_update(ListGate::answered);
+        read
+    }
+
+    /// Re-reads the plugins now, or once the grant dialog closes if it is open.
+    async fn refresh(self) {
+        if self.gate.try_update(ListGate::may_list).unwrap_or(false) {
+            self.reload().await;
         }
+    }
+
+    /// What the section does with an engine event.
+    async fn on_event(self, event: &Event) {
+        if matches!(
+            event,
+            Event::PluginStateChanged { .. } | Event::EventsDropped { .. }
+        ) {
+            self.refresh().await;
+        }
+    }
+
+    /// Opens the grant dialog for `plugin_id`, as the plugins were last read, showing
+    /// `problem` if given.
+    fn open_grant(self, plugin_id: &PluginId, problem: Option<String>) {
+        let Some(plugin) = self
+            .plugins
+            .try_with_untracked(|all| all.iter().find(|p| p.plugin_id == *plugin_id).cloned())
+            .flatten()
+        else {
+            return;
+        };
+        self.gate.try_update(ListGate::open);
+        self.grant_problem.try_set(problem);
+        self.granting.try_set(Some(plugin));
+    }
+
+    /// Closes the grant dialog, then re-reads the plugins if `reload` or if a re-read was
+    /// held back while it was open.
+    async fn close_grant(self, reload: bool) {
+        self.granting.try_set(None);
+        let due = self.gate.try_update(ListGate::close).unwrap_or(false);
+        if reload || due {
+            self.reload().await;
+        }
+    }
+
+    /// The grant dialog's OK: sends `grant` for the plugin it shows and, for one disabled
+    /// as `needs_grant`, enables it. Does nothing while a list is on its way. A failed
+    /// grant keeps the dialog open, its re-read held back. Any failed enable after a
+    /// grant (an update that asks for still more, or a module that traps on load) closes
+    /// it, re-reads, and opens it again on what the plugin asks for now, with the error.
+    async fn submit_grant(self, grant_to: PluginGrant) {
+        let Some(shown) = self.granting.try_get_untracked().flatten() else {
+            return;
+        };
+        if !self
+            .gate
+            .try_with_untracked(ListGate::may_grant)
+            .unwrap_or(false)
+        {
+            return;
+        }
+        let Some(session) = self.session.get() else {
+            return;
+        };
+        let control = &*session.control;
+        if let Err(error) = grant(control, shown.plugin_id.clone(), grant_to, false).await {
+            self.grant_problem.try_set(Some(error));
+            self.refresh().await;
+            return;
+        }
+        if shown.reason == Some(PluginDisabledReason::NeedsGrant)
+            && let Err(error) = enable(control, shown.plugin_id.clone()).await
+        {
+            self.close_grant(true).await;
+            self.open_grant(&shown.plugin_id, Some(error));
+            return;
+        }
+        self.close_grant(true).await;
     }
 
     fn enable(self, plugin_id: PluginId) {
@@ -309,7 +471,7 @@ impl Section {
         spawn_local(async move {
             let done = enable(&*session.control, plugin_id).await;
             self.problem.try_set(done.err());
-            self.reload().await;
+            self.refresh().await;
         });
     }
 }
@@ -326,6 +488,8 @@ pub fn Plugins() -> impl IntoView {
         problem: RwSignal::new(None),
         installing: RwSignal::new(false),
         granting: RwSignal::new(None),
+        grant_problem: RwSignal::new(None),
+        gate: RwSignal::new(ListGate::default()),
     };
     let read = RwSignal::new(false);
     spawn_local(async move {
@@ -342,12 +506,7 @@ pub fn Plugins() -> impl IntoView {
                 if section.plugins.try_with_untracked(|_| ()).is_none() {
                     break;
                 }
-                if matches!(
-                    event,
-                    Event::PluginStateChanged { .. } | Event::EventsDropped { .. }
-                ) {
-                    section.reload().await;
-                }
+                section.on_event(&event).await;
             }
         });
     }
@@ -385,7 +544,7 @@ pub fn Plugins() -> impl IntoView {
                             <span class="plugin-meta">"Asks for, not granted: " {m}</span>
                         })}
                         <div class="plugin-actions">
-                            <button on:click=move |_| section.granting.set(Some(grant_id.clone()))>
+                            <button on:click=move |_| section.open_grant(&grant_id, None)>
                                 "Permissions…"
                             </button>
                             {(!enabled).then(|| view! {
@@ -422,11 +581,8 @@ pub fn Plugins() -> impl IntoView {
             <Show when=move || section.installing.get()>
                 <InstallDialog section=section />
             </Show>
-            {move || section.granting.get().and_then(|plugin_id| {
-                section
-                    .plugins
-                    .with_untracked(|plugins| plugins.iter().find(|p| p.plugin_id == plugin_id).cloned())
-                    .map(|plugin| view! { <GrantDialog section=section plugin=plugin /> })
+            {move || section.granting.get().map(|plugin| view! {
+                <GrantDialog section=section plugin=plugin />
             })}
         </Show>
     }
@@ -488,7 +644,7 @@ fn InstallDialog(section: Section) -> impl IntoView {
                 .iter()
                 .any(|p| p.plugin_id == plugin_id && asks_beyond_read(&p.request))
             {
-                section.granting.try_set(Some(plugin_id));
+                section.open_grant(&plugin_id, None);
             }
         });
     };
@@ -548,35 +704,22 @@ fn InstallDialog(section: Section) -> impl IntoView {
 #[component]
 fn GrantDialog(section: Section, plugin: PluginInfo) -> impl IntoView {
     let form = RwSignal::new(GrantForm::of(&plugin));
-    let problem = RwSignal::new(None::<String>);
+    let problem = section.grant_problem;
     let busy = RwSignal::new(false);
     let request = StoredValue::new(plugin.request.clone());
-    let plugin_id = StoredValue::new(plugin.plugin_id.clone());
     let needs_grant = plugin.reason == Some(PluginDisabledReason::NeedsGrant);
-    let cancel = move || section.granting.set(None);
+    // OK, and so Enter, waits while a list is on its way (`ListGate::may_grant`).
+    let waiting = move || busy.get() || !section.gate.with(ListGate::may_grant);
+    let cancel = move || spawn_local(section.close_grant(false));
     let ok = move |_| {
         if busy.get_untracked() {
             return;
         }
-        let Some(session) = section.session.get() else {
-            return;
-        };
         let granted = form.with_untracked(|f| request.with_value(|r| f.grant(r)));
-        let plugin_id = plugin_id.get_value();
         busy.set(true);
         spawn_local(async move {
-            let done = grant(&*session.control, plugin_id, granted, needs_grant).await;
+            section.submit_grant(granted).await;
             busy.try_set(false);
-            match done {
-                Ok(()) => {
-                    section.granting.try_set(None);
-                    section.reload().await;
-                }
-                Err(error) => {
-                    problem.try_set(Some(error));
-                    section.reload().await;
-                }
-            }
         });
     };
 
@@ -701,7 +844,7 @@ fn GrantDialog(section: Section, plugin: PluginInfo) -> impl IntoView {
             </div>
             <div class="modal-footer">
                 <button type="button" class="secondary" on:click=move |_| cancel()>"Cancel"</button>
-                <button type="button" class="primary" data-primary disabled=move || busy.get() on:click=ok>
+                <button type="button" class="primary" data-primary disabled=waiting on:click=ok>
                     {if needs_grant { "Grant and turn on" } else { "Save" }}
                 </button>
             </div>
@@ -712,7 +855,8 @@ fn GrantDialog(section: Section, plugin: PluginInfo) -> impl IntoView {
 #[cfg(test)]
 mod tests {
     use super::{
-        CLASSES, GrantForm, asks_beyond_read, display_name, not_granted, state_text, suggested_id,
+        CLASSES, GrantForm, ListGate, asks_beyond_read, display_name, not_granted, state_text,
+        suggested_id,
     };
     use jstream_control::protocol::{
         PluginClass, PluginDisabledReason, PluginGrant, PluginId, PluginInfo, PluginRequest,
@@ -872,5 +1016,342 @@ mod tests {
         assert_eq!(suggested_id("", &[]), "plg_plugin");
         let taken = [PluginId::new("plg_timer"), PluginId::new("plg_timer_2")];
         assert_eq!(suggested_id("/p/timer", &taken), "plg_timer_3");
+    }
+
+    use super::{Event, PluginDisabledReason as Reason, Section};
+    use crate::app::SessionContext;
+    use crate::session::Session;
+    use jstream_control::protocol::{
+        Action, Call, CallResult, Hello, PROTOCOL_VERSION, ProtocolError, Query, QueryResult,
+        RequestId, Response, Welcome,
+    };
+    use jstream_control::{BoxFuture, Control, ControlError, EventStream, MockControl, MockEngine};
+    use leptos::prelude::*;
+    use std::future::Future;
+    use std::pin::Pin;
+    use std::rc::Rc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{Arc, Mutex};
+    use std::task::{Context, Poll, Waker};
+
+    /// An engine with one plugin, as far as a grant goes (ADR-0090): each `plugin.list`
+    /// notes, when it is handled, the request it shows, and a grant acknowledges the last
+    /// one noted. An enable fails while the plugin asks for more than was acknowledged.
+    /// While `hold` is set, a list is handled but its answer doesn't arrive. While
+    /// `fail_list` is set, a list fails as if the connection dropped, and notes nothing.
+    struct NotingEngine {
+        inner: MockControl,
+        request: Mutex<PluginRequest>,
+        reason: Mutex<Option<Reason>>,
+        noted: Mutex<Option<PluginRequest>>,
+        acknowledged: Mutex<Option<PluginRequest>>,
+        calls: Mutex<Vec<&'static str>>,
+        hold: Arc<AtomicBool>,
+        fail_list: AtomicBool,
+    }
+
+    impl NotingEngine {
+        fn new() -> Rc<Self> {
+            Rc::new(NotingEngine {
+                inner: MockEngine::new().connect(),
+                request: Mutex::new(PluginRequest::default()),
+                reason: Mutex::new(None),
+                noted: Mutex::new(None),
+                acknowledged: Mutex::new(None),
+                calls: Mutex::new(Vec::new()),
+                hold: Arc::new(AtomicBool::new(false)),
+                fail_list: AtomicBool::new(false),
+            })
+        }
+
+        fn calls(&self) -> Vec<&'static str> {
+            self.calls.lock().expect("not poisoned").clone()
+        }
+
+        fn acknowledged(&self) -> Option<PluginRequest> {
+            self.acknowledged.lock().expect("not poisoned").clone()
+        }
+
+        fn ask(&self, request: PluginRequest) {
+            *self.request.lock().expect("not poisoned") = request;
+        }
+    }
+
+    impl Control for NotingEngine {
+        fn hello(&self, hello: Hello) -> BoxFuture<'_, Result<Welcome, ControlError>> {
+            self.inner.hello(hello)
+        }
+
+        fn call(&self, call: Call) -> BoxFuture<'_, Result<Response, ControlError>> {
+            let request = self.request.lock().expect("not poisoned").clone();
+            let answer = |result| {
+                Ok(Response {
+                    id: RequestId::new("engine_1"),
+                    result,
+                })
+            };
+            let mut calls = self.calls.lock().expect("not poisoned");
+            let result = match call {
+                Call::Query {
+                    query: Query::PluginList,
+                } => {
+                    calls.push("plugin.list");
+                    let listed = if self.fail_list.load(Ordering::SeqCst) {
+                        Err(ControlError::Disconnected {
+                            reason: "the link went down".into(),
+                        })
+                    } else {
+                        *self.noted.lock().expect("not poisoned") = Some(request.clone());
+                        let mut listed = plugin(request, PluginGrant::default());
+                        listed.state = PluginState::Disabled;
+                        listed.reason = *self.reason.lock().expect("not poisoned");
+                        answer(CallResult::Query {
+                            result: QueryResult::PluginList {
+                                plugins: vec![listed],
+                            },
+                        })
+                    };
+                    let mut result = Some(listed);
+                    let hold = Arc::clone(&self.hold);
+                    return Box::pin(std::future::poll_fn(move |_| {
+                        if hold.load(Ordering::SeqCst) {
+                            Poll::Pending
+                        } else {
+                            Poll::Ready(result.take().expect("polled once ready"))
+                        }
+                    }));
+                }
+                Call::Action {
+                    action: Action::PluginGrant { .. },
+                } => {
+                    calls.push("plugin.grant");
+                    let noted = self.noted.lock().expect("not poisoned").clone();
+                    *self.acknowledged.lock().expect("not poisoned") =
+                        Some(noted.unwrap_or(request));
+                    answer(CallResult::action())
+                }
+                Call::Action {
+                    action: Action::PluginEnable { .. },
+                } => {
+                    calls.push("plugin.enable");
+                    if self.acknowledged().as_ref() == Some(&request) {
+                        answer(CallResult::action())
+                    } else {
+                        Err(ControlError::from(ProtocolError::ActionFailed {
+                            reason: "its update asks for `edit`".into(),
+                        }))
+                    }
+                }
+                other => {
+                    drop(calls);
+                    return self.inner.call(other);
+                }
+            };
+            Box::pin(std::future::ready(result))
+        }
+
+        fn events(&self) -> EventStream {
+            self.inner.events()
+        }
+    }
+
+    /// Polls a future that is ready at once, as the fake engine's are unless held.
+    fn now<F: Future>(future: F) -> F::Output {
+        match std::pin::pin!(future).poll(&mut Context::from_waker(Waker::noop())) {
+            Poll::Ready(value) => value,
+            Poll::Pending => panic!("the futures here are ready at once"),
+        }
+    }
+
+    /// The Plugins section's state, on a session with `engine`, its plugins read once.
+    fn section(engine: &Rc<NotingEngine>) -> Section {
+        let welcome = now(engine.hello(Hello {
+            protocol: PROTOCOL_VERSION,
+            client_name: "test".into(),
+        }))
+        .expect("handshake");
+        let control: Rc<dyn Control> = engine.clone();
+        let section = Section {
+            session: SessionContext(StoredValue::new_local(Some(Session { control, welcome }))),
+            plugins: RwSignal::new(Vec::new()),
+            problem: RwSignal::new(None),
+            installing: RwSignal::new(false),
+            granting: RwSignal::new(None),
+            grant_problem: RwSignal::new(None),
+            gate: RwSignal::new(ListGate::default()),
+        };
+        now(section.reload()).expect("lists");
+        section
+    }
+
+    fn shown(section: Section) -> PluginInfo {
+        section
+            .granting
+            .get_untracked()
+            .expect("the dialog is open")
+    }
+
+    fn ok_waits(section: Section) -> bool {
+        !section.gate.with_untracked(ListGate::may_grant)
+    }
+
+    fn state_changed() -> Event {
+        Event::PluginStateChanged {
+            plugin_id: PluginId::new("plg_timer"),
+            state: PluginState::Disabled,
+            reason: Some(Reason::NeedsGrant),
+            remote_name: None,
+        }
+    }
+
+    /// #1004 review B1: a `plugin.state_changed` that arrives while the grant dialog is
+    /// open sends no `plugin.list`, so the grant acknowledges the request the dialog
+    /// shows, and the held-back list goes out once the dialog closes.
+    #[test]
+    fn a_state_change_while_the_grant_dialog_is_open_sends_no_list() {
+        let engine = NotingEngine::new();
+        let section = section(&engine);
+        section.open_grant(&PluginId::new("plg_timer"), None);
+        // Another client loads an update that asks for more, and its state change
+        // arrives while the dialog is open.
+        engine.ask(asks_all());
+        now(section.on_event(&state_changed()));
+        now(section.on_event(&Event::EventsDropped { count: 3 }));
+        assert_eq!(
+            engine.calls(),
+            ["plugin.list"],
+            "no list while the dialog is open"
+        );
+
+        let shown = shown(section);
+        now(section.submit_grant(GrantForm::of(&shown).grant(&shown.request)));
+        assert_eq!(engine.acknowledged(), Some(PluginRequest::default()));
+        assert_eq!(section.granting.get_untracked(), None, "the dialog closed");
+        assert_eq!(
+            engine.calls(),
+            ["plugin.list", "plugin.grant", "plugin.list"],
+            "then one list"
+        );
+    }
+
+    /// #1004 review B3: a list sent before the grant dialog opened, answered after, holds
+    /// OK until its answer has drawn the dialog again with the request it noted, so a
+    /// grant acknowledges what the dialog shows.
+    #[test]
+    fn a_list_in_flight_when_the_dialog_opens_holds_ok_until_it_redraws() {
+        let engine = NotingEngine::new();
+        let section = section(&engine);
+        engine.ask(asks_all());
+        engine.hold.store(true, Ordering::SeqCst);
+        let event = state_changed();
+        let mut refresh: Pin<Box<dyn Future<Output = ()>>> = Box::pin(section.on_event(&event));
+        let mut cx = Context::from_waker(Waker::noop());
+        assert!(
+            refresh.as_mut().poll(&mut cx).is_pending(),
+            "the list is on its way"
+        );
+
+        // The person opens the dialog on the plugins as last read.
+        section.open_grant(&PluginId::new("plg_timer"), None);
+        assert_eq!(shown(section).request, PluginRequest::default());
+        assert!(ok_waits(section), "OK waits for the list");
+        // Pressing it now does nothing.
+        now(section.submit_grant(PluginGrant::default()));
+        assert_eq!(engine.calls(), ["plugin.list", "plugin.list"]);
+
+        engine.hold.store(false, Ordering::SeqCst);
+        assert!(refresh.as_mut().poll(&mut cx).is_ready());
+        assert_eq!(shown(section).request, asks_all(), "drawn again");
+        assert!(!ok_waits(section));
+        let shown = shown(section);
+        now(section.submit_grant(GrantForm::of(&shown).grant(&shown.request)));
+        assert_eq!(
+            engine.acknowledged(),
+            Some(asks_all()),
+            "what the dialog showed"
+        );
+        assert_eq!(
+            engine.calls(),
+            ["plugin.list", "plugin.list", "plugin.grant", "plugin.list"]
+        );
+    }
+
+    /// #1004 review N3: when the enable after a grant fails because the plugin now asks
+    /// for more than the dialog showed, the dialog opens again on what it asks for now,
+    /// with why.
+    #[test]
+    fn a_failed_enable_after_a_grant_opens_the_dialog_on_the_update() {
+        let engine = NotingEngine::new();
+        *engine.reason.lock().expect("not poisoned") = Some(Reason::NeedsGrant);
+        let section = section(&engine);
+        section.open_grant(&PluginId::new("plg_timer"), None);
+        // The update lands with no event reaching this client.
+        engine.ask(asks_all());
+        now(section.submit_grant(PluginGrant::default()));
+        assert_eq!(
+            engine.calls(),
+            [
+                "plugin.list",
+                "plugin.grant",
+                "plugin.enable",
+                "plugin.list"
+            ]
+        );
+        assert_eq!(shown(section).request, asks_all(), "open on the update");
+        let problem = section.grant_problem.get_untracked().expect("why");
+        assert!(problem.contains("`edit`"), "{problem}");
+    }
+
+    /// #1004 review N6: a list sent before the grant dialog opened that fails while it is
+    /// open still counts as answered, so OK acts again, the dialog stays as it was, and
+    /// the section shows why.
+    #[test]
+    fn a_list_that_fails_while_the_dialog_is_open_lets_ok_act_again() {
+        let engine = NotingEngine::new();
+        let section = section(&engine);
+        engine.hold.store(true, Ordering::SeqCst);
+        engine.fail_list.store(true, Ordering::SeqCst);
+        let event = state_changed();
+        let mut refresh: Pin<Box<dyn Future<Output = ()>>> = Box::pin(section.on_event(&event));
+        let mut cx = Context::from_waker(Waker::noop());
+        assert!(refresh.as_mut().poll(&mut cx).is_pending());
+        section.open_grant(&PluginId::new("plg_timer"), None);
+        assert!(ok_waits(section), "OK waits for the list");
+
+        engine.hold.store(false, Ordering::SeqCst);
+        assert!(refresh.as_mut().poll(&mut cx).is_ready());
+        assert!(!ok_waits(section), "the failed list was answered");
+        let problem = section.problem.get_untracked().expect("why");
+        assert!(problem.contains("the link went down"), "{problem}");
+        assert_eq!(
+            shown(section).request,
+            PluginRequest::default(),
+            "as it was"
+        );
+        assert_eq!(section.grant_problem.get_untracked(), None);
+
+        engine.fail_list.store(false, Ordering::SeqCst);
+        let shown = shown(section);
+        now(section.submit_grant(GrantForm::of(&shown).grant(&shown.request)));
+        assert_eq!(engine.acknowledged(), Some(PluginRequest::default()));
+        assert_eq!(section.granting.get_untracked(), None, "the dialog closed");
+        assert_eq!(
+            engine.calls(),
+            ["plugin.list", "plugin.list", "plugin.grant", "plugin.list"]
+        );
+    }
+
+    #[test]
+    fn a_closed_dialog_holds_nothing_back() {
+        let mut gate = ListGate::default();
+        assert!(gate.may_list());
+        gate.open();
+        assert!(!gate.close(), "nothing was wanted while it was open");
+        gate.sent();
+        gate.sent();
+        gate.answered();
+        assert!(!gate.may_grant(), "one list is still on its way");
+        gate.answered();
+        assert!(gate.may_grant());
     }
 }

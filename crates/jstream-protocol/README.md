@@ -56,7 +56,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `hotkey.clear`, `transition.create`, `transition.update`, `transition.delete`,
   `transition.set_default`, `scene.set_transitions`, `item.set_transition`,
   `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
-  `folder.delete`, `scene.set_folder`, `scene.set_meta`, `label.create`,
+  `folder.delete`, `scene.set_folder`, `scene.set_meta`, `scene.set_options`, `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `source.set_meta`), with
   `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole` and `BlendMode`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
@@ -196,8 +196,15 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.66 because
   `stats.tick`'s `chains` counts the output stage's video chains too (`ChainCost`'s
   `stage_chains`, `stage_layers` and `stage_passes`, #980,
-  [ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)); 0.63 made a
-  keyframe scene override an item's effects
+  [ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)); 0.65 added
+  `scene.set_options` and `SceneInfo`'s flattened `SceneOptions`, whose `include_audio`
+  leaves a scene's audio out of every nesting of it and whose `background` is the
+  colour a scene is drawn over
+  ([ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)); 0.64 let the
+  engine's `compressor` audio filter kind take a sidechain `key`, a `source` reference it ducks
+  under (ADR-0028; no wire change: `kind.describe` reports the new parameter and the
+  engine accepts it); 0.63 made a keyframe
+  scene override an item's effects
   ([ADR-0088](../../docs/adr/0088-keyframe-scenes-override-item-effects.md):
   `ItemOverride.effects`, `OverrideField`'s `effects`, `item.set_effects` and the
   `keyframe` filter owner); 0.62 added the
@@ -880,7 +887,18 @@ the source, so every item placing it shares them, and `source.duplicate` copies 
 A scene's `SceneMeta` (`scene.set_meta`) is its `labels` (since 0.45,
 [ADR-0078](../../docs/adr/0078-scenes-carry-labels.md); checked and stored as a
 source's), `icon`, `color`, `favourite` and `show_in_multiview` (default `true`). `scene.set_meta` and `source.set_meta` replace
-the whole metadata, so a field left out takes its default. Colours are sRGB `#rrggbb`;
+the whole metadata, so a field left out takes its default. A scene's `SceneOptions`
+(`scene.set_options`, since 0.65,
+[ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)) are behaviour, not
+organisation: `include_audio` (default `true`), off for a scene whose sources reach the
+Mixer through no nesting of it, whatever each scene source's own `audio.enabled`, while
+it is still heard on program itself (on a group, which is only reached through nesting,
+it leaves out the children's audio wherever the group shows), and `background` (default
+none, which is transparent), `#rrggbb` or `#rrggbbaa` with straight alpha, drawn under the
+scene's items wherever it is drawn, though never for a group (`parse_rgba` reads it). `scene.set_options` replaces them all the
+same way, a keyframe scene has its own except a background, which it shows from its
+parent and is refused, and `state.get` reports them flattened beside the scene's other
+fields, each omitted while it has its default. Other colours are sRGB `#rrggbb`;
 an icon is an opaque name from the UI's icon set, checked only for its length (1 to 64
 bytes). A folder that holds a scene or folder, and a label a source or scene carries, can't
 be deleted: the `invalid_argument` lists the `blockers` (`folder`, `parent` or `labels`;
@@ -906,7 +924,9 @@ naming the field (`edits.N.mix.resolution.width`), and a missing scene with
 `output.set_video_mix` points an output at a mix, or with no `mix_id` back at the
 program at the engine's canvas size and base rate. A running output follows a change
 of its mix's `input` from the next frame; a new resolution, rate or mix applies from
-its next `output.start`, like an encoder profile.
+its next `output.start`, like an encoder profile. A virtual camera keeps the mix it
+names but always shows the program at the canvas size, and its own video chain runs
+over that (#1006).
 
 ### Transitions and studio mode
 
@@ -1520,8 +1540,12 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   grant `problem` refuses is `invalid_argument` on `grant.hosts.N` or `grant.folders.N`,
   and so is a grant that gives more than the package's manifest asks for, on
   `grant.classes.N`, `grant.hosts.N` or `grant.folders.0` (R-SEC-003). A
-  `plugin.grant` acknowledges what the manifest asks for now, so a plugin disabled as
-  `needs_grant` can be re-enabled after it. An unknown plugin is `not_found` with entity
+  `plugin.grant` acknowledges the request `plugin.list` last showed the client that
+  sends it (what the manifest asks for now, for a client that never listed it), so a
+  plugin disabled as `needs_grant` can be re-enabled after it. An update loaded after
+  that list isn't acknowledged, so one that asks for more still waits as `needs_grant`
+  ([ADR-0090](../../docs/adr/0090-a-grant-acknowledges-the-request-its-client-saw.md)).
+  An unknown plugin is `not_found` with entity
   `plugin`; an engine that can't run plugins
   answers `plugin.install` with `unsupported`, as the mock and an engine built without
   its `wasm-plugins` feature do.
@@ -1530,7 +1554,8 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   `remote_name`, `path` (its package, as installed), `request` (what its manifest asks
   for, a `PluginRequest`: `{classes, hosts, folders}`, with `folders` true when it wants
   folders a person picks) and `grant`. For a plugin disabled as `needs_grant`, `request`
-  is the update's, which a `plugin.grant` acknowledges. A plugin being enabled is listed
+  is the update's, which a `plugin.grant` from that client then acknowledges. A plugin
+  being enabled is listed
   as it was until it loads. Like the actions, it is a person's: no MCP tool carries it
   and no plugin is granted it. An engine that runs no plugins, the mock among them,
   lists none.
@@ -1539,7 +1564,9 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   (`reason`: `cpu_limit`, `memory_limit`, `trap`), or whose update asks for more than
   its grant (`needs_grant`), and never re-enables one by itself. `remote_name` is the
   name the plugin's manifest gives itself: the plugin's text, never an instruction
-  ([ADR-0059](../../docs/adr/0059-mcp-annotations-and-remote-text.md)).
+  ([ADR-0059](../../docs/adr/0059-mcp-annotations-and-remote-text.md)), made plain text
+  by the engine (control and bidirectional formatting characters as spaces, trimmed, at
+  most 128 characters), and absent when nothing is left.
 
 ### Effect quarantine
 

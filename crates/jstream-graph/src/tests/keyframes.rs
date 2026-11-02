@@ -636,6 +636,34 @@ fn keyframe_scenes_save_and_load() {
     assert_eq!(loaded.to_collection_json(), json);
 }
 
+/// A scene's background is one of its options, and checked; a keyframe scene shows its
+/// parent's, so it can't have one of its own (ADR-0089 §4).
+#[test]
+fn a_background_is_checked_and_a_keyframe_has_none_of_its_own() {
+    let mut graph = family();
+    let background = |scene: &str, color: &str| Edit::SceneSetOptions {
+        scene_id: SceneId::new(scene),
+        options: jstream_protocol::SceneOptions {
+            background: Some(color.into()),
+            ..jstream_protocol::SceneOptions::default()
+        },
+    };
+    apply_ok(&mut graph, vec![background("a", "#0F111580")]);
+    let options = graph
+        .state()
+        .scene(&SceneId::new("a"))
+        .map(|s| s.options().clone());
+    assert_eq!(
+        options.and_then(|o| o.background),
+        Some("#0F111580".to_owned())
+    );
+    let (field, _) = invalid_reason(apply_err(&mut graph, vec![background("a", "blue")]));
+    assert!(field.ends_with("background"), "{field}");
+    let (field, reason) = invalid_reason(apply_err(&mut graph, vec![background("k", "#000000")]));
+    assert!(field.ends_with("background"), "{field}");
+    assert!(reason.contains("parent"), "{reason}");
+}
+
 /// A keyframe's override of an item's effects (ADR-0088): one `tint` per entry, with
 /// `amount` set and `mask` naming a scene, or the defaults.
 fn effects(entries: &[(&str, Option<f64>, Option<&str>)]) -> Vec<FilterInfo> {
