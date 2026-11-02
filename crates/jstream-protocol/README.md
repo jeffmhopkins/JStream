@@ -190,7 +190,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.59 because outputs carry
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.64 because the engine's
+  `compressor` audio filter kind takes a sidechain `key`, a `source` reference it ducks
+  under (ADR-0028; no wire change: `kind.describe` reports the new parameter and the
+  engine accepts it); 0.59 made outputs carry
   audio buses: `OutputInfo.audio_buses`, the `output.set_audio_buses` edit, and an
   output as a `bus.delete` blocker ([Audio](#design)); 0.58 added the
   `plugin.list` query, the installed WASM plugins with what each manifest asks for and

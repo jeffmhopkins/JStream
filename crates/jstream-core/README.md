@@ -98,7 +98,16 @@ state machine. Contents:
   the `audio_filter` kinds `gain`, `noise_gate`, `compressor`, `limiter` and `delay`,
   one per `jstream-audio` kernel, the mapping from a filter's settings to the kernel's
   `FilterSpec` and `FilterParams`, and `Chain`, which keeps one mixer input's, the
-  master's or an output tap's filters in line with its owner's audio chain. A CLAP
+  master's or an output tap's filters in line with its owner's audio chain. A
+  `compressor`'s `key` ("Duck under", a `source` reference to an audio source, not
+  live) is ADR-0028's sidechain key: the program stage's audio sources thread resolves
+  it to the key source's mixer input once every input is open (`resolve_keys`), and
+  builds the filter as a `FilterSpec::KeyedCompressor` on it, so the source ducks
+  while the key plays. A key that names no playing input reads as silence. Setting,
+  clearing or re-resolving it rebuilds the filter. A master or output filter holds no
+  reference yet, so only a source's compressor has a key; the graph refuses a key on
+  its own source and a cycle of keys as it refuses any reference cycle, and a key blocks
+  deleting the source it names. A CLAP
   filter's plugin host (`ClapHosts`) runs on the program stage's
   `jstream-audio-sources` thread for every chain: a source's chain is kept there too,
   and the master's and the output taps' chains, which the routing keeps under the
@@ -437,7 +446,8 @@ state machine. Contents:
   a device that isn't there, and closed once taken away or when the output stops
   (`a_bus_monitor_plays_its_bus_on_its_device_while_an_output_runs`)), the audio filter kinds
   and their kernels (`filters.rs`: defaults, range edges, and a chain updated in place
-  or rebuilt on a real mixer, and new settings a full command queue refuses kept off
+  or rebuilt on a real mixer, a keyed compressor rebuilt when its key is set, resolved
+  or cleared, and new settings a full command queue refuses kept off
   the record and tried again; a CLAP filter bypassed until its fake host is ready, kept
   on the same host when the chain is rebuilt, kept on a crashed host's block until the
   restart, a missing plugin reported once, a running host told to stop when its filter
@@ -1663,7 +1673,9 @@ brings the mixer in line with the collection under the collection lock:
 - every bus's fader and mute, the master's on `Mixer::bus`;
 - for each source with a mixer input, its fader and a send into each mixer bus as the
   collection's sends say, removing the others. A `muted` source keeps its sends at
-  silence, so its post-fader meter still reads, as ADR-0028's mute requires. A source
+  silence, so its post-fader meter still reads, as ADR-0028's mute requires, and its
+  input is silenced as a key (`set_key_silenced`), so a compressor keyed on it ducks
+  nothing while it is muted. A source
   whose audio is off has no input, since the program stage closes it; until it has,
   the routing mutes it and leaves it out of `meters.tick`. The
   inputs are the ones the program stage's audio sources thread lists in `Routed` as it

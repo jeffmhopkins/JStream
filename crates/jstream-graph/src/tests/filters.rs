@@ -1014,3 +1014,60 @@ fn references_in_scene_filters_and_effects_are_edges_of_the_scene() {
     assert!(!edits.contains(&clear(item_owner("isc"), "e")), "{edits:?}");
     apply_ok(&mut g, edits);
 }
+
+/// A source's audio filter keyed on another source (ADR-0028's sidechain key, a
+/// compressor's `key`) is an edge of its source: keying a source on itself, or two
+/// sources on each other, is a cycle, and the key blocks deleting the source it names.
+#[test]
+fn a_sidechain_key_is_an_edge_of_its_source() {
+    let mut kinds = kinds();
+    kinds.push(KindDescriptor {
+        kind_id: "duck".into(),
+        category: KindCategory::AudioFilter,
+        name: "Duck".into(),
+        version: 1,
+        video: false,
+        audio: true,
+        max_outset_px: None,
+        params: vec![ParamDescriptor {
+            id: "key".into(),
+            ty: ParamType::Source { media: None },
+            default: Value::Null,
+            label: "Duck under".into(),
+            description: None,
+            group: None,
+            advanced: false,
+            visible_if: None,
+            live: false,
+        }],
+    });
+    let mut g = Graph::new().with_kinds(kinds);
+    apply_ok(&mut g, vec![tone("music"), tone("mic")]);
+    let key = |source: &str| json!({"type": "source", "source_id": source});
+    let duck = |source: &str, on: &str| {
+        with(
+            filter_add(source, FilterChain::Audio, "d", "duck"),
+            &[("key", key(on))],
+            None,
+        )
+    };
+
+    let (field, reason) = invalid_reason(apply_err(&mut g, vec![duck("music", "music")]));
+    assert_eq!(field, "edits.0.settings.key");
+    assert!(reason.contains("cycle"), "{reason}");
+    apply_ok(&mut g, vec![duck("music", "mic")]);
+    let (field, reason) = invalid_reason(apply_err(&mut g, vec![duck("mic", "music")]));
+    assert_eq!(field, "edits.0.settings.key");
+    assert!(
+        reason.ends_with("source `mic` -> source `music` -> source `mic`"),
+        "{reason}"
+    );
+
+    let delete = Edit::SourceDelete {
+        source_id: SourceId::new("mic"),
+    };
+    assert_eq!(
+        blockers(apply_err(&mut g, vec![delete])),
+        vec![blocker(EntityKind::Source, "music", "filters.d.key")]
+    );
+}

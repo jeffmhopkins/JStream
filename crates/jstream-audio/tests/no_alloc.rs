@@ -458,6 +458,19 @@ mod rt {
             .control
             .add_filter(FilterSpec::Compressor(CompressorParams::default()))
             .expect("valid compressor");
+        // The loopback ducks under the mic (ADR-0028's sidechain key), and the 5.1
+        // input under the loopback, so the mixer orders three inputs by their keys.
+        let mic_id = sim.devices[0].control.id();
+        let loopback_id = sim.devices[1].control.id();
+        for (device, key) in [(1, mic_id), (2, loopback_id)] {
+            sim.devices[device]
+                .control
+                .add_filter(FilterSpec::KeyedCompressor {
+                    params: CompressorParams::default(),
+                    key: Some(key),
+                })
+                .expect("valid keyed compressor");
+        }
         let master_gain = bus
             .add_filter(FilterSpec::Gain { gain_db: -3.0 })
             .expect("valid gain");

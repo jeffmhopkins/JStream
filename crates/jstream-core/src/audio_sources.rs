@@ -69,7 +69,7 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use jstream_audio::{InputControl, MixerControl, Monitor, MonitorControl, monitor_socket};
+use jstream_audio::{InputControl, InputId, MixerControl, Monitor, MonitorControl, monitor_socket};
 use jstream_platform::HostBlock;
 use jstream_platform::{
     AudioInputTarget, AudioIo, AudioOutputTarget, AudioProcess, AudioStream, DeviceId, MediaClock,
@@ -82,7 +82,7 @@ use crate::audio::MonitorRoute;
 use jstream_sources::{AudioTarget, SourceAudio, webcam_device};
 
 use crate::drops::{AudioInputDrops, DropLedger, DropSourceId, lock_ledger};
-use crate::filters::{Chain, Chained, Clap, ClapHosts, chain_of};
+use crate::filters::{Chain, Chained, Clap, ClapHosts, chain_of, resolve_keys};
 use crate::live::LiveAudio;
 use crate::lock;
 use crate::plugins::filter::ClapCatalog;
@@ -929,14 +929,27 @@ impl Open {
                     }
                 }
             }
-            if let (Key::Source(id), Some(live)) = (&key, input.live.as_mut()) {
+            self.inputs.insert(key, input);
+        }
+        // Chains run once every input is open, so a compressor's key (ADR-0028) finds
+        // the input of a source that sorts after its own.
+        let playing: BTreeMap<SourceId, InputId> = self
+            .inputs
+            .iter()
+            .filter_map(|(key, input)| match (key, &input.live) {
+                (Key::Source(id), Some(live)) => Some((id.clone(), live.control.id())),
+                _ => None,
+            })
+            .collect();
+        for (key, input) in &mut self.inputs {
+            if let (Key::Source(id), Some(live)) = (key, input.live.as_mut()) {
                 let chain = wants.chains.get(id).map_or(&[][..], Vec::as_slice);
+                let chain = resolve_keys(chain, |source| playing.get(source).copied());
                 let clap = Clap::Run(wants.clap.as_deref());
-                for reason in live.chain.apply(&live.control, chain, clap, now) {
+                for reason in live.chain.apply(&live.control, &chain, clap, now) {
                     notes.push(Note::Refused(key.clone(), reason));
                 }
             }
-            self.inputs.insert(key, input);
         }
         let status = self
             .inputs

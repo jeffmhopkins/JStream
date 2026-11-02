@@ -9,17 +9,24 @@
 //! own on its output tap (ADR-0080). One setting only a rebuild changes: a limiter's
 //! `lookahead_ms`, which is its latency, so [`params`] leaves it out and the descriptor
 //! marks it not live.
+//!
+//! A compressor's `key` names another source to duck under (ADR-0028's sidechain key):
+//! its detector then hears that source's mixer input, after its fader, mute and
+//! activity gain, instead of its own. The key is resolved to a mixer input where the
+//! chain runs ([`resolve_keys`]); a key that names no playing input reads as silence, so
+//! nothing is ducked. Setting, clearing or re-resolving a key rebuilds the filter.
 
 use jstream_audio::filter::{
     CompressorParams, GateParams, LimiterParams, MAX_DELAY_MS, MAX_LOOKAHEAD_MS,
 };
 use jstream_audio::{
-    AudioError, FilterControl, FilterParams, FilterSpec, InputControl, MasterControl,
+    AudioError, FilterControl, FilterParams, FilterSpec, InputControl, InputId, MasterControl,
     OutputTapControl,
 };
 use jstream_platform::HostBlock;
 use jstream_protocol::{
-    FilterChain, FilterId, KindCategory, KindDescriptor, ParamDescriptor, ParamType, Settings,
+    FilterChain, FilterId, KindCategory, KindDescriptor, Media, ParamDescriptor, ParamType,
+    Reference, Settings, SourceId,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -31,6 +38,8 @@ use serde_json::Value;
 
 /// The kind that changes a source's level.
 const GAIN: &str = "gain";
+/// A compressor's sidechain key: the source it ducks under (ADR-0028).
+const KEY: &str = "key";
 /// The kind that silences a source below a threshold.
 const NOISE_GATE: &str = "noise_gate";
 /// The kind that evens out a source's level.
@@ -116,6 +125,25 @@ pub(crate) fn descriptors() -> Vec<KindDescriptor> {
                 float("attack_ms", "Attack", 0.0, 500.0, comp.attack_ms, "ms"),
                 float("release_ms", "Release", 0.0, 5000.0, comp.release_ms, "ms"),
                 float("makeup_db", "Makeup gain", 0.0, 24.0, comp.makeup_db, "dB"),
+                ParamDescriptor {
+                    id: KEY.into(),
+                    ty: ParamType::Source {
+                        media: Some(Media::Audio),
+                    },
+                    default: Value::Null,
+                    label: "Duck under".into(),
+                    description: Some(
+                        "Another source whose sound drives the compressor instead of this \
+                         one's, after its fader and mute: this source ducks while that one \
+                         plays, such as music under a microphone. Nothing ducks while that \
+                         source is muted or not playing. Changing it rebuilds the filter."
+                            .into(),
+                    ),
+                    group: None,
+                    advanced: false,
+                    visible_if: None,
+                    live: false,
+                },
             ],
         ),
         filter(
@@ -235,9 +263,38 @@ pub(crate) struct Chained {
     id: FilterId,
     kind: String,
     settings: Settings,
+    /// A keyed compressor's key, resolved to the mixer input it reads where the chain
+    /// runs ([`resolve_keys`]): `None` until then, and while the key source isn't
+    /// playing.
+    key: Option<InputId>,
 }
 
 impl Chained {
+    /// The source a compressor ducks under, if it is keyed.
+    fn key_source(&self) -> Option<SourceId> {
+        if self.kind != COMPRESSOR {
+            return None;
+        }
+        match Reference::from_value(self.settings.get(KEY)?)? {
+            Reference::Source { source_id } => Some(source_id),
+            _ => None,
+        }
+    }
+
+    /// The kernel the mixer builds for this filter: [`spec`]'s, keyed on [`Self::key`]
+    /// when it is a compressor with a key.
+    fn spec(&self) -> Option<FilterSpec> {
+        match spec(&self.kind, &self.settings)? {
+            FilterSpec::Compressor(params) if self.key_source().is_some() => {
+                Some(FilterSpec::KeyedCompressor {
+                    params,
+                    key: self.key,
+                })
+            }
+            spec => Some(spec),
+        }
+    }
+
     /// Whether this is a CLAP filter, run by a plugin host (ADR-0035).
     fn is_clap(&self) -> bool {
         self.kind.starts_with(CLAP_KIND_PREFIX)
@@ -261,6 +318,22 @@ pub(crate) fn chain_of(chains: &jstream_graph::Chains) -> Vec<Chained> {
             id: f.id().clone(),
             kind: f.kind().to_owned(),
             settings: f.settings().clone(),
+            key: None,
+        })
+        .collect()
+}
+
+/// `chain` with each keyed compressor's key resolved by `input`, which gives the mixer
+/// input a source plays on now, if any.
+pub(crate) fn resolve_keys(
+    chain: &[Chained],
+    input: impl Fn(&SourceId) -> Option<InputId>,
+) -> Vec<Chained> {
+    chain
+        .iter()
+        .map(|chained| Chained {
+            key: chained.key_source().and_then(|source| input(&source)),
+            ..chained.clone()
         })
         .collect()
 }
@@ -473,8 +546,8 @@ impl Chain {
                     && if new.is_clap() {
                         same_block(slot.block.as_ref(), blocks.get(&new.id))
                     } else {
-                        (slot.control.is_some() && !rebuilds(old, new))
-                            || old.settings == new.settings
+                        !rebuilds(old, new)
+                            && (slot.control.is_some() || old.settings == new.settings)
                     }
             });
         if same_layout {
@@ -572,7 +645,8 @@ impl Chain {
                 };
                 (control, block)
             } else {
-                let control = spec(&chained.kind, &chained.settings)
+                let control = chained
+                    .spec()
                     .map(|spec| host.add_filter(spec))
                     .and_then(|added| {
                         added
@@ -602,9 +676,14 @@ pub(crate) fn same_block(a: Option<&HostBlock>, b: Option<&HostBlock>) -> bool {
 }
 
 /// Whether going from `old` to `new`, of the same kind, rebuilds the filter: a
-/// limiter's look-ahead is its latency, fixed when it is built.
+/// limiter's look-ahead is its latency, and a compressor's key the input it reads, both
+/// fixed when it is built.
 fn rebuilds(old: &Chained, new: &Chained) -> bool {
-    old.kind == LIMITER && old.settings.get("lookahead_ms") != new.settings.get("lookahead_ms")
+    match old.kind.as_str() {
+        LIMITER => old.settings.get("lookahead_ms") != new.settings.get("lookahead_ms"),
+        COMPRESSOR => old.settings.get(KEY) != new.settings.get(KEY) || old.key != new.key,
+        _ => false,
+    }
 }
 
 /// A filter's settings, read as kernel values.
@@ -672,11 +751,13 @@ fn float(id: &str, label: &str, min: f64, max: f64, default: f32, unit: &str) ->
 
 #[cfg(test)]
 mod tests {
-    use super::{Chain, Chained, Clap, ClapHosts, SILENT_DB, descriptors, params, spec};
+    use super::{
+        Chain, Chained, Clap, ClapHosts, SILENT_DB, descriptors, params, resolve_keys, spec,
+    };
     use jstream_audio::filter::{CompressorParams, GateParams, LimiterParams};
     use jstream_audio::{FilterParams, FilterSpec, Mixer, MixerConfig};
     use jstream_media::{AudioFormat, ChannelLayout, SampleFormat};
-    use jstream_protocol::{FilterId, Settings};
+    use jstream_protocol::{FilterId, Settings, SourceId};
     use serde_json::{Value, json};
     use std::time::Instant;
 
@@ -771,7 +852,74 @@ mod tests {
             id: FilterId::new(kind),
             kind: kind.into(),
             settings,
+            key: None,
         }
+    }
+
+    /// A compressor with a key is built keyed on the key source's input, resolved where
+    /// the chain runs; setting, clearing or re-resolving the key rebuilds it, and its
+    /// other settings still change in place.
+    #[test]
+    fn a_keyed_compressor_rebuilds_when_its_key_changes() {
+        let mut mixer = Mixer::new(MixerConfig::default()).expect("mixer");
+        let format = AudioFormat::new(48_000, ChannelLayout::Stereo, SampleFormat::F32Interleaved)
+            .expect("format");
+        let (_producer, input) = mixer.add_input(format).expect("input");
+        let (_music, key) = mixer.add_input(format).expect("key input");
+        let mic = SourceId::new("mic");
+        let keyed = |threshold: f64| {
+            [chained(
+                "compressor",
+                &[
+                    ("threshold_db", json!(threshold)),
+                    ("key", json!({"type": "source", "source_id": "mic"})),
+                ],
+            )]
+        };
+        assert_eq!(keyed(-20.0)[0].key_source(), Some(mic.clone()));
+        assert!(matches!(
+            keyed(-20.0)[0].spec(),
+            Some(FilterSpec::KeyedCompressor { key: None, .. })
+        ));
+        let id = |chain: &Chain| chain.filters[0].control.as_ref().map(|c| c.id());
+        let mut chain = Chain::default();
+        let apply = |chain: &mut Chain, wanted: &[Chained]| {
+            assert!(
+                chain
+                    .apply(&input, wanted, Clap::Run(None), Instant::now())
+                    .is_empty()
+            );
+        };
+
+        apply(&mut chain, &[chained("compressor", &[])]);
+        let plain = id(&chain);
+        assert!(plain.is_some());
+        // Keyed on a source that isn't playing: rebuilt, reading silence.
+        apply(&mut chain, &resolve_keys(&keyed(-20.0), |_| None));
+        let unresolved = id(&chain);
+        assert_ne!(unresolved, plain, "rebuilt keyed");
+        // The key source starts playing: rebuilt on its input.
+        let playing = |source: &SourceId| (*source == mic).then(|| key.id());
+        let resolved = resolve_keys(&keyed(-20.0), playing);
+        assert_eq!(resolved[0].key, Some(key.id()));
+        apply(&mut chain, &resolved);
+        let on_key = id(&chain);
+        assert_ne!(on_key, unresolved, "rebuilt on the key's input");
+        // Another setting changes in place.
+        apply(&mut chain, &resolve_keys(&keyed(-30.0), playing));
+        assert_eq!(id(&chain), on_key, "updated in place");
+        // Clearing the key rebuilds it unkeyed.
+        apply(
+            &mut chain,
+            &[chained("compressor", &[("threshold_db", json!(-30.0))])],
+        );
+        assert_ne!(id(&chain), on_key, "rebuilt unkeyed");
+        // A key on any other kind is no key.
+        let gain = chained(
+            "gain",
+            &[("key", json!({"type": "source", "source_id": "mic"}))],
+        );
+        assert_eq!(gain.key_source(), None);
     }
 
     /// A settings change updates the filter in place; a new kind, a reorder, or a
@@ -937,6 +1085,7 @@ mod tests {
                 id: FilterId::new("verb"),
                 kind: "clap/org.example.gain".into(),
                 settings: [("1", json!(0.5))].into_iter().collect(),
+                key: None,
             },
         ];
         let master = mixer.master();
@@ -1044,6 +1193,7 @@ mod tests {
             id: FilterId::new(id),
             kind: kind.into(),
             settings: [("1", json!(0.5))].into_iter().collect(),
+            key: None,
         };
         let wanted = [chained("gain", &[]), clap("verb", "clap/org.example.gain")];
         let mut chain = Chain::default();
@@ -1196,6 +1346,7 @@ mod tests {
             id: FilterId::new("verb"),
             kind: "clap/org.example.gain".into(),
             settings: Settings::new(),
+            key: None,
         }];
         let mut chain = Chain::default();
         let mut out = vec![0.0; block * 2];

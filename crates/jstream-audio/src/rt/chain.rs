@@ -15,11 +15,11 @@
 //! deliberate shift with no latency, so it is not compensated.
 
 use super::host::{HostFilter, HostStandIn};
-use crate::AudioError;
 use crate::filter::{
     AudioFilter, Compressor, CompressorParams, Delay, Gain, GateParams, Limiter, LimiterParams,
     NoiseGate,
 };
+use crate::{AudioError, InputId};
 
 /// Filters one chain can hold. Its list is reserved at this size when it is built.
 pub(crate) const MAX_FILTERS: usize = 8;
@@ -42,6 +42,19 @@ pub enum FilterSpec {
     NoiseGate(GateParams),
     /// [`Compressor`], without a sidechain key.
     Compressor(CompressorParams),
+    /// [`Compressor`] detecting on another input's block instead of its own
+    /// (ADR-0028's sidechain key, for ducking): `key`'s block after its fader, mute and
+    /// activity gain, as [`Mixer::input_block`](crate::Mixer::input_block) gives it. The
+    /// mixer runs the key's input first. While `key` is `None` or gone, is silenced as a
+    /// key ([`InputControl::set_key_silenced`](crate::InputControl::set_key_silenced)),
+    /// or would only run later (a cycle, which the engine refuses), the key reads as
+    /// silence, so nothing is ducked. Edited with [`FilterParams::Compressor`].
+    KeyedCompressor {
+        /// The compressor's settings.
+        params: CompressorParams,
+        /// The input whose block drives the detector, if it has one yet.
+        key: Option<InputId>,
+    },
     /// [`Limiter`] with a look-ahead fixed when it is built: its latency.
     Limiter {
         /// The look-ahead, 0 to 20 ms.
@@ -101,6 +114,9 @@ impl FilterSpec {
             (Self::Gain { .. }, FilterParams::Gain { gain_db }) => Self::Gain { gain_db },
             (Self::NoiseGate(_), FilterParams::NoiseGate(p)) => Self::NoiseGate(p),
             (Self::Compressor(_), FilterParams::Compressor(p)) => Self::Compressor(p),
+            (Self::KeyedCompressor { key, .. }, FilterParams::Compressor(params)) => {
+                Self::KeyedCompressor { params, key }
+            }
             (Self::Limiter { lookahead_ms, .. }, FilterParams::Limiter(params)) => Self::Limiter {
                 lookahead_ms,
                 params,
@@ -131,6 +147,9 @@ pub(crate) enum Kernel {
     Gain(Gain),
     NoiseGate(NoiseGate),
     Compressor(Compressor),
+    /// A compressor with a sidechain key: the id of the input whose block it detects on,
+    /// or `None` for silence.
+    KeyedCompressor(Compressor, Option<u64>),
     Limiter(Limiter),
     Delay(Delay),
     Host(HostFilter),
@@ -146,6 +165,10 @@ impl Kernel {
             FilterSpec::Gain { gain_db } => Self::Gain(Gain::new(rate, gain_db)?),
             FilterSpec::NoiseGate(p) => Self::NoiseGate(NoiseGate::new(rate, p)?),
             FilterSpec::Compressor(p) => Self::Compressor(Compressor::new(rate, p)?),
+            FilterSpec::KeyedCompressor { params, key } => Self::KeyedCompressor(
+                Compressor::new(rate, params)?.with_key(true),
+                key.map(|key| key.0),
+            ),
             FilterSpec::Limiter {
                 lookahead_ms,
                 params,
@@ -162,7 +185,7 @@ impl Kernel {
         match self {
             Self::Gain(_) => KernelKind::Gain,
             Self::NoiseGate(_) => KernelKind::NoiseGate,
-            Self::Compressor(_) => KernelKind::Compressor,
+            Self::Compressor(_) | Self::KeyedCompressor(..) => KernelKind::Compressor,
             Self::Limiter(_) => KernelKind::Limiter,
             Self::Delay(_) => KernelKind::Delay,
             Self::Host(_) | Self::HostStandIn(_) => KernelKind::Host,
@@ -173,7 +196,7 @@ impl Kernel {
         match self {
             Self::Gain(f) => f,
             Self::NoiseGate(f) => f,
-            Self::Compressor(f) => f,
+            Self::Compressor(f) | Self::KeyedCompressor(f, _) => f,
             Self::Limiter(f) => f,
             Self::Delay(f) => f,
             Self::Host(f) => f,
@@ -185,7 +208,7 @@ impl Kernel {
         match self {
             Self::Gain(f) => f.latency_frames(),
             Self::NoiseGate(f) => f.latency_frames(),
-            Self::Compressor(f) => f.latency_frames(),
+            Self::Compressor(f) | Self::KeyedCompressor(f, _) => f.latency_frames(),
             Self::Limiter(f) => f.latency_frames(),
             Self::Delay(f) => f.latency_frames(),
             Self::Host(f) => f.latency_frames(),
@@ -201,7 +224,9 @@ impl Kernel {
         let _ = match (self, params) {
             (Self::Gain(g), FilterParams::Gain { gain_db }) => g.set_gain_db(*gain_db),
             (Self::NoiseGate(g), FilterParams::NoiseGate(p)) => g.set_params(*p),
-            (Self::Compressor(c), FilterParams::Compressor(p)) => c.set_params(*p),
+            (Self::Compressor(c) | Self::KeyedCompressor(c, _), FilterParams::Compressor(p)) => {
+                c.set_params(*p)
+            }
             (Self::Limiter(l), FilterParams::Limiter(p)) => l.set_params(*p),
             (Self::Delay(d), FilterParams::Delay { delay_ms }) => d.set_delay_ms(*delay_ms),
             _ => Ok(()),
@@ -303,12 +328,34 @@ impl Chain {
         self.latency
     }
 
+    /// The inputs this chain's keyed filters read, by id: each must run before it.
+    pub(crate) fn keys(&self) -> impl Iterator<Item = u64> + '_ {
+        self.filters
+            .iter()
+            .filter_map(|(_, kernel)| match **kernel {
+                Kernel::KeyedCompressor(_, key) => key,
+                _ => None,
+            })
+    }
+
     /// Runs the filters in order over `block`, then delays it by `comp` frames (capped
-    /// at the compensation delay's room).
-    pub(crate) fn process(&mut self, block: &mut [[f32; 2]], comp: usize) {
+    /// at the compensation delay's room). A keyed filter reads the block `key` gives for
+    /// its key input's id; an empty one reads as silence.
+    pub(crate) fn process<'k>(
+        &mut self,
+        block: &mut [[f32; 2]],
+        comp: usize,
+        key: impl Fn(u64) -> &'k [[f32; 2]],
+    ) {
         let flat = block.as_flattened_mut();
         for (_, kernel) in &mut self.filters {
-            kernel.filter().process(flat);
+            match &mut **kernel {
+                Kernel::KeyedCompressor(filter, id) => {
+                    let block = id.map_or(&[][..], &key);
+                    filter.process_keyed(flat, block.as_flattened());
+                }
+                other => other.filter().process(flat),
+            }
         }
         let comp = comp.min(self.comp.max_frames());
         let was = self.comp.delay_frames();
