@@ -61,7 +61,7 @@ Contents ([Design](#design) explains the choices):
   share: the collection as `state.get` last reported it (`Collection`, with its buses
   for the bus picker, its transition presets, its hotkey bindings, its scene folders and
   the master stage's chains, and `chains` to read any owner's; a keyframe scene's items
-  are its parent's with its overrides applied, `shown_items`, and the children of the
+  are its parent's with its overrides applied (effects included), `shown_items`, and the children of the
   groups in its tree likewise, `keyframe_children`, which `item_in` and the selection
   count as its own), the program and preview
   scenes, whether studio mode is on (and `scene_click`, what a click on a scene sends
@@ -126,9 +126,9 @@ Contents ([Design](#design) explains the choices):
   (`override_submenu`); and
   `transform.rs`: `Transform`, the Transform panel (align, distribute and arrange the
   selected items); and `stats.rs`: `StreamStats`, the Stream stats panel (one output's
-  pill, uptime, bitrate, dropped frames, health, two-minute bitrate chart and details,
-  from `stats.tick`'s `outputs`), whose figures, chart and choice of output are tested
-  natively.
+  pill, uptime, bitrate, dropped frames, health, two-minute bitrate chart with its
+  hover readout, and details, from `stats.tick`'s `outputs`), whose figures, chart,
+  hover and choice of output are tested natively.
 - **Pairing** (`pairing.rs`): `Pairing`, the pairing panel under the properties in the
   Inspector, shown only when the server pairs devices (start pairing and show the code, list and
   revoke devices), and the calls behind it, tested natively against `MockEngine` and a
@@ -504,7 +504,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   item's own effects (owner `item`, ADR-0065), a video chain for an item whose source has
   a picture, with the same rows and dialogs; `Collection::chains` reads them from
   `ItemInfo.effects`, and their Uses the scene picker leaves out the scenes whose
-  picture holds the item's scene. The Add filter dialog lists the vignette under Style.
+  picture holds the item's scene. In a keyframe scene that shows the item they are its
+  effects as the keyframe shows them (owner `keyframe`,
+  [ADR-0088](../../docs/adr/0088-keyframe-scenes-override-item-effects.md),
+  `effects_owner`): the item's own until a change there, which the engine applies to a
+  copy of them, gives the keyframe its own; a note says which, and Follow the item sends
+  `item.clear_override` of `effects`. Their Uses the scene picker leaves out the scenes
+  whose picture holds the keyframe. The Add filter dialog lists the vignette under Style.
 - **The shell** is the header bar over the workspace. A failed call shows in a
   dismissable bar. A confirmation, such as "Added a reference…" after a placement of
   an existing source or a duplicate, shows in the toast (`Studio::notify`, or
@@ -530,7 +536,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   first running output, then the first stream. It reads the outputs and profiles as
   the Outputs panel does, keeps the last 120 `kbps` readings of each listed output for
   the bitrate chart (an output a tick leaves out, or whose uptime went down, starts
-  over), and shows the YouTube-only tiles not at all.
+  over), and shows the YouTube-only tiles not at all. Hovering the chart picks the
+  nearest reading and draws a vertical line, a dot centred on the reading (8 px with a
+  2 px ring, as the prototype's) and a tooltip inside the plot ("2.65 Mbps · 14 s
+  ago", or "now", hidden from screen readers, which read the chart's label), anchored
+  left in the chart's left 30%, right in its right 30% and centred between, as the
+  prototype's; a drag on the chart still scrolls vertically; the dot and tooltip are
+  placed with `style:` properties, which the page's CSP allows where a `style`
+  attribute is refused.
   Agent activity (`panels/agent.rs`) lists what agents did from the engine's
   `activity.list` ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md)),
   leaving out JStream's own UIs, and asks again after each `state.changed`,

@@ -8,17 +8,21 @@
 //! the parent's **tree**: one of the parent's own, or a child of a group (a scene with
 //! the role `group`) the parent places, at any depth (since 0.55, #846). The placement edits write
 //! an override when their `scene_id` names a variant whose tree holds the item, and
-//! `item.clear_override` removes one field ([`OverrideField`]).
+//! `item.clear_override` removes one field ([`OverrideField`]). Since 0.63 a variant also
+//! overrides an item's effects, whole, with `item.set_effects`
+//! ([ADR-0088](../../../docs/adr/0088-keyframe-scenes-override-item-effects.md)).
 
 use crate::command::{Crop, ItemTransform};
+use crate::filter::FilterInfo;
 use crate::finite::Finite32;
 use crate::geometry::ItemGeometry;
 use crate::id::{ItemId, SceneId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-/// One of the four fields a keyframe scene can override. Each is overridden whole: a
-/// variant that overrides `geometry` overrides all of it.
+/// One of the fields a keyframe scene can override. Each is overridden whole: a variant
+/// that overrides `geometry` overrides all of it, and one that overrides `effects` the
+/// whole list.
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
 )]
@@ -32,6 +36,8 @@ pub enum OverrideField {
     Visible,
     /// Its opacity (`item.set_opacity`).
     Opacity,
+    /// Its effects, the whole list (`item.set_effects`, since 0.63, ADR-0088).
+    Effects,
 }
 
 /// What a keyframe scene overrides for one item in its parent's tree, as `state.get`
@@ -57,6 +63,11 @@ pub struct ItemOverride {
     /// The overridden opacity, in `0..=1`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opacity: Option<Finite32>,
+    /// The overridden effects, first first, which the keyframe draws in place of the
+    /// item's own (since 0.63, ADR-0088). An empty list is an override too: no effects
+    /// there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effects: Option<Vec<FilterInfo>>,
 }
 
 /// Overrides a batch dropped because their item left the keyframe scene's tree
