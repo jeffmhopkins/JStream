@@ -2,14 +2,16 @@
 //! a search box and a favourites and labels filter, each row with its icon, a "program"
 //! badge on the scene on program, the chips of its labels (ADR-0078), the tag button
 //! whose popover opens under the row, and a favourite star. The label manager opens
-//! over the rows when "Edit labels…" is chosen here (`labels.rs`). Clicking a scene shows it in Scene
-//! objects and the canvas and puts it on program (`scene.switch`), or, in studio mode,
+//! over the rows when "Edit labels…" is chosen here (`labels.rs`). Clicking a scene shows it in
+//! Sources and the canvas and puts it on program (`scene.switch`), or, in studio mode,
 //! on preview (`studio.set_preview`), where a hover button puts it on program. A double
 //! click opens its Properties dialog (a keyframe's renames it). Rows are reordered by
 //! dragging them (`scene.reorder`), renamed in place (F2) and deleted (Del or the menu)
 //! through `delete.plan`, so the user sees what else goes. A right-click on a scene
 //! opens its menu, and one on the panel's empty space opens the panel's
-//! (spec-workspace.md 5.2.3 and 5.2.7).
+//! (spec-workspace.md 5.2.3 and 5.2.7). The tool bar under the rows (SC-11) adds a
+//! scene beside the selected one, deletes it, opens its Properties or Filters, and moves
+//! it one place up or down among the scenes of its folder.
 //!
 //! A scene's keyframe scenes (ADR-0024 §2) nest under it, each with the purple diamond,
 //! and the scene's caret folds them away. They stay under their scene: they aren't
@@ -31,7 +33,9 @@ use crate::panels::labels::{
 };
 use crate::panels::scene_properties::SceneDialog;
 use crate::panels::studio::override_submenu;
-use crate::panels::tree::{Filter, Reorder, SearchBar, Side, Star, dropped_at, indent};
+use crate::panels::tree::{
+    Filter, Reorder, SearchBar, Side, Star, Tool, ToolBar, dropped_at, indent,
+};
 use crate::store::{Collection, Studio, apply, plan_delete, plan_summary, reset_edits};
 use crate::workspace::DockState;
 use jstream_control::protocol::{
@@ -315,6 +319,36 @@ fn moved(collection: &Collection, moved: &Node, target: &Node, side: Side) -> Ve
         }
     }
     edits
+}
+
+/// The edits that move `scene_id` one place `up` or down among the scenes of its own
+/// folder, as the tool bar's arrows do (SC-11): nothing at either end, or for a keyframe,
+/// which stays under its scene.
+fn stepped(collection: &Collection, scene_id: &SceneId, up: bool) -> Vec<Edit> {
+    if collection.is_keyframe(scene_id) {
+        return Vec::new();
+    }
+    let folder = folder_of(collection, scene_id);
+    let siblings: Vec<&SceneId> = collection
+        .listed_scenes()
+        .filter(|s| !collection.is_keyframe(&s.scene_id))
+        .filter(|s| folder_of(collection, &s.scene_id) == folder)
+        .map(|s| &s.scene_id)
+        .collect();
+    let Some(at) = siblings.iter().position(|s| *s == scene_id) else {
+        return Vec::new();
+    };
+    let neighbour = if up { at.checked_sub(1) } else { Some(at + 1) };
+    let Some(neighbour) = neighbour.and_then(|n| siblings.get(n)) else {
+        return Vec::new();
+    };
+    let side = if up { Side::Before } else { Side::After };
+    moved(
+        collection,
+        &Node::Scene(scene_id.clone()),
+        &Node::Scene((*neighbour).clone()),
+        side,
+    )
 }
 
 /// The name a new keyframe scene of a scene with `count` of them gets.
@@ -1095,6 +1129,100 @@ pub fn Scenes() -> impl IntoView {
         );
     };
 
+    // The tool bar (SC-11) acts on the selected scene.
+    let selected = move || studio.selection.with(|s| s.scene.clone());
+    let selected_keyframe = move || {
+        selected().is_some_and(|id| {
+            studio
+                .collection
+                .with(|c| c.as_ref().is_some_and(|c| c.is_keyframe(&id)))
+        })
+    };
+    let step = move |up: bool| {
+        let Some(scene_id) = selected() else { return };
+        let edits = studio.collection.with_untracked(|c| {
+            c.as_ref()
+                .map(|c| stepped(c, &scene_id, up))
+                .unwrap_or_default()
+        });
+        send_all(edits);
+    };
+    let can_step = move |up: bool| {
+        selected().is_some_and(|id| {
+            studio
+                .collection
+                .with(|c| c.as_ref().is_some_and(|c| !stepped(c, &id, up).is_empty()))
+        })
+    };
+    let tools = vec![
+        Tool::new(
+            "Add scene",
+            "plus",
+            move || studio.collection.with(Option::is_none),
+            move || {
+                // A keyframe sits under its parent: the new scene goes in the parent's folder.
+                let folder = selected().and_then(|id| {
+                    studio.collection.with_untracked(|c| {
+                        c.as_ref().and_then(|c| {
+                            let id = c.parent_of(&id).map_or(&id, |p| &p.scene_id);
+                            folder_of(c, id)
+                        })
+                    })
+                });
+                new_scene(folder);
+            },
+        ),
+        Tool::new(
+            "Delete scene",
+            "trash",
+            move || selected().is_none(),
+            move || {
+                let Some(id) = selected() else { return };
+                let found = studio.collection.with_untracked(|c| {
+                    let c = c.as_ref()?;
+                    let scene = c.scene(&id)?;
+                    Some((
+                        scene.name.clone(),
+                        c.parent_of(&id).map(|p| p.scene_id.clone()),
+                    ))
+                });
+                match found {
+                    Some((name, Some(parent))) => delete_keyframe(id, parent, name),
+                    Some((name, None)) => ask_delete(id, name),
+                    None => {}
+                }
+            },
+        ),
+        Tool::new(
+            "Scene properties",
+            "gear",
+            move || scene_dialog.is_none() || selected().is_none() || selected_keyframe(),
+            move || {
+                if let (Some(dialog), Some(id)) = (scene_dialog, selected()) {
+                    dialog.open(id);
+                }
+            },
+        ),
+        Tool::new(
+            "Scene filters",
+            "sliders",
+            // A keyframe has no chain of its own: the graph refuses filter edits there.
+            move || selected().is_none() || selected_keyframe(),
+            move || {
+                if let Some(scene_id) = selected() {
+                    show_filters(filters, dock, FilterOwner::Scene { scene_id });
+                }
+            },
+        ),
+        Tool::new("Move up", "up", move || !can_step(true), move || step(true)),
+        Tool::new(
+            "Move down",
+            "down",
+            move || !can_step(false),
+            move || step(false),
+        ),
+    ];
+
     view! {
         <section class="panel scenes-panel tree-panel" on:contextmenu=on_context>
             <h2>"Scenes"</h2>
@@ -1114,11 +1242,14 @@ pub fn Scenes() -> impl IntoView {
                 let none = !any_rows();
                 let hidden = !none && shown_rows().is_empty();
                 (studio.collection.with(Option::is_some) && none)
-                    .then(|| view! { <p class="placeholder">"No scenes yet."</p> }.into_any())
+                    .then(|| view! {
+                        <p class="placeholder">"No scenes yet. Click + below to add one."</p>
+                    }.into_any())
                     .or_else(|| {
                         hidden.then(|| view! { <p class="placeholder">"Nothing matches these filters."</p> }.into_any())
                     })
             }}
+            <ToolBar label="Scene tools" tools=tools />
         </section>
     }
 }
@@ -1178,7 +1309,7 @@ pub fn RenameField(value: String, done: impl Fn(String) + Clone + 'static) -> im
 
 #[cfg(test)]
 mod tests {
-    use super::{Node, Row, keyframe_name, moved, rows};
+    use super::{Node, Row, keyframe_name, moved, rows, stepped};
     use crate::panels::tree::Side;
     use crate::store::Collection;
     use jstream_control::protocol::{
@@ -1357,6 +1488,46 @@ mod tests {
         // Where it is already: nothing; and a scene holds nothing to drop into.
         assert!(moved(&c, &scene_node("a"), &folder_node("show"), Side::Into).is_empty());
         assert!(moved(&c, &scene_node("a"), &scene_node("brb"), Side::Into).is_empty());
+    }
+
+    #[test]
+    fn the_arrows_move_a_scene_one_place_among_its_folders_scenes() {
+        let mut keyframe = scene("kf", None, false);
+        keyframe.variant_of = Some("y".into());
+        let c = Collection {
+            scenes: vec![
+                scene("x", None, false),
+                scene("a", Some("show"), false),
+                scene("y", None, false),
+                keyframe,
+                scene("z", None, false),
+            ],
+            folders: vec![folder("show", None)],
+            ..Collection::default()
+        };
+        let y = SceneId::new("y");
+        // Up passes over the scene in a folder to the top-level scene above.
+        assert_eq!(
+            stepped(&c, &y, true),
+            [Edit::SceneReorder {
+                scene_id: "y".into(),
+                index: 0,
+            }]
+        );
+        // Down passes over its own keyframe to the next top-level scene.
+        assert_eq!(
+            stepped(&c, &y, false),
+            [Edit::SceneReorder {
+                scene_id: "y".into(),
+                index: 4,
+            }]
+        );
+        // Nothing at the ends, and a keyframe stays under its scene.
+        assert!(stepped(&c, &SceneId::new("x"), true).is_empty());
+        assert!(stepped(&c, &SceneId::new("z"), false).is_empty());
+        assert!(stepped(&c, &SceneId::new("kf"), true).is_empty());
+        // Alone in its folder, a scene has nowhere to go.
+        assert!(stepped(&c, &SceneId::new("a"), false).is_empty());
     }
 
     #[test]

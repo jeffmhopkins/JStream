@@ -26,6 +26,9 @@ async function tree(page) {
 
 /** Drags row `from` to `at` (0 to 1) of row `to`'s height. */
 async function drag(page, from, to, at) {
+  // Both rows clear of the tool bar, which stays over the panel's foot while it scrolls.
+  await to.evaluate((row) => row.scrollIntoView({ block: 'nearest' }));
+  await from.evaluate((row) => row.scrollIntoView({ block: 'nearest' }));
   const a = await from.boundingBox();
   const b = await to.boundingBox();
   await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
@@ -37,7 +40,7 @@ async function drag(page, from, to, at) {
 /** Right-clicks the panel's empty space below the rows. */
 async function panelMenu(page) {
   const box = await panel(page).boundingBox();
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height - 10, { button: 'right' });
+  await page.mouse.click(box.x + box.width / 2, (await page.locator('.scenes-panel .tool-bar').boundingBox()).y - 10, { button: 'right' });
 }
 
 /** Names the new folder whose name field is open. */

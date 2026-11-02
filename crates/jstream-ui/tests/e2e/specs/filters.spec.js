@@ -20,7 +20,7 @@ function videoRows(scope) {
   return scope.getByRole('list', { name: 'Video filters' }).getByRole('listitem');
 }
 
-/** Selects the Backdrop through its Scene objects row. */
+/** Selects the Backdrop through its Sources row. */
 async function selectBackdrop(page) {
   await page.locator('.sources-panel li.row .row-main').first().click();
 }

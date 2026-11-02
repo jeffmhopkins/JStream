@@ -71,6 +71,15 @@ pub fn path(name: &str) -> &'static str {
         "funnel" => "M4 5h16l-6 7v6l-4 2v-8z",
         "close" => "M6 6l12 12 M18 6L6 18",
         "reset" => "M4 12a8 8 0 1 0 2.3-5.6 M4 4v5h5",
+        // The panels' tool bars (UI-FEATURES SC-11, OB-10), drawn for JStream.
+        "plus" => "M12 5v14 M5 12h14",
+        "trash" => "M4 7h16 M9 7V4h6v3 M6 7l1 13h10l1-13 M10 11v6 M14 11v6",
+        "gear" => {
+            "M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z M12 2v3 M12 19v3 M2 12h3 M19 12h3 M4.9 4.9l2.1 2.1 M17 17l2.1 2.1 M4.9 19.1L7 17 M17 7l2.1-2.1"
+        }
+        "sliders" => "M4 6h9 M17 6h3 M4 12h3 M11 12h9 M4 18h11 M19 18h1 M15 4v4 M9 10v4 M17 16v4",
+        "up" => "M6 15l6-6 6 6",
+        "down" => "M6 9l6 6 6-6",
         _ => "M3 5h18v14H3z M3 16l5-5 4 4 3-3 6 6 M15.5 7.5a1.5 1.5 0 1 0 0.01 0z",
     }
 }
@@ -83,6 +92,10 @@ const NAMES: &[&str] = &[
     "bell", "eye", "eye-off", "lock", "wrench", "out", "search", "funnel", "close", "reset",
     "image",
 ];
+
+/// The tool bars' icons, which aren't offered as a scene's icon.
+#[cfg(test)]
+const TOOLS: &[&str] = &["plus", "trash", "gear", "sliders", "up", "down"];
 
 /// The icon of this name as a `'static` name, for a name read at run time (a scene's
 /// icon); one this set doesn't have is `fallback`.
@@ -112,12 +125,12 @@ pub fn Icon(
 
 #[cfg(test)]
 mod tests {
-    use super::{NAMES, named, path};
+    use super::{NAMES, TOOLS, named, path};
 
     #[test]
     fn every_name_has_its_own_path() {
         let image = path("image");
-        for name in NAMES.iter().filter(|n| **n != "image") {
+        for name in NAMES.iter().chain(TOOLS).filter(|n| **n != "image") {
             assert_ne!(path(name), image, "{name} falls back to the image icon");
         }
         assert_eq!(named("coffee", "layers"), "coffee");

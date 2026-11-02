@@ -1,4 +1,4 @@
-// Groups in the Scene objects panel (OB-04, OB-06): grouping the selection from the
+// Groups in the Sources panel (OB-04, OB-06): grouping the selection from the
 // item menu, a group's caret showing its items, a click on one of them opening the
 // group's scene, dragging an item into a group, and ungrouping, which a second client
 // follows. Groups stay out of the Scenes panel (ADR-0024).
@@ -70,7 +70,7 @@ test('an item dragged onto a group goes into it, and the panel menu makes a grou
   // With the Backdrop selected, the panel's New group groups it.
   await rows(page).first().locator('.row-main').click();
   const box = await page.locator('.sources-panel').boundingBox();
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height - 10, { button: 'right' });
+  await page.mouse.click(box.x + box.width / 2, (await page.locator('.sources-panel .tool-bar').boundingBox()).y - 10, { button: 'right' });
   await menu(page).getByRole('menuitem', { name: 'New group' }).click();
   await expect.poll(() => tree(page)).toEqual(['Group 1']);
 
