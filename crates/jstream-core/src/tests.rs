@@ -674,8 +674,8 @@ fn scene_filters_and_item_effects_are_taken() {
     );
 }
 
-/// The effect packs in the folder the engine watches become `video_filter` kinds, which a
-/// video chain takes; a pack removed from the folder takes its kinds out of `kind.list`.
+/// A pack update made before a blame but installed after it is ignored, so the blamed
+/// kind stays quarantined.
 #[test]
 fn a_pack_update_older_than_a_blame_does_not_lift_its_quarantine() {
     use crate::effect_packs::test_pack::{self, KIND, Temp};
@@ -707,6 +707,8 @@ fn a_pack_update_older_than_a_blame_does_not_lift_its_quarantine() {
     assert!(kind.quarantined, "the older update was ignored");
 }
 
+/// The effect packs in the folder the engine watches become `video_filter` kinds, which a
+/// video chain takes; a pack removed from the folder takes its kinds out of `kind.list`.
 #[test]
 fn effect_packs_become_video_filter_kinds() {
     use crate::effect_packs::test_pack::{self, KIND, Temp};

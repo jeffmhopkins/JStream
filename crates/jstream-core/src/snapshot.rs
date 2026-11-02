@@ -594,11 +594,13 @@ impl Shot {
         self.chains.len()
     }
 
-    /// The effect-pack kinds this shot's chains draw, which a GPU device loss while it
-    /// is drawn is blamed on (#349).
+    /// The effect-pack kinds this shot's chains draw, its sources', scenes' and items'
+    /// and its master and output stages' (ADR-0080), which a GPU device loss while it is
+    /// drawn is blamed on (#349).
     pub(crate) fn pack_kinds(&self) -> std::collections::BTreeSet<String> {
         self.chains
             .values()
+            .chain(self.stages.values())
             .flat_map(|chain| chain.pack_kinds())
             .map(str::to_owned)
             .collect()
