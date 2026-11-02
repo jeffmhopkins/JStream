@@ -928,8 +928,12 @@ a hardware GPU.
   the compositor consequences of
   [ADR-0023](../../docs/adr/0023-placements-references-and-clones.md) describe. Blend
   modes are on the item too ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md)).
-- **Background.** The clear colour is a field of the snapshot. `Scene.background` is
-  not in the graph.
+- **Background.** The clear colour is a field of the snapshot: `jstream-core` passes
+  each scene's background ([ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)
+  §4) as the clear of its pass. `Color::from_rgba8` reads the protocol's RGBA8,
+  `Color::over_black` is what a mix shows of one with alpha, and `Color::mix` the fade
+  between two during a transition, both blended premultiplied in linear light as the
+  composite pass blends.
 - **Golden files.** When `cargo xtask golden` exists, WARP renders under
   `tests/golden/` should freeze the cases these tolerance checks and geometry grids
   cover. Until then they are the pixel oracle on both software adapters.

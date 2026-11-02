@@ -5,8 +5,8 @@ use crate::Graph;
 use jstream_protocol::{
     Action, BusId, Chord, Edit, EncoderProfile, EncoderProfileId, FilterChain, FilterId,
     FilterOwner, FolderId, ItemId, KindCategory, KindDescriptor, LabelId, OutputId, OutputKind,
-    ParamDescriptor, ParamType, ProtocolError, Rev, SceneId, SceneMeta, SceneRole, SourceId,
-    SourceKind, SourceMeta, parity,
+    ParamDescriptor, ParamType, ProtocolError, Rev, SceneId, SceneMeta, SceneOptions, SceneRole,
+    SourceId, SourceKind, SourceMeta, parity,
 };
 use serde_json::{Value, json};
 
@@ -1212,6 +1212,8 @@ fn folders_labels_and_metadata_round_trip() {
         "folder",
         "favourite",
         "show_in_multiview",
+        "include_audio",
+        "background",
     ] {
         assert!(
             !plain.contains(&format!("\"{field}\"")),
@@ -1254,6 +1256,13 @@ fn folders_labels_and_metadata_round_trip() {
                     show_in_multiview: false,
                 },
             },
+            Edit::SceneSetOptions {
+                scene_id: SceneId::new("a"),
+                options: SceneOptions {
+                    include_audio: false,
+                    background: Some("#0f111580".into()),
+                },
+            },
             Edit::SourceSetMeta {
                 source_id: SourceId::new("cam"),
                 meta: SourceMeta {
@@ -1282,6 +1291,8 @@ fn folders_labels_and_metadata_round_trip() {
         .as_array()
         .and_then(|scenes| scenes.iter().find(|s| s["id"] == "a"));
     assert_eq!(scene.map(|s| &s["labels"]), Some(&json!(["sponsor"])));
+    assert_eq!(scene.map(|s| &s["include_audio"]), Some(&json!(false)));
+    assert_eq!(scene.map(|s| &s["background"]), Some(&json!("#0f111580")));
     assert_eq!(load(&json), Ok(graph));
 }
 

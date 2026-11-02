@@ -255,6 +255,7 @@ impl Collection {
             items: Vec::new(),
             folder: None,
             meta: Default::default(),
+            options: Default::default(),
             filters: Default::default(),
             variant_of: Some(variant_of.clone()),
             overrides: Overrides::new(),

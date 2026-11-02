@@ -56,7 +56,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `hotkey.clear`, `transition.create`, `transition.update`, `transition.delete`,
   `transition.set_default`, `scene.set_transitions`, `item.set_transition`,
   `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
-  `folder.delete`, `scene.set_folder`, `scene.set_meta`, `label.create`,
+  `folder.delete`, `scene.set_folder`, `scene.set_meta`, `scene.set_options`, `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `source.set_meta`), with
   `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole` and `BlendMode`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
@@ -190,8 +190,12 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.59 because outputs carry
-  audio buses: `OutputInfo.audio_buses`, the `output.set_audio_buses` edit, and an
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.65 because of
+  `scene.set_options` and `SceneInfo`'s flattened `SceneOptions`, whose `include_audio`
+  leaves a scene's audio out of every nesting of it and whose `background` is the
+  colour a scene is drawn over
+  ([ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)); 0.59 made outputs
+  carry audio buses: `OutputInfo.audio_buses`, the `output.set_audio_buses` edit, and an
   output as a `bus.delete` blocker ([Audio](#design)); 0.58 added the
   `plugin.list` query, the installed WASM plugins with what each manifest asks for and
   what a person granted ([Plugins](#design)); 0.57 added
@@ -829,7 +833,18 @@ the source, so every item placing it shares them, and `source.duplicate` copies 
 A scene's `SceneMeta` (`scene.set_meta`) is its `labels` (since 0.45,
 [ADR-0078](../../docs/adr/0078-scenes-carry-labels.md); checked and stored as a
 source's), `icon`, `color`, `favourite` and `show_in_multiview` (default `true`). `scene.set_meta` and `source.set_meta` replace
-the whole metadata, so a field left out takes its default. Colours are sRGB `#rrggbb`;
+the whole metadata, so a field left out takes its default. A scene's `SceneOptions`
+(`scene.set_options`, since 0.65,
+[ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)) are behaviour, not
+organisation: `include_audio` (default `true`), off for a scene whose sources reach the
+Mixer through no nesting of it, whatever each scene source's own `audio.enabled`, while
+it is still heard on program itself (on a group, which is only reached through nesting,
+it leaves out the children's audio wherever the group shows), and `background` (default
+none, which is transparent), `#rrggbb` or `#rrggbbaa` with straight alpha, drawn under the
+scene's items wherever it is drawn, though never for a group (`parse_rgba` reads it). `scene.set_options` replaces them all the
+same way, a keyframe scene has its own except a background, which it shows from its
+parent and is refused, and `state.get` reports them flattened beside the scene's other
+fields, each omitted while it has its default. Other colours are sRGB `#rrggbb`;
 an icon is an opaque name from the UI's icon set, checked only for its length (1 to 64
 bytes). A folder that holds a scene or folder, and a label a source or scene carries, can't
 be deleted: the `invalid_argument` lists the `blockers` (`folder`, `parent` or `labels`;

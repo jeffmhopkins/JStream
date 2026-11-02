@@ -14,7 +14,7 @@ use crate::model::{Overrides, Placement, Scene, State};
 use jstream_anim::{Field, Inverse, Override, Value};
 use jstream_protocol::{
     Crop, DroppedOverride, Edit, EntityKind, Finite32, ItemId, ItemOverride, OverrideField,
-    ProtocolError, SceneId, SceneMeta, SceneRole,
+    ProtocolError, SceneId, SceneMeta, SceneOptions, SceneRole,
 };
 
 /// The value a keyframe scene stores for one field.
@@ -74,6 +74,7 @@ fn create(
         transition_out: None,
         folder: None,
         meta: SceneMeta::default(),
+        options: SceneOptions::default(),
         items: Vec::new(),
         variant_of: Some(variant_of.clone()),
         overrides: Overrides::new(),

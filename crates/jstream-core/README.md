@@ -916,9 +916,13 @@ scene into its items only when it and they are all `normal`.
 then placed like any image. The shot is scheduled inside out: each nested scene is
 one pass into its own layer (`Compositor::render_into`), which stays on the GPU as
 premultiplied linear `Rgba16Float` (no sRGB round trip, no readback) and is kept for
-the next frame while the program still nests it. A nested scene has no background yet, so it is transparent where it
-draws nothing and the scene under it shows through; the program scene is drawn over
-opaque black. A scene placed more than once at the same depth is composited once.
+the next frame while the program still nests it. Each pass clears to its scene's
+background ([ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md) §4; a
+keyframe scene's is its parent's, and a group has none), so a nested scene without one is transparent where it
+draws nothing and the scene under it shows through; the program scene's pass clears to
+its background over opaque black (`Color::over_black`). While a transition runs, its
+tracks are drawn over the two scenes' backgrounds mixed by the time since it started
+(`Transitioning::background`). A scene placed more than once at the same depth is composited once.
 Depth is bounded: the program scene is depth 0, and a scene source more than 8
 levels below it draws nothing (logged at `debug`). A scene with a scene filter
 (ADR-0065) is composited once per frame at depth 0 wherever it shows, so the count
@@ -1675,9 +1679,12 @@ brings the mixer in line with the collection under the collection lock:
   inputs are not sources and keep sending to the master at unity.
 - each such input's activity gain (`activity.rs`, ADR-0028's "shown"): 1 for a source
   that follows `always`; for a `when_shown` one, `min(1, Σ w)` over the roots that
-  reach it through visible items and nested scene sources whose audio is on. The roots
-  are the program scene (weight 1) and every nested scene source whose audio is on and
-  follows `always` (weight 1 each). The mixer applies it after the input's fader and
+  reach it through visible items and nested scene sources whose audio is on, into
+  scenes whose `include_audio` option is on
+  ([ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)). The roots are the
+  program scene (weight 1, whatever its own `include_audio`) and every nested scene
+  source whose audio is on, whose scene's `include_audio` is on, and that follows
+  `always` (weight 1 each). The mixer applies it after the input's fader and
   meter, scaling every send, and ramps to it over one block, so a cut never clicks
   and the meter still reads a source that is off program. `scene.switch` and a batch
   that moves program sync too, after program is reconciled;

@@ -26,6 +26,7 @@ use crate::organise::{SceneMeta, SourceMeta};
 use crate::output::{OutputKind, RtmpTarget, SecretString};
 use crate::plugin::PluginGrant;
 use crate::preview::{PreviewCodec, PreviewDraft};
+use crate::query::SceneOptions;
 use crate::settings::Settings;
 use crate::transition::{Easing, ItemTransition};
 use crate::youtube::{BroadcastPrivacy, BroadcastTransition};
@@ -711,6 +712,19 @@ pub enum Edit {
         #[serde(flatten)]
         meta: SceneMeta,
     },
+    /// Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the
+    /// Mixer when it is nested, and its background colour. Every field left out takes
+    /// its default. A keyframe scene has options of its own, except a background, which
+    /// it shows from its parent. `invalid` for a background that isn't a colour, or one
+    /// on a keyframe scene. Inverse: `scene.set_options` with the previous options.
+    #[serde(rename = "scene.set_options")]
+    SceneSetOptions {
+        /// The scene to change.
+        scene_id: SceneId,
+        /// The new options.
+        #[serde(flatten)]
+        options: SceneOptions,
+    },
     /// Adds a label, last in label order (ADR-0024 §4). Rejected with `invalid_argument`
     /// for an empty name, a colour that isn't `#rrggbb`, or an icon checked as
     /// `scene.set_meta`'s. Inverse: `label.delete`.
@@ -1054,6 +1068,7 @@ impl Edit {
             Edit::FolderDelete { .. } => "folder.delete",
             Edit::SceneSetFolder { .. } => "scene.set_folder",
             Edit::SceneSetMeta { .. } => "scene.set_meta",
+            Edit::SceneSetOptions { .. } => "scene.set_options",
             Edit::LabelCreate { .. } => "label.create",
             Edit::LabelUpdate { .. } => "label.update",
             Edit::LabelReorder { .. } => "label.reorder",

@@ -913,6 +913,7 @@ mod tests {
             role: SceneRole::Scene,
             folder: None,
             meta: Default::default(),
+            options: Default::default(),
             items,
             transition_in: None,
             transition_out: None,

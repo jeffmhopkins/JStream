@@ -938,6 +938,7 @@ mod tests {
                 role: SceneRole::Scene,
                 folder: None,
                 meta: Default::default(),
+                options: Default::default(),
                 items: vec![item("bottom", "cam", true), item("top", "gone", false)],
                 transition_in: None,
                 transition_out: None,

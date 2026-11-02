@@ -1199,6 +1199,7 @@ mod tests {
             transition_out: None,
             folder: folder.map(FolderId::new),
             meta,
+            options: Default::default(),
             variant_of: None,
             overrides: Vec::new(),
             items: Vec::new(),

@@ -280,7 +280,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   the bindings it will remove, and a binding is never a delete blocker
   ([ADR-0040](adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)). `Scene.background` (absent
   means transparent) is scene model, not metadata, because the compositor draws it
-  wherever the scene renders.
+  wherever the scene renders; it is one of the scene's options, set with
+  `scene.set_options` ([ADR-0089](adr/0089-scene-options-and-nested-audio.md) §4).
 - **Filters and effects:** a source's two filter chains, `filters.video` and
   `filters.audio`, belong to the source and apply wherever it is used
   ([ADR-0026](adr/0026-source-filter-chains.md)). A source has a video chain if its kind
@@ -365,8 +366,11 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 - **Shown and on program** (D29): "shown" is relative to the Program mix only. Its roots
   are `program_scene`, or both scenes of a running transition, weighted by the
   transition's audio curve (weights sum to 1). A source is reachable from a scene through
-  `visible` items, following nested scene sources whose `audio.enabled` is on, to any
-  depth. A nested scene source set to `follow = always` is an extra root of weight 1. A
+  `visible` items, following nested scene sources whose `audio.enabled` is on, into
+  scenes whose `include_audio` option is on
+  ([ADR-0089](adr/0089-scene-options-and-nested-audio.md)), to any depth. A nested scene
+  source set to `follow = always` is an extra root of weight 1, unless its scene's
+  `include_audio` is off. A
   `when_shown` source's activity gain is `min(1, Σ w(r))` over the roots that reach it;
   an `always` source's is 1. The activity gain is runtime state, never an edit. Preview,
   other video mixes, projectors and editor previews never make a source shown.
@@ -447,7 +451,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
   and hotkey bindings (protocol 0.25), as the organisation bullet above describes.
   Not yet: settings migrations between kind versions (a source saved at another
-  version is refused on load), `background`, output audio buses and chains, the `YouTube` kind, a virtual
+  version is refused on load), output audio buses and chains, the `YouTube` kind, a virtual
   camera's video mix (it always shows the program), and everything outside `sources`,
   `scenes`, `outputs`, `encoders`, `video_mixes`, `audio`, `folders`, `labels`,
   `hotkeys` and `transitions`. The collection file saves everything built so far,
@@ -663,7 +667,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `label.update`, `label.reorder`, `label.delete`, `scene.set_meta` and
   `source.set_meta` edit labels and organisation metadata
   ([ADR-0024](adr/0024-scene-structure.md), protocol 0.31; a scene's labels, protocol
-  0.45, [ADR-0078](adr/0078-scenes-carry-labels.md)).
+  0.45, [ADR-0078](adr/0078-scenes-carry-labels.md)). `scene.set_options` sets a scene's
+  behaviour options, so far whether its audio reaches the Mixer when nested and its
+  background colour
+  ([ADR-0089](adr/0089-scene-options-and-nested-audio.md), protocol 0.65).
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
@@ -896,7 +903,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 764 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 773 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking
@@ -997,7 +1004,10 @@ no GPU still runs. A nested scene is composited into an `Rgba16Float` layer that
 on the GPU
 and is placed in its parent: `render_image` makes a new one, and `render_into` redraws
 a layer the caller keeps, so a frame allocates no texture for it. The caller walks the
-nesting, bounded in depth. `ResourceCache` keeps a compositor's uploads and layers from
+nesting, bounded in depth, and clears each scene's pass to its background (transparent
+without one), and the root of a mix to that background over black, fading from one
+scene's to the other's in linear light while a transition runs (`Color::over_black`,
+`Color::mix`; [ADR-0089](adr/0089-scene-options-and-nested-audio.md) §4). `ResourceCache` keeps a compositor's uploads and layers from
 frame to frame, keyed by the caller's IDs, and hands an image back for freeing only
 after the GPU has finished the last frame that used it (see
 [Threads › State to RT threads](#threading)). On the GPU path the engine's render

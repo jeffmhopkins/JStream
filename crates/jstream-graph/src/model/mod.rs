@@ -72,9 +72,9 @@ use jstream_protocol::{
     Action, BlendMode, BusId, BusMonitor, Canvas, Chord, Crop, Easing, EncoderProfile,
     EncoderProfileId, FilterChain, FilterId, Finite32, FolderId, INITIAL_PRESET, ItemGeometry,
     ItemId, ItemTransform, ItemTransition, KindDescriptor, LabelId, OutputId, OutputKind,
-    PlacementForm, Rev, SceneId, SceneMeta, SceneRole, Settings, SourceAudio, SourceId, SourceKind,
-    TransitionPresetId, TransitionPresetInfo, TransitionsInfo, VideoMix as MixSpec, VideoMixId,
-    builtin_transition_kinds, initial_preset,
+    PlacementForm, Rev, SceneId, SceneMeta, SceneOptions, SceneRole, Settings, SourceAudio,
+    SourceId, SourceKind, TransitionPresetId, TransitionPresetInfo, TransitionsInfo,
+    VideoMix as MixSpec, VideoMixId, builtin_transition_kinds, initial_preset,
 };
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
@@ -723,6 +723,8 @@ pub struct Scene {
     pub(crate) transition_out: Option<TransitionPresetId>,
     pub(crate) folder: Option<FolderId>,
     pub(crate) meta: SceneMeta,
+    /// Its options (ADR-0089): whether its audio reaches the Mixer when nested.
+    pub(crate) options: SceneOptions,
     pub(crate) items: Vec<Item>,
     /// The scene it is a keyframe scene of, if it is one.
     pub(crate) variant_of: Option<SceneId>,
@@ -767,6 +769,11 @@ impl Scene {
     /// Its organisation metadata: icon, colour, favourite and multiview flag.
     pub fn meta(&self) -> &SceneMeta {
         &self.meta
+    }
+
+    /// Its options (ADR-0089), which `scene.set_options` sets.
+    pub fn options(&self) -> &SceneOptions {
+        &self.options
     }
 
     /// Its own items in stacking order: the first is at the bottom. A keyframe scene

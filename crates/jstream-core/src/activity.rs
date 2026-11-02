@@ -6,7 +6,9 @@
 //! as only a cut exists so far (ADR-0030; a transition's two scenes and its audio curve
 //! come with T1). A nested scene source whose audio is on and follows `always` is an
 //! extra root of weight 1. A source is **reachable** from a scene through its visible
-//! items, following nested scene sources whose audio is on, to any depth. A
+//! items, following nested scene sources whose audio is on, to any depth, into scenes
+//! whose `include_audio` option is on (ADR-0089): a scene with it off adds nothing
+//! through nesting, nor as an `always` root, though it is heard as a root itself. A
 //! `when_shown` source's activity gain is `min(1, Σ w(r))` over the roots `r` that
 //! reach it; an `always` source's is 1. The gain is runtime state, never an edit: the
 //! routing (`crate::audio`) hands it to each mixer input, which ramps to it over one
@@ -30,7 +32,8 @@ fn weighted_gains(state: &State, roots: &[(&SceneId, f32)]) -> BTreeMap<SourceId
         SourceKind::Scene { scene_id }
             if source
                 .audio()
-                .is_some_and(|audio| audio.enabled && audio.follow == AudioFollow::Always) =>
+                .is_some_and(|audio| audio.enabled && audio.follow == AudioFollow::Always)
+                && included(state, scene_id) =>
         {
             Some((scene_id, 1.0))
         }
@@ -55,6 +58,14 @@ fn weighted_gains(state: &State, roots: &[(&SceneId, f32)]) -> BTreeMap<SourceId
             Some((source.id().clone(), gain))
         })
         .collect()
+}
+
+/// Whether `scene_id`'s audio reaches the Mixer through nesting: its `include_audio`
+/// option (ADR-0089). A scene the collection doesn't have adds nothing either way.
+fn included(state: &State, scene_id: &SceneId) -> bool {
+    state
+        .scene(scene_id)
+        .is_none_or(|scene| scene.options().include_audio)
 }
 
 /// The sources `root` reaches: those its visible items place, and through each placed
@@ -87,6 +98,7 @@ fn reachable<'a>(state: &'a State, root: &SceneId) -> BTreeSet<&'a SourceId> {
             reached.insert(source.id());
             if let SourceKind::Scene { scene_id } = source.kind()
                 && source.audio().is_none_or(|audio| audio.enabled)
+                && included(state, scene_id)
             {
                 // Only a group stays in the keyframe's tree.
                 let group = state
@@ -104,8 +116,8 @@ mod tests {
     use super::{activity_gains, weighted_gains};
     use jstream_graph::Graph;
     use jstream_protocol::{
-        AudioFollow, Edit, ItemId, KindCategory, KindDescriptor, SceneId, Settings, SourceId,
-        SourceKind,
+        AudioFollow, Edit, ItemId, KindCategory, KindDescriptor, SceneId, SceneOptions, Settings,
+        SourceId, SourceKind,
     };
 
     fn apply(graph: &mut Graph, edits: Vec<Edit>) {
@@ -268,6 +280,42 @@ mod tests {
             "nothing is shown without program"
         );
         assert_eq!(gain(&gains, "mic"), 1.0);
+    }
+
+    fn include_audio(scene_id: &str, include_audio: bool) -> Edit {
+        Edit::SceneSetOptions {
+            scene_id: SceneId::new(scene_id),
+            options: SceneOptions {
+                include_audio,
+                ..SceneOptions::default()
+            },
+        }
+    }
+
+    /// A scene whose `include_audio` is off adds none of its audio through nesting, nor
+    /// as an `always` root, and is still heard on program itself (ADR-0089).
+    #[test]
+    fn a_scene_left_out_of_nested_audio_is_heard_only_on_program() {
+        let mut graph = graph();
+        let a = SceneId::new("a");
+        apply(&mut graph, vec![include_audio("c", false)]);
+        let gains = activity_gains(graph.state(), Some(&a));
+        assert_eq!(gain(&gains, "media"), 1.0);
+        assert_eq!(gain(&gains, "nested_media"), 0.0, "not through `inner`");
+        let c = SceneId::new("c");
+        let gains = activity_gains(graph.state(), Some(&c));
+        assert_eq!(gain(&gains, "nested_media"), 1.0, "on program itself");
+        // An `always` nested source of it adds nothing either.
+        apply(
+            &mut graph,
+            vec![set_audio("inner", None, Some(AudioFollow::Always))],
+        );
+        let b = SceneId::new("b");
+        let gains = activity_gains(graph.state(), Some(&b));
+        assert_eq!(gain(&gains, "nested_media"), 0.0);
+        apply(&mut graph, vec![include_audio("c", true)]);
+        let gains = activity_gains(graph.state(), Some(&b));
+        assert_eq!(gain(&gains, "nested_media"), 1.0, "back on, `always` again");
     }
 
     #[test]

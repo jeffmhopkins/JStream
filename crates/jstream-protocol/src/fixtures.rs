@@ -6,6 +6,7 @@
 //! naming and classification checks see every variant.
 
 use crate::ActivityEntry;
+use crate::SceneOptions;
 use crate::{
     Action, Batch, BlendMode, Blocker, Call, CallResult, Canvas, ChainCost, ClientId,
     ClientMessage, Command, CommandClass, Crop, DeleteTarget, DropCounts, Edit, EngineLoad,
@@ -415,6 +416,13 @@ pub(crate) fn edits() -> Vec<Edit> {
         Edit::SceneSetMeta {
             scene_id: SceneId::new("scn_1"),
             meta: scene_meta(),
+        },
+        Edit::SceneSetOptions {
+            scene_id: SceneId::new("scn_1"),
+            options: SceneOptions {
+                include_audio: false,
+                background: Some("#0f1115".into()),
+            },
         },
         Edit::LabelCreate {
             label_id: LabelId::new("lbl_sponsor"),
@@ -1571,6 +1579,10 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     items: item_infos(),
                     folder: Some(FolderId::new("fld_shows")),
                     meta: scene_meta(),
+                    options: SceneOptions {
+                        include_audio: false,
+                        background: Some("#0f1115".into()),
+                    },
                 },
                 SceneInfo {
                     overrides: item_overrides(),
@@ -1584,6 +1596,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     items: vec![],
                     folder: None,
                     meta: Default::default(),
+                    options: Default::default(),
                 },
                 SceneInfo {
                     overrides: Vec::new(),
@@ -1597,6 +1610,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     items: vec![],
                     folder: None,
                     meta: Default::default(),
+                    options: Default::default(),
                 },
             ],
             outputs: output_infos(),
