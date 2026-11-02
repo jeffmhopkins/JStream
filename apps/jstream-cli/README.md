@@ -111,7 +111,7 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `source.create`'s `duplicated_from` and the filter edits. `source.set_settings`,
   `source.create` with settings, `encoder.create`, `encoder.update`, `encoder.delete`,
   `output.set_encoder`, `video_mix.create`, `video_mix.update`, `video_mix.delete`,
-  `output.set_video_mix` and the `filter.*` edits need a JSON argument form the CLI
+  `output.set_video_mix`, `output.set_audio_buses` and the `filter.*` edits need a JSON argument form the CLI
   doesn't have yet, so a
   source it creates gets its kind's defaults and an output it creates the engine's
   default encoder and the program (MCP and the WebSocket API take them). `item.add` of a
@@ -231,7 +231,7 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   stream ends. A stream that ends means the engine went away, so it exits with code 3.
   When the server dropped events because the CLI read too slowly, it prints
   `events.dropped <count>`. A pipeline drop sample prints
-  `stats.tick seq <n> capture_frames <n> audio_frames <n> render_ticks <n> encode_frames <n> encode_blocks <n> output_packets <n>`, then `elapsed_ms <n> program_frames <n> cpus <n>` and `cpu_ms <n>` when the tick carries the engine's load (protocol 0.48) and the host reads CPU time.
+  `stats.tick seq <n> capture_frames <n> audio_frames <n> render_ticks <n> encode_frames <n> encode_blocks <n> output_packets <n>`, then `elapsed_ms <n> program_frames <n> cpus <n>` and `cpu_ms <n>` when the tick carries the engine's load (protocol 0.48) and the host reads CPU time, then for each running output (protocol 0.57) `output <id> uptime_ms <n> kbps <n> bytes <n> frames <n> dropped_frames <n> dropped_packets <n> health <waiting|good|fair|poor>`.
   Any other event, `meters.tick` among them, prints as its JSON.
 
 **MCP.** `jstream-cli mcp` is the stdio MCP proxy for an agent's MCP client to launch,
@@ -282,7 +282,7 @@ for example:
 | 17 | `invalid_argument` |
 | 18 | `action_failed` |
 | 19 | `internal` |
-| 20 | an error code this CLI doesn't know (from a newer engine); `undo_conflict` and `history_empty`, which answer only a `history` call, which the CLI doesn't send; `unsupported`, which `pair` and `device` get from an engine with no server in front (`--mock`); `forbidden`, which only a plugin's call gets; and `hardware_session_limit`, which `output start` gets when the hardware encoder session limit is reached (0.44), and whose own number waits on the maintainer's confirmation of this table |
+| 20 | an error code this CLI doesn't know (from a newer engine); `undo_conflict` and `history_empty`, which answer only a `history` call, which the CLI doesn't send; `unsupported`, which `pair` and `device` get from an engine with no server in front (`--mock`); `forbidden`, which only a plugin's call gets; and `hardware_session_limit`, which `output start` gets when the hardware encoder session limit is reached (0.44); and `too_large`, a message over the server's request limit (0.62, [ADR-0074](../../docs/adr/0074-too-large-requests.md)); these last two have own numbers that wait on the maintainer's confirmation of this table |
 
 <a id="design"></a>
 ## Design

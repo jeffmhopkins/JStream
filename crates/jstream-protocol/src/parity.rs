@@ -405,6 +405,15 @@ pub fn collection() -> Batch {
                 bus_id: BusId::new("drums"),
                 monitor: Some(BusMonitor::default()),
             },
+            // An output carries a bus (0.59), and moves off it before it is deleted.
+            Edit::OutputSetAudioBuses {
+                output_id: OutputId::new("rec"),
+                audio_buses: vec![BusId::new("drums")],
+            },
+            Edit::OutputSetAudioBuses {
+                output_id: OutputId::new("rec"),
+                audio_buses: vec![BusId::new("vod")],
+            },
             Edit::BusDelete {
                 bus_id: BusId::new("drums"),
             },
@@ -1234,15 +1243,21 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
             },
             invalid("edits.6.chain", "a chain holds at most 8 filters"),
         ),
-        // The master stage and outputs (ADR-0080): audio chains only, on an output
-        // that exists.
+        // The master stage and outputs (ADR-0080): since 0.60 every output has a video
+        // chain, on an output that exists.
         (
-            Batch::single(gain_on(FilterOwner::Master, "v", FilterChain::Video, 0.0)),
-            invalid(
-                "edits.0.chain",
-                "the master stage's and outputs' video chains are not available yet; only \
-                 their audio chains hold filters",
-            ),
+            Batch::single(gain_on(
+                FilterOwner::Output {
+                    output_id: OutputId::new("ghost"),
+                },
+                "v",
+                FilterChain::Video,
+                0.0,
+            )),
+            ProtocolError::NotFound {
+                entity: EntityKind::Output,
+                id: "ghost".into(),
+            },
         ),
         // A scene's filters and an item's effects (0.43, ADR-0065): a video chain only,
         // on a scene or item that exists.
@@ -1558,6 +1573,74 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
             ProtocolError::NotFound {
                 entity: EntityKind::Bus,
                 id: "ghost".into(),
+            },
+        ),
+        // An output's audio buses (0.59): one bus that exists, on an output with audio.
+        (
+            Batch::single(Edit::OutputSetAudioBuses {
+                output_id: OutputId::new("tw"),
+                audio_buses: vec![BusId::new("ghost")],
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Bus,
+                id: "ghost".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::OutputSetAudioBuses {
+                output_id: OutputId::new("ghost"),
+                audio_buses: vec![BusId::master()],
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Output,
+                id: "ghost".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::OutputSetAudioBuses {
+                output_id: OutputId::new("tw"),
+                audio_buses: vec![],
+            }),
+            invalid(
+                "edits.0.audio_buses",
+                "an output carries exactly one bus: it writes one audio track",
+            ),
+        ),
+        (
+            Batch::single(Edit::OutputSetAudioBuses {
+                output_id: OutputId::new("tw"),
+                audio_buses: vec![BusId::master(), BusId::new("vod")],
+            }),
+            invalid(
+                "edits.0.audio_buses",
+                "an output carries exactly one bus: it writes one audio track",
+            ),
+        ),
+        (
+            Batch::single(Edit::OutputSetAudioBuses {
+                output_id: OutputId::new("vcam"),
+                audio_buses: vec![BusId::new("vod")],
+            }),
+            invalid(
+                "edits.0.audio_buses",
+                "output `vcam` has no audio: a virtual camera sends video only",
+            ),
+        ),
+        // A bus an output carries can't be deleted: the output blocks it.
+        (
+            Batch::single(Edit::BusDelete {
+                bus_id: BusId::new("vod"),
+            }),
+            ProtocolError::InvalidArgument {
+                field: "edits.0.bus_id".into(),
+                reason: "bus `vod` is still referred to by output `rec` (audio_buses); remove \
+                         those references first, or send the batch `delete.plan` returns"
+                    .into(),
+                blockers: vec![crate::Blocker {
+                    entity: EntityKind::Output,
+                    id: "rec".into(),
+                    field: "audio_buses".into(),
+                }],
             },
         ),
         // Monitors (0.42): the bus must exist, and `BusMonitor::problem` decides the rest.
@@ -1999,6 +2082,7 @@ fn recording() -> OutputInfo {
             settings: gain_db(-6.0),
         }]),
         video_mix: Some(VideoMixId::new("prog")),
+        audio_buses: vec![BusId::new("vod")],
     }
 }
 
@@ -2009,6 +2093,7 @@ fn youtube() -> OutputInfo {
         encoder_profile: Some(EncoderProfileId::new("low")),
         filters: FilterChains::default(),
         video_mix: Some(VideoMixId::new("side")),
+        audio_buses: vec![BusId::master()],
     }
 }
 
@@ -2022,6 +2107,7 @@ fn outputs() -> Vec<OutputInfo> {
             encoder_profile: None,
             filters: FilterChains::default(),
             video_mix: None,
+            audio_buses: vec![BusId::master()],
         },
         OutputInfo {
             output_id: OutputId::new("vcam"),
@@ -2029,6 +2115,7 @@ fn outputs() -> Vec<OutputInfo> {
             encoder_profile: None,
             filters: FilterChains::default(),
             video_mix: None,
+            audio_buses: vec![BusId::master()],
         },
         youtube(),
     ]

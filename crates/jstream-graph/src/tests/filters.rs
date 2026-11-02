@@ -550,8 +550,74 @@ fn the_master_and_outputs_have_audio_chains() {
     assert_eq!(g.state(), &before);
 }
 
-/// The master's and outputs' video chains wait for video mixes, an output must exist,
-/// and their filters can't hold a reference yet.
+/// The master stage and every output, the virtual camera included, have a video chain
+/// (ADR-0080): its filters apply, undo and survive a save, an output with one gets its
+/// own encoder session even while every filter is off, and a deleted output brings its
+/// video filters back with it.
+#[test]
+fn the_master_and_outputs_have_video_chains() {
+    let mut g = fixture();
+    apply_ok(
+        &mut g,
+        vec![
+            Edit::OutputCreate {
+                output_id: OutputId::new("cam"),
+                kind: OutputKind::VirtualCam,
+            },
+            Edit::OutputCreate {
+                output_id: OutputId::new("rec"),
+                kind: OutputKind::Record {
+                    path: "/home/me/show.mp4".into(),
+                    container: RecordContainer::Mp4,
+                },
+            },
+        ],
+    );
+    let has_chain = |g: &Graph, id: &str| {
+        g.state()
+            .output(&OutputId::new(id))
+            .is_some_and(crate::Output::has_video_chain)
+    };
+    assert!(!has_chain(&g, "cam"));
+    undoes_exactly(
+        &mut g,
+        vec![
+            owned(FilterOwner::Master, FilterChain::Video, "t", "tint"),
+            owned(output("cam"), FilterChain::Video, "t", "tint"),
+            owned(output("rec"), FilterChain::Video, "t", "tint"),
+        ],
+    );
+    assert!(has_chain(&g, "cam") && has_chain(&g, "rec"));
+    apply_ok(
+        &mut g,
+        vec![Edit::FilterSetEnabled {
+            owner: output("cam"),
+            filter_id: FilterId::new("t"),
+            enabled: false,
+        }],
+    );
+    assert!(has_chain(&g, "cam"), "a disabled filter still counts");
+    assert_eq!(g.state().master.chain(FilterChain::Video).len(), 1);
+
+    let json = g.to_collection_json();
+    let loaded = Graph::new().with_kinds(kinds()).with_collection_json(&json);
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(g.state()));
+
+    let before = g.state().clone();
+    let deleted = apply_ok(
+        &mut g,
+        vec![Edit::OutputDelete {
+            output_id: OutputId::new("cam"),
+        }],
+    );
+    let names: Vec<&str> = deleted.inverse.edits.iter().map(Edit::name).collect();
+    assert_eq!(names, ["output.create", "filter.add"]);
+    apply_ok(&mut g, deleted.inverse.edits);
+    assert_eq!(g.state(), &before);
+}
+
+/// The master's and an output's video chain take video filter kinds, an output must
+/// exist, and their filters can't hold a reference yet.
 #[test]
 fn master_and_output_chains_are_validated() {
     let mut kinds = kinds();
@@ -579,10 +645,20 @@ fn master_and_output_chains_are_validated() {
     apply_ok(&mut g, vec![builtin("cam")]);
     let field_of = |g: &mut Graph, edit: Edit| invalid_reason(apply_err(g, vec![edit]));
 
-    let video = owned(FilterOwner::Master, FilterChain::Video, "t", "tint");
-    let (field, reason) = field_of(&mut g, video);
-    assert_eq!(field, "edits.0.chain");
-    assert!(reason.contains("video chains"), "{reason}");
+    let audio_kind = owned(FilterOwner::Master, FilterChain::Video, "d", "duck");
+    let (field, reason) = field_of(&mut g, audio_kind);
+    assert_eq!(field, "edits.0.kind");
+    assert!(reason.contains("for the video chain"), "{reason}");
+    assert!(matches!(
+        apply_err(
+            &mut g,
+            vec![owned(output("ghost"), FilterChain::Video, "t", "tint")]
+        ),
+        ProtocolError::NotFound {
+            entity: EntityKind::Output,
+            ..
+        }
+    ));
     assert!(matches!(
         apply_err(&mut g, vec![owned_gain(output("ghost"), "g")]),
         ProtocolError::NotFound {

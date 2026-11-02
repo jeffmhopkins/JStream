@@ -154,10 +154,10 @@ fn dfs(
 /// scene (ID order), every settings value that refers to the target (source ID order;
 /// the source's own settings in parameter order, then each filter's, in chain order, as
 /// `filters.<filter_id>.<param>`; then each scene's filters, its items' effects and a
-/// keyframe scene's overridden effects), then the video mixes that show a scene (ID
-/// order). A
-/// bus is held only by settings values (its sends go with it). `delete.plan` removes
-/// exactly these, and points those mixes at the program.
+/// keyframe scene's overridden effects), then the outputs that carry a bus (ID order),
+/// then the video mixes that show a scene (ID order). A bus is held only by settings
+/// values and outputs (its sends go with it). `delete.plan` removes exactly these, points
+/// those mixes at the program and moves those outputs to the master bus.
 ///
 /// A mix is not a node: nothing depends on it but outputs, so it can't be in a cycle.
 pub(crate) fn blockers(state: &State, target: &Node) -> Vec<Blocker> {
@@ -264,6 +264,19 @@ pub(crate) fn blockers(state: &State, target: &Node) -> Vec<Blocker> {
                 );
             }
         }
+    }
+    // The outputs that carry a bus (ID order).
+    if let Node::Bus(bus_id) = target {
+        out.extend(
+            state
+                .outputs()
+                .filter(|o| o.audio_bus() == bus_id)
+                .map(|o| Blocker {
+                    entity: EntityKind::Output,
+                    id: o.id().as_str().to_owned(),
+                    field: "audio_buses".into(),
+                }),
+        );
     }
     if let Node::Scene(scene_id) = target {
         out.extend(

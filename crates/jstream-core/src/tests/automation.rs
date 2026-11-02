@@ -10,7 +10,7 @@ use crate::plugins::automation::{EVENT_ENTRY, MANIFEST_FILE, MODULE_FILE, PLUGIN
 use jstream_control::{Control, ControlError, EventStream};
 use jstream_protocol::{
     Action, Call, CallResult, EntityKind, Event, PluginClass, PluginDisabledReason, PluginGrant,
-    PluginId, PluginState, ProtocolError, Query, QueryResult, SceneId,
+    PluginId, PluginInfo, PluginRequest, PluginState, ProtocolError, Query, QueryResult, SceneId,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -907,4 +907,126 @@ fn a_second_plugin_folder_is_ignored() {
     engine.open_plugin_dir(&second);
     assert!(first.join(PLUGINS_FILE).exists());
     assert!(!second.join(PLUGINS_FILE).exists());
+}
+
+/// `plugin.list` for a person's session.
+fn listed(control: &impl Control) -> Vec<PluginInfo> {
+    match call(
+        control,
+        Call::Query {
+            query: Query::PluginList,
+        },
+    ) {
+        Ok(CallResult::Query {
+            result: QueryResult::PluginList { plugins },
+        }) => plugins,
+        other => panic!("not a plugin.list result: {other:?}"),
+    }
+}
+
+#[test]
+fn plugin_list_shows_each_plugins_state_request_and_grant() {
+    let engine = Engine::new();
+    let person = connected(&engine);
+    assert!(listed(&person).is_empty(), "nothing installed yet");
+    let mut events = person.events();
+    let idle = package(
+        "list_idle",
+        IDLE,
+        Some(
+            r#"{"name": "Idle", "classes": ["edit", "live"], "hosts": ["https://api.example.com:443"], "folders": true}"#,
+        ),
+    );
+    let traps = package("list_traps", TRAPS, None);
+    call(
+        &person,
+        install("plg_b", &idle, grant(&[PluginClass::Edit])),
+    )
+    .expect("installs");
+    assert_eq!(next_state(&mut events).1, PluginState::Enabled);
+    call(&person, install("plg_a", &traps, PluginGrant::default())).expect("installs");
+    assert_eq!(next_state(&mut events).1, PluginState::Enabled);
+    call(&person, create_scene("a")).expect("applies");
+    assert_eq!(next_state(&mut events).1, PluginState::Disabled);
+
+    let plugins = listed(&person);
+    assert_eq!(
+        plugins
+            .iter()
+            .map(|p| p.plugin_id.as_str())
+            .collect::<Vec<_>>(),
+        ["plg_a", "plg_b"],
+        "ordered by ID"
+    );
+    assert_eq!(plugins[0].state, PluginState::Disabled);
+    assert_eq!(plugins[0].reason, Some(PluginDisabledReason::Trap));
+    assert_eq!(plugins[0].remote_name, None);
+    assert_eq!(plugins[0].request, PluginRequest::default());
+    assert_eq!(plugins[0].path, traps.to_string_lossy());
+    assert_eq!(plugins[1].state, PluginState::Enabled);
+    assert_eq!(plugins[1].reason, None);
+    assert_eq!(plugins[1].remote_name.as_deref(), Some("Idle"));
+    assert_eq!(
+        plugins[1].request,
+        PluginRequest {
+            classes: [PluginClass::Edit, PluginClass::Live].into(),
+            hosts: vec!["https://api.example.com:443".into()],
+            folders: true,
+        }
+    );
+    assert_eq!(plugins[1].grant, grant(&[PluginClass::Edit]));
+
+    // A new grant shows at once.
+    call(
+        &person,
+        regrant("plg_b", grant(&[PluginClass::Edit, PluginClass::Live])),
+    )
+    .expect("regrants");
+    assert_eq!(
+        listed(&person)[1].grant,
+        grant(&[PluginClass::Edit, PluginClass::Live])
+    );
+}
+
+#[test]
+fn plugin_list_shows_an_update_waiting_for_a_grant() {
+    let dir = plugin_dir("list_needs_grant");
+    let package_dir = package("list_needs_grant", IDLE, None);
+    {
+        let engine = opened(&dir);
+        let person = connected(&engine);
+        call(
+            &person,
+            install("plg_u", &package_dir, PluginGrant::default()),
+        )
+        .expect("installs");
+    }
+    fs::write(package_dir.join(MANIFEST_FILE), ASKS_EDIT).expect("manifest written");
+    let engine = opened(&dir);
+    let person = connected(&engine);
+    let plugins = listed(&person);
+    assert_eq!(plugins[0].state, PluginState::Disabled);
+    assert_eq!(plugins[0].reason, Some(PluginDisabledReason::NeedsGrant));
+    assert_eq!(
+        plugins[0].request.classes,
+        [PluginClass::Edit].into(),
+        "the update's request, for the person to grant"
+    );
+    assert_eq!(plugins[0].grant, PluginGrant::default());
+}
+
+/// No plugin may read what is installed, or where, whatever it is granted.
+#[test]
+fn a_plugin_cant_list_the_plugins() {
+    let plugin = Call::Query {
+        query: Query::PluginList,
+    };
+    let every = PluginGrant {
+        classes: [PluginClass::Edit, PluginClass::Live, PluginClass::Outputs].into(),
+        ..PluginGrant::default()
+    };
+    assert!(matches!(
+        every.check(&plugin),
+        Err(ProtocolError::Forbidden { .. })
+    ));
 }

@@ -242,6 +242,7 @@ impl Output {
             encoder_profile: self.encoder_profile.clone(),
             filters: self.filters.to_info(),
             video_mix: self.video_mix.clone(),
+            audio_buses: self.audio_buses().to_vec(),
         }
     }
 }

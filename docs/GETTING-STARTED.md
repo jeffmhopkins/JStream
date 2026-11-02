@@ -81,8 +81,8 @@ scene's right-click menu (or Ctrl+C then Ctrl+V on its row) copies the whole sce
 Panels can be moved, hidden and brought back from the **View** menu; **Layout** saves
 and resets arrangements.
 
-To watch a scene, the program or a multiview on another screen, choose **Pop out** on a
-scene's right-click menu, or a projector under **View**: each opens in a window of its
+To watch a scene, a source, the program or a multiview on another screen, choose
+**Pop out** on a scene's or an object's right-click menu, or a projector under **View**: each opens in a window of its
 own, or full screen. Drag a window to the monitor you want and double-click it to fill
 that screen; Esc closes it.
 
@@ -104,6 +104,12 @@ others) with the server address and stream key the service gives you.
 3. Press **Go Live** at the top right. It starts every stream output whose key is set;
    **End stream** stops them. Each output shows its state, and reconnects by itself if
    the connection drops.
+
+An output sends H.264 at the engine's default rate unless you pick otherwise. To change
+the codec or bit rate, or to send a vertical picture (1080 × 1920 for Shorts or TikTok),
+make an encoder or a video mix under **Encoders** and **Video mixes**, below the output
+cards, and pick it in the output's **Encoder** or **Video** list. A running output takes
+the new choice when it next starts.
 
 Signing in to YouTube (choosing a broadcast, chat, viewer counts) is not in this alpha:
 create the broadcast in YouTube Studio and stream to it with its key.

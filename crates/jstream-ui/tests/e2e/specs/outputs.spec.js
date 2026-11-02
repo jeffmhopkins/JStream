@@ -1,6 +1,7 @@
 // The Outputs panel and the header: adding outputs, the write-only stream key, start and
 // stop, Go Live and Record in the header,
-// the encoder profile and deleting, through a real browser and the WebSocket API.
+// the encoder profile, the audio bus, the video mix, editing encoder profiles and video
+// mixes, and deleting, through a real browser and the WebSocket API.
 import { test, expect, connect, showPanel } from '../fixtures.js';
 
 /** Connects and opens the inspector's Outputs page. */
@@ -90,6 +91,79 @@ test('a server URL edit and an encoder choice reach the engine', async ({ page, 
   await openOutputs(page, daemon);
   await expect(stream).toContainText('Stream to rtmps://127.0.0.1/app');
   await expect(stream.getByLabel('Encoder')).toHaveValue('hq');
+});
+
+test('an output carries the bus its Audio select picks', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  await showPanel(page, 'Audio mixer');
+  const buses = page.locator('.mixer-panel .fold');
+  await buses.locator('.fold-toggle').click();
+  await buses.getByRole('textbox', { name: 'New bus name' }).fill('Stream');
+  await buses.getByRole('button', { name: 'Add bus' }).click();
+  await expect(buses.locator('.strip .strip-name')).toHaveText(['Master', 'Stream']);
+
+  await showPanel(page, 'Outputs');
+  await addOutput(page, 'record', '/tmp/a.mp4');
+  const recording = card(page, 'output-1');
+  const audio = recording.getByLabel('Audio');
+  await expect(audio.locator('option:checked')).toHaveText('Master');
+  await audio.selectOption({ label: 'Stream' });
+  // A fresh page reads it back from the engine.
+  await openOutputs(page, daemon);
+  await expect(card(page, 'output-1').getByLabel('Audio').locator('option:checked')).toHaveText('Stream');
+});
+
+test('an encoder profile and a vertical video mix are made, used and kept', async ({ page, daemon }) => {
+  await openOutputs(page, daemon);
+  await addOutput(page, 'record', '/tmp/a.mkv');
+  const recording = card(page, 'output-1');
+
+  const encoders = page.getByRole('region', { name: 'Encoders' });
+  await encoders.getByRole('button', { name: 'New encoder…' }).click();
+  const form = encoders.getByRole('form', { name: 'New encoder' });
+  await form.getByLabel('Encoder name').fill('AV1 archive');
+  await form.getByLabel('Video codec').selectOption({ label: 'AV1' });
+  await form.getByLabel('Rate control').selectOption('vbr');
+  await form.getByLabel('Bit rate', { exact: true }).fill('6000');
+  await form.getByLabel('Peak bit rate').fill('5000');
+  await form.getByRole('button', { name: 'Save' }).click();
+  // The form names the field the engine would refuse, and stays open.
+  await expect(form.getByRole('alert')).toContainText('Peak bit rate');
+  await form.getByLabel('Peak bit rate').fill('9000');
+  await form.getByRole('button', { name: 'Save' }).click();
+  await expect(form).toHaveCount(0);
+  const row = encoders.locator('li.profile').filter({ hasText: 'AV1 archive' });
+  await expect(row).toContainText('AV1 · VBR 6000 kbps, peak 9000');
+
+  const mixes = page.getByRole('region', { name: 'Video mixes' });
+  await mixes.getByRole('button', { name: 'New video mix…' }).click();
+  const mixForm = mixes.getByRole('form', { name: 'New video mix' });
+  await expect(mixForm.getByLabel('Size')).toHaveValue('3');
+  await mixForm.getByRole('button', { name: 'Save' }).click();
+  const vertical = mixes.locator('li.profile').filter({ hasText: 'Vertical' });
+  await expect(vertical).toContainText('Program · 1080 × 1920 · every frame');
+
+  await recording.getByLabel('Encoder').selectOption({ label: 'AV1 archive' });
+  await recording.getByLabel('Video').selectOption({ label: 'Vertical' });
+  // In use, neither can be deleted.
+  await expect(row.getByRole('button', { name: 'Delete AV1 archive' })).toBeDisabled();
+  await expect(vertical.getByRole('button', { name: 'Delete Vertical' })).toBeDisabled();
+
+  // A fresh page reads it all back from the engine, and an edit keeps the mix's ID.
+  await openOutputs(page, daemon);
+  await expect(recording.getByLabel('Encoder').locator('option:checked')).toHaveText('AV1 archive');
+  await expect(recording.getByLabel('Video').locator('option:checked')).toHaveText('Vertical');
+  await vertical.getByRole('button', { name: 'Edit Vertical' }).click();
+  const edit = mixes.getByRole('form', { name: 'Edit video mix' });
+  await edit.getByLabel('Size').selectOption({ label: '720 × 1280 (vertical)' });
+  await edit.getByRole('button', { name: 'Save' }).click();
+  await expect(vertical).toContainText('Program · 720 × 1280');
+  await expect(recording.getByLabel('Video').locator('option:checked')).toHaveText('Vertical');
+
+  // Back on the program, the mix can go.
+  await recording.getByLabel('Video').selectOption({ label: 'Program, canvas size' });
+  await vertical.getByRole('button', { name: 'Delete Vertical' }).click();
+  await expect(vertical).toHaveCount(0);
 });
 
 test('another client sees outputs come and go', async ({ page, context, daemon }) => {

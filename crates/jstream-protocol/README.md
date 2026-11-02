@@ -47,7 +47,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `canvas.set_size`, `source.create`, `source.rename`, `source.set_settings`,
   `source.duplicate`, `source.delete`, `filter.add`, `filter.remove`,
   `filter.set_enabled`, `filter.set_settings`, `filter.reorder`, `output.create`,
-  `output.set_target`, `output.set_encoder`, `output.set_video_mix`, `output.delete`,
+  `output.set_target`, `output.set_encoder`, `output.set_video_mix`,
+  `output.set_audio_buses`, `output.delete`,
   `encoder.create`, `encoder.update`, `encoder.delete`, `video_mix.create`,
   `video_mix.update`, `video_mix.delete`, `source.set_audio`, `bus.create`,
   `bus.rename`, `bus.set_fader`, `bus.set_monitor`, `bus.delete`, `send.set`,
@@ -63,7 +64,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`,
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
-  `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`), with
+  `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`,
+  `effect.enable`), with
   `Action::named_objects` and `Action::bind_problem`,
   which every implementation uses to check and follow a hotkey's action; `Batch`, whose
   optional `ends_gesture` commits a gesture; and the `Command`/`CommandClass`
@@ -111,7 +113,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `live.list`, `capture.targets`,
-  `source.sizes` and `activity.list`, with `QueryResult`
+  `source.sizes`, `activity.list` and `plugin.list`, with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
   `CaptureTargetInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
   (`activity.rs` holds the last, with `MAX_ACTIVITY_ENTRIES` and
@@ -150,9 +152,11 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Events** (`event.rs`): `state.changed`, `output.state_changed`, `studio.changed`
   (program, preview and the transition a switch started), `privacy.changed` (deprecated),
   `source.size_changed`, `events.dropped`,
-  `stats.tick` (with `DropCounts`, `EngineLoad` and `ChainCost`), `meters.tick`,
+  `stats.tick` (with `DropCounts`, `EngineLoad`, `ChainCost` and each running output's
+  `OutputStatsInfo` and `OutputHealth`), `meters.tick`,
   `youtube.status_changed`, `youtube.health_changed`,
-  `youtube.stats`, `live.changed`, `live.ended` and `plugin.state_changed`.
+  `youtube.stats`, `live.changed`, `live.ended`, `plugin.state_changed` and
+  `gpu.device_lost`.
 - **Plugins** (`plugin.rs`, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)): `PluginClass` (`read`,
   `edit`, `live`, `outputs`), `PLUGIN_SCOPES`, the table that places every command in
   one class or under "never", with `plugin_scope` and `plugin_classes` (a call's
@@ -160,7 +164,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `PluginDenial` no grant overrides), `PluginGrant` (the classes, hosts and folders a
   person grants, with `check`, which returns the `forbidden` error, and `problem`),
   `settings_reach` and `Reach` (the hosts and files a settings map names),
-  `plugin_may_bind`, `PluginState` and `PluginDisabledReason` ([Plugins](#design)).
+  `plugin_may_bind`, `PluginState`, `PluginDisabledReason`, and `PluginInfo` and
+  `PluginRequest`, what `plugin.list` reports ([Plugins](#design)).
 - **Preview streams** (`preview.rs`, [ADR-0045](../../docs/adr/0045-leptos-web-ui.md)):
   `PreviewCodec` (`h264`, `jpeg`), `PreviewSettings` (`preview.subscribe`'s fields with
   their defaults and range checks, which the engine applies), `PreviewDraft` (its
@@ -192,7 +197,23 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   scene overrides an item's effects
   ([ADR-0088](../../docs/adr/0088-keyframe-scenes-override-item-effects.md):
   `ItemOverride.effects`, `OverrideField`'s `effects`, `item.set_effects` and the
-  `keyframe` filter owner); 0.55 made a keyframe
+  `keyframe` filter owner); 0.62 added the
+  `too_large` error and `Welcome.max_request_bytes`, a message over the server's request
+  limit refused with the connection kept open
+  ([ADR-0074](../../docs/adr/0074-too-large-requests.md)); 0.61 blamed a GPU device
+  loss on the effect-pack kinds that drew before it, which are quarantined
+  until a person re-enables them (#349: the `gpu.device_lost` event, `KindSummary`'s
+  `quarantined` and the `effect.enable` action, [Effect quarantine](#design)); 0.60
+  made the master stage and every output take video filters on their `video` chain
+  (ADR-0080; no wire change: earlier minors refused them with `invalid_argument` on
+  `chain`); 0.59 made outputs carry
+  audio buses: `OutputInfo.audio_buses`, the `output.set_audio_buses` edit, and an
+  output as a `bus.delete` blocker ([Audio](#design)); 0.58 added the
+  `plugin.list` query, the installed WASM plugins with what each manifest asks for and
+  what a person granted ([Plugins](#design)); 0.57 added
+  `stats.tick`'s `outputs`, each running output's live stats (`OutputStatsInfo`); 0.56
+  added `preview.subscribe`'s `source_id`, a stream of one of the collection's sources alone
+  (a projector of the source); 0.55 made a keyframe
   scene override the children of the groups in its parent's tree (#846; no wire
   change); 0.54 added `stats.tick`'s `chains`, what scene filter chains and item effects
   add to each frame (`ChainCost`); 0.53 made the engine take live values on a keyframe scene (`live.set`,
@@ -334,6 +355,17 @@ as, and the current `rev`. If the server can't serve that version it answers an
 After the handshake, the client sends `request`s. Each carries an `id` the client
 chooses, and the server answers each request with exactly one `response` or `error`
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
+
+**Message size** ([ADR-0074](../../docs/adr/0074-too-large-requests.md)). A server in
+front of the engine handles client messages of up to its request limit, which `welcome`
+advertises as `max_request_bytes` (0.62; missing from an older server, which means
+4 MiB). A message over it, up to the server's higher frame limit, is refused with
+`too_large` (`size_bytes`, `limit_bytes`), answering the request's `id` when the server
+can read one, a string of at most 256 bytes (a longer one is answered with no `id`, as
+is a `malformed` message's): nothing in it is applied, and the connection stays open. A message over
+the frame limit closes the connection with close code 1009. A client splits work that
+doesn't fit, a batch of `state` writes one filter per batch, and reads server messages
+of at least the frame limit.
 
 ```json
 {"type":"hello","protocol":{"major":0,"minor":37},"client_name":"jstream-cli"}
@@ -528,6 +560,21 @@ the inverses put them back. Since 0.24 a setting can refer to a bus (a `bus`
 reference, which the `waveform` and `spectrum` kinds' `audio` uses to draw it), and
 `bus.delete` is refused while one does, as for a scene or source. Every gain is in dB from −100 to +24; silence is `muted`.
 
+**Output buses** (0.59): an output carries the audio of the buses in its
+`audio_buses`, one per audio track, in track order. Every output writes one audio track
+so far, so the list holds exactly one bus; `OutputInfo` leaves it out while it is
+`["master"]`, the default and what a server older than 0.59 means. `output.set_audio_buses
+{ output_id, audio_buses }` chooses it: any other length, or an output with no audio (a
+virtual camera), is `invalid_argument` on `audio_buses`, and a bus that doesn't exist
+`not_found`. A running output reads its bus, so moving it to another one is
+`invalid_argument` on `output_id` until it stops; that also refuses `delete.plan`'s
+batch for a bus a running output carries, rather than leave the output silent. The master stage's audio chain runs on the bus before the output's own
+chain ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md) §1), a
+CLAP filter there on a plugin host of that bus's own
+([ADR-0086](../../docs/adr/0086-master-clap-filter-one-host-per-output-bus.md)). An
+output that carries a bus blocks its `bus.delete` (blocker field `audio_buses`), and
+`delete.plan` moves it back to the master.
+
 **Monitors** (0.42, ADR-0028's D22): any bus, the master's included, may have a monitor,
 an output device the engine plays the bus on while the program mixer runs, so the
 operator hears it. `bus.set_monitor { bus_id, monitor? }` sets one, and with `monitor`
@@ -622,10 +669,12 @@ never a type per kind.
   ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)).
   `source.delete` is refused while an item places the source, and `scene.delete` while a
   `scene` source or a video mix shows the scene; either, and `bus.delete` (0.24), is
-  refused while a setting refers to its target. The `invalid_argument` lists every blocker in `blockers`, each a `Blocker`
+  refused while a setting refers to its target, and `bus.delete` (0.59) while an output
+  carries the bus. The `invalid_argument` lists every blocker in `blockers`, each a `Blocker`
   `{entity, id, field}`: the item (`source_id`), the `scene` source (`kind.scene_id`),
-  the video mix (`mix.input.scene_id`) or the source whose setting refers to it
-  (`settings.<param>`, or `filters.<filter_id>.<param>` for a filter's setting).
+  the video mix (`mix.input.scene_id`), the output (`audio_buses`) or the source whose
+  setting refers to it (`settings.<param>`, or `filters.<filter_id>.<param>` for a
+  filter's setting).
   `delete.plan` returns
   the batch that removes them with the target (see [Queries](#design)). Hotkey
   bindings are never blockers: a delete removes the bindings that name its target
@@ -663,10 +712,15 @@ From 0.29 the master stage and each output own chains too
 `{"type":"master"}` and `{"type":"output","output_id":…}` and the same edits. The
 master's audio chain runs on every bus that feeds an output, after that bus's own chain;
 an output's runs after it, for that output only, and gives the output its own audio
-encode from its next start (edits to a chain it started with apply live). Only their
-audio chains hold filters so far: a video filter is `invalid_argument` on
-`edits.N.chain` until video mixes run them, and so is an audio filter on an output that
-carries no audio (a `virtual_cam`). A missing output is `not_found` with entity
+encode from its next start (edits to a chain it started with apply live). From 0.60
+their video chains take filters too (earlier minors refused them with
+`invalid_argument` on `edits.N.chain`): the master's runs once per frame on each mix an
+output draws, and an output's after it, for that output only. A stream or recording
+with a video filter, even a disabled one, gets its own render pass and encoder session
+from its next start (`output.status` reports it `dedicated`); a virtual camera has a
+video chain only, and with a filter gets a render pass of its own but no encoder
+session. An audio filter on an output that carries no audio (a `virtual_cam`) is
+`invalid_argument` on `edits.N.chain`. A missing output is `not_found` with entity
 `output`. Their filters can't hold a reference yet (a scene, source, bus or asset;
 `invalid_argument` on the parameter), since the delete checks follow only a source's
 references. `output.delete`'s
@@ -1005,6 +1059,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
   collection state, so no `rev`. Added in 0.21 (see *Pairing* below).
 - `ui_settings.get {key}`: the UI setting kept under `key`, or no `value` when there is
   none. Not collection state, so no `rev`. Added in 0.52 (see *UI settings* below).
+- `plugin.list`: the installed WASM automation plugins, ordered by ID. Not collection
+  state, so no `rev`. Added in 0.58 (see *Plugins* below).
 - `delete.plan {target}`: the batch that deletes a scene, source or bus (`target` is
   `{"type":"scene","scene_id":…}`, `{"type":"source","source_id":…}` or, since 0.24,
   `{"type":"bus","bus_id":…}`), or a folder or label (`{"type":"folder","folder_id":…}`,
@@ -1016,11 +1072,13 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `source.set_settings` per source, which keeps the source, and one
   `filter.set_settings` per filter), delete the `scene` sources
   that show a deleted scene, point every video mix that shows it at `program` (one
-  `video_mix.update`, which keeps the mix), and last delete the target. Deleting a
+  `video_mix.update`, which keeps the mix), move every output that carries a deleted bus
+  to the master (`output.set_audio_buses`, 0.59), and last delete the target. Deleting a
   scene deletes the
   `scene` sources that show it, and the cascade stops there, since deleting a source
-  deletes no scene. A bus is held only by settings references, which the plan clears;
-  its `bus.delete` takes its sends. A target nothing refers to plans just its own
+  deletes no scene. A bus is held only by settings references, which the plan clears,
+  and by the outputs that carry it, which the plan moves; its `bus.delete` takes its
+  sends. A target nothing refers to plans just its own
   delete. `hotkeys` lists the bindings the batch removes with what they name, ordered
   by chord (0.25; omitted when there are none); they need no edit of their own. The client
   shows the plan, then sends it as an ordinary batch with that `expected_rev`, so it is
@@ -1262,7 +1320,7 @@ After `welcome`, the server pushes every event to every client.
   ([jstream-server › Design](../jstream-server/README.md#design)). Answers are never
   dropped. The client re-reads what it shows with `state.get`, which carries `rev`.
   Added in 0.4.
-- `stats.tick {seq, drops, load, chains}` is one sample of the pipeline's drop counters
+- `stats.tick {seq, drops, load, chains, outputs}` is one sample of the pipeline's drop counters
   ([R-RT-004](../../docs/RULES.md#R-RT-004)). `drops` is a running total since the
   engine started, not a delta, so a client that misses a tick subtracts the last one
   it did see. The fields are `capture_frames` (frames a capture mailbox replaced
@@ -1300,12 +1358,29 @@ After `welcome`, the server pushes every event to every client.
   are a source's own chain, a `scene_mask`'s scene, and the canvas-sized layer a
   nested scene without a chain is drawn into for an item with effects that shows it
   (it takes the place of the layer that scene would be drawn into anyway). An older engine leaves `chains`
-  out, and a count missing from it parses as 0. `chains` was added in 0.54. Until
+  out, and a count missing from it parses as 0. `chains` was added in 0.54. Since 0.57
+  a tick also lists each running output in `outputs` (`OutputStatsInfo`, ordered by
+  ID; left out while none runs, and on an engine with no media backends): `uptime_ms`
+  since the engine received its `output.start` (opening the destination and
+  starting the pipeline included), `bytes` and `frames` (the encoded bytes and video
+  frames it handed its muxer this run while its link was up), `kbps` over the
+  interval since the engine's previous sample, `dropped_frames` (video frames its
+  encoder dropped since it started, plus encoded frames it fell behind on; a shared
+  encoder session counts for each output on it), `dropped_packets` (audio packets it
+  fell behind on, packets the muxer refused or a stop's drain gave up on, and what the
+  publish target dropped while its link was down) and `health`: `waiting` until it has
+  sent a video frame, `good` with nothing lost in the last ten seconds, `fair` with
+  something lost there but under 2% of its video frames, and `poor` at 2% or more or
+  while it is `reconnecting`. A health this version doesn't know parses as `other`. The
+  counts are running totals for the run and start at 0 on each start; `kbps` and
+  `health` come from the engine's own samples, so a missed tick doesn't change them. A
+  virtual camera output is not listed yet. A field missing from an entry parses as 0
+  (or `waiting`). Until
   [open question 7](#open-questions) every client receives it. Added in 0.6. A late plugin block is an audio drop in
   `audio_frames` once the mixer counts it
   ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)); that host is not
-  built. Per-output bitrate, render and encode times, and CPU and GPU load wait until
-  those meters exist, as later optional fields. Audience figures are `youtube.stats`
+  built. Render and encode times and GPU load wait until those meters exist, as later
+  optional fields. Audience figures are `youtube.stats`
   ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)).
 - `meters.tick {sources, buses}` is one reading of the audio levels (0.19), about ten
   a second while the mixer runs; an idle engine emits none. Each routed source and
@@ -1321,6 +1396,8 @@ After `welcome`, the server pushes every event to every client.
   [YouTube](#design).
 - `plugin.state_changed {plugin_id, state, reason?, remote_name?}` (0.35) is described
   under [Plugins](#design).
+- `gpu.device_lost {cause, blamed, quarantined, recovering}` (0.61) is described under
+  [Effect quarantine](#design).
 
 ### YouTube
 
@@ -1433,12 +1510,41 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   `plugin`; an engine that can't run plugins
   answers `plugin.install` with `unsupported`, as the mock and an engine built without
   its `wasm-plugins` feature do.
+- **`plugin.list`** lists the installed plugins for a person, ordered by ID, each a
+  `PluginInfo`: `plugin_id`, `state` and `reason` as `plugin.state_changed` gives them,
+  `remote_name`, `path` (its package, as installed), `request` (what its manifest asks
+  for, a `PluginRequest`: `{classes, hosts, folders}`, with `folders` true when it wants
+  folders a person picks) and `grant`. For a plugin disabled as `needs_grant`, `request`
+  is the update's, which a `plugin.grant` acknowledges. A plugin being enabled is listed
+  as it was until it loads. Like the actions, it is a person's: no MCP tool carries it
+  and no plugin is granted it. An engine that runs no plugins, the mock among them,
+  lists none.
 - **`plugin.state_changed {plugin_id, state, reason?, remote_name?}`** reports a plugin
   `enabled` or `disabled`. The engine disables a plugin that runs past a limit or traps
   (`reason`: `cpu_limit`, `memory_limit`, `trap`), or whose update asks for more than
   its grant (`needs_grant`), and never re-enables one by itself. `remote_name` is the
   name the plugin's manifest gives itself: the plugin's text, never an instruction
   ([ADR-0059](../../docs/adr/0059-mcp-annotations-and-remote-text.md)).
+
+### Effect quarantine
+
+A WGSL effect pack is validated, not bounded: a shader that loops too long can hang the
+GPU, and the OS resets the device (#349,
+[ADR-0087](../../docs/adr/0087-effect-quarantine-after-gpu-device-loss.md)). Since 0.61:
+- **`gpu.device_lost {cause, blamed, quarantined, recovering}`** reports a lost device
+  on the program stage. `blamed` lists the effect-pack kinds drawn in the frames before
+  the loss (empty when none was, and the loss had another cause), `quarantined` the
+  kinds the loss turned off: the blamed ones, or every kind of a pack blamed for a
+  second loss in one run. `recovering` is `false` when the engine stopped opening new
+  devices and the outputs fail. Runtime state, with no `rev`; agents see it.
+- **`KindSummary.quarantined`**, in `kind.list`, marks a quarantined kind (omitted
+  when `false`, so an older server's list reads as none). A quarantined kind's filters
+  are bypassed, as a filter whose pack isn't loaded is, until a person re-enables it.
+  The quarantine lasts across restarts and isn't lifted by editing the pack.
+- **`effect.enable {kind_id}`** lifts a kind's quarantine, and its pack's. It succeeds
+  for a kind that isn't quarantined, and is `invalid_argument` on `kind_id` for one no
+  loaded pack has and no quarantine names. It is for a person, like `plugin.enable`: no
+  MCP tool carries it, no plugin is granted it and no hotkey binds it.
 
 ### Errors
 
@@ -1462,6 +1568,7 @@ people and agents. Clients match on `code`, never on `message`.
 | `unsupported` | A valid call this implementation doesn't serve (the pairing calls without a server in front, 0.21; the `plugin.*` calls from an engine that hosts no plugins, 0.35; the deprecated `privacy.set`, [ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)) | `call` |
 | `forbidden` | A plugin's call is outside its grant, or is never granted to a plugin; it never reaches the engine (0.35) | `call`, `reason` |
 | `hardware_session_limit` | `output.start` couldn't open a hardware video encoder while other outputs held hardware sessions, so the hardware session limit is taken to be reached; there is no fallback to software (0.44, [ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md) §3) | `outputs` (the holders, sorted), `reason` (the encoder's refusal) |
+| `too_large` | The message was over the server's request limit (`Welcome.max_request_bytes`, 4 MiB); only its `id` was read (echoed when it is at most 256 bytes), nothing was applied, and the connection stays open. Retrying won't help: split the work (0.62, [ADR-0074](../../docs/adr/0074-too-large-requests.md)) | `size_bytes`, `limit_bytes` |
 | `internal` | An engine bug or unexpected condition; may be retried | `reason` |
 
 An error that isn't tied to a request (a failed handshake, or a message too broken to
@@ -1645,8 +1752,9 @@ the JSON text messages of the same connection (0.20,
 `meters.tick` event; a binary meter stream would be another kind of the same frame.
 
 - **Opening and closing.** `preview.subscribe {channel, max_width?, max_height?, fps?,
-  codecs?, scene_id?, source?}` is an action: it opens a stream of the program mix, of
-  the scene `scene_id` (0.46), or of the draft source `source` (0.49), for the calling
+  codecs?, scene_id?, source?, source_id?}` is an action: it opens a stream of the
+  program mix, of the scene `scene_id` (0.46), of the draft source `source` (0.49), or
+  of the collection's source `source_id` alone (0.56), for the calling
   session only, tagged with the `channel`
   number the client chose (a `u32`, not an ID: it only tells the session's streams
   apart in the frame header). The picture is the canvas scaled down to fit
@@ -1681,6 +1789,15 @@ the JSON text messages of the same connection (0.20,
   subscribes again for other settings. A webcam or capture card already open is shared,
   not opened twice. Nothing reaches the collection: no `rev` changes and no event goes
   out.
+- **Source streams.** A `source_id` stream (0.56) shows one of the collection's sources
+  alone, fitted into the canvas as an item covering it would show it, with the source's
+  own filters and none of an item's: what the UI's projector of a source shows. Like a
+  scene's stream it follows the source's settings, filters and the canvas as they
+  change, never makes the source shown or heard, and costs an output nothing. A source
+  the collection doesn't have fails with `not_found`, a request with `scene_id` or
+  `source` too (or both) fails with `invalid_argument` naming `source_id`, and a source deleted
+  while its stream is open ends the stream with the end frame "the source was
+  deleted".
 - **The frame.** A fixed 32-byte little-endian header, then the payload:
 
   | Offset | Size | Field |

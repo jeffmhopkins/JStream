@@ -6,15 +6,15 @@
 //! The preview captures the displays, windows and webcams the program and those scenes
 //! show itself.
 
-use super::{add, batch, block_on, code, connected, create, edits, live, moved, webcam};
+use super::{add, batch, block_on, code, connected, create, edits, live, moved, query, webcam};
 use crate::preview::{BINARY_BUFFER, KEYFRAME_EVERY, OpenPreviewDraw, PreviewDraw};
 use crate::snapshot::{Captures, LiveParams, Shot};
 use crate::{Engine, InProcessControl};
 use jstream_control::{BinaryStream, Control, ControlError};
 use jstream_platform::fake::{self, FakeClock};
 use jstream_protocol::{
-    Action, Batch, BinaryFrame, Call, Edit, PreviewCodec, PreviewDraft, ProtocolError, Rev,
-    SceneId, SourceId, SourceKind, WireError,
+    Action, Batch, BinaryFrame, Call, Edit, ItemId, PreviewCodec, PreviewDraft, ProtocolError,
+    Query, QueryResult, Rev, SceneId, Settings, SourceId, SourceKind, WireError,
 };
 use jstream_sources::CaptureSpec;
 use std::sync::{Arc, mpsc};
@@ -91,6 +91,7 @@ fn subscribe(channel: u32, fps: Option<u32>, codecs: Vec<PreviewCodec>) -> Call 
             codecs,
             scene_id: None,
             source: None,
+            source_id: None,
         },
     }
 }
@@ -106,6 +107,7 @@ fn subscribe_scene(channel: u32, scene: &str) -> Call {
             codecs: Vec::new(),
             scene_id: Some(SceneId::new(scene)),
             source: None,
+            source_id: None,
         },
     }
 }
@@ -604,6 +606,7 @@ fn subscribe_draft(channel: u32, kind: &str, settings: serde_json::Value) -> Cal
                 kind: kind.into(),
                 settings,
             }),
+            source_id: None,
         },
     }
 }
@@ -720,6 +723,7 @@ fn drafts_are_checked() {
                 codecs: Vec::new(),
                 scene_id: Some(SceneId::new("main")),
                 source,
+                source_id: None,
             },
         },
     )
@@ -731,4 +735,199 @@ fn drafts_are_checked() {
         subscribe_draft(1, "window", serde_json::json!({})),
     )
     .expect("subscribed");
+}
+
+/// [`subscribe`] to the collection's source `source` alone, at 30 fps.
+fn subscribe_source(channel: u32, source: &str) -> Call {
+    Call::Action {
+        action: Action::PreviewSubscribe {
+            channel,
+            max_width: None,
+            max_height: None,
+            fps: Some(30),
+            codecs: Vec::new(),
+            scene_id: None,
+            source: None,
+            source_id: Some(SourceId::new(source)),
+        },
+    }
+}
+
+/// A projector of a source: the stream draws a source no scene places, follows its
+/// frames, and stops planning it once unsubscribed.
+#[test]
+fn a_source_stream_shows_the_source_alone() {
+    let engine = Engine::new().with_cpu_compositor();
+    let control = connected(&engine);
+    let mut frames = control.binary();
+    let rev = batch(&control, edits(vec![create("main"), webcam()])).expect("source");
+    act(&control, subscribe_source(2, "webcam")).expect("subscribed");
+    assert_eq!(engine.previewed_sources(), vec![SourceId::new("webcam")]);
+    let first = frame_at(&mut frames, rev);
+    assert_eq!(first.header.channel, 2);
+    assert_eq!((first.header.width, first.header.height), (640, 360));
+    // The program places nothing, so a new picture comes from the source alone.
+    let first_pts = first.header.pts_us;
+    engine
+        .set_source_frame(&SourceId::new("webcam"), 2, 2, &[255; 16])
+        .expect("frame");
+    let changed = frame(&mut frames);
+    assert!(changed.header.pts_us > first_pts);
+    assert!(
+        Duration::from_micros(u64::try_from(changed.header.pts_us - first_pts).expect("later"))
+            < KEYFRAME_EVERY,
+        "drawn only for a keyframe"
+    );
+    // The collection is as it was: no scene or item was added for the stream.
+    let Ok(QueryResult::StateGet { scenes, .. }) = query(&control, Query::StateGet) else {
+        panic!("state.get");
+    };
+    assert_eq!(scenes.len(), 1);
+    act(
+        &control,
+        Call::Action {
+            action: Action::PreviewUnsubscribe { channel: 2 },
+        },
+    )
+    .expect("unsubscribed");
+    assert!(engine.previewed_sources().is_empty());
+}
+
+/// Deleting a source ends its streams with an end frame that says why.
+#[test]
+fn deleting_the_source_ends_its_stream() {
+    let engine = Engine::new().with_cpu_compositor();
+    let control = connected(&engine);
+    let mut frames = control.binary();
+    batch(&control, edits(vec![create("main"), webcam()])).expect("source");
+    act(&control, subscribe_source(3, "webcam")).expect("subscribed");
+    frame(&mut frames);
+    batch(
+        &control,
+        Batch::single(Edit::SourceDelete {
+            source_id: SourceId::new("webcam"),
+        }),
+    )
+    .expect("deleted");
+    let deadline = Instant::now() + WAIT;
+    let end = loop {
+        let frame = frame(&mut frames);
+        if frame.header.end {
+            break frame;
+        }
+        assert!(Instant::now() < deadline, "no end frame");
+    };
+    assert_eq!(end.header.channel, 3);
+    assert_eq!(&*end.payload, b"the source was deleted");
+    assert!(engine.previewed_sources().is_empty());
+}
+
+/// A source's stream draws the display it captures, captured by the preview, while
+/// the program stage captures nothing.
+#[test]
+fn a_source_stream_draws_its_display() {
+    let devices = fake::FakeVideoDevices::new(FakeClock::new(jstream_media::Timebase::MICROS));
+    let (engine, seen) = recording_captures(&devices);
+    let hub = engine.render_hub();
+    let control = connected(&engine);
+    let mut frames = control.binary();
+    batch(&control, edits(vec![create("main"), screen()])).expect("source");
+    act(&control, subscribe_source(1, "screen")).expect("subscribed");
+    until_drawn(&mut frames, &seen, &[CaptureSpec::Display(None)]);
+    assert!(hub.load().shot().captures().is_empty());
+}
+
+#[test]
+fn source_streams_are_checked() {
+    let engine = Engine::new().with_cpu_compositor();
+    let control = connected(&engine);
+    let _frames = control.binary();
+    batch(&control, edits(vec![create("main"), webcam()])).expect("source");
+    let missing = act(&control, subscribe_source(1, "nowhere")).expect_err("no such source");
+    assert_eq!(code(&missing), Some("not_found"));
+    let both = act(
+        &control,
+        Call::Action {
+            action: Action::PreviewSubscribe {
+                channel: 1,
+                max_width: None,
+                max_height: None,
+                fps: None,
+                codecs: Vec::new(),
+                scene_id: Some(SceneId::new("main")),
+                source: None,
+                source_id: Some(SourceId::new("webcam")),
+            },
+        },
+    )
+    .expect_err("a scene and a source");
+    match both {
+        ControlError::Protocol(WireError {
+            error: ProtocolError::InvalidArgument { field, .. },
+            ..
+        }) => assert_eq!(field, "source_id"),
+        other => panic!("expected invalid_argument, got {other:?}"),
+    }
+    // With all three, the error still names `source_id`, the later field.
+    let all = act(
+        &control,
+        Call::Action {
+            action: Action::PreviewSubscribe {
+                channel: 1,
+                max_width: None,
+                max_height: None,
+                fps: None,
+                codecs: Vec::new(),
+                scene_id: Some(SceneId::new("main")),
+                source: Some(PreviewDraft {
+                    kind: "color".into(),
+                    settings: Settings::new(),
+                }),
+                source_id: Some(SourceId::new("webcam")),
+            },
+        },
+    )
+    .expect_err("all three");
+    match all {
+        ControlError::Protocol(WireError {
+            error: ProtocolError::InvalidArgument { field, .. },
+            ..
+        }) => assert_eq!(field, "source_id"),
+        other => panic!("expected invalid_argument, got {other:?}"),
+    }
+    // A refused subscription leaves its channel free.
+    act(&control, subscribe_source(1, "webcam")).expect("subscribed");
+}
+
+/// A collection that already holds the IDs a source's stream plans through still gets
+/// its picture: the stream's scene and item take other IDs.
+#[test]
+fn a_source_stream_avoids_the_collection_s_ids() {
+    let engine = Engine::new().with_cpu_compositor();
+    let control = connected(&engine);
+    let mut frames = control.binary();
+    batch(
+        &control,
+        edits(vec![
+            Edit::SceneCreate {
+                scene_id: SceneId::new("jstream-source-preview"),
+                name: "Taken".into(),
+                role: None,
+            },
+            webcam(),
+            Edit::ItemAdd {
+                scene_id: SceneId::new("jstream-source-preview"),
+                item_id: ItemId::new("jstream-source-preview-item"),
+                source_id: SourceId::new("webcam"),
+                transform: None,
+                geometry: None,
+                opacity: None,
+                blend: None,
+            },
+        ]),
+    )
+    .expect("taken");
+    act(&control, subscribe_source(4, "webcam")).expect("subscribed");
+    let first = frame(&mut frames);
+    assert_eq!(first.header.channel, 4);
 }

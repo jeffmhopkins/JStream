@@ -36,20 +36,31 @@
 //!
 //! The master stage's audio chain runs on the mixer's master chain, so on every bus that
 //! feeds an output (ADR-0080, docs/adr/0080-program-master-and-output-chains-v2.md). An
-//! output that starts with an audio chain of its own gets an output tap on the master
-//! bus, which runs that chain after the master's; the output encodes its audio from the
-//! tap instead of sharing the master bus's encode. Each sync brings both chains in line
-//! with the collection, so their filters change live.
+//! output that starts with an audio chain of its own, or that carries a bus other than
+//! the master (`output.set_audio_buses`), gets an output tap on its bus, which runs its
+//! chain after the master's; the output encodes its audio from the tap instead of
+//! sharing the master bus's encode. The tap stays on the bus the output started with.
+//! Each sync brings both chains in line with the collection, so their filters change
+//! live.
 //!
 //! A CLAP filter on either (ADR-0035) runs in a plugin host process, which the program
 //! stage's audio thread starts and supervises off the collection lock
 //! (`crate::audio_sources::Wanted::set_routed_chains`). Each sync names both chains to
 //! that thread and puts each CLAP filter on its host's block once it is ready; until
 //! then the filter is bypassed. The next `meters.tick` syncs again when a block changes.
+//!
+//! A master CLAP filter runs one host per bus that feeds an output (ADR-0086,
+//! docs/adr/0086-master-clap-filter-one-host-per-output-bus.md): the master bus's copy
+//! of the filter runs on the host it was added with, and each other bus an output tap
+//! reads gets hosts of its own for the master chain's CLAP filters, named to the same
+//! thread. Each sync puts every such bus's copy on its own host's block once both that
+//! block and the master bus's filter are ready; until then the copy passes the bus's
+//! dry signal at the filter's latency, as it does again once the bus feeds no output.
+//! Every host gets the filter's settings, and each keeps its own state.
 
 use crate::activity::activity_gains;
 use crate::audio_sources::{RoutedChains, Wanted, WantedMonitor};
-use crate::filters::{Chain, Clap, chain_of};
+use crate::filters::{Chain, Clap, chain_of, same_block};
 use arc_swap::ArcSwap;
 use jstream_audio::meter::{LoudnessMeter, TruePeakMeter};
 use jstream_audio::{
@@ -57,12 +68,13 @@ use jstream_audio::{
     OutputTapId,
 };
 use jstream_graph::State;
+use jstream_platform::HostBlock;
 use jstream_protocol::{
-    BusId, BusMeter, Finite32, Loudness, OutputId, Reference, SceneId, SourceId, SourceKind,
-    SourceMeter,
+    BusId, BusMeter, FilterId, Finite32, Loudness, OutputId, Reference, SceneId, SourceId,
+    SourceKind, SourceMeter,
 };
 use jstream_sources::{AudioScope, AudioScopes};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::time::Instant;
@@ -93,8 +105,12 @@ struct Attached {
     taps: Arc<ScopeTaps>,
     /// The master stage's audio chain, on the mixer's master chain.
     master_chain: Chain,
-    /// The output tap of each running output with its own audio chain.
+    /// The output tap of each running output with its own audio chain or a bus other
+    /// than the master.
     output_taps: BTreeMap<OutputId, Tap>,
+    /// Each bus other than the master that feeds an output, by bus: the master chain's
+    /// CLAP filters its copies run on hosts of their own (ADR-0086).
+    bus_hosts: BTreeMap<BusId, BusHosts>,
     /// Output taps whose removal the mixer refused, by output: each sync tries again.
     removing_taps: Vec<(OutputId, OutputTapControl)>,
     /// The chains last named to the program stage's audio thread, which runs their
@@ -104,10 +120,21 @@ struct Attached {
     wanted: Arc<Wanted>,
 }
 
-/// One output's tap and the chain it runs.
+/// One output's tap, the bus it reads and the chain it runs.
 struct Tap {
     control: OutputTapControl,
+    bus: BusId,
     chain: Chain,
+}
+
+/// The master CLAP filters one bus's copies run on hosts of their own (ADR-0086).
+struct BusHosts {
+    /// The mixer bus they are on.
+    mixer: jstream_audio::BusId,
+    /// The block each copy runs on, by the master filter's mixer id.
+    hosted: HashMap<jstream_audio::FilterId, HostBlock>,
+    /// The block each copy refused, so it isn't tried again until the block changes.
+    refused: HashMap<jstream_audio::FilterId, HostBlock>,
 }
 
 /// What the program stage hands the engine when its mixer opens.
@@ -255,6 +282,16 @@ fn drawn_sources(state: &State) -> BTreeSet<SourceId> {
 }
 
 impl Attached {
+    /// The buses but the master that an output tap reads and the mixer still has: a
+    /// bus gone from the mixer needs no hosts.
+    fn tapped_buses(&self) -> BTreeSet<BusId> {
+        self.output_taps
+            .values()
+            .filter(|tap| self.buses.contains_key(&tap.bus))
+            .map(|tap| tap.bus.clone())
+            .collect()
+    }
+
     /// Names the master chain and each tapped output's chain to the program stage's
     /// audio thread, which runs their CLAP filters' hosts.
     fn name_routed(&mut self, state: &State) {
@@ -265,8 +302,88 @@ impl Attached {
                 .keys()
                 .filter_map(|id| Some((id.clone(), chain_of(state.output(id)?.filters()))))
                 .collect(),
+            buses: self.tapped_buses(),
         };
         self.wanted.set_routed_chains(self.routed.clone());
+    }
+
+    /// Puts each bus that feeds an output, but the master, on its own hosts for the
+    /// master chain's CLAP filters, once both the host's block in `blocks` and the master
+    /// bus's filter are ready, and back on the stand-in when it no longer feeds one or
+    /// its host goes (ADR-0086).
+    fn sync_bus_hosts(&mut self, blocks: &BTreeMap<BusId, BTreeMap<FilterId, HostBlock>>) {
+        let fed: BTreeMap<BusId, jstream_audio::BusId> = self
+            .routed
+            .buses
+            .iter()
+            .filter_map(|id| Some((id.clone(), self.buses.get(id)?.id())))
+            .collect();
+        let clap: Vec<(FilterId, jstream_audio::FilterControl)> = self
+            .master_chain
+            .clap_controls()
+            .map(|(id, control)| (id.clone(), control.clone()))
+            .collect();
+        // A bus that no longer feeds an output, or is a new mixer bus now, goes back to
+        // the stand-in.
+        self.bus_hosts.retain(|bus_id, hosts| {
+            if fed.get(bus_id) == Some(&hosts.mixer) {
+                return true;
+            }
+            for (_, control) in &clap {
+                if hosts.hosted.contains_key(&control.id()) {
+                    let _ = control.set_bus_host(hosts.mixer, None);
+                }
+            }
+            false
+        });
+        // A removed filter the mixer's queue hasn't taken yet may still run a bus's
+        // block: wait for it.
+        if !self.master_chain.settled() {
+            return;
+        }
+        let none = BTreeMap::new();
+        for (bus_id, mixer) in fed {
+            let hosts = self.bus_hosts.entry(bus_id.clone()).or_insert(BusHosts {
+                mixer,
+                hosted: HashMap::new(),
+                refused: HashMap::new(),
+            });
+            // Copies of filters the chain rebuilt or removed went with them.
+            let live: HashSet<jstream_audio::FilterId> =
+                clap.iter().map(|(_, control)| control.id()).collect();
+            hosts.hosted.retain(|id, _| live.contains(id));
+            hosts.refused.retain(|id, _| live.contains(id));
+            let ready = blocks.get(&bus_id).unwrap_or(&none);
+            for (filter_id, control) in &clap {
+                let want = ready.get(filter_id);
+                let id = control.id();
+                if same_block(hosts.hosted.get(&id), want)
+                    || (want.is_some() && same_block(hosts.refused.get(&id), want))
+                {
+                    continue;
+                }
+                match control.set_bus_host(mixer, want.cloned()) {
+                    Ok(()) => {
+                        hosts.refused.remove(&id);
+                        match want {
+                            Some(block) => hosts.hosted.insert(id, Arc::clone(block)),
+                            None => hosts.hosted.remove(&id),
+                        };
+                    }
+                    Err(err) => {
+                        tracing::warn!(
+                            bus_id = %bus_id,
+                            filter_id = %filter_id,
+                            error = %err,
+                            "master filter keeps the bus's dry signal"
+                        );
+                        if let Some(block) = want {
+                            hosts.refused.insert(id, Arc::clone(block));
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /// The ready CLAP blocks of `output_id`'s tap chain: none while an older tap of
@@ -307,6 +424,7 @@ impl AudioRouting {
             meters: mixer.meters,
             master_chain: Chain::default(),
             output_taps: BTreeMap::new(),
+            bus_hosts: BTreeMap::new(),
             removing_taps: Vec::new(),
             routed: RoutedChains::default(),
             scopes: mixer.scopes,
@@ -331,13 +449,16 @@ impl AudioRouting {
         }
     }
 
-    /// Adds an output tap on the master bus for `output_id`, running its audio chain as
-    /// `state` says, for an output that encodes its own audio (ADR-0080). The engine
+    /// Adds an output tap for `output_id` on the bus it carries, running its audio chain
+    /// as `state` says, for an output that encodes its own audio (ADR-0080). The engine
     /// keeps the tap's chain in line on every sync, until
-    /// [`remove_output_tap`](Self::remove_output_tap).
+    /// [`remove_output_tap`](Self::remove_output_tap), and a bus other than the master
+    /// that a tap reads gets hosts of its own for the master chain's CLAP filters
+    /// (ADR-0086).
     ///
     /// # Errors
-    /// When no mixer runs, or the mixer refuses the tap.
+    /// When no mixer runs, the mixer has no bus for the output's bus yet, or the mixer
+    /// refuses the tap.
     pub(crate) fn add_output_tap(
         &mut self,
         output_id: &OutputId,
@@ -347,9 +468,21 @@ impl AudioRouting {
             .attached
             .as_mut()
             .ok_or("the program mixer is not running")?;
+        let bus = state
+            .output(output_id)
+            .map_or_else(BusId::master, |output| output.audio_bus().clone());
+        let mixer_bus = if bus.is_master() {
+            attached.master.id()
+        } else {
+            attached
+                .buses
+                .get(&bus)
+                .ok_or_else(|| format!("output tap: the mixer has no bus `{bus}`"))?
+                .id()
+        };
         let control = attached
             .control
-            .add_output_tap(attached.master.id())
+            .add_output_tap(mixer_bus)
             .map_err(|err| format!("output tap: {err}"))?;
         // Queued before the new tap's filters, so a CLAP filter's block never feeds two
         // taps at once.
@@ -376,6 +509,7 @@ impl AudioRouting {
             output_id.clone(),
             Tap {
                 control: control.clone(),
+                bus,
                 chain,
             },
         );
@@ -398,6 +532,24 @@ impl AudioRouting {
         })
     }
 
+    /// How many master CLAP filters each bus other than the master runs on a host of
+    /// its own, and the bus each output tap reads, for tests.
+    #[cfg(test)]
+    pub(crate) fn bus_hosted(&self) -> (BTreeMap<BusId, usize>, BTreeMap<OutputId, BusId>) {
+        self.attached.as_ref().map_or_else(Default::default, |a| {
+            (
+                a.bus_hosts
+                    .iter()
+                    .map(|(id, hosts)| (id.clone(), hosts.hosted.len()))
+                    .collect(),
+                a.output_taps
+                    .iter()
+                    .map(|(id, tap)| (id.clone(), tap.bus.clone()))
+                    .collect(),
+            )
+        })
+    }
+
     /// Removes `output_id`'s tap `tap`, once its output has stopped. A tap of an earlier
     /// start, or of a mixer that has stopped, is left alone.
     pub(crate) fn remove_output_tap(&mut self, output_id: &OutputId, tap: OutputTapId) {
@@ -415,8 +567,10 @@ impl AudioRouting {
                     .removing_taps
                     .push((output_id.clone(), own.control));
             }
-            // Its CLAP filters' hosts stop.
+            // Its CLAP filters' hosts stop, and its bus's own master hosts once no other
+            // tap reads it; the next sync puts that bus's copies back on the stand-in.
             attached.routed.outputs.remove(output_id);
+            attached.routed.buses = attached.tapped_buses();
             attached.wanted.set_routed_chains(attached.routed.clone());
         }
     }
@@ -502,6 +656,9 @@ impl AudioRouting {
             control.set_gain_db(bus.gain_db().get());
             control.set_muted(bus.muted());
         }
+        // Each bus that feeds an output on its own master hosts, now that the mixer
+        // holds every bus.
+        attached.sync_bus_hosts(&blocks.buses);
         // The monitors, each on the mixer bus its bus has now.
         let monitors = state
             .buses()

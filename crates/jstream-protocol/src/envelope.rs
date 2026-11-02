@@ -82,6 +82,13 @@ pub struct Welcome {
     pub client_id: ClientId,
     /// The current state revision, so the client knows where it starts.
     pub rev: Rev,
+    /// The request limit (0.62, ADR-0074): the most message text, in bytes, the server
+    /// handles in one client message. A message over it, up to the server's frame limit,
+    /// is refused with `too_large` and the connection stays open. Only a server in front
+    /// of the engine sets it; missing (an older server, or an engine with no server in
+    /// front) means 4 MiB.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_request_bytes: Option<u64>,
 }
 
 /// One request: a call plus the client-chosen ID its answer will carry.

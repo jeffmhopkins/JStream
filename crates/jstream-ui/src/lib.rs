@@ -7,7 +7,7 @@
 //! (`header`), the dock model (`dock`) and the workspace that draws it (`workspace`),
 //! the hotkeys the page runs (`hotkeys`), the state the panels share (`store`), the
 //! panels (`panels`), the pairing panel
-//! (`pairing`), the preview canvas (`canvas`), the right-click menu (`menu`) and the
+//! (`pairing`), the Plugins section (`plugins`), the preview canvas (`canvas`), the right-click menu (`menu`) and the
 //! selected items' entries in it (`item_menu`), copy and paste (`clipboard`), the modal dialog frame (`dialog`) and
 //! the prototype's icons (`icons`).
 //!
@@ -28,6 +28,7 @@ pub mod item_menu;
 pub mod menu;
 pub mod pairing;
 pub mod panels;
+pub mod plugins;
 pub mod projector;
 pub mod session;
 pub mod store;

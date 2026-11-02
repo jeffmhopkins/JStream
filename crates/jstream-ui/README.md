@@ -47,9 +47,9 @@ Contents ([Design](#design) explains the choices):
   `DockState`, the dock as context, which the header's menus change; and `restore`,
   the dock the browser kept.
 - **Projectors** (`projector.rs`): `Projector`, the page a projector window shows (the
-  program, one scene or a multiview, filling the window), `Request` (what a projector
-  page's query asks for, and its window name), `open` and `pop_out` (a scene's Pop out
-  submenu), which open one, and `subscribe` and `multiview_scenes`, its logic, tested
+  program, one scene, one source alone or a multiview, filling the window), `Request`
+  (what a projector page's query asks for, and its window name), `open`, `pop_out` (a
+  scene's Pop out submenu) and `pop_out_source` (an object's), which open one, and `subscribe` and `multiview_scenes`, its logic, tested
   natively.
 - **Host detection** (`host.rs`): `desktop()`, the engine URL and token the desktop
   app hands the page through the `__JSTREAM_DESKTOP__` global, if the page runs there,
@@ -111,7 +111,8 @@ Contents ([Design](#design) explains the choices):
   field the panels share (`number.rs`) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
   (the program output and each output with its FX button, creating, editing and
   deleting streams, recordings and the virtual camera, their stream keys, start and
-  stop, and the pipeline's health), and the calls and
+  stop, and the pipeline's health); `encoders.rs`: `Profiles`, its encoder profile and
+  video mix lists and forms, whose drafts, edits and summaries are tested natively; and the calls and
   logic behind it and the header's Go Live, tested natively against `MockEngine`; and `mixer.rs`: `Mixer`, the
   audio mixer (the master card with its loudness and true peak, the channels folded
   under it with their meters, faders, dB fields, mutes and routing, the same as
@@ -122,11 +123,18 @@ Contents ([Design](#design) explains the choices):
   and the scene's Transition in and out submenus the menus share
   (`override_submenu`); and
   `transform.rs`: `Transform`, the Transform panel (align, distribute and arrange the
-  selected items).
+  selected items); and `stats.rs`: `StreamStats`, the Stream stats panel (one output's
+  pill, uptime, bitrate, dropped frames, health, two-minute bitrate chart and details,
+  from `stats.tick`'s `outputs`), whose figures, chart and choice of output are tested
+  natively.
 - **Pairing** (`pairing.rs`): `Pairing`, the pairing panel under the properties in the
   Inspector, shown only when the server pairs devices (start pairing and show the code, list and
   revoke devices), and the calls behind it, tested natively against `MockEngine` and a
   stub that answers them as the server does.
+- **Plugins** (`plugins.rs`): `Plugins`, the WASM automation plugins section under the
+  pairing panel in the Inspector, with its install and grant dialogs, the calls behind
+  them, and `GrantForm`, `suggested_id`, `not_granted` and the row texts, tested
+  natively.
 - **Canvas** (`canvas/`): the canvas editor. It draws the selected scene's item boxes
   over that scene's live picture (the program mix while it is on program), edits their geometry with the pointer and the keyboard, and undoes and
   redoes ([Canvas](#canvas)).
@@ -325,15 +333,17 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   call's does.
 - **Projectors** (`projector.rs`, [UI features › DL-07](../../docs/UI-FEATURES.md#dialogs)).
   A scene's Pop out submenu (on its row, on the canvas margin for the scene it shows,
-  and on a nested scene's item) and the View menu's Projectors group open a projector:
+  and on a nested scene's item), any other single object's (Source in a window or full
+  screen, its source alone with its own filters) and the View menu's Projectors group
+  open a projector:
   this same page, opened with `window.open` under one window name per target so asking
-  again brings that window back, with a query (`?projector=program`, `multiview` or
-  `scene:<percent-encoded ID>`, then `&full=1` for full screen) that `App` reads before
+  again brings that window back, with a query (`?projector=program`, `multiview`,
+  `scene:<percent-encoded ID>` or `source:<percent-encoded ID>`, then `&full=1` for full screen) that `App` reads before
   anything else. Such a page connects as the desktop app's page does, or in a browser
   at once with the credentials the browser already sends (the connect form if they
   aren't enough), keeps `Studio` current like the workspace, and shows `Projector`
   instead of the shell. Every picture on it is a preview stream (`preview.subscribe`,
-  with `scene_id` for a scene) on the session's one binary channel, which `Channels`
+  with `scene_id` for a scene and `source_id` for a source alone, 0.56) on the session's one binary channel, which `Channels`
   reads and hands out by channel number, each picture taking a number never used
   before on the page; a picture falls back to JPEG as the canvas does, says why when its
   stream ends (a deleted scene), and unsubscribes when it goes. One picture asks for the
@@ -470,9 +480,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   panel. Names come from the prototype's catalogue, then `kind.list`, then the kind's ID.
   An FX button (the Outputs panel's rows, the Mixer's master card or strip) picks the program
   output's chain (owner `master`) or an output's (ADR-0080) instead, and shows the
-  panel; the same rows and dialogs edit it with that owner. Only their audio chains
-  show, since the engine refuses their video chains so far, and the virtual camera,
-  which has no sound, has none. A scene's chain (owner `scene`, ADR-0065) shows while no
+  panel; the same rows and dialogs edit it with that owner. Both chains show, and the
+  virtual camera, which has no sound, has a video chain only. The Add filter dialog
+  won't add a kind whose settings name a scene, a source, a bus or a file there
+  (`refers`: the engine refuses those references yet), and, for an output whose video
+  chain is empty, reads `output.status` and states what its first video filter costs
+  (`first_video_cost`, ADR-0080 §3): its own GPU pass and encoder session, with the
+  encoder sessions in use now, or for the virtual camera, which opens no encoder
+  session, a GPU pass only, from its next start if it runs. A scene's chain (owner `scene`, ADR-0065) shows while no
   item is selected, for the selected scene, or a keyframe's parent, since a keyframe has
   none of its own; a scene row's Edit filters… and the canvas margin's Edit scene
   filters… pick it as an FX button does (`show_filters`). It is a video chain, and the
@@ -505,17 +520,23 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the canvas, outer columns, full-width top and bottom, sidebars, and above and below
   the canvas. A zone stacks groups (columns top to bottom, rows side by side); a group
   shows one panel with its title, or tabs. Panels are the prototype's eleven: Scenes,
-  Scene objects (`Sources`), the Inspector (`Inspector`, with `Pairing` under it), the
+  Scene objects (`Sources`), the Inspector (`Inspector`, with `Pairing` and `Plugins` under it), the
   Transform, Filters, Live chat, Stream stats, Audio mixer, Outputs, Agent activity and
   Transitions (`StudioMode`); `panel_view` maps each to its component, and a new panel
-  adds a `PanelId` and a line there. Live chat and Stream stats wait on the engine
-  (YouTube sign-in), so they say what they wait on and neither is in a built-in layout.
+  adds a `PanelId` and a line there. Live chat waits on the engine (YouTube sign-in),
+  so it says what it waits on and is in no built-in layout. Stream stats
+  (`panels/stats.rs`) shows one output's live stats from `stats.tick`'s `outputs`
+  (protocol 0.57): the output picked in its menu, else the first running stream, the
+  first running output, then the first stream. It reads the outputs and profiles as
+  the Outputs panel does, keeps the last 120 `kbps` readings of each listed output for
+  the bitrate chart (an output a tick leaves out, or whose uptime went down, starts
+  over), and shows the YouTube-only tiles not at all.
   Agent activity (`panels/agent.rs`) lists what agents did from the engine's
   `activity.list` ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md)),
   leaving out JStream's own UIs, and asks again after each `state.changed`,
   `studio.changed`, `output.state_changed`, `live.ended` and `events.dropped`, and every
   5 seconds; the
-  Live layout shows it as a second tab beside Outputs. The
+  Live layout shows Stream stats, Outputs and it as tabs in one group. The
   panels' own `h2` headings are hidden, since the tab is the title. Narrow windows
   stack the zones, without splitters.
   - Each group keeps every tab's panel mounted and hides the inactive ones, so a tab
@@ -564,12 +585,28 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Redo in the Edit menu call `history.undo` and `history.redo`, like the canvas's
   buttons. A failed call shows in the shell's problem bar. The menus close on Escape
   or on a press anywhere outside them.
-- **Outputs.** The panel reads the outputs and encoder profiles with `state.get`, then
+- **Outputs.** The panel reads the outputs, encoder profiles, video mixes, buses and scenes with `state.get`, then
   each output's `output.status`, and re-reads them on `state.changed` and
   `events.dropped`; `output.state_changed` updates one output's state in place. It
   creates RTMP(S), recording and virtual camera outputs (IDs `output-N`, the first free one), changes
   an RTMP server URL (`output.set_target`) and the encoder profile, deletes a stopped
-  output, and starts and stops each. Above the cards, the program output's row
+  output, and starts and stops each. A card's Audio select picks the bus the output
+  carries (`output.set_audio_buses`, one bus); while the output runs it is disabled and
+  titled "Stop the output to change its bus", as the engine refuses the move. A virtual
+  camera's card has none. A card's Video select picks the mix it shows
+  (`output.set_video_mix`), or "Program, canvas size" for none; a running output takes
+  it when it next starts. A virtual camera's card has no Video select either, as the
+  camera always shows the program at the canvas size. Under the cards (`encoders.rs`), Encoders and Video mixes list
+  each profile and mix with a line on what it encodes or shows, and a form makes one
+  (`encoder.create`, `video_mix.create`, with the first free `enc_N` or `mix_N`) or edits
+  it (`encoder.update`, `video_mix.update`). The form checks the draft with the
+  protocol's own `problem` before sending, so a refused value is named by its field and
+  the form stays open. A profile has the codec (H.264, HEVC, AV1), CBR or VBR with its
+  peak, the keyframe interval, the hardware preference and the AAC rate; a mix has its
+  input (program, preview or a scene, groups left out), a size preset (vertical
+  1080 × 1920 and 720 × 1280 among them) or custom even sides, and a frame-rate divisor.
+  Delete is disabled, titled with the outputs that use it, while any does, as the
+  engine refuses it then. Above the cards, the program output's row
   ("master") and a row per output with its state each have an "FX N" button counting
   that chain's filters, which shows the chain in the Filters panel (below the rows,
   the prototype's footnote). The header's "Go Live" starts every stopped or
@@ -604,6 +641,23 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   name and its paired and last-used dates (UTC), with a button that calls
   `device.revoke` and re-reads the list. The code is never logged or stored by the page,
   and `OpenCode`'s `Debug` form hides it.
+- **Plugins** (WA1, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md),
+  [ADR-0076](../../docs/adr/0076-saved-wasm-plugins-and-manifest-requests.md)). The
+  Plugins section reads `plugin.list` when it opens and shows once that answers; it
+  re-reads after each of its calls and on `plugin.state_changed` and `events.dropped`.
+  Each plugin shows its manifest's name (the plugin's own text, shown as data), its
+  state with why it is off, its ID and package path, what its manifest asks for that
+  isn't granted, Permissions…, and Turn on (`plugin.enable`) when it is off. Install
+  plugin asks for the package folder and an ID, suggested from the folder's name
+  (`plg_<name>`, numbered when taken) until it is typed, and sends `plugin.install`
+  with no grant beyond `read`; when the manifest asks for more, the grant dialog opens
+  next. The grant dialog, titled "Plugin permissions" with the plugin's name quoted
+  under it beside its ID and path, so a name can't pass for the dialog's own text,
+  offers only what the manifest asks for: `read`, ticked and
+  fixed, then each class asked for with what it lets the plugin do, each host, and,
+  when it asks for folders, a box of absolute paths, one a line. Its OK sends
+  `plugin.grant` with the ticked choices; for a plugin off as `needs_grant` it reads
+  "Grant and turn on" and sends `plugin.enable` after it.
 - **Studio mode** ([ADR-0029](../../docs/adr/0029-transitions.md)).
   The Transitions panel (a tab beside Outputs in the Editing layout, under the canvas
   in Live) reads the scenes (groups left out) and presets with

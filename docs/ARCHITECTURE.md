@@ -292,9 +292,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   bypassed. The audio chain runs on the source's input before its fader. The master
   stage and each output own `filters { video, audio }` too, edited with the same
   `filter.*` edits under the owners `master` and `output`
-  ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md)); only their audio chains
-  hold filters until video mixes run the video ones, and their filters can't hold a
-  reference (a scene, source, bus or asset) yet. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
+  ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md)): every output has a
+  video chain (the virtual camera's is its only one) and the master stage and each
+  output that carries audio an audio chain, and their filters can't hold a reference
+  (a scene, source, bus or asset) yet. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
   multiplier in [0, 1]) and `blend` (default `normal`; every mode is drawn,
   [ADR-0082](adr/0082-blend-modes-drawn.md)). A scene's `filters` and a placement's `effects[]` are video filter
   chains, the owners `scene` and `item` of `filter.*`
@@ -342,13 +343,14 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   outputs whose video chain is empty share one encoder session when they have the same
   `(video_mix, encoder_profile)`, the master stage counting as part of the mix. An
   output with a video chain, even one holding only disabled filters, gets its own render
-  pass and session, keyed by its output ID. An output's own audio chain gives it its own
+  pass and session, keyed by its output ID; a virtual camera, which encodes nothing,
+  gets the render pass only and is never reported dedicated. An output's own audio
+  chain, or a bus other than the master (`output.set_audio_buses`), gives it its own
   audio encode and never affects video sharing. Hardware session caps differ by GPU
   vendor, so the engine reports, per output, whether it shares and with which outputs
   and whether its session is its own, plus the sessions in use. It does not guess the
-  caps. Outputs carry no video chain until filters land, so for now every output shares
-  by `(video_mix, encoder_profile)`; the engine already keys and draws an output with a
-  chain on its own.
+  caps. A chain added to a running output that started without one takes effect at its
+  next start.
 - **No privacy screen** ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md)
   §4): nothing covers the outputs or mutes the microphones on a switch. Muting a source
   and switching scenes do that job.
@@ -444,11 +446,12 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   runs from a source to a bus, and filters have no sidechain keys yet, so no edit can
   close an audio cycle. The engine routes these into the program stage's mixer while it
   runs, and plays each bus's monitor on its device (one it can't open stays silent and
-  is retried).
+  is retried). Each output's audio bus (protocol 0.59, `output.set_audio_buses`) and
+  its filter chains are saved with it.
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
   and hotkey bindings (protocol 0.25), as the organisation bullet above describes.
   Not yet: settings migrations between kind versions (a source saved at another
-  version is refused on load), `background`, output audio buses and chains, the `YouTube` kind, a virtual
+  version is refused on load), `background`, the `YouTube` kind, a virtual
   camera's video mix (it always shows the program), and everything outside `sources`,
   `scenes`, `outputs`, `encoders`, `video_mixes`, `audio`, `folders`, `labels`,
   `hotkeys` and `transitions`. The collection file saves everything built so far,
@@ -495,8 +498,9 @@ model; a change that would contradict it edits it in the same PR.
 process (`jstream-plugin-host`) are built, and so are starting hosts
 (`jstream-platform-windows`) and watching and restarting them on a control thread
 (`jstream-core`'s `HostSupervisor`), and a source's, the master's and each output's
-audio chain runs CLAP filters, each with its own supervisor (on the master chain, the
-plugin on the master bus and a delayed-dry stand-in on the other buses, #922); the
+audio chain runs CLAP filters, each with its own supervisor (on the master chain, one
+host per bus that feeds an output,
+[ADR-0086](adr/0086-master-clap-filter-one-host-per-output-bus.md)); the
 `stats.tick` count is not yet. Each CLAP filter
 instance runs in its own `jstream-plugin-host` process, on a real-time thread registered
 with MMCSS "Pro Audio" and woken by its own timer on the media clock, which both
@@ -612,7 +616,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
 
 - **Envelope:** JSON messages tagged by `type`. A `hello`/`welcome` handshake exchanges
   the protocol version, then each `request` (with a client-chosen `id`) gets exactly one
-  `response` or `error`, and `event`s arrive at any time.
+  `response` or `error`, and `event`s arrive at any time. A message over the server's
+  4 MiB request limit, which `welcome` advertises as `max_request_bytes`, is refused
+  with `too_large` and the connection stays open; one over its 16 MiB frame limit
+  closes it with code 1009 ([ADR-0074](adr/0074-too-large-requests.md), protocol 0.62).
 - **Edits** (`scene.create`, `item.set_transform`, `send.set`, …): typed, undoable,
   always sent in an atomic batch (of one or more), which carries the optional
   `expected_rev` and idempotency key ([R-API-004](RULES.md#R-API-004)). Each applied
@@ -639,6 +646,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   (an input, a resolution and a divisor of the base rate), and `output.set_video_mix`
   points an output at one or back at the program (protocol 0.28). A mix an output shows
   can't be deleted, and a mix showing a scene blocks that scene's delete.
+  `output.set_audio_buses` chooses the bus an output carries, one per audio track and
+  one track so far (protocol 0.59); an output carrying a bus blocks its delete, and
+  `delete.plan` moves it to the master, which is refused while the output runs.
   `item.set_opacity` and `item.set_blend` set a placement's opacity and blend mode
   (`item.add` takes both too), and `filter.add`, `filter.remove`, `filter.set_enabled`,
   `filter.set_settings` and `filter.reorder` edit the filter chains of a source, the
@@ -648,7 +658,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   [ADR-0080](adr/0080-program-master-and-output-chains-v2.md), protocol 0.29). Since 0.43
   the owners `scene` and `item`, `SceneInfo.filters`, `ItemInfo.effects` and a
   descriptor's `max_outset_px` are in the protocol
-  ([ADR-0065](adr/0065-scene-chains-and-item-effects.md)). The engine runs both.
+  ([ADR-0065](adr/0065-scene-chains-and-item-effects.md)). The engine runs both. Since
+  0.60 the master stage's and outputs' video chains take filters too (ADR-0080).
   `source.set_audio`, `bus.create`, `bus.rename`, `bus.set_fader`, `bus.delete`,
   `send.set` and `send.remove` edit sources' audio, the buses and the send matrix
   ([ADR-0028](adr/0028-audio-model-v2.md), protocol 0.19), and `bus.set_monitor` a
@@ -696,9 +707,14 @@ The wire format, versioning, error codes and compatibility policy are designed i
   no server in front answers `unsupported`.
 - **Plugins** (protocol 0.35, [ADR-0069](adr/0069-wasm-plugin-limits-and-capabilities.md)): the actions
   `plugin.install`, `plugin.grant` and `plugin.enable` install a WASM automation plugin
-  with what a person grants it, change the grant and re-enable it; they are for a person,
-  so no MCP tool, plugin or hotkey carries them. The event `plugin.state_changed` reports
-  a plugin enabled or disabled, with why the engine disabled it. A plugin calls the API
+  with what a person grants it, change the grant and re-enable it, and the query
+  `plugin.list` (0.58) lists the installed plugins with what each manifest asks for and
+  what was granted; they are for a person, so no MCP tool, plugin or hotkey carries
+  them. The event `plugin.state_changed` reports
+  a plugin enabled or disabled, with why the engine disabled it. Likewise
+  `effect.enable` (0.61, #349) is for a person: it re-enables an effect-pack kind the
+  engine quarantined because a GPU device loss was blamed on it, which the event
+  `gpu.device_lost` reports and `kind.list` marks (`quarantined`). A plugin calls the API
   through a scoped `Control` that checks each call against its grant, using
   `jstream-protocol`'s table of every command's class (`read`, `edit`, `live`, `outputs`
   or never), and the hosts and files a call's settings name against the grant's hosts
@@ -772,14 +788,17 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `activity.list` (protocol 0.51) → the engine's last 100 audit entries, each with a
   sentence saying what it did ([ADR-0083](adr/0083-activity-log-over-the-protocol.md));
   audio levels are the `meters.tick` event, not a query).
-- **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops, load, chains}`, `meters.tick`,
+- **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops, load, chains, outputs}`, `meters.tick`,
   `source.size_changed` (protocol 0.40), …).
   `stats.tick` (protocol 0.6) carries the pipeline's running drop totals
   ([R-RT-004](RULES.md#R-RT-004)) and, since 0.48, the engine's load (program frames
   drawn and process CPU time, from which a client derives the frame rate and CPU use;
   the daemon and the desktop app also tick about once a second while idle); since 0.54
   it also carries what scene filter chains and item effects add to each frame
-  ([ADR-0065](adr/0065-scene-chains-and-item-effects.md) §7). `meters.tick` (protocol 0.19, about ten a second
+  ([ADR-0065](adr/0065-scene-chains-and-item-effects.md) §7); since 0.57 it lists each
+  running output's live stats: its uptime, the bytes and video frames it sent, its bitrate
+  over the last tick, what it dropped this run, and a health the engine works out over
+  the last ten seconds. `meters.tick` (protocol 0.19, about ten a second
   while the mixer runs) carries every source's and bus's levels and the master's loudness,
   which `audio.reset_loudness` restarts; the fields are in
   [jstream-protocol › Design](../crates/jstream-protocol/README.md#design).
@@ -815,8 +834,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `label.delete` refused because a scene or folder is in the folder or a source carries
   the label.
 - **Binary streams** (WebSocket binary frames, protocol 0.20): preview video.
-  `preview.subscribe` opens a stream of the program mix, or of any one scene (0.46,
-  `scene_id`: the UI's projector windows and multiview), for the calling session,
+  `preview.subscribe` opens a stream of the program mix, of any one scene (0.46,
+  `scene_id`: the UI's projector windows and multiview), or of one source alone (0.56,
+  `source_id`: the UI's projector of a source), for the calling session,
   scaled down, at most `fps` pictures a second and only when the mix changes (as it
   does throughout a running transition), in H.264
   when the platform has an encoder and JPEG otherwise; `preview.unsubscribe` or the
@@ -877,7 +897,10 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   the `events` feed: YouTube is for people, through
   the UI ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md) §3). The same
   holds for the `plugin.*` ops and events: only a person installs or grants a plugin
-  (ADR-0069 G1).
+  (ADR-0069 G1). And for the `effect.*` ops: only a person re-enables an effect pack
+  quarantined after a GPU device loss
+  ([ADR-0087](adr/0087-effect-quarantine-after-gpu-device-loss.md) §4), though the
+  `gpu.device_lost` event that reports it reaches agents.
 - **Events** reach agents through the `events` tool, which returns the engine's events
   after a cursor from a bounded buffer and reports any it dropped
   ([ADR-0036](adr/0036-mcp-events-polling-tool.md)). The high-rate `stats.tick` is kept
@@ -890,7 +913,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 767 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 788 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking
@@ -1045,12 +1068,16 @@ context device fails its outputs at once instead
 ([jstream-core › Runtime](../crates/jstream-core/README.md#runtime)); the NV12 pass
 reports the loss as an error rather than panicking. The third loss within
 60 s fails the output instead. Each loss is logged and counted in the output's stats
+([jstream-core › Design](../crates/jstream-core/README.md#design)). Each loss is blamed
+on the effect-pack kinds the shot being drawn draws, which are quarantined (their
+filters bypassed, and the whole pack after a second loss blamed on one of its effects
+in a run) until a person re-enables them with `effect.enable`, and reported in the
+engine event `gpu.device_lost` (protocol 0.61). The quarantine is kept in the packs
+folder, across restarts and pack edits
 ([jstream-core › Design](../crates/jstream-core/README.md#design)). Not built yet: the
-engine event for a loss (a protocol change), attributing a loss to the effect pack that
-was drawing, quarantining that pack, and the GPU-time guard (timestamp queries that
-quarantine an effect whose pass runs over half the frame budget for 30 frames running,
-before Windows' TDR fires). The engine draws pack kinds now
-([jstream-core › Design](../crates/jstream-core/README.md#design)), so these can be built.
+GPU-time guard (timestamp queries that quarantine an effect whose pass runs over half
+the frame budget for 30 frames running, before Windows' TDR fires), and a forced TDR on
+Windows hardware, which only a hardware run can check.
 
 **Transitions** ([ADR-0029](adr/0029-transitions.md), with
 [ADR-0052](adr/0052-transition-mechanics-and-studio-preview.md)'s mechanics). A Move is not a texture blend:
@@ -1090,8 +1117,10 @@ plus an `effect.toml` manifest.
 **Output path** ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md)), for each
 output: mix → master video chain → the output's own video chain → colour conversion
 (step 4) → encoder. The render plan has a master node per consumed mix and a node per
-output with a video chain. Built so far: the sharing key's output part. The master and
-output video chains are not built yet (their audio chains are, protocol 0.29).
+output with a video chain. Both chains run at the canvas size over the mix's layer
+(`GpuKey::Mixed`), the master's once per frame per mix however many outputs draw it,
+and the result is fitted into the output's frame; a frame with neither chain draws as
+before. Built: the audio chains in protocol 0.29, the video chains in 0.60.
 
 <a id="browser-source"></a>
 ## Browser source
@@ -1181,7 +1210,7 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   `jstream-graph`, which checks a loaded collection as it checks edits. A field added
   for new collection state (encoder profiles, hotkey bindings, transition presets and
   settings, folders, labels and organisation metadata, keyframe scenes' `variant_of` and
-  `overrides`) is omitted when empty or at its default (for presets, a new collection's one `cut`), so a file without it is still
+  `overrides`, an output's `audio_bus`) is omitted when empty or at its default (for presets, a new collection's one `cut`), so a file without it is still
   valid at the same `schema_version`. Scene filters and item effects (version 2) and a
   keyframe override's `effects` (version 3, ADR-0088) bumped it instead, each with a
   migration that refuses the new field in an older file. `jstream-core`

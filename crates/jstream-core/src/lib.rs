@@ -39,6 +39,7 @@ mod history;
 mod kinds;
 mod live;
 mod load;
+mod output_stats;
 mod outputs;
 mod plugins;
 mod preview;

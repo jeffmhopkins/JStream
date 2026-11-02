@@ -94,6 +94,29 @@ impl FilterControl {
     pub fn remove(&self) -> bool {
         self.plane.remove_filter(self.target, self.id)
     }
+
+    /// For a CLAP filter on the master chain: runs `bus`'s copy of it on the host using
+    /// `memory`, a host of that bus's own, or with `None` on a stand-in that passes the
+    /// bus's dry signal at the filter's latency
+    /// (docs/adr/0086-master-clap-filter-one-host-per-output-bus.md). The master bus's
+    /// copy always runs the host the filter was added with. The mixer swaps the copy
+    /// at the start of its next block, in place, and frees the one it replaces on the
+    /// collector thread.
+    ///
+    /// # Errors
+    /// [`AudioError::InvalidConfig`] when this is not a master CLAP filter, `bus` is the
+    /// master or another mixer's, or the host is not ready or reports another latency
+    /// than the filter has; [`AudioError::Removed`] when the filter or the bus is gone;
+    /// [`AudioError::CommandQueueFull`] when the queue can't take it.
+    pub fn set_bus_host(&self, bus: BusId, memory: Option<HostMemory>) -> Result<(), AudioError> {
+        if self.target != ChainTarget::Master || !bus.belongs_to(self.plane.tag()) {
+            return Err(AudioError::InvalidConfig {
+                what: "a bus's own host is for a master CLAP filter on one of its mixer's buses",
+            });
+        }
+        self.plane
+            .set_master_host(self.id, bus.slot, bus.id, memory)
+    }
 }
 
 /// Adds `spec` at `index` in `target`'s chain.
@@ -539,9 +562,10 @@ impl MasterControl {
     }
 
     /// [`InputControl::insert_host_filter`] for the master chain. The plugin runs on
-    /// the master bus's copy only, as one host takes one chain's blocks; every other
-    /// bus's copy delays its dry signal by the filter's latency instead, so the master
-    /// chain's latency stays the same on every bus.
+    /// the master bus's copy, as one host takes one chain's blocks; every other bus's
+    /// copy delays its dry signal by the filter's latency, so the master chain's latency
+    /// stays the same on every bus, until [`FilterControl::set_bus_host`] gives that
+    /// bus's copy a host of its own.
     ///
     /// # Errors
     /// As [`InputControl::insert_host_filter`].

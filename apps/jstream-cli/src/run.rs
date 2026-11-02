@@ -11,8 +11,8 @@ use crate::exit::{self, CliError};
 use crate::mcp;
 use jstream_control::protocol::{
     Action, ActionResult, Batch, Call, CallResult, Canvas, Edit, Event, Hello, HotkeyBinding,
-    ItemGeometry, ItemInfo, OutputInfo, OutputKind, PROTOCOL_VERSION, Query, QueryResult, Response,
-    RtmpTarget, SecretString, SourceId, SourceInfo, SourceKind, Welcome,
+    ItemGeometry, ItemInfo, OutputHealth, OutputInfo, OutputKind, PROTOCOL_VERSION, Query,
+    QueryResult, Response, RtmpTarget, SecretString, SourceId, SourceInfo, SourceKind, Welcome,
 };
 use jstream_control::{Control, ControlError, EventStream, WsConfig, WsControl};
 use serde_json::json;
@@ -756,6 +756,17 @@ fn table(
 
 /// Writes one event. Events this protocol version doesn't know are skipped, as the
 /// protocol asks; returns whether anything was written.
+/// An output's health as the protocol spells it.
+fn health_name(health: OutputHealth) -> &'static str {
+    match health {
+        OutputHealth::Waiting => "waiting",
+        OutputHealth::Good => "good",
+        OutputHealth::Fair => "fair",
+        OutputHealth::Poor => "poor",
+        _ => "unknown",
+    }
+}
+
 fn write_event(out: &mut dyn Write, event: &Event, json: bool) -> Result<bool, CliError> {
     if event.name().is_none() {
         return Ok(false);
@@ -814,7 +825,11 @@ fn write_event(out: &mut dyn Write, event: &Event, json: bool) -> Result<bool, C
             writeln!(out, "events.dropped {count}")?;
         }
         Event::StatsTick {
-            seq, drops, load, ..
+            seq,
+            drops,
+            load,
+            outputs,
+            ..
         } => {
             write!(
                 out,
@@ -836,6 +851,23 @@ fn write_event(out: &mut dyn Write, event: &Event, json: bool) -> Result<bool, C
                 if let Some(cpu_ms) = load.cpu_ms {
                     write!(out, " cpu_ms {cpu_ms}")?;
                 }
+            }
+            // Each running output's stats (protocol 0.57), in the order the engine
+            // lists them.
+            for output in outputs {
+                write!(
+                    out,
+                    " output {} uptime_ms {} kbps {} bytes {} frames {} dropped_frames {} \
+                     dropped_packets {} health {}",
+                    output.output_id,
+                    output.uptime_ms,
+                    output.kbps,
+                    output.bytes,
+                    output.frames,
+                    output.dropped_frames,
+                    output.dropped_packets,
+                    health_name(output.health),
+                )?;
             }
             writeln!(out)?;
         }

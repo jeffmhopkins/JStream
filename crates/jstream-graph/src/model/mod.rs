@@ -236,7 +236,7 @@ impl State {
     }
 
     /// The master stage's filter chains, which apply to everything leaving JStream
-    /// (ADR-0080 §1). Only the audio chain holds filters so far.
+    /// (ADR-0080 §1): a video chain over each mix an output draws, and an audio chain.
     pub fn master(&self) -> &Chains {
         &self.master
     }
@@ -956,6 +956,10 @@ pub struct Output {
     /// Its own chains, after the master stage (ADR-0080 §2).
     pub(crate) filters: Chains,
     pub(crate) video_mix: Option<VideoMixId>,
+    /// The bus whose audio it carries: the master by default. The protocol's
+    /// `audio_buses` is a list, one bus per audio track, and every output writes one
+    /// audio track so far.
+    pub(crate) audio_bus: BusId,
 }
 
 impl Output {
@@ -974,8 +978,8 @@ impl Output {
         self.encoder_profile.as_ref()
     }
 
-    /// Its own filter chains, which run after the master stage (ADR-0080 §2). Only the
-    /// audio chain holds filters so far.
+    /// Its own filter chains, which run after the master stage (ADR-0080 §2): a video
+    /// chain, and an audio chain when it carries audio.
     pub fn filters(&self) -> &Chains {
         &self.filters
     }
@@ -994,11 +998,23 @@ impl Output {
         self.video_mix.as_ref()
     }
 
+    /// The buses whose audio it carries, one per audio track, in track order: one so
+    /// far, the master unless `output.set_audio_buses` chose another. A virtual camera,
+    /// which has no audio, always carries the master.
+    pub fn audio_buses(&self) -> &[BusId] {
+        std::slice::from_ref(&self.audio_bus)
+    }
+
+    /// The bus its one audio track carries.
+    pub fn audio_bus(&self) -> &BusId {
+        &self.audio_bus
+    }
+
     /// Whether its own video filter chain has any filters. Such an output gets its own
-    /// render pass and encoder session (ADR-0080 §3). Outputs carry no video chain
-    /// until filters land, so this is `false` for every output.
+    /// render pass and encoder session (ADR-0080 §3), even when every filter is off, so
+    /// switching one never moves the output between sessions.
     pub fn has_video_chain(&self) -> bool {
-        false
+        !self.filters.chain(FilterChain::Video).is_empty()
     }
 }
 
