@@ -991,6 +991,9 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::PluginEnable {
             plugin_id: PluginId::new("plg_1"),
         },
+        Action::EffectEnable {
+            kind_id: "fx/blur".into(),
+        },
         Action::PrivacySet { on: true },
         Action::PreviewSubscribe {
             channel: 2,
@@ -1652,18 +1655,21 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     category: KindCategory::VideoFilter,
                     name: "Blur".into(),
                     version: 2,
+                    quarantined: true,
                 },
                 KindSummary {
                     kind_id: "gain".into(),
                     category: KindCategory::AudioFilter,
                     name: "Gain".into(),
                     version: 1,
+                    quarantined: false,
                 },
                 KindSummary {
                     kind_id: "move".into(),
                     category: KindCategory::Transition,
                     name: "Move".into(),
                     version: 1,
+                    quarantined: false,
                 },
             ],
         },
@@ -1967,6 +1973,12 @@ pub(crate) fn events() -> Vec<Event> {
             remote_name: None,
         });
     }
+    events.push(Event::GpuDeviceLost {
+        cause: "Device lost (DXGI_ERROR_DEVICE_HUNG)".into(),
+        blamed: vec!["fx/blur".into()],
+        quarantined: vec!["fx/blur".into()],
+        recovering: true,
+    });
     events.push(Event::StatsTick {
         seq: 4,
         drops: DropCounts {

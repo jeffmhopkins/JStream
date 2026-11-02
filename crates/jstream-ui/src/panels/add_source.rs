@@ -852,6 +852,7 @@ mod tests {
             category: KindCategory::Source,
             name: name.into(),
             version: 1,
+            quarantined: false,
         }
     }
 

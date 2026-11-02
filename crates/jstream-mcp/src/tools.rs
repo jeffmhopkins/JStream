@@ -112,10 +112,14 @@ pub(crate) const OPEN_WORLD: [&str; 2] = ["output", "source"];
 pub(crate) const REMOTE_PREFIX: &str = "remote_";
 
 /// The nouns whose ops are for people only, so no tool carries them and a call naming
-/// one is an unknown op: YouTube (ADR-0058 §3), and installing, granting and re-enabling
+/// one is an unknown op: YouTube (ADR-0058 §3), installing, granting and re-enabling
 /// plugins (ADR-0069 G1), so an agent can't hand its access to code that outlives the
-/// conversation. The protocol keeps them for the UI.
-pub(crate) const PEOPLE_ONLY: [&str; 2] = ["youtube", "plugin"];
+/// conversation, and re-enabling an effect quarantined after a GPU device loss (ADR-0087
+/// §4), so an agent can't put a shader that hung the GPU back on air. The protocol keeps
+/// them for the UI. `events.rs` hides these nouns' events from agents too, so an
+/// `effect.*` event would never reach one; a loss is reported as `gpu.device_lost`,
+/// which does (ADR-0087 §5).
+pub(crate) const PEOPLE_ONLY: [&str; 3] = ["youtube", "plugin", "effect"];
 
 /// The nouns whose ops are deprecated, so no tool carries them either: an agent is
 /// never offered a call the engine always refuses. `privacy` (ADR-0080 §4): JStream has

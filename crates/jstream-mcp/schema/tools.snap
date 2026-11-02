@@ -629,6 +629,24 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Re-enables an effect-pack kind the engine quarantined after a GPU device loss was\nblamed on it (0.61, #349; `gpu.device_lost`), and the whole pack when the pack\nwas quarantined. Its filters draw again from the next frame. The engine never\nlifts a quarantine by itself, nor when the pack's files change. Succeeds for a\nkind that isn't quarantined. Fails with `invalid_argument` on `kind_id`, as\n`kind.describe` does, for a kind that no loaded pack has and no quarantine names. For a person only, like\n`plugin.enable`.",
+                "properties": {
+                  "kind_id": {
+                    "description": "The kind, `<pack>/<effect>`.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "effect.enable",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "kind_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "**Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy\nscreen: the engine refuses this with `unsupported` and covers nothing.",
                 "properties": {
                   "on": {
@@ -5958,6 +5976,24 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Re-enables an effect-pack kind the engine quarantined after a GPU device loss was\nblamed on it (0.61, #349; `gpu.device_lost`), and the whole pack when the pack\nwas quarantined. Its filters draw again from the next frame. The engine never\nlifts a quarantine by itself, nor when the pack's files change. Succeeds for a\nkind that isn't quarantined. Fails with `invalid_argument` on `kind_id`, as\n`kind.describe` does, for a kind that no loaded pack has and no quarantine names. For a person only, like\n`plugin.enable`.",
+                "properties": {
+                  "kind_id": {
+                    "description": "The kind, `<pack>/<effect>`.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "effect.enable",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "kind_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "**Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy\nscreen: the engine refuses this with `unsupported` and covers nothing.",
                 "properties": {
                   "on": {
@@ -10850,6 +10886,24 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "plugin_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Re-enables an effect-pack kind the engine quarantined after a GPU device loss was\nblamed on it (0.61, #349; `gpu.device_lost`), and the whole pack when the pack\nwas quarantined. Its filters draw again from the next frame. The engine never\nlifts a quarantine by itself, nor when the pack's files change. Succeeds for a\nkind that isn't quarantined. Fails with `invalid_argument` on `kind_id`, as\n`kind.describe` does, for a kind that no loaded pack has and no quarantine names. For a person only, like\n`plugin.enable`.",
+                "properties": {
+                  "kind_id": {
+                    "description": "The kind, `<pack>/<effect>`.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "effect.enable",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "kind_id"
                 ],
                 "type": "object"
               },

@@ -20,6 +20,7 @@ pub(crate) use captures::Backends as CaptureBackends;
 pub(crate) use captures::{RETRY_MS, start as start_capture};
 pub(crate) use captures::{RenderCaptures, SizeChange, spawn as spawn_captures};
 pub(crate) use devices::SharedVideoDevices;
+pub(crate) use pipeline::DeviceLoss;
 pub use pipeline::OutputStats;
 #[cfg(test)]
 pub(crate) use pipeline::{DrawError, DrawFn, STOP_DRAIN, gpu_draw, open_capture};

@@ -144,8 +144,9 @@ fn new_token() -> anyhow::Result<String> {
 /// Credential Manager, and RTMP(S) publishing on `output.start`, plus the virtual
 /// camera (`WindowsVcam`) unless `vcam` is false (`--no-vcam`). With the `cef` feature
 /// it also opens browser sources' pages, keeping CEF's cache and log under `data`
-/// (`browser::backend`). Elsewhere there are no backends yet. Either way it starts the
-/// engine's stats heartbeat, and on Windows each `stats.tick` carries the process's
+/// (`browser::backend`). Elsewhere there are no backends yet. Either way it watches the
+/// effect packs in `data`'s `effects` folder (`Engine::watch_effect_packs`) and starts
+/// the engine's stats heartbeat, and on Windows each `stats.tick` carries the process's
 /// CPU time.
 ///
 /// # Errors

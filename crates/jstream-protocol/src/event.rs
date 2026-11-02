@@ -232,6 +232,29 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         remote_name: Option<String>,
     },
+    /// The program stage's GPU device was lost (0.61, #349): a GPU hang that the OS
+    /// reset (Windows' TDR), a driver reset or a removed GPU. The engine opens a new
+    /// device and the outputs repeat their last frame meanwhile, unless `recovering` is
+    /// `false`. A loss is blamed on the effect-pack kinds drawn in the frames before it;
+    /// each blamed kind is quarantined, its filters bypassed, until a person re-enables
+    /// it (`effect.enable`). Runtime state: a client that misses it sees the quarantine
+    /// in `kind.list`.
+    #[serde(rename = "gpu.device_lost")]
+    GpuDeviceLost {
+        /// What the driver or the engine said about the loss.
+        cause: String,
+        /// The effect-pack kinds drawn in the frames before the loss, ordered by ID:
+        /// empty when none was, and the loss had another cause.
+        #[serde(default)]
+        blamed: Vec<String>,
+        /// The kinds this loss quarantined, ordered by ID: the blamed ones, or every kind
+        /// of a pack blamed for a second loss in this run.
+        #[serde(default)]
+        quarantined: Vec<String>,
+        /// Whether the engine is opening a new device. `false` when it gave up (too many
+        /// losses, or nothing it could switch to): the outputs that drew on it fail.
+        recovering: bool,
+    },
     /// An event this version of the protocol doesn't know. Never sent; produced only when
     /// parsing an event from a newer server.
     #[serde(other)]
@@ -255,6 +278,7 @@ impl Event {
             Event::YoutubeStats { .. } => Some("youtube.stats"),
             Event::MetersTick { .. } => Some("meters.tick"),
             Event::PluginStateChanged { .. } => Some("plugin.state_changed"),
+            Event::GpuDeviceLost { .. } => Some("gpu.device_lost"),
             Event::StudioChanged { .. } => Some("studio.changed"),
             Event::PrivacyChanged { .. } => Some("privacy.changed"),
             Event::Unknown => None,

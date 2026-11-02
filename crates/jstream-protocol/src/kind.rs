@@ -45,6 +45,11 @@ pub struct KindSummary {
     /// The descriptor's version. Stored settings record the version they were written
     /// with.
     pub version: u32,
+    /// An effect-pack kind the engine quarantined after a GPU device loss was blamed on
+    /// it (0.61, `gpu.device_lost`): its filters are bypassed until a person re-enables
+    /// it (`effect.enable`). Omitted when `false`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub quarantined: bool,
 }
 
 /// Everything a client needs to show and edit one kind's settings.
@@ -82,6 +87,7 @@ impl KindDescriptor {
             category: self.category,
             name: self.name.clone(),
             version: self.version,
+            quarantined: false,
         }
     }
 

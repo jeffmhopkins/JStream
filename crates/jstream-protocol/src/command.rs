@@ -1405,6 +1405,18 @@ pub enum Action {
         /// The plugin.
         plugin_id: PluginId,
     },
+    /// Re-enables an effect-pack kind the engine quarantined after a GPU device loss was
+    /// blamed on it (0.61, #349; `gpu.device_lost`), and the whole pack when the pack
+    /// was quarantined. Its filters draw again from the next frame. The engine never
+    /// lifts a quarantine by itself, nor when the pack's files change. Succeeds for a
+    /// kind that isn't quarantined. Fails with `invalid_argument` on `kind_id`, as
+    /// `kind.describe` does, for a kind that no loaded pack has and no quarantine names. For a person only, like
+    /// `plugin.enable`.
+    #[serde(rename = "effect.enable")]
+    EffectEnable {
+        /// The kind, `<pack>/<effect>`.
+        kind_id: String,
+    },
     /// **Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy
     /// screen: the engine refuses this with `unsupported` and covers nothing.
     #[serde(rename = "privacy.set")]
@@ -1441,6 +1453,7 @@ impl Action {
             Action::PluginInstall { .. } => "plugin.install",
             Action::PluginGrant { .. } => "plugin.grant",
             Action::PluginEnable { .. } => "plugin.enable",
+            Action::EffectEnable { .. } => "effect.enable",
         }
     }
 
@@ -1485,7 +1498,8 @@ impl Action {
             | Action::PrivacySet { .. }
             | Action::PluginInstall { .. }
             | Action::PluginGrant { .. }
-            | Action::PluginEnable { .. } => vec![],
+            | Action::PluginEnable { .. }
+            | Action::EffectEnable { .. } => vec![],
         }
     }
 
@@ -1527,6 +1541,11 @@ impl Action {
                 "type",
                 "a plugin action can't be bound: a person installs, grants and re-enables \
                  plugins through the UI (ADR-0069)",
+            )),
+            Action::EffectEnable { .. } => Some((
+                "type",
+                "`effect.enable` can't be bound: a person re-enables a quarantined effect \
+                 through the UI (#349)",
             )),
             Action::YoutubeSignIn
             | Action::YoutubeSignOut
