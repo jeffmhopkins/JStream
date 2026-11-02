@@ -2060,6 +2060,75 @@ mod tests {
         );
     }
 
+    /// A virtual camera always draws the program at the canvas size, so its own chain is
+    /// planned over the program's master stage even when it names a video mix, and its
+    /// frame runs it (#1006).
+    #[test]
+    fn a_virtual_camera_naming_a_mix_runs_its_own_chain_over_the_program() {
+        let mut g = graph(&[]);
+        let vertical = VideoMixId::new("vertical");
+        let cam = OutputId::new("cam");
+        apply(
+            &mut g,
+            vec![
+                Edit::VideoMixCreate {
+                    mix_id: vertical.clone(),
+                    name: "Vertical".into(),
+                    mix: jstream_protocol::VideoMix {
+                        input: jstream_protocol::MixInput::Program,
+                        resolution: jstream_protocol::MixResolution {
+                            width: 1080,
+                            height: 1920,
+                        },
+                        fps_divisor: 1,
+                    },
+                },
+                Edit::OutputCreate {
+                    output_id: cam.clone(),
+                    kind: OutputKind::VirtualCam,
+                },
+                Edit::OutputSetVideoMix {
+                    output_id: cam.clone(),
+                    mix_id: Some(vertical),
+                },
+                multiply(output("cam"), "o", "#ff0000"),
+            ],
+        );
+        let plain = shot(&g);
+        assert_eq!(
+            plain
+                .stage_chain(&ChainOwner::Output(cam.clone()))
+                .map(|chain| &chain.input),
+            Some(&GpuKey::Mixed(None)),
+            "the camera's chain reads the program, not the mix it names"
+        );
+        apply(&mut g, vec![multiply(FilterOwner::Master, "m", "#ff00ff")]);
+        let staged = shot(&g);
+        assert_eq!(
+            staged
+                .stage_chain(&ChainOwner::Output(cam.clone()))
+                .map(|chain| &chain.input),
+            Some(&GpuKey::Filtered(ChainOwner::Master(None))),
+        );
+
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let canvas = staged.canvas().expect("canvas");
+        let pixels = draw_views(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            &staged,
+            &[(snapshot::View::output(None, Some(&cam)), canvas)],
+        );
+        assert_eq!(
+            pixels,
+            [RED],
+            "the master's and the camera's chains both ran"
+        );
+    }
+
     /// A pack filter drawn only on the master stage or only on an output's is still in
     /// `Shot::pack_kinds`, so a device loss while it draws blames it (#349, ADR-0080); a
     /// disabled one on either stage isn't.

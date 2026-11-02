@@ -903,7 +903,9 @@ naming the field (`edits.N.mix.resolution.width`), and a missing scene with
 `output.set_video_mix` points an output at a mix, or with no `mix_id` back at the
 program at the engine's canvas size and base rate. A running output follows a change
 of its mix's `input` from the next frame; a new resolution, rate or mix applies from
-its next `output.start`, like an encoder profile.
+its next `output.start`, like an encoder profile. A virtual camera keeps the mix it
+names but always shows the program at the canvas size, and its own video chain runs
+over that (#1006).
 
 ### Transitions and studio mode
 

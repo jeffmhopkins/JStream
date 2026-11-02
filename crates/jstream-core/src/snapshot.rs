@@ -24,15 +24,15 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use jstream_graph::{
-    Filter, Graph, Item as GraphItem, Placement as GraphPlacement, Scene as GraphScene, Source,
-    State,
+    Filter, Graph, Item as GraphItem, Output as GraphOutput, Placement as GraphPlacement,
+    Scene as GraphScene, Source, State,
 };
 use jstream_media::{FrameSize, MediaTime, PixelFormat, Rounding, VideoFrame};
 use jstream_platform::{ContextKey, GpuFrame};
 use jstream_protocol::{
     BlendMode, Canvas, ChainCost, Crop as ProtocolCrop, Edit, FilterChain, Glide, ItemGeometry,
-    ItemId, ItemTransition, OutputId, ProtocolError, QueryResult, Rev, SceneId, SceneRole,
-    SourceId, SourceKind, VideoMixId,
+    ItemId, ItemTransition, OutputId, OutputKind, ProtocolError, QueryResult, Rev, SceneId,
+    SceneRole, SourceId, SourceKind, VideoMixId,
 };
 use jstream_render::transition::{Endpoint, Track};
 use jstream_render::{
@@ -1033,7 +1033,7 @@ fn plan_inner(
 
 /// The output stage's video chains (ADR-0080): the master stage's over the program and
 /// over each video mix, when it has an enabled filter, and each output's own over what
-/// the master stage made of the mix it shows, as its encoder session is keyed
+/// (`engine::encode_key`): [`shown_mix`].
 /// (`engine::encode_key`): its mix if the collection has it, else the program.
 fn plan_stages(state: &State, assets: &FilterAssets) -> BTreeMap<ChainOwner, Chain> {
     let master = state.master().chain(FilterChain::Video);
@@ -1046,10 +1046,7 @@ fn plan_stages(state: &State, assets: &FilterAssets) -> BTreeMap<ChainOwner, Cha
         }
     }
     for output in state.outputs() {
-        let mix = output
-            .video_mix()
-            .filter(|id| state.video_mix(id).is_some())
-            .cloned();
+        let mix = shown_mix(state, output);
         let master_owner = ChainOwner::Master(mix.clone());
         let input = if stages.contains_key(&master_owner) {
             GpuKey::Filtered(master_owner)
@@ -1063,6 +1060,20 @@ fn plan_stages(state: &State, assets: &FilterAssets) -> BTreeMap<ChainOwner, Cha
         }
     }
     stages
+}
+
+/// The video mix an output's frames are drawn from, as its encoder session is keyed
+/// (`engine::encode_key`) and its output stage planned ([`plan_stages`]): its mix if the
+/// collection has it, else the program (`None`). A virtual camera always shows the
+/// program at the canvas size, whatever mix it names (#1006).
+pub(crate) fn shown_mix(state: &State, output: &GraphOutput) -> Option<VideoMixId> {
+    if matches!(output.kind(), OutputKind::VirtualCam) {
+        return None;
+    }
+    output
+        .video_mix()
+        .filter(|id| state.video_mix(id).is_some())
+        .cloned()
 }
 
 /// What is on screen at `now` while `running` runs toward `program`, as the starting
