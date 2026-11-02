@@ -762,7 +762,8 @@ collection lock:
   naming the first such entry, nothing applied, and the step dropped. Edits that
   pass the check but no longer apply also fail with `undo_conflict`, naming the latest
   entry by another client, and drop the step. Edits that fail only because an output
-  is running (undoing `output.create` while it runs) answer the graph's own
+  is running (undoing `output.create` while it runs, or a running output's
+  `output.set_audio_buses`, which would move it to another bus) answer the graph's own
   `invalid_argument` and keep the step for a retry once it is stopped; with no other
   client's entry to blame, any other failure does too. The log is pruned to the oldest
   `since` of any kept step. Only when there is no conflict does the copy replace the
@@ -1683,10 +1684,14 @@ the desktop app start it; tests and an embedding host call `emit_stats_tick` as 
 
 Each tick also lists every running output's live stats (protocol 0.57;
 `output_stats.rs`). The output thread counts each packet the muxer takes while the
-publish link is up into its `SentCounters` (two relaxed atomic adds: the bytes, and a
+publish link is `active` into its `SentCounters` (two relaxed atomic adds: the bytes, and a
 frame for video), so a link that is down sends nothing and its tags count as the
-link's drops instead. A video frame handed over while the link is down also adds to a
-third counter, which only the health reads (#994). `output.start` registers an `OutputMeter` for the run once it is
+link's drops instead. A link that came back but isn't stable yet is still
+`reconnecting`: its packets reach the server, but they aren't counted as sent either.
+A video frame handed over while the link isn't `active` also adds to a third counter,
+which only the health reads (#994), so a flapping server stays `poor`. The link state
+is the one the output thread's previous pass read, so the first packet after the link
+drops still counts as sent. `output.start` registers an `OutputMeter` for the run once it is
 armed, with its uptime counted from when the engine received the `output.start`
 (before the start waits for an earlier one, opens the destination and starts the
 program stage), whose read gathers those counts with the output's drops: its video encode
@@ -1699,8 +1704,8 @@ never with it. Each meter keeps the samples of the last ten seconds: `kbps` is t
 bytes since the previous sample over the time between them, and `health` compares the
 newest sample with the one at the window's start (`waiting` until a video frame was
 sent, `good` with nothing new lost, `poor` with 2% or more of the video frames lost,
-`fair` otherwise). Lost video frames there are the `dropped_frames` and the frames lost
-on a down link, so an outage keeps the output `poor` until it leaves the window, not
+`fair` otherwise). Lost video frames there are the `dropped_frames` and the frames
+handed over while the link isn't `active`, so an outage keeps the output `poor` until it leaves the window, not
 just while it reconnects. Under the collection lock the engine then makes an output that is
 `reconnecting` `poor`. The stop drops the meter with the output's drop guard, so the
 next tick leaves the output out. A virtual camera output has no meter yet.

@@ -25,7 +25,8 @@ const WINDOW: Duration = Duration::from_secs(10);
 const POOR_PER_10K: u64 = 200;
 
 /// What the output thread has handed its muxer this run while the link was up, and the
-/// video frames it handed it while the link was down, which the publish target dropped.
+/// video frames it handed it while the link was not active: dropped by the publish
+/// target, or delivered on a link that isn't stable yet.
 #[derive(Debug, Default)]
 pub(crate) struct SentCounters {
     bytes: AtomicU64,
@@ -43,9 +44,10 @@ impl SentCounters {
         }
     }
 
-    /// Counts one video frame the publish target dropped because its link was down.
-    /// It is already in the link's dropped packets; this is for the health, which
-    /// weighs lost video frames (#994).
+    /// Counts one video frame the muxer took while the link was not active: dropped by
+    /// the publish target, and so already in the link's dropped packets, or delivered
+    /// on a link that came back but isn't stable yet, which keeps a flapping server
+    /// `poor`. This is for the health, which weighs lost video frames (#994).
     pub(crate) fn lose_on_link(&self) {
         self.link_lost_frames.fetch_add(1, Ordering::Relaxed);
     }
@@ -67,8 +69,9 @@ pub(crate) struct OutputSample {
     pub(crate) frames: u64,
     pub(crate) dropped_frames: u64,
     pub(crate) dropped_packets: u64,
-    /// Video frames the publish target dropped while its link was down: counted in
-    /// `dropped_packets`, and as lost frames by the health only.
+    /// Video frames handed over while the link was not active, counted as lost frames
+    /// by the health only: those the publish target dropped are also in
+    /// `dropped_packets`, and those it delivered on a link not yet stable are in neither.
     pub(crate) link_lost_frames: u64,
 }
 
