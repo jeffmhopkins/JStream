@@ -134,8 +134,10 @@ when it is installed, and runs them one at a time, in about half a minute. They 
 - **A stream on an encoder profile.** H.264 at the canvas size and 30 fps, a keyframe
   at the profile's interval, and AAC stereo at 48 kHz with the microphone in it. The
   decoded pixels match the scene, and the file holds the frames the stats counted and
-  lasts as long as their timestamps span, so a runner stall, which stretches the
-  wall-clock pts without adding frames, doesn't fail it (#1007). Each `stats.tick` entry for the output has a rising uptime, growing totals,
+  lasts as long as their timestamps span. That span, in ticks, is those frames plus the
+  render ticks the engine skipped over the run (`stats.tick` drops), within a second, so
+  a runner stall, which stretches the wall-clock pts and counts skipped ticks rather
+  than frames, doesn't fail it (#1007, #1010). Each `stats.tick` entry for the output has a rising uptime, growing totals,
   a bitrate that matches the bytes sent between ticks and stays at most a little above
   the profile's, no drops, and health `good`. The uptime counts from `output.start` and starts again at
   the next one.

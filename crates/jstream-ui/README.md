@@ -138,7 +138,7 @@ Contents ([Design](#design) explains the choices):
   them, and `GrantForm`, `ListGate` (no `plugin.list` while the grant dialog is open,
   and no grant while a list is on its way), `suggested_id`, `not_granted` and the row
   texts, tested natively, the section's re-reads and grants against a fake engine that
-  notes each list.
+  notes each list, or fails one.
 - **Canvas** (`canvas/`): the canvas editor. It draws the selected scene's item boxes
   over that scene's live picture (the program mix while it is on program), edits their geometry with the pointer and the keyboard, and undoes and
   redoes ([Canvas](#canvas)).
