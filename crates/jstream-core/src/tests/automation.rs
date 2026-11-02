@@ -1123,6 +1123,10 @@ fn a_saved_name_is_made_plain_when_loaded() {
         assert_eq!(next_state(&mut events).1, PluginState::Enabled);
         call(&person, create_scene("a")).expect("applies");
         assert_eq!(next_state(&mut events).1, PluginState::Disabled);
+        // Saved as disabled, so the next start doesn't read its package again.
+        eventually("the disabled plugin saved", || {
+            saved(&dir)["plugins"][0]["disabled"] == "trap"
+        });
     }
     let mut file = saved(&dir);
     file["plugins"][0]["name"] = "\u{2067}Evil\u{7}".into();
