@@ -5,8 +5,11 @@
 //! keyframe share one definition.
 //!
 //! - [`Keyframe`] is a variant's override set: per item, an [`Override`] of some of the
-//!   four keyable fields ([`Field`]). Writing and clearing a field return the edit that
-//!   undoes it ([`Inverse`]); dropping overrides returns what restores them.
+//!   five override fields ([`Field`]): the four keyable ones and the effects list
+//!   ([ADR-0088](../../docs/adr/0088-keyframe-scenes-override-item-effects.md)), which
+//!   replaces the parent's whole and never animates. Writing and clearing a field
+//!   return the edit that undoes it ([`Inverse`]); dropping overrides returns what
+//!   restores them.
 //! - [`Keyframe::effective`] computes an item's values in the variant from the
 //!   **parent's current values**: an overridden field takes the override, every other
 //!   field follows the parent live (ADR-0049 §1).
@@ -14,11 +17,11 @@
 //!   (a parent and its variants) and gives its two ends ([`Step`]). Interpolation and
 //!   easing are ADR-0029's transition sampler's; the plan only supplies the ends.
 //!
-//! The geometry and crop types are type parameters, so this crate doesn't depend on
-//! `jstream-protocol`: the graph instantiates it with the protocol's `ItemGeometry` and
-//! `Crop`.
+//! The geometry, crop and effects types are type parameters, so this crate doesn't
+//! depend on `jstream-protocol`: the graph instantiates it with the protocol's
+//! `ItemGeometry` and `Crop`, and its own filter chains.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-anim/README.md#purpose, docs/adr/0049-keyframe-scene-model-and-evaluation.md, docs/adr/0024-scene-structure.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-anim/README.md#purpose, docs/adr/0049-keyframe-scene-model-and-evaluation.md, docs/adr/0024-scene-structure.md, docs/adr/0088-keyframe-scenes-override-item-effects.md
 
 #![forbid(unsafe_code)]
 

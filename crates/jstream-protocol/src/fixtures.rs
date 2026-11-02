@@ -514,7 +514,8 @@ pub(crate) fn edits() -> Vec<Edit> {
 }
 
 /// A keyframe scene's edits (protocol 0.39): creating one, writing an override through
-/// a placement edit's `scene_id`, and clearing it.
+/// a placement edit's `scene_id`, and clearing it; and since 0.63 its effects, whole and
+/// one at a time (ADR-0088).
 fn keyframe_edits() -> Vec<Edit> {
     let mut edits = vec![
         Edit::SceneCreateVariant {
@@ -532,6 +533,21 @@ fn keyframe_edits() -> Vec<Edit> {
             item_id: ItemId::new("itm_2"),
             field: OverrideField::Opacity,
         },
+        // A keyframe's own effects for the item, whole (protocol 0.63, ADR-0088).
+        Edit::ItemSetEffects {
+            scene_id: SceneId::new("scn_1_wide"),
+            item_id: ItemId::new("itm_2"),
+            effects: keyframe_effects(),
+        },
+        // One effect of the keyframe's, through the `keyframe` owner (ADR-0088).
+        Edit::FilterSetEnabled {
+            owner: FilterOwner::Keyframe {
+                scene_id: SceneId::new("scn_1_wide"),
+                item_id: ItemId::new("itm_2"),
+            },
+            filter_id: FilterId::new("flt_frame"),
+            enabled: false,
+        },
     ];
     // Every field, as "reset keyframe" clears them.
     edits.extend(
@@ -539,6 +555,7 @@ fn keyframe_edits() -> Vec<Edit> {
             OverrideField::Geometry,
             OverrideField::Crop,
             OverrideField::Visible,
+            OverrideField::Effects,
         ]
         .map(|field| Edit::ItemClearOverride {
             scene_id: SceneId::new("scn_1_wide"),
@@ -558,6 +575,17 @@ fn item_overrides() -> Vec<ItemOverride> {
         crop: None,
         visible: Some(false),
         opacity: Some(Finite32::new(0.5).expect("finite")),
+        effects: Some(keyframe_effects()),
+    }]
+}
+
+/// The effects the keyframe scene `scn_1_wide` draws `itm_2` with (ADR-0088).
+fn keyframe_effects() -> Vec<FilterInfo> {
+    vec![FilterInfo {
+        filter_id: FilterId::new("flt_frame"),
+        kind: "vignette".into(),
+        enabled: true,
+        settings: vignette(),
     }]
 }
 
@@ -990,6 +1018,9 @@ pub(crate) fn actions() -> Vec<Action> {
         },
         Action::PluginEnable {
             plugin_id: PluginId::new("plg_1"),
+        },
+        Action::EffectEnable {
+            kind_id: "fx/blur".into(),
         },
         Action::PrivacySet { on: true },
         Action::PreviewSubscribe {
@@ -1652,18 +1683,21 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     category: KindCategory::VideoFilter,
                     name: "Blur".into(),
                     version: 2,
+                    quarantined: true,
                 },
                 KindSummary {
                     kind_id: "gain".into(),
                     category: KindCategory::AudioFilter,
                     name: "Gain".into(),
                     version: 1,
+                    quarantined: false,
                 },
                 KindSummary {
                     kind_id: "move".into(),
                     category: KindCategory::Transition,
                     name: "Move".into(),
                     version: 1,
+                    quarantined: false,
                 },
             ],
         },
@@ -1967,6 +2001,12 @@ pub(crate) fn events() -> Vec<Event> {
             remote_name: None,
         });
     }
+    events.push(Event::GpuDeviceLost {
+        cause: "Device lost (DXGI_ERROR_DEVICE_HUNG)".into(),
+        blamed: vec!["fx/blur".into()],
+        quarantined: vec!["fx/blur".into()],
+        recovering: true,
+    });
     events.push(Event::StatsTick {
         seq: 4,
         drops: DropCounts {
@@ -2202,6 +2242,10 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
             outputs: vec![OutputId::new("out_main"), OutputId::new("out_rec")],
             reason: "the hardware encoder refused the session".into(),
         },
+        ProtocolError::TooLarge {
+            size_bytes: 5_767_168,
+            limit_bytes: 4_194_304,
+        },
         ProtocolError::Internal {
             reason: "render thread stopped".into(),
         },
@@ -2297,6 +2341,7 @@ pub(crate) fn server_messages() -> Vec<ServerMessage> {
             protocol: PROTOCOL_VERSION,
             client_id: ClientId::new("cli_7"),
             rev: Rev(12),
+            max_request_bytes: Some(4_194_304),
         }),
         ServerMessage::Response(Response {
             id: RequestId::new("r0"),

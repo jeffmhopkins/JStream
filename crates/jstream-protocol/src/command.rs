@@ -12,7 +12,7 @@
 use crate::audio::{AudioFollow, BusMonitor};
 use crate::encoder::EncoderProfile;
 use crate::error::EntityKind;
-use crate::filter::{FilterChain, FilterOwner};
+use crate::filter::{FilterChain, FilterInfo, FilterOwner};
 use crate::finite::Finite32;
 use crate::geometry::ItemGeometry;
 use crate::hotkey::Chord;
@@ -89,6 +89,26 @@ pub enum Edit {
         item_id: ItemId,
         /// The field to clear.
         field: OverrideField,
+    },
+    /// Writes a keyframe scene's override of an item's effects, the whole list, which the
+    /// keyframe draws in place of the item's own (ADR-0088, since 0.63). `scene_id` must
+    /// name a keyframe scene whose tree holds `item_id`, else `invalid_argument` on
+    /// `scene_id` (`not_found` for a missing one): an item's own effects are edited with
+    /// `filter.*`. Each entry is checked, and its settings completed, as `filter.add`
+    /// checks an item effect's; the field is `effects.<n>.<field>`. An empty list is an
+    /// override with no effects. One effect of the override is edited with `filter.*`
+    /// on the `keyframe` owner. Inverse: `item.set_effects` with the old list, or
+    /// `item.clear_override` of `effects` when the keyframe didn't override it.
+    #[serde(rename = "item.set_effects")]
+    ItemSetEffects {
+        /// The keyframe scene.
+        scene_id: SceneId,
+        /// The item in the parent's tree.
+        item_id: ItemId,
+        /// The effects, first first: at most
+        /// [`MAX_CHAIN_FILTERS`](crate::MAX_CHAIN_FILTERS), else `invalid_argument` on
+        /// `effects`.
+        effects: Vec<FilterInfo>,
     },
     /// Renames a scene. Inverse: `scene.rename` back to the previous name.
     #[serde(rename = "scene.rename")]
@@ -1001,6 +1021,7 @@ impl Edit {
             Edit::SceneCreate { .. } => "scene.create",
             Edit::SceneCreateVariant { .. } => "scene.create_variant",
             Edit::ItemClearOverride { .. } => "item.clear_override",
+            Edit::ItemSetEffects { .. } => "item.set_effects",
             Edit::SceneRename { .. } => "scene.rename",
             Edit::SceneSetRole { .. } => "scene.set_role",
             Edit::SceneDelete { .. } => "scene.delete",
@@ -1405,6 +1426,18 @@ pub enum Action {
         /// The plugin.
         plugin_id: PluginId,
     },
+    /// Re-enables an effect-pack kind the engine quarantined after a GPU device loss was
+    /// blamed on it (0.61, #349; `gpu.device_lost`), and the whole pack when the pack
+    /// was quarantined. Its filters draw again from the next frame. The engine never
+    /// lifts a quarantine by itself, nor when the pack's files change. Succeeds for a
+    /// kind that isn't quarantined. Fails with `invalid_argument` on `kind_id`, as
+    /// `kind.describe` does, for a kind that no loaded pack has and no quarantine names. For a person only, like
+    /// `plugin.enable`.
+    #[serde(rename = "effect.enable")]
+    EffectEnable {
+        /// The kind, `<pack>/<effect>`.
+        kind_id: String,
+    },
     /// **Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy
     /// screen: the engine refuses this with `unsupported` and covers nothing.
     #[serde(rename = "privacy.set")]
@@ -1441,6 +1474,7 @@ impl Action {
             Action::PluginInstall { .. } => "plugin.install",
             Action::PluginGrant { .. } => "plugin.grant",
             Action::PluginEnable { .. } => "plugin.enable",
+            Action::EffectEnable { .. } => "effect.enable",
         }
     }
 
@@ -1485,7 +1519,8 @@ impl Action {
             | Action::PrivacySet { .. }
             | Action::PluginInstall { .. }
             | Action::PluginGrant { .. }
-            | Action::PluginEnable { .. } => vec![],
+            | Action::PluginEnable { .. }
+            | Action::EffectEnable { .. } => vec![],
         }
     }
 
@@ -1527,6 +1562,11 @@ impl Action {
                 "type",
                 "a plugin action can't be bound: a person installs, grants and re-enables \
                  plugins through the UI (ADR-0069)",
+            )),
+            Action::EffectEnable { .. } => Some((
+                "type",
+                "`effect.enable` can't be bound: a person re-enables a quarantined effect \
+                 through the UI (#349)",
             )),
             Action::YoutubeSignIn
             | Action::YoutubeSignOut

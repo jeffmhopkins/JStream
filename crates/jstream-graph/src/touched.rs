@@ -46,6 +46,8 @@ enum Prop {
     Visible,
     /// An item's alpha multiplier (ADR-0023).
     Opacity,
+    /// A keyframe scene's override of an item's effects, the whole list (ADR-0088).
+    Effects,
     /// An item's blend mode.
     Blend,
     /// An item's stacking position.
@@ -125,6 +127,13 @@ impl Touched {
     }
 
     fn add(&mut self, edit: &Edit) {
+        // A filter edit on a keyframe's effects changes the one effects property of the
+        // item there, which `item.set_effects` and `item.clear_override` of `effects`
+        // write whole (ADR-0088 §4): it conflicts with them, and so with another
+        // client's filter edit on that keyframe's effects.
+        if let Some(FilterOwner::Keyframe { item_id, .. }) = filter_owner(edit) {
+            self.prop(Object::Item(item_id.clone()), Prop::Effects);
+        }
         match edit {
             Edit::SceneCreate { scene_id, .. } | Edit::SceneDelete { scene_id } => {
                 self.exists.insert(Object::Scene(scene_id.clone()));
@@ -145,8 +154,13 @@ impl Touched {
                     OverrideField::Crop => Prop::Crop,
                     OverrideField::Visible => Prop::Visible,
                     OverrideField::Opacity => Prop::Opacity,
+                    OverrideField::Effects => Prop::Effects,
                 };
                 self.prop(Object::Item(item_id.clone()), prop);
+            }
+            // The whole list is one property, as `item.clear_override` of `effects` keys it.
+            Edit::ItemSetEffects { item_id, .. } => {
+                self.prop(Object::Item(item_id.clone()), Prop::Effects);
             }
             Edit::SceneRename { scene_id, .. } => {
                 self.prop(Object::Scene(scene_id.clone()), Prop::Name);
@@ -353,6 +367,10 @@ impl Touched {
                     FilterOwner::Item { item_id } => {
                         self.uses.insert(Object::Item(item_id.clone()));
                     }
+                    FilterOwner::Keyframe { scene_id, item_id } => {
+                        self.uses.insert(Object::Scene(scene_id.clone()));
+                        self.uses.insert(Object::Item(item_id.clone()));
+                    }
                     // The master stage always exists.
                     _ => {}
                 }
@@ -533,6 +551,18 @@ impl Touched {
             || other.objects().any(|o| self.exists.contains(o))
             || self.objects().any(|o| other.exists.contains(o))
             || !self.props.is_disjoint(&other.props)
+    }
+}
+
+/// The owner a filter edit names, `None` for any other edit.
+fn filter_owner(edit: &Edit) -> Option<&FilterOwner> {
+    match edit {
+        Edit::FilterAdd { owner, .. }
+        | Edit::FilterRemove { owner, .. }
+        | Edit::FilterSetEnabled { owner, .. }
+        | Edit::FilterSetSettings { owner, .. }
+        | Edit::FilterReorder { owner, .. } => Some(owner),
+        _ => None,
     }
 }
 

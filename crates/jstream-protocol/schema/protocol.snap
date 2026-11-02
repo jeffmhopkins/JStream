@@ -529,6 +529,24 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Re-enables an effect-pack kind the engine quarantined after a GPU device loss was\nblamed on it (0.61, #349; `gpu.device_lost`), and the whole pack when the pack\nwas quarantined. Its filters draw again from the next frame. The engine never\nlifts a quarantine by itself, nor when the pack's files change. Succeeds for a\nkind that isn't quarantined. Fails with `invalid_argument` on `kind_id`, as\n`kind.describe` does, for a kind that no loaded pack has and no quarantine names. For a person only, like\n`plugin.enable`.",
+          "properties": {
+            "kind_id": {
+              "description": "The kind, `<pack>/<effect>`.",
+              "type": "string"
+            },
+            "type": {
+              "const": "effect.enable",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "kind_id"
+          ],
+          "type": "object"
+        },
+        {
           "description": "**Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy\nscreen: the engine refuses this with `unsupported` and covers nothing.",
           "properties": {
             "on": {
@@ -1798,6 +1816,16 @@ source: crates/jstream-protocol/src/fixtures.rs
           ],
           "description": "The overridden crop."
         },
+        "effects": {
+          "description": "The overridden effects, first first, which the keyframe draws in place of the\nitem's own (since 0.63, ADR-0088). An empty list is an override too: no effects\nthere.",
+          "items": {
+            "$ref": "#/$defs/FilterInfo"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "geometry": {
           "anyOf": [
             {
@@ -1968,6 +1996,37 @@ source: crates/jstream-protocol/src/fixtures.rs
             "scene_id",
             "item_id",
             "field"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Writes a keyframe scene's override of an item's effects, the whole list, which the\nkeyframe draws in place of the item's own (ADR-0088, since 0.63). `scene_id` must\nname a keyframe scene whose tree holds `item_id`, else `invalid_argument` on\n`scene_id` (`not_found` for a missing one): an item's own effects are edited with\n`filter.*`. Each entry is checked, and its settings completed, as `filter.add`\nchecks an item effect's; the field is `effects.<n>.<field>`. An empty list is an\noverride with no effects. One effect of the override is edited with `filter.*`\non the `keyframe` owner. Inverse: `item.set_effects` with the old list, or\n`item.clear_override` of `effects` when the keyframe didn't override it.",
+          "properties": {
+            "effects": {
+              "description": "The effects, first first: at most\n[`MAX_CHAIN_FILTERS`](crate::MAX_CHAIN_FILTERS), else `invalid_argument` on\n`effects`.",
+              "items": {
+                "$ref": "#/$defs/FilterInfo"
+              },
+              "type": "array"
+            },
+            "item_id": {
+              "$ref": "#/$defs/ItemId",
+              "description": "The item in the parent's tree."
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The keyframe scene."
+            },
+            "type": {
+              "const": "item.set_effects",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id",
+            "item_id",
+            "effects"
           ],
           "type": "object"
         },
@@ -4621,6 +4680,45 @@ source: crates/jstream-protocol/src/fixtures.rs
             "state"
           ],
           "type": "object"
+        },
+        {
+          "description": "The program stage's GPU device was lost (0.61, #349): a GPU hang that the OS\nreset (Windows' TDR), a driver reset or a removed GPU. The engine opens a new\ndevice and the outputs repeat their last frame meanwhile, unless `recovering` is\n`false`. A loss is blamed on the effect-pack kinds drawn in the frames before it;\neach blamed kind is quarantined, its filters bypassed, until a person re-enables\nit (`effect.enable`). Runtime state: a client that misses it sees the quarantine\nin `kind.list`.",
+          "properties": {
+            "blamed": {
+              "default": [],
+              "description": "The effect-pack kinds drawn in the frames before the loss, ordered by ID:\nempty when none was, and the loss had another cause.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "cause": {
+              "description": "What the driver or the engine said about the loss.",
+              "type": "string"
+            },
+            "quarantined": {
+              "default": [],
+              "description": "The kinds this loss quarantined, ordered by ID: the blamed ones, or every kind\nof a pack blamed for a second loss in this run.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "recovering": {
+              "description": "Whether the engine is opening a new device. `false` when it gave up (too many\nlosses, or nothing it could switch to): the outputs that drew on it fail.",
+              "type": "boolean"
+            },
+            "type": {
+              "const": "gpu.device_lost",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "cause",
+            "recovering"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -4787,6 +4885,29 @@ source: crates/jstream-protocol/src/fixtures.rs
           },
           "required": [
             "type",
+            "item_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "An item's effects as a keyframe scene draws it (ADR-0088, since 0.63): the\nkeyframe's override of them, or the item's own while it has none. `scene_id` must\nname a keyframe scene whose tree holds `item_id`, else `invalid_argument` on\n`owner` (`not_found` for a missing one). A video chain only. The first edit while\nthe keyframe follows the item's own effects copies them into its override and\napplies there, and its inverse is `item.clear_override` of `effects`; later edits\nhave their usual inverses. The item's own effects never change.",
+          "properties": {
+            "item_id": {
+              "$ref": "#/$defs/ItemId",
+              "description": "The item in its parent's tree."
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The keyframe scene."
+            },
+            "type": {
+              "const": "keyframe",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id",
             "item_id"
           ],
           "type": "object"
@@ -5270,6 +5391,16 @@ source: crates/jstream-protocol/src/fixtures.rs
           ],
           "description": "The overridden crop."
         },
+        "effects": {
+          "description": "The overridden effects, first first, which the keyframe draws in place of the\nitem's own (since 0.63, ADR-0088). An empty list is an override too: no effects\nthere.",
+          "items": {
+            "$ref": "#/$defs/FilterInfo"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "geometry": {
           "anyOf": [
             {
@@ -5472,6 +5603,10 @@ source: crates/jstream-protocol/src/fixtures.rs
         "name": {
           "description": "Display name.",
           "type": "string"
+        },
+        "quarantined": {
+          "description": "An effect-pack kind the engine quarantined after a GPU device loss was blamed on\nit (0.61, `gpu.device_lost`): its filters are bypassed until a person re-enables\nit (`effect.enable`). Omitted when `false`.",
+          "type": "boolean"
         },
         "version": {
           "description": "The descriptor's version. Stored settings record the version they were written\nwith.",
@@ -5932,7 +6067,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "OverrideField": {
-      "description": "One of the four fields a keyframe scene can override. Each is overridden whole: a\nvariant that overrides `geometry` overrides all of it.",
+      "description": "One of the fields a keyframe scene can override. Each is overridden whole: a variant\nthat overrides `geometry` overrides all of it, and one that overrides `effects` the\nwhole list.",
       "oneOf": [
         {
           "const": "geometry",
@@ -5952,6 +6087,11 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "opacity",
           "description": "Its opacity (`item.set_opacity`).",
+          "type": "string"
+        },
+        {
+          "const": "effects",
+          "description": "Its effects, the whole list (`item.set_effects`, since 0.63, ADR-0088).",
           "type": "string"
         }
       ]
@@ -8814,6 +8954,15 @@ source: crates/jstream-protocol/src/fixtures.rs
           "$ref": "#/$defs/ClientId",
           "description": "The identity this connection acts as: its undo history and audit-log entries are\nkeyed by it."
         },
+        "max_request_bytes": {
+          "description": "The request limit (0.62, ADR-0074): the most message text, in bytes, the server\nhandles in one client message. A message over it, up to the server's frame limit,\nis refused with `too_large` and the connection stays open. Only a server in front\nof the engine sets it; missing (an older server, or an engine with no server in\nfront) means 4 MiB.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "protocol": {
           "$ref": "#/$defs/ProtocolVersion",
           "description": "The protocol version the server speaks."
@@ -9131,6 +9280,33 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "The message was over the server's request limit (0.62, ADR-0074). The server read\nonly its envelope's `id`: nothing in it was applied, and the connection stays\nopen. Retrying the same message won't help: split the work, for example one\nfilter's `state` per batch. `Welcome.max_request_bytes` advertises the limit.",
+          "properties": {
+            "code": {
+              "const": "too_large",
+              "type": "string"
+            },
+            "limit_bytes": {
+              "description": "The server's request limit in bytes.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "size_bytes": {
+              "description": "The message's size in bytes.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "code",
+            "size_bytes",
+            "limit_bytes"
+          ],
+          "type": "object"
+        },
+        {
           "description": "The engine hit a bug or an unexpected condition. The request may be retried.",
           "properties": {
             "code": {
@@ -9201,5 +9377,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.60"
+  "title": "JStream protocol 0.63"
 }

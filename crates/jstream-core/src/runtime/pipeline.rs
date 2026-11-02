@@ -643,6 +643,9 @@ pub(crate) struct Program {
     /// Hands the captures' sizes to the engine. It ends once the render thread has let
     /// go of its captures.
     sizes: Option<JoinHandle<()>>,
+    /// Hands each lost device to the engine, which blames and quarantines the pack
+    /// effects drawn before it (#349). It ends once the render thread has ended.
+    device_losses: Option<JoinHandle<()>>,
     clock: Arc<dyn MediaClock>,
     codecs: Arc<dyn Codecs>,
     size: FrameSize,
@@ -863,6 +866,7 @@ impl Drop for Program {
         join("collector", self.collector.take());
         join("program watch", self.forward.take());
         join("capture sizes", self.sizes.take());
+        join("device losses", self.device_losses.take());
         join("stats", self.ticker.take());
         // After the threads stop, so the latch sees their final counters.
         self.drop_guard.take();
@@ -1243,7 +1247,7 @@ impl Running {
         // the session closes.
         let last = AtomicU64::new(0);
         Box::new(move || {
-            let (bytes, frames) = sent.read();
+            let (bytes, frames, link_lost_frames) = sent.read();
             let video_sub = *lock(&stats.video_subscriber);
             let audio_sub = *lock(&stats.audio_subscriber);
             let encoded = match video.as_ref().and_then(Weak::upgrade) {
@@ -1261,6 +1265,7 @@ impl Running {
                     .dropped
                     .saturating_add(own.load(Ordering::Relaxed))
                     .saturating_add(link.load(Ordering::Relaxed)),
+                link_lost_frames,
             }
         })
     }
@@ -1568,6 +1573,45 @@ pub(crate) enum PipelineEvent {
     LinkUp,
 }
 
+/// A lost GPU device on the program stage's render thread (#349), for the engine to
+/// blame on the pack effects drawn before it.
+#[derive(Debug)]
+pub(crate) struct DeviceLoss {
+    /// What the compositor said about the loss.
+    pub(crate) cause: String,
+    /// The effect-pack kinds the shot being drawn when the loss surfaced draws: the
+    /// frames submitted just before it drew the same, unless the shot changed in the
+    /// frame or two a loss takes to surface.
+    pub(crate) drawn: BTreeSet<String>,
+    /// Whether the render thread is switching to a new device; `false` when it gave up
+    /// and the outputs fail.
+    pub(crate) recovering: bool,
+    /// Dropped once the engine has handled the loss, which tells the render thread it
+    /// may draw on the new device.
+    pub(crate) handled: LossHandled,
+}
+
+/// Set when dropped: the engine has handled a [`DeviceLoss`] and published the render
+/// snapshot without the kinds it quarantined, or the loss was dropped unhandled (the
+/// engine is gone). The render thread doesn't draw on a new device before then, so a
+/// shader that hangs the GPU at once isn't drawn again (#349).
+#[derive(Debug)]
+pub(crate) struct LossHandled(Arc<AtomicBool>);
+
+impl LossHandled {
+    /// A token, and the flag its drop sets.
+    fn new() -> (Self, Arc<AtomicBool>) {
+        let flag = Arc::new(AtomicBool::new(false));
+        (Self(Arc::clone(&flag)), flag)
+    }
+}
+
+impl Drop for LossHandled {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::Release);
+    }
+}
+
 /// Sends a fatal pipeline error to the publish watcher, which settles `failed`.
 fn report(fail: &Sender<PipelineEvent>, reason: String) {
     tracing::error!(error = %reason, "pipeline failed");
@@ -1634,6 +1678,9 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
     // Ends once the captures' sender goes, so on an early return it ends by itself.
     let (size_tx, size_rx) = mpsc::channel();
     let sizes = spawn("jstream-capture-sizes", engine.capture_sizes_watch(size_rx))?;
+    // Ends once the render thread's sender goes, so on an early return it ends by itself.
+    let (loss_tx, loss_rx) = mpsc::channel();
+    let device_losses = spawn("jstream-device-losses", engine.device_loss_watch(loss_rx))?;
     let captures = captures::spawn(backends, parts.clock.timebase(), size_tx)?;
     let format = engine_format()?;
     let mixer = Mixer::new(MixerConfig::default()).map_err(|err| format!("mixer: {err}"))?;
@@ -1712,6 +1759,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             gpu_gate: Arc::clone(&gpu_gate),
             drops: capture_drops.clone(),
             fail: fail_tx.clone(),
+            losses: loss_tx,
         };
         move || render_thread(job)
     });
@@ -1756,6 +1804,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         mixer: Some(mixer_thread),
         forward: Some(forward),
         sizes: Some(sizes),
+        device_losses: Some(device_losses),
         clock: Arc::clone(&parts.clock),
         codecs: Arc::clone(&parts.codecs),
         size,
@@ -2451,6 +2500,9 @@ struct RenderJob {
     gpu_gate: Arc<GpuGate>,
     drops: DropSnapshot,
     fail: Sender<PipelineEvent>,
+    /// Told of each lost device, with the pack kinds drawn before it (#349): the
+    /// engine handles it on its `jstream-device-losses` thread, never on this one.
+    losses: Sender<DeviceLoss>,
 }
 
 /// The render thread's boundary: a panic outside a tick (opening the compositor,
@@ -2684,7 +2736,8 @@ impl Frames {
 ///
 /// Each tick first adopts the render snapshot the control side published last, then the
 /// live values on the parameter channel, which costs two pointer compares unless a new
-/// one arrived ([`RenderReader::adopt`]); the thread never takes the collection lock. Its generation is stamped as the thread
+/// one arrived ([`RenderReader::adopt`]); the thread never takes the collection lock,
+/// and hands a lost device to the engine's `jstream-device-losses` thread. Its generation is stamped as the thread
 /// starts and whenever it changes. The stopped marker is published when the loop ends,
 /// and when a fatal error stops the drawing.
 ///
@@ -2741,6 +2794,7 @@ fn render_loop(job: RenderJob) {
         gpu_gate,
         drops,
         fail,
+        losses: loss_sender,
     } = job;
     let mut cams: Vec<VcamTap> = Vec::new();
     let mut draw = match open(context.as_deref()) {
@@ -2777,6 +2831,8 @@ fn render_loop(job: RenderJob) {
     // When the device was lost, within the last `LOSS_WINDOW`: at most
     // `MAX_DEVICE_LOSSES`, as the third ends the drawing.
     let mut losses: Vec<Instant> = Vec::with_capacity(MAX_DEVICE_LOSSES);
+    // Set once the engine has handled the last loss: a new device draws only after.
+    let mut loss_handled: Option<Arc<AtomicBool>> = None;
     // Set by a fatal error: stop drawing and repeat `shown` until the pipeline stops. A
     // session that arrives afterwards with a new feed has nothing drawn to repeat, so
     // it gets no frames until the pipeline (already failing) stops.
@@ -2833,12 +2889,21 @@ fn render_loop(job: RenderJob) {
             // Repeating the shown frames, below.
         } else if let Some(pending) = &switch {
             // The last frames repeat while the compositor opens; snapshots are still
-            // adopted, so a gesture never waits on the fallback.
+            // adopted, so a gesture never waits on the fallback. After a loss the new
+            // device waits for the engine to quarantine the blamed pack effects, and
+            // adopts the snapshot it published before drawing.
+            let handled = loss_handled
+                .as_ref()
+                .is_none_or(|handled| handled.load(Ordering::Acquire));
             let adopted = panic::catch_unwind(AssertUnwindSafe(|| {
                 reader.adopt();
             }));
             let done = match adopted {
-                Ok(()) => pending.poll(Instant::now()),
+                Ok(()) if handled => {
+                    loss_handled = None;
+                    pending.poll(Instant::now())
+                }
+                Ok(()) => None,
                 Err(panic) => Some(Err(format!("panicked: {}", panic_message(&*panic)))),
             };
             if let Some(done) = done {
@@ -2911,7 +2976,9 @@ fn render_loop(job: RenderJob) {
                     gpu_losses.fetch_add(1, Ordering::Relaxed);
                     losses.retain(|lost: &Instant| at.duration_since(*lost) < LOSS_WINDOW);
                     losses.push(at);
-                    let why = SwitchWhy::Lost { cause };
+                    let why = SwitchWhy::Lost {
+                        cause: cause.clone(),
+                    };
                     let started = if losses.len() >= MAX_DEVICE_LOSSES {
                         Err(format!(
                             "it was lost {} times within {}s, so the engine stopped \
@@ -2933,6 +3000,18 @@ fn render_loop(job: RenderJob) {
                     on_context = false;
                     gpu_gate.shut();
                     draw_errors = 0;
+                    // The pack effects the lost frames drew are blamed for the loss and
+                    // quarantined (#349); a loss with none drawn had another cause. The
+                    // engine does that on its own thread: this one takes no lock and
+                    // writes no file. A loss it can't take is handled (dropped) here.
+                    let (handled, flag) = LossHandled::new();
+                    loss_handled = Some(flag);
+                    let _unsent = loss_sender.send(DeviceLoss {
+                        cause,
+                        drawn: reader.held().0.shot().pack_kinds(),
+                        recovering: started.is_ok(),
+                        handled,
+                    });
                     match started {
                         Ok(started) => switch = Some(started),
                         Err(fell) => {
@@ -3748,8 +3827,12 @@ fn output_loop(job: OutputJob) {
     sink.finish();
 }
 
-/// Counts a packet the muxer `taken` in `sent`, unless the live link is down: the
-/// publish target drops it then, and counts it with the link's drops.
+/// Counts a packet the muxer `taken` in `sent`, unless the link is not active: the
+/// publish target then drops it and counts it with the link's drops, or delivers it on
+/// a link that came back but isn't stable yet. A video frame either way is counted as
+/// lost for the health, so a flapping server stays `poor` (#994). `link` is the state
+/// the previous pass read, so the first packet after the link drops still counts as
+/// sent.
 fn count_sent(
     sent: &SentCounters,
     packet: &jstream_media::Packet,
@@ -3757,8 +3840,13 @@ fn count_sent(
     link: LinkState,
     video: bool,
 ) {
-    if taken && link == LinkState::Active {
+    if !taken {
+        return;
+    }
+    if link == LinkState::Active {
         sent.add(packet.data().len(), video);
+    } else if video {
+        sent.lose_on_link();
     }
 }
 
@@ -4768,5 +4856,36 @@ mod tests {
         };
         assert!(err.contains("did not open"), "{err}");
         drop(release);
+    }
+
+    /// `count_sent` counts what the muxer took as sent while the link is active, and a
+    /// video frame taken on any other link as lost for the health (#998 N6).
+    #[test]
+    fn count_sent_splits_sent_from_link_lost() {
+        use super::{LinkState, SentCounters, count_sent};
+        let at = MediaTime::zero(Timebase::MICROS);
+        let packet =
+            jstream_media::Packet::new(Codec::H264, true, at, at, vec![0u8; 7]).expect("packet");
+        let links = [
+            LinkState::Active,
+            LinkState::Reconnecting,
+            LinkState::Failed,
+        ];
+        for link in links {
+            for taken in [false, true] {
+                for video in [false, true] {
+                    let sent = SentCounters::default();
+                    count_sent(&sent, &packet, taken, link, video);
+                    let want = match (taken, link == LinkState::Active, video) {
+                        (false, _, _) => (0, 0, 0),
+                        (true, true, false) => (7, 0, 0),
+                        (true, true, true) => (7, 1, 0),
+                        (true, false, false) => (0, 0, 0),
+                        (true, false, true) => (0, 0, 1),
+                    };
+                    assert_eq!(sent.read(), want, "{link:?} taken={taken} video={video}");
+                }
+            }
+        }
     }
 }

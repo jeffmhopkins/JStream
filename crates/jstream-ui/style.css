@@ -832,6 +832,29 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .output .buttons { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .output .encoder, .new-output label { display: grid; gap: 0.25rem; color: var(--muted); font-size: 0.85rem; }
 .outputs form.inline { display: flex; gap: 0.4rem; }
+.outputs .profiles { display: grid; gap: 0.4rem; }
+.outputs .profiles > .hint { margin: 0; color: var(--dim); font-size: 11px; }
+.outputs .profiles > button { justify-self: start; }
+.profile-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.profile {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.4rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.profile strong { flex: 1 1 auto; min-width: 0; }
+.profile-summary { flex: 1 0 100%; order: 1; color: var(--muted); font-size: 0.8rem; overflow-wrap: anywhere; }
+.profile-form { display: grid; gap: 0.5rem; padding: 0.6rem; border: 1px solid var(--accent); border-radius: 8px; }
+.profile-form .hint { margin: 0; color: var(--muted); font-size: 0.8rem; }
+.profile-form .problem { margin: 0; }
+.profile-form .buttons { display: flex; gap: 0.4rem; }
+.profile-field, .profile-field.size-pair label { display: grid; gap: 0.25rem; }
+.profile-field .label { color: var(--muted); font-size: 0.85rem; }
+.profile-field input, .profile-field select { min-width: 0; }
+.profile-field.size-pair { grid-template-columns: 1fr 1fr; gap: 0.4rem; }
 .outputs form.inline input { flex: 1; min-width: 0; }
 .outputs .key { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .outputs .key input { flex: 1 0 100%; }
@@ -1265,6 +1288,8 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .filters-effects { display: flex; flex-direction: column; gap: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
 .filters-subtitle { font-size: 13px; font-weight: 600; color: var(--text); }
 .filters-add { align-self: flex-start; padding: 6px 12px; background: var(--menu); border: 1px solid var(--border); border-radius: 6px; color: var(--text); }
+.filters-keyframe { margin: 0; font-size: 11px; color: var(--muted); }
+.filters-follow { padding: 0; background: none; border: 0; color: var(--accent); font-size: 11px; text-decoration: underline; cursor: pointer; }
 .filter-chains { display: flex; flex-direction: column; gap: 12px; }
 .filter-chain-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; color: var(--text-soft); }
 .filter-chain-title { font-size: 11px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; }
@@ -1289,6 +1314,11 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .props-side .filter-summary { max-width: 50%; }
 .filter-summary.scene { font-family: inherit; font-style: italic; color: #b5ceff; }
 .filter-summary.no-scene { font-family: inherit; color: #e8a33d; }
+/* A quarantined effect-pack kind (ADR-0087): bypassed until a person re-enables it. */
+.filter .badge.quarantined { flex: 0 0 auto; background: color-mix(in srgb, var(--problem) 22%, transparent); color: var(--problem); }
+.filter.quarantined .filter-name { color: var(--dim); }
+.filter-reenable { flex: 0 0 auto; height: 22px; padding: 0 8px; border: 1px solid var(--line); border-radius: 4px; background: none; color: var(--text-soft); font-size: 12px; }
+.filter-reenable:hover:not(:disabled) { background: var(--hover); color: var(--text); }
 .filter-caret { flex: 0 0 14px; text-align: center; font-size: 11px; color: var(--dim); }
 .filter-remove {
   flex: 0 0 24px; height: 24px; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--muted);
@@ -1548,6 +1578,18 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .stats-chart .target { stroke: var(--border-strong); }
 .stats-chart .baseline { stroke: var(--border); }
 .stats-chart .line { stroke: var(--accent); }
+.stats-chart .hover { stroke: var(--muted); }
+.stats-chart-box { position: relative; cursor: crosshair; touch-action: pan-y; }
+.stats-hover-dot {
+  position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px;
+  border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--panel);
+  pointer-events: none;
+}
+.stats-hover-tip {
+  position: absolute; top: 2px; padding: 2px 6px; white-space: nowrap;
+  background: var(--menu); border: 1px solid var(--border); border-radius: 4px;
+  font-size: 11px; color: var(--text); pointer-events: none;
+}
 .stats-axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--dim); }
 .stats-nodata {
   display: flex; align-items: center; justify-content: center; height: 72px;

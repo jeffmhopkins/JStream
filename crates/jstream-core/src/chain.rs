@@ -202,6 +202,14 @@ impl Chain {
             .fold(0, u32::saturating_add)
     }
 
+    /// The kinds of its filters an effect pack draws.
+    pub(crate) fn pack_kinds(&self) -> impl Iterator<Item = &str> {
+        self.filters
+            .iter()
+            .filter(|filter| filter.effect.is_some())
+            .map(|filter| filter.kind.as_str())
+    }
+
     /// The enabled filters' kinds and settings, in order: what makes two items' effects
     /// look the same, so a transition may pair them (ADR-0065 §6, as ADR-0081 amends it).
     pub(crate) fn look(&self) -> Vec<(String, Settings)> {
@@ -1386,6 +1394,85 @@ mod tests {
         assert_eq!(layer, Some((16, 9)), "the box of an unscaled 16x9 frame");
     }
 
+    /// A keyframe scene's overridden effects (ADR-0088) run over the item's box where
+    /// the keyframe draws it: its parent, and a keyframe that follows the item's own
+    /// effects, draw the item without them, and an empty override draws none.
+    #[test]
+    fn a_keyframe_scene_draws_an_item_with_its_overridden_effects() {
+        let (main, key, plain, cam) = (
+            SceneId::new("main"),
+            SceneId::new("key"),
+            SceneId::new("plain"),
+            ItemId::new("cam"),
+        );
+        let red = jstream_protocol::FilterInfo {
+            filter_id: FilterId::new("tint"),
+            kind: "color_correction".into(),
+            enabled: true,
+            settings: [("multiply", serde_json::json!("#ff0000"))]
+                .into_iter()
+                .collect(),
+        };
+        let mut keyed = graph(&[]);
+        let variant = |scene_id: &SceneId| Edit::SceneCreateVariant {
+            scene_id: scene_id.clone(),
+            variant_of: main.clone(),
+            name: scene_id.as_str().into(),
+        };
+        apply(
+            &mut keyed,
+            vec![
+                variant(&key),
+                variant(&plain),
+                Edit::ItemSetEffects {
+                    scene_id: key.clone(),
+                    item_id: cam.clone(),
+                    effects: vec![red],
+                },
+            ],
+        );
+        let on_key = shot_of(&keyed, "key");
+        let chain = on_key
+            .item_chain(&key, &cam)
+            .expect("the keyframe's effects");
+        assert_eq!(chain.input, GpuKey::ItemBox(key.clone(), cam.clone()));
+        let on_main = shot_of(&keyed, "main");
+        assert!(
+            on_main.item_chain(&main, &cam).is_none(),
+            "the parent's own"
+        );
+        let on_plain = shot_of(&keyed, "plain");
+        assert!(
+            on_plain.item_chain(&plain, &cam).is_none(),
+            "follows the item"
+        );
+
+        // An empty override draws no effects, over an item that has its own.
+        apply(
+            &mut keyed,
+            vec![
+                item_tint("cam", "#ff0000"),
+                Edit::ItemSetEffects {
+                    scene_id: plain.clone(),
+                    item_id: cam.clone(),
+                    effects: Vec::new(),
+                },
+            ],
+        );
+        assert!(shot_of(&keyed, "main").item_chain(&main, &cam).is_some());
+        let none = shot_of(&keyed, "plain");
+        assert!(none.item_chain(&plain, &cam).is_none(), "an empty override");
+
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        for (shot, want) in [(on_key, RED), (on_main, WHITE), (none, WHITE)] {
+            let mut cache = ResourceCache::new();
+            let mut chains = Chains::default();
+            let pixel = draw(&mut compositor, (&mut cache, &mut chains), &shot, 1);
+            assert_eq!(pixel, want);
+        }
+    }
+
     /// `stats.tick`'s chain cost (ADR-0065 §7) counts a scene's chain as its composite
     /// and one layer and pass per filter, an item's effects as its box and one per
     /// effect, at the sizes they draw at; a source's chain and a bypassed filter add
@@ -1971,6 +2058,63 @@ mod tests {
             None,
             "a disabled filter is bypassed"
         );
+    }
+
+    /// A pack filter drawn only on the master stage or only on an output's is still in
+    /// `Shot::pack_kinds`, so a device loss while it draws blames it (#349, ADR-0080); a
+    /// disabled one on either stage isn't.
+    #[test]
+    fn pack_kinds_count_the_master_and_output_stages() {
+        use crate::effect_packs::test_pack::{self, KIND, Temp};
+
+        let temp = Temp::new("stages");
+        let assets = FilterAssets::new().with_effects(Arc::new(
+            [(KIND.to_owned(), test_pack::effect(&temp, test_pack::MUL))]
+                .into_iter()
+                .collect(),
+        ));
+        let pack = |owner: FilterOwner, id: &str| Edit::FilterAdd {
+            owner,
+            chain: FilterChain::Video,
+            filter_id: FilterId::new(id),
+            kind: KIND.into(),
+            settings: Settings::default(),
+            enabled: None,
+            index: None,
+        };
+        let enable = |owner: FilterOwner, id: &str, enabled: bool| Edit::FilterSetEnabled {
+            owner,
+            filter_id: FilterId::new(id),
+            enabled,
+        };
+        let mut g = graph(&[("cam", true)]).with_kinds([test_pack::descriptor()]);
+        apply(
+            &mut g,
+            vec![
+                record("rec"),
+                pack(FilterOwner::Master, "m"),
+                pack(output("rec"), "o"),
+                enable(output("rec"), "o", false),
+            ],
+        );
+        let kinds =
+            |g: &Graph| -> Vec<String> { shot_with(g, &assets).pack_kinds().into_iter().collect() };
+        // The source's chain is built in, so only the master stage counts here.
+        assert_eq!(kinds(&g), [KIND], "the master stage's filter");
+
+        apply(
+            &mut g,
+            vec![
+                enable(FilterOwner::Master, "m", false),
+                enable(output("rec"), "o", true),
+            ],
+        );
+        let shot = shot_with(&g, &assets);
+        assert_eq!(shot.stage_chain(&ChainOwner::Master(None)), None);
+        assert_eq!(kinds(&g), [KIND], "the output stage's filter");
+
+        apply(&mut g, vec![enable(output("rec"), "o", false)]);
+        assert!(kinds(&g).is_empty(), "disabled on both stages");
     }
 
     /// Draws each of `views` of `shot` at its size in one cache frame, as the render
