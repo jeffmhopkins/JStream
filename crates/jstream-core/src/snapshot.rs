@@ -1033,8 +1033,8 @@ fn plan_inner(
 
 /// The output stage's video chains (ADR-0080): the master stage's over the program and
 /// over each video mix, when it has an enabled filter, and each output's own over what
-/// (`engine::encode_key`): [`shown_mix`].
-/// (`engine::encode_key`): its mix if the collection has it, else the program.
+/// the master stage made of the mix it shows ([`shown_mix`]), as its encoder session is
+/// keyed (`engine::encode_key`).
 fn plan_stages(state: &State, assets: &FilterAssets) -> BTreeMap<ChainOwner, Chain> {
     let master = state.master().chain(FilterChain::Video);
     let mut stages = BTreeMap::new();
