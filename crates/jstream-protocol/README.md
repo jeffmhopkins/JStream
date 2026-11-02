@@ -193,7 +193,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.65 because of
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.66 because
+  `stats.tick`'s `chains` counts the output stage's video chains too (`ChainCost`'s
+  `stage_chains`, `stage_layers` and `stage_passes`, #980,
+  [ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)); 0.65 added
   `scene.set_options` and `SceneInfo`'s flattened `SceneOptions`, whose `include_audio`
   leaves a scene's audio out of every nesting of it and whose `background` is the
   colour a scene is drawn over
@@ -1377,7 +1380,19 @@ After `welcome`, the server pushes every event to every client.
   pixel). A filter of a kind the engine doesn't draw is bypassed and not counted, nor
   are a source's own chain, a `scene_mask`'s scene, and the canvas-sized layer a
   nested scene without a chain is drawn into for an item with effects that shows it
-  (it takes the place of the layer that scene would be drawn into anyway). An older engine leaves `chains`
+  (it takes the place of the layer that scene would be drawn into anyway). Since 0.66
+  `chains` also counts the output stage
+  ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), for the
+  running outputs only, as it runs only for an output's frame, and as each one's frames
+  are drawn since its `output.start` (a video filter or mix set on a running output
+  counts from its next start, and a virtual camera is drawn as the program):
+  `stage_chains` counts the master video chain once for each mix a running output gets
+  through it, and the own video chain of each running output that started with one; `stage_layers` and `stage_passes` count each
+  staged mix's canvas-sized layer and the pass compositing the mix into it, once
+  however many outputs get the mix, and one per enabled filter of those chains; their
+  bytes are in `layer_bytes`. A mix with neither a master chain nor an output's own is
+  drawn straight to the output and adds nothing, and the pass fitting the result into
+  each output's frame, which every output frame draws, is not counted. An older engine leaves `chains`
   out, and a count missing from it parses as 0. `chains` was added in 0.54. Since 0.57
   a tick also lists each running output in `outputs` (`OutputStatsInfo`, ordered by
   ID; left out while none runs, and on an engine with no media backends): `uptime_ms`

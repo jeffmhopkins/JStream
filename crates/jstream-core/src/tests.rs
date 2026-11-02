@@ -6219,6 +6219,139 @@ mod cpu_pipeline {
         block_on(control.call(output_call("cam", false))).expect("output.stop");
         assert_eq!(log.lock().expect("vcam log").stops, 2);
     }
+
+    /// `stats.tick`'s output stage (#980) counts each running output as its frames are
+    /// drawn since it started, not as the collection now names it: a video filter added
+    /// to a running output, or a mix set on it, waits for its next start, and a virtual
+    /// camera is drawn as the program whatever mix it names.
+    #[test]
+    fn the_stats_tick_counts_the_output_stage_as_each_output_started() {
+        use jstream_protocol::{
+            ChainCost, FilterChain, FilterId, FilterOwner, MixInput, MixResolution, Settings,
+            VideoMix, VideoMixId,
+        };
+
+        let dir = TempDir::new("stage-cost");
+        let path = dir.join("show.mp4");
+        let fakes = fakes();
+        let log = Arc::new(Mutex::new(VcamLog::default()));
+        let (engine, control, mut events) =
+            vcam_engine(&fakes, cpu_draw(), scripted(&log), (64, 36), None);
+        let vertical = VideoMixId::new("vertical");
+        let tint = |owner: FilterOwner, id: &str| Edit::FilterAdd {
+            owner,
+            chain: FilterChain::Video,
+            filter_id: FilterId::new(id),
+            kind: "color_correction".into(),
+            settings: Settings::new(),
+            enabled: None,
+            index: None,
+        };
+        let rec = || FilterOwner::Output {
+            output_id: OutputId::new("rec"),
+        };
+        // The output stage's counts in a `stats.tick` sent now.
+        let stage = |events: &mut EventStream| -> (u32, u32, u32) {
+            engine.emit_stats_tick();
+            let chains = drain(events)
+                .into_iter()
+                .filter_map(|event| match event {
+                    Event::StatsTick { chains, .. } => chains,
+                    _ => None,
+                })
+                .next_back()
+                .unwrap_or_else(ChainCost::default);
+            (
+                chains.stage_chains,
+                chains.stage_layers,
+                chains.stage_passes,
+            )
+        };
+        batch(
+            &control,
+            edits(vec![
+                Edit::OutputCreate {
+                    output_id: OutputId::new("rec"),
+                    kind: OutputKind::Record {
+                        path: path.to_str().expect("a UTF-8 temp path").into(),
+                        container: RecordContainer::Mp4,
+                    },
+                },
+                Edit::VideoMixCreate {
+                    mix_id: vertical.clone(),
+                    name: "Vertical".into(),
+                    mix: VideoMix {
+                        input: MixInput::Program,
+                        resolution: MixResolution {
+                            width: 36,
+                            height: 64,
+                        },
+                        fps_divisor: 1,
+                    },
+                },
+                Edit::OutputSetVideoMix {
+                    output_id: OutputId::new("cam"),
+                    mix_id: Some(vertical.clone()),
+                },
+            ]),
+        )
+        .expect("setup");
+        drain(&mut events);
+
+        start_output(&control, &mut events, "rec");
+        assert_eq!(stage(&mut events), (0, 0, 0), "no stage: drawn straight");
+
+        batch(&control, edits(vec![tint(rec(), "own")])).expect("filter.add");
+        assert_eq!(
+            stage(&mut events),
+            (0, 0, 0),
+            "rec's new chain runs from its next start"
+        );
+
+        batch(&control, edits(vec![tint(FilterOwner::Master, "m")])).expect("filter.add");
+        assert_eq!(
+            stage(&mut events),
+            (1, 2, 2),
+            "the program's layer and the master chain"
+        );
+
+        batch(
+            &control,
+            edits(vec![Edit::OutputSetVideoMix {
+                output_id: OutputId::new("rec"),
+                mix_id: Some(vertical.clone()),
+            }]),
+        )
+        .expect("output.set_video_mix");
+        assert_eq!(
+            stage(&mut events),
+            (1, 2, 2),
+            "rec draws the program until its next start"
+        );
+
+        start_output(&control, &mut events, "cam");
+        assert_eq!(
+            stage(&mut events),
+            (1, 2, 2),
+            "the camera, naming the vertical mix, shares the program's stage"
+        );
+
+        for output in ["cam", "rec"] {
+            block_on(control.call(output_call(output, false))).expect("output.stop");
+        }
+        drain(&mut events);
+        assert_eq!(stage(&mut events), (0, 0, 0), "nothing runs");
+
+        // A recording never overwrites a file.
+        std::fs::remove_file(&path).expect("the first recording");
+        start_output(&control, &mut events, "rec");
+        assert_eq!(
+            stage(&mut events),
+            (2, 3, 3),
+            "restarted on the vertical mix: its layer, the master chain and rec's own"
+        );
+        block_on(control.call(output_call("rec", false))).expect("output.stop");
+    }
 }
 
 fn rtmp_output(url: &str) -> jstream_protocol::OutputKind {

@@ -523,5 +523,5 @@ fn an_items_effects_run_once_a_transition_onto_its_scene_ends() {
             .is_some(),
         "b1's effects are planned"
     );
-    assert_eq!(shot.chain_cost().item_effects, 1, "and run each frame");
+    assert_eq!(shot.chain_cost([]).item_effects, 1, "and run each frame");
 }

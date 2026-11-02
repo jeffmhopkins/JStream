@@ -122,10 +122,10 @@ pub enum Event {
         /// at (0.48). An older engine leaves it out.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         load: Option<EngineLoad>,
-        /// What the scene filter chains and item effects add to each frame: their
-        /// offscreen layers, GPU passes and the layers' texture bytes, as the current
-        /// render plan schedules them (ADR-0065 §7; 0.54). An older engine leaves it
-        /// out.
+        /// What the scene filter chains and item effects, and the running outputs'
+        /// output stage (0.66), add to each frame: their offscreen layers, GPU passes and
+        /// the layers' texture bytes, as the current render plan schedules them
+        /// (ADR-0065 §7; 0.54). An older engine leaves it out.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         chains: Option<ChainCost>,
         /// Each running output's live stats, by output ID: what it has sent and lost
@@ -314,9 +314,9 @@ pub struct EngineLoad {
     pub cpus: u32,
 }
 
-/// What the video chains of scenes and items add to each frame the engine draws
-/// (ADR-0065 §7), as the current render plan schedules them: a gauge, not a running
-/// total.
+/// What the video chains of scenes and items, and since 0.66 the output stage's, add to
+/// each frame the engine draws (ADR-0065 §7, ADR-0080), as the current render plan
+/// schedules them: a gauge, not a running total.
 ///
 /// A scene with an enabled video filter is composited once per frame into a
 /// canvas-sized layer, however many places show it, and each enabled filter then draws
@@ -328,6 +328,17 @@ pub struct EngineLoad {
 /// (ADR-0026), the scenes a `scene_mask` reads, and the canvas-sized layer a nested
 /// scene without a chain is drawn into for an item with effects that shows it (it takes
 /// the place of the layer the scene would be drawn into anyway).
+///
+/// The output stage (0.66) is counted for the running outputs only, as it runs only
+/// when an output's frame is drawn, and as each output's frames are drawn since it
+/// started: a video filter or mix set on a running output counts from its next start,
+/// as it draws from then, and a virtual camera is drawn as the program. A mix that a
+/// running output gets through a master or output video chain is drawn once per frame
+/// into a canvas-sized layer (one layer and one pass, however many outputs get it), the
+/// master chain runs once over it, and the own chain of each output that started with
+/// one runs once after that; each enabled filter of either
+/// draws one pass into a layer of its own. Not counted: the pass that fits the result
+/// into each output's frame, which every output frame draws with or without a stage.
 ///
 /// A missing field parses as 0, so a field added later can be left out by an older
 /// sender (R-API-001). Unknown fields are ignored.
@@ -348,8 +359,19 @@ pub struct ChainCost {
     pub item_layers: u32,
     /// The GPU passes those effects draw: each item's box and one per effect.
     pub item_passes: u32,
-    /// The texture memory of every layer above, in bytes.
+    /// The texture memory of every layer counted here, the output stage's included
+    /// (0.66), in bytes.
     pub layer_bytes: u64,
+    /// The output stage's video chains that run each frame (0.66): the master chain
+    /// once for each mix a running output gets through it, and each running output's
+    /// own.
+    pub stage_chains: u32,
+    /// The offscreen layers the output stage draws into (0.66): each staged mix's
+    /// canvas-sized layer and one per filter. Their bytes are in `layer_bytes`.
+    pub stage_layers: u32,
+    /// The GPU passes the output stage draws (0.66): each staged mix's composite into
+    /// its layer and one per filter.
+    pub stage_passes: u32,
 }
 
 /// One running output's live stats in a `stats.tick` (0.57): what it has sent and lost
@@ -529,6 +551,9 @@ mod tests {
                 item_layers: 3,
                 item_passes: 3,
                 layer_bytes: 99_532_800,
+                stage_chains: 1,
+                stage_layers: 2,
+                stage_passes: 2,
             }),
             outputs: Vec::new(),
         };
@@ -555,6 +580,9 @@ mod tests {
                     "item_layers": 3,
                     "item_passes": 3,
                     "layer_bytes": 99_532_800u64,
+                    "stage_chains": 1,
+                    "stage_layers": 2,
+                    "stage_passes": 2,
                 }
             })
         );

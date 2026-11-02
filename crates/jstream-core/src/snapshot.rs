@@ -2995,6 +2995,21 @@ fn draw(
     })
 }
 
+/// Adds one of the output stage's chains to `cost`, run over an input of `width` by
+/// `height`: one layer and pass per filter, at the sizes [`Chains`] makes them.
+fn add_stage(cost: &mut ChainCost, chain: &Chain, (width, height): (u32, u32)) {
+    let sizes = chain.layer_sizes(width, height);
+    let count = u32::try_from(sizes.len()).unwrap_or(u32::MAX);
+    cost.stage_chains = cost.stage_chains.saturating_add(1);
+    cost.stage_layers = cost.stage_layers.saturating_add(count);
+    cost.stage_passes = cost.stage_passes.saturating_add(count);
+    let bytes = sizes
+        .into_iter()
+        .map(layer_bytes)
+        .fold(0, u64::saturating_add);
+    cost.layer_bytes = cost.layer_bytes.saturating_add(bytes);
+}
+
 /// The bytes of one pixel of an offscreen layer (`Rgba16Float`).
 const LAYER_PIXEL_BYTES: u64 = 8;
 
@@ -3006,15 +3021,27 @@ fn layer_bytes((width, height): (u32, u32)) -> u64 {
 }
 
 impl Shot {
-    /// What the scene chains and item effects add to each frame (ADR-0065 §7), for
-    /// `stats.tick`: read from the chain phase's steps ([`schedule_chains`]), so it
-    /// counts what each frame runs once, before any mix draws. A scene's chain is its
-    /// canvas-sized composite and one layer and pass per filter; an item's effects are
-    /// its box's layer and pass and one per effect, at the sizes [`Chains`] makes them.
-    /// A source's chain, a scene a `scene_mask` reads, and the reference layer a nested
-    /// scene without a chain is drawn into for an item's effects (in place of the layer
-    /// it would be drawn into anyway) are not counted.
-    pub(crate) fn chain_cost(&self) -> ChainCost {
+    /// What the scene chains, item effects and output stage add to each frame
+    /// (ADR-0065 §7, ADR-0080), for `stats.tick`. The scene chains and item effects are
+    /// read from the chain phase's steps ([`schedule_chains`]), so it counts what each
+    /// frame runs once, before any mix draws. A scene's chain is its canvas-sized
+    /// composite and one layer and pass per filter; an item's effects are its box's
+    /// layer and pass and one per effect, at the sizes [`Chains`] makes them. A source's
+    /// chain, a scene a `scene_mask` reads, and the reference layer a nested scene
+    /// without a chain is drawn into for an item's effects (in place of the layer it
+    /// would be drawn into anyway) are not counted.
+    ///
+    /// The output stage runs only for an output's frame, so it is counted for
+    /// `running`, the mix and owner each running output's frames are drawn with (its
+    /// session's, as the render thread draws `View::output`): what [`Shot::stage_of`]
+    /// gives that frame, each mix's canvas-sized layer and master chain once however
+    /// many outputs get it ([`Chains::stage`]), and the owner's own chain over what the
+    /// master chain makes. The pass fitting the result into the output's frame, which
+    /// every output frame draws, is not counted.
+    pub(crate) fn chain_cost<'a>(
+        &self,
+        running: impl IntoIterator<Item = (Option<&'a VideoMixId>, Option<&'a OutputId>)>,
+    ) -> ChainCost {
         let mut cost = ChainCost::default();
         let canvas = (self.canvas.width, self.canvas.height);
         for step in &self.chain_steps {
@@ -3055,6 +3082,28 @@ impl Shot {
                 .map(layer_bytes)
                 .fold(layer_bytes(input), u64::saturating_add);
             cost.layer_bytes = cost.layer_bytes.saturating_add(bytes);
+        }
+        let mut staged = BTreeSet::new();
+        for (mix, owner) in running {
+            let Some(stage) = self.stage_of(mix, owner) else {
+                continue;
+            };
+            // What the output's own chain reads: the master chain's output, or the mix.
+            let mut size = canvas;
+            if staged.insert(mix) {
+                cost.stage_passes = cost.stage_passes.saturating_add(1);
+                cost.stage_layers = cost.stage_layers.saturating_add(1);
+                cost.layer_bytes = cost.layer_bytes.saturating_add(layer_bytes(canvas));
+                if let Some((_, master)) = stage.master {
+                    add_stage(&mut cost, master, canvas);
+                }
+            }
+            if let Some((_, master)) = stage.master {
+                size = master.output_size(canvas.0, canvas.1);
+            }
+            if let Some((_, own)) = stage.output {
+                add_stage(&mut cost, own, size);
+            }
         }
         cost
     }

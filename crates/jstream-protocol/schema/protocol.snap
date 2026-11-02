@@ -1492,7 +1492,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       ]
     },
     "ChainCost": {
-      "description": "What the video chains of scenes and items add to each frame the engine draws\n(ADR-0065 §7), as the current render plan schedules them: a gauge, not a running\ntotal.\n\nA scene with an enabled video filter is composited once per frame into a\ncanvas-sized layer, however many places show it, and each enabled filter then draws\none pass into a layer of its own. An item with an enabled effect is drawn into one\nlayer the size of its box plus the effects' outset, and each enabled effect then\ndraws one pass into a layer of its own. An item placed in two scenes counts once for\neach. A filter of a kind the engine doesn't draw is bypassed and not counted. Every\nlayer is `Rgba16Float`, 8 bytes a pixel. Not counted: a source's own filters\n(ADR-0026), the scenes a `scene_mask` reads, and the canvas-sized layer a nested\nscene without a chain is drawn into for an item with effects that shows it (it takes\nthe place of the layer the scene would be drawn into anyway).\n\nA missing field parses as 0, so a field added later can be left out by an older\nsender (R-API-001). Unknown fields are ignored.",
+      "description": "What the video chains of scenes and items, and since 0.66 the output stage's, add to\neach frame the engine draws (ADR-0065 §7, ADR-0080), as the current render plan\nschedules them: a gauge, not a running total.\n\nA scene with an enabled video filter is composited once per frame into a\ncanvas-sized layer, however many places show it, and each enabled filter then draws\none pass into a layer of its own. An item with an enabled effect is drawn into one\nlayer the size of its box plus the effects' outset, and each enabled effect then\ndraws one pass into a layer of its own. An item placed in two scenes counts once for\neach. A filter of a kind the engine doesn't draw is bypassed and not counted. Every\nlayer is `Rgba16Float`, 8 bytes a pixel. Not counted: a source's own filters\n(ADR-0026), the scenes a `scene_mask` reads, and the canvas-sized layer a nested\nscene without a chain is drawn into for an item with effects that shows it (it takes\nthe place of the layer the scene would be drawn into anyway).\n\nThe output stage (0.66) is counted for the running outputs only, as it runs only\nwhen an output's frame is drawn, and as each output's frames are drawn since it\nstarted: a video filter or mix set on a running output counts from its next start,\nas it draws from then, and a virtual camera is drawn as the program. A mix that a\nrunning output gets through a master or output video chain is drawn once per frame\ninto a canvas-sized layer (one layer and one pass, however many outputs get it), the\nmaster chain runs once over it, and the own chain of each output that started with\none runs once after that; each enabled filter of either\ndraws one pass into a layer of its own. Not counted: the pass that fits the result\ninto each output's frame, which every output frame draws with or without a stage.\n\nA missing field parses as 0, so a field added later can be left out by an older\nsender (R-API-001). Unknown fields are ignored.",
       "properties": {
         "item_effects": {
           "default": 0,
@@ -1517,7 +1517,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         "layer_bytes": {
           "default": 0,
-          "description": "The texture memory of every layer above, in bytes.",
+          "description": "The texture memory of every layer counted here, the output stage's included\n(0.66), in bytes.",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
@@ -1539,6 +1539,27 @@ source: crates/jstream-protocol/src/fixtures.rs
         "scene_passes": {
           "default": 0,
           "description": "The GPU passes those chains draw: each scene's composite and one per filter.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stage_chains": {
+          "default": 0,
+          "description": "The output stage's video chains that run each frame (0.66): the master chain\nonce for each mix a running output gets through it, and each running output's\nown.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stage_layers": {
+          "default": 0,
+          "description": "The offscreen layers the output stage draws into (0.66): each staged mix's\ncanvas-sized layer and one per filter. Their bytes are in `layer_bytes`.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stage_passes": {
+          "default": 0,
+          "description": "The GPU passes the output stage draws (0.66): each staged mix's composite into\nits layer and one per filter.",
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
@@ -4415,7 +4436,7 @@ source: crates/jstream-protocol/src/fixtures.rs
                   "type": "null"
                 }
               ],
-              "description": "What the scene filter chains and item effects add to each frame: their\noffscreen layers, GPU passes and the layers' texture bytes, as the current\nrender plan schedules them (ADR-0065 §7; 0.54). An older engine leaves it\nout."
+              "description": "What the scene filter chains and item effects, and the running outputs'\noutput stage (0.66), add to each frame: their offscreen layers, GPU passes and\nthe layers' texture bytes, as the current render plan schedules them\n(ADR-0065 §7; 0.54). An older engine leaves it out."
             },
             "drops": {
               "$ref": "#/$defs/DropCounts",
@@ -9417,5 +9438,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.65"
+  "title": "JStream protocol 0.66"
 }
