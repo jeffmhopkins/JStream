@@ -2947,8 +2947,8 @@ impl State {
     /// edits no longer apply after one,
     /// fails with `undo_conflict` and is dropped, so the next undo reaches the step
     /// before it. Edits that fail only because an output is running (an output the step
-    /// would delete) fail with the graph's error, and the step stays: stop the output
-    /// and retry.
+    /// would delete, or move to another bus) fail with the graph's error, and the step
+    /// stays: stop the output and retry.
     fn history(
         &mut self,
         client_id: &ClientId,
