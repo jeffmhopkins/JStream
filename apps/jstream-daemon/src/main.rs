@@ -184,6 +184,7 @@ fn init_logging(dir: &Path, filter: Targets, secrets: &Secrets) -> Result<(), Fa
         Program {
             name: env!("CARGO_PKG_NAME"),
             version: env!("CARGO_PKG_VERSION"),
+            handled: jstream_core::HANDLED_PANIC_THREADS,
         },
         secrets.clone(),
         crash_line,

@@ -83,8 +83,9 @@ pub use jstream_protocol::MAX_CHAIN_FILTERS;
 
 /// A keyframe scene's overrides of its parent's items (ADR-0049 §1): per item, the
 /// fields it sets, each a whole value. An overridden geometry is always a
-/// [`Placement::Geometry`].
-pub type Overrides = jstream_anim::Keyframe<ItemId, Placement, Crop>;
+/// [`Placement::Geometry`]. Overridden effects are [`Chains`] whose audio chain is
+/// always empty, which the keyframe draws in place of the item's own (ADR-0088).
+pub type Overrides = jstream_anim::Keyframe<ItemId, Placement, Crop, Chains>;
 
 /// The scene graph of one collection, its revision, and the kinds it can create.
 ///
@@ -235,7 +236,7 @@ impl State {
     }
 
     /// The master stage's filter chains, which apply to everything leaving JStream
-    /// (ADR-0080 §1). Only the audio chain holds filters so far.
+    /// (ADR-0080 §1): a video chain over each mix an output draws, and an audio chain.
     pub fn master(&self) -> &Chains {
         &self.master
     }
@@ -403,7 +404,7 @@ impl State {
 
     /// The items of `scene` as the keyframe scene `keyframe` shows them: the parent's
     /// own, or a group's in its tree (ADR-0024 §2, ADR-0040 §2), each at its effective
-    /// values.
+    /// values, its effects included (ADR-0088).
     pub fn items_through<'a>(scene: &'a Scene, keyframe: &'a Scene) -> Vec<Cow<'a, Item>> {
         scene
             .items
@@ -419,6 +420,8 @@ impl State {
                         // An override's opacity was checked to be in [0, 1] when it
                         // was written; the parent's is kept if it somehow isn't.
                         opacity: Finite32::new(props.opacity).unwrap_or(item.opacity),
+                        // Overridden effects replace the item's own, whole (ADR-0088).
+                        effects: o.effects.clone().unwrap_or_else(|| item.effects.clone()),
                         ..item.clone()
                     })
                 }
@@ -982,8 +985,8 @@ impl Output {
         self.encoder_profile.as_ref()
     }
 
-    /// Its own filter chains, which run after the master stage (ADR-0080 §2). Only the
-    /// audio chain holds filters so far.
+    /// Its own filter chains, which run after the master stage (ADR-0080 §2): a video
+    /// chain, and an audio chain when it carries audio.
     pub fn filters(&self) -> &Chains {
         &self.filters
     }
@@ -1015,10 +1018,10 @@ impl Output {
     }
 
     /// Whether its own video filter chain has any filters. Such an output gets its own
-    /// render pass and encoder session (ADR-0080 §3). Outputs carry no video chain
-    /// until filters land, so this is `false` for every output.
+    /// render pass and encoder session (ADR-0080 §3), even when every filter is off, so
+    /// switching one never moves the output between sessions.
     pub fn has_video_chain(&self) -> bool {
-        false
+        !self.filters.chain(FilterChain::Video).is_empty()
     }
 }
 

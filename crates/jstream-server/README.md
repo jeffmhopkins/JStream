@@ -383,7 +383,20 @@ task speaks the envelope
   before `hello` is answered by the session itself (`handshake_required`).
 - A message that doesn't parse gets a `malformed` error, with the request ID when one is
   readable. A binary message from the client gets `malformed` too: binary frames only
-  go to the client. Messages over 4 MiB close the connection.
+  go to the client.
+- **Message size** ([ADR-0074](../../docs/adr/0074-too-large-requests.md)). A client
+  message of up to 4 MiB (the request limit, `REQUEST_LIMIT`, which `welcome` advertises
+  as `max_request_bytes`) is handled as above. One over it and up to 16 MiB (the frame
+  limit, `FRAME_LIMIT`) is read and refused with `too_large` (`size_bytes`,
+  `limit_bytes`), with the request ID when the envelope's `id` is readable: only the
+  envelope's `type` and `id` are read (`envelope.rs`), and an `id` over 256 bytes
+  (`MAX_ECHOED_ID`) is not echoed, here or in a `malformed` error, so a queued answer
+  stays small whatever the message held. Nothing else of the message is built: it
+  never reaches the session and never counts as in flight, and the connection stays
+  open. One over the frame limit closes the connection
+  with close code 1009 (message too big): nothing more of it is read, so the socket is
+  held unread for the 2 s closing budget, for the client to take the close frame, and
+  then dropped.
 - **Preview frames.** After a successful `hello` the task also opens the session's
   binary channel (`Control::binary`) and sends each frame it yields as a WebSocket
   binary message (`BinaryFrame::to_bytes`), so `preview.subscribe` works over the
@@ -418,7 +431,8 @@ task speaks the envelope
   hasn't answered yet are bounded the same way: while 64 are in flight on a connection
   (`MAX_IN_FLIGHT`), the task reads nothing more until one completes, so a client that
   never waits for its answers holds at most 64 parsed requests, each of up to 4 MiB of
-  message text.
+  message text, and one more message of up to 16 MiB while it reads it to refuse it
+  (*Message size*).
 - The connection ends when the client closes it, when the session's event stream ends
   (the engine went away; close code 1001), when the session reports `Disconnected`
   (close code 1011), when the server shuts down, or when the client goes silent (see
@@ -473,7 +487,8 @@ WebSocket API: browsers send `Origin` on a cross-origin `fetch`, and a `POST` ne
 | `POST` without `Mcp-Session-Id` | served by the one shared stateless server (MCP 2026-07-28 requests carry no session) |
 | `DELETE` with `Mcp-Session-Id` | ends that session: 204, or 404 if it is unknown |
 | `GET` | 405 with `Allow: POST, DELETE`: the server sends no server-initiated messages |
-| A body that isn't `Content-Type: application/json` / is over 4 MiB (refused from its `Content-Length` before it is read, when it declares one) / isn't UTF-8 | 415 / 413 / 400 |
+| A body over the request limit, 4 MiB, and up to the frame limit, 16 MiB ([ADR-0074](../../docs/adr/0074-too-large-requests.md) §5) | 200 with a JSON-RPC error: code `-32000`, `data` `{"code": "too_large", "size_bytes", "limit_bytes"}`, and the body's `id` (`null` when none is readable, or when it is a string over 256 bytes). Only the `id` is read, so the body is never handled; clients match on `data.code`, not on the integer |
+| A body that isn't `Content-Type: application/json` / is over 16 MiB (refused from its `Content-Length` before it is read, when it declares one) / isn't UTF-8 | 415 / 413 / 400 |
 | `MCP-Protocol-Version` naming a revision `jstream-mcp` doesn't serve | 400 |
 
 The `Accept` header isn't checked: the answer is always JSON, which every client

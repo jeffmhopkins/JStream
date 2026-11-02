@@ -78,3 +78,10 @@ jstream-platform = { workspace = true, features = ["fake"] }
 # The browser wiring's test: a browser that opens pages in memory.
 jstream-browser = { workspace = true, features = ["fake"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal", "time"] }
+# The real-receiver harness (`tests/receiver`, `cargo xtask e2e-stream`): the GPU
+# compositor on a software adapter, and Linux's codecs (JStream's AAC-LC encoder, and
+# Cisco's OpenH264 when the harness is given it).
+jstream-render.workspace = true
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+jstream-platform-linux.workspace = true

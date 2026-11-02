@@ -43,7 +43,8 @@ Contents (a first cut; Windows first, because the window needs WebView2):
   a new user-only file at each start, through `create_private_file` on Windows and
   `jstream-crash`'s `create_new` elsewhere.
 - **Crash reports**: `jstream-crash`'s panic hook, which writes a redacted report beside
-  the log file, and its `Redacting` key store wrapper, which registers each stream key
+  the log file (none for a panic on a thread in `jstream_core::HANDLED_PANIC_THREADS`,
+  an effect-pack load the engine catches and logs, #999), and its `Redacting` key store wrapper, which registers each stream key
   with the redaction.
 - **Tests** (unit tests in each module, run on every platform: the server behind the
   token and the webview's origin, the bundle's paths, types and CSP, the bootstrap
@@ -118,7 +119,9 @@ folder, and its log `logs\cef.log`.
   its console; a release build has no console window. The audit log goes in the same
   folder, as the daemon's does. The token is never logged.
 - **Crash reports.** A panic writes `logs\crash-<UTC time>-<pid>-<n>.txt` in the data
-  folder; the newest 10 are kept. Nothing is uploaded
+  folder; the newest 10 are kept. An effect pack whose shader panics the validator
+  writes none (unless its load thread can't start): it is logged as a pack that failed
+  to load. Nothing is uploaded
   ([R-SEC-004](../../docs/RULES.md#R-SEC-004)).
 - **When it can't start** (no data folder, Media Foundation missing, the collection
   file unreadable, no UI bundle), the window shows what went wrong and the log has the

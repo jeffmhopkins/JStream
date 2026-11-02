@@ -108,6 +108,12 @@ others) with the server address and stream key the service gives you.
    **End stream** stops them. Each output shows its state, and reconnects by itself if
    the connection drops.
 
+An output sends H.264 at the engine's default rate unless you pick otherwise. To change
+the codec or bit rate, or to send a vertical picture (1080 × 1920 for Shorts or TikTok),
+make an encoder or a video mix under **Encoders** and **Video mixes**, below the output
+cards, and pick it in the output's **Encoder** or **Video** list. A running output takes
+the new choice when it next starts.
+
 Signing in to YouTube (choosing a broadcast, chat, viewer counts) is not in this alpha:
 create the broadcast in YouTube Studio and stream to it with its key.
 

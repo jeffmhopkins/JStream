@@ -100,5 +100,8 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0084](0084-ui-settings-kept-by-the-server.md) | The server keeps the UI's settings, so a layout follows the person | accepted | agent |  |
 | [ADR-0085](0085-capture-target-names-marked-as-remote-text.md) | Capture target names are a second field marked as remote text by its description | accepted | agent |  |
 | [ADR-0086](0086-master-clap-filter-one-host-per-output-bus.md) | A master-chain CLAP filter runs one plugin host per bus that feeds an output | accepted | agent |  |
+| [ADR-0087](0087-effect-quarantine-after-gpu-device-loss.md) | A GPU device loss quarantines the effect-pack kinds drawn before it, until a person re-enables them | accepted | agent |  |
+| [ADR-0088](0088-keyframe-scenes-override-item-effects.md) | Keyframe scenes override an item's effects | accepted | agent |  |
 | [ADR-0089](0089-scene-options-and-nested-audio.md) | Scene options: a scene's audio left out of nesting, and its background | accepted | agent |  |
+| [ADR-0090](0090-a-grant-acknowledges-the-request-its-client-saw.md) | A plugin grant acknowledges the request its client was shown | accepted | agent |  |
 <!-- @generated end adr-index -->

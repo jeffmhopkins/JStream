@@ -37,7 +37,9 @@ state machine. Contents:
   and `start_stats_heartbeat` (`stats.tick`'s load, below); `open_plugin_dir`
   (where installed WASM plugins are saved, ADR-0076), called once the engine is built;
   `scan_clap_plugins` adds the CLAP filter kinds; `watch_effect_packs` loads and
-  hot-reloads the WGSL effect packs (video filter kinds, below);
+  hot-reloads the WGSL effect packs (video filter kinds, below), and
+  `HANDLED_PANIC_THREADS` names the pack load thread, whose panics the engine catches,
+  for the apps' crash hook to leave out (#999);
   `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
   frame of a source; `output_stats` reads a running output's pipeline counters
   (`output_stats_of` names the output); `output_kind` reads a
@@ -47,7 +49,8 @@ state machine. Contents:
   (*Stream keys* below). It holds the
   `jstream-graph` `Graph`, the outputs, those frames, the idempotency keys, the undo
   history, the open gestures and the subscribers behind one lock, and the drop ledger behind another, and executes
-  batches, history calls, actions and queries. The pipeline threads do not take the collection lock.
+  batches, history calls, actions and queries. The real-time pipeline threads (render,
+  mixer) do not take the collection lock.
 - **YouTube** (`youtube.rs`, [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)):
   `with_youtube(YoutubeSetup)` gives the engine a Google OAuth client, the HTTPS
   transport and the `OAuthTokenStore`. `YoutubeSetup::built_in` uses JStream's built-in
@@ -113,8 +116,8 @@ state machine. Contents:
     stepped one is an `int`, any other a `float`, both with the plugin's range; hidden,
     read-only and bypass parameters and ones without a finite range are left out. When
     two files offer one plugin id, the first found wins. A plugin's names reach clients
-    through `plugin_text` (#351): control characters become spaces, trimmed, at most 128
-    characters. The scan returns a `ClapScan`
+    through `plugin_text` (#351, #977): control and bidirectional formatting characters
+    become spaces, trimmed, at most 128 characters. The scan returns a `ClapScan`
     with each kind's file and plugin id, and the files that failed. Kinds stay until
     the engine ends. It is slow, so a host calls it on a worker thread; the engine's
     lock is held only to add the kinds and hand the audio thread a `ClapCatalog` (the
@@ -198,7 +201,9 @@ state machine. Contents:
   draw it (`plan`, `compose`, each with the live values), and `video.snapshot`, the program mix
   read back as a PNG on the engine's own snapshot thread, which owns the snapshot
   compositor. A keyframe scene draws its parent's items at their effective values
-  (`State::shown_items`), so it follows every edit to the parent; so does what the
+  (`State::shown_items`), effects included where it overrides them
+  ([ADR-0088](../../docs/adr/0088-keyframe-scenes-override-item-effects.md)), so it
+  follows every edit to the parent; so does what the
   scene reaches for audio (`activity.rs`). A group in its tree whose children it
   overrides (#846) is planned as a view of the group through the keyframe, with its
   own layer, chains and boxes, under an internal scene ID (`view_id`, a control
@@ -483,7 +488,9 @@ state machine. Contents:
   scene once a transition onto it ends, a switch mid-transition, and a GPU
   snapshot mid-fade), keyframe scenes (`src/tests/keyframes.rs`: a variant drawing its
   parent's items with its overrides and following the parent, a `move` between a parent
-  and its variant pairing by item where pairing by source would cross, and the
+  and its variant pairing by item where pairing by source would cross, and pairing an
+  item only where its overridden effects look the same on both sides, an undo of a
+  keyframe effects step refused once another client changed those effects, and the
   overrides a batch drops reported and restored by undo, with a no-op clear that is no
   undo step, and a live value on a keyframe scene shown only where the keyframe draws the
   item, the parent's own showing there through fields it doesn't override, committed as
@@ -755,7 +762,8 @@ collection lock:
   naming the first such entry, nothing applied, and the step dropped. Edits that
   pass the check but no longer apply also fail with `undo_conflict`, naming the latest
   entry by another client, and drop the step. Edits that fail only because an output
-  is running (undoing `output.create` while it runs) answer the graph's own
+  is running (undoing `output.create` while it runs, or a running output's
+  `output.set_audio_buses`, which would move it to another bus) answer the graph's own
   `invalid_argument` and keep the step for a retry once it is stopped; with no other
   client's entry to blame, any other failure does too. The log is pruned to the oldest
   `since` of any kept step. Only when there is no conflict does the copy replace the
@@ -1008,12 +1016,21 @@ doesn't show its unfiltered input, so a failing key or mask reveals nothing it h
 **Effect packs** (`effect_packs.rs`, [ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md),
 X1). `Engine::watch_effect_packs(root)` watches a folder of pack folders with
 `jstream-effects`' `PackWatcher`: it loads them before it returns, then a
-`jstream-effect-packs` thread polls every 500 ms while the engine lives. Each effect is a
+`jstream-effect-packs` thread polls every 500 ms while the engine lives. It is called
+once; a second call is logged and ignored. A pack whose load panics (naga parsing or
+validating untrusted WGSL) is one that failed to load: the watcher catches the panic
+around that pack, so the other packs keep loading and hot-reloading. The load runs on
+`jstream_effects::LOAD_THREAD`, which `HANDLED_PANIC_THREADS` lists, so the apps' crash
+hook writes no report for it (#999), unless its load thread can't start: the load then
+runs on the poll thread, still caught, and its panic writes a report. Each effect is a
 `video_filter` kind, `<pack>/<effect>`, added to the graph's kinds, so `kind.list` and
 `kind.describe` report it and a video chain, a scene's or an item's effects take it. A
 poll that changes kinds applies them under the collection lock (`Graph::without_kinds`
 for the ones gone, `with_kinds` for the added and changed ones), hands the effects to
-the live sources' `FilterAssets`, which every plan reads, and re-plans. A chain's filter
+the live sources' `FilterAssets`, which every plan reads, and re-plans. Every pack
+update, a poll's, a blame's or an `effect.enable`'s, is installed with the packs' lock
+still held (then the collection's; nothing takes them the other way round), so an
+older update can't land after a newer one and undo it. A chain's filter
 of a pack kind carries its `PackEffect`, so each compositor draws it through
 `Effect::video_filter` like a built-in kind. A reload is a new `PackEffect`, so the
 running filter is made again with the new WGSL and uniform layout; an effect that didn't
@@ -1023,6 +1040,18 @@ in the collection and is bypassed, as before its pack loaded. The daemon watches
 `--effects-dir` (default `effects` in the data folder, `paths::EFFECTS_DIR`) and the
 desktop app the data folder's `effects`. A filter's stored settings are not migrated
 through the effect's renames yet.
+A GPU device loss on the program stage (#349, [Runtime](#runtime),
+[ADR-0087](../../docs/adr/0087-effect-quarantine-after-gpu-device-loss.md)) is blamed on the pack
+kinds the frames before it drew (`Packs::blame`): each is quarantined, and a pack one
+of whose effects is blamed a second time in a run is quarantined whole. A quarantined
+kind stays in `kind.list`, marked `quarantined`, and is left out of the effects plans
+read, so its filters are bypassed. The quarantine is kept in `quarantine.json` in the
+packs folder (`QUARANTINE_FILE`; the watcher reads only sub-folders), not in the
+collection, so it isn't undoable and survives restarts; editing the pack doesn't lift
+it, and a file that can't be read quarantines nothing. Only `effect.enable` lifts it,
+for the kind and its pack, run before the collection lock is taken. The engine then
+sends `gpu.device_lost` with the cause, the blamed and quarantined kinds, and whether
+it is recovering. The GPU-time guard of #349 is not built.
 Each filter's layer key is made when the chain's shape changes, so a steady frame
 builds none. A shot with a chain counts as
 changing with time (`Shot::changes_with_time`), so the preview redraws it like a
@@ -1046,7 +1075,8 @@ items.
 An item's effects (ADR-0065 §5, in v1 under
 [ADR-0068](../../docs/adr/0068-item-effects-in-v1.md)) run over its box, once per frame,
 as the scene that draws the item draws it: a keyframe scene's items have chains of
-their own, at their effective values. The chain phase draws the item into
+their own, at their effective values, with the keyframe's own effects where it
+overrides them (ADR-0088). The chain phase draws the item into
 `GpuKey::ItemBox`, a layer the size of its planned box plus the effects' outset on
 every side, in canvas pixels. The outset is the sum of their kinds' `max_outset_px`; no
 built-in kind declares one yet. A layer longer than 8192 pixels on a side is scaled
@@ -1079,6 +1109,30 @@ so the render thread does no extra work. Not counted: a source's own chain, a sc
 `scene_mask` reads, and the canvas-sized layer a nested scene without a chain is drawn
 into for an item's effects (it takes the place of the layer it would be drawn into
 anyway).
+
+**The output stage** ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)).
+Planning the program stage's shot (not a preview's) copies the master stage's video
+chain into `Shot::stages` once for the program and once for each video mix, keyed
+`ChainOwner::Master(mix)` over `GpuKey::Mixed(mix)`, and each output's own chain,
+keyed `ChainOwner::Output(id)`, over the master chain's output for the mix it shows
+(`snapshot::shown_mix`: its mix if the collection has it, else the program, as its
+encoder session is keyed; a virtual camera, drawn as the program at the canvas size, is
+always planned over the program, whatever mix it names, #1006), or over the mix itself
+when the master chain is empty. The render thread draws each
+output's frame with `View::output(mix, owner)`, `owner` being the output whose session
+is its own. When the frame's mix has a master chain or its owner a chain of its own,
+`compose` draws the mix at the canvas size into `GpuKey::Mixed` instead of straight to
+the output, runs the master chain over it, then the owner's, and fits the last output
+inside the output's frame, centred, with black bars. `Chains::stage` records what the
+cache's frame has drawn, so a mix that two outputs draw at different sizes is composited
+and its master chain run once per tick, as ADR-0080 §1 asks, and each output chain runs
+once. A failed stage chain draws a black frame: the unfiltered mix never leaves in its
+place. A frame without either chain draws as before, with no extra layer. The editing
+canvas, previews and `video.snapshot` draw with `View::default()`, before the master
+stage. The stage's chains count toward `Shot::changes_with_time`, and `Chains::begin`
+keeps their filters with the shot's other chains, so a stateful kind sees each frame
+of its mix in order. Their filters hold no references (the graph refuses one), so none
+reads a scene or an asset.
 
 A filter that reads an asset (`apply_lut`'s `lut`, a `.cube` file or a tiled PNG, and
 `image_mask`'s `image`, whose first frame is the mask) gets it through the live
@@ -1471,7 +1525,14 @@ projector of the source. `publish_render` plans each source a live stream shows
 (`PreviewHub::sources`) after the scenes, with `snapshot::plan_source`: on a copy of the
 collection, one scene of its own whose one item (each under an ID the collection
 doesn't hold, numbered when it holds the plain one) places the source over the whole canvas, planned as `plan_scene` plans a scene, so the
-source's own filters draw and no item's do. Its shots are kept beside the scenes'
+source's own filters draw and no item's do. The copy is kept per source with the
+revision it was made at (`SourceCopies`, `source_copies`), and made again only once the
+revision has moved on: the collection changes only through edits, which move it, so a
+re-plan with no edit (a new frame, an installed asset, a timed wake) copies nothing,
+and loading a collection file forgets every copy. A source no longer previewed lets its
+copy go at the next re-plan. The cost is memory: each previewed source keeps a whole
+copy of the collection (its state and kind descriptors, not the undo history) while a
+stream shows it, so the copies grow with the collection times the sources previewed. Its shots are kept beside the scenes'
 (`source_shots`), replaced only when what they draw changed, and read by the preview
 thread alone, which captures what they show as it does a draft's. Like a scene stream
 it looks its source up quietly, so it never makes the source shown or heard, and a
@@ -1630,9 +1691,16 @@ the desktop app start it; tests and an embedding host call `emit_stats_tick` as 
 
 Each tick also lists every running output's live stats (protocol 0.57;
 `output_stats.rs`). The output thread counts each packet the muxer takes while the
-publish link is up into its `SentCounters` (two relaxed atomic adds: the bytes, and a
+publish link is `active` into its `SentCounters` (two relaxed atomic adds: the bytes, and a
 frame for video), so a link that is down sends nothing and its tags count as the
-link's drops instead. `output.start` registers an `OutputMeter` for the run once it is
+link's drops instead. A link that came back but isn't stable yet is still
+`reconnecting`: its packets reach the server, but they aren't counted as sent either.
+A video frame handed over while the link isn't `active` also adds to a third counter,
+which only the health reads (#994), so a flapping server stays `poor`. The link state
+is the one the output thread's previous pass read, so a pass's packets count by the
+link before it changed, in both directions: every packet of the pass in which the link
+drops, video and audio, counts as sent, and the video frame of the pass in which it
+becomes `active` again counts as lost, though it reached the server. `output.start` registers an `OutputMeter` for the run once it is
 armed, with its uptime counted from when the engine received the `output.start`
 (before the start waits for an earlier one, opens the destination and starts the
 program stage), whose read gathers those counts with the output's drops: its video encode
@@ -1645,7 +1713,9 @@ never with it. Each meter keeps the samples of the last ten seconds: `kbps` is t
 bytes since the previous sample over the time between them, and `health` compares the
 newest sample with the one at the window's start (`waiting` until a video frame was
 sent, `good` with nothing new lost, `poor` with 2% or more of the video frames lost,
-`fair` otherwise). Under the collection lock the engine then makes an output that is
+`fair` otherwise). Lost video frames there are the `dropped_frames` and the frames
+handed over while the link isn't `active`, so an outage keeps the output `poor` until it leaves the window, not
+just while it reconnects. Under the collection lock the engine then makes an output that is
 `reconnecting` `poor`. The stop drops the meter with the output's drop guard, so the
 next tick leaves the output out. A virtual camera output has no meter yet.
 
@@ -1806,9 +1876,11 @@ entries.
 `EncoderProfile::DEFAULT` when it has none. Running outputs share an encoder session
 when they have the same key: the video mix (or none, for the program at the canvas
 size and base rate), its resolution and rate, and the profile ID and its settings, all
-as they were at start. An output with its own video chain adds its ID to the key, so
-its session and its drawn frame are its own; outputs carry no chain yet
-(`Output::has_video_chain` is false), so none does so far. So `encoder.update`, `output.set_encoder`, a mix's new
+as they were at start. An output with its own video chain (`Output::has_video_chain`:
+a filter on it, even a disabled one) adds its ID to the key, so its session and its
+drawn frame are its own and it shares with no one, which `output.status` reports as
+`dedicated`. A chain added to a running output that started without one takes effect at
+its next start; edits to a chain it started with apply live. So `encoder.update`, `output.set_encoder`, a mix's new
 resolution or rate, or `output.set_video_mix` on a running output changes nothing until
 it restarts, and an
 output started after the update opens a session of its own rather than joining one
@@ -2026,7 +2098,9 @@ it. It starts the camera at the canvas size the collection has then, as BGRA8 at
 the render thread a tap, and starts the output's camera thread, `jstream-vcam`. The
 tap and that thread share only the output's stop flag and two bounded channels, never
 a lock ([R-RT-003](../../docs/RULES.md#R-RT-003)). Each tick the tap copies the
-program frame (RGBA) into a buffer the camera thread handed back and sends it,
+program frame (RGBA) into a buffer the camera thread handed back and sends it (a
+camera with its own video chain is fed a program frame of its own, drawn through that
+chain, which the render thread holds for it as it holds the shared one),
 without blocking: with a frame still waiting, it drops this one and counts it in
 `output_stats`' output drops. The camera thread converts each frame to BGRA at the
 canvas size (as is when the program frame is the canvas size, otherwise fitted inside
@@ -2229,7 +2303,10 @@ The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in proc
 
 - **Package.** `plugin.install`'s `path` is an absolute directory on the engine's machine
   holding `plugin.wasm` and, optionally, `manifest.json`, a JSON object. Its `name`, a
-  string, is the plugin's own text: `plugin.state_changed` carries it as `remote_name`.
+  string, is the plugin's own text: `plugin.state_changed` carries it as `remote_name`,
+  made plain as a CLAP plugin's name is (`kinds::plugin_text`: control and bidirectional
+  formatting characters become spaces, trimmed, cut to 128 characters), and none when
+  nothing is left. A name read from `plugins.json` is made plain the same way.
   What it asks for (`Request`) is its `classes` (capability classes), `hosts` (as
   `scheme://host:port`) and `folders` (true for folders a person picks), each optional.
   Other manifest fields are ignored. Like the ABI, the layout is version 0.
@@ -2283,7 +2360,12 @@ The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in proc
   the plugin, at install or with `plugin.grant`. One that asks for more stays disabled
   as `needs_grant` (`plugin.state_changed` says so when the reason changes), and
   `plugin.enable` answers `action_failed` naming what is new; a `plugin.grant`
-  acknowledges what it asks for now, and the plugin can be enabled after it. One that
+  acknowledges what `plugin.list` last showed its client (`Entry::seen`, forgotten when
+  the session ends, never saved), or what it asks for now from a client that never
+  listed it, and the plugin can be enabled after it. An update another client's
+  `plugin.enable` loaded since that list isn't acknowledged, so one that asks for more
+  still waits as `needs_grant`
+  ([ADR-0090](../../docs/adr/0090-a-grant-acknowledges-the-request-its-client-saw.md)). One that
   asks for less has its grant narrowed to match. A running plugin keeps the module it
   loaded.
 - **Saving.** `open_plugin_dir(dir)` creates `dir` if missing and reads its
@@ -2304,9 +2386,10 @@ The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in proc
 - **Listing.** `plugin.list` (`automation::list`) answers from the registry with no
   collection lock held: each plugin's state and reason, its manifest's name, its
   package path, what its manifest asks for as last read (`Request`, as `PluginRequest`)
-  and its grant. A plugin being installed, or started with the saved plugins, is listed
-  as enabled; one being enabled keeps the reason it was disabled for until it loads
-  (`Run::Starting` holds it). Built without `wasm-plugins`, the engine lists none, from
+  and its grant. It notes that request as what the calling client was shown. A plugin
+  being installed, or started with the saved plugins, is listed as enabled; one being
+  enabled keeps the reason it was disabled for until it loads (`Run::Starting` holds
+  it). Built without `wasm-plugins`, the engine lists none, from
   the collection's query match (`plugin_list_is_empty_until_a_plugin_is_installed`).
 - **Not yet:** a private data folder per plugin, deferred until the file imports a plugin
   would need to use it are designed (ADR-0076); and a way to remove one (no
@@ -2619,9 +2702,17 @@ test pattern. Each loss is logged as a warning and counted
 (`OutputStats::gpu_device_losses`; leaving the context also counts in
 `gpu_fallbacks`). The third loss within 60 s fails the output instead ("the GPU was
 lost ... and the compositor could not reopen"), as does a switch that fails as above.
-There is no engine event for a loss yet (a protocol change), and no attribution of a
-loss to the pack effects drawn before it, or quarantine of them, though packs are drawn
-now (X1).
+The render thread then sends a `DeviceLoss` over a channel to `jstream-device-losses`
+(`Engine::device_loss_watch`), with the cause, whether it is switching, and the
+effect-pack kinds the held shot draws (`Shot::pack_kinds`): the frames submitted just
+before the loss drew the same, unless the shot changed in the frame or two a loss takes
+to surface. That thread blames and quarantines them ([Design](#design), *Effect
+packs*), which takes the packs' and the collection's locks, writes the quarantine file
+and publishes a render snapshot without them, and then sends `gpu.device_lost`; the
+render thread does none of it. It doesn't adopt the new device until the engine has
+handled the loss (`LossHandled`, set once the snapshot is published, or when the loss
+is dropped unhandled), and adopts that snapshot first, so a shader that hangs at once
+isn't drawn again.
 
 A session on the GPU encode path rules the fallback out: its encode targets are the
 context's, which a compositor on its own device can't write. If one runs when the
@@ -2726,7 +2817,8 @@ output stops, and `meters.tick` about ten times a second. The stage also starts
 render thread sends under the collection lock and announces the sources it changes
 (`source.size_changed`, *Source sizes* in [Design](#design)), and when the render thread
 lets go of its captures it forgets them all and ends. `Program`'s drop joins it after
-the render thread. The render loop counts each tick it composites into the render hub
+the render thread. It also joins `jstream-device-losses`, which hands each lost device
+the render thread sends to the engine (the lost-device paragraph above). The render loop counts each tick it composites into the render hub
 (`stats.tick`'s `program_frames`), and publishes capture mailbox skips and the frames an encode ring drops
 (`encode_frames`), and a tick that falls a
 whole period behind the clock skips to the current tick and counts the skipped ones in

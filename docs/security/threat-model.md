@@ -112,7 +112,9 @@ a stolen token, local denial of service.
 - The server keeps only a BLAKE3 digest of the token and compares digests in constant
   time. Tokens are 32 bytes from the OS random source. Header values are never logged.
 - The daemon binds `127.0.0.1` and has no flag to bind elsewhere. There is no TLS yet.
-- Limits: 4 MiB messages and MCP bodies, 128 open TCP connections of any kind
+- Limits: 4 MiB messages and MCP bodies (one over that and up to 16 MiB is read and
+  refused with `too_large`, echoing at most a 256-byte `id`, one larger closes the
+  connection or is `413`; [ADR-0074](../adr/0074-too-large-requests.md)), 128 open TCP connections of any kind
   (authenticated or not), 32 WebSocket connections, 64 calls in flight per connection,
   16 MCP sessions, 10 s to send headers and finish the handshake, a bounded event
   outbox, and 45 s for a WebSocket client to answer the server's pings (sent every
@@ -292,7 +294,16 @@ engine's memory, not the block. Parameter descriptions with an unusable range or
 repeated id are dropped; a parameter change coming back (a control message or the
 block's ring) must name a described parameter and be finite and in range; a saved
 state over 2 MiB is ignored; and plugin-chosen names are made plain text and capped
-before they reach the UI, agents or the log (#351).
+before they reach the UI, agents or the log (#351). A WASM plugin's manifest `name` is
+treated the same way, and both drop bidirectional formatting characters (#977). A
+person's `plugin.grant` acknowledges the manifest request their client was last listed
+(#978, [ADR-0090](../adr/0090-a-grant-acknowledges-the-request-its-client-saw.md)). For
+a client that sends no `plugin.list` while its grant dialog is open and grants only once
+every list it sent has been answered and shown, that is the request the dialog showed,
+so an update loaded meanwhile still asks for its grant. The jstream UI does both: it
+holds re-reads back while the dialog is open, and keeps OK disabled while a list is on
+its way, so a list sent before the dialog opened redraws it first. A client that re-lists
+with its dialog open, or grants with a list unanswered, acknowledges its latest list.
 
 **Gaps:**
 - WASM (#348): [ADR-0069](../adr/0069-wasm-plugin-limits-and-capabilities.md) decided
@@ -319,9 +330,12 @@ before they reach the UI, agents or the log (#351).
   context's GPU encode path fails at once instead), the third loss
   within 60 s fails the output, and each loss is logged and counted in the output's stats
   ([ARCH › GPU pipeline](../ARCHITECTURE.md#gpu-pipeline)). The static load limits are
-  enforced (`jstream-effects`' shader contract, plus #538's 16 KiB value cap). The engine
-  draws packs now. Not built yet: the engine event for a loss, blaming a loss on the pack
-  effect that was drawing and quarantining it, and the GPU-time guard against long loops.
+  enforced (`jstream-effects`' shader contract, plus #538's 16 KiB value cap). A loss is
+  blamed on the pack effects drawn before it, which are quarantined until a person
+  re-enables them (`effect.enable`, which no MCP tool, plugin or hotkey carries), the
+  whole pack after a second blame in a run, and reported in `gpu.device_lost` (protocol
+  0.61). Not built yet: the GPU-time guard against long loops, which would turn an
+  effect off before the OS resets the device.
 
 <a id="mcp"></a>
 ## MCP agents
@@ -489,7 +503,7 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 | #345 | Files | `absolute` asset paths accept UNC and device paths | Medium |
 | #347 | Browser | Permissions Chromium grants without a prompt; public names resolving locally (`*.nip.io`, DNS rebinding) and requests the handler doesn't see | Medium |
 | #348 | WASM | ADR-0069's capability checks on a plugin's calls, installing and granting plugins, disabling a failing plugin and untrusted-output handling are decided but not built; the protocol's command classes, `PluginGrant` and `forbidden` error are (#642), and so are the host's CPU and memory limits, command cap and event queue | Medium |
-| #349 | WGSL | A hanging shader can still reset the GPU: the engine survives a lost device (#604), but the loss event, blaming and quarantining the pack, and a GPU-time guard are not built yet, and packs are drawn now | Medium |
+| #349 | WGSL | A hanging shader can still reset the GPU: the engine survives a lost device (#604), and quarantines the pack effect blamed for it, but the GPU-time guard that would stop a hang before the reset is not built, and a forced TDR hasn't run on Windows hardware | Medium |
 | #355 | Files | A recording can replace a file created just before its rename | Low |
 | #356 | Virtual camera | A pre-created control mapping keeps its own DACL | Low |
 | #273 | Server | A hung engine hello escapes the handshake deadline | Low |

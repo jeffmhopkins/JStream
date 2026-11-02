@@ -82,6 +82,8 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   stream, MCP starts the recording, and the test checks `stats.tick`, what the sink
   received and the recorded MP4. The binary has no backends on Linux, so it runs
   in process, on the library's `live` and `rtmp`, the wiring `serve.rs` uses;
+  `tests/receiver/`, the same wiring streaming to a real RTMP server and decoding what
+  it got, ignored by `cargo test` ([Real-receiver end to end](#receiver-e2e));
   `tests/delay_load.rs`, Windows MSVC only, which reads the built binary's PE headers to check that the
   backends' Media Foundation DLLs are delay-loaded and none is a load-time import;
   `tests/info_plist.rs`, which checks on every OS that `Info.plist` has each usage
@@ -97,6 +99,64 @@ location ([Design › Open questions](#open-questions)).
 Why a crate: it is a host binary of its own (ADR-0066 ships `jstream-daemon.exe` next
 to the desktop app), and only an app may link both `jstream-core` and `jstream-server`
 ([R-ARCH-003](../../docs/RULES.md#R-ARCH-003)).
+
+<a id="receiver-e2e"></a>
+## Real-receiver end to end
+<!-- @section
+covers = ["apps/jstream-daemon/tests/receiver/**", "xtask/src/e2e_stream.rs"]
+-->
+
+`tests/receiver/` streams to a real RTMP server and checks what arrives, so the output
+path is tested end to end without hardware or a YouTube account. `tests/e2e.rs`
+already drives the daemon's wiring, but on fake codecs and a hand-written sink, so
+nothing it sends can be decoded. Here the engine is the one `live.rs` builds, and only
+capture and the microphone are fakes. Their fake clock is kept level with real time.
+Everything after them is real: the GPU compositor on a software Vulkan adapter
+(lavapipe), JStream's AAC-LC encoder, an H.264 encoder, the RTMP publisher with its
+reconnects, and `ffmpeg -listen 1` as the server, which writes the stream to FLV.
+`ffprobe` and `ffmpeg` then read the file back.
+
+The H.264 encoder is Cisco's OpenH264, Linux's software encoder
+([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), when
+`JSTREAM_E2E_OPENH264` (`cargo xtask e2e-stream --openh264 <library>`) names its
+library. The harness stores the library under a pin made from its own hash, and
+`VaapiCodecs` loads it the way it loads a download. Otherwise the encoder is
+`tests/receiver/x264.rs`, a test stand-in that pipes frames to `ffmpeg`'s libx264 in a
+child process. Product code never encodes through FFmpeg
+([R-DEP-002](../../docs/RULES.md#R-DEP-002)). The stand-in exists because OpenH264
+can't be loaded until it is downloaded from Cisco.
+
+The tests need `ffmpeg`, `ffprobe` and a Vulkan adapter, which
+[R-TEST-004](../../docs/RULES.md#R-TEST-004) keeps out of `cargo test`, so they are
+`#[ignore]`d. `cargo xtask e2e-stream` checks for the tools, points Vulkan at lavapipe
+when it is installed, and runs them one at a time, in about half a minute. They check:
+
+- **A stream on an encoder profile.** H.264 at the canvas size and 30 fps, a keyframe
+  every 30 frames, which from the second keyframe on is a second apart within 0.1 s,
+  stretched by at most the render ticks the run skipped (#1012), and AAC stereo at 48 kHz with the microphone in it. The
+  decoded pixels match the scene, and the file holds the frames the stats counted and
+  lasts as long as their timestamps span. That span, in ticks, is those frames plus the
+  render ticks the engine skipped over the run (`stats.tick` drops), within a second, so
+  a runner stall, which stretches the wall-clock pts and counts skipped ticks rather
+  than frames, doesn't fail it (#1007, #1010). Each `stats.tick` entry for the output has a rising uptime, growing totals,
+  a bitrate that matches the bytes sent between ticks and stays at most a little above
+  the profile's, no drops, and health `good`. The uptime counts from `output.start` and starts again at
+  the next one.
+- **A vertical mix with an output filter.** A wide stream and a 180x320, half-rate
+  stream run together. The vertical stream has a hue shift on its own video chain
+  (FL-07), which gives it a dedicated session. Its receiver gets the canvas fitted in
+  the middle, with black above and below, turned from red to green.
+- **An output on another bus.** A stream on the master hears the microphone. A stream
+  on a bus with no sends is silent, until a send into that bus.
+- **A reconnect.** The server goes away mid-stream. The output reports `reconnecting`
+  with health `poor`, and its uptime keeps counting. Once the server is back, the output
+  reconnects by itself and goes `active`. It stays `poor` while the video lost in the
+  outage is inside the health's ten-second window (#994). The new connection opens on a
+  keyframe, with audio.
+
+They don't cover what needs hardware or another OS: VA-API, NVENC, QSV, AMF, Media
+Foundation and VideoToolbox, the virtual camera, real capture devices, or the platform
+GPU paths.
 
 <a id="usage"></a>
 ## Usage
@@ -185,7 +245,9 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   `logs::create_new`, #656) are created with a protected DACL for SYSTEM and the user,
   and the directories keep what they inherit.
 - **Crash reports.** A panic writes `crash-<UTC time>-<pid>-<n>.txt` into the log
-  directory and prints `crash report: <path>` to stderr; the newest 10 are kept.
+  directory and prints `crash report: <path>` to stderr; the newest 10 are kept. An
+  effect pack whose shader panics the validator writes none (unless its load thread
+  can't start): it is logged as a pack that failed to load.
   Nothing is uploaded ([R-SEC-004](../../docs/RULES.md#R-SEC-004)): attach the report
   to a bug report yourself. What it holds is in [Design](#design).
 - **Stopping.** Ctrl-C (SIGINT) or SIGTERM on Unix, Ctrl-C or Ctrl-Break on Windows:
@@ -571,7 +633,10 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   with that digest, so the hook holds no plaintext. It replaces the default hook,
   whose stderr line would quote the message unredacted; `main.rs`'s `crash_line` prints
   the hook's redacted line instead (the crate never prints). A panic in a tokio task writes
-  a report too, even though the daemon carries on. The oldest reports beyond 10 are
+  a report too, even though the daemon carries on. A panic on a thread in
+  `jstream_core::HANDLED_PANIC_THREADS` (`Program::handled`) writes none: an
+  effect-pack load that panics naga is the engine's own failed load, logged as such
+  (#999). The oldest reports beyond 10 are
   deleted before each new one.
 - **Argument parsing is hand-rolled**, for the reasons `jstream-cli` gives
   ([jstream-cli › Design](../jstream-cli/README.md#design)): a handful of options
@@ -602,7 +667,11 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   `futures-util` and tokio's `time`, to drive the daemon as a client would;
   `jstream-platform` (feature `fake`), for the live engine and opener tests;
   `jstream-browser` (feature `fake`), for the browser wiring's test;
-  `jstream-youtube` (feature `fake`), for the YouTube setup's test.
+  `jstream-youtube` (feature `fake`), for the YouTube setup's test; `jstream-render`
+  (the compositor on a software adapter) and, on Linux, `jstream-platform-linux` (its
+  AAC-LC encoder and OpenH264 loader), for the [real-receiver harness](#receiver-e2e).
+  `jstream-render` is already in the tree through core, and `jstream-platform-linux` is
+  a workspace crate. Neither ships in the daemon binary.
 
 <a id="open-questions"></a>
 ### Open questions

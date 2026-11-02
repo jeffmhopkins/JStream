@@ -61,7 +61,7 @@ Contents ([Design](#design) explains the choices):
   share: the collection as `state.get` last reported it (`Collection`, with its buses
   for the bus picker, its transition presets, its hotkey bindings, its scene folders and
   the master stage's chains, and `chains` to read any owner's; a keyframe scene's items
-  are its parent's with its overrides applied, `shown_items`, and the children of the
+  are its parent's with its overrides applied (effects included), `shown_items`, and the children of the
   groups in its tree likewise, `keyframe_children`, which `item_in` and the selection
   count as its own), the program and preview
   scenes, whether studio mode is on (and `scene_click`, what a click on a scene sends
@@ -71,7 +71,9 @@ Contents ([Design](#design) explains the choices):
   crop mode (which a switch of scene leaves), the source kinds
   and the kind descriptors read so far, the last failed call, the toast's confirmation
   (`notify`, `apply_noting`), and `keys_changed`, which the outputs panel bumps when a stream key
-  is set or cleared. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
+  is set or cleared. `enable_effect` sends `effect.enable` for a quarantined effect-pack
+  kind and reads `kind.list` again, as a `gpu.device_lost` that quarantined kinds does,
+  since no event reports a quarantine's change. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
   `plan_summary`, `reset_edits` (a keyframe's Reset) and `fresh_id`.
 - **Hotkeys** (`hotkeys.rs`): `Hotkeys`, which runs the collection's hotkey bindings
   while the page has the focus and no dialog or menu is open, and the chord of a key
@@ -111,7 +113,8 @@ Contents ([Design](#design) explains the choices):
   field the panels share (`number.rs`) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
   (the program output and each output with its FX button, creating, editing and
   deleting streams, recordings and the virtual camera, their stream keys, start and
-  stop, and the pipeline's health), and the calls and
+  stop, and the pipeline's health); `encoders.rs`: `Profiles`, its encoder profile and
+  video mix lists and forms, whose drafts, edits and summaries are tested natively; and the calls and
   logic behind it and the header's Go Live, tested natively against `MockEngine`; and `mixer.rs`: `Mixer`, the
   audio mixer (the master card with its loudness and true peak, the channels folded
   under it with their meters, faders, dB fields, mutes and routing, the same as
@@ -123,17 +126,19 @@ Contents ([Design](#design) explains the choices):
   (`override_submenu`); and
   `transform.rs`: `Transform`, the Transform panel (align, distribute and arrange the
   selected items); and `stats.rs`: `StreamStats`, the Stream stats panel (one output's
-  pill, uptime, bitrate, dropped frames, health, two-minute bitrate chart and details,
-  from `stats.tick`'s `outputs`), whose figures, chart and choice of output are tested
-  natively.
+  pill, uptime, bitrate, dropped frames, health, two-minute bitrate chart with its
+  hover readout, and details, from `stats.tick`'s `outputs`), whose figures, chart,
+  hover and choice of output are tested natively.
 - **Pairing** (`pairing.rs`): `Pairing`, the pairing panel under the properties in the
   Inspector, shown only when the server pairs devices (start pairing and show the code, list and
   revoke devices), and the calls behind it, tested natively against `MockEngine` and a
   stub that answers them as the server does.
 - **Plugins** (`plugins.rs`): `Plugins`, the WASM automation plugins section under the
   pairing panel in the Inspector, with its install and grant dialogs, the calls behind
-  them, and `GrantForm`, `suggested_id`, `not_granted` and the row texts, tested
-  natively.
+  them, and `GrantForm`, `ListGate` (no `plugin.list` while the grant dialog is open,
+  and no grant while a list is on its way), `suggested_id`, `not_granted` and the row
+  texts, tested natively, the section's re-reads and grants against a fake engine that
+  notes each list, or fails one.
 - **Canvas** (`canvas/`): the canvas editor. It draws the selected scene's item boxes
   over that scene's live picture (the program mix while it is on program), edits their geometry with the pointer and the keyboard, and undoes and
   redoes ([Canvas](#canvas)).
@@ -470,7 +475,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   its settings come from the kind's descriptor, read once per kind and kept; a kind the
   engine doesn't describe shows its name alone. A filter with three settings or fewer
   opens the properties form under its row, any other opens the Filter settings dialog,
-  and a double-click always does; each field's change is a one-parameter
+  and a double-click always does: in the Filters panel, the panel opens the dialog of
+  the row the double-click's first click landed on (`double_click_target`, within
+  800 ms), as that click's fold can scroll the row from under the second, which
+  toggles nothing, and a first click anywhere else in the panel forgets that row (#984);
+  each field's change is a one-parameter
   `filter.set_settings`. The dialog applies every change at once and, on Cancel, Escape
   or the backdrop, sends one batch putting back the settings and the switch it opened
   with, including each one it sent whose change the engine hasn't reported yet; an
@@ -481,11 +490,20 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `fresh_id`; the new filter opens in place, or in the settings dialog when it has more
   than three settings or isn't described yet. Edit filters… in the item menus selects the item and shows the
   panel. Names come from the prototype's catalogue, then `kind.list`, then the kind's ID.
+  A filter whose kind `kind.list` marks quarantined (ADR-0087: an effect-pack kind a GPU
+  device loss was blamed on, bypassed) shows a "quarantined" badge and a Re-enable
+  button that sends `effect.enable` (`Studio::enable_effect`); its badge goes once
+  `kind.list` no longer marks it.
   An FX button (the Outputs panel's rows, the Mixer's master card or strip) picks the program
   output's chain (owner `master`) or an output's (ADR-0080) instead, and shows the
-  panel; the same rows and dialogs edit it with that owner. Only their audio chains
-  show, since the engine refuses their video chains so far, and the virtual camera,
-  which has no sound, has none. A scene's chain (owner `scene`, ADR-0065) shows while no
+  panel; the same rows and dialogs edit it with that owner. Both chains show, and the
+  virtual camera, which has no sound, has a video chain only. The Add filter dialog
+  won't add a kind whose settings name a scene, a source, a bus or a file there
+  (`refers`: the engine refuses those references yet), and, for an output whose video
+  chain is empty, reads `output.status` and states what its first video filter costs
+  (`first_video_cost`, ADR-0080 §3): its own GPU pass and encoder session, with the
+  encoder sessions in use now, or for the virtual camera, which opens no encoder
+  session, a GPU pass only, from its next start if it runs. A scene's chain (owner `scene`, ADR-0065) shows while no
   item is selected, for the selected scene, or a keyframe's parent, since a keyframe has
   none of its own; a scene row's Edit filters… and the canvas margin's Edit scene
   filters… pick it as an FX button does (`show_filters`). It is a video chain, and the
@@ -496,7 +514,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   item's own effects (owner `item`, ADR-0065), a video chain for an item whose source has
   a picture, with the same rows and dialogs; `Collection::chains` reads them from
   `ItemInfo.effects`, and their Uses the scene picker leaves out the scenes whose
-  picture holds the item's scene. The Add filter dialog lists the vignette under Style.
+  picture holds the item's scene. In a keyframe scene that shows the item they are its
+  effects as the keyframe shows them (owner `keyframe`,
+  [ADR-0088](../../docs/adr/0088-keyframe-scenes-override-item-effects.md),
+  `effects_owner`): the item's own until a change there, which the engine applies to a
+  copy of them, gives the keyframe its own; a note says which, and Follow the item sends
+  `item.clear_override` of `effects`. Their Uses the scene picker leaves out the scenes
+  whose picture holds the keyframe. The Add filter dialog lists the vignette under Style.
 - **The shell** is the header bar over the workspace. A failed call shows in a
   dismissable bar. A confirmation, such as "Added a reference…" after a placement of
   an existing source or a duplicate, shows in the toast (`Studio::notify`, or
@@ -522,7 +546,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   first running output, then the first stream. It reads the outputs and profiles as
   the Outputs panel does, keeps the last 120 `kbps` readings of each listed output for
   the bitrate chart (an output a tick leaves out, or whose uptime went down, starts
-  over), and shows the YouTube-only tiles not at all.
+  over), and shows the YouTube-only tiles not at all. Hovering the chart picks the
+  nearest reading and draws a vertical line, a dot centred on the reading (8 px with a
+  2 px ring, as the prototype's) and a tooltip inside the plot ("2.65 Mbps · 14 s
+  ago", or "now", hidden from screen readers, which read the chart's label), anchored
+  left in the chart's left 30%, right in its right 30% and centred between, as the
+  prototype's; a drag on the chart still scrolls vertically; the dot and tooltip are
+  placed with `style:` properties, which the page's CSP allows where a `style`
+  attribute is refused.
   Agent activity (`panels/agent.rs`) lists what agents did from the engine's
   `activity.list` ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md)),
   leaving out JStream's own UIs, and asks again after each `state.changed`,
@@ -577,7 +608,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Redo in the Edit menu call `history.undo` and `history.redo`, like the canvas's
   buttons. A failed call shows in the shell's problem bar. The menus close on Escape
   or on a press anywhere outside them.
-- **Outputs.** The panel reads the outputs, encoder profiles and buses with `state.get`, then
+- **Outputs.** The panel reads the outputs, encoder profiles, video mixes, buses and scenes with `state.get`, then
   each output's `output.status`, and re-reads them on `state.changed` and
   `events.dropped`; `output.state_changed` updates one output's state in place. It
   creates RTMP(S), recording and virtual camera outputs (IDs `output-N`, the first free one), changes
@@ -585,7 +616,20 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   output, and starts and stops each. A card's Audio select picks the bus the output
   carries (`output.set_audio_buses`, one bus); while the output runs it is disabled and
   titled "Stop the output to change its bus", as the engine refuses the move. A virtual
-  camera's card has none. Above the cards, the program output's row
+  camera's card has none. A card's Video select picks the mix it shows
+  (`output.set_video_mix`), or "Program, canvas size" for none; a running output takes
+  it when it next starts. A virtual camera's card has no Video select either, as the
+  camera always shows the program at the canvas size. Under the cards (`encoders.rs`), Encoders and Video mixes list
+  each profile and mix with a line on what it encodes or shows, and a form makes one
+  (`encoder.create`, `video_mix.create`, with the first free `enc_N` or `mix_N`) or edits
+  it (`encoder.update`, `video_mix.update`). The form checks the draft with the
+  protocol's own `problem` before sending, so a refused value is named by its field and
+  the form stays open. A profile has the codec (H.264, HEVC, AV1), CBR or VBR with its
+  peak, the keyframe interval, the hardware preference and the AAC rate; a mix has its
+  input (program, preview or a scene, groups left out), a size preset (vertical
+  1080 × 1920 and 720 × 1280 among them) or custom even sides, and a frame-rate divisor.
+  Delete is disabled, titled with the outputs that use it, while any does, as the
+  engine refuses it then. Above the cards, the program output's row
   ("master") and a row per output with its state each have an "FX N" button counting
   that chain's filters, which shows the chain in the Filters panel (below the rows,
   the prototype's footnote). The header's "Go Live" starts every stopped or
@@ -623,7 +667,18 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **Plugins** (WA1, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md),
   [ADR-0076](../../docs/adr/0076-saved-wasm-plugins-and-manifest-requests.md)). The
   Plugins section reads `plugin.list` when it opens and shows once that answers; it
-  re-reads after each of its calls and on `plugin.state_changed` and `events.dropped`.
+  re-reads after each of its calls and on `plugin.state_changed` and `events.dropped`,
+  except while the grant dialog is open (`ListGate`). The engine takes a grant to
+  acknowledge the request this client was last listed
+  ([ADR-0090](../../docs/adr/0090-a-grant-acknowledges-the-request-its-client-saw.md)),
+  and the section makes that the request the dialog shows: a re-read waits until the
+  dialog closes (failed grants included) and goes out once then, and the dialog's OK,
+  and so Enter, is disabled while any list is on its way. A list sent before the dialog
+  opened that answers another request for its plugin draws the dialog again with it, so
+  the redraw always lands before OK can act. When the enable after a grant fails,
+  for example because the plugin now asks for more or its module traps on load, the
+  dialog closes, the list is read again, and the dialog opens on what it asks for now
+  with the engine's reason.
   Each plugin shows its manifest's name (the plugin's own text, shown as data), its
   state with why it is off, its ID and package path, what its manifest asks for that
   isn't granted, Permissions…, and Turn on (`plugin.enable`) when it is off. Install

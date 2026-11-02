@@ -159,8 +159,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     a missing owner (a source, output, scene or item) or filter, an empty or duplicate
     filter ID, an audio chain on a `scene` source, a full chain and an index out of range. The master stage and
     outputs ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)) take
-    audio filters only, an output only if it carries audio, and their filters no scene
-    or source reference; a scene and an item (ADR-0065) take video filters only, and
+    video filters, and audio filters on the master and an output that carries audio,
+    and their filters no scene or source reference; a scene and an item (ADR-0065) take video filters only, and
     `scene.delete`'s and `item.remove`'s inverses re-add theirs. `source.duplicate`
     copies the chains, and `source.delete`'s and `output.delete`'s inverses re-add them; a reference in a filter's settings
     blocks deleting its target, as a source's own does;
@@ -208,7 +208,12 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   inverse, so undo restores the overrides; the batch result's `dropped_overrides` stays
   empty. `state.get` reports each keyframe scene's `variant_of` and `overrides`, and
   `live.set` takes a value addressed to one as a parameter of that keyframe's, apart
-  from the item's own, as the engine does (protocol 0.53, #846);
+  from the item's own, as the engine does (protocol 0.53, #846). A keyframe overrides
+  an item's effects too
+  ([ADR-0088](../../docs/adr/0088-keyframe-scenes-override-item-effects.md)), through
+  `item.set_effects` (checking only the list's length and its IDs) and the `filter.*`
+  edits on the `keyframe` owner, which copy the item's own effects first where the
+  keyframe follows them, with the graph's inverses;
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing
@@ -239,6 +244,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `plugin.grant` and `plugin.enable` with `not_found` (entity `plugin`), as the engine
   answers them for a plugin that isn't installed: none ever is in the mock, so
   `plugin.list` lists none;
+- `effect.enable` answered with `invalid_argument` on `kind_id`, as an engine that loads
+  no effect packs answers it: the mock quarantines nothing;
 - the stream-key actions with the engine's checks and errors. `output.set_key` answers
   `not_found` for an output not in the collection, then `invalid_argument` (field
   `key`) for an empty or over-long key, or one with whitespace, control or non-ASCII

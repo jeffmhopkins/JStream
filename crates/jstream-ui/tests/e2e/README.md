@@ -104,8 +104,12 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   appears in the page; go live and end stream; the header's Record starts and stops a
   recording; clearing the key; deleting; editing the
   server URL and choosing an encoder profile, both read back by a fresh page; a
-  recording's Audio select moving it to another bus, read back by a fresh page; a second
-  client sees outputs created, started and deleted.
+  recording's Audio select moving it to another bus, read back by a fresh page; making an
+  AV1 VBR encoder profile (a peak under the average is named in the form, which stays
+  open) and a vertical video mix, a recording using both (neither can then be deleted),
+  both read back by a fresh page, the mix resized from its Edit form and deleted once the
+  recording is back on the program; a second client sees outputs created, started and
+  deleted.
 - **Plugins** (`plugins.spec.js`, under the Inspector): the mock engine runs no plugins,
   so the spec routes the page's WebSocket itself and answers `plugin.list`,
   `plugin.install`, `plugin.grant` and `plugin.enable` from a list it keeps. An install
@@ -122,8 +126,10 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   there are no outputs; with a recording added it is READY with no uptime and shows
   the default profile's H.264 at 2500 kbps; once the recording starts it is LIVE with
   the no-data box, and the ticks the test sends give the uptime, the bitrate against
-  the target, the dropped share, Excellent then Poor, the chart and what was sent; a
-  stop puts it back to READY and Waiting.
+  the target, the dropped share, Excellent then Poor, the chart and what was sent;
+  hovering the chart's right edge reads the newest sample "now" and further left the
+  one before "1 s ago", gone when the pointer leaves; a stop puts it back to READY and
+  Waiting.
 - **Docking** (`docking.spec.js`): the Editing layout's zones (Filters and Transform as
   tabs under the Inspector, Transitions as a tab beside Outputs), with empty zones hidden; the View
   menu hiding and adding a panel at the end of its home zone, and the layout marked
@@ -248,17 +254,23 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   opens the Filter settings dialog titled "Effect on “Backdrop”" once the collection
   holds it, while the source keeps its own two; Sharpen added as a second effect, and
   dragged above the vignette as one reorder of the item's chain; the row's eye and × as
-  one edit each; and selecting the scene again leaving the effects section out.
+  one edit each; and selecting the scene again leaving the effects section out. In a
+  new keyframe of Main, the Backdrop's effects "in this keyframe", with the keyframe's
+  note and the note that they follow the item's; Sharpen added there as one edit, "For
+  this item of “Backdrop” in this keyframe", after which the keyframe has its own and
+  Main's item still has none; and Follow the item clearing them as one edit.
 - **Program and output chains** (`output-chains.spec.js`): the Outputs panel's Program
   output row ("master", "FX 0"), a recording's row under it with its state and FX
   button, and the footnote; the program's FX showing the master chain in the Filters
-  panel from behind the Transform tab, with its note, its one audio chain and the note
-  on video, the output's FX its own chain, and selecting an item going back to its
-  source's. With Gain and Sharpen described: Add filter on the master offering only
-  Gain, with its foot, as one edit that the program's FX and the Mixer's count; the new
-  filter opening in place, a setting there as one more edit; the output's chain adding
-  its own Gain, counted on its FX button alone, whose eye and × edit the output's chain,
-  not the master's; and the master's filter in the Filter settings dialog, whose Remove
+  panel from behind the Transform tab, with its note and its video and audio chains,
+  the output's FX its own chain, and selecting an item going back to its source's. With
+  Gain and Sharpen described: Add filter on the master offering both, with its foot,
+  Gain added as one edit that the program's FX and the Mixer's count; the new filter
+  opening in place, a setting there as one more edit; on the output, Sharpen showing
+  the first video filter's cost note, then its own Gain, counted on its FX button
+  alone, whose eye and × edit the output's chain, not the master's; and the master's
+  filter in the Filter settings dialog on a real double-click, which opens it even
+  though the first click's toggle scrolls the taller panel (#984), and whose Remove
   deletes it.
 - **Mixer** (`mixer.spec.js`, on the Audio mixer tab): the master card counting the
   seed's two channels, its Hear button enabled, its "FX 0" showing the program

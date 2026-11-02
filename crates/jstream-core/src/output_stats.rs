@@ -24,11 +24,14 @@ const WINDOW: Duration = Duration::from_secs(10);
 /// above which an output is `poor`: 2%.
 const POOR_PER_10K: u64 = 200;
 
-/// What the output thread has handed its muxer this run while the link was up.
+/// What the output thread has handed its muxer this run while the link was up, and the
+/// video frames it handed it while the link was not active: dropped by the publish
+/// target, or delivered on a link that isn't stable yet.
 #[derive(Debug, Default)]
 pub(crate) struct SentCounters {
     bytes: AtomicU64,
     frames: AtomicU64,
+    link_lost_frames: AtomicU64,
 }
 
 impl SentCounters {
@@ -41,11 +44,20 @@ impl SentCounters {
         }
     }
 
-    /// The bytes and video frames counted so far.
-    pub(crate) fn read(&self) -> (u64, u64) {
+    /// Counts one video frame the muxer took while the link was not active: dropped by
+    /// the publish target, and so already in the link's dropped packets, or delivered
+    /// on a link that came back but isn't stable yet, which keeps a flapping server
+    /// `poor`. This is for the health, which weighs lost video frames (#994).
+    pub(crate) fn lose_on_link(&self) {
+        self.link_lost_frames.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// The bytes and video frames sent so far, and the video frames lost on the link.
+    pub(crate) fn read(&self) -> (u64, u64, u64) {
         (
             self.bytes.load(Ordering::Relaxed),
             self.frames.load(Ordering::Relaxed),
+            self.link_lost_frames.load(Ordering::Relaxed),
         )
     }
 }
@@ -57,6 +69,10 @@ pub(crate) struct OutputSample {
     pub(crate) frames: u64,
     pub(crate) dropped_frames: u64,
     pub(crate) dropped_packets: u64,
+    /// Video frames handed over while the link was not active, counted as lost frames
+    /// by the health only: those the publish target dropped are also in
+    /// `dropped_packets`, and those it delivered on a link not yet stable are in neither.
+    pub(crate) link_lost_frames: u64,
 }
 
 /// Reads one running output's counters.
@@ -179,11 +195,16 @@ fn kbps(bytes: u64, elapsed: Duration) -> u32 {
 
 /// The output's health from its counters at the window's start and now. The engine
 /// makes a running output `poor` while its link reconnects, which this doesn't see.
+/// Video frames lost while the link was down count as lost frames, so an outage keeps
+/// the output `poor` until it leaves the window, not just while it lasts (#994).
 fn health(start: &OutputSample, now: &OutputSample) -> OutputHealth {
     if now.frames == 0 {
         return OutputHealth::Waiting;
     }
-    let lost = now.dropped_frames.saturating_sub(start.dropped_frames);
+    let lost = now
+        .dropped_frames
+        .saturating_sub(start.dropped_frames)
+        .saturating_add(now.link_lost_frames.saturating_sub(start.link_lost_frames));
     let other = now.dropped_packets.saturating_sub(start.dropped_packets);
     let sent = now.frames.saturating_sub(start.frames);
     if lost == 0 && other == 0 {
@@ -214,6 +235,7 @@ mod tests {
             frames,
             dropped_frames,
             dropped_packets,
+            link_lost_frames: 0,
         }
     }
 
@@ -244,6 +266,30 @@ mod tests {
         assert_eq!(health(&start, &sample(1_000, 64, 2)), OutputHealth::Poor);
     }
 
+    /// Video frames the publish target dropped while its link was down count toward
+    /// the health like encoder drops, though `dropped_frames` leaves them out: a
+    /// two-second outage keeps the output `poor` after it reconnects, until the outage
+    /// leaves the window (#994).
+    #[test]
+    fn video_lost_on_the_link_counts_toward_the_health() {
+        let start = sample(1_000, 0, 0);
+        let outage = |frames, lost| OutputSample {
+            link_lost_frames: lost,
+            ..sample(frames, 0, lost)
+        };
+        // 60 of 300 frames lost on the link: poor, though no frame was dropped before
+        // the muxer.
+        assert_eq!(health(&start, &outage(1_240, 60)), OutputHealth::Poor);
+        // 5 of 300: under 2%, so fair.
+        assert_eq!(health(&start, &outage(1_295, 5)), OutputHealth::Fair);
+        // Lost before the window: good again.
+        let earlier = OutputSample {
+            link_lost_frames: 60,
+            ..sample(1_000, 0, 60)
+        };
+        assert_eq!(health(&earlier, &outage(1_300, 60)), OutputHealth::Good);
+    }
+
     /// The meter reports running totals, the bitrate since the previous sample, and a
     /// health that forgets losses older than the window.
     #[test]
@@ -255,12 +301,13 @@ mod tests {
         let read = {
             let (sent, dropped) = (Arc::clone(&sent), Arc::clone(&dropped));
             Box::new(move || {
-                let (bytes, frames) = sent.read();
+                let (bytes, frames, link_lost_frames) = sent.read();
                 OutputSample {
                     bytes,
                     frames,
                     dropped_frames: *dropped.lock().expect("lock"),
-                    dropped_packets: 0,
+                    dropped_packets: link_lost_frames,
+                    link_lost_frames,
                 }
             })
         };

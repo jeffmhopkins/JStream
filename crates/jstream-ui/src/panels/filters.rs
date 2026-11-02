@@ -22,12 +22,12 @@ use crate::icons::Icon;
 use crate::panels::add_source::{has_picture, type_label};
 use crate::panels::properties::{Form, draft_patch, value_of};
 use crate::panels::tree::{Reorder, Side, dropped_at};
-use crate::store::{Collection, Studio, apply};
+use crate::store::{Collection, Studio, apply, query};
 use crate::workspace::DockState;
 use jstream_control::protocol::{
     Edit, FilterChain, FilterId, FilterInfo, FilterOwner, ItemId, KindCategory, KindDescriptor,
-    KindSummary, MAX_CHAIN_FILTERS, OutputKind, ParamType, Reference, Rev, SceneId, Settings,
-    SourceId, SourceInfo, SourceKind,
+    KindSummary, MAX_CHAIN_FILTERS, OutputKind, OutputState, ParamType, Query, QueryResult,
+    Reference, Rev, SceneId, Settings, SourceId, SourceInfo, SourceKind,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -302,6 +302,12 @@ pub fn filter_name(kinds: &[KindSummary], kind_id: &str) -> String {
         .map_or_else(|| kind_id.to_owned(), |k| k.name.clone())
 }
 
+/// Whether `kind.list` marks `kind_id` quarantined: an effect-pack kind a GPU device
+/// loss was blamed on, bypassed until a person re-enables it (ADR-0087).
+pub fn quarantined(kinds: &[KindSummary], kind_id: &str) -> bool {
+    kinds.iter().any(|k| k.kind_id == kind_id && k.quarantined)
+}
+
 /// The filter kinds to offer for an owner with these chains: every filter kind
 /// `kind.list` reported for them, video first, in the catalogue's group order and the
 /// prototype's order within a group, then by name.
@@ -526,23 +532,21 @@ pub fn output_has_audio(kind: &OutputKind) -> bool {
 
 /// The chains `owner` shows, as (video, audio). A source's follow its kind
 /// ([`chains_of`]); a scene has a video chain, and so does an item whose source has a
-/// picture: its effects (ADR-0065). The program output and an output show their
-/// audio chain only, since the engine refuses their video chains so far, and an output
-/// without sound (the virtual camera) has none.
+/// picture: its effects (ADR-0065). The program output and every output have a video
+/// chain, and an audio chain unless the output has no sound (the virtual camera)
+/// (ADR-0080).
 pub fn owner_chains(collection: &Collection, owner: &FilterOwner) -> (bool, bool) {
     match owner {
         FilterOwner::Source { source_id } => collection
             .source(source_id)
             .map_or((false, false), chains_of),
-        FilterOwner::Master => (false, true),
-        FilterOwner::Output { output_id } => (
-            false,
-            collection
-                .output(output_id)
-                .is_some_and(|o| output_has_audio(&o.kind)),
-        ),
+        FilterOwner::Master => (true, true),
+        FilterOwner::Output { output_id } => match collection.output(output_id) {
+            Some(output) => (true, output_has_audio(&output.kind)),
+            None => (false, false),
+        },
         FilterOwner::Scene { .. } => (true, false),
-        FilterOwner::Item { item_id } => (
+        FilterOwner::Item { item_id } | FilterOwner::Keyframe { item_id, .. } => (
             collection
                 .item(item_id)
                 .and_then(|(_, item)| collection.source(&item.source_id))
@@ -564,10 +568,12 @@ pub fn owner_name(collection: &Collection, owner: &FilterOwner) -> String {
         FilterOwner::Scene { scene_id } => collection
             .scene(scene_id)
             .map_or_else(|| scene_id.to_string(), |s| s.name.clone()),
-        FilterOwner::Item { item_id } => collection.item(item_id).map_or_else(
-            || item_id.to_string(),
-            |(_, item)| collection.source_name(&item.source_id),
-        ),
+        FilterOwner::Item { item_id } | FilterOwner::Keyframe { item_id, .. } => {
+            collection.item(item_id).map_or_else(
+                || item_id.to_string(),
+                |(_, item)| collection.source_name(&item.source_id),
+            )
+        }
         _ => String::new(),
     }
 }
@@ -582,6 +588,9 @@ pub fn owner_note(collection: &Collection, owner: &FilterOwner) -> &'static str 
         FilterOwner::Output { .. } => "Only this output, after the program filters. No sound.",
         FilterOwner::Scene { .. } => "Scene filters apply to the whole scene, top to bottom.",
         FilterOwner::Item { .. } => "Only this item, after its crop, top to bottom.",
+        FilterOwner::Keyframe { .. } => {
+            "Only this item in this keyframe, after its crop, top to bottom."
+        }
         _ => "Applies everywhere this source appears, top to bottom.",
     }
 }
@@ -593,7 +602,43 @@ fn owner_foot(owner: &FilterOwner) -> &'static str {
         FilterOwner::Output { .. } => "Applies to this output only, after the program filters.",
         FilterOwner::Scene { .. } => "Applies to the whole scene.",
         FilterOwner::Item { .. } => "Applies to this item only, after its crop.",
+        FilterOwner::Keyframe { .. } => "Applies to this item in this keyframe only.",
         _ => "Applies everywhere this source appears.",
+    }
+}
+
+/// Whether a filter of `kind` would hold a reference: a setting that names a scene, a
+/// source, a bus or an asset. A master or output filter can't hold one yet (ADR-0080),
+/// so the Add filter dialog won't add such a kind to those chains.
+pub fn refers(kind: &KindDescriptor) -> bool {
+    kind.params.iter().any(|p| {
+        matches!(
+            p.ty,
+            ParamType::Scene | ParamType::Source { .. } | ParamType::Bus | ParamType::Asset { .. }
+        )
+    })
+}
+
+/// The Add filter dialog's note on what an output's first video filter costs (ADR-0080
+/// §3), from its next start when it is `running`. A stream or a recording that
+/// `encodes` gets its own GPU pass and encoder session, beside the `sessions` in use
+/// now; a virtual camera, which opens no encoder session, only a GPU pass of its own.
+pub fn first_video_cost(encodes: bool, sessions: u32, running: bool) -> String {
+    let when = if running {
+        " It takes effect the next time this output starts."
+    } else {
+        ""
+    };
+    if encodes {
+        format!(
+            "A video filter gives this output its own GPU pass and encoder session, even \
+             while the filter is off. Encoder sessions in use now: {sessions}.{when}"
+        )
+    } else {
+        format!(
+            "A video filter gives the virtual camera its own GPU pass, even while the \
+             filter is off; it opens no encoder session.{when}"
+        )
     }
 }
 
@@ -602,6 +647,7 @@ fn owner_foot(owner: &FilterOwner) -> &'static str {
 fn add_sub(owner: &FilterOwner, name: &str) -> String {
     match owner {
         FilterOwner::Item { .. } => format!("For this item of “{name}”"),
+        FilterOwner::Keyframe { .. } => format!("For this item of “{name}” in this keyframe"),
         _ => format!("For “{name}”"),
     }
 }
@@ -636,6 +682,52 @@ pub fn scene_owner(collection: &Collection, scene_id: &SceneId) -> FilterOwner {
     FilterOwner::Scene { scene_id }
 }
 
+/// The owner of item `item_id`'s effects as scene `scene_id` shows it (FL-09): its own
+/// ([`FilterOwner::Item`]), or in a keyframe scene that shows it the keyframe's
+/// ([`FilterOwner::Keyframe`]), with whether the keyframe overrides them (ADR-0088).
+/// `None` when the item has no picture, so no effects.
+pub fn effects_owner(
+    collection: &Collection,
+    scene_id: Option<&SceneId>,
+    item_id: &ItemId,
+) -> Option<(FilterOwner, Option<bool>)> {
+    let keyframe = scene_id.filter(|scene_id| {
+        collection.is_keyframe(scene_id)
+            && collection
+                .chains(&FilterOwner::Keyframe {
+                    scene_id: (*scene_id).clone(),
+                    item_id: item_id.clone(),
+                })
+                .is_some()
+    });
+    let (owner, overridden) = match keyframe {
+        Some(scene_id) => {
+            let overridden = collection.scene(scene_id).is_some_and(|scene| {
+                scene
+                    .overrides
+                    .iter()
+                    .any(|o| &o.item_id == item_id && o.effects.is_some())
+            });
+            (
+                FilterOwner::Keyframe {
+                    scene_id: scene_id.clone(),
+                    item_id: item_id.clone(),
+                },
+                Some(overridden),
+            )
+        }
+        None => (
+            FilterOwner::Item {
+                item_id: item_id.clone(),
+            },
+            None,
+        ),
+    };
+    owner_chains(collection, &owner)
+        .0
+        .then_some((owner, overridden))
+}
+
 /// Whether `scene_id`'s picture holds `inner`'s: it is `inner`, a keyframe of a scene that
 /// holds it, or it places a nested scene that does.
 fn holds_scene(collection: &Collection, scene_id: &SceneId, inner: &SceneId) -> bool {
@@ -667,7 +759,8 @@ fn holds_scene(collection: &Collection, scene_id: &SceneId, inner: &SceneId) -> 
 /// The scenes a scene-input filter on `owner` may use (F8). For a scene's chain, every
 /// scene whose picture doesn't hold the scene itself; for an item's effects, every scene
 /// whose picture doesn't hold the item's scene, since the reference is an edge from that
-/// scene (ADR-0065 §3); for any other owner, [`scene_choices`]'.
+/// scene (ADR-0065 §3), and for its effects in a keyframe every scene whose picture
+/// doesn't hold the keyframe (ADR-0088); for any other owner, [`scene_choices`]'.
 pub fn owner_scene_choices(
     collection: &Collection,
     owner: &FilterOwner,
@@ -689,6 +782,11 @@ pub fn owner_scene_choices(
                 .map(|s| (s.scene_id.clone(), s.name.clone()))
                 .collect()
         }
+        FilterOwner::Keyframe { scene_id, .. } => collection
+            .listed_scenes()
+            .filter(|s| !holds_scene(collection, &s.scene_id, scene_id))
+            .map(|s| (s.scene_id.clone(), s.name.clone()))
+            .collect(),
         _ => scene_choices(collection, editing, &own_source(owner)),
     }
 }
@@ -724,6 +822,22 @@ pub struct FilterDialogs {
     /// The revision of the batch that added the filter the settings dialog opened on,
     /// when it opened right after that add.
     added_at: RwSignal<Option<Rev>>,
+    /// The row an in-place click last landed on, and when (the event's `timeStamp`), so
+    /// a double-click opens that row's settings even when the first click folded its
+    /// editor and the panel scrolled another element under the pointer (#984).
+    clicked: StoredValue<Option<(Target, f64)>>,
+}
+
+/// How long after a row's first click a double-click still opens that row's settings:
+/// longer than any platform's double-click interval.
+pub const DOUBLE_CLICK_MS: f64 = 800.0;
+
+/// The filter a double-click at `at` opens: the row whose first click came at most
+/// [`DOUBLE_CLICK_MS`] before it, wherever the pointer is now (#984).
+pub fn double_click_target(clicked: Option<&(Target, f64)>, at: f64) -> Option<&Target> {
+    clicked
+        .filter(|(_, when)| at >= *when && at - when <= DOUBLE_CLICK_MS)
+        .map(|(target, _)| target)
 }
 
 impl FilterDialogs {
@@ -735,6 +849,33 @@ impl FilterDialogs {
             fresh: RwSignal::new(None),
             picked: RwSignal::new(None),
             added_at: RwSignal::new(None),
+            clicked: StoredValue::new(None),
+        }
+    }
+
+    /// Forgets the row a click landed on when a first click lands anywhere else in the
+    /// panel (an editor's field, Add filter), so a double-click there opens nothing. The
+    /// row's own click reaches the panel too, with the time it recorded.
+    fn click_elsewhere(&self, event: &leptos::ev::MouseEvent) {
+        let at = event.time_stamp();
+        if event.detail() == 1
+            && self
+                .clicked
+                .with_value(|c| c.as_ref().is_some_and(|(_, when)| *when != at))
+        {
+            self.clicked.set_value(None);
+        }
+    }
+
+    /// Opens the Filter settings dialog on the row an in-place click landed on just
+    /// before a double-click at `at`, if one did ([`double_click_target`]).
+    fn open_double_clicked(&self, at: f64) {
+        let target = self
+            .clicked
+            .with_value(|c| double_click_target(c.as_ref(), at).cloned());
+        if let Some(target) = target {
+            self.clicked.set_value(None);
+            self.edit(target.owner, target.filter_id);
         }
     }
 
@@ -831,6 +972,7 @@ fn describe_all(
 pub fn Filters() -> impl IntoView {
     let studio = expect_context::<Studio>();
     let dialogs = expect_context::<FilterDialogs>();
+    let session = expect_context::<SessionContext>();
     let selected = Memo::new(move |_| studio.selection.with(|s| (s.scene.clone(), s.item.clone())));
     // Selecting another item or scene shows its chains again.
     Effect::new(move |before: Option<(Option<SceneId>, Option<ItemId>)>| {
@@ -872,19 +1014,25 @@ pub fn Filters() -> impl IntoView {
     });
     let chains =
         Memo::new(move |_| shown.with(|s| s.as_ref().map(|(chains, _, o)| (o.clone(), *chains))));
-    // The selected item's own effects (ADR-0065), under its source's chains, while the
-    // panel shows that source's and the item has a picture.
+    // The selected item's effects (ADR-0065), under its source's chains, while the
+    // panel shows that source's and the item has a picture: in a keyframe scene, as the
+    // keyframe shows them, with whether it overrides them (ADR-0088).
     let effects = Memo::new(move |_| {
         let source = shown.with(|s| matches!(s, Some((_, _, FilterOwner::Source { .. }))));
-        let (_, item) = selected.get();
-        let owner = FilterOwner::Item { item_id: item? };
-        let video = studio
-            .collection
-            .with(|c| c.as_ref().is_some_and(|c| owner_chains(c, &owner).0));
-        (source && video).then_some(owner)
+        let (scene, item) = selected.get();
+        let item = item?;
+        let effects = studio.collection.with(|c| {
+            c.as_ref()
+                .and_then(|c| effects_owner(c, scene.as_ref(), &item))
+        });
+        effects.filter(|_| source)
     });
     view! {
-        <section class="panel filters-panel">
+        <section
+            class="panel filters-panel"
+            on:click=move |event: leptos::ev::MouseEvent| dialogs.click_elsewhere(&event)
+            on:dblclick=move |event: leptos::ev::MouseEvent| dialogs.open_double_clicked(event.time_stamp())
+        >
             {move || match shown.with(|s| s.as_ref().map(|(_, head, _)| head.clone())) {
                 None => view! {
                     <div class="filters-head">
@@ -909,16 +1057,12 @@ pub fn Filters() -> impl IntoView {
             }}
             {move || {
                 chains.get().map(|(owner, (video, audio))| {
-                    let stage = matches!(owner, FilterOwner::Master | FilterOwner::Output { .. });
                     let add = {
                         let owner = owner.clone();
                         move |_| dialogs.add(owner.clone())
                     };
                     view! {
                         <Chains owner=owner video=video audio=audio in_place=true />
-                        {stage.then(|| view! {
-                            <p class="filters-later">"Video filters on outputs aren’t available yet."</p>
-                        })}
                         {(video || audio).then(|| view! {
                             <button type="button" class="filters-add" on:click=add>"+ Add filter…"</button>
                         })}
@@ -926,21 +1070,65 @@ pub fn Filters() -> impl IntoView {
                 })
             }}
             {move || {
-                effects.get().map(|owner| {
+                effects.get().map(|(owner, overridden)| {
                     let add = {
                         let owner = owner.clone();
                         move |_| dialogs.add(owner.clone())
                     };
+                    let subtitle = if overridden.is_some() {
+                        "This item’s effects in this keyframe"
+                    } else {
+                        "This item’s effects"
+                    };
+                    // In a keyframe: whether it follows the item's own effects, and a
+                    // button that follows them again.
+                    let follow = overridden.map(|overridden| {
+                        let owner = owner.clone();
+                        let follow = move |_| {
+                            let FilterOwner::Keyframe { scene_id, item_id } = owner.clone() else {
+                                return;
+                            };
+                            if let Some(s) = session.get() {
+                                studio.apply(
+                                    &s,
+                                    vec![Edit::ItemClearOverride {
+                                        scene_id,
+                                        item_id,
+                                        field: jstream_control::protocol::OverrideField::Effects,
+                                    }],
+                                );
+                            }
+                        };
+                        if overridden {
+                            view! {
+                                <p class="filters-keyframe">
+                                    "This keyframe has its own effects for this item. "
+                                    <button type="button" class="filters-follow" on:click=follow>
+                                        "Follow the item"
+                                    </button>
+                                </p>
+                            }
+                            .into_any()
+                        } else {
+                            view! {
+                                <p class="filters-keyframe">
+                                    "Follows the item’s own effects. A change here gives this keyframe its own."
+                                </p>
+                            }
+                            .into_any()
+                        }
+                    });
                     view! {
                         <div class="filters-effects">
                             <div class="filters-titles">
-                                <span class="filters-subtitle">"This item’s effects"</span>
+                                <span class="filters-subtitle">{subtitle}</span>
                                 <span class="filters-effects-note">
                                     {studio.collection.with_untracked(|c| {
                                         c.as_ref().map(|c| owner_note(c, &owner)).unwrap_or_default()
                                     })}
                                 </span>
                             </div>
+                            {follow}
                             <Chains owner=owner.clone() video=true audio=false in_place=true />
                             <button type="button" class="filters-add" on:click=add>"+ Add effect…"</button>
                         </div>
@@ -1029,7 +1217,10 @@ pub fn Chains(
             }
         }
     };
-    let effects = matches!(owner, FilterOwner::Item { .. });
+    let effects = matches!(
+        owner,
+        FilterOwner::Item { .. } | FilterOwner::Keyframe { .. }
+    );
     let chain = move |which: FilterChain| {
         let (title, icon, empty) = chain_head(effects, which);
         let list = Memo::new(move |_| chains.with(|c| c.chain(which).to_vec()));
@@ -1154,6 +1345,45 @@ fn Row(
         })
     });
     let how = move || descriptor.with(|d| d.as_ref().map_or(Opens::Nothing, opens));
+    let held = {
+        let kind = filter.kind.clone();
+        Memo::new(move |_| {
+            studio
+                .kinds
+                .with(|k| quarantined(k.as_deref().unwrap_or_default(), &kind))
+        })
+    };
+    let reenable = {
+        let kind = filter.kind.clone();
+        move |event: leptos::ev::MouseEvent| {
+            event.stop_propagation();
+            if let Some(s) = session.get() {
+                studio.enable_effect(&s, kind.clone());
+            }
+        }
+    };
+    let reenable_label = format!("Re-enable {name}");
+    let held_view = move || {
+        held.get().then(|| {
+            view! {
+                <span
+                    class="badge quarantined"
+                    title="Bypassed: a GPU device loss was blamed on this effect"
+                >
+                    "quarantined"
+                </span>
+                <button
+                    type="button"
+                    class="filter-reenable"
+                    aria-label=reenable_label.clone()
+                    on:click=reenable.clone()
+                    on:dblclick=|event| event.stop_propagation()
+                >
+                    "Re-enable"
+                </button>
+            }
+        })
+    };
     let send = move |edit: Edit| {
         if let Some(s) = session.get() {
             studio.apply(&s, vec![edit]);
@@ -1193,10 +1423,19 @@ fn Row(
     let on_click = {
         let filter_id = filter_id.clone();
         let open_dialog = open_dialog.clone();
-        move |_| {
+        let target = target.clone();
+        move |event: leptos::ev::MouseEvent| {
             if !in_place {
                 return;
             }
+            // A double-click's second click does nothing: its first already toggled
+            // this row, and the panel may have scrolled another row under it (#984).
+            if event.detail() > 1 {
+                return;
+            }
+            dialogs
+                .clicked
+                .set_value(Some((target.clone(), event.time_stamp())));
             match how() {
                 Opens::InPlace => expanded.update(|e| {
                     *e = if e.as_ref() == Some(&filter_id) {
@@ -1210,9 +1449,16 @@ fn Row(
             }
         }
     };
+    // In place, the panel opens the double-clicked row's settings, as the first click
+    // can move it from under the pointer (#984); in a dialog the row opens its own.
     let on_dblclick = {
         let open_dialog = open_dialog.clone();
-        move |_| open_dialog()
+        move |event: leptos::ev::MouseEvent| {
+            if !in_place {
+                event.stop_propagation();
+                open_dialog();
+            }
+        }
     };
     let title = move || match (in_place, how()) {
         (true, Opens::InPlace) => "Click to adjust here · double-click for the full dialog",
@@ -1286,6 +1532,7 @@ fn Row(
         <li
             class="filter"
             class:off=!enabled
+            class:quarantined=move || held.get()
             class:open=is_open
             class:drop-before=drop_side(Side::Before)
             class:drop-after=drop_side(Side::After)
@@ -1310,6 +1557,7 @@ fn Row(
                     <Icon name=if enabled { "eye" } else { "eye-off" } size=14 />
                 </button>
                 <span class="filter-name">{name.clone()}</span>
+                {held_view}
                 {summary_view}
                 {move || caret().map(|c| view! { <span class="filter-caret" aria-hidden="true">{c}</span> })}
                 <button
@@ -1468,7 +1716,12 @@ fn SettingsBody(target: Target, close: impl Fn() + Copy + Send + Sync + 'static)
             .unwrap_or_default()
     });
     let (icon, sub) = match chain {
-        FilterChain::Video if matches!(target.owner, FilterOwner::Item { .. }) => {
+        FilterChain::Video
+            if matches!(
+                target.owner,
+                FilterOwner::Item { .. } | FilterOwner::Keyframe { .. }
+            ) =>
+        {
             ("monitor", format!("Effect on “{owner_name}”"))
         }
         FilterChain::Video => ("monitor", format!("Video filter on “{owner_name}”")),
@@ -1731,12 +1984,51 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
                 .map(|p| p.id.clone())
         })
     });
+    // A master or output filter can't hold a reference yet (ADR-0080).
+    let stage = matches!(owner, FilterOwner::Master | FilterOwner::Output { .. });
+    let referring =
+        Memo::new(move |_| stage && descriptor.with(|d| d.as_ref().is_some_and(refers)));
+    // An output's first video filter costs a pass, and for a stream or a recording a
+    // session, of its own (ADR-0080 §3): the sessions in use, and whether the output
+    // runs, from `output.status`.
+    let cost = RwSignal::new(None::<String>);
+    if let FilterOwner::Output { output_id } = &owner {
+        let (first, encodes) = studio.collection.with_untracked(|c| {
+            let Some(c) = c.as_ref() else {
+                return (false, false);
+            };
+            let first = c
+                .chains(&owner)
+                .is_some_and(|f| f.chain(FilterChain::Video).is_empty());
+            let encodes = c
+                .output(output_id)
+                .is_some_and(|o| !matches!(o.kind, OutputKind::VirtualCam));
+            (first, encodes)
+        });
+        if let (true, Some(s)) = (first, session.get()) {
+            let output_id = output_id.clone();
+            spawn_local(async move {
+                if let Ok(QueryResult::OutputStatus {
+                    state,
+                    encoder_sessions,
+                    ..
+                }) = query(&s, Query::OutputStatus { output_id }).await
+                {
+                    let running = !matches!(state, OutputState::Stopped | OutputState::Failed);
+                    let text = first_video_cost(encodes, encoder_sessions, running);
+                    _ = cost.try_set(Some(text));
+                }
+            });
+        }
+    }
     let foot = owner_foot(&owner);
     let sub = add_sub(&owner, &name);
     let none = match &owner {
         FilterOwner::Source { .. } => "The engine lists no filters for this source.",
         FilterOwner::Scene { .. } => "The engine lists no filters for this scene.",
-        FilterOwner::Item { .. } => "The engine lists no effects for this item.",
+        FilterOwner::Item { .. } | FilterOwner::Keyframe { .. } => {
+            "The engine lists no effects for this item."
+        }
         _ => "The engine lists no filters for this output.",
     };
     let owner = StoredValue::new(owner);
@@ -1751,7 +2043,11 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
     let blocked = {
         move || match current.get() {
             None => true,
-            Some(t) => full(t.chain) || (scene_param.get().is_some() && scene.get().is_none()),
+            Some(t) => {
+                full(t.chain)
+                    || referring.get()
+                    || (scene_param.get().is_some() && scene.get().is_none())
+            }
         }
     };
     let add = {
@@ -1848,7 +2144,10 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
             let quick = {
                 let t = t.clone();
                 move |_| {
-                    if scene_param.get_untracked().is_none() && !full(t.chain) {
+                    if scene_param.get_untracked().is_none()
+                        && !referring.get_untracked()
+                        && !full(t.chain)
+                    {
                         add.with_value(|add| add(t.clone()));
                     }
                 }
@@ -1898,7 +2197,18 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
                 .map(|c| owner.with_value(|o| owner_scene_choices(c, o, editing.as_ref())))
                 .unwrap_or_default()
         });
-        let scene_select = scene_param.get().map(|_| {
+        let refer_note = referring.get().then(|| {
+            view! {
+                <p class="add-note">
+                    "A filter on an output can’t use a scene, a source or a file yet."
+                </p>
+            }
+        });
+        let cost_note = (t.chain == FilterChain::Video)
+            .then(|| cost.get())
+            .flatten()
+            .map(|text| view! { <p class="add-note add-filter-cost">{text}</p> });
+        let scene_select = scene_param.get().filter(|_| !referring.get()).map(|_| {
             let options = choices
                 .into_iter()
                 .map(|(id, name)| view! { <option value=id.to_string()>{name}</option> })
@@ -1938,6 +2248,8 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
                 </div>
             })}
             {full_note}
+            {refer_note}
+            {cost_note}
         })
     };
 
@@ -1988,7 +2300,24 @@ mod tests {
             category,
             name: name.into(),
             version: 1,
+            quarantined: false,
         }
+    }
+
+    /// Only a kind `kind.list` marks quarantined shows the badge and its Re-enable; a
+    /// kind it doesn't list isn't quarantined.
+    #[test]
+    fn a_quarantined_kind_is_marked() {
+        let mut held = kind_summary("fx/blur", "Blur", KindCategory::VideoFilter);
+        held.quarantined = true;
+        let kinds = [
+            held,
+            kind_summary("fx/glow", "Glow", KindCategory::VideoFilter),
+        ];
+        assert!(quarantined(&kinds, "fx/blur"));
+        assert!(!quarantined(&kinds, "fx/glow"));
+        assert!(!quarantined(&kinds, "fx/gone"));
+        assert!(!quarantined(&[], "fx/blur"));
     }
 
     fn param(id: &str, label: &str, ty: ParamType, default: Value) -> ParamDescriptor {
@@ -2533,6 +2862,151 @@ mod tests {
         assert_eq!(count_text(false, 0), "0 filters");
     }
 
+    /// An item's effects in a keyframe scene (FL-09, ADR-0088): the keyframe's owner, which
+    /// reads the item's own effects until the keyframe overrides them, and whose scene
+    /// inputs leave out every scene whose picture holds the keyframe.
+    #[test]
+    fn a_keyframe_shows_an_items_effects_as_it_overrides_them() {
+        use jstream_control::protocol::{
+            Crop, Finite32, ItemInfo, ItemOverride, ItemTransform, PlacementForm, SceneRole,
+        };
+        let vignette = FilterInfo {
+            filter_id: FilterId::new("v"),
+            kind: "vignette".into(),
+            enabled: true,
+            settings: Settings::new(),
+        };
+        let item = ItemInfo {
+            item_id: "i-cam".into(),
+            source_id: "cam".into(),
+            placement: PlacementForm::Legacy,
+            transform: ItemTransform::IDENTITY,
+            geometry: None,
+            crop: Crop::NONE,
+            visible: true,
+            effects: vec![vignette.clone()],
+            opacity: Finite32::ONE,
+            blend: Default::default(),
+            transition: jstream_control::protocol::ItemTransition::default(),
+        };
+        let scene = |id: &str, variant_of: Option<&str>, overrides: Vec<ItemOverride>| {
+            let items = match variant_of {
+                None if id == "main" => vec![item.clone()],
+                None => Vec::new(),
+                Some(_) => crate::store::shown_items(std::slice::from_ref(&item), &overrides),
+            };
+            SceneInfo {
+                overrides,
+                filters: Default::default(),
+                variant_of: variant_of.map(SceneId::new),
+                scene_id: id.into(),
+                name: id.to_uppercase(),
+                role: SceneRole::Scene,
+                folder: None,
+                meta: Default::default(),
+                options: Default::default(),
+                items,
+                transition_in: None,
+                transition_out: None,
+            }
+        };
+        let own = |effects: Option<Vec<FilterInfo>>| ItemOverride {
+            item_id: "i-cam".into(),
+            geometry: None,
+            transform: None,
+            crop: None,
+            visible: None,
+            opacity: None,
+            effects,
+        };
+        let collection = Collection {
+            scenes: vec![
+                scene("main", None, Vec::new()),
+                scene("follows", Some("main"), Vec::new()),
+                scene("bare", Some("main"), vec![own(Some(Vec::new()))]),
+                scene("other", None, Vec::new()),
+            ],
+            sources: vec![SourceInfo {
+                source_id: SourceId::new("cam"),
+                name: "Camera".into(),
+                kind: SourceKind::Builtin {
+                    kind: "color".into(),
+                },
+                settings: Settings::new(),
+                duplicated_from: None,
+                audio: None,
+                filters: Default::default(),
+                meta: Default::default(),
+            }],
+            ..Collection::default()
+        };
+        let keyframe = |scene: &str| FilterOwner::Keyframe {
+            scene_id: SceneId::new(scene),
+            item_id: ItemId::new("i-cam"),
+        };
+        let cam = ItemId::new("i-cam");
+        // In its own scene, or with no scene, the item's own effects.
+        let item_owner = FilterOwner::Item {
+            item_id: cam.clone(),
+        };
+        assert_eq!(
+            effects_owner(&collection, Some(&SceneId::new("main")), &cam),
+            Some((item_owner.clone(), None))
+        );
+        assert_eq!(
+            effects_owner(&collection, None, &cam),
+            Some((item_owner, None))
+        );
+        // A keyframe that follows the item reads its own effects.
+        assert_eq!(
+            effects_owner(&collection, Some(&SceneId::new("follows")), &cam),
+            Some((keyframe("follows"), Some(false)))
+        );
+        let chains = collection
+            .chains(&keyframe("follows"))
+            .expect("its effects");
+        assert_eq!(chains.video, [vignette]);
+        // One that overrides them with none reads none.
+        assert_eq!(
+            effects_owner(&collection, Some(&SceneId::new("bare")), &cam),
+            Some((keyframe("bare"), Some(true)))
+        );
+        let chains = collection.chains(&keyframe("bare")).expect("its effects");
+        assert!(chains.video.is_empty());
+        // A scene that isn't a keyframe, or one that doesn't show the item, has none.
+        assert!(collection.chains(&keyframe("main")).is_none());
+        assert!(collection.chains(&keyframe("other")).is_none());
+        let owner = keyframe("follows");
+        assert_eq!(owner_chains(&collection, &owner), (true, false));
+        assert_eq!(owner_name(&collection, &owner), "Camera");
+        assert_eq!(
+            owner_note(&collection, &owner),
+            "Only this item in this keyframe, after its crop, top to bottom."
+        );
+        assert_eq!(
+            owner_foot(&owner),
+            "Applies to this item in this keyframe only."
+        );
+        assert_eq!(
+            add_sub(&owner, "Camera"),
+            "For this item of “Camera” in this keyframe"
+        );
+        // Its scene inputs leave out only what holds the keyframe: itself.
+        let mut names: Vec<String> = owner_scene_choices(&collection, &owner, None)
+            .into_iter()
+            .map(|(_, name)| name)
+            .collect();
+        names.sort();
+        let mut want: Vec<String> = collection
+            .listed_scenes()
+            .filter(|s| s.scene_id != SceneId::new("follows"))
+            .map(|s| s.name.clone())
+            .collect();
+        want.sort();
+        assert_eq!(names, want);
+        assert!(names.contains(&"MAIN".to_string()), "{names:?}");
+    }
+
     /// The vignette is a Style filter with the prototype's kind of hint (#862).
     #[test]
     fn the_vignette_is_offered_under_style() {
@@ -2555,7 +3029,7 @@ mod tests {
     }
 
     #[test]
-    fn the_program_output_and_outputs_show_their_audio_chain_only() {
+    fn the_program_output_and_outputs_show_their_chains() {
         use jstream_control::protocol::{OutputId, OutputInfo, RecordContainer};
         let output = |id: &str, kind: OutputKind| OutputInfo {
             output_id: id.into(),
@@ -2582,20 +3056,20 @@ mod tests {
             output_id: OutputId::new(id),
         };
         let master = FilterOwner::Master;
-        assert_eq!(owner_chains(&collection, &master), (false, true));
+        assert_eq!(owner_chains(&collection, &master), (true, true));
         assert_eq!(owner_name(&collection, &master), "Program output");
         assert_eq!(
             owner_note(&collection, &master),
             "Master chain: applies to everything leaving JStream."
         );
-        assert_eq!(owner_chains(&collection, &out("rec")), (false, true));
+        assert_eq!(owner_chains(&collection, &out("rec")), (true, true));
         assert_eq!(owner_name(&collection, &out("rec")), "rec");
         assert_eq!(
             owner_note(&collection, &out("rec")),
             "Only this output, after the program filters."
         );
-        // The virtual camera has no sound, so no chain the engine takes.
-        assert_eq!(owner_chains(&collection, &out("cam")), (false, false));
+        // The virtual camera has no sound, so a video chain only.
+        assert_eq!(owner_chains(&collection, &out("cam")), (true, false));
         assert_eq!(
             owner_note(&collection, &out("cam")),
             "Only this output, after the program filters. No sound."
@@ -2604,6 +3078,74 @@ mod tests {
         assert!(collection.chains(&out("gone")).is_none());
         assert!(collection.chains(&master).is_some());
         assert_eq!(own_source(&master), SourceId::new(""));
+    }
+
+    /// A kind whose settings name a scene, a source, a bus or an asset refers; the Add
+    /// filter dialog keeps it off the master's and outputs' chains (ADR-0080).
+    #[test]
+    fn a_kind_with_a_reference_setting_refers() {
+        let kind = |params| KindDescriptor {
+            kind_id: "k".into(),
+            category: KindCategory::VideoFilter,
+            name: "K".into(),
+            version: 1,
+            video: true,
+            audio: false,
+            params,
+            max_outset_px: None,
+        };
+        assert!(!refers(&kind(vec![param(
+            "amount",
+            "Amount",
+            float(0.0, 1.0, None, None),
+            json!(0.5)
+        )])));
+        assert!(refers(&kind(vec![param(
+            "scene",
+            "Scene",
+            ParamType::Scene,
+            Value::Null
+        )])));
+        assert!(refers(&kind(vec![param(
+            "audio",
+            "Audio",
+            ParamType::Bus,
+            Value::Null
+        )])));
+    }
+
+    /// A double-click opens the row its first click landed on, within the window (#984).
+    #[test]
+    fn a_double_click_opens_the_row_its_first_click_landed_on() {
+        let gain = Target {
+            owner: FilterOwner::Master,
+            filter_id: FilterId::new("gain"),
+        };
+        let clicked = Some((gain.clone(), 1000.0));
+        // Wherever the second click landed, the first click's row opens.
+        assert_eq!(double_click_target(clicked.as_ref(), 1250.0), Some(&gain));
+        assert_eq!(double_click_target(clicked.as_ref(), 1800.0), Some(&gain));
+        // Too late, before it, or with no click on a row: nothing opens.
+        assert_eq!(double_click_target(clicked.as_ref(), 1801.0), None);
+        assert_eq!(double_click_target(clicked.as_ref(), 999.0), None);
+        assert_eq!(double_click_target(None, 1000.0), None);
+    }
+
+    /// The cost of an output's first video filter names the sessions in use, and says
+    /// when it takes effect for a running output (ADR-0080 §3).
+    #[test]
+    fn the_first_video_filter_states_its_cost() {
+        assert_eq!(
+            first_video_cost(true, 1, false),
+            "A video filter gives this output its own GPU pass and encoder session, even \
+             while the filter is off. Encoder sessions in use now: 1."
+        );
+        assert!(first_video_cost(true, 0, false).ends_with("in use now: 0."));
+        assert!(first_video_cost(true, 2, true).ends_with("the next time this output starts."));
+        // A virtual camera opens no encoder session, so its filter costs a pass only.
+        let camera = first_video_cost(false, 2, false);
+        assert!(camera.contains("its own GPU pass") && camera.contains("no encoder session"));
+        assert!(!camera.contains("in use now"));
     }
 
     #[test]

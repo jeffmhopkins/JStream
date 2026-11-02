@@ -123,6 +123,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("item.set_source", Class(E)),
     ("item.set_transition", Class(E)),
     ("item.clear_override", Class(E)),
+    ("item.set_effects", Class(E)),
     ("source.create", Class(E)),
     ("source.rename", Class(E)),
     ("source.set_settings", Class(E)),
@@ -205,6 +206,8 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("plugin.install", N),
     ("plugin.grant", N),
     ("plugin.enable", N),
+    // A person re-enables a quarantined effect (#349); a plugin never does.
+    ("effect.enable", N),
     // History, on the plugin's own session.
     ("history.undo", Class(E)),
     ("history.redo", Class(E)),
@@ -666,7 +669,8 @@ pub struct PluginInfo {
     /// Its package directory on the engine's machine, as `plugin.install` named it.
     pub path: String,
     /// What its manifest asks for, as the engine last read it. For a plugin disabled as
-    /// `needs_grant`, this is the update's request, which a `plugin.grant` acknowledges.
+    /// `needs_grant`, this is the update's request, which a `plugin.grant` from the
+    /// client it was listed to then acknowledges.
     pub request: PluginRequest,
     /// What a person granted it.
     pub grant: PluginGrant,

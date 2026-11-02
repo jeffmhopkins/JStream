@@ -5,9 +5,9 @@
 //! on/off switch and settings checked against the kind's descriptor, like a source's
 //! (ADR-0025). The `filter.*` edits address a filter by its owner and its ID.
 //!
-//! Sources own chains, and so do the master stage and each output (ADR-0080). The
-//! master's and an output's chains are audio only until video mixes run their video
-//! chains. Since 0.43 a scene and an item also name a video chain (ADR-0065): a scene's
+//! Sources own chains, and so do the master stage and each output (ADR-0080). Since
+//! 0.60 the master's and every output's video chain take filters too (earlier minors
+//! refused them). Since 0.43 a scene and an item also name a video chain (ADR-0065): a scene's
 //! filters run on its whole composite, and an item's effects on its cropped, fitted box.
 
 use crate::id::{FilterId, ItemId, OutputId, SceneId, SourceId};
@@ -34,11 +34,19 @@ pub enum FilterOwner {
     /// The master stage's chains, which apply to everything leaving JStream: every
     /// output, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose
     /// fader feeds it. Its audio chain runs once per block on each bus that feeds an
-    /// output, and monitoring hears the bus before it.
+    /// output, and monitoring hears the bus before it. Its video chain (since 0.60)
+    /// runs once per frame on each mix an output draws, at the canvas size; the
+    /// editing canvas, previews and `video.snapshot` show the mix before it. Its
+    /// filters can't hold a reference.
     Master,
     /// An output's own chains, which run after the master stage for that output only
     /// (ADR-0080 §2). An output with filters on its audio chain gets its own audio
-    /// encode from its next start; edits to a chain it started with apply live.
+    /// encode from its next start; edits to a chain it started with apply live. Every
+    /// output, the virtual camera included, has a video chain (since 0.60). A stream
+    /// or recording with a filter on it, even a disabled one, gets its own render
+    /// pass and encoder session from its next start, which `output.status` reports as
+    /// `dedicated`; a virtual camera, which opens no encoder session, gets its own
+    /// render pass (a program frame of its own) and is never reported `dedicated`.
     Output {
         /// The output.
         output_id: OutputId,
@@ -59,6 +67,19 @@ pub enum FilterOwner {
         /// The item.
         item_id: ItemId,
     },
+    /// An item's effects as a keyframe scene draws it (ADR-0088, since 0.63): the
+    /// keyframe's override of them, or the item's own while it has none. `scene_id` must
+    /// name a keyframe scene whose tree holds `item_id`, else `invalid_argument` on
+    /// `owner` (`not_found` for a missing one). A video chain only. The first edit while
+    /// the keyframe follows the item's own effects copies them into its override and
+    /// applies there, and its inverse is `item.clear_override` of `effects`; later edits
+    /// have their usual inverses. The item's own effects never change.
+    Keyframe {
+        /// The keyframe scene.
+        scene_id: SceneId,
+        /// The item in its parent's tree.
+        item_id: ItemId,
+    },
 }
 
 impl FilterOwner {
@@ -69,7 +90,8 @@ impl FilterOwner {
             FilterOwner::Master
             | FilterOwner::Output { .. }
             | FilterOwner::Scene { .. }
-            | FilterOwner::Item { .. } => None,
+            | FilterOwner::Item { .. }
+            | FilterOwner::Keyframe { .. } => None,
         }
     }
 }

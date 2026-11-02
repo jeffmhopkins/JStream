@@ -718,8 +718,8 @@ pub struct SceneSummary {
 /// JStream (ADR-0080 §1).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct MasterInfo {
-    /// Its chains, which `filter.*` edits with the owner `{"type":"master"}`. Only the
-    /// audio chain holds filters so far. Omitted while both are empty.
+    /// Its chains, which `filter.*` edits with the owner `{"type":"master"}`. Both hold
+    /// filters (the video chain since 0.60). Omitted while both are empty.
     #[serde(default, skip_serializing_if = "FilterChains::is_empty")]
     pub filters: FilterChains,
 }
