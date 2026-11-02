@@ -335,8 +335,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   placed again but not created, and Scene. A search box above the list narrows it by
   name, description or group (`type_matches`, tested natively), keeping the pick while
   it is shown, else the first match. "Create new" sends `source.create` and
-  `item.add` as one batch (a new `text` starting bold with a soft shadow,
-  `starting_settings`, over its kind's plain defaults), with a box of the prototype's native size for the type,
+  `item.add` as one batch (a new `text` or `timer` starting bold with a soft shadow,
+  `starting_settings`, over its kind's plain defaults), with a box of the prototype's native size for the type
+  (Shape 400 × 120 and Timer 300 × 90, which the prototype doesn't have),
   centred and scaled down to fit the canvas (ADR-0022's `fit` keeps the picture's
   aspect within it). An existing source is placed again 40 pixels right of and below
   its first placement, or, placed nowhere, at its own size when the engine reports one

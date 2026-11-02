@@ -39,8 +39,10 @@ mod image;
 mod media;
 mod registry;
 mod scope;
+mod shape;
 mod source;
 mod text;
+mod timer;
 mod youtube_chat;
 
 pub use audio::AudioTarget;

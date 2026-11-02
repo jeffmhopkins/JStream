@@ -1701,6 +1701,169 @@ source: crates/jstream-core/src/kinds.rs
         "default": true,
         "label": "Loop vertically",
         "live": true
+      },
+      {
+        "id": "gap_x",
+        "type": "float",
+        "min": 0.0,
+        "max": 4096.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Horizontal gap",
+        "description": "Transparent pixels between repeats when looping horizontally, so a ticker's last item doesn't run into its first.",
+        "live": true
+      },
+      {
+        "id": "gap_y",
+        "type": "float",
+        "min": 0.0,
+        "max": 4096.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Vertical gap",
+        "description": "Transparent pixels between repeats when looping vertically.",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "shape",
+    "category": "source",
+    "name": "Shape",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "shape",
+        "type": "enum",
+        "options": [
+          {
+            "value": "rectangle",
+            "label": "Rectangle"
+          },
+          {
+            "value": "ellipse",
+            "label": "Ellipse"
+          }
+        ],
+        "default": "rectangle",
+        "label": "Shape",
+        "description": "A rectangle (rounded by Corner radius, a pill when it is half the height) or an ellipse filling the size (a circle when square).",
+        "live": true
+      },
+      {
+        "id": "width",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 400,
+        "label": "Width",
+        "description": "Draw it at the size of the box it is placed in, so it isn't scaled.",
+        "live": true
+      },
+      {
+        "id": "height",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 120,
+        "label": "Height",
+        "description": "See Width.",
+        "live": true
+      },
+      {
+        "id": "radius",
+        "type": "float",
+        "min": 0.0,
+        "max": 4096.0,
+        "step": 1.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Corner radius",
+        "description": "A rectangle's corner radius; at most half the shorter side, which makes the short ends round.",
+        "live": true
+      },
+      {
+        "id": "fill",
+        "type": "enum",
+        "options": [
+          {
+            "value": "solid",
+            "label": "Solid"
+          },
+          {
+            "value": "linear",
+            "label": "Linear gradient"
+          },
+          {
+            "value": "radial",
+            "label": "Radial gradient"
+          }
+        ],
+        "default": "solid",
+        "label": "Fill",
+        "description": "Solid Color, or a gradient from Color to End color.",
+        "live": true
+      },
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#ffffffff",
+        "label": "Color",
+        "description": "The fill, or a gradient's start.",
+        "live": true
+      },
+      {
+        "id": "color2",
+        "type": "color",
+        "alpha": true,
+        "default": "#000000ff",
+        "label": "End color",
+        "description": "A gradient's end: at the far side of a linear one, the edge of a radial one.",
+        "live": true
+      },
+      {
+        "id": "angle",
+        "type": "float",
+        "min": 0.0,
+        "max": 360.0,
+        "step": 1.0,
+        "unit": "deg",
+        "default": 90.0,
+        "label": "Angle",
+        "description": "The direction a linear gradient runs from Color to End color: 0 is left to right, 90 top to bottom.",
+        "visible_if": {
+          "param": "fill",
+          "equals": "linear"
+        },
+        "live": true
+      },
+      {
+        "id": "border_width",
+        "type": "float",
+        "min": 0.0,
+        "max": 4096.0,
+        "step": 1.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Border width",
+        "description": "A border inside the edge; 0 is none.",
+        "live": true
+      },
+      {
+        "id": "border_color",
+        "type": "color",
+        "alpha": true,
+        "default": "#ffffffff",
+        "label": "Border color",
+        "description": "The border's color.",
+        "live": true
       }
     ]
   },
@@ -1854,6 +2017,258 @@ source: crates/jstream-core/src/kinds.rs
         "max_len": 4096,
         "default": "",
         "label": "Text",
+        "live": true
+      },
+      {
+        "id": "font",
+        "type": "asset",
+        "accept": [
+          "ttf",
+          "otf",
+          "ttc"
+        ],
+        "default": null,
+        "label": "Font",
+        "description": "A TrueType or OpenType font, or the first font of a collection. None uses the bundled Roboto.",
+        "live": false
+      },
+      {
+        "id": "face",
+        "type": "enum",
+        "options": [
+          {
+            "value": "regular",
+            "label": "Regular"
+          },
+          {
+            "value": "bold",
+            "label": "Bold"
+          },
+          {
+            "value": "condensed_bold",
+            "label": "Condensed bold"
+          }
+        ],
+        "default": "regular",
+        "label": "Face",
+        "description": "The bundled face drawn while Font is none. A font file ignores it.",
+        "live": true
+      },
+      {
+        "id": "size",
+        "type": "float",
+        "min": 1.0,
+        "max": 1024.0,
+        "step": 1.0,
+        "unit": "px",
+        "default": 64.0,
+        "label": "Size",
+        "live": true
+      },
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#ffffffff",
+        "label": "Color",
+        "live": true
+      },
+      {
+        "id": "align",
+        "type": "enum",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "center",
+            "label": "Centre"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ],
+        "default": "left",
+        "label": "Alignment",
+        "live": true
+      },
+      {
+        "id": "wrap_width",
+        "type": "int",
+        "min": 0,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 0,
+        "label": "Wrap width",
+        "description": "Lines wrap at this width. 0 doesn't wrap.",
+        "live": true
+      },
+      {
+        "id": "outline_width",
+        "type": "int",
+        "min": 0,
+        "max": 64,
+        "step": 1,
+        "unit": "px",
+        "default": 0,
+        "label": "Outline width",
+        "live": true
+      },
+      {
+        "id": "outline_color",
+        "type": "color",
+        "alpha": true,
+        "default": "#000000ff",
+        "label": "Outline color",
+        "live": true
+      },
+      {
+        "id": "background",
+        "type": "color",
+        "alpha": true,
+        "default": "#00000000",
+        "label": "Background",
+        "live": true
+      },
+      {
+        "id": "padding",
+        "type": "int",
+        "min": 0,
+        "max": 1024,
+        "step": 1,
+        "unit": "px",
+        "default": 0,
+        "label": "Padding",
+        "live": true
+      },
+      {
+        "id": "letter_spacing",
+        "type": "float",
+        "min": -200.0,
+        "max": 200.0,
+        "step": 0.5,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Letter spacing",
+        "description": "Added after every character. Negative draws them closer.",
+        "live": true
+      },
+      {
+        "id": "shadow_color",
+        "type": "color",
+        "alpha": true,
+        "default": "#00000000",
+        "label": "Shadow color",
+        "description": "The text's shadow, drawn under its outline and fill. Fully transparent draws none.",
+        "live": true
+      },
+      {
+        "id": "shadow_x",
+        "type": "float",
+        "min": -200.0,
+        "max": 200.0,
+        "step": 1.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Shadow X",
+        "live": true
+      },
+      {
+        "id": "shadow_y",
+        "type": "float",
+        "min": -200.0,
+        "max": 200.0,
+        "step": 1.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Shadow Y",
+        "live": true
+      },
+      {
+        "id": "shadow_blur",
+        "type": "float",
+        "min": 0.0,
+        "max": 100.0,
+        "step": 1.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Shadow blur",
+        "description": "How far the shadow's edge spreads, softening.",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "timer",
+    "category": "source",
+    "name": "Timer",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "mode",
+        "type": "enum",
+        "options": [
+          {
+            "value": "countdown",
+            "label": "Countdown"
+          },
+          {
+            "value": "stopwatch",
+            "label": "Stopwatch"
+          }
+        ],
+        "default": "countdown",
+        "label": "Mode",
+        "description": "Count down from Duration, or up from zero. Changing it restarts the count.",
+        "live": true
+      },
+      {
+        "id": "duration",
+        "type": "int",
+        "min": 0,
+        "max": 86400,
+        "step": 1,
+        "unit": "s",
+        "default": 300,
+        "label": "Duration",
+        "description": "A countdown's length. Changing it restarts the count.",
+        "live": true
+      },
+      {
+        "id": "format",
+        "type": "enum",
+        "options": [
+          {
+            "value": "auto",
+            "label": "Auto (h:mm:ss from an hour)"
+          },
+          {
+            "value": "mm:ss",
+            "label": "mm:ss"
+          },
+          {
+            "value": "hh:mm:ss",
+            "label": "hh:mm:ss"
+          }
+        ],
+        "default": "auto",
+        "label": "Format",
+        "description": "How the time is written. Auto is mm:ss under an hour and h:mm:ss from one.",
+        "live": true
+      },
+      {
+        "id": "end_text",
+        "type": "string",
+        "multiline": false,
+        "max_len": 256,
+        "default": "",
+        "label": "End text",
+        "description": "Shown once a countdown reaches zero, such as LIVE; empty keeps 00:00.",
         "live": true
       },
       {

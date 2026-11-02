@@ -182,6 +182,20 @@ fn known(kind: &str) -> Option<Known> {
             Generated,
             Some((1920.0, 1080.0)),
         ),
+        "shape" => (
+            "Shape",
+            "A plate, pill, circle or bar, solid or with a gradient.",
+            "layers",
+            Generated,
+            Some((400.0, 120.0)),
+        ),
+        "timer" => (
+            "Timer",
+            "A countdown or stopwatch, styled like text.",
+            "clock",
+            Generated,
+            Some((300.0, 90.0)),
+        ),
         "waveform" => (
             "Audio waveform",
             "Draws an audio source as a moving wave.",
@@ -201,7 +215,7 @@ fn known(kind: &str) -> Option<Known> {
 }
 
 /// The prototype's order of the kinds it knows.
-const ORDER: [&str; 14] = [
+const ORDER: [&str; 16] = [
     "display",
     "window",
     "webcam",
@@ -214,6 +228,8 @@ const ORDER: [&str; 14] = [
     "text",
     "color",
     "backdrop",
+    "shape",
+    "timer",
     "waveform",
     "spectrum",
 ];
@@ -471,11 +487,11 @@ pub fn add_edits(
 }
 
 /// The settings a new source of `kind` starts with, over its kind's defaults. A new text
-/// starts bold with a soft shadow, which reads on any picture (#1020); the kind's own
-/// defaults stay plain, so texts saved before keep their look.
+/// or timer starts bold with a soft shadow, which reads on any picture (#1020); the
+/// kinds' own defaults stay plain, so texts saved before keep their look.
 fn starting_settings(kind: &str) -> Settings {
     match kind {
-        "text" => [
+        "text" | "timer" => [
             ("face", serde_json::json!("bold")),
             ("shadow_color", serde_json::json!("#000000a0")),
             ("shadow_y", serde_json::json!(3.0)),
@@ -1340,9 +1356,11 @@ mod tests {
     /// kind's defaults.
     #[test]
     fn a_new_text_starts_bold_with_a_shadow() {
-        let text = super::starting_settings("text");
-        assert_eq!(text.get("face"), Some(&serde_json::json!("bold")));
-        assert!(text.get("shadow_color").is_some());
+        for kind in ["text", "timer"] {
+            let text = super::starting_settings(kind);
+            assert_eq!(text.get("face"), Some(&serde_json::json!("bold")), "{kind}");
+            assert!(text.get("shadow_color").is_some(), "{kind}");
+        }
         assert!(super::starting_settings("color").is_empty());
     }
 }

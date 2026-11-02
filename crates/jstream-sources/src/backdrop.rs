@@ -393,7 +393,7 @@ fn paint(size: FrameSize, look: &Look) -> Result<VideoFrame, SourceError> {
     Ok(rgba_frame(size, rgba, MediaTime::zero(Timebase::MILLIS))?)
 }
 
-fn byte(v: f32) -> u8 {
+pub(crate) fn byte(v: f32) -> u8 {
     // Clamped to 0..=255 first, so the cast is exact.
     v.round().clamp(0.0, 255.0) as u8
 }
@@ -425,12 +425,12 @@ fn encode(c: f32) -> f32 {
 
 /// [`encode`] from a table, which a frame's millions of samples need: linear light in
 /// 4096 steps, finer than 8-bit sRGB's darkest step.
-struct Encoder(Vec<f32>);
+pub(crate) struct Encoder(Vec<f32>);
 
 impl Encoder {
     const STEPS: usize = 4096;
 
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self(
             (0..=Self::STEPS)
                 .map(|i| encode(i as f32 / Self::STEPS as f32))
@@ -439,7 +439,7 @@ impl Encoder {
     }
 
     /// Linear light, clamped to 0 to 1, as sRGB, interpolated between steps.
-    fn encode(&self, c: f32) -> f32 {
+    pub(crate) fn encode(&self, c: f32) -> f32 {
         let at = c.clamp(0.0, 1.0) * Self::STEPS as f32;
         // From 0 to STEPS, so both indices are in the table.
         let i = (at as usize).min(Self::STEPS - 1);
@@ -448,13 +448,13 @@ impl Encoder {
     }
 }
 
-fn linear(rgba: [u8; 4]) -> [f32; 3] {
+pub(crate) fn linear(rgba: [u8; 4]) -> [f32; 3] {
     [decode(rgba[0]), decode(rgba[1]), decode(rgba[2])]
 }
 
 /// A number from 0 to 1 for a pixel and a seed: a fixed integer hash, so a backdrop is
 /// the same on every machine.
-fn hash(x: u32, y: u32, seed: u32) -> f32 {
+pub(crate) fn hash(x: u32, y: u32, seed: u32) -> f32 {
     let mut h = x
         .wrapping_mul(0x8da6_b343)
         .wrapping_add(y.wrapping_mul(0xd816_3841))

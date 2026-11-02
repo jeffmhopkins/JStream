@@ -63,7 +63,9 @@ on **program**, drawn on the canvas in the middle.
    Pick a type, or type in the search box to find one: display or window capture, a
    webcam, an audio input (your microphone), a media file, an image, a browser page,
    text (it starts bold with a soft shadow), a colour, a backdrop (a painted studio
-   backdrop, generated), or an audio visualiser. Name it and press **Create**
+   backdrop, generated), a shape (a plate, pill or circle, with an optional gradient),
+   a timer (a countdown or stopwatch), or an audio visualiser. Name it and press
+   **Create**
    (or pick an existing source to reuse it); its properties open, so you can choose the
    display or window from the list of those open now, the device or the file. A display,
    window or webcam shows its live picture at the top of the dialog as you pick it,

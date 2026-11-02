@@ -133,9 +133,14 @@ The server instructions end with design guidance (`design.rs`), because an agent
 build any graphic still tends to build poor ones: flat full-saturation colours, thin
 type, boxes that don't fit their text. It says what a broadcast designer would: the
 title-safe area, alignment and spacing, a `backdrop` source rather than a flat colour,
-the `text` faces, sizes, letter spacing and shadow to use, restrained colour and
-contrast, a lower-third recipe, fitting an item to its text's `source.sizes`, and
-checking each step with `video.snapshot` (building on preview when a scene is on air).
+`shape` sources sized to their boxes for plates, pills, circles and gradients, the
+`text` faces, sizes, letter spacing and shadow to use, restrained colour and contrast,
+recipes for a lower third, a ticker (`scroll` with a negative speed and a `gap_x`) and
+a countdown (`timer`), grouping a multi-part graphic as a nested scene whose item's
+effects clip and shadow it as one, fitting an item to its text's `source.sizes`,
+animating with keyframe scenes, a `move` preset, crop reveals and staggered
+`delay_ms`, and checking each step with `video.snapshot` (building on preview when a
+scene is on air).
 It names engine kinds and settings, which this crate doesn't link, so a renamed setting
 must be renamed here too. Tested by `instructions_carry_the_design_guidance`.
 

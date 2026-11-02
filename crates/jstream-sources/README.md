@@ -54,7 +54,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `set_density(d)` asks a source to draw its frames `d` times as many pixels each way
   as its own size, so an item that shows it enlarged stays sharp, and returns that own
   size, which its frames are placed at; the default is `None`, a kind whose frames are
-  their own size whatever is asked. Only `text` draws at a density (see *Kinds*).
+  their own size whatever is asked. Only `text` and `timer` draw at a density (see *Kinds*).
 - `Painter`: `paint(at)` draws the frame for `at` ahead of `frame`, for a source
   whose frames follow something live. Drawing can take milliseconds, so a host that
   asks for frames under a lock paints before taking it, when `next_change` said a
@@ -144,6 +144,19 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   source. The frame must also fit the decoded-memory cap: 16384x16384 RGBA is exactly
   1 GiB, so the default cap allows every size the descriptor does, and a lower cap
   makes `create` fail naming the larger side.
+- `shape`: a `shape` (`rectangle` or `ellipse`) drawn at exactly `width` by `height`
+  pixels, transparent around it, for plates, bars, chips, pills, badges and dots. A
+  rectangle's corners round by `radius`, clamped to half the shorter side, which makes a
+  pill; an ellipse fills the frame, a circle when it is square. `fill` is `solid`
+  (`color`), `linear` (from `color` to `color2` along `angle`: 0 runs left to right, 90
+  top to bottom, its ends on the frame's extent that way) or `radial` (`color` at the
+  centre to `color2` at the inscribed ellipse). `border_width` draws `border_color`
+  inside the edge. Coverage comes from a signed distance (for an ellipse, its implicit
+  function over its gradient's length), so edges antialias over a pixel. Colours mix
+  premultiplied in linear light, so a gradient into a transparent colour keeps its hue,
+  and are dithered to 8 bits. Every setting is live, the size too: an update draws the
+  frame again. Unlike `color`, a shape is meant to be drawn at its item's box, so no
+  `fit` letterboxes it.
 - `image`: the `file` asset, decoded whole when the source is created. The format is
   told from the file's first bytes, not its extension. PNG (first image only; an APNG
   plays as its still) through `png`, JPEG through `zune-jpeg`, WebP (still or
@@ -189,7 +202,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   and background are blended on sRGB values, not in linear light. The frame must fit
   `Limits`: its sides within `max_side`, and its working memory (8 bytes a pixel, 4
   more with an outline and 8 more with a shadow) within `max_decoded_bytes`; otherwise `create` or `update` fails
-  naming `text`. It is the one kind that draws at a density
+  naming `text`. It draws at a density (as `timer` does, the same way)
   ([ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)):
   `set_density(d)` draws the same layout with every length (the em size, the glyphs'
   positions, the outline, the padding, the shadow) multiplied by `d`, so the frame has `d` times the
@@ -199,6 +212,16 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   ([ADR-0079](../../docs/adr/0079-text-density-bounded-by-pixels.md)); one whose frame
   would still be over the limits is halved until it fits, down to 1. An update draws at
   the density set last, lowered the same way.
+- `timer`: a countdown or stopwatch drawn as `text` draws (every `text` setting but
+  `text` itself), redrawn when the time it shows changes, once a second. It counts on
+  the media clock from the first frame asked for after it starts, or after an update
+  that changes `mode` or `duration`; any other update keeps counting. A `countdown`
+  shows the seconds left of `duration`, rounded up (05:00 at the start, 00:00 at the
+  end), then `end_text` when that isn't empty, and `next_change` is `None` from then;
+  a `stopwatch` shows the whole seconds since its start. `format` writes `auto`
+  (`mm:ss`, or `h:mm:ss` from an hour), `mm:ss` (minutes past an hour keep counting) or
+  `hh:mm:ss`. Every setting but `font` is live, and it draws at a density as `text`
+  does. It has no time of day: that needs the machine's time zone.
 - `display` and `window`: what the platform captures, by the `target` setting, a
   capture-backend target ID (on Windows `monitor:` and the display's GDI device name, or
   `hwnd:0x` and the window handle). An empty `display` target is the primary display,
@@ -462,7 +485,16 @@ alignment, padding, outline, live updates, font assets and limits, drawing at a
 density (twice the pixels for the same extent, kept across an update, clamped to
 `MAX_DENSITY`, lowered to a 4K canvas's pixels, halved to fit the limits, and a short
 line filling the canvas drawn at the 13x it is shown at, a bundled face picked live, letter spacing widening a line, and a shadow growing the frame but not the background), plus golden PNGs in `tests/data/text`, one of
-them the styled text at a density of 2^0.75 (`JSTREAM_BLESS=1` rewrites them). `tests/backdrop.rs` checks the backdrop's descriptor (all but the size live), that a backdrop is opaque and the same for the same settings, that the light and vignette brighten its pool and darken its edges, that the style and texture set how much it mottles, and that a look changes live while a new size restarts it. The scope's unit tests check the
+them the styled text at a density of 2^0.75 (`JSTREAM_BLESS=1` rewrites them). `tests/backdrop.rs` checks the backdrop's descriptor (all but the size live), that a backdrop is opaque and the same for the same settings, that the light and vignette brighten its pool and darken its edges, that the style and texture set how much it mottles, and that a look changes live while a new size restarts it. `tests/shape.rs` draws a
+rectangle at its exact size, a pill whose corners are clear and whose edge is
+antialiased, a circle that is symmetric, linear gradients that run their angle without
+banding and mix in linear light, a radial one, and a border inside the edge, and
+checks that every setting is live. `tests/timer.rs` compares a countdown's and a
+stopwatch's frames with text drawn by the `text` kind, second by second: rounding,
+`end_text`, `next_change`, a style update that keeps counting and a mode change that
+restarts it. The unit tests check the shape's distances (a rectangle's, a pill's
+corner, an ellipse's axes) and premultiplied mixing, and the timer's text in every
+mode and format. The scope's unit tests check the
 ring (latest window, wrap-around, and a reader racing a writer never seeing a torn
 window), the frame ticks and easing, and draw both kinds from known audio: each
 waveform column's range, the dB scale, a tone lighting its own spectrum bar, every

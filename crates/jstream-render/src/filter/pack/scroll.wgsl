@@ -1,26 +1,36 @@
 // Scroll: the picture moved by `offset` pixels (right and down are positive), sampled
 // bilinearly by hand so a looping axis wraps across its seam and a non-looping axis
-// reads transparent past the edge.
+// reads transparent past the edge. A looping axis repeats every size plus `gap` pixels,
+// the gap transparent.
 
 struct Params {
     // Pixels, already wrapped to the image on a looping axis.
     offset: vec2<f32>,
     loop_x: f32,
     loop_y: f32,
+    // Transparent pixels between repeats on a looping axis.
+    gap: vec2<f32>,
 }
 
 @group(0) @binding(4) var<uniform> p: Params;
 
 fn fetch(px: vec2<i32>) -> vec4<f32> {
     let size = vec2<i32>(frame.in_size);
+    let period = size + vec2<i32>(p.gap);
     var q = px;
     if (p.loop_x > 0.5) {
-        q.x = ((q.x % size.x) + size.x) % size.x;
+        q.x = ((q.x % period.x) + period.x) % period.x;
+        if (q.x >= size.x) {
+            return vec4<f32>(0.0);
+        }
     } else if (q.x < 0 || q.x >= size.x) {
         return vec4<f32>(0.0);
     }
     if (p.loop_y > 0.5) {
-        q.y = ((q.y % size.y) + size.y) % size.y;
+        q.y = ((q.y % period.y) + period.y) % period.y;
+        if (q.y >= size.y) {
+            return vec4<f32>(0.0);
+        }
     } else if (q.y < 0 || q.y >= size.y) {
         return vec4<f32>(0.0);
     }

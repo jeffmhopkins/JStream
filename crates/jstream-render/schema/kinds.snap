@@ -927,6 +927,28 @@ source: crates/jstream-render/tests/kinds.rs
         "default": true,
         "label": "Loop vertically",
         "live": true
+      },
+      {
+        "id": "gap_x",
+        "type": "float",
+        "min": 0.0,
+        "max": 4096.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Horizontal gap",
+        "description": "Transparent pixels between repeats when looping horizontally, so a ticker's last item doesn't run into its first.",
+        "live": true
+      },
+      {
+        "id": "gap_y",
+        "type": "float",
+        "min": 0.0,
+        "max": 4096.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Vertical gap",
+        "description": "Transparent pixels between repeats when looping vertically.",
+        "live": true
       }
     ]
   },
