@@ -1,7 +1,8 @@
 //! The `text` kind through the public API.
 //!
-//! Every test draws with the bundled font, `assets/fonts/Roboto-Regular-subset.ttf`
-//! (Apache-2.0; the crate README's "Bundled font" says how it was made). The golden
+//! Every test draws with the bundled fonts, `assets/fonts/Roboto-Regular-subset.ttf`
+//! unless it picks another `face` (Apache-2.0; the crate README's "Bundled fonts" says
+//! how they were made). The golden
 //! tests compare against PNGs in `tests/data/text`; run them with `JSTREAM_BLESS=1` to
 //! rewrite those after a deliberate change, and look at the new images before
 //! committing them.
@@ -208,6 +209,7 @@ fn the_descriptor_marks_everything_but_the_font_live() {
         [
             ("text", true),
             ("font", false),
+            ("face", true),
             ("size", true),
             ("color", true),
             ("align", true),
@@ -216,6 +218,11 @@ fn the_descriptor_marks_everything_but_the_font_live() {
             ("outline_color", true),
             ("background", true),
             ("padding", true),
+            ("letter_spacing", true),
+            ("shadow_color", true),
+            ("shadow_x", true),
+            ("shadow_y", true),
+            ("shadow_blur", true),
         ]
     );
     assert!(kind.video && !kind.audio);
@@ -573,4 +580,111 @@ fn the_extent_is_the_size_at_a_density_of_1() {
             }
         }
     }
+}
+
+/// #1020: the bundled faces. Bold draws heavier and wider than regular, condensed bold
+/// narrower than bold, and the face is live: an update swaps it without a restart.
+#[test]
+fn a_bundled_face_is_picked_live() {
+    let text = ("text", json!("BREAKING NEWS"));
+    let ink_of =
+        |frame: &VideoFrame| -> u64 { pixels(frame).iter().map(|p| u64::from(p[3])).sum() };
+    let regular = draw(std::slice::from_ref(&text));
+    let bold = draw(&[text.clone(), ("face", json!("bold"))]);
+    let condensed = draw(&[text.clone(), ("face", json!("condensed_bold"))]);
+    assert!(size(&bold).0 > size(&regular).0, "bold is wider");
+    assert!(size(&condensed).0 < size(&bold).0, "condensed is narrower");
+    assert!(ink_of(&bold) > ink_of(&regular) * 5 / 4, "bold is heavier");
+
+    let registry = Registry::builtin();
+    let kind = registry.descriptor("text").expect("the text kind");
+    let old = settings(std::slice::from_ref(&text));
+    let new = settings(&[text.clone(), ("face", json!("bold"))]);
+    assert!(!needs_restart(kind, &old, &new));
+    let mut source = registry
+        .create("text", &old, &Context::default())
+        .expect("a source");
+    source.update(&new).expect("a live update");
+    assert_eq!(
+        pixels(&source.frame(ms(0)).expect("a frame")),
+        pixels(&bold)
+    );
+    assert!(matches!(
+        source.update(&settings(&[("face", json!("italic"))])),
+        Err(SourceError::Setting { param, .. }) if param == "face"
+    ));
+}
+
+/// #1020: `letter_spacing` adds that many pixels between characters, so a line of `n`
+/// characters grows by `(n - 1)` times it, and the space after the last one isn't drawn.
+#[test]
+fn letter_spacing_spreads_the_characters() {
+    let text = ("text", json!("ABCD"));
+    let plain = size(&draw(std::slice::from_ref(&text))).0;
+    let wide = size(&draw(&[text.clone(), ("letter_spacing", json!(10.0))])).0;
+    let tight = size(&draw(&[text.clone(), ("letter_spacing", json!(-4.0))])).0;
+    assert!(
+        (i64::from(wide) - i64::from(plain) - 30).abs() <= 1,
+        "{plain} → {wide}"
+    );
+    assert!(
+        (i64::from(plain) - i64::from(tight) - 12).abs() <= 1,
+        "{plain} → {tight}"
+    );
+}
+
+/// #1020: a shadow is drawn under the fill, offset and blurred, in a transparent margin
+/// the frame grows by, while the background keeps to the text box. A transparent shadow
+/// draws exactly what no shadow did.
+#[test]
+fn a_shadow_grows_the_frame_but_not_the_background() {
+    let base = [
+        ("text", json!("Hi")),
+        ("background", json!("#0000ffff")),
+        ("padding", json!(4)),
+    ];
+    let plain = draw(&base);
+    let hidden = draw(&[
+        base[0].clone(),
+        base[1].clone(),
+        base[2].clone(),
+        ("shadow_x", json!(12.0)),
+        ("shadow_blur", json!(6.0)),
+    ]);
+    assert_eq!(
+        pixels(&plain),
+        pixels(&hidden),
+        "a transparent shadow draws nothing"
+    );
+
+    let shadowed = draw(&[
+        base[0].clone(),
+        base[1].clone(),
+        base[2].clone(),
+        ("shadow_color", json!("#ff0000ff")),
+        ("shadow_x", json!(12.0)),
+        ("shadow_y", json!(30.0)),
+        ("shadow_blur", json!(6.0)),
+    ]);
+    let ((pw, ph), (sw, sh)) = (size(&plain), size(&shadowed));
+    assert!(sw > pw && sh > ph, "{pw}x{ph} → {sw}x{sh}");
+    let px = pixels(&shadowed);
+    // The background still fills the text box at the top left, unchanged.
+    assert_eq!(px[0], [0, 0, 255, 255]);
+    assert_eq!(px[(ph as usize - 1) * sw as usize], [0, 0, 255, 255]);
+    // Past the box, only the shadow draws: red, with no blue.
+    let margin: Vec<[u8; 4]> = px
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| *i as u32 % sw >= pw || *i as u32 / sw >= ph)
+        .map(|(_, p)| *p)
+        .collect();
+    assert!(
+        margin.iter().any(|p| p[3] > 0),
+        "the shadow shows past the box"
+    );
+    assert!(
+        margin.iter().all(|p| p[2] == 0 || p[3] == 0),
+        "no background past the box"
+    );
 }

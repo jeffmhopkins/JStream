@@ -252,6 +252,166 @@ source: crates/jstream-core/src/kinds.rs
     ]
   },
   {
+    "kind_id": "backdrop",
+    "category": "source",
+    "name": "Backdrop",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "style",
+        "type": "enum",
+        "options": [
+          {
+            "value": "canvas",
+            "label": "Painted canvas"
+          },
+          {
+            "value": "muslin",
+            "label": "Muslin"
+          },
+          {
+            "value": "paper",
+            "label": "Seamless paper"
+          }
+        ],
+        "default": "canvas",
+        "label": "Style",
+        "description": "Painted canvas has brushy, broken mottling; muslin softer, larger clouds; seamless paper is a smooth sweep with almost none.",
+        "live": true
+      },
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": false,
+        "default": "#56697f",
+        "label": "Colour",
+        "description": "The backdrop's main colour, where the light falls.",
+        "live": true
+      },
+      {
+        "id": "accent",
+        "type": "color",
+        "alpha": false,
+        "default": "#202c3a",
+        "label": "Accent",
+        "description": "The second colour mottled in. A darker or shifted shade of Colour looks most like paint.",
+        "live": true
+      },
+      {
+        "id": "texture",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.6,
+        "label": "Texture",
+        "description": "How strongly the two colours mottle. 0 is a plain gradient.",
+        "live": true
+      },
+      {
+        "id": "scale",
+        "type": "float",
+        "min": 0.25,
+        "max": 4.0,
+        "step": 0.05,
+        "default": 1.0,
+        "label": "Scale",
+        "description": "The size of the mottling: above 1 is larger clouds.",
+        "live": true
+      },
+      {
+        "id": "light",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.6,
+        "label": "Light",
+        "description": "How bright the pool of light is.",
+        "live": true
+      },
+      {
+        "id": "light_x",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.5,
+        "label": "Light X",
+        "description": "Where the light falls, from the left edge (0) to the right (1).",
+        "live": true
+      },
+      {
+        "id": "light_y",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.42,
+        "label": "Light Y",
+        "description": "Where the light falls, from the top (0) to the bottom (1).",
+        "live": true
+      },
+      {
+        "id": "vignette",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.5,
+        "label": "Vignette",
+        "description": "How much the edges and corners fall off into shadow.",
+        "live": true
+      },
+      {
+        "id": "grain",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.35,
+        "label": "Grain",
+        "description": "Film grain over everything.",
+        "live": true
+      },
+      {
+        "id": "seed",
+        "type": "int",
+        "min": 0,
+        "max": 999999,
+        "step": 1,
+        "default": 1,
+        "label": "Seed",
+        "description": "Another number draws another backdrop with the same look.",
+        "live": true
+      },
+      {
+        "id": "width",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 1920,
+        "label": "Width",
+        "live": false
+      },
+      {
+        "id": "height",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 1080,
+        "label": "Height",
+        "live": false
+      }
+    ]
+  },
+  {
     "kind_id": "blur",
     "category": "video_filter",
     "name": "Blur",
@@ -1710,6 +1870,28 @@ source: crates/jstream-core/src/kinds.rs
         "live": false
       },
       {
+        "id": "face",
+        "type": "enum",
+        "options": [
+          {
+            "value": "regular",
+            "label": "Regular"
+          },
+          {
+            "value": "bold",
+            "label": "Bold"
+          },
+          {
+            "value": "condensed_bold",
+            "label": "Condensed bold"
+          }
+        ],
+        "default": "regular",
+        "label": "Face",
+        "description": "The bundled face drawn while Font is none. A font file ignores it.",
+        "live": true
+      },
+      {
         "id": "size",
         "type": "float",
         "min": 1.0,
@@ -1797,6 +1979,61 @@ source: crates/jstream-core/src/kinds.rs
         "unit": "px",
         "default": 0,
         "label": "Padding",
+        "live": true
+      },
+      {
+        "id": "letter_spacing",
+        "type": "float",
+        "min": -200.0,
+        "max": 200.0,
+        "step": 0.5,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Letter spacing",
+        "description": "Added after every character. Negative draws them closer.",
+        "live": true
+      },
+      {
+        "id": "shadow_color",
+        "type": "color",
+        "alpha": true,
+        "default": "#00000000",
+        "label": "Shadow colour",
+        "description": "The text's shadow, drawn under its outline and fill. Fully transparent draws none.",
+        "live": true
+      },
+      {
+        "id": "shadow_x",
+        "type": "float",
+        "min": -200.0,
+        "max": 200.0,
+        "step": 1.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Shadow X",
+        "live": true
+      },
+      {
+        "id": "shadow_y",
+        "type": "float",
+        "min": -200.0,
+        "max": 200.0,
+        "step": 1.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Shadow Y",
+        "live": true
+      },
+      {
+        "id": "shadow_blur",
+        "type": "float",
+        "min": 0.0,
+        "max": 100.0,
+        "step": 1.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Shadow blur",
+        "description": "How far the shadow's edge spreads, softening.",
         "live": true
       }
     ]

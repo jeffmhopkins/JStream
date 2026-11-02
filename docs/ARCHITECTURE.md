@@ -967,6 +967,11 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 - Every agent action goes to the audit log with the client's name, and the last 100
   are readable over the protocol (`activity.list`, ADR-0083) for the UI's Agent activity
   panel. Undo is per client, so an agent can never undo the user's work.
+- **Design guidance:** the server instructions end with how to build graphics that look
+  finished (the title-safe area, backdrops, type, colour, a lower-third recipe, fitting
+  boxes to text, and checking each step with `video.snapshot`), since what an agent
+  builds is only as good as its choices
+  ([jstream-mcp › Design](../crates/jstream-mcp/README.md#design)).
 
 <a id="gpu-pipeline"></a>
 ## GPU pipeline

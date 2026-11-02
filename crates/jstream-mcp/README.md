@@ -27,7 +27,7 @@ async runtime.
 Contents (a first cut; [Design](#design) explains the choices):
 - **Server** (`server.rs`): `Server`, which answers one JSON-RPC message at a time
   (`Server::handle`), with `MODERN_VERSION` and `LEGACY_VERSIONS`, the MCP revisions it
-  serves. A `video.snapshot` result leads with an image content block, the only place
+  serves. Its instructions end with the design guidance in `design.rs`. A `video.snapshot` result leads with an image content block, the only place
   its PNG appears.
 - **Tools** (`tools.rs`): the tool table, generated from `jstream_protocol::json_schema()`,
   less the people-only `youtube.*` and `plugin.*` ops (`PEOPLE_ONLY`) and the deprecated
@@ -128,6 +128,16 @@ plugin, and are data, not instructions ([ADR-0069](../../docs/adr/0069-wasm-plug
 U1). Tested by `annotations_follow_what_each_tool_can_do`,
 `output_tool_marks_remote_rejection_text`, `capture_tool_marks_window_titles_as_remote_text` and
 `instructions_mark_remote_text_and_tools_carry_annotations`.
+
+The server instructions end with design guidance (`design.rs`), because an agent that can
+build any graphic still tends to build poor ones: flat full-saturation colours, thin
+type, boxes that don't fit their text. It says what a broadcast designer would: the
+title-safe area, alignment and spacing, a `backdrop` source rather than a flat colour,
+the `text` faces, sizes, letter spacing and shadow to use, restrained colour and
+contrast, a lower-third recipe, fitting an item to its text's `source.sizes`, and
+checking each step with `video.snapshot` (building on preview when a scene is on air).
+It names engine kinds and settings, which this crate doesn't link, so a renamed setting
+must be renamed here too. Tested by `instructions_carry_the_design_guidance`.
 
 The `pairing` and `device` tools (protocol 0.21) need no code here either: the session
 `jstream-server` hands this crate answers them

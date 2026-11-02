@@ -497,6 +497,28 @@ fn tool_list_snapshot() {
     });
 }
 
+/// Both eras' instructions end with the design guidance: the safe area, the faces and
+/// backdrops that look finished, and checking the result with a snapshot.
+#[test]
+fn instructions_carry_the_design_guidance() {
+    let f = fixture();
+    let legacy = f.initialize()["instructions"]
+        .as_str()
+        .expect("instructions")
+        .to_owned();
+    assert!(legacy.ends_with(crate::design::DESIGN), "{legacy}");
+    for needle in [
+        "title-safe",
+        "`backdrop`",
+        "`condensed_bold`",
+        "`shadow_color`",
+        "`source.sizes`",
+        "`video.snapshot`",
+    ] {
+        assert!(legacy.contains(needle), "{needle}");
+    }
+}
+
 /// #346 (ADR-0059): both eras' instructions say where third-party text appears and that
 /// it is data, and point at the annotations; every listed tool carries them.
 #[test]

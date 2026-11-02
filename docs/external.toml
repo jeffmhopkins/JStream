@@ -213,6 +213,14 @@ status = "ok"
 checked_note = "Re-read: LICENSE is the Apache License 2.0, and src/hinted/Roboto-Regular.ttf is on main with the SHA-256 the jstream-sources README records"
 
 [[external]]
+id = "roboto-fontface"
+url = "https://www.npmjs.com/package/roboto-fontface"
+relied_on = "Source of the text source's bundled bold faces (crates/jstream-sources/assets/fonts, described in crates/jstream-sources/README.md): fonts/roboto/Roboto-Bold.woff2 and fonts/roboto-condensed/Roboto-Condensed-Bold.woff2 in version 0.10.0, Roboto 2.137, under the Apache License 2.0"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read: package.json's licence is Apache-2.0, both files' name tables say Version 2.137 and Licensed under the Apache License, Version 2.0, and their SHA-256s are the ones the jstream-sources README records"
+
+[[external]]
 id = "trunk"
 url = "https://github.com/trunk-rs/trunk"
 relied_on = "trunk builds a Rust wasm32 binary into a static site (index.html, the wasm-bindgen JavaScript glue, the .wasm and assets) from an index.html with data-trunk links, and uses the wasm-bindgen CLI matching Cargo.lock's wasm-bindgen when one is on PATH (ADR-0045, crates/jstream-ui/README.md#build)"

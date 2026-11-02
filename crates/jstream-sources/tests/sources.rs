@@ -86,6 +86,7 @@ fn the_registry_describes_every_builtin_kind_in_order() {
         [
             "app_audio",
             "audio_input",
+            "backdrop",
             "browser",
             "chat_message",
             "color",

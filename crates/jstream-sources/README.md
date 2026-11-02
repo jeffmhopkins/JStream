@@ -127,6 +127,18 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `spectrum` draws, for the engine to feed.
 
 **Kinds.**
+- `backdrop`: a generated studio backdrop, like the painted canvas, muslin or seamless
+  paper a photographer hangs behind a subject, `width` by `height` pixels and opaque.
+  `style` (`canvas`, `muslin` or `paper`) sets how the two colours, `color` and
+  `accent`, mottle: domain-warped fractal gradient noise, with smaller dabs on a
+  canvas, worked out on a grid 4 pixels coarse and interpolated. `texture` scales the
+  mottle and `scale` its size; `light`, `light_x` and `light_y` place a soft pool of
+  light; `vignette` darkens the edges; a fine fibre noise and `grain` go over
+  everything, and the frame is dithered to 8 bits so smooth sweeps don't band. Colours
+  mix and light in linear light. The same settings always draw the same picture
+  (integer hashes, no platform randomness), and `seed` picks another. Every setting but
+  the size is live; an update draws the frame again on the sources thread, about a
+  third of a second for 1080p in a release build.
 - `color`: one frame of the `color` setting (`#rrggbb` or `#rrggbbaa`, straight
   alpha), `width` by `height` pixels. The colour is live; a size change needs a new
   source. The frame must also fit the decoded-memory cap: 16384x16384 RGBA is exactly
@@ -151,28 +163,36 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   *Audio sources*). Both settings are free text rather than a list of what is present,
   so a collection naming an unplugged device still loads.
 - `text`: the `text` string drawn with the `font` asset (TrueType or OpenType, or the
-  first font of a collection), or with the bundled font when it is `null`. Fonts are
+  first font of a collection), or with the bundled face `face` names when it is `null`
+  (`regular`, `bold` or `condensed_bold`; see *Bundled fonts*). Fonts are
   read with `skrifa` and glyph outlines rasterised with `ab_glyph_rasterizer`, unhinted.
   `size` is the em size in pixels, as CSS's `font-size`. Lines break at `\n`; with a
   `wrap_width` above 0 they also wrap at spaces, and a word wider than the wrap breaks
-  inside the word. The line box is as wide as the widest line, or `wrap_width` when it
-  wraps, and `align` places each line within it. `outline_width` grows the glyphs by
-  that many pixels in `outline_color`, drawn under the fill; `background` fills the
-  whole frame, which is the line box plus `padding` on every side, grown to fit any
-  glyph ink or outline that reaches past it. Every setting but `font` is live: an update
-  redraws the frame, and a new font needs a new source. There is no shaping and no
+  inside the word. `letter_spacing` adds that many pixels after every character
+  (negative draws them closer), though not after a line's last. The line box is as
+  wide as the widest line, or `wrap_width` when it wraps, and `align` places each line
+  within it. `outline_width` grows the glyphs by that many pixels in `outline_color`,
+  drawn under the fill; `background` fills the line box plus `padding` on every side,
+  grown to fit any glyph ink or outline that reaches past it. A shadow (`shadow_color`;
+  fully transparent, the default, draws none) is the ink with its outline, moved by
+  `shadow_x` and `shadow_y` and blurred by `shadow_blur` (CSS's blur radius: twice a
+  Gaussian's standard deviation, approximated by three box blurs each way), drawn over
+  the background and under the outline and fill. The frame grows to hold it, and that
+  margin stays transparent: the background keeps to its box. Every setting but `font`
+  is live: an update redraws the frame (swapping the bundled face when `face` changes),
+  and a new font needs a new source. There is no shaping and no
   kerning: each character is its font's glyph for that code point, placed by its
   advance, so kerning, ligatures, complex scripts and right-to-left text need a shaper
   later. A character the font lacks draws its `.notdef` box; tabs draw as one space and
   other control characters are dropped. The outline comes from an exact Euclidean
   distance transform of the fill, so its cost doesn't grow with its width. Fill, outline
   and background are blended on sRGB values, not in linear light. The frame must fit
-  `Limits`: its sides within `max_side`, and its working memory (8 bytes a pixel, 12
-  with an outline) within `max_decoded_bytes`; otherwise `create` or `update` fails
+  `Limits`: its sides within `max_side`, and its working memory (8 bytes a pixel, 4
+  more with an outline and 8 more with a shadow) within `max_decoded_bytes`; otherwise `create` or `update` fails
   naming `text`. It is the one kind that draws at a density
   ([ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)):
   `set_density(d)` draws the same layout with every length (the em size, the glyphs'
-  positions, the outline, the padding) multiplied by `d`, so the frame has `d` times the
+  positions, the outline, the padding, the shadow) multiplied by `d`, so the frame has `d` times the
   pixels each way and stands for the same size, which `set_density` returns and the
   engine places it at. Densities run from 1 to `MAX_DENSITY` (32), lowered to the
   highest whose frame holds at most a 4K canvas's pixels and is at most 8192 each way
@@ -352,12 +372,24 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
 
 Every frame is packed `Rgba8` with straight alpha, sRGB, full range.
 
-**Bundled font.** `assets/fonts/Roboto-Regular-subset.ttf` is the text source's
-default font and the one its tests draw with: Roboto Regular by Google, under the
-Apache License 2.0 (`assets/fonts/LICENSE-Roboto.txt`). It was cut from
-`src/hinted/Roboto-Regular.ttf` in [googlefonts/roboto](https://github.com/googlefonts/roboto)
-(Roboto 2.001047, SHA-256
-`56a45233d29f11b4dfb86d248e921939d115778f87325e7ae8cc108383d6664d`) with fontTools 4.67:
+**Bundled fonts.** Three Latin subsets of Roboto by Google, under the Apache License
+2.0 (`assets/fonts/LICENSE-Roboto.txt`), are the text source's faces while `font` is
+`null`; `chat_message` draws with the regular one, and the tests draw with all three.
+
+- `assets/fonts/Roboto-Regular-subset.ttf` (`face` `regular`, the default) was cut from
+  `src/hinted/Roboto-Regular.ttf` in [googlefonts/roboto](https://github.com/googlefonts/roboto)
+  (Roboto 2.001047, SHA-256
+  `56a45233d29f11b4dfb86d248e921939d115778f87325e7ae8cc108383d6664d`).
+- `assets/fonts/Roboto-Bold-subset.ttf` (`bold`) and
+  `assets/fonts/RobotoCondensed-Bold-subset.ttf` (`condensed_bold`) were cut from
+  `fonts/roboto/Roboto-Bold.woff2` and `fonts/roboto-condensed/Roboto-Condensed-Bold.woff2`
+  in the [roboto-fontface](https://www.npmjs.com/package/roboto-fontface) package 0.10.0
+  (Roboto 2.137, Apache-2.0; SHA-256
+  `8e44376b735dcc9027acbcc8a0df64c3f886a23529eff27b022f344d719e90f2` and
+  `427b7abb7c2f9fda9abd3c60553314237e300f8366c9ec3575cb033c811c1f00`), unpacked with
+  `fonttools ttLib.woff2 decompress`.
+
+Each was cut with fontTools 4.67:
 
 ```sh
 fonttools subset Roboto-Regular.ttf \
@@ -366,7 +398,7 @@ fonttools subset Roboto-Regular.ttf \
   --name-IDs='*' --notdef-outline --output-file=Roboto-Regular-subset.ttf
 ```
 
-The subset keeps Basic Latin, Latin-1, Latin Extended-A, common punctuation, the euro
+Each subset keeps Basic Latin, Latin-1, Latin Extended-A, common punctuation, the euro
 and trademark signs and the replacement character, about 22 KB. Hinting and the
 OpenType layout tables are dropped, because the text source neither hints nor shapes.
 The name table, which carries the copyright and licence notice, is kept whole. Text in

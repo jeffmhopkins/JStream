@@ -325,7 +325,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   source kinds `kind.list` reports, under the prototype's groups, names, icons and
   descriptions, plus the kinds of placed sources it didn't report, which can be
   placed again but not created, and Scene. "Create new" sends `source.create` and
-  `item.add` as one batch, with a box of the prototype's native size for the type,
+  `item.add` as one batch (a new `text` starting bold with a soft shadow,
+  `starting_settings`, over its kind's plain defaults), with a box of the prototype's native size for the type,
   centred and scaled down to fit the canvas (ADR-0022's `fit` keeps the picture's
   aspect within it). An existing source is placed again 40 pixels right of and below
   its first placement, or, placed nowhere, at its own size when the engine reports one

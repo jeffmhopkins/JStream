@@ -6,7 +6,7 @@ use crate::color::rgba_frame;
 use crate::describe::{asset, kind, param};
 use crate::source::{self, changed_non_live, setting};
 use crate::text::raster::{render, stack};
-use crate::text::{Align, DEFAULT_FONT, Style, bad, color, parse, pixels};
+use crate::text::{Align, DEFAULT_FONT, Shadow, Style, bad, color, parse, pixels};
 use crate::{Context, Limits, Painter, Source, SourceError, SourceKind};
 use jstream_media::{FrameSize, MediaTime, Timebase, VideoFrame};
 use jstream_protocol::{KindDescriptor, ParamDescriptor, ParamType, Settings};
@@ -369,6 +369,8 @@ fn draw(
         outline_color: color(settings, "outline_color")?,
         background: [0; 4],
         padding: 0,
+        letter_spacing: 0.0,
+        shadow: Shadow::default(),
     };
     let author_color = color(settings, "author_color")?;
     let background = color(settings, "background")?;

@@ -81,11 +81,11 @@ pub(crate) fn render(
             })
             .map(|c| {
                 let id = charmap.map(c).unwrap_or(GlyphId::NOTDEF);
-                (id, advance(id), c == ' ')
+                (id, advance(id) + style.letter_spacing, c == ' ')
             })
             .collect();
         for range in wrap_lines(&glyphs, wrap) {
-            lines.push(place(&glyphs[range]));
+            lines.push(place(&glyphs[range], style.letter_spacing));
         }
     }
     let widest = lines.iter().map(|(_, w)| *w).fold(0.0, f32::max);
@@ -129,8 +129,9 @@ pub(crate) fn render(
     let plain = pens(1.0);
 
     // The frame holds the text box with its padding, and every glyph's ink with the
-    // outline around it, which may reach past the box. Its bounds are whole pixels at a
-    // density of 1, its extent, and the drawing covers them `k` times over.
+    // outline around it, which may reach past the box: the background fills that much.
+    // A shadow may reach past it again, over a transparent margin. Its bounds are whole
+    // pixels at a density of 1, its extent, and the drawing covers them `k` times over.
     let pad = style.padding as f32;
     let reach = style.outline_width as f32;
     let (mut left, mut top) = (-pad, -pad);
@@ -140,6 +141,18 @@ pub(crate) fn render(
         top = top.min(glyph.min.y - reach);
         right = right.max(glyph.max.x + reach);
         bottom = bottom.max(glyph.max.y + reach);
+    }
+    let plate = [left.floor(), top.floor(), right.ceil(), bottom.ceil()];
+    let shadow = style.shadow;
+    if shadow.shows() {
+        // Three standard deviations of the blur, which is twice one.
+        let spread = reach + 1.5 * shadow.blur;
+        for glyph in &plain {
+            left = left.min(glyph.min.x - spread + shadow.x);
+            top = top.min(glyph.min.y - spread + shadow.y);
+            right = right.max(glyph.max.x + spread + shadow.x);
+            bottom = bottom.max(glyph.max.y + spread + shadow.y);
+        }
     }
     let (left, top) = (left.floor(), top.floor());
     let extent = FrameSize::new(
@@ -154,11 +167,21 @@ pub(crate) fn render(
     let dense = (k != 1.0).then(|| pens(k));
     let width = side((extent.width() as f32 * k).ceil(), limits)?;
     let height = side((extent.height() as f32 * k).ceil(), limits)?;
+    // The background's rectangle in frame pixels, rounded outward as the frame's own
+    // sides are: all of the frame without a shadow.
+    let plate = [
+        ((plate[0] - left) * k).floor() as usize,
+        ((plate[1] - top) * k).floor() as usize,
+        ((plate[2] - left) * k).ceil() as usize,
+        ((plate[3] - top) * k).ceil() as usize,
+    ];
     let (left, top) = (left * k, top * k);
     let reach = reach * k;
-    // The output and the fill coverage, and with an outline its distance field. The
-    // distance transform's working rows and each glyph's raster are smaller.
-    let per_pixel: u64 = if style.outline_width > 0 { 12 } else { 8 };
+    // The output and the fill coverage, with an outline its distance field, and with a
+    // shadow its two working planes. The distance transform's working rows and each
+    // glyph's raster are smaller.
+    let per_pixel: u64 =
+        8 + if style.outline_width > 0 { 4 } else { 0 } + if shadow.shows() { 8 } else { 0 };
     let pixels = u64::from(width) * u64::from(height);
     if pixels * per_pixel > limits.max_decoded_bytes {
         return Err(too_large(width, height));
@@ -170,11 +193,24 @@ pub(crate) fn render(
         glyph.draw(&mut fill, w, h, point(left, top));
     }
     let outline = (style.outline_width > 0).then(|| outline(&fill, w, h, reach));
+    let shade = shadow.shows().then(|| {
+        let ink: Vec<f32> = match &outline {
+            Some(outline) => fill.iter().zip(outline).map(|(f, o)| f.max(*o)).collect(),
+            None => fill.clone(),
+        };
+        let offset = ((shadow.x * k).round() as i64, (shadow.y * k).round() as i64);
+        blurred(&ink, w, h, offset, shadow.blur / 2.0 * k)
+    });
 
     let mut rgba = Vec::with_capacity(w * h * 4);
     let background = premultiplied(style.background, 1.0);
     for (i, &coverage) in fill.iter().enumerate() {
-        let mut px = background;
+        let (x, y) = (i % w, i / w);
+        let inside = (plate[0]..plate[2]).contains(&x) && (plate[1]..plate[3]).contains(&y);
+        let mut px = if inside { background } else { [0.0; 4] };
+        if let Some(shade) = &shade {
+            px = over(premultiplied(shadow.color, shade[i]), px);
+        }
         if let Some(outline) = &outline {
             px = over(premultiplied(style.outline_color, outline[i]), px);
         }
@@ -225,19 +261,20 @@ fn wrap_lines(glyphs: &[(GlyphId, f32, bool)], wrap: Option<f32>) -> Vec<Range<u
 }
 
 /// The glyphs of one line with their x positions from the line's start, and the line's
-/// width without its trailing spaces.
-fn place(glyphs: &[(GlyphId, f32, bool)]) -> (Vec<(GlyphId, f32)>, f32) {
+/// width without its trailing spaces or the `spacing` after its last character (each
+/// advance already holds it).
+fn place(glyphs: &[(GlyphId, f32, bool)], spacing: f32) -> (Vec<(GlyphId, f32)>, f32) {
     let mut x = 0.0;
-    let mut width = 0.0;
+    let mut width: f32 = 0.0;
     let mut placed = Vec::with_capacity(glyphs.len());
     for &(id, advance, space) in glyphs {
         placed.push((id, x));
         x += advance;
         if !space {
-            width = x;
+            width = x - spacing;
         }
     }
-    (placed, width)
+    (placed, width.max(0.0))
 }
 
 /// One segment of a glyph's outline, in frame pixels with y down.
@@ -380,6 +417,87 @@ fn too_large(width: u32, height: u32) -> SourceError {
     SourceError::Setting {
         param: "text".into(),
         reason: format!("it draws a {width}x{height} frame, over the decoded-memory limit"),
+    }
+}
+
+/// `ink` moved by `offset` pixels and blurred with a Gaussian of standard deviation
+/// `sigma` pixels, approximated by three box blurs each way (Kovesi's widths), so its
+/// cost doesn't grow with the blur. What moves off the frame is lost; the frame was
+/// grown to hold the shadow.
+fn blurred(ink: &[f32], w: usize, h: usize, (dx, dy): (i64, i64), sigma: f32) -> Vec<f32> {
+    let mut out = vec![0f32; w * h];
+    for y in 0..h {
+        let Ok(ty) = usize::try_from(y as i64 + dy) else {
+            continue;
+        };
+        if ty >= h {
+            continue;
+        }
+        for x in 0..w {
+            if let Ok(tx) = usize::try_from(x as i64 + dx)
+                && tx < w
+            {
+                out[ty * w + tx] = ink[y * w + x];
+            }
+        }
+    }
+    if sigma < 0.5 {
+        return out;
+    }
+    let mut work = vec![0f32; w.max(h)];
+    for radius in box_radii(sigma) {
+        for row in out.chunks_mut(w) {
+            box_pass(row, &mut work[..w], radius);
+        }
+        let mut column = vec![0f32; h];
+        for x in 0..w {
+            for y in 0..h {
+                column[y] = out[y * w + x];
+            }
+            box_pass(&mut column, &mut work[..h], radius);
+            for y in 0..h {
+                out[y * w + x] = column[y];
+            }
+        }
+    }
+    out
+}
+
+/// The radii of three box blurs whose sequence approximates a Gaussian of `sigma`.
+fn box_radii(sigma: f32) -> [usize; 3] {
+    let n = 3.0;
+    let ideal = (12.0 * sigma * sigma / n + 1.0).sqrt();
+    let mut lower = ideal.floor() as i64;
+    if lower % 2 == 0 {
+        lower -= 1;
+    }
+    let lower = lower.max(1) as f32;
+    let upper = lower + 2.0;
+    let m = ((12.0 * sigma * sigma - n * lower * lower - 4.0 * n * lower - 3.0 * n)
+        / (-4.0 * lower - 4.0))
+        .round();
+    let width = |i: f32| if i < m { lower } else { upper };
+    [0.0, 1.0, 2.0].map(|i| ((width(i) - 1.0) / 2.0) as usize)
+}
+
+/// One box blur of `radius` along `line`, in place, treating what is past either end as
+/// empty. `work` is as long as `line`.
+fn box_pass(line: &mut [f32], work: &mut [f32], radius: usize) {
+    if radius == 0 {
+        return;
+    }
+    let n = line.len();
+    work.copy_from_slice(line);
+    let scale = 1.0 / (2 * radius + 1) as f32;
+    let mut sum: f32 = work[..radius.min(n)].iter().sum();
+    for i in 0..n {
+        if i + radius < n {
+            sum += work[i + radius];
+        }
+        line[i] = (sum * scale).clamp(0.0, 1.0);
+        if i >= radius {
+            sum -= work[i - radius];
+        }
     }
 }
 

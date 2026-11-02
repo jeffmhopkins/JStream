@@ -13,10 +13,38 @@ use skrifa::FontRef;
 use std::borrow::Cow;
 use std::sync::Arc;
 
-/// The font used when the `font` setting is `null`: a Latin subset of Roboto Regular
-/// (Apache-2.0; the crate README's "Bundled font" says how it was made).
+/// The font used when the `font` setting is `null` and `face` is `regular`: a Latin
+/// subset of Roboto Regular (Apache-2.0; the crate README's "Bundled fonts" says how it
+/// was made).
 pub(crate) static DEFAULT_FONT: &[u8] =
     include_bytes!("../../assets/fonts/Roboto-Regular-subset.ttf");
+
+/// The bundled faces the `face` setting picks between while `font` is `null`, by
+/// option value. The same Latin subset as [`DEFAULT_FONT`], of the same family
+/// (Apache-2.0; the crate README's "Bundled fonts").
+static FACES: [(&str, &str, &[u8]); 3] = [
+    ("regular", "Regular", DEFAULT_FONT),
+    (
+        "bold",
+        "Bold",
+        include_bytes!("../../assets/fonts/Roboto-Bold-subset.ttf"),
+    ),
+    (
+        "condensed_bold",
+        "Condensed bold",
+        include_bytes!("../../assets/fonts/RobotoCondensed-Bold-subset.ttf"),
+    ),
+];
+
+/// The bundled face named by `face`'s value.
+fn bundled(settings: &Settings) -> Result<&'static [u8], SourceError> {
+    let face = string(settings, "face")?;
+    FACES
+        .iter()
+        .find(|(value, ..)| *value == face)
+        .map(|(.., bytes)| *bytes)
+        .ok_or_else(|| bad("face", "must be `regular`, `bold` or `condensed_bold`"))
+}
 
 /// The longest `text`, in characters.
 const MAX_TEXT_LEN: u32 = 4096;
@@ -26,6 +54,12 @@ const MAX_SIZE: f64 = 1024.0;
 const MAX_OUTLINE: u32 = 64;
 /// The largest `padding`, in pixels.
 const MAX_PADDING: u32 = 1024;
+/// The widest `letter_spacing` either way, in pixels.
+const MAX_SPACING: f64 = 200.0;
+/// The farthest a shadow is offset either way, in pixels.
+const MAX_SHADOW_OFFSET: f64 = 200.0;
+/// The largest shadow `blur`, in pixels.
+const MAX_SHADOW_BLUR: f64 = 100.0;
 /// The largest `wrap_width`, in pixels: a source's widest frame.
 const MAX_WRAP: u32 = 16384;
 
@@ -42,6 +76,12 @@ impl TextKind {
             unit: Some("px".into()),
         };
         let colour = || ParamType::Color { alpha: true };
+        let float = |min: f64, max: f64, step: f64| ParamType::Float {
+            min: Some(min),
+            max: Some(max),
+            step: Some(step),
+            unit: Some("px".into()),
+        };
         let option = |value: &str, label: &str| EnumOption {
             value: value.into(),
             label: label.into(),
@@ -65,6 +105,22 @@ impl TextKind {
                     ),
                     ..param("font", "Font", asset(&["ttf", "otf", "ttc"]), Value::Null)
                 },
+                live(ParamDescriptor {
+                    description: Some(
+                        "The bundled face drawn while Font is none. A font file ignores it.".into(),
+                    ),
+                    ..param(
+                        "face",
+                        "Face",
+                        ParamType::Enum {
+                            options: FACES
+                                .iter()
+                                .map(|(value, label, _)| option(value, label))
+                                .collect(),
+                        },
+                        json!("regular"),
+                    )
+                }),
                 live(param(
                     "size",
                     "Size",
@@ -117,6 +173,51 @@ impl TextKind {
                     pixels(0, MAX_PADDING),
                     json!(0),
                 )),
+                live(ParamDescriptor {
+                    description: Some(
+                        "Added after every character. Negative draws them closer.".into(),
+                    ),
+                    ..param(
+                        "letter_spacing",
+                        "Letter spacing",
+                        float(-MAX_SPACING, MAX_SPACING, 0.5),
+                        json!(0.0),
+                    )
+                }),
+                live(ParamDescriptor {
+                    description: Some(
+                        "The text's shadow, drawn under its outline and fill. Fully \
+                         transparent draws none."
+                            .into(),
+                    ),
+                    ..param(
+                        "shadow_color",
+                        "Shadow colour",
+                        colour(),
+                        json!("#00000000"),
+                    )
+                }),
+                live(param(
+                    "shadow_x",
+                    "Shadow X",
+                    float(-MAX_SHADOW_OFFSET, MAX_SHADOW_OFFSET, 1.0),
+                    json!(0.0),
+                )),
+                live(param(
+                    "shadow_y",
+                    "Shadow Y",
+                    float(-MAX_SHADOW_OFFSET, MAX_SHADOW_OFFSET, 1.0),
+                    json!(0.0),
+                )),
+                live(ParamDescriptor {
+                    description: Some("How far the shadow's edge spreads, softening.".into()),
+                    ..param(
+                        "shadow_blur",
+                        "Shadow blur",
+                        float(0.0, MAX_SHADOW_BLUR, 1.0),
+                        json!(0.0),
+                    )
+                }),
             ],
             ..kind("text", "Text", true, false)
         })
@@ -135,7 +236,10 @@ impl SourceKind for TextKind {
                 let bytes = ctx.assets.read(root, &path, ctx.limits.max_file_bytes)?;
                 (Cow::Owned(bytes), path)
             }
-            None => (Cow::Borrowed(DEFAULT_FONT), "(bundled font)".to_owned()),
+            None => (
+                Cow::Borrowed(bundled(settings)?),
+                "(bundled font)".to_owned(),
+            ),
         };
         // Parsed once here to report a bad file; each draw parses it again, which only
         // reads the table directory.
@@ -199,7 +303,13 @@ impl Source for TextSource {
                 param: param.to_owned(),
             });
         }
-        (self.frame, self.extent) = draw(&self.font, settings, self.density, &self.limits)?;
+        // A bundled face is swapped live; a font file ignores `face`.
+        let font = match source::asset(settings, "font")? {
+            None => Cow::Borrowed(bundled(settings)?),
+            Some(_) => self.font.clone(),
+        };
+        (self.frame, self.extent) = draw(&font, settings, self.density, &self.limits)?;
+        self.font = font;
         self.settings = settings.clone();
         Ok(())
     }
@@ -266,6 +376,29 @@ pub(crate) struct Style {
     pub(crate) outline_color: [u8; 4],
     pub(crate) background: [u8; 4],
     pub(crate) padding: u32,
+    /// Pixels added after every character, negative to draw them closer.
+    pub(crate) letter_spacing: f32,
+    pub(crate) shadow: Shadow,
+}
+
+/// A text's shadow: its ink, offset and blurred, under the outline and fill.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct Shadow {
+    /// Fully transparent draws none.
+    pub(crate) color: [u8; 4],
+    /// The offset in pixels, right and down.
+    pub(crate) x: f32,
+    pub(crate) y: f32,
+    /// How far the edge spreads, in pixels: twice the Gaussian's standard deviation,
+    /// as CSS's `text-shadow` blur radius.
+    pub(crate) blur: f32,
+}
+
+impl Shadow {
+    /// Whether it draws anything.
+    pub(crate) fn shows(&self) -> bool {
+        self.color[3] > 0
+    }
 }
 
 /// How lines sit within the text's width.
@@ -299,7 +432,24 @@ fn style(settings: &Settings) -> Result<Style, SourceError> {
         outline_color: color(settings, "outline_color")?,
         background: color(settings, "background")?,
         padding: pixels(settings, "padding", MAX_PADDING)?,
+        letter_spacing: number(settings, "letter_spacing", -MAX_SPACING, MAX_SPACING)?,
+        shadow: Shadow {
+            color: color(settings, "shadow_color")?,
+            x: number(settings, "shadow_x", -MAX_SHADOW_OFFSET, MAX_SHADOW_OFFSET)?,
+            y: number(settings, "shadow_y", -MAX_SHADOW_OFFSET, MAX_SHADOW_OFFSET)?,
+            blur: number(settings, "shadow_blur", 0.0, MAX_SHADOW_BLUR)?,
+        },
     })
+}
+
+/// A number from `min` to `max`.
+fn number(settings: &Settings, id: &str, min: f64, max: f64) -> Result<f32, SourceError> {
+    setting(settings, id)?
+        .as_f64()
+        .filter(|v| (min..=max).contains(v))
+        // Within ±200, which an f32 holds closely enough.
+        .map(|v| v as f32)
+        .ok_or_else(|| bad(id, &format!("must be a number from {min} to {max}")))
 }
 
 pub(crate) fn bad(param: &str, reason: &str) -> SourceError {
