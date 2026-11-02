@@ -26,7 +26,7 @@ pub use error::PackError;
 pub use manifest::{MAX_EFFECTS, MAX_ID_LEN, MAX_PARAMS};
 pub use pack::{Effect, MANIFEST, MAX_MANIFEST_BYTES, MAX_SHADER_BYTES, Pack};
 pub use shader::{FieldType, Layout, MAX_VALUE_BYTES};
-pub use watch::{Changes, DEFAULT_POLL_INTERVAL, KindChange, PackWatcher};
+pub use watch::{Changes, DEFAULT_POLL_INTERVAL, KindChange, LOAD_THREAD, PackWatcher};
 
 #[cfg(test)]
 mod tests;

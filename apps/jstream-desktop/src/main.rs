@@ -40,6 +40,7 @@ fn main() -> ExitCode {
             jstream_crash::Program {
                 name: env!("CARGO_PKG_NAME"),
                 version: env!("CARGO_PKG_VERSION"),
+                handled: jstream_core::HANDLED_PANIC_THREADS,
             },
             secrets.clone(),
             crash_line,

@@ -22,7 +22,11 @@ const CHILD_ENV: &str = "JSTREAM_CRASH_TEST_DIR";
 const PROGRAM: Program = Program {
     name: "jstream-test-app",
     version: "1.2.3",
+    handled: &[HANDLED_THREAD],
 };
+
+/// A thread whose panics [`PROGRAM`] handles itself.
+const HANDLED_THREAD: &str = "crash-test-handled";
 
 fn secret(value: &str) -> Secret {
     digest(value)
@@ -302,7 +306,8 @@ fn install_creates_the_folder() {
 /// token, loads the fake stream key and refresh token from credential stores behind
 /// [`Redacting`] (the key's text comes from its environment, so only the store registers
 /// it), and panics with a message quoting all three; the report has the facts and no
-/// secret (#353). The folder doesn't exist yet: `install` makes it.
+/// secret (#353). The folder doesn't exist yet: `install` makes it. A second panic, on a
+/// thread the program handles, writes no report and no line (#999).
 #[test]
 fn a_panic_writes_a_redacted_report() {
     if let Some(dir) = std::env::var_os(CHILD_ENV) {
@@ -334,6 +339,12 @@ fn a_panic_writes_a_redacted_report() {
                 let token = token.as_ref().map_or("", StoredSecret::expose);
                 panic!("boom with token={FAKE_TOKEN} and key={key} and refresh={token}");
             })
+            .expect("spawned")
+            .join();
+        // A panic on a handled thread writes no report and no line (#999).
+        let _ = std::thread::Builder::new()
+            .name(HANDLED_THREAD.to_owned())
+            .spawn(|| panic!("caught and reported by its own code"))
             .expect("spawned")
             .join();
         return;
@@ -395,5 +406,7 @@ fn a_panic_writes_a_redacted_report() {
         "{stderr}"
     );
     assert!(stderr.contains("crash report: "), "{stderr}");
+    // The handled thread's panic left no report (only one, above) and no line.
+    assert!(!stderr.contains(HANDLED_THREAD), "{stderr}");
     let _ = std::fs::remove_dir_all(&scratch);
 }

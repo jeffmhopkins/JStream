@@ -820,6 +820,12 @@ impl SourceCopies {
 
     /// The copy of `graph` for `source_id` at `graph`'s revision, made now if there is
     /// none yet.
+    ///
+    /// Kind changes don't move the revision: an effect pack's poll changes the graph's
+    /// kinds (`Graph::with_kinds`, `without_kinds`) with no edit, so a copy can keep the
+    /// kinds it was made with. That is safe only because planning reads a pack kind's
+    /// effect from `assets.effects()`, never from the graph's kinds. A plan that read the
+    /// kinds would need the copy made again when they change.
     fn copy(&mut self, graph: &Graph, source_id: &SourceId) -> Option<(&Graph, &SceneId)> {
         let rev = graph.rev();
         let stale = self

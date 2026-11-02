@@ -8,8 +8,8 @@
 //! that fails keeps the last good version of the pack live and reports the error once,
 //! so a half-saved shader never takes an effect off the air. A load that panics (naga
 //! parsing or validating a pack's WGSL, which is untrusted) is caught around that one
-//! pack and counts as a load that failed, so the other packs keep loading and the poll
-//! keeps every change it found. A folder refused because another folder holds its pack
+//! pack, which loads on a [`LOAD_THREAD`] of its own, and counts as a load that failed,
+//! so the other packs keep loading and the poll keeps every change it found. A folder refused because another folder holds its pack
 //! ID is retried in the poll that frees the ID.
 //!
 //! Polling, not OS notifications: it needs no dependency and behaves the same on every
@@ -205,9 +205,29 @@ impl PackWatcher {
     }
 }
 
-/// `load(dir, prelude)`, with a panic caught and returned as [`PackError::Panicked`].
+/// The name of the thread each pack loads on. A panic there is caught and becomes
+/// [`PackError::Panicked`], so an app's panic hook can leave it out of its crash reports
+/// (#999): the pack's error already says what happened.
+pub const LOAD_THREAD: &str = "jstream-pack-load";
+
+/// `load(dir, prelude)` on a [`LOAD_THREAD`] of its own, with a panic caught and
+/// returned as [`PackError::Panicked`]. If that thread can't start, the load runs here,
+/// still caught.
 fn load_caught(load: Loader, dir: &Path, prelude: &str) -> Result<Pack, PackError> {
-    std::panic::catch_unwind(|| load(dir, prelude)).unwrap_or_else(|panic| {
+    let joined = std::thread::scope(|scope| {
+        std::thread::Builder::new()
+            .name(LOAD_THREAD.to_owned())
+            .spawn_scoped(scope, || load(dir, prelude))
+            .map(std::thread::ScopedJoinHandle::join)
+    });
+    let caught = match joined {
+        Ok(joined) => joined,
+        Err(error) => {
+            tracing::warn!(%error, "no thread for a pack load; loading it here");
+            std::panic::catch_unwind(|| load(dir, prelude))
+        }
+    };
+    caught.unwrap_or_else(|panic| {
         let message = panic
             .downcast_ref::<&str>()
             .map(|s| (*s).to_owned())
