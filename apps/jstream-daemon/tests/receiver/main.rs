@@ -10,8 +10,9 @@
 //! pump keeps level with real time, so the encoders and the server see a live pace.
 //!
 //! The H.264 encoder is Cisco's OpenH264, the product's Linux software encoder, when
-//! `JSTREAM_E2E_OPENH264` names its library (`--openh264` of the xtask). Otherwise
-//! it is `x264.rs`'s stand-in, `ffmpeg`'s libx264 in a child process.
+//! `JSTREAM_E2E_OPENH264` is `download` (the xtask's `--openh264-download`, which CI
+//! runs) or names a copy of the pinned library (`--openh264 <library>`). Otherwise it is
+//! `x264.rs`'s stand-in, `ffmpeg`'s libx264 in a child process.
 //!
 //! The tests are `#[ignore]`d: they need `ffmpeg`, `ffprobe` and a Vulkan adapter, which
 //! R-TEST-004 keeps out of `cargo test`. Run them with `cargo xtask e2e-stream`, or
@@ -48,7 +49,7 @@ use jstream_platform::{
     AdapterId, AudioEncoder, AudioEncoderConfig, Backends, CodecInfo, Codecs, GpuContext, GpuFrame,
     GpuInterop, PlatformError, VideoDecoder, VideoDecoderConfig, VideoEncoder, VideoEncoderConfig,
 };
-use jstream_platform_linux::{OPENH264_PIN, OpenH264Pin, OpenH264Store, VaapiCodecs};
+use jstream_platform_linux::{HttpsFetch, OPENH264_PIN, OpenH264Store, VaapiCodecs};
 use jstream_render::{Compositor, OpenOptions};
 use probe::{Receiver, free_port, mean_volume, pixel, probe};
 use serde_json::{Value, json};
@@ -111,27 +112,31 @@ struct RealCodecs {
     openh264: bool,
 }
 
-/// Cisco's library from `JSTREAM_E2E_OPENH264`, stored in `dir` under a pin made from
-/// its own SHA-256, so `VaapiCodecs` loads it the way it loads a download.
+/// Cisco's library from `JSTREAM_E2E_OPENH264`. `download` installs the pinned release
+/// from Cisco's server, as the app does on the user's request, into a store the run's
+/// tests share (under `CARGO_TARGET_TMPDIR`), so it downloads once. Any other value names
+/// a copy of that release, which is stored in `dir`. Either way the store holds it to
+/// [`OPENH264_PIN`]'s SHA-256 and `VaapiCodecs` loads it the way it loads a download, so
+/// a library that isn't the pinned one fails the test.
 fn openh264(dir: &Path) -> Option<OpenH264Store> {
-    let library = std::env::var_os("JSTREAM_E2E_OPENH264")?;
-    let bytes = std::fs::read(&library).expect("JSTREAM_E2E_OPENH264 names a readable file");
-    let output = std::process::Command::new("sha256sum")
-        .arg(&library)
-        .output()
-        .expect("sha256sum runs");
-    let hex = String::from_utf8_lossy(&output.stdout);
-    let hex = hex.split_whitespace().next().expect("a SHA-256");
-    let mut sha = [0u8; 32];
-    for (i, byte) in sha.iter_mut().enumerate() {
-        *byte = u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16).expect("hex");
+    let source = std::env::var_os("JSTREAM_E2E_OPENH264")?;
+    if source == "download" {
+        let store = OpenH264Store::new(Path::new(env!("CARGO_TARGET_TMPDIR")).join("openh264"));
+        if !store.is_installed() {
+            let fetch = HttpsFetch::new().expect("a TLS client on the OS's roots");
+            store
+                .install(&fetch)
+                .expect("OpenH264 downloads from Cisco and matches the pin");
+            eprintln!(
+                "OpenH264 downloaded from {} into {}",
+                OPENH264_PIN.url,
+                store.library_path().display()
+            );
+        }
+        return Some(store);
     }
-    eprintln!("OpenH264 library SHA-256: {hex}");
-    let pin = OpenH264Pin {
-        library_sha256: Some(sha),
-        ..OPENH264_PIN
-    };
-    let store = OpenH264Store::with_pin(dir.join("openh264"), pin);
+    let bytes = std::fs::read(&source).expect("JSTREAM_E2E_OPENH264 names a readable file");
+    let store = OpenH264Store::new(dir.join("openh264"));
     std::fs::create_dir_all(dir.join("openh264")).expect("the store's folder");
     std::fs::write(store.library_path(), bytes).expect("the library is stored");
     Some(store)
