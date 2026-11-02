@@ -508,7 +508,7 @@ pub fn StreamStats() -> impl IntoView {
                     ></span>
                     <span
                         class="stats-hover-tip mono"
-                        role="status"
+                        aria-hidden="true"
                         style:left=format!("{:.2}%", h.x_pct)
                         style:transform=format!("translateX({})", tooltip_shift(h.x_pct))
                     >

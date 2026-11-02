@@ -525,9 +525,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the Outputs panel does, keeps the last 120 `kbps` readings of each listed output for
   the bitrate chart (an output a tick leaves out, or whose uptime went down, starts
   over), and shows the YouTube-only tiles not at all. Hovering the chart picks the
-  nearest reading and draws a vertical line, a dot on the line and a tooltip
-  ("2.65 Mbps · 14 s ago", or "now"), anchored left in the chart's left 30%, right in
-  its right 30% and centred between, as the prototype's; the dot and tooltip are
+  nearest reading and draws a vertical line, a dot centred on the reading (8 px with a
+  2 px ring, as the prototype's) and a tooltip inside the plot ("2.65 Mbps · 14 s
+  ago", or "now", hidden from screen readers, which read the chart's label), anchored
+  left in the chart's left 30%, right in its right 30% and centred between, as the
+  prototype's; a drag on the chart still scrolls vertically; the dot and tooltip are
   placed with `style:` properties, which the page's CSP allows where a `style`
   attribute is refused.
   Agent activity (`panels/agent.rs`) lists what agents did from the engine's
