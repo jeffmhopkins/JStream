@@ -190,7 +190,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.59 because outputs carry
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.60 because the master
+  stage and every output take video filters on their `video` chain (ADR-0080; no wire
+  change: earlier minors refused them with `invalid_argument` on `chain`); 0.59 made outputs carry
   audio buses: `OutputInfo.audio_buses`, the `output.set_audio_buses` edit, and an
   output as a `bus.delete` blocker ([Audio](#design)); 0.58 added the
   `plugin.list` query, the installed WASM plugins with what each manifest asks for and
@@ -670,10 +672,15 @@ From 0.29 the master stage and each output own chains too
 `{"type":"master"}` and `{"type":"output","output_id":…}` and the same edits. The
 master's audio chain runs on every bus that feeds an output, after that bus's own chain;
 an output's runs after it, for that output only, and gives the output its own audio
-encode from its next start (edits to a chain it started with apply live). Only their
-audio chains hold filters so far: a video filter is `invalid_argument` on
-`edits.N.chain` until video mixes run them, and so is an audio filter on an output that
-carries no audio (a `virtual_cam`). A missing output is `not_found` with entity
+encode from its next start (edits to a chain it started with apply live). From 0.60
+their video chains take filters too (earlier minors refused them with
+`invalid_argument` on `edits.N.chain`): the master's runs once per frame on each mix an
+output draws, and an output's after it, for that output only. A stream or recording
+with a video filter, even a disabled one, gets its own render pass and encoder session
+from its next start (`output.status` reports it `dedicated`); a virtual camera has a
+video chain only, and with a filter gets a render pass of its own but no encoder
+session. An audio filter on an output that carries no audio (a `virtual_cam`) is
+`invalid_argument` on `edits.N.chain`. A missing output is `not_found` with entity
 `output`. Their filters can't hold a reference yet (a scene, source, bus or asset;
 `invalid_argument` on the parameter), since the delete checks follow only a source's
 references. `output.delete`'s

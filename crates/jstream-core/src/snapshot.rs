@@ -31,8 +31,8 @@ use jstream_media::{FrameSize, MediaTime, PixelFormat, Rounding, VideoFrame};
 use jstream_platform::{ContextKey, GpuFrame};
 use jstream_protocol::{
     BlendMode, Canvas, ChainCost, Crop as ProtocolCrop, Edit, FilterChain, Glide, ItemGeometry,
-    ItemId, ItemTransition, ProtocolError, QueryResult, Rev, SceneId, SceneRole, SourceId,
-    SourceKind, VideoMixId,
+    ItemId, ItemTransition, OutputId, ProtocolError, QueryResult, Rev, SceneId, SceneRole,
+    SourceId, SourceKind, VideoMixId,
 };
 use jstream_render::transition::{Endpoint, Track};
 use jstream_render::{
@@ -466,6 +466,11 @@ pub(crate) struct Shot {
     chain_steps: Vec<ChainStep>,
     /// The items with effects, by their chain's owner (ADR-0065).
     boxes: BTreeMap<ChainOwner, ItemBox>,
+    /// The output stage's video chains (ADR-0080): the master stage's over each mix an
+    /// output may draw, and each output's own, with the image each reads. They run as
+    /// an output's frame is drawn ([`compose`] with [`View::stage`]), not in the chain
+    /// phase, and never on the editing canvas or a preview.
+    stages: BTreeMap<ChainOwner, Chain>,
 }
 
 /// A transition as a shot draws it (ADR-0029): each item's track in drawing order and
@@ -493,6 +498,7 @@ impl Default for Shot {
             transition: None,
             chain_steps: Vec::new(),
             boxes: BTreeMap::new(),
+            stages: BTreeMap::new(),
         }
     }
 }
@@ -546,7 +552,40 @@ impl Shot {
     /// source has a video chain, whose filters may move or hold frames (scroll, video
     /// delay). Every chain counts, which redraws a still filtered picture too.
     pub(crate) fn changes_with_time(&self) -> bool {
-        self.transitioning() || !self.chains.is_empty()
+        self.transitioning() || !self.chains.is_empty() || !self.stages.is_empty()
+    }
+
+    /// The output stage's chains in this shot, for tests.
+    #[cfg(test)]
+    pub(crate) fn stage_chain(&self, owner: &ChainOwner) -> Option<&Chain> {
+        self.stages.get(owner)
+    }
+
+    /// The output stage an output's frame of `mix` goes through (ADR-0080): the mix's
+    /// layer, the master chain over it and `owner`'s own chain, or `None` when neither
+    /// chain runs, so the mix is drawn straight to the output as before.
+    fn stage_of(&self, mix: Option<&VideoMixId>, owner: Option<&OutputId>) -> Option<Stage<'_>> {
+        let master_owner = ChainOwner::Master(mix.cloned());
+        let master = self.stages.get_key_value(&master_owner);
+        let output = owner.and_then(|id| {
+            self.stages
+                .get_key_value(&ChainOwner::Output(id.clone()))
+                // Drawn after this mix's master stage only: an output whose mix changed
+                // since it started is drawn without it until its next start.
+                .filter(|(_, chain)| match (&chain.input, master) {
+                    (GpuKey::Filtered(read), Some(_)) => *read == master_owner,
+                    (GpuKey::Mixed(read), None) => read.as_ref() == mix,
+                    _ => false,
+                })
+        });
+        if master.is_none() && output.is_none() {
+            return None;
+        }
+        Some(Stage {
+            mixed: GpuKey::Mixed(mix.cloned()),
+            master,
+            output,
+        })
     }
 
     /// How many sources have a video chain in this shot, for tests.
@@ -659,6 +698,7 @@ impl PartialEq for Shot {
             && self.captures == other.captures
             && self.transition == other.transition
             && self.boxes == other.boxes
+            && self.stages == other.stages
     }
 }
 
@@ -894,12 +934,49 @@ fn plan_inner(
     }))
     .collect::<Vec<_>>();
     shot.captures.extend(read);
+    if mixes {
+        shot.stages = plan_stages(state, assets);
+    }
     Planning {
         shot,
         wake: planner.wake,
         finished,
         end_ms,
     }
+}
+
+/// The output stage's video chains (ADR-0080): the master stage's over the program and
+/// over each video mix, when it has an enabled filter, and each output's own over what
+/// the master stage made of the mix it shows, as its encoder session is keyed
+/// (`engine::encode_key`): its mix if the collection has it, else the program.
+fn plan_stages(state: &State, assets: &FilterAssets) -> BTreeMap<ChainOwner, Chain> {
+    let master = state.master().chain(FilterChain::Video);
+    let mut stages = BTreeMap::new();
+    let mixes = std::iter::once(None).chain(state.video_mixes().map(|mix| Some(mix.id().clone())));
+    for mix in mixes {
+        let owner = ChainOwner::Master(mix.clone());
+        if let Some(chain) = Chain::of_filters(&owner, master, GpuKey::Mixed(mix), assets) {
+            stages.insert(owner, chain);
+        }
+    }
+    for output in state.outputs() {
+        let mix = output
+            .video_mix()
+            .filter(|id| state.video_mix(id).is_some())
+            .cloned();
+        let master_owner = ChainOwner::Master(mix.clone());
+        let input = if stages.contains_key(&master_owner) {
+            GpuKey::Filtered(master_owner)
+        } else {
+            GpuKey::Mixed(mix)
+        };
+        let owner = ChainOwner::Output(output.id().clone());
+        let filters = output.filters().chain(FilterChain::Video);
+        if let Some(chain) = Chain::of_filters(&owner, filters, input, assets) {
+            stages.insert(owner, chain);
+        }
+    }
+    stages
 }
 
 /// What is on screen at `now` while `running` runs toward `program`, as the starting
@@ -1715,6 +1792,9 @@ pub(crate) enum GpuKey {
     /// The layer an item with effects is drawn into before they run (ADR-0065 §5), as
     /// that scene draws it.
     ItemBox(SceneId, ItemId),
+    /// A mix an output draws (`None` for the program of an output that names none), at
+    /// the canvas size, which the output stage's chains run over (ADR-0080).
+    Mixed(Option<VideoMixId>),
 }
 
 /// The depth a scene that a video filter reads (`scene_mask`) is drawn at: as a scene
@@ -1747,11 +1827,46 @@ enum ChainStep {
     Run(ChainOwner),
 }
 
-/// What [`compose`] draws: which mix.
+/// What [`compose`] draws: which mix, and whether as an output gets it.
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct View<'a> {
     /// The mix to draw; `None` for the program.
     pub(crate) mix: Option<&'a VideoMixId>,
+    /// Whether it is drawn for an output, through the master stage's video chain and
+    /// `owner`'s (ADR-0080). The editing canvas, previews and `video.snapshot` show the
+    /// mix before the master stage.
+    pub(crate) stage: bool,
+    /// The output whose own video chain the frame runs through, for a frame drawn for
+    /// that output alone.
+    pub(crate) owner: Option<&'a OutputId>,
+}
+
+impl<'a> View<'a> {
+    /// `mix` as the outputs drawing it get it, through `owner`'s own chain if any.
+    pub(crate) fn output(mix: Option<&'a VideoMixId>, owner: Option<&'a OutputId>) -> Self {
+        Self {
+            mix,
+            stage: true,
+            owner,
+        }
+    }
+
+    /// `mix` before the master stage.
+    #[cfg(test)]
+    pub(crate) fn mix(mix: Option<&'a VideoMixId>) -> Self {
+        Self {
+            mix,
+            ..Self::default()
+        }
+    }
+}
+
+/// The output stage a frame goes through ([`Shot::stage_of`]).
+struct Stage<'s> {
+    /// The mix's layer at the canvas size, which the first chain reads.
+    mixed: GpuKey,
+    master: Option<(&'s ChainOwner, &'s Chain)>,
+    output: Option<(&'s ChainOwner, &'s Chain)>,
 }
 
 /// One composite in a frame: a scene at a nesting depth (the program scene is 0).
@@ -2759,7 +2874,7 @@ impl Shot {
                         &mut cost.item_passes,
                     )
                 }
-                ChainOwner::Source(_) => continue,
+                ChainOwner::Source(_) | ChainOwner::Master(_) | ChainOwner::Output(_) => continue,
             };
             let sizes = chain.layer_sizes(input.0, input.1);
             // The composite or the box, then one per filter.
@@ -2975,79 +3090,167 @@ pub(crate) fn compose(
         fallback = Some(key);
     }
     run_chains(compositor, (&mut *cache, &mut *chains), shot, live, at)?;
+    let stage = view
+        .stage
+        .then(|| shot.stage_of(view.mix, view.owner))
+        .flatten();
+    // The mix goes to the output stage's layer at the canvas size, or straight to the
+    // output.
+    let target = if stage.is_some() { canvas } else { output };
+    if let Some(stage) = &stage
+        && !chains.stage(&stage.mixed)
+    {
+        // Another output's frame drew this mix and ran its master stage this tick.
+        return finish_stage(compositor, (cache, chains), stage, at, (output, readback));
+    }
     let (root, nested) = match (tracks, passes.split_last()) {
         (Some(_), _) => (None, passes),
         (None, Some((root, nested))) => (Some(root), nested),
         (None, None) => {
-            let image = fallback.as_ref().and_then(|key| cache.get(key));
-            // Scaled to fill the canvas, which the output follows (not the display), and
-            // fitted inside the output like the canvas layer.
-            let (scale, offset) = fit_inside(canvas, output);
-            let items: Vec<Item<'_>> = image
-                .into_iter()
-                .map(|image| {
-                    let sx = canvas.width() as f32 * scale / image.width() as f32;
-                    let sy = canvas.height() as f32 * scale / image.height() as f32;
-                    Item {
-                        image,
-                        placement: Placement::Legacy(LegacyTransform {
-                            position: offset,
-                            scale: [sx, sy],
-                            ..LegacyTransform::IDENTITY
-                        }),
-                        crop: Crop::NONE,
-                        opacity: OPAQUE,
-                        blend: BlendMode::Normal,
-                        visible: true,
-                    }
-                })
-                .collect();
-            let shown = scene(output, Color::BLACK, &items);
-            return compositor.render(&shown, readback);
+            if let Some(stage) = &stage {
+                cache.layer(compositor, &stage.mixed, canvas.width(), canvas.height())?;
+            }
+            {
+                let image = fallback.as_ref().and_then(|key| cache.get(key));
+                // Scaled to fill the canvas, which the output follows (not the display),
+                // and fitted inside the output like the canvas layer.
+                let (scale, offset) = fit_inside(canvas, target);
+                let items: Vec<Item<'_>> = image
+                    .into_iter()
+                    .map(|image| {
+                        let sx = canvas.width() as f32 * scale / image.width() as f32;
+                        let sy = canvas.height() as f32 * scale / image.height() as f32;
+                        Item {
+                            image,
+                            placement: Placement::Legacy(LegacyTransform {
+                                position: offset,
+                                scale: [sx, sy],
+                                ..LegacyTransform::IDENTITY
+                            }),
+                            crop: Crop::NONE,
+                            opacity: OPAQUE,
+                            blend: BlendMode::Normal,
+                            visible: true,
+                        }
+                    })
+                    .collect();
+                let shown = scene(target, Color::BLACK, &items);
+                let Some(stage) = &stage else {
+                    return compositor.render(&shown, readback);
+                };
+                let layer = cache
+                    .get(&stage.mixed)
+                    .ok_or_else(|| RenderError::Invalid {
+                        what: "cache",
+                        detail: format!("no image for {:?}", stage.mixed),
+                    })?;
+                compositor.render_into(&shown, layer)?;
+            }
+            return match &stage {
+                Some(stage) => {
+                    finish_stage(compositor, (cache, chains), stage, at, (output, readback))
+                }
+                None => Err(RenderError::Invalid {
+                    what: "output stage",
+                    detail: "a frame without an output stage reached it".into(),
+                }),
+            };
         }
     };
-    let direct = output == canvas;
-    claim_layers(
-        compositor,
-        (&mut *cache, &mut *chains),
-        shot,
-        view.mix,
-        output,
-    )?;
-    let cache = &*cache;
-    let chains = &*chains;
-    let image = |key: &GpuKey| {
-        cache.get(key).ok_or_else(|| RenderError::Invalid {
-            what: "cache",
-            detail: format!("no image for {key:?}"),
+    let direct = target == canvas;
+    claim_layers(compositor, (&mut *cache, &mut *chains), shot, view, output)?;
+    {
+        let cache = &*cache;
+        let chains = &*chains;
+        let image = |key: &GpuKey| {
+            cache.get(key).ok_or_else(|| RenderError::Invalid {
+                what: "cache",
+                detail: format!("no image for {key:?}"),
+            })
+        };
+        let mut items: Vec<Item<'_>> = Vec::new();
+        for pass in nested {
+            fill_items(&mut items, (cache, chains), pass, (at, canvas), live);
+            compositor.render_into(
+                &scene(canvas, Color::TRANSPARENT, &items),
+                image(&pass.key)?,
+            )?;
+        }
+        match (root, tracks) {
+            (_, Some(transition)) => {
+                fill_tracks(&mut items, (cache, chains), transition, canvas, at);
+            }
+            (Some(root), None) => {
+                fill_items(&mut items, (cache, chains), root, (at, canvas), live);
+            }
+            (None, None) => items.clear(),
+        }
+        match &stage {
+            Some(stage) => {
+                compositor
+                    .render_into(&scene(canvas, Color::BLACK, &items), image(&stage.mixed)?)?;
+            }
+            None if direct => {
+                let shown = scene(output, Color::BLACK, &items);
+                return compositor.render(&shown, readback);
+            }
+            None => {
+                let layer = image(&GpuKey::Program)?;
+                compositor.render_into(&scene(canvas, Color::BLACK, &items), layer)?;
+                let placed = [fitted(layer, canvas, output)];
+                let shown = scene(output, Color::BLACK, &placed);
+                return compositor.render(&shown, readback);
+            }
+        }
+    }
+    match &stage {
+        Some(stage) => finish_stage(compositor, (cache, chains), stage, at, (output, readback)),
+        // Every path without a stage returned above.
+        None => Err(RenderError::Invalid {
+            what: "output stage",
+            detail: "a frame without an output stage reached it".into(),
+        }),
+    }
+}
+
+/// Runs the output stage's chains of `stage` over its mix's layer, already drawn this
+/// frame, and draws what they make into an `output`-sized frame, fitted inside it like
+/// the canvas layer (ADR-0080): the master chain once per frame of the cache, however
+/// many outputs draw the mix, then the output's own. A chain that failed this frame
+/// draws a black frame, as a failed chain draws nothing elsewhere: the unfiltered mix
+/// never leaves in its place.
+///
+/// # Errors
+/// What the compositor reports for the frame's pass.
+fn finish_stage(
+    compositor: &mut Compositor,
+    (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+    stage: &Stage<'_>,
+    at: MediaTime,
+    (output, readback): (FrameSize, bool),
+) -> Result<Output, RenderError> {
+    let mut shown = None;
+    let mut failed = false;
+    for (owner, chain) in [stage.master, stage.output].into_iter().flatten() {
+        let key = GpuKey::Filtered(owner.clone());
+        if chains.stage(&key) {
+            chains.run_one(compositor, cache, (owner, chain), at);
+        }
+        failed |= chains.failed(&key);
+        shown = Some(key);
+    }
+    let shown = shown.as_ref().unwrap_or(&stage.mixed);
+    // Fitted at its own size: an aspect ratio filter changes it.
+    let placed: Vec<Item<'_>> = cache
+        .get(shown)
+        .filter(|_| !failed)
+        .and_then(|image| {
+            let size = FrameSize::new(image.width(), image.height()).ok()?;
+            Some(fitted(image, size, output))
         })
-    };
-    let mut items: Vec<Item<'_>> = Vec::new();
-    for pass in nested {
-        fill_items(&mut items, (cache, chains), pass, (at, canvas), live);
-        compositor.render_into(
-            &scene(canvas, Color::TRANSPARENT, &items),
-            image(&pass.key)?,
-        )?;
-    }
-    match (root, tracks) {
-        (_, Some(transition)) => {
-            fill_tracks(&mut items, (cache, chains), transition, canvas, at);
-        }
-        (Some(root), None) => {
-            fill_items(&mut items, (cache, chains), root, (at, canvas), live);
-        }
-        (None, None) => items.clear(),
-    }
-    if direct {
-        let shown = scene(output, Color::BLACK, &items);
-        return compositor.render(&shown, readback);
-    }
-    let layer = image(&GpuKey::Program)?;
-    compositor.render_into(&scene(canvas, Color::BLACK, &items), layer)?;
-    let placed = [fitted(layer, canvas, output)];
-    let shown = scene(output, Color::BLACK, &placed);
-    compositor.render(&shown, readback)
+        .into_iter()
+        .collect();
+    compositor.render(&scene(output, Color::BLACK, &placed), readback)
 }
 
 /// Runs `shot`'s video chains, once per frame of the cache however many mixes draw it
@@ -3065,7 +3268,7 @@ fn run_chains(
     live: &LiveParams,
     at: MediaTime,
 ) -> Result<(), RenderError> {
-    if !chains.begin(compositor, cache, &shot.chains) {
+    if !chains.begin(compositor, cache, &shot.chains, &shot.stages) {
         return Ok(());
     }
     let canvas = shot.canvas()?;
@@ -3173,9 +3376,10 @@ fn draw_box(
     compositor.render_into(&scene(size, Color::TRANSPARENT, &items), layer)
 }
 
-/// Marks the layers [`compose`] draws `mix` at `output` through as used in the cache's
+/// Marks the layers [`compose`] draws `view` at `output` through as used in the cache's
 /// current frame, allocating any that are missing, without drawing: each nested
-/// scene's, the program layer when `output` isn't the canvas size, and the layers of the
+/// scene's, the program layer when `output` isn't the canvas size, or for an output's
+/// frame with an output stage the mix's layer ([`GpuKey::Mixed`]), and the layers of the
 /// video chains that ran in an earlier frame ([`Chains::claim`]). The render
 /// thread calls it for every mix not due on a tick, so a mix with a divisor keeps its
 /// layers between the ticks it draws on and a steady frame allocates no texture.
@@ -3186,11 +3390,23 @@ pub(crate) fn claim_layers(
     compositor: &mut Compositor,
     (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
     shot: &Shot,
-    mix: Option<&VideoMixId>,
+    view: View<'_>,
     output: FrameSize,
 ) -> Result<(), RenderError> {
     chains.claim(compositor, cache);
     let canvas = shot.canvas()?;
+    let mix = view.mix;
+    // The output stage's layer, which a frame for an output with a stage draws into
+    // instead of the output or the program layer.
+    let staged = view.stage && shot.stage_of(mix, view.owner).is_some();
+    if staged {
+        cache.layer(
+            compositor,
+            &GpuKey::Mixed(mix.cloned()),
+            canvas.width(),
+            canvas.height(),
+        )?;
+    }
     for step in &shot.chain_steps {
         match step {
             ChainStep::Pass(pass) => {
@@ -3222,7 +3438,7 @@ pub(crate) fn claim_layers(
     for pass in nested {
         cache.layer(compositor, &pass.key, canvas.width(), canvas.height())?;
     }
-    if output != canvas {
+    if output != canvas && !staged {
         cache.layer(
             compositor,
             &GpuKey::Program,
@@ -4481,7 +4697,7 @@ pub(crate) mod tests {
                 &mut compositor,
                 (&mut cache, &mut Chains::default()),
                 (&shot, zero()),
-                View { mix },
+                View::mix(mix),
                 &LiveParams::default(),
                 &super::NoCaptures,
                 super::DrawAt::read(square),
@@ -4774,7 +4990,7 @@ pub(crate) mod tests {
                     &mut compositor,
                     (&mut *cache, &mut chains),
                     (&nested, zero()),
-                    View { mix: Some(&half) },
+                    View::mix(Some(&half)),
                     &LiveParams::default(),
                     &super::NoCaptures,
                     super::DrawAt::read(small),
@@ -4785,7 +5001,7 @@ pub(crate) mod tests {
                     &mut compositor,
                     (&mut *cache, &mut chains),
                     &nested,
-                    Some(&half),
+                    View::mix(Some(&half)),
                     small,
                 )
                 .expect("claim");
