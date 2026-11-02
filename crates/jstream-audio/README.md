@@ -391,7 +391,7 @@ for that check, so it never reads the mixer's copy. Inserting or removing a filt
 takes effect at a block edge without a crossfade.
 
 **Sidechain keys** (ADR-0028). A keyed compressor names the input whose block drives
-its detector. After applying a block's commands, when an input or filter changed, the
+its detector. After applying a block's commands, when any command changed something, the
 mixer gives each input a depth one more than its deepest key's, relaxed in at most one
 pass per input, and sorts the inputs by it in place (`sort_unstable_by_key`, no
 allocation), so every key runs before the inputs keyed on it. A cycle leaves its
@@ -399,7 +399,14 @@ inputs at the cap and reads as silence to whichever runs first: the engine refus
 cycles, so this only keeps a bad edit from mattering. An input's chain reads its key's
 `input_block` from the inputs already run this block, and a bus chain from any input.
 A key that is gone, silenced as a key (`key_silenced`) or not yet run is an empty
-block, which the compressor reads as silence.
+block, which the compressor reads as silence. ADR-0028 sorts the audio graph on the
+control thread when the audio snapshot is built; with no audio snapshot yet
+([Not yet](#follow-ups)), the mixer sorts on its own thread instead, bounded and
+without allocating, as it recomputes latency in `apply_commands`. The key block is the
+key's output after its latency-compensation delay, while an input's chain runs before
+its own, so when an input chain has latency (a limiter's look-ahead) the key reaches
+the detector up to that latency late, and the ducking lags by as much; a bus chain's
+key is aligned.
 
 **Latency compensation.** Each chain's latency is the sum of its filters' (the
 limiters' look-ahead; a `Delay` filter is a deliberate shift and counts 0, per
