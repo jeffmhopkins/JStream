@@ -197,7 +197,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `scene.set_options` and `SceneInfo`'s flattened `SceneOptions`, whose `include_audio`
   leaves a scene's audio out of every nesting of it and whose `background` is the
   colour a scene is drawn over
-  ([ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)); 0.63 made a keyframe
+  ([ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)); 0.64 let the
+  engine's `compressor` audio filter kind take a sidechain `key`, a `source` reference it ducks
+  under (ADR-0028; no wire change: `kind.describe` reports the new parameter and the
+  engine accepts it); 0.63 made a keyframe
   scene override an item's effects
   ([ADR-0088](../../docs/adr/0088-keyframe-scenes-override-item-effects.md):
   `ItemOverride.effects`, `OverrideField`'s `effects`, `item.set_effects` and the
