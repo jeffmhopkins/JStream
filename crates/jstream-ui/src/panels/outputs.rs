@@ -1,8 +1,9 @@
 //! The outputs panel: the program output and each output with its FX button, which
 //! shows that chain in the Filters panel (spec-panels.md 9, ADR-0080); create, edit and
 //! delete outputs (streams, recordings and the virtual camera), set or clear their stream
-//! keys, choose each one's encoder profile and the audio bus it carries, start and stop
-//! them, and the pipeline's health from `stats.tick`. It also holds the logic behind the header's
+//! keys, choose each one's encoder profile, video mix and the audio bus it carries,
+//! edit the encoder profiles and video mixes ([`encoders`](super::encoders)), start and
+//! stop them, and the pipeline's health from `stats.tick`. It also holds the logic behind the header's
 //! Go Live (`go_live_targets`, `live_outputs`, `start_or_stop_all`).
 //!
 //! The stream key is write-only (R-SEC-001). It is read from its password field only
@@ -16,6 +17,7 @@
 use crate::app::SessionContext;
 use crate::dock::PanelId;
 use crate::icons::Icon;
+use crate::panels::encoders::Profiles;
 use crate::panels::filters::FilterDialogs;
 use crate::session::Session;
 use crate::workspace::DockState;
@@ -23,7 +25,8 @@ use futures_util::StreamExt;
 use jstream_control::protocol::{
     Action, Batch, BusId, BusInfo, Call, CallResult, DropCounts, Edit, EncoderProfileId,
     EncoderProfileInfo, Event, FilterChains, FilterOwner, OutputId, OutputInfo, OutputKind,
-    OutputState, Query, QueryResult, RecordContainer, Rev, RtmpTarget, SecretString,
+    OutputState, Query, QueryResult, RecordContainer, Rev, RtmpTarget, SceneId, SceneRole,
+    SecretString, VideoMixId, VideoMixInfo,
 };
 use jstream_control::{Control, ControlError};
 use leptos::html;
@@ -58,7 +61,8 @@ pub struct Status {
     pub cleartext: bool,
 }
 
-/// The outputs and encoder profiles at one revision, with each output's status.
+/// The outputs, encoder profiles and video mixes at one revision, with each output's
+/// status.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Snapshot {
     /// The revision `state.get` read.
@@ -69,21 +73,28 @@ pub struct Snapshot {
     pub encoders: Vec<EncoderProfileInfo>,
     /// The audio buses an output can carry, ordered by ID, the master among them.
     pub buses: Vec<BusInfo>,
+    /// The video mixes an output can show, ordered by ID.
+    pub mixes: Vec<VideoMixInfo>,
+    /// The scenes a mix can show, by ID and name, in display order: groups left out.
+    pub scenes: Vec<(SceneId, String)>,
 }
 
-/// Reads the outputs, encoder profiles and buses (`state.get`), then each output's
-/// status (`output.status`).
+/// Reads the outputs, encoder profiles, video mixes, buses and scenes (`state.get`),
+/// then each output's status (`output.status`).
 pub async fn load(control: &dyn Control) -> Result<Snapshot, String> {
-    let (rev, outputs, encoders, buses) = match query(control, Query::StateGet).await? {
-        QueryResult::StateGet {
-            rev,
-            outputs,
-            encoders,
-            buses,
-            ..
-        } => (rev, outputs, encoders, buses),
-        other => return Err(unexpected("state.get", other.name())),
-    };
+    let (rev, outputs, encoders, buses, mixes, scenes) =
+        match query(control, Query::StateGet).await? {
+            QueryResult::StateGet {
+                rev,
+                outputs,
+                encoders,
+                buses,
+                video_mixes,
+                scenes,
+                ..
+            } => (rev, outputs, encoders, buses, video_mixes, scenes),
+            other => return Err(unexpected("state.get", other.name())),
+        };
     let mut rows = Vec::with_capacity(outputs.len());
     for info in outputs {
         let Status {
@@ -103,6 +114,12 @@ pub async fn load(control: &dyn Control) -> Result<Snapshot, String> {
         outputs: rows,
         encoders,
         buses,
+        mixes,
+        scenes: scenes
+            .into_iter()
+            .filter(|scene| scene.role != SceneRole::Group)
+            .map(|scene| (scene.scene_id, scene.name))
+            .collect(),
     })
 }
 
@@ -554,6 +571,10 @@ struct Panel {
     encoders: RwSignal<Vec<EncoderProfileInfo>>,
     /// The audio buses an output can carry.
     buses: RwSignal<Vec<BusInfo>>,
+    /// The video mixes an output can show.
+    mixes: RwSignal<Vec<VideoMixInfo>>,
+    /// The scenes a mix can show, by ID and name.
+    scenes: RwSignal<Vec<(SceneId, String)>>,
     /// The last failed call, shown until the next one succeeds or is dismissed.
     problem: RwSignal<Option<String>>,
     /// Bumped by each reload, so an older reload that finishes late is dropped.
@@ -598,7 +619,7 @@ impl Panel {
         });
     }
 
-    /// Re-reads every output and encoder profile.
+    /// Re-reads every output, encoder profile and video mix.
     fn reload(self) {
         let Some(session) = self.session.get() else {
             return;
@@ -625,6 +646,8 @@ impl Panel {
                     );
                     self.encoders.try_set(snapshot.encoders);
                     self.buses.try_set(snapshot.buses);
+                    self.mixes.try_set(snapshot.mixes);
+                    self.scenes.try_set(snapshot.scenes);
                 }
                 Err(problem) => {
                     self.problem.try_set(Some(problem));
@@ -669,6 +692,8 @@ pub fn Outputs() -> impl IntoView {
         rows: RwSignal::new(BTreeMap::new()),
         encoders: RwSignal::new(Vec::new()),
         buses: RwSignal::new(Vec::new()),
+        mixes: RwSignal::new(Vec::new()),
+        scenes: RwSignal::new(Vec::new()),
         problem: RwSignal::new(None),
         loads: StoredValue::new(0),
         vcam: Vcam::from_host(crate::host::desktop_vcam().as_deref()),
@@ -718,6 +743,16 @@ pub fn Outputs() -> impl IntoView {
             .with(|rows| rows.keys().cloned().collect::<Vec<_>>())
     };
     let reading = move || health.with(Health::reading);
+    let infos = Signal::derive(move || {
+        panel.rows.with(|rows| {
+            rows.values()
+                .map(|row| row.info.clone())
+                .collect::<Vec<_>>()
+        })
+    });
+    let send = Callback::new(move |change: Edit| {
+        panel.run(move |session| async move { edit(&*session.control, change).await });
+    });
 
     view! {
         <section class="outputs">
@@ -748,6 +783,13 @@ pub fn Outputs() -> impl IntoView {
                 </For>
             </ul>
             <NewOutputForm panel=panel />
+            <Profiles
+                encoders=panel.encoders
+                mixes=panel.mixes
+                outputs=infos
+                scenes=panel.scenes.into()
+                send=send
+            />
         </section>
     }
     .into_any()
@@ -951,6 +993,17 @@ fn OutputCard(panel: Panel, output_id: OutputId) -> impl IntoView {
                 .and_then(|row| row.info.encoder_profile.clone())
         })
     };
+    let choose_mix = move |event: leptos::ev::Event| {
+        let chosen = event_target_value(&event);
+        let mix_id = (!chosen.is_empty()).then(|| VideoMixId::new(chosen));
+        let output_id = id.get_value();
+        panel.run(move |session| async move {
+            let set = Edit::OutputSetVideoMix { output_id, mix_id };
+            edit(&*session.control, set).await
+        });
+    };
+    let chosen_mix =
+        move || row.with(|row| row.as_ref().and_then(|row| row.info.video_mix.clone()));
     let choose_bus = move |event: leptos::ev::Event| {
         let output_id = id.get_value();
         let set = bus_edit(output_id, &event_target_value(&event));
@@ -1007,6 +1060,40 @@ fn OutputCard(panel: Panel, output_id: OutputId) -> impl IntoView {
                 </p>
                 {panel.vcam.hint().map(|hint| view! { <p class="hint">{hint}</p> })}
             </Show>
+            <label class="encoder">
+                "Video"
+                <select
+                    on:change=choose_mix
+                    title=move || {
+                        if running() {
+                            "A new mix applies when the output starts again"
+                        } else {
+                            "What the output shows"
+                        }
+                    }
+                >
+                    <option value="" prop:selected=move || chosen_mix().is_none()>
+                        "Program, canvas size"
+                    </option>
+                    <For
+                        each=move || panel.mixes.get()
+                        key=|mix| (mix.mix_id.clone(), mix.name.clone())
+                        let:mix
+                    >
+                        {
+                            let mix_id = mix.mix_id.clone();
+                            view! {
+                                <option
+                                    value=mix.mix_id.to_string()
+                                    prop:selected=move || chosen_mix().as_ref() == Some(&mix_id)
+                                >
+                                    {mix.name}
+                                </option>
+                            }
+                        }
+                    </For>
+                </select>
+            </label>
             <Show when=move || !is_vcam()>
             <label class="encoder">
                 "Encoder"

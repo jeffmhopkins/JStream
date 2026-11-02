@@ -111,7 +111,8 @@ Contents ([Design](#design) explains the choices):
   field the panels share (`number.rs`) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
   (the program output and each output with its FX button, creating, editing and
   deleting streams, recordings and the virtual camera, their stream keys, start and
-  stop, and the pipeline's health), and the calls and
+  stop, and the pipeline's health); `encoders.rs`: `Profiles`, its encoder profile and
+  video mix lists and forms, whose drafts, edits and summaries are tested natively; and the calls and
   logic behind it and the header's Go Live, tested natively against `MockEngine`; and `mixer.rs`: `Mixer`, the
   audio mixer (the master card with its loudness and true peak, the channels folded
   under it with their meters, faders, dB fields, mutes and routing, the same as
@@ -578,7 +579,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Redo in the Edit menu call `history.undo` and `history.redo`, like the canvas's
   buttons. A failed call shows in the shell's problem bar. The menus close on Escape
   or on a press anywhere outside them.
-- **Outputs.** The panel reads the outputs, encoder profiles and buses with `state.get`, then
+- **Outputs.** The panel reads the outputs, encoder profiles, video mixes, buses and scenes with `state.get`, then
   each output's `output.status`, and re-reads them on `state.changed` and
   `events.dropped`; `output.state_changed` updates one output's state in place. It
   creates RTMP(S), recording and virtual camera outputs (IDs `output-N`, the first free one), changes
@@ -586,7 +587,19 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   output, and starts and stops each. A card's Audio select picks the bus the output
   carries (`output.set_audio_buses`, one bus); while the output runs it is disabled and
   titled "Stop the output to change its bus", as the engine refuses the move. A virtual
-  camera's card has none. Above the cards, the program output's row
+  camera's card has none. A card's Video select picks the mix it shows
+  (`output.set_video_mix`), or "Program, canvas size" for none; a running output takes
+  it when it next starts. Under the cards (`encoders.rs`), Encoders and Video mixes list
+  each profile and mix with a line on what it encodes or shows, and a form makes one
+  (`encoder.create`, `video_mix.create`, with the first free `enc_N` or `mix_N`) or edits
+  it (`encoder.update`, `video_mix.update`). The form checks the draft with the
+  protocol's own `problem` before sending, so a refused value is named by its field and
+  the form stays open. A profile has the codec (H.264, HEVC, AV1), CBR or VBR with its
+  peak, the keyframe interval, the hardware preference and the AAC rate; a mix has its
+  input (program, preview or a scene, groups left out), a size preset (vertical
+  1080 × 1920 and 720 × 1280 among them) or custom even sides, and a frame-rate divisor.
+  Delete is disabled, titled with the outputs that use it, while any does, as the
+  engine refuses it then. Above the cards, the program output's row
   ("master") and a row per output with its state each have an "FX N" button counting
   that chain's filters, which shows the chain in the Filters panel (below the rows,
   the prototype's footnote). The header's "Go Live" starts every stopped or
