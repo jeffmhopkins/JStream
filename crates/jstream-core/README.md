@@ -1017,7 +1017,8 @@ once; a second call is logged and ignored. A pack whose load panics (naga parsin
 validating untrusted WGSL) is one that failed to load: the watcher catches the panic
 around that pack, so the other packs keep loading and hot-reloading. The load runs on
 `jstream_effects::LOAD_THREAD`, which `HANDLED_PANIC_THREADS` lists, so the apps' crash
-hook writes no report for it (#999). Each effect is a
+hook writes no report for it (#999), unless its load thread can't start: the load then
+runs on the poll thread, still caught, and its panic writes a report. Each effect is a
 `video_filter` kind, `<pack>/<effect>`, added to the graph's kinds, so `kind.list` and
 `kind.describe` report it and a video chain, a scene's or an item's effects take it. A
 poll that changes kinds applies them under the collection lock (`Graph::without_kinds`
@@ -1690,8 +1691,10 @@ link's drops instead. A link that came back but isn't stable yet is still
 `reconnecting`: its packets reach the server, but they aren't counted as sent either.
 A video frame handed over while the link isn't `active` also adds to a third counter,
 which only the health reads (#994), so a flapping server stays `poor`. The link state
-is the one the output thread's previous pass read, so the first packet after the link
-drops still counts as sent. `output.start` registers an `OutputMeter` for the run once it is
+is the one the output thread's previous pass read, so a pass's packets count by the
+link before it changed, in both directions: every packet of the pass in which the link
+drops, video and audio, counts as sent, and the video frame of the pass in which it
+becomes `active` again counts as lost, though it reached the server. `output.start` registers an `OutputMeter` for the run once it is
 armed, with its uptime counted from when the engine received the `output.start`
 (before the start waits for an earlier one, opens the destination and starts the
 program stage), whose read gathers those counts with the output's drops: its video encode
