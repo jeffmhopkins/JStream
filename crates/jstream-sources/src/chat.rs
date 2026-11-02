@@ -132,13 +132,13 @@ impl ChatKind {
                 )),
                 live(param(
                     "author_color",
-                    "Author colour",
+                    "Author color",
                     colour(),
                     json!("#ffd54fff"),
                 )),
                 live(param(
                     "text_color",
-                    "Text colour",
+                    "Text color",
                     colour(),
                     json!("#ffffffff"),
                 )),
@@ -161,7 +161,7 @@ impl ChatKind {
                 )),
                 live(param(
                     "outline_color",
-                    "Outline colour",
+                    "Outline color",
                     colour(),
                     json!("#000000ff"),
                 )),

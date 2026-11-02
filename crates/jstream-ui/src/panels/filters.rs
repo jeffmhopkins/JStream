@@ -101,7 +101,7 @@ const KNOWN: [(&str, Known); 23] = {
         ),
         (
             "apply_lut",
-            k(Video, CK, "Apply LUT", "A .cube or .png colour look"),
+            k(Video, CK, "Apply LUT", "A .cube or .png color look"),
         ),
         (
             "chroma_key",
@@ -109,7 +109,7 @@ const KNOWN: [(&str, Known); 23] = {
         ),
         (
             "color_key",
-            k(Video, CK, "Color key", "Remove any one colour"),
+            k(Video, CK, "Color key", "Remove any one color"),
         ),
         (
             "luma_key",

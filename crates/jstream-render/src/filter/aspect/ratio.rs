@@ -115,10 +115,10 @@ pub(super) fn descriptor() -> KindDescriptor {
                  bars. Unused by stretch.",
             ),
             shown_if(
-                color("pad_color", "Pad colour", true, "#000000ff"),
+                color("pad_color", "Pad color", true, "#000000ff"),
                 "mode",
                 "pad",
-                "The colour of the bars; may be transparent.",
+                "The color of the bars; may be transparent.",
             ),
             shown_if(
                 choice(

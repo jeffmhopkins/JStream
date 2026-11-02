@@ -60,7 +60,7 @@ on **program**, drawn on the canvas in the middle.
 1. In **Scenes**, click **+** under the list (or right-click and choose **New scene**),
    then type its name.
 2. In **Sources**, click **+** under the list (or right-click and choose **Add source…**).
-   Pick a type: display or window capture, a webcam, an audio input (your microphone), a media file, an image, a
+   Pick a type, or type in the search box to find one: display or window capture, a webcam, an audio input (your microphone), a media file, an image, a
    browser page, text, a colour, or an audio visualiser. Name it and press **Create**
    (or pick an existing source to reuse it); its properties open, so you can choose the
    display or window from the list of those open now, the device or the file. A display,

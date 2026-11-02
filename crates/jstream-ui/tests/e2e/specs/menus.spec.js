@@ -456,3 +456,25 @@ test('the scene menu copies and pastes the scene, and sets whether a multiview s
   await item('Paste scene').click();
   await expect(scenes).toHaveCount(3);
 });
+
+test('the Add source dialog\'s search narrows the types, and says so when none match', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  const dialog = await openAddSource(page);
+  const types = dialog.getByRole('listbox', { name: 'Source type' }).getByRole('option');
+  const all = await types.count();
+  const search = dialog.getByRole('textbox', { name: 'Search source types' });
+  // By name, in any case: the Color type, picked, with its description.
+  await search.fill('COLOR');
+  await expect(types).toHaveText(['Color']);
+  await expect(types.first()).toHaveAttribute('aria-selected', 'true');
+  await expect(dialog.locator('.add-desc')).toHaveText('A solid fill. Handy as a mask or matte.');
+  // By description: "nest" finds Scene.
+  await search.fill('nest');
+  await expect(types).toHaveText(['Scene']);
+  await search.fill('zebra');
+  await expect(types).toHaveCount(0);
+  await expect(dialog.locator('.add-types .placeholder')).toHaveText('No source type matches.');
+  await expect(dialog.getByRole('button', { name: 'Add', exact: true })).toBeDisabled();
+  await search.fill('');
+  await expect(types).toHaveCount(all);
+});

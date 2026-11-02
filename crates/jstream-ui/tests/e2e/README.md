@@ -176,7 +176,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   panel's menu opens the Add source dialog, whose types start with the seed's audio
   inputs, and its Color type places the seed's Backdrop again as a reference 40 px
   down and right, selected (the mock lists no kinds, so Color can't create); a scene nests once and isn't offered again, and the backdrop
-  cancels the dialog. An item row's menu lists the item menu's lines and Delete source everywhere…, Send to back
+  cancels the dialog. Its search box narrows the types by name ("COLOR" leaves Color,
+  picked) or description ("nest" leaves Scene), shows "No source type matches." with
+  Add disabled when none match, and an empty search lists them all again. An item row's menu lists the item menu's lines and Delete source everywhere…, Send to back
   restacks in one edit and Stretch to canvas, from the Transform submenu, fills the
   canvas; the item menu's Rename opens the row's name, Visible hides and shows the item
   with its check following, Blending's Multiply replaces the checked Normal, and Paste
