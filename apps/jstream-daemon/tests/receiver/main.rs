@@ -406,6 +406,20 @@ impl Rig {
             .collect()
     }
 
+    /// The render ticks skipped so far, engine-wide, by the latest `stats.tick` (0 before
+    /// the first). The totals run for the engine's life, so a run's skips are the
+    /// difference across it.
+    fn render_ticks(&self) -> u64 {
+        self.events()
+            .into_iter()
+            .rev()
+            .find_map(|event| match event {
+                Event::StatsTick { drops, .. } => Some(drops.render_ticks),
+                _ => None,
+            })
+            .unwrap_or(0)
+    }
+
     /// Every `stats.tick` entry for the output, oldest first.
     fn stats(&self, id: &str) -> Vec<OutputStatsInfo> {
         self.events()
@@ -516,6 +530,7 @@ async fn a_stream_reaches_a_real_receiver_with_its_encoder_settings_and_stats() 
         .await;
 
     let receiver = Receiver::start(port, KEY, &dir.join("live.flv"));
+    let skipped_before = rig.render_ticks();
     let started = Instant::now();
     rig.start("live").await;
     rig.until("live active", |rig| {
@@ -533,6 +548,8 @@ async fn a_stream_reaches_a_real_receiver_with_its_encoder_settings_and_stats() 
     let streamed = started.elapsed().as_secs_f64();
     let stats = rig.stats("live");
     rig.stop("live").await;
+    // The stop's final tick, before `stopped`, holds the run's last skips.
+    let skipped = rig.render_ticks() - skipped_before;
     let file = receiver.finish();
 
     // The stats, tick by tick.
@@ -592,7 +609,8 @@ async fn a_stream_reaches_a_real_receiver_with_its_encoder_settings_and_stats() 
     // The file is checked against the stats by its frame count, and its duration by
     // the frames' own timestamps. The pts are wall clock and a stalled tick is counted
     // in `render_ticks`, not `frames`, so a runner stall lengthens the file without
-    // adding frames: `frames / 30` is not its duration then (#1007).
+    // adding frames: `frames / 30` is not its duration then (#1007), but the frames
+    // plus the ticks skipped over the run are, within a second (#1010).
     assert!(
         close(p.video_packets.len() as f64, last.frames as f64, 30.0),
         "the file holds the frames the stats counted, within a tick: {} vs {last:?}",
@@ -605,6 +623,17 @@ async fn a_stream_reaches_a_real_receiver_with_its_encoder_settings_and_stats() 
     assert!(
         close(p.duration, span, 1.0),
         "the file lasts as long as its frames: {span:.3} s vs {p:?}"
+    );
+    let ticks = p.video_packets.len() as f64 + skipped as f64;
+    eprintln!(
+        "{span:.3} s of video: {} frames and {skipped} skipped ticks",
+        p.video_packets.len()
+    );
+    assert!(
+        close(span * 30.0, ticks, 30.0),
+        "the frames and the skipped ticks fill the file's span: {span:.3} s, {} frames, \
+         {skipped} skipped ticks",
+        p.video_packets.len()
     );
     assert_eq!(
         p.video_packets.first().map(|(_, k)| *k),

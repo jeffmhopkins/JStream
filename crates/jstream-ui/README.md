@@ -671,9 +671,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   dialog closes (failed grants included) and goes out once then, and the dialog's OK,
   and so Enter, is disabled while any list is on its way. A list sent before the dialog
   opened that answers another request for its plugin draws the dialog again with it, so
-  the redraw always lands before OK can act. When the enable after a grant fails
-  because the plugin now asks for more, the dialog closes, the list is read again, and
-  the dialog opens on what it asks for now with the engine's reason.
+  the redraw always lands before OK can act. When the enable after a grant fails,
+  for example because the plugin now asks for more or its module traps on load, the
+  dialog closes, the list is read again, and the dialog opens on what it asks for now
+  with the engine's reason.
   Each plugin shows its manifest's name (the plugin's own text, shown as data), its
   state with why it is off, its ID and package path, what its manifest asks for that
   isn't granted, Permissions…, and Turn on (`plugin.enable`) when it is off. Install
