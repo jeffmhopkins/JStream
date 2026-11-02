@@ -1006,8 +1006,9 @@ doesn't show its unfiltered input, so a failing key or mask reveals nothing it h
 X1). `Engine::watch_effect_packs(root)` watches a folder of pack folders with
 `jstream-effects`' `PackWatcher`: it loads them before it returns, then a
 `jstream-effect-packs` thread polls every 500 ms while the engine lives. It is called
-once; a second call is logged and ignored. A poll that panics (naga parsing or
-validating untrusted WGSL) is caught, logged once and changes nothing. Each effect is a
+once; a second call is logged and ignored. A pack whose load panics (naga parsing or
+validating untrusted WGSL) is one that failed to load: the watcher catches the panic
+around that pack, so the other packs keep loading and hot-reloading. Each effect is a
 `video_filter` kind, `<pack>/<effect>`, added to the graph's kinds, so `kind.list` and
 `kind.describe` report it and a video chain, a scene's or an item's effects take it. A
 poll that changes kinds applies them under the collection lock (`Graph::without_kinds`

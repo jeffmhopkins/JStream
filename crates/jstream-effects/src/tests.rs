@@ -602,6 +602,86 @@ fn the_watcher_hot_reloads_packs() {
     assert_eq!(watcher.packs().count(), 0);
 }
 
+/// [`Pack::load`], except that it panics, as naga might on hostile WGSL, for a manifest
+/// holding `# panic`.
+fn load_or_panic(dir: &Path, prelude: &str) -> Result<Pack, PackError> {
+    let manifest = std::fs::read_to_string(dir.join("effect.toml")).unwrap_or_default();
+    assert!(!manifest.contains("# panic"), "naga gave up");
+    Pack::load(dir, prelude)
+}
+
+#[test]
+fn a_pack_that_panics_fails_alone() {
+    let temp = Temp::new("panic");
+    let mut watcher = PackWatcher::with_loader(&temp.0, PRELUDE, load_or_panic);
+    let neo = MANIFEST.replacen(r#"id = "retro""#, r#"id = "neo""#, 1);
+    // `a-neo` sorts first, so it panics before `b-retro` loads in the same poll.
+    let bad = temp.0.join("a-neo");
+    let good = temp.0.join("b-retro");
+    retro(&bad, &format!("# panic\n{neo}"), SCANLINES);
+    retro(&good, MANIFEST, SCANLINES);
+
+    // The panicking pack fails to load; the other loads in the same poll.
+    let changes = watcher.poll();
+    assert!(
+        matches!(
+            &changes.errors[..],
+            [PackError::Panicked { path, message }]
+                if path == &bad.join("effect.toml") && message.contains("naga gave up")
+        ),
+        "{:?}",
+        changes.errors
+    );
+    assert_eq!(
+        changes.kinds,
+        [
+            KindChange::Added("retro/plain".into()),
+            KindChange::Added("retro/scanlines".into()),
+        ]
+    );
+    assert!(watcher.effect("neo/scanlines").is_none());
+
+    // It is reported once, and the other pack keeps hot-reloading.
+    write(
+        &good.join("scanlines.wgsl"),
+        &SCANLINES.replace("1.0 - p.strength", "1.0 - 0.5 * p.strength"),
+    );
+    let changes = watcher.poll();
+    assert!(changes.errors.is_empty(), "{:?}", changes.errors);
+    assert_eq!(
+        changes.kinds,
+        [KindChange::Changed("retro/scanlines".into())]
+    );
+
+    // Fixed, it loads.
+    write(&bad.join("effect.toml"), &neo);
+    let changes = watcher.poll();
+    assert!(changes.errors.is_empty(), "{:?}", changes.errors);
+    assert_eq!(
+        changes.kinds,
+        [
+            KindChange::Added("neo/plain".into()),
+            KindChange::Added("neo/scanlines".into()),
+        ]
+    );
+
+    // A reload that panics keeps the last good version, and the other pack's change in
+    // the same poll is still reported.
+    write(&bad.join("effect.toml"), &format!("# panic\n{neo}"));
+    write(&good.join("scanlines.wgsl"), SCANLINES);
+    let changes = watcher.poll();
+    assert!(
+        matches!(&changes.errors[..], [PackError::Panicked { .. }]),
+        "{:?}",
+        changes.errors
+    );
+    assert_eq!(
+        changes.kinds,
+        [KindChange::Changed("retro/scanlines".into())]
+    );
+    assert!(watcher.effect("neo/scanlines").is_some());
+}
+
 /// The test compositor, or `None` (a skip) where no adapter exists outside CI.
 fn compositor() -> Option<jstream_render::Compositor> {
     match jstream_render::Compositor::open(jstream_render::OpenOptions::headless()) {

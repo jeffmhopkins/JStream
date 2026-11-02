@@ -6,8 +6,11 @@
 //! whose stamp changed is reloaded, and the poll reports which kinds appeared,
 //! changed or disappeared, for the engine's `kind.changed` events (ADR-0025). A reload
 //! that fails keeps the last good version of the pack live and reports the error once,
-//! so a half-saved shader never takes an effect off the air. A folder refused because
-//! another folder holds its pack ID is retried in the poll that frees the ID.
+//! so a half-saved shader never takes an effect off the air. A load that panics (naga
+//! parsing or validating a pack's WGSL, which is untrusted) is caught around that one
+//! pack and counts as a load that failed, so the other packs keep loading and the poll
+//! keeps every change it found. A folder refused because another folder holds its pack
+//! ID is retried in the poll that frees the ID.
 //!
 //! Polling, not OS notifications: it needs no dependency and behaves the same on every
 //! platform and file system, and a pack is a handful of small files. The cost is the
@@ -63,7 +66,12 @@ pub struct PackWatcher {
     root: PathBuf,
     prelude: String,
     folders: BTreeMap<PathBuf, Folder>,
+    /// Loads one pack folder: [`Pack::load`], or a test's stand-in.
+    load: Loader,
 }
+
+/// Loads the pack in a folder, validating its shaders against a prelude.
+type Loader = fn(&Path, &str) -> Result<Pack, PackError>;
 
 impl PackWatcher {
     /// A watcher of the pack folders in `root`, validating shaders against the host's
@@ -73,6 +81,16 @@ impl PackWatcher {
             root: root.into(),
             prelude: prelude.into(),
             folders: BTreeMap::new(),
+            load: Pack::load,
+        }
+    }
+
+    /// A watcher that loads each pack folder with `load`, for tests.
+    #[cfg(test)]
+    pub(crate) fn with_loader(root: impl Into<PathBuf>, prelude: &str, load: Loader) -> Self {
+        Self {
+            load,
+            ..Self::new(root, prelude)
         }
     }
 
@@ -133,7 +151,7 @@ impl PackWatcher {
         // The stamp is taken before the load, so an edit during it is seen next poll.
         let watched = watched_files(dir);
         let now = stamp(&watched);
-        let loaded = Pack::load(dir, &self.prelude).and_then(|pack| {
+        let loaded = load_caught(self.load, dir, &self.prelude).and_then(|pack| {
             let taken = self.folders.iter().find(|(other, f)| {
                 other.as_path() != dir && f.pack.as_ref().is_some_and(|p| p.id() == pack.id())
             });
@@ -185,6 +203,21 @@ impl PackWatcher {
     pub fn effect(&self, kind_id: &str) -> Option<&Effect> {
         self.packs().find_map(|p| p.effect(kind_id))
     }
+}
+
+/// `load(dir, prelude)`, with a panic caught and returned as [`PackError::Panicked`].
+fn load_caught(load: Loader, dir: &Path, prelude: &str) -> Result<Pack, PackError> {
+    std::panic::catch_unwind(|| load(dir, prelude)).unwrap_or_else(|panic| {
+        let message = panic
+            .downcast_ref::<&str>()
+            .map(|s| (*s).to_owned())
+            .or_else(|| panic.downcast_ref::<String>().cloned())
+            .unwrap_or_default();
+        Err(PackError::Panicked {
+            path: dir.join(MANIFEST),
+            message,
+        })
+    })
 }
 
 /// The sub-folders of `root` that hold a manifest, sorted.

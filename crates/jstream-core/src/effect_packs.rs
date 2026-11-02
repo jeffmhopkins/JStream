@@ -123,9 +123,6 @@ pub(crate) struct Packs {
     quarantine: Quarantine,
     /// How many losses each kind was blamed for in this run.
     blamed: BTreeMap<String, u32>,
-    /// Whether a poll panicked and that was logged, so one that keeps panicking logs
-    /// once.
-    panicked: bool,
     /// The last [`Update::seq`] made.
     seq: u64,
 }
@@ -140,36 +137,17 @@ impl Packs {
             loaded: BTreeMap::new(),
             quarantine,
             blamed: BTreeMap::new(),
-            panicked: false,
             seq: 0,
         }
     }
 
     /// Loads, reloads and drops packs to match the folder. `None` when no kind changed.
     /// A pack that fails to load is logged; one that fails a reload keeps its last good
-    /// version.
-    /// A poll that panics (naga parsing or validating a pack's WGSL, which is
-    /// untrusted) is logged and changes nothing, so a pack can't crash the engine.
+    /// version. A pack whose load panics (naga parsing or validating its WGSL, which is
+    /// untrusted) is one that failed to load: the watcher catches the panic around that
+    /// pack, so the others keep loading and a pack can't crash the engine.
     pub(crate) fn poll(&mut self) -> Option<Update> {
-        let changes = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            self.watcher.poll()
-        })) {
-            Ok(changes) => {
-                self.panicked = false;
-                changes
-            }
-            Err(panic) => {
-                if !std::mem::replace(&mut self.panicked, true) {
-                    let what = panic
-                        .downcast_ref::<&str>()
-                        .map(|s| (*s).to_owned())
-                        .or_else(|| panic.downcast_ref::<String>().cloned())
-                        .unwrap_or_default();
-                    tracing::error!(root = %self.watcher.root().display(), panic = %what, "loading the effect packs panicked; their kinds stay as they were");
-                }
-                return None;
-            }
-        };
+        let changes = self.watcher.poll();
         for error in &changes.errors {
             tracing::warn!(root = %self.watcher.root().display(), %error, "effect pack not loaded");
         }

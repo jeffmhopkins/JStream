@@ -71,7 +71,9 @@ Contents ([Design](#design) explains the choices):
   crop mode (which a switch of scene leaves), the source kinds
   and the kind descriptors read so far, the last failed call, the toast's confirmation
   (`notify`, `apply_noting`), and `keys_changed`, which the outputs panel bumps when a stream key
-  is set or cleared. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
+  is set or cleared. `enable_effect` sends `effect.enable` for a quarantined effect-pack
+  kind and reads `kind.list` again, as a `gpu.device_lost` that quarantined kinds does,
+  since no event reports a quarantine's change. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
   `plan_summary`, `reset_edits` (a keyframe's Reset) and `fresh_id`.
 - **Hotkeys** (`hotkeys.rs`): `Hotkeys`, which runs the collection's hotkey bindings
   while the page has the focus and no dialog or menu is open, and the chord of a key
@@ -477,6 +479,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `fresh_id`; the new filter opens in place, or in the settings dialog when it has more
   than three settings or isn't described yet. Edit filters… in the item menus selects the item and shows the
   panel. Names come from the prototype's catalogue, then `kind.list`, then the kind's ID.
+  A filter whose kind `kind.list` marks quarantined (ADR-0087: an effect-pack kind a GPU
+  device loss was blamed on, bypassed) shows a "quarantined" badge and a Re-enable
+  button that sends `effect.enable` (`Studio::enable_effect`); its badge goes once
+  `kind.list` no longer marks it.
   An FX button (the Outputs panel's rows, the Mixer's master card or strip) picks the program
   output's chain (owner `master`) or an output's (ADR-0080) instead, and shows the
   panel; the same rows and dialogs edit it with that owner. Both chains show, and the
