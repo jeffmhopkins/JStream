@@ -40,7 +40,8 @@ protocol's types (`Overrides`).
   ([ADR-0040](../../docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)
   §3), and the `transitions`: the presets, keyed by ID, and the default. A binding
   always names objects that exist. A new state holds one preset, `cut`, as its default.
-  Each `Output` has its own `Chains` too; only their audio chains hold filters so far.
+  Each `Output` has its own `Chains` too: a video chain, and an audio chain when it
+  carries audio.
 - `Source`: a single shared instance with an ID, a name, a `SourceKind` (`builtin` by
   kind ID, or `scene`, a nested scene) and its `Settings`: every parameter of its kind,
   or none for a `scene` source. `item.add` places an existing source by reference,
@@ -182,7 +183,8 @@ the batch **touched**.
   source, an output, the master stage, a scene or an item), the filter ID (non-empty,
   unused on the owner), that the owner has the chain (a source: video if its kind
   produces video, audio if it produces audio and it is not a `scene` source; the master
-  and an output that carries audio: audio only, ADR-0080; a scene and an item: video
+  and every output: video, and audio for the master and an output that carries audio,
+  ADR-0080, an output that doesn't exist being `not_found`; a scene and an item: video
   only, [ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md)), that the
   chain has room, that the kind is a filter kind of that chain (`kind`), that a master
   or output filter's settings hold no reference (a scene, source, bus or asset), the
@@ -571,9 +573,10 @@ no error quotes a credential-like value placed where a number, key or tag belong
 
 Planned, and kept possible by the private fields of the model types:
 
-- **More chains:** filter chains on buses, and video chains on the master and outputs
-  ([ADR-0026](../../docs/adr/0026-source-filter-chains.md),
-  [ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)); keyframe
+- **More chains:** filter chains on buses
+  ([ADR-0026](../../docs/adr/0026-source-filter-chains.md)); references in the master's
+  and outputs' filters
+  ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)); keyframe
   overrides of item effects (ADR-0065).
 - **Kind versions.** The engine's kinds come from `jstream-sources`. The collection file
   records each source's kind version but refuses a mismatch: settings migrations per

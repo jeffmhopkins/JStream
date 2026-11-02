@@ -23,6 +23,7 @@ use jstream_media::{
     VideoFrameInfo,
 };
 use jstream_platform::{VcamFormat, VcamSink, VideoSurface};
+use jstream_protocol::OutputId;
 
 use crate::lock;
 use crate::runtime::pipeline::FailLine;
@@ -95,6 +96,7 @@ pub(crate) struct CameraFrame {
 pub(crate) fn camera_channels(
     stop: Arc<AtomicBool>,
     drops: Arc<AtomicU64>,
+    owner: Option<OutputId>,
 ) -> (VcamTap, Receiver<CameraFrame>, SyncSender<Vec<u8>>) {
     let (frames_tx, frames_rx) = std::sync::mpsc::sync_channel(CAMERA_QUEUE);
     let (spare_tx, spare_rx) = std::sync::mpsc::sync_channel(SPARE_BUFFERS);
@@ -104,6 +106,7 @@ pub(crate) fn camera_channels(
         held: None,
         stop,
         drops,
+        owner,
     };
     (tap, frames_rx, spare_tx)
 }
@@ -120,9 +123,17 @@ pub(crate) struct VcamTap {
     stop: Arc<AtomicBool>,
     /// The output's drop count: frames the camera thread was too far behind to take.
     drops: Arc<AtomicU64>,
+    /// The camera's output when it has its own video chain, so it is fed a program
+    /// frame of its own (ADR-0080 §2); `None` shares the program frame.
+    owner: Option<OutputId>,
 }
 
 impl VcamTap {
+    /// The output whose own program frame it is fed, or `None` for the shared one.
+    pub(crate) fn owner(&self) -> Option<&OutputId> {
+        self.owner.as_ref()
+    }
+
     /// Sends one program frame, RGBA8 at `size`, to the camera thread. It reuses a
     /// buffer the camera thread handed back, so it allocates only until buffers
     /// circulate. `false` once the tap is done: its output is stopping, or the camera

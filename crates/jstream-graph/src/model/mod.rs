@@ -235,7 +235,7 @@ impl State {
     }
 
     /// The master stage's filter chains, which apply to everything leaving JStream
-    /// (ADR-0080 §1). Only the audio chain holds filters so far.
+    /// (ADR-0080 §1): a video chain over each mix an output draws, and an audio chain.
     pub fn master(&self) -> &Chains {
         &self.master
     }
@@ -975,8 +975,8 @@ impl Output {
         self.encoder_profile.as_ref()
     }
 
-    /// Its own filter chains, which run after the master stage (ADR-0080 §2). Only the
-    /// audio chain holds filters so far.
+    /// Its own filter chains, which run after the master stage (ADR-0080 §2): a video
+    /// chain, and an audio chain when it carries audio.
     pub fn filters(&self) -> &Chains {
         &self.filters
     }
@@ -1008,10 +1008,10 @@ impl Output {
     }
 
     /// Whether its own video filter chain has any filters. Such an output gets its own
-    /// render pass and encoder session (ADR-0080 §3). Outputs carry no video chain
-    /// until filters land, so this is `false` for every output.
+    /// render pass and encoder session (ADR-0080 §3), even when every filter is off, so
+    /// switching one never moves the output between sessions.
     pub fn has_video_chain(&self) -> bool {
-        false
+        !self.filters.chain(FilterChain::Video).is_empty()
     }
 }
 

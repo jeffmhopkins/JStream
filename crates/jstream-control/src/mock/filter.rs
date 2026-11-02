@@ -3,8 +3,9 @@
 //! in the same order and with the same errors. Like the rest of the mock it describes no
 //! kinds, so it doesn't check a filter's kind, or whether a builtin source has the chain
 //! (a `scene` source has no audio chain, and that it does check), and stores settings as
-//! given. The master stage and each output that carries audio have an audio chain only,
-//! whose filters can't hold a reference (ADR-0080); those it checks too. A scene and an
+//! given. The master stage and every output have a video chain, and the master stage
+//! and each output that carries audio an audio chain; their filters can't hold a
+//! reference (ADR-0080), and those it checks too. A scene and an
 //! item have a video chain only (ADR-0065), whose references the mock's delete checks
 //! follow; it has no keyframe scenes, so it never refuses a variant owner, and it runs
 //! no cycle check.
@@ -148,11 +149,6 @@ impl Collection {
             {
                 missing(format!("source `{source_id}` has no audio chain"))
             }
-            (FilterOwner::Master | FilterOwner::Output { .. }, FilterChain::Video) => missing(
-                "the master stage's and outputs' video chains are not available yet; only \
-                 their audio chains hold filters"
-                    .into(),
-            ),
             (FilterOwner::Output { output_id }, FilterChain::Audio)
                 if !matches!(
                     self.outputs.get(output_id),

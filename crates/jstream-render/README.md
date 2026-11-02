@@ -499,9 +499,11 @@ defaults pass its descriptor, and that they build its pass.
 **Where they run.** `jstream-core`'s chain runtime (roadmap V0,
 [core › Design](../jstream-core/README.md#design)) keeps a `VideoFilter` per enabled
 filter of a source's video chain and runs them in order before placement, of a
-scene's over its composite, and of an item's effects over its box, drawn into a layer
+scene's over its composite, of an item's effects over its box, drawn into a layer
 grown by their summed `max_outset_px`
-([ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md)), each into a
+([ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md)), and of the master
+stage's and an output's over the mix an output draws
+([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), each into a
 cached layer with `apply_filter_into`. `video_filter_descriptors()` is how its
 `kind.list` gets these kinds.
 

@@ -479,9 +479,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   panel. Names come from the prototype's catalogue, then `kind.list`, then the kind's ID.
   An FX button (the Outputs panel's rows, the Mixer's master card or strip) picks the program
   output's chain (owner `master`) or an output's (ADR-0080) instead, and shows the
-  panel; the same rows and dialogs edit it with that owner. Only their audio chains
-  show, since the engine refuses their video chains so far, and the virtual camera,
-  which has no sound, has none. A scene's chain (owner `scene`, ADR-0065) shows while no
+  panel; the same rows and dialogs edit it with that owner. Both chains show, and the
+  virtual camera, which has no sound, has a video chain only. The Add filter dialog
+  won't add a kind whose settings name a scene, a source, a bus or a file there
+  (`refers`: the engine refuses those references yet), and, for an output whose video
+  chain is empty, reads `output.status` and states what its first video filter costs
+  (`first_video_cost`, ADR-0080 §3): its own GPU pass and encoder session, with the
+  encoder sessions in use now, or for the virtual camera, which opens no encoder
+  session, a GPU pass only, from its next start if it runs. A scene's chain (owner `scene`, ADR-0065) shows while no
   item is selected, for the selected scene, or a keyframe's parent, since a keyframe has
   none of its own; a scene row's Edit filters… and the canvas margin's Edit scene
   filters… pick it as an FX button does (`show_filters`). It is a video chain, and the
