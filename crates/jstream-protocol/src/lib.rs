@@ -56,7 +56,9 @@ pub use envelope::{
     Response, ServerMessage, Welcome,
 };
 pub use error::{Blocker, EntityKind, ProtocolError, WireError};
-pub use event::{ChainCost, DropCounts, EngineLoad, Event, OutputState};
+pub use event::{
+    ChainCost, DropCounts, EngineLoad, Event, OutputHealth, OutputState, OutputStatsInfo,
+};
 pub use filter::{FilterChain, FilterChains, FilterInfo, FilterOwner, MAX_CHAIN_FILTERS};
 pub use finite::Finite32;
 pub use geometry::{
@@ -88,8 +90,9 @@ pub use output::{
     rtmp_url_sends_key_in_cleartext,
 };
 pub use plugin::{
-    PLUGIN_SCOPES, PluginClass, PluginDenial, PluginDisabledReason, PluginGrant, PluginScope,
-    PluginState, Reach, plugin_classes, plugin_may_bind, plugin_scope, settings_reach,
+    PLUGIN_SCOPES, PluginClass, PluginDenial, PluginDisabledReason, PluginGrant, PluginInfo,
+    PluginRequest, PluginScope, PluginState, Reach, plugin_classes, plugin_may_bind, plugin_scope,
+    settings_reach,
 };
 pub use preview::{
     BINARY_HEADER_LEN, BINARY_VERSION, BinaryError, BinaryFrame, BinaryHeader, KeyframeGate,

@@ -144,9 +144,10 @@ state machine. Contents:
     the master stage's audio chain or an output's (ADR-0080), the program stage's
     `jstream-audio-sources` thread owns it (`filters::ClapHosts`), and the routing puts
     the filter on its host's block once that is ready (see *Audio routing*): on the
-    master bus's copy of the mixer's master chain, every other bus's copy delaying its
-    dry signal by the same latency (until outputs take other buses: then each bus that
-    feeds one gets its own host, ADR-0086, not built yet). A collection holding one
+    master bus's copy of the mixer's master chain, and on each other bus that feeds an
+    output (an output tap reads it) its copy on a host of that bus's own (ADR-0086).
+    A bus's copy delays its dry signal by the filter's latency while its host starts
+    and once the bus feeds no output. A collection holding one
     loads before the scan describes its kind (the graph keeps such a filter verbatim),
     and the filter is bypassed until then.
   - **Not yet:** writing the plugin's own parameter changes and saved state back to the
@@ -161,7 +162,8 @@ state machine. Contents:
   [ADR-0076](../../docs/adr/0076-saved-wasm-plugins-and-manifest-requests.md)):
   `plugin.install` loads a package's module on `jstream-plugin-wasm`'s host,
   `plugin.grant` replaces what it may do, never past what its manifest asks for, and
-  `plugin.enable` loads it again after the engine disabled it. With a plugin folder
+  `plugin.enable` loads it again after the engine disabled it, and `plugin.list` lists
+  them. With a plugin folder
   (`open_plugin_dir`), the installed plugins and their grants are saved in its
   `plugins.json` and loaded again at the next start. See *WASM plugins* under Design.
 - **Live sources** (`live.rs`): a running `jstream-sources` source for every source
@@ -252,7 +254,8 @@ state machine. Contents:
   moves to CPU frames on its own device (see *Runtime*). Encode threads live in the encoder
   sessions: one video session per video mix and encoder profile in use, shared by the
   outputs on that pair, one audio session of the master bus per such pair, shared by
-  its outputs with no audio chain, and one per output with an audio chain. Each
+  its outputs with no audio chain that carry the master bus, and one per output with an
+  audio chain or carrying another bus. Each
   output's own thread muxes FLV and publishes it, or muxes MP4 and records it
   ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)). A virtual camera's
   thread converts and publishes the frames the render thread sends it through a tap
@@ -263,7 +266,8 @@ state machine. Contents:
   mixer input has its fader and its sends (silenced while it is `muted`), scaled by
   its activity gain (`activity.rs`): a `when_shown` source is heard only while the
   Program mix shows it. The master stage's audio chain runs on the mixer's master
-  chain, and an output with an audio chain has an output tap running it
+  chain, and an output with an audio chain, or on a bus other than the master, has an
+  output tap on its bus running it
   ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md));
   `meters.tick` carries their levels about ten times a second, with the master's true
   peak and BS.1770 loudness, which the mixer thread measures on each block, and
@@ -305,6 +309,9 @@ state machine. Contents:
   the publish link's, and a sampler thread
   emits a tick about once a second until the last output stops. The same thread emits
   `meters.tick` about ten times a second.
+- **Output stats** (`output_stats.rs`): each running output's meter for `stats.tick`'s
+  `outputs` (protocol 0.57). `output.start` registers one per output once it runs (not
+  for a virtual camera yet), and the stop removes it (*Output stats* below).
 - **Engine load** (`load.rs`): what a `stats.tick`'s `load` reads besides the render
   hub's frame count: when the engine started, the process CPU time from the host's
   `ProcessCpu` (`Engine::set_process_cpu`), and the idle heartbeat
@@ -400,7 +407,9 @@ state machine. Contents:
   virtual camera publishing the program as BGRA at the canvas size (fitted into a canvas of another size, started again after a stop, running beside
   a stream, refused without a camera in the backends or while another output uses
   it, a refused start keeping the sink, a failed publish failing only that output), a render panic failing both outputs, overload drops from a
-  fake encoder and the mixer reported in `stats.tick`, render and mixer panics
+  fake encoder and the mixer reported in `stats.tick`, a running output listed in each
+  `stats.tick` with what it sent and left out once stopped, a lost link making it
+  `poor` and its bytes stop counting, render and mixer panics
   reported as `failed` on the CPU stand-in (`tests/scenarios.rs` reaches it through
   the hidden `Engine::with_cpu_compositor`), audio sources becoming mixer inputs on the CPU
   stand-in (`src/tests/audio.rs`: the defaults while there is none, sources added and
@@ -1267,7 +1276,8 @@ differs from what the host was sent, all of them when a new host is ready. A CLA
 filter with no plugin for its kind (no scan yet, or the plugin is gone) is logged once
 and bypassed; one removed from the chain, or on a closed input, stops its host. The
 same thread runs the hosts of the master stage's and the running output taps' CLAP
-filters (`filters::ClapHosts`), which the routing names with
+filters (`filters::ClapHosts`), the master stage's once more for each bus other than
+the master that a running tap reads (ADR-0086), which the routing names with
 `Wanted::set_routed_chains`: started, ticked, sent their settings and stopped as a
 source's are, at the mixer's rate and block size, and each ready host's block listed in
 `Routed` (`Wanted::routed_blocks`) for the routing (see *Audio routing*). A change to
@@ -1634,6 +1644,29 @@ holds the engine weakly and emits a tick about once a second while no program st
 `jstream-stats` thread runs, ending once the last engine handle is gone. The daemon and
 the desktop app start it; tests and an embedding host call `emit_stats_tick` as before.
 
+### Output stats (`stats.tick`'s `outputs`)
+
+Each tick also lists every running output's live stats (protocol 0.57;
+`output_stats.rs`). The output thread counts each packet the muxer takes while the
+publish link is up into its `SentCounters` (two relaxed atomic adds: the bytes, and a
+frame for video), so a link that is down sends nothing and its tags count as the
+link's drops instead. `output.start` registers an `OutputMeter` for the run once it is
+armed, with its uptime counted from when the engine received the `output.start`
+(before the start waits for an earlier one, opens the destination and starts the
+program stage), whose read gathers those counts with the output's drops: its video encode
+session's queue-full and busy drops counted from when the meter was armed (a shared
+session may have dropped frames for an earlier output), and the video subscriber's
+losses, for `dropped_frames`; the audio subscriber's losses, the output thread's own
+drops and the publish link's, for `dropped_packets`. The meters are on their own lock,
+which the stats thread takes after the drop ledger and before the collection lock, and
+never with it. Each meter keeps the samples of the last ten seconds: `kbps` is the
+bytes since the previous sample over the time between them, and `health` compares the
+newest sample with the one at the window's start (`waiting` until a video frame was
+sent, `good` with nothing new lost, `poor` with 2% or more of the video frames lost,
+`fair` otherwise). Under the collection lock the engine then makes an output that is
+`reconnecting` `poor`. The stop drops the meter with the output's drop guard, so the
+next tick leaves the output out. A virtual camera output has no meter yet.
+
 ### Audio routing (`meters.tick`)
 
 [ADR-0028](../../docs/adr/0028-audio-model-v2.md)'s mixer lives in the program stage,
@@ -1708,16 +1741,30 @@ brings the mixer in line with the collection under the collection lock:
   it ready (see *Audio sources*), bypassed until then, and a new tap for an output
   that already has one queues the old tap's removal first, so a block never feeds two
   taps; while the mixer hasn't taken that removal, the new tap's CLAP filters wait.
+  A master CLAP filter runs one host per bus that feeds an output
+  ([ADR-0086](../../docs/adr/0086-master-clap-filter-one-host-per-output-bus.md)): the
+  master bus's copy on the filter's own host, and each other bus a running tap reads
+  on hosts of that bus's own, which the routing names to the same thread
+  (`RoutedChains::buses`) and puts on that bus's copy with
+  `FilterControl::set_bus_host` once both the bus's host and the master bus's filter
+  are ready and the master chain has no removal pending. Until then, and once the bus
+  feeds no output, the copy passes the bus's dry signal at the filter's latency. A host
+  whose latency differs from the master bus's is refused, logged once per block, and
+  the copy stays dry. Every host gets the filter's settings; each keeps its own state.
 
 An output whose audio chain holds a filter, even a disabled one
-([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), gets an output
-tap on the master bus when it starts (`Engine::add_output_tap`), and its own audio
-encode fed from the tap's blocks, stamped earlier by its chain's latency. Its video
+([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), or that
+carries a bus other than the master (`output.set_audio_buses`, protocol 0.59), gets an
+output tap on its bus when it starts (`Engine::add_output_tap`), and its own audio
+encode fed from the tap's blocks, stamped earlier by its chain's latency. The graph
+refuses to move a running output to another bus, so the bus its tap reads can't be
+deleted while it runs. Its video
 still shares a session as *Encoder profiles* says. The other outputs on its video
 session (the same video mix and encoder profile) share one audio encode of the master
 bus, opened when the first of them starts; each video session has its own. The tap is
 removed when the output stops; a chain added to a running output takes effect at its
-next start, while edits to an existing tap's chain apply live.
+next start, while edits to an existing tap's chain apply
+live.
 
 The `jstream-stats` sampler also emits `meters.tick` on each of its 100 ms wakes: a
 reading of every routed source's meter (if its audio is on) and every bus's, peak (held since the last
@@ -1735,7 +1782,8 @@ An output's configuration is collection state (`output.create`, `output.set_targ
 `output.delete`, kept by `jstream-graph`); whether it runs is runtime state, which never
 changes `rev`. After each applied batch the runtime states follow the collection: a
 created output starts `stopped`, and a deleted one is forgotten. The graph refuses to
-delete a running output (`invalid_argument`), so the batch passes it the running set.
+delete a running output or move one to another bus (`invalid_argument`), so the batch
+passes it the running set.
 A host can also declare an output with `Engine::with_output(id)`, outside the
 collection: it starts `stopped`, has no target and stays known whatever the collection
 holds. A live host reads a collection output's target with `output_kind` when its
@@ -2272,10 +2320,17 @@ The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in proc
   `error`, and the next change saves again. A file that can't be read, or of a version
   it doesn't know, is logged at `error` and left as it is, and nothing is loaded or saved
   that run. Without a plugin folder, the installed plugins last for the run.
+- **Listing.** `plugin.list` (`automation::list`) answers from the registry with no
+  collection lock held: each plugin's state and reason, its manifest's name, its
+  package path, what its manifest asks for as last read (`Request`, as `PluginRequest`)
+  and its grant. A plugin being installed, or started with the saved plugins, is listed
+  as enabled; one being enabled keeps the reason it was disabled for until it loads
+  (`Run::Starting` holds it). Built without `wasm-plugins`, the engine lists none, from
+  the collection's query match (`plugin_list_is_empty_until_a_plugin_is_installed`).
 - **Not yet:** a private data folder per plugin, deferred until the file imports a plugin
-  would need to use it are designed (ADR-0076); a query that lists the installed plugins;
-  a way to remove one (no `plugin.uninstall` yet, so an unwanted plugin stays saved,
-  disabled, until `plugins.json` is edited); and the UI's grant flow.
+  would need to use it are designed (ADR-0076); and a way to remove one (no
+  `plugin.uninstall` yet, so an unwanted plugin stays saved, disabled, until
+  `plugins.json` is edited).
 
 ### Locking
 
@@ -2665,9 +2720,9 @@ routing* in Design). Every running output shares that one program stage (capture
 render, mixer, audio inputs); the first `output.start` builds it and the
 last `output.stop` tears it down, and starts are serialized. Encode threads are the
 ones inside the encoder sessions: outputs with the same video mix and encoder profile
-share one video session (an output with its own video chain would get its own); those of them with no audio chain share one audio session of
-the master bus; an output with an audio chain has an audio session of its own that the
-mixer thread feeds from the output's tap. The render and mixer threads take a new
+share one video session (an output with its own video chain would get its own); those of them with no audio chain that carry the master bus share one audio session of
+it; an output with an audio chain, or one carrying another bus, has an audio session of
+its own that the mixer thread feeds from the output's tap. The render and mixer threads take a new
 session's inputs from a channel, never a lock, and hand a finished session's input to
 the collector rather than drop it. While the stage has no session and no virtual
 camera, or no mix is due on a tick, it draws nothing but still adopts the latest render

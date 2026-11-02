@@ -68,9 +68,9 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Mixer](#mixer) | 7 | 6 | 0 | 0 | 0 | 1 |
 | [Outputs](#outputs) | 4 | 3 | 0 | 0 | 1 | 0 |
 | [Transitions](#transitions) | 6 | 6 | 0 | 0 | 0 | 0 |
-| [Stream stats, live chat, agent activity](#live-panels) | 4 | 1 | 0 | 0 | 3 | 0 |
+| [Stream stats, live chat, agent activity](#live-panels) | 4 | 1 | 1 | 0 | 2 | 0 |
 | [Keyboard](#keyboard) | 7 | 6 | 0 | 0 | 0 | 1 |
-| **Total** | **131** | **118** | **3** | **0** | **6** | **4** |
+| **Total** | **131** | **118** | **4** | **0** | **5** | **4** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -106,7 +106,7 @@ Spec: [workspace › header bar](../design/ui-prototype/spec-workspace.md#header
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
 | HD-01 | Brand and menu row | Accent square and "JStream", then File, Edit, View and Layout menus; one top menu open at a time, closed by any outside press. | ✅ | The prototype leaves File and Edit empty; the real ones hold the connection details and Disconnect, and Undo and Redo. The menus behave as a desktop menu bar: a click opens or closes one; while one is open, pointing at another menu opens it instead; Escape closes it. From the keyboard, Down, Enter or Space opens the focused menu at its first item (Up at its last), Up, Down, Home and End move through it, Left and Right move along the bar (opening the next menu while one is open), and Tab closes it. Keys with Ctrl, Alt or Meta are left to the hotkeys. |
-| HD-02 | View menu | Lists all 11 panels with "shown" or "add"; clicking hides a shown panel or adds a hidden one to its home zone. | ✅ | All eleven, in the prototype's order. Live chat and Stream stats wait on YouTube sign-in ([live panels](#live-panels)), so for now they say what they wait on. Beyond the prototype, a Projectors group under them opens the program or the multiview in a window or full screen ([DL-07](#dialogs)). |
+| HD-02 | View menu | Lists all 11 panels with "shown" or "add"; clicking hides a shown panel or adds a hidden one to its home zone. | ✅ | All eleven, in the prototype's order. Live chat waits on YouTube sign-in ([live panels](#live-panels)), so for now it says what it waits on; Stream stats shows an output's own stats without it. Beyond the prototype, a Projectors group under them opens the program or the multiview in a window or full screen ([DL-07](#dialogs)). |
 | HD-03 | Layout menu | "Layout: <name>", saved layouts with "current", "Save current layout as new", "Reset to default". | ✅ | |
 | HD-04 | Stats readout | Mono "60 fps · 0 dropped · CPU 3%". | ✅ | Built from `stats.tick`: the frame rate is the program's over the last tick's interval, and shows only while an output runs, since the program stage draws nothing otherwise; "N dropped" counts video frames dropped since the page connected; CPU is the engine process's share of every logical CPU, as Task Manager counts it, "<1%" below half a percent (protocol 0.48's `load`). The daemon and the desktop app tick about once a second while idle too. CPU shows on Windows and macOS; elsewhere the engine can't read it and the readout leaves it out. |
 | HD-05 | Privacy button | "Privacy" / "Privacy on" (red); blurs every output and mutes the mic; Pause toggles it. | ⏸ | Removed at the maintainer's request after the alpha: JStream has no privacy screen ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md) §4). Bringing it back is the maintainer's call. |
@@ -123,10 +123,11 @@ covers = ["crates/jstream-ui/src/app.rs", "crates/jstream-ui/src/dock.rs", "crat
 
 Spec: [workspace › dock zones and docking](../design/ui-prototype/spec-workspace.md#dock-zones-and-docking).
 The dock is built (`dock.rs`, `workspace.rs`) with the prototype's eleven panels: Scenes,
-Scene objects, Inspector (with the pairing panel under the properties), Transform,
+Scene objects, Inspector (with the pairing panel and the Plugins section under the properties), Transform,
 Filters, Live chat, Stream stats, Audio mixer, Outputs, Agent activity and Transitions
-(studio mode and the presets). Live chat and Stream stats say what they wait on until
-their rows are built ([live panels](#live-panels)).
+(studio mode and the presets). Live chat says what it waits on until its rows are built,
+and Stream stats shows the half of its row that needs no YouTube sign-in
+([live panels](#live-panels)).
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
@@ -137,7 +138,7 @@ their rows are built ([live panels](#live-panels)).
 | DK-05 | Close twice | × arms red on the first click, closes on the second; disarms after 3 s or when the pointer leaves. | ✅ | |
 | DK-06 | Drag to dock | Drag a tab onto a tab strip (group), a panel's half (split before or after), or a zone (append); empty zones show "Drop here" placeholders while dragging. | ✅ | Pointer drag rather than HTML drag and drop, which desktop webviews can intercept. Unlike the spec's `cursor: grab`, a tab keeps the arrow pointer, on the maintainer's alpha feedback; the grabbing hand shows only while it drags. |
 | DK-07 | Home zones | A panel added from the View menu goes to its home zone (Scenes and Scene objects left; Inspector, Transform, Filters, chat, stats and agent right; Mixer, Outputs and Transitions bottom). | ✅ | |
-| DK-08 | Editing and Live layouts | Editing is the default: left Scenes, Scene objects; right Inspector (weight 2), Filters+Transform; bottom Mixer, Outputs+Transitions. Live: Scenes; Mixer and Transitions under the canvas; chat, then stats+Outputs+Agent on the right. | 🟡 | Both built with the panels the UI has: Editing puts Filters and Transform in one group under the Inspector, Filters shown. Live puts Agent activity as a second tab beside Outputs; Live chat and Stream stats only say what they wait on, so Live leaves them out until the engine supports them. |
+| DK-08 | Editing and Live layouts | Editing is the default: left Scenes, Scene objects; right Inspector (weight 2), Filters+Transform; bottom Mixer, Outputs+Transitions. Live: Scenes; Mixer and Transitions under the canvas; chat, then stats+Outputs+Agent on the right. | 🟡 | Both built with the panels the UI has: Editing puts Filters and Transform in one group under the Inspector, Filters shown. Live puts Stream stats, Outputs and Agent activity as tabs in one group, Stream stats shown; Live chat only says what it waits on, so Live leaves it out until the engine supports it. |
 | DK-09 | "(modified)" and saving | Any move, close, resize or View toggle marks the layout "(modified)"; layouts can be saved as "My layout N" and reset. | ✅ | |
 | DK-10 | Layouts persist | Layouts survive a reload, the same on the desktop app and in a browser. | ✅ | The engine's server keeps the dock, saved layouts included, in its UI settings (`ui_settings.get`/`set`, [ADR-0084](adr/0084-ui-settings-kept-by-the-server.md)), in the data folder the desktop app and the daemon share. The browser keeps a copy too, shown first and used alone with no server in front, and a change the server never got (the page closed within the send delay) is sent on the next load rather than lost. Another open client picks up a change when its workspace next opens. |
 
@@ -320,7 +321,7 @@ chain (FL-06), and so does each item: its effects (FL-09,
 | FL-05 | Settings from descriptors | Each filter's settings come from its kind descriptor ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). | ✅ | The Inspector's form (`properties.rs`) on `kind.describe`'s descriptor. The prototype's catalogue is a wish list; the engine lists gain, noise gate, compressor, limiter and delay, its built-in video filters and effect-pack kinds. A scene setting's select is the form's, listing every scene with None, not F8's "Choose a scene…" over the allowed scenes. |
 | FL-06 | Scene filters | A scene's video chain. | ✅ | The `scene` owner ([ADR-0065](adr/0065-scene-chains-and-item-effects.md)), which the engine runs over the scene's composite. The Filters panel shows the selected scene's chain while no item is selected, with the scene's name and "Scene filters apply to the whole scene, top to bottom."; Edit filters… on a scene row ([CM-03](#menus)) and Edit scene filters… on the canvas margin ([CM-02](#menus)) show it, as an FX button does an output's, until another item or scene is selected. A keyframe scene shows its parent's chain, as it has none of its own. Rows, Add filter (video kinds only, foot "Applies to the whole scene.") and the settings dialog work as on a source's; the Add filter dialog's Uses the scene picker, on a scene's chain, offers the scenes whose picture doesn't hold that scene by nesting or as a keyframe; it doesn't follow other filters' scene references, and the settings form lists every scene, as for a source (FL-05), so the engine's cycle check refuses the rest. The scene Properties dialog shows the chain too ([DL-03](#dialogs)). |
 | FL-07 | Program and output chains | Master chain on the program output, one chain per output. | ✅ | An FX button ([OU-01](#outputs), [OU-02](#outputs), [MX-01](#mixer)) shows the program output's (`{"type":"master"}`) or an output's chains in the panel, titled "Program output" or the output's ID with the prototype's note ("Master chain: applies to everything leaving JStream.", "Only this output, after the program filters.", and "No sound." for the virtual camera, which has a video chain only). Video and Audio chains, rows, Add filter and the settings dialog work as on a source's. The engine runs the master's video chain on every output's frame and an output's own after it ([ARCH › GPU pipeline](ARCHITECTURE.md#gpu-pipeline)); the canvas shows the mix before them. Add filter leaves out what the engine refuses there: a kind whose settings name a scene, a source, a bus or a file is listed but can't be added ("A filter on an output can’t use a scene, a source or a file yet."). For an output with no video filter yet it states the cost first (ADR-0080 §3): "A video filter gives this output its own GPU pass and encoder session, even while the filter is off. Encoder sessions in use now: N." (for the virtual camera, which opens no encoder session: "A video filter gives the virtual camera its own GPU pass, even while the filter is off; it opens no encoder session."), adding "It takes effect the next time this output starts." while it runs. Selecting another item or scene, or an item's Edit filters…, shows the selection's chains again: the item's source's, or with no item the scene's ([FL-06](#filters)). |
-| FL-08 | CLAP plugin filter | Host a CLAP audio effect. | ✅ | [ADR-0035](adr/0035-clap-plugins-out-of-process.md): each effect the engine's scan finds is its own kind, `clap/<plugin id>`, so the Add filter dialog lists each plugin by name under Plugins with the hint "A CLAP audio effect", rather than the prototype's one "CLAP plugin" with a Plugin select. It goes on any audio chain: a source's, the program output's and an output's ([FL-07](#filters)); on the program output's the plugin runs on the master bus, which every output reads. Its settings are the plugin's parameters, from the kind's descriptor (FL-05). The live-audio run on Windows is #912. |
+| FL-08 | CLAP plugin filter | Host a CLAP audio effect. | ✅ | [ADR-0035](adr/0035-clap-plugins-out-of-process.md): each effect the engine's scan finds is its own kind, `clap/<plugin id>`, so the Add filter dialog lists each plugin by name under Plugins with the hint "A CLAP audio effect", rather than the prototype's one "CLAP plugin" with a Plugin select. It goes on any audio chain: a source's, the program output's and an output's ([FL-07](#filters)); on the program output's the plugin runs once for each bus an output carries ([ADR-0086](adr/0086-master-clap-filter-one-host-per-output-bus.md)), so every output hears it. Its settings are the plugin's parameters, from the kind's descriptor (FL-05). The live-audio run on Windows is #912. |
 | FL-09 | Item effects | One placement's own video chain, after its crop. | ✅ | Beyond the prototype, which has no item effects ([ADR-0065](adr/0065-scene-chains-and-item-effects.md), the `item` owner, `ItemInfo.effects`). Under the selected item's source's chains, the Filters panel shows "This item’s effects" with "Only this item, after its crop, top to bottom.", an "Effects" chain ("No effects.", "N effects") and "+ Add effect…", for an item whose source has a picture, while no FX button's or scene's pick is shown. Rows, the Add filter dialog (video kinds only, "For this item of “Backdrop”", foot "Applies to this item only, after its crop.") and the settings dialog ("Effect on “Backdrop”") work as on a source's chain. In a keyframe scene the item's own effects show, as a keyframe doesn't override them. On an item's effects the Uses the scene picker offers the scenes whose picture doesn't hold the item's scene. The Properties dialog shows the source's chains only. |
 
 <a id="mixer"></a>
@@ -391,7 +392,7 @@ Spec: [panels › stream stats](../design/ui-prototype/spec-panels.md#stream-sta
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| ST-01 | Stream stats | LIVE/READY pill and uptime, watching, likes, chat rate, dropped frames, stream health, 2-minute bitrate chart, details. | 🔒 | Y4 (YouTube health and audience stats); bitrate needs engine stats (D39). |
+| ST-01 | Stream stats | LIVE/READY pill and uptime, watching, likes, chat rate, dropped frames, stream health, 2-minute bitrate chart, details. | 🟡 | One output's own stats from `stats.tick`'s `outputs` (protocol 0.57): the pill, the output and its uptime; a Bitrate tile (against the profile's video plus audio rate, since the engine's bitrate counts both) and Dropped frames (with this run's share); the health the engine works out over ten seconds (Excellent, OK, Poor or Waiting); the two-minute bitrate chart with the target dashed; and the details (video and audio encoding, what was sent, other drops). It shows the picked output, else the first running stream. Not built: watching, likes and chat rate, YouTube's own health, latency and visibility, which need YouTube sign-in (Y4), and the chart's hover readout. |
 | CH-01 | Live chat | YouTube chat with badges and Super Chats, pinned message, composer. | 🔒 | Y4 (#363) and the OAuth client. |
 | CH-02 | Show on stream | Feature one message on stream. | 🔒 | Y4 (#363 draws the featured message). |
 | AG-01 | Agent activity | What MCP clients changed, newest first. | ✅ | `activity.list` (protocol 0.51, [ADR-0083](adr/0083-activity-log-over-the-protocol.md)): the engine's sentence for each call under the client's name and how long ago; JStream's own UIs are left out, a failed call shows its error code. |
@@ -419,7 +420,7 @@ handlers; the real UI makes them work.
 <a id="beyond"></a>
 ## Beyond the prototype
 <!-- @section
-covers = ["crates/jstream-ui/src/session.rs", "crates/jstream-ui/src/host.rs", "crates/jstream-ui/src/pairing.rs"]
+covers = ["crates/jstream-ui/src/session.rs", "crates/jstream-ui/src/host.rs", "crates/jstream-ui/src/pairing.rs", "crates/jstream-ui/src/plugins.rs"]
 -->
 
 The real UI does these and the prototype doesn't show them. Matching the prototype must
@@ -431,10 +432,19 @@ not remove them; they move into the prototype's look.
   one-time code for a remote browser and lists and revokes paired devices. In the
   workspace it sits under the properties in the Inspector panel, since it hides itself
   where the server pairs nothing.
+- WASM automation plugins (WA1, [ADR-0069](adr/0069-wasm-plugin-limits-and-capabilities.md),
+  [ADR-0076](adr/0076-saved-wasm-plugins-and-manifest-requests.md)): the Plugins section
+  under the pairing panel in the Inspector lists the installed plugins with why one is
+  off and what it asks for that isn't granted, installs one from its package folder, and
+  turns a disabled one back on. Its grant dialog offers only what the plugin's manifest
+  asks for: `read`, always on, the other classes with what each lets it do, the hosts,
+  and folders when it asks for them. It opens after an install that asks for more than
+  `read`, and grants and turns on, in one step, a plugin whose update needs a grant.
 - Undo and redo, with the engine's history.
 - Delete plans: deleting a scene, source or bus shows what else it takes.
 - Outputs: creating stream, recording and virtual camera outputs, the write-only stream
-  key, per-output start and stop, encoder profiles, virtual camera registration hints,
+  key, per-output start and stop, encoder profiles, the audio bus each output carries
+  (its card's Audio select, while it is stopped), virtual camera registration hints,
   and the pipeline's health line.
 - Mixer: buses, sends, "heard always or when on program", mute, the console-taper fader,
   peak hold, loudness reset, and a monitor on any bus, with its output device.

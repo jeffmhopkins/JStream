@@ -128,6 +128,12 @@ pub enum Event {
         /// out.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         chains: Option<ChainCost>,
+        /// Each running output's live stats, by output ID: what it has sent and lost
+        /// since it started, its bitrate over the last tick and its health (0.57).
+        /// Empty, and left out, while no output runs or on an engine with no media
+        /// backends; an older engine leaves it out too.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        outputs: Vec<OutputStatsInfo>,
     },
     /// A gesture's live values changed (ADR-0032): the newest value of each parameter
     /// that changed since the gesture's last `live.changed`, as setter edits. The engine
@@ -322,6 +328,78 @@ pub struct ChainCost {
     pub layer_bytes: u64,
 }
 
+/// One running output's live stats in a `stats.tick` (0.57): what it has sent and lost
+/// since its `output.start`, its bitrate and its health.
+///
+/// The counts are running totals for this run of the output: they start at 0 on each
+/// `output.start`, and a client that misses a tick subtracts the last one it did see.
+/// `kbps` and `health` are gauges the engine works out from its own previous samples, so
+/// they don't depend on the client seeing every tick.
+///
+/// Every field but `output_id` may be missing and parses as 0 (or `waiting`), so a
+/// field added later can be left out by an older sender (R-API-001). Unknown fields are
+/// ignored.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+pub struct OutputStatsInfo {
+    /// The output.
+    pub output_id: OutputId,
+    /// Milliseconds since the engine received this run's `output.start`, on its
+    /// monotonic clock: it includes opening the destination and starting the pipeline.
+    /// It keeps counting while the output reconnects.
+    #[serde(default)]
+    pub uptime_ms: u64,
+    /// Encoded bytes, video and audio, the output has handed to its muxer this run,
+    /// left out while its live link is down: the publish target drops what it is handed
+    /// then, and counts it in `dropped_packets`.
+    #[serde(default)]
+    pub bytes: u64,
+    /// Video frames the output has handed to its muxer this run, left out like `bytes`
+    /// while its live link is down.
+    #[serde(default)]
+    pub frames: u64,
+    /// What the output sent over the last tick's interval, in kilobits a second (bytes
+    /// times 8 over the milliseconds since the previous sample). 0 on the first tick of
+    /// a run that hasn't sent anything yet.
+    #[serde(default)]
+    pub kbps: u32,
+    /// Video frames the output lost this run: frames its video encoder dropped (its
+    /// input queue was full or it was busy), and encoded frames dropped on their way to
+    /// this output because it fell behind. An encoder session that two outputs share
+    /// counts its drops for each.
+    #[serde(default)]
+    pub dropped_frames: u64,
+    /// Other encoded packets the output lost this run: audio packets that it fell
+    /// behind on, packets the muxer refused or a stop's drain gave up on, and what the
+    /// publish target dropped while its link was down.
+    #[serde(default)]
+    pub dropped_packets: u64,
+    /// How the output is doing over the last ten seconds.
+    #[serde(default)]
+    pub health: OutputHealth,
+}
+
+/// How a running output is doing, from its own drops and link over the last ten
+/// seconds: the share of its video frames lost there, and whether its live link is up.
+/// Serialized as a snake_case string.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum OutputHealth {
+    /// It hasn't sent a video frame yet: it is connecting, or its encoder is starting.
+    #[default]
+    Waiting,
+    /// Nothing lost in the last ten seconds.
+    Good,
+    /// Something lost in the last ten seconds, but under 2% of its video frames.
+    Fair,
+    /// 2% or more of its video frames lost in the last ten seconds, or its live link is
+    /// down and reconnecting.
+    Poor,
+    /// A value this version doesn't know, from a newer server.
+    #[serde(other)]
+    Other,
+}
+
 /// Running totals of frames and packets the pipeline has dropped since the engine
 /// started (R-RT-004).
 ///
@@ -428,6 +506,7 @@ mod tests {
                 item_passes: 3,
                 layer_bytes: 99_532_800,
             }),
+            outputs: Vec::new(),
         };
         let value = serde_json::to_value(&event).expect("serializes");
         assert_eq!(
@@ -479,6 +558,7 @@ mod tests {
                 },
                 load: None,
                 chains: None,
+                outputs: Vec::new(),
             }
         );
     }
@@ -505,6 +585,7 @@ mod tests {
                 drops: super::DropCounts::default(),
                 load: Some(load),
                 chains: None,
+                outputs: Vec::new(),
             }
         );
         assert_eq!(
@@ -534,6 +615,7 @@ mod tests {
                     item_effects: 2,
                     ..super::ChainCost::default()
                 }),
+                outputs: Vec::new(),
             }
         );
         let without = Event::StatsTick {
@@ -541,8 +623,73 @@ mod tests {
             drops: super::DropCounts::default(),
             load: None,
             chains: None,
+            outputs: Vec::new(),
         };
         let value = serde_json::to_value(&without).expect("serializes");
         assert_eq!(value.get("chains"), None);
+        assert_eq!(value.get("outputs"), None);
+    }
+
+    /// A tick's per-output stats round-trip, and one from a peer with fewer (or more)
+    /// fields, or a health this version doesn't know, still parses (R-API-001).
+    #[test]
+    fn stats_tick_output_stats_roundtrip_and_tolerate_peers() {
+        let event = Event::StatsTick {
+            seq: 7,
+            drops: super::DropCounts::default(),
+            load: None,
+            chains: None,
+            outputs: vec![super::OutputStatsInfo {
+                output_id: crate::OutputId::new("out_1"),
+                uptime_ms: 61_000,
+                bytes: 45_750_000,
+                frames: 3_660,
+                kbps: 6_000,
+                dropped_frames: 3,
+                dropped_packets: 1,
+                health: super::OutputHealth::Fair,
+            }],
+        };
+        let value = serde_json::to_value(&event).expect("serializes");
+        assert_eq!(
+            value["outputs"],
+            json!([{
+                "output_id": "out_1",
+                "uptime_ms": 61_000,
+                "bytes": 45_750_000,
+                "frames": 3_660,
+                "kbps": 6_000,
+                "dropped_frames": 3,
+                "dropped_packets": 1,
+                "health": "fair",
+            }])
+        );
+        assert_eq!(
+            serde_json::from_value::<Event>(value).expect("parses"),
+            event
+        );
+        let parsed = serde_json::from_value::<Event>(json!({
+            "type": "stats.tick",
+            "seq": 8,
+            "drops": {},
+            "outputs": [{"output_id": "out_2", "kbps": 12, "health": "superb", "future": 1}]
+        }))
+        .expect("parses");
+        let Event::StatsTick { outputs, .. } = parsed else {
+            panic!("a stats.tick");
+        };
+        assert_eq!(
+            outputs,
+            vec![super::OutputStatsInfo {
+                output_id: crate::OutputId::new("out_2"),
+                uptime_ms: 0,
+                bytes: 0,
+                frames: 0,
+                kbps: 12,
+                dropped_frames: 0,
+                dropped_packets: 0,
+                health: super::OutputHealth::Other,
+            }]
+        );
     }
 }

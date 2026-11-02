@@ -342,7 +342,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   `(video_mix, encoder_profile)`, the master stage counting as part of the mix. An
   output with a video chain, even one holding only disabled filters, gets its own render
   pass and session, keyed by its output ID; a virtual camera, which encodes nothing,
-  gets the render pass only and is never reported dedicated. An output's own audio chain gives it its own
+  gets the render pass only and is never reported dedicated. An output's own audio
+  chain, or a bus other than the master (`output.set_audio_buses`), gives it its own
   audio encode and never affects video sharing. Hardware session caps differ by GPU
   vendor, so the engine reports, per output, whether it shares and with which outputs
   and whether its session is its own, plus the sessions in use. It does not guess the
@@ -494,8 +495,9 @@ model; a change that would contradict it edits it in the same PR.
 process (`jstream-plugin-host`) are built, and so are starting hosts
 (`jstream-platform-windows`) and watching and restarting them on a control thread
 (`jstream-core`'s `HostSupervisor`), and a source's, the master's and each output's
-audio chain runs CLAP filters, each with its own supervisor (on the master chain, the
-plugin on the master bus and a delayed-dry stand-in on the other buses, #922); the
+audio chain runs CLAP filters, each with its own supervisor (on the master chain, one
+host per bus that feeds an output,
+[ADR-0086](adr/0086-master-clap-filter-one-host-per-output-bus.md)); the
 `stats.tick` count is not yet. Each CLAP filter
 instance runs in its own `jstream-plugin-host` process, on a real-time thread registered
 with MMCSS "Pro Audio" and woken by its own timer on the media clock, which both
@@ -635,6 +637,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   (an input, a resolution and a divisor of the base rate), and `output.set_video_mix`
   points an output at one or back at the program (protocol 0.28). A mix an output shows
   can't be deleted, and a mix showing a scene blocks that scene's delete.
+  `output.set_audio_buses` chooses the bus an output carries, one per audio track and
+  one track so far (protocol 0.59); an output carrying a bus blocks its delete, and
+  `delete.plan` moves it to the master, which is refused while the output runs.
   `item.set_opacity` and `item.set_blend` set a placement's opacity and blend mode
   (`item.add` takes both too), and `filter.add`, `filter.remove`, `filter.set_enabled`,
   `filter.set_settings` and `filter.reorder` edit the filter chains of a source, the
@@ -693,8 +698,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   no server in front answers `unsupported`.
 - **Plugins** (protocol 0.35, [ADR-0069](adr/0069-wasm-plugin-limits-and-capabilities.md)): the actions
   `plugin.install`, `plugin.grant` and `plugin.enable` install a WASM automation plugin
-  with what a person grants it, change the grant and re-enable it; they are for a person,
-  so no MCP tool, plugin or hotkey carries them. The event `plugin.state_changed` reports
+  with what a person grants it, change the grant and re-enable it, and the query
+  `plugin.list` (0.58) lists the installed plugins with what each manifest asks for and
+  what was granted; they are for a person, so no MCP tool, plugin or hotkey carries
+  them. The event `plugin.state_changed` reports
   a plugin enabled or disabled, with why the engine disabled it. A plugin calls the API
   through a scoped `Control` that checks each call against its grant, using
   `jstream-protocol`'s table of every command's class (`read`, `edit`, `live`, `outputs`
@@ -769,14 +776,17 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `activity.list` (protocol 0.51) → the engine's last 100 audit entries, each with a
   sentence saying what it did ([ADR-0083](adr/0083-activity-log-over-the-protocol.md));
   audio levels are the `meters.tick` event, not a query).
-- **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops, load, chains}`, `meters.tick`,
+- **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops, load, chains, outputs}`, `meters.tick`,
   `source.size_changed` (protocol 0.40), …).
   `stats.tick` (protocol 0.6) carries the pipeline's running drop totals
   ([R-RT-004](RULES.md#R-RT-004)) and, since 0.48, the engine's load (program frames
   drawn and process CPU time, from which a client derives the frame rate and CPU use;
   the daemon and the desktop app also tick about once a second while idle); since 0.54
   it also carries what scene filter chains and item effects add to each frame
-  ([ADR-0065](adr/0065-scene-chains-and-item-effects.md) §7). `meters.tick` (protocol 0.19, about ten a second
+  ([ADR-0065](adr/0065-scene-chains-and-item-effects.md) §7); since 0.57 it lists each
+  running output's live stats: its uptime, the bytes and video frames it sent, its bitrate
+  over the last tick, what it dropped this run, and a health the engine works out over
+  the last ten seconds. `meters.tick` (protocol 0.19, about ten a second
   while the mixer runs) carries every source's and bus's levels and the master's loudness,
   which `audio.reset_loudness` restarts; the fields are in
   [jstream-protocol › Design](../crates/jstream-protocol/README.md#design).
@@ -888,7 +898,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 758 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 764 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking
@@ -1181,7 +1191,7 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   `jstream-graph`, which checks a loaded collection as it checks edits. A field added
   for new collection state (encoder profiles, hotkey bindings, transition presets and
   settings, folders, labels and organisation metadata, keyframe scenes' `variant_of` and
-  `overrides`) is omitted when empty or at its default (for presets, a new collection's one `cut`), so a file without it is still
+  `overrides`, an output's `audio_bus`) is omitted when empty or at its default (for presets, a new collection's one `cut`), so a file without it is still
   valid at the same `schema_version`. `jstream-core`
   loads the file the host names and replaces it atomically after every change.
 - **Asset files** named in settings are stored relative to the collection folder or the

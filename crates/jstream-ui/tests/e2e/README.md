@@ -103,12 +103,27 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   or go live until its key is set; the key field empties on save and the key never
   appears in the page; go live and end stream; the header's Record starts and stops a
   recording; clearing the key; deleting; editing the
-  server URL and choosing an encoder profile, both read back by a fresh page; a second
+  server URL and choosing an encoder profile, both read back by a fresh page; a
+  recording's Audio select moving it to another bus, read back by a fresh page; a second
   client sees outputs created, started and deleted.
+- **Plugins** (`plugins.spec.js`, under the Inspector): the mock engine runs no plugins,
+  so the spec routes the page's WebSocket itself and answers `plugin.list`,
+  `plugin.install`, `plugin.grant` and `plugin.enable` from a list it keeps. An install
+  sends the folder and the ID suggested from its name with no grant, and, since the
+  manifest asks for more than `read`, opens the grant dialog, which offers `read` ticked
+  and fixed and only the classes and host asked for, and sends just what was ticked; the
+  row then names what is asked for and not granted. A plugin off as `needs_grant` is
+  granted a class and a folder and turned on in one step.
 - **Header stats** (`header-stats.spec.js`): the readout shows the dropped count from
   the first `stats.tick`, the CPU share ("<1%") from the second while the program draws
   nothing, and "60 fps · 2 dropped · CPU 3%" once the load says it drew 60 frames in a
   second.
+- **Stream stats** (`stream-stats.spec.js`): added from the View menu, the panel says
+  there are no outputs; with a recording added it is READY with no uptime and shows
+  the default profile's H.264 at 2500 kbps; once the recording starts it is LIVE with
+  the no-data box, and the ticks the test sends give the uptime, the bitrate against
+  the target, the dropped share, Excellent then Poor, the chart and what was sent; a
+  stop puts it back to READY and Waiting.
 - **Docking** (`docking.spec.js`): the Editing layout's zones (Filters and Transform as
   tabs under the Inspector, Transitions as a tab beside Outputs), with empty zones hidden; the View
   menu hiding and adding a panel at the end of its home zone, and the layout marked
@@ -116,7 +131,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   which shows while dragging, docks it there; a lone panel collapses by its title,
   closes on a second click of its ×, and the Inspector doesn't collapse once it is alone
   in its zone; a splitter resizes a zone, and a saved layout and its sizes survive a reload;
-  the Layout menu switches to Live and resets to Editing.
+  the Layout menu switches to Live, with Stream stats, Outputs and Agent activity as
+  tabs on the right, and resets to Editing.
 - **Canvas** (`canvas.spec.js`): the selected scene's box is drawn where the seed put
   it, under the scene's caption; a click on the box selects its row in the sources list
   and shows the size readout, a click on empty canvas clears both, and selecting another

@@ -15,7 +15,8 @@ use jstream_media::{AudioFormat, SampleFormat};
 
 use super::bus::{BusShared, MASTER_ID, MAX_BUSES};
 use super::chain::{
-    Chain, FilterBook, FilterParams, FilterSpec, Kernel, MAX_CHAIN_LATENCY_MS, MAX_FILTERS,
+    Chain, FilterBook, FilterParams, FilterSpec, Kernel, KernelKind, MAX_CHAIN_LATENCY_MS,
+    MAX_FILTERS,
 };
 use super::host::{HostFilter, HostMemory, HostStandIn};
 use super::input::{InputProducer, InputShared};
@@ -83,6 +84,14 @@ pub(crate) enum Command {
         index: usize,
         id: u64,
         kernels: MasterKernels,
+    },
+    /// A new kernel for master filter `id` on the bus in `slot` with id `bus`: its own
+    /// host's filter, or the stand-in. The kernel it replaces goes to the collector.
+    SetMasterKernel {
+        slot: usize,
+        bus: u64,
+        id: u64,
+        kernel: Box<Kernel>,
     },
     AddTap(Tap),
     RemoveTap(u64),
@@ -281,8 +290,8 @@ impl ControlPlane {
     fn master_copy(&self, book: Option<&Vec<FilterBook>>) -> Result<Chain, AudioError> {
         let mut chain = Chain::new(self.sample_rate)?;
         for filter in book.into_iter().flatten() {
-            // A CLAP filter runs only on the master bus, which always exists: a new
-            // bus gets its stand-in.
+            // A CLAP filter runs on the master bus's host, which always exists: a new
+            // bus gets its stand-in until it gets a host of its own.
             let kernel = Box::new(match filter.spec {
                 Some(spec) => Kernel::build(self.sample_rate, spec)?,
                 None => Kernel::HostStandIn(HostStandIn::new(self.sample_rate, filter.latency)?),
@@ -366,7 +375,8 @@ impl ControlPlane {
     /// for `target`'s chain at `index` (clamped to the end). Returns its id and latency.
     /// On the master chain, which every bus runs its own copy of, the plugin runs on the
     /// master bus's copy and every other bus's copy delays its dry signal by the same
-    /// latency ([`HostStandIn`]): one host takes one chain's blocks.
+    /// latency ([`HostStandIn`]) until [`Self::set_master_host`] gives it a host of its
+    /// own: one host takes one chain's blocks.
     pub(crate) fn add_host_filter(
         &self,
         target: ChainTarget,
@@ -385,6 +395,66 @@ impl ControlPlane {
         self.queue_filter(target, index, None, || {
             HostFilter::new(self.sample_rate, self.block_frames, memory).map(Kernel::Host)
         })
+    }
+
+    /// Runs master CLAP filter `id` on the bus in `slot` with id `bus` on the host
+    /// using `memory`, or with `None` on the stand-in that delays the dry signal by the
+    /// filter's latency (ADR-0086: one host per bus that feeds an output). The master
+    /// bus's copy runs the host the filter was added with, so `slot` 0 is refused.
+    ///
+    /// # Errors
+    /// [`AudioError::Removed`] when the bus or the filter is gone,
+    /// [`AudioError::InvalidConfig`] for the master bus, a filter that isn't a CLAP
+    /// filter, or a host that isn't ready or reports another latency than the filter
+    /// has, and [`AudioError::CommandQueueFull`].
+    pub(crate) fn set_master_host(
+        &self,
+        id: u64,
+        slot: usize,
+        bus: u64,
+        memory: Option<HostMemory>,
+    ) -> Result<(), AudioError> {
+        if slot == 0 {
+            return Err(AudioError::InvalidConfig {
+                what: "the master bus runs a master CLAP filter on the host it was added with",
+            });
+        }
+        let buses = lock(&self.buses);
+        if buses.get(slot).copied().flatten() != Some(bus) {
+            return Err(AudioError::Removed);
+        }
+        let books = lock(&self.books);
+        let filter = books
+            .get(&ChainTarget::Master)
+            .and_then(|book| book.iter().find(|f| f.id == id))
+            .ok_or(AudioError::Removed)?;
+        if filter.kind != KernelKind::Host {
+            return Err(AudioError::InvalidConfig {
+                what: "only a CLAP filter runs on a host of its own per bus",
+            });
+        }
+        let kernel = match memory {
+            Some(memory) => Kernel::Host(HostFilter::new(
+                self.sample_rate,
+                self.block_frames,
+                memory,
+            )?),
+            None => Kernel::HostStandIn(HostStandIn::new(self.sample_rate, filter.latency)?),
+        };
+        if kernel.latency_frames() != filter.latency {
+            return Err(AudioError::InvalidConfig {
+                what: "a bus's host must report the latency the master bus's host did",
+            });
+        }
+        let queued = Command::SetMasterKernel {
+            slot,
+            bus,
+            id,
+            kernel: Box::new(kernel),
+        };
+        self.tx
+            .try_send(queued)
+            .map_err(|_| AudioError::CommandQueueFull)
     }
 
     /// Builds a filter with `build` for `target`'s chain, if the chain has room for it,

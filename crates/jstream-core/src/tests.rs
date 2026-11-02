@@ -76,12 +76,17 @@ fn unloaded(events: Vec<Event>) -> Vec<Event> {
         .into_iter()
         .map(|event| match event {
             Event::StatsTick {
-                seq, drops, chains, ..
+                seq,
+                drops,
+                chains,
+                outputs,
+                ..
             } => Event::StatsTick {
                 seq,
                 drops,
                 load: None,
                 chains,
+                outputs,
             },
             other => other,
         })
@@ -3164,6 +3169,7 @@ fn a_removed_drop_source_keeps_its_total() {
             },
             load: None,
             chains: Some(ChainCost::default()),
+            outputs: Vec::new(),
         }]
     );
 
@@ -3186,6 +3192,7 @@ fn a_removed_drop_source_keeps_its_total() {
             },
             load: None,
             chains: Some(ChainCost::default()),
+            outputs: Vec::new(),
         }],
         "the removed source stays at the total it had when it was removed"
     );
@@ -3203,6 +3210,7 @@ fn a_removed_drop_source_keeps_its_total() {
             },
             load: None,
             chains: Some(ChainCost::default()),
+            outputs: Vec::new(),
         }],
         "removing an unknown source changes nothing"
     );
@@ -4163,6 +4171,64 @@ mod cpu_pipeline {
         block_on(control.call(output_call("yt", false))).expect("output.stop");
     }
 
+    // --- Item: each running output's live stats (protocol 0.57).
+
+    /// While an output runs, each `stats.tick` lists it with what it has sent and its
+    /// uptime; once it stops, the tick leaves it out.
+    #[test]
+    fn a_running_output_is_in_each_stats_tick() {
+        let fakes = fakes();
+        let publish = RecordingPublish::new();
+        let engine = engine(
+            share(&fakes.backends),
+            cpu_draw(),
+            Box::new(publish.clone()),
+        );
+        let control = connected(&engine);
+        let mut events = control.events();
+        start(&control, &mut events);
+        let video_frames = || {
+            publish
+                .tags()
+                .iter()
+                .filter(|tag| tag.tag_type == TagType::Video && tag.body.get(1) == Some(&1))
+                .count()
+        };
+        assert!(wait_until(|| video_frames() >= 1), "no frame published");
+        let outputs = |events: &mut _| {
+            engine.emit_stats_tick();
+            drain(events)
+                .into_iter()
+                .filter_map(|event| match event {
+                    Event::StatsTick { outputs, .. } => Some(outputs),
+                    _ => None,
+                })
+                .next_back()
+                .expect("a stats.tick")
+        };
+        let running = outputs(&mut events);
+        assert_eq!(running.len(), 1, "{running:?}");
+        let yt = &running[0];
+        assert_eq!(yt.output_id, OutputId::new("yt"));
+        assert!(yt.frames >= 1, "{yt:?}");
+        assert!(yt.bytes > 0, "{yt:?}");
+        assert_eq!(yt.dropped_frames, 0, "{yt:?}");
+        assert!(
+            matches!(
+                yt.health,
+                jstream_protocol::OutputHealth::Good | jstream_protocol::OutputHealth::Fair
+            ),
+            "{yt:?}"
+        );
+
+        block_on(control.call(output_call("yt", false))).expect("output.stop");
+        assert_eq!(
+            outputs(&mut events),
+            Vec::new(),
+            "a stopped output is left out"
+        );
+    }
+
     // --- Item: a failed start's teardown does not overlap the next start.
 
     /// Fails its first tag, the FLV header the output thread sends before the start
@@ -4623,6 +4689,57 @@ mod cpu_pipeline {
             output_steps(&mut events),
             vec![OutputState::Stopping, OutputState::Stopped]
         );
+    }
+
+    /// While its link is down an output's stats say `poor`, count what the target
+    /// dropped, and stop counting bytes as sent (protocol 0.57).
+    #[test]
+    fn a_lost_link_makes_the_output_poor_in_its_stats() {
+        let fakes = fakes();
+        let link = Arc::new(Link::default());
+        let (engine, control, mut events) = flaky_start(&fakes, &link);
+        let yt = |events: &mut EventStream| {
+            engine.emit_stats_tick();
+            drain(events)
+                .into_iter()
+                .filter_map(|event| match event {
+                    Event::StatsTick { mut outputs, .. } => outputs.pop(),
+                    _ => None,
+                })
+                .next_back()
+                .expect("a stats.tick for yt")
+        };
+        let mut up = yt(&mut events);
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || {
+                up = yt(&mut events);
+                up.frames > 0
+            }),
+            "no frame counted as sent: {up:?}"
+        );
+        assert!(up.bytes > 0, "{up:?}");
+
+        link.down.store(true, Ordering::Release);
+        assert!(reaches(&control, &fakes, OutputState::Reconnecting));
+        let before = yt(&mut events).bytes;
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || link
+                .dropped
+                .load(Ordering::Acquire)
+                >= 2),
+            "nothing was dropped while the link was down"
+        );
+        let down = yt(&mut events);
+        assert_eq!(
+            down.health,
+            jstream_protocol::OutputHealth::Poor,
+            "{down:?}"
+        );
+        assert!(down.dropped_packets >= 2, "{down:?}");
+        assert_eq!(down.bytes, before, "bytes counted while the link was down");
+
+        link.down.store(false, Ordering::Release);
+        block_on(control.call(output_call("yt", false))).expect("output.stop");
     }
 
     /// Giving up reconnecting fails the output from `reconnecting`, as a publish
@@ -5431,6 +5548,94 @@ mod cpu_pipeline {
         assert_eq!(encoder_status(&control, "yt").2, 0);
     }
 
+    /// A recording on a bus other than the master (`output.set_audio_buses`) gets an
+    /// output tap on that bus and its own audio encode, while its video still shares the
+    /// stream's session; its file finishes. While it runs it can't move off `vod`, so
+    /// `vod` can't be deleted under it.
+    #[test]
+    fn an_output_on_another_bus_encodes_that_bus() {
+        let dir = TempDir::new("bus-audio");
+        let path = dir.join("vod.mp4");
+        let fakes = fakes();
+        let publish = RecordingPublish::new();
+        let (engine, control, mut events) =
+            streaming_and_recording(&fakes, cpu_draw(), &publish, &path);
+        let vod = jstream_protocol::BusId::new("vod");
+        batch(
+            &control,
+            edits(vec![
+                Edit::BusCreate {
+                    bus_id: vod.clone(),
+                    name: "VOD".into(),
+                },
+                Edit::OutputSetAudioBuses {
+                    output_id: OutputId::new("rec"),
+                    audio_buses: vec![vod.clone()],
+                },
+            ]),
+        )
+        .expect("a bus, and the recording on it");
+        drain(&mut events);
+
+        block_on(control.call(output_call("yt", true))).expect("yt start");
+        block_on(control.call(output_call("rec", true))).expect("rec start");
+        let (_, encoder, sessions, _) = encoder_status(&control, "rec");
+        assert_eq!(
+            encoder.map(|encoder| encoder.shared_with),
+            Some(vec![OutputId::new("yt")]),
+            "the video session is still shared"
+        );
+        assert_eq!(sessions, 1);
+        assert_eq!(
+            engine.routed_bus_hosted().1.get(&OutputId::new("rec")),
+            Some(&vod),
+            "the recording taps its bus"
+        );
+        // The plan to delete `vod` moves the recording to the master first, which is
+        // refused while it runs and reads `vod`.
+        let refused = batch(
+            &control,
+            edits(vec![
+                Edit::OutputSetAudioBuses {
+                    output_id: OutputId::new("rec"),
+                    audio_buses: vec![jstream_protocol::BusId::master()],
+                },
+                Edit::BusDelete {
+                    bus_id: vod.clone(),
+                },
+            ]),
+        )
+        .expect_err("a running output keeps its bus");
+        assert_eq!(
+            refused.protocol(),
+            Some(&jstream_protocol::ProtocolError::invalid_argument(
+                "edits.0.output_id",
+                "output `rec` is running; stop it first"
+            ))
+        );
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || {
+                engine
+                    .output_stats_of(&OutputId::new("rec"))
+                    .is_some_and(|stats| {
+                        stats.video_subscriber.delivered >= 70
+                            && stats.audio_subscriber.delivered >= 10
+                    })
+            }),
+            "the recording never got its bus's audio"
+        );
+        assert_eq!(
+            engine.routed_bus_hosted().1.get(&OutputId::new("rec")),
+            Some(&vod),
+            "a running output keeps its bus"
+        );
+        block_on(control.call(output_call("rec", false))).expect("rec stop");
+        let bytes = std::fs::read(&path).expect("the finished recording");
+        let found = boxes(&bytes);
+        assert_eq!(found.get(1).map(String::as_str), Some("moov"), "{found:?}");
+        block_on(control.call(output_call("yt", false))).expect("yt stop");
+    }
+
     /// A program-stage failure fails every output on it. A start after that waits for
     /// the failed stage to go and opens a new one.
     #[test]
@@ -6064,6 +6269,7 @@ fn output_edits_configure_the_collection() {
             encoder_profile: None,
             filters: Default::default(),
             video_mix: None,
+            audio_buses: vec![jstream_protocol::BusId::master()],
         }]
     );
     assert_eq!(
@@ -6090,6 +6296,7 @@ fn output_edits_configure_the_collection() {
                 encoder_profile: None,
                 filters: Default::default(),
                 video_mix: None,
+                audio_buses: vec![jstream_protocol::BusId::master()],
             }]
         ),
         other => panic!("not a state: {other:?}"),
@@ -6637,5 +6844,20 @@ fn batches_and_actions_are_audited() {
     assert!(
         !line.contains("Webcam") && !line.contains("\"B\""),
         "{line}"
+    );
+}
+
+/// #974 B1: an engine with no plugin installed lists none, with or without the
+/// `wasm-plugins` feature (run with `--no-default-features` for the build without it),
+/// as the protocol promises, rather than failing the query.
+#[test]
+fn plugin_list_is_empty_until_a_plugin_is_installed() {
+    let engine = Engine::new();
+    let control = connected(&engine);
+    assert_eq!(
+        query(&control, Query::PluginList).expect("plugin.list"),
+        QueryResult::PluginList {
+            plugins: Vec::new()
+        }
     );
 }

@@ -11,11 +11,11 @@ use crate::{
     ClientMessage, Command, CommandClass, Crop, DeleteTarget, DropCounts, Edit, EngineLoad,
     EntityKind, ErrorResponse, Event, EventMessage, FilterChain, FilterChains, FilterId,
     FilterInfo, FilterOwner, Finite32, FitMode, Hello, IdempotencyKey, ItemGeometry, ItemId,
-    ItemInfo, ItemTransform, MasterInfo, OutputId, OutputInfo, OutputKind, OutputState,
-    PROTOCOL_VERSION, PlacementForm, ProtocolError, Query, QueryResult, RecordContainer, Request,
-    RequestId, Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary,
-    SecretString, ServerMessage, Settings, Size, SourceId, SourceInfo, SourceKind, Vec2, Welcome,
-    json_schema,
+    ItemInfo, ItemTransform, MasterInfo, OutputHealth, OutputId, OutputInfo, OutputKind,
+    OutputState, OutputStatsInfo, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query,
+    QueryResult, RecordContainer, Request, RequestId, Response, Rev, RtmpTarget, SceneId,
+    SceneInfo, SceneRole, SceneSummary, SecretString, ServerMessage, Settings, Size, SourceId,
+    SourceInfo, SourceKind, Vec2, Welcome, json_schema,
 };
 use crate::{
     ActionResult, AudioCodec, AudioEncoding, BroadcastInfo, BroadcastLifeCycle,
@@ -375,6 +375,10 @@ pub(crate) fn edits() -> Vec<Edit> {
         Edit::OutputSetVideoMix {
             output_id: OutputId::new("out_yt"),
             mix_id: None,
+        },
+        Edit::OutputSetAudioBuses {
+            output_id: OutputId::new("out_rec"),
+            audio_buses: vec![BusId::new("bus_vod")],
         },
         Edit::VideoMixDelete {
             mix_id: VideoMixId::new("mix_old"),
@@ -873,6 +877,7 @@ fn output_infos() -> Vec<OutputInfo> {
                 }],
             },
             video_mix: Some(VideoMixId::new("mix_cam")),
+            audio_buses: vec![BusId::new("bus_vod")],
         },
         OutputInfo {
             output_id: OutputId::new("out_yt"),
@@ -880,6 +885,7 @@ fn output_infos() -> Vec<OutputInfo> {
             encoder_profile: None,
             filters: FilterChains::default(),
             video_mix: None,
+            audio_buses: vec![BusId::master()],
         },
     ]
 }
@@ -1131,6 +1137,7 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::UiSettingsGet {
             key: "workspace.dock".into(),
         },
+        Query::PluginList,
         Query::YoutubeStats,
         Query::SourceSizes,
     ]
@@ -1828,6 +1835,40 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             key: "workspace.dock".into(),
             value: Some(serde_json::json!({"version": 1, "current": "Live"})),
         },
+        QueryResult::PluginList {
+            plugins: vec![
+                crate::PluginInfo {
+                    plugin_id: crate::PluginId::new("chat_switcher"),
+                    state: crate::PluginState::Enabled,
+                    reason: None,
+                    remote_name: Some("Chat switcher".into()),
+                    path: "/home/me/plugins/chat-switcher".into(),
+                    request: crate::PluginRequest {
+                        classes: [crate::PluginClass::Live].into(),
+                        hosts: vec!["https://api.example.com:443".into()],
+                        folders: false,
+                    },
+                    grant: crate::PluginGrant {
+                        classes: [crate::PluginClass::Live].into(),
+                        hosts: Vec::new(),
+                        folders: Vec::new(),
+                    },
+                },
+                crate::PluginInfo {
+                    plugin_id: crate::PluginId::new("scene_timer"),
+                    state: crate::PluginState::Disabled,
+                    reason: Some(crate::PluginDisabledReason::NeedsGrant),
+                    remote_name: None,
+                    path: "/home/me/plugins/scene-timer".into(),
+                    request: crate::PluginRequest {
+                        classes: [crate::PluginClass::Edit, crate::PluginClass::Live].into(),
+                        hosts: Vec::new(),
+                        folders: true,
+                    },
+                    grant: crate::PluginGrant::default(),
+                },
+            ],
+        },
     ]
 }
 
@@ -1951,6 +1992,48 @@ pub(crate) fn events() -> Vec<Event> {
             item_passes: 3,
             layer_bytes: 99_532_800,
         }),
+        outputs: vec![
+            OutputStatsInfo {
+                output_id: OutputId::new("out_1"),
+                uptime_ms: 61_000,
+                bytes: 45_750_000,
+                frames: 3_660,
+                kbps: 6_000,
+                dropped_frames: 3,
+                dropped_packets: 1,
+                health: OutputHealth::Fair,
+            },
+            OutputStatsInfo {
+                output_id: OutputId::new("out_2"),
+                uptime_ms: 400,
+                bytes: 0,
+                frames: 0,
+                kbps: 0,
+                dropped_frames: 0,
+                dropped_packets: 0,
+                health: OutputHealth::Waiting,
+            },
+            OutputStatsInfo {
+                output_id: OutputId::new("out_3"),
+                uptime_ms: 3_600_000,
+                bytes: 2_700_000_000,
+                frames: 216_000,
+                kbps: 6_010,
+                dropped_frames: 0,
+                dropped_packets: 0,
+                health: OutputHealth::Good,
+            },
+            OutputStatsInfo {
+                output_id: OutputId::new("out_4"),
+                uptime_ms: 90_000,
+                bytes: 60_000_000,
+                frames: 5_100,
+                kbps: 0,
+                dropped_frames: 260,
+                dropped_packets: 41,
+                health: OutputHealth::Poor,
+            },
+        ],
     });
     events.push(Event::LiveChanged {
         gesture_id: GestureId::new("drag_1"),

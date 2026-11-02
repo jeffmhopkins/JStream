@@ -3017,6 +3017,32 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Chooses the buses whose audio an output carries (since 0.59), one per audio\ntrack, in track order. Every output writes one audio track for now, so the list\nholds exactly one bus; any other length is `invalid_argument` on `audio_buses`,\nas is an output with no audio (a virtual camera). Each bus must exist, else\n`not_found`. The master stage's audio chain runs on the bus, then the output's\nown chain (ADR-0080 §1). A running output reads its bus, so moving it to another\nis `invalid_argument` on `output_id` until it stops. Inverse:\n`output.set_audio_buses` with the previous buses.",
+          "properties": {
+            "audio_buses": {
+              "description": "The buses, in track order.",
+              "items": {
+                "$ref": "#/$defs/BusId"
+              },
+              "type": "array"
+            },
+            "output_id": {
+              "$ref": "#/$defs/OutputId",
+              "description": "The output to change."
+            },
+            "type": {
+              "const": "output.set_audio_buses",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "output_id",
+            "audio_buses"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Adds a folder to the scene list, last in folder order (ADR-0024 §3). Folders\norganise only: they change no rendering, switching or nesting. Inverse:\n`folder.delete`.",
           "properties": {
             "folder_id": {
@@ -3769,7 +3795,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Deletes a bus and every send into it. The master bus can't be deleted\n(`invalid_argument`), nor (since 0.24) a bus a source's settings refer to: that\n`invalid_argument` lists the `blockers`, and `delete.plan` clears them. Inverse: `bus.create` with its name, `bus.set_fader` if\nits fader or mute were not the defaults, `bus.set_monitor` if it had a monitor\n(since 0.42), then `send.set` for each send it had.",
+          "description": "Deletes a bus and every send into it. The master bus can't be deleted\n(`invalid_argument`), nor (since 0.24) a bus a source's settings refer to, nor\n(since 0.59) a bus an output carries: that `invalid_argument` lists the\n`blockers`, and `delete.plan` clears them, moving such an output to the master\nbus. Inverse: `bus.create` with its name, `bus.set_fader` if\nits fader or mute were not the defaults, `bus.set_monitor` if it had a monitor\n(since 0.42), then `send.set` for each send it had.",
           "properties": {
             "bus_id": {
               "$ref": "#/$defs/BusId",
@@ -4317,6 +4343,13 @@ source: crates/jstream-protocol/src/fixtures.rs
                 }
               ],
               "description": "The engine's load: how many frames the program drew and how much CPU time\nthe engine's process used, as running totals beside the time they were read\nat (0.48). An older engine leaves it out."
+            },
+            "outputs": {
+              "description": "Each running output's live stats, by output ID: what it has sent and lost\nsince it started, its bitrate over the last tick and its health (0.57).\nEmpty, and left out, while no output runs or on an engine with no media\nbackends; an older engine leaves it out too.",
+              "items": {
+                "$ref": "#/$defs/OutputStatsInfo"
+              },
+              "type": "array"
             },
             "seq": {
               "description": "Monotonic sample number, starting at 1.",
@@ -5659,6 +5692,36 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "OutputHealth": {
+      "description": "How a running output is doing, from its own drops and link over the last ten\nseconds: the share of its video frames lost there, and whether its live link is up.\nSerialized as a snake_case string.",
+      "oneOf": [
+        {
+          "const": "waiting",
+          "description": "It hasn't sent a video frame yet: it is connecting, or its encoder is starting.",
+          "type": "string"
+        },
+        {
+          "const": "good",
+          "description": "Nothing lost in the last ten seconds.",
+          "type": "string"
+        },
+        {
+          "const": "fair",
+          "description": "Something lost in the last ten seconds, but under 2% of its video frames.",
+          "type": "string"
+        },
+        {
+          "const": "poor",
+          "description": "2% or more of its video frames lost in the last ten seconds, or its live link is\ndown and reconnecting.",
+          "type": "string"
+        },
+        {
+          "const": "other",
+          "description": "A value this version doesn't know, from a newer server.",
+          "type": "string"
+        }
+      ]
+    },
     "OutputId": {
       "description": "An output (RTMP(S), recording, virtual camera).",
       "type": "string"
@@ -5666,6 +5729,13 @@ source: crates/jstream-protocol/src/fixtures.rs
     "OutputInfo": {
       "description": "One output, as `output.list` and `state.get` report it: its collection state.\nWhether it runs, and whether its stream key is set, are in `output.status`.",
       "properties": {
+        "audio_buses": {
+          "description": "The buses whose audio it carries (`output.set_audio_buses`, since 0.59), one per\naudio track, in track order: for now always one, as every output writes one\naudio track. The master stage's audio chain runs on each of them before the\noutput's own chain (ADR-0080 §1). Absent means `[\"master\"]`, as from a server\nolder than 0.59; a virtual camera, which has no audio, always reports that.",
+          "items": {
+            "$ref": "#/$defs/BusId"
+          },
+          "type": "array"
+        },
         "encoder_profile": {
           "anyOf": [
             {
@@ -5800,6 +5870,66 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "string"
         }
       ]
+    },
+    "OutputStatsInfo": {
+      "description": "One running output's live stats in a `stats.tick` (0.57): what it has sent and lost\nsince its `output.start`, its bitrate and its health.\n\nThe counts are running totals for this run of the output: they start at 0 on each\n`output.start`, and a client that misses a tick subtracts the last one it did see.\n`kbps` and `health` are gauges the engine works out from its own previous samples, so\nthey don't depend on the client seeing every tick.\n\nEvery field but `output_id` may be missing and parses as 0 (or `waiting`), so a\nfield added later can be left out by an older sender (R-API-001). Unknown fields are\nignored.",
+      "properties": {
+        "bytes": {
+          "default": 0,
+          "description": "Encoded bytes, video and audio, the output has handed to its muxer this run,\nleft out while its live link is down: the publish target drops what it is handed\nthen, and counts it in `dropped_packets`.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "dropped_frames": {
+          "default": 0,
+          "description": "Video frames the output lost this run: frames its video encoder dropped (its\ninput queue was full or it was busy), and encoded frames dropped on their way to\nthis output because it fell behind. An encoder session that two outputs share\ncounts its drops for each.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "dropped_packets": {
+          "default": 0,
+          "description": "Other encoded packets the output lost this run: audio packets that it fell\nbehind on, packets the muxer refused or a stop's drain gave up on, and what the\npublish target dropped while its link was down.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "frames": {
+          "default": 0,
+          "description": "Video frames the output has handed to its muxer this run, left out like `bytes`\nwhile its live link is down.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "health": {
+          "$ref": "#/$defs/OutputHealth",
+          "default": "waiting",
+          "description": "How the output is doing over the last ten seconds."
+        },
+        "kbps": {
+          "default": 0,
+          "description": "What the output sent over the last tick's interval, in kilobits a second (bytes\ntimes 8 over the milliseconds since the previous sample). 0 on the first tick of\na run that hasn't sent anything yet.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "output_id": {
+          "$ref": "#/$defs/OutputId",
+          "description": "The output."
+        },
+        "uptime_ms": {
+          "default": 0,
+          "description": "Milliseconds since the engine received this run's `output.start`, on its\nmonotonic clock: it includes opening the destination and starting the pipeline.\nIt keeps counting while the output reconnects.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "output_id"
+      ],
+      "type": "object"
     },
     "OverrideField": {
       "description": "One of the four fields a keyframe scene can override. Each is overridden whole: a\nvariant that overrides `geometry` overrides all of it.",
@@ -6264,6 +6394,82 @@ source: crates/jstream-protocol/src/fixtures.rs
       "description": "An installed WASM automation plugin (ADR-0069), chosen by the person who installs\nit.",
       "type": "string"
     },
+    "PluginInfo": {
+      "description": "One installed plugin, as `plugin.list` lists it (0.58).",
+      "properties": {
+        "grant": {
+          "$ref": "#/$defs/PluginGrant",
+          "description": "What a person granted it."
+        },
+        "path": {
+          "description": "Its package directory on the engine's machine, as `plugin.install` named it.",
+          "type": "string"
+        },
+        "plugin_id": {
+          "$ref": "#/$defs/PluginId",
+          "description": "The plugin."
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginDisabledReason"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why the engine disabled it, as `plugin.state_changed` says. Omitted when it is\nenabled."
+        },
+        "remote_name": {
+          "description": "The name the plugin's manifest gives itself: the plugin's own text, never an\ninstruction (ADR-0059). Omitted when it gives none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "request": {
+          "$ref": "#/$defs/PluginRequest",
+          "description": "What its manifest asks for, as the engine last read it. For a plugin disabled as\n`needs_grant`, this is the update's request, which a `plugin.grant` acknowledges."
+        },
+        "state": {
+          "$ref": "#/$defs/PluginState",
+          "description": "Whether it runs. A plugin being enabled is listed as it was until it loads."
+        }
+      },
+      "required": [
+        "plugin_id",
+        "state",
+        "path",
+        "request",
+        "grant"
+      ],
+      "type": "object"
+    },
+    "PluginRequest": {
+      "description": "What a plugin's manifest asks for (ADR-0076): the classes, hosts and folders a\nperson may grant it. A grant may give less, never more. `read` is every plugin's,\nasked for or not.\n\n```json\n{\"classes\": [\"edit\"], \"hosts\": [\"https://api.example.com:443\"], \"folders\": true}\n```",
+      "properties": {
+        "classes": {
+          "description": "The classes it asks for. Omitted for none.",
+          "items": {
+            "$ref": "#/$defs/PluginClass"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "folders": {
+          "description": "Whether it wants folders a person picks. Omitted when `false`.",
+          "type": "boolean"
+        },
+        "hosts": {
+          "description": "The hosts it asks to reach, each as `scheme://host:port`. Omitted for none.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
     "PluginState": {
       "description": "Whether a plugin runs.",
       "oneOf": [
@@ -6725,6 +6931,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "key"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Lists the installed WASM automation plugins (0.58, ADR-0069), ordered by ID: each\none's state, its package, what its manifest asks for and what a person granted it,\nso a client can show them and offer a grant. For a person only, like\n`plugin.install`: no plugin is ever granted it, and no MCP tool carries it. Not\ncollection state, so the result carries no `rev`. An engine built without WASM\nplugins lists none.",
+          "properties": {
+            "type": {
+              "const": "plugin.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
           ],
           "type": "object"
         }
@@ -7506,6 +7725,27 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "key"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `plugin.list` (0.58). Installed plugins are not collection state, so\nit carries no `rev`.",
+          "properties": {
+            "plugins": {
+              "description": "The installed plugins, ordered by ID.",
+              "items": {
+                "$ref": "#/$defs/PluginInfo"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "plugin.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "plugins"
           ],
           "type": "object"
         }

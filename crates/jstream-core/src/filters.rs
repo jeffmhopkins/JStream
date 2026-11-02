@@ -504,6 +504,24 @@ impl Chain {
         notes
     }
 
+    /// Each of its CLAP filters that the mixer runs now, on its host's block, with its
+    /// control: on the master chain, the filters whose copies on other buses can run on
+    /// hosts of their own (ADR-0086).
+    pub(crate) fn clap_controls(&self) -> impl Iterator<Item = (&FilterId, &FilterControl)> {
+        self.filters
+            .iter()
+            .filter_map(|slot| match (&slot.block, &slot.control) {
+                (Some(_), Some(control)) => Some((&slot.chained.id, control)),
+                _ => None,
+            })
+    }
+
+    /// Whether every filter it removed has left the mixer's queue: until then a removed
+    /// CLAP filter may still run on its block.
+    pub(crate) fn settled(&self) -> bool {
+        self.removing.is_empty()
+    }
+
     /// How many of its CLAP filters run on a host's block now, for tests.
     #[cfg(test)]
     pub(crate) fn hosted(&self) -> usize {
@@ -575,7 +593,7 @@ impl Chain {
 }
 
 /// Whether `a` and `b` are the same block, or both none.
-fn same_block(a: Option<&HostBlock>, b: Option<&HostBlock>) -> bool {
+pub(crate) fn same_block(a: Option<&HostBlock>, b: Option<&HostBlock>) -> bool {
     match (a, b) {
         (Some(a), Some(b)) => Arc::ptr_eq(a, b),
         (None, None) => true,
