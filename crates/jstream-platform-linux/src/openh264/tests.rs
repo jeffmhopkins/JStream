@@ -1,6 +1,6 @@
 //! The store against a fake download: no test touches the network (R-TEST-004). The one
 //! that does, `downloads_the_pinned_release_from_cisco`, needs the `openh264-download`
-//! feature and `--ignored`, and CI runs neither.
+//! feature and `--ignored`. `cargo test` runs neither; CI's `e2e-stream` job runs it.
 
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -145,15 +145,27 @@ fn a_download_that_doesnt_match_the_pin_is_discarded() {
 
 #[test]
 fn nothing_downloads_without_a_recorded_hash() {
-    let store = OpenH264Store::new(dir("unpinned"));
-    let fetch = FakeFetch::new(Ok(ARCHIVE.to_vec()));
-    if OPENH264_PIN.archive_sha256.is_none() || OPENH264_PIN.library_sha256.is_none() {
+    for unpinned in [
+        OpenH264Pin {
+            archive_sha256: None,
+            ..OPENH264_PIN
+        },
+        OpenH264Pin {
+            library_sha256: None,
+            ..OPENH264_PIN
+        },
+    ] {
+        let store = OpenH264Store::with_pin(dir("unpinned"), unpinned);
+        let fetch = FakeFetch::new(Ok(ARCHIVE.to_vec()));
         assert!(matches!(
             store.install(&fetch),
             Err(PlatformError::Unsupported { .. })
         ));
         assert!(fetch.asked.borrow().is_empty(), "no request was made");
+        assert!(!store.is_installed());
     }
+    // The release's pin has both values recorded, so the app can download it.
+    assert!(OPENH264_PIN.archive_sha256.is_some() && OPENH264_PIN.library_sha256.is_some());
     // The pinned address is Cisco's own server, over HTTPS.
     assert!(
         OPENH264_PIN

@@ -369,8 +369,9 @@ It has:
   opens, the stored file's SHA-256 is checked again before `dlopen`, and the library
   must report the pinned version, since the hand-written declarations (`ffi.rs`, only
   the encoder calls JStream makes) follow that release's headers. A copy from anywhere
-  else is never loaded. The pin's two SHA-256 values are not recorded yet, so for now
-  `install` refuses before any request is made. **`HttpsFetch`** is the real `Fetch`:
+  else is never loaded. The pin (OpenH264 2.6.0 for 64-bit x86) records both SHA-256
+  values, taken from Cisco's server by the `openh264-download` test; a pin without them
+  makes `install` refuse before any request is made. **`HttpsFetch`** is the real `Fetch`:
   one `GET` over rustls with the OS trust store, no redirects. **`OpenH264Encoder`**
   (`VideoEncoder`) takes CPU NV12, I420, RGBA or BGRA frames of even size (RGBA and
   BGRA, which the engine's compositor reads back, go through
@@ -442,7 +443,8 @@ temporary folder, and each backend's preferred input on a card) are
 platform-independent. The OpenH264 tests use a fake download and a fake encoder
 behind the library's vtable, and the bzip2 decoder is tested on files `bzip2` wrote
 (`openh264/testdata`). The one test that downloads from Cisco, which is how the pin is
-recorded, needs the `openh264-download` feature and `--ignored`; CI runs neither. The
+recorded, needs the `openh264-download` feature and `--ignored`. `cargo test` runs
+neither; CI's `e2e-stream` job runs it before it streams on OpenH264. The
 `hw-tests` feature holds the tests against a real desktop, `#[ignore]`d
 and run by hand: the session bus (`dbus-run-session` is enough), a portal capture in a
 GNOME or KDE session with PipeWire (on the CPU path, and on the GPU path with a Vulkan

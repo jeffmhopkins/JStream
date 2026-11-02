@@ -11,13 +11,12 @@
 //!   output goes `active`, and the receiver gets H.264 at the canvas size and AAC, with
 //!   red pixels.
 //! - **Without one**: the start fails, and the reason tells the user how to get one
-//!   (OpenH264, or a VA-API driver). This is CI and the sandbox today: OpenH264's pin has
-//!   no recorded SHA-256 yet (LNX2), so no store holds it.
+//!   (OpenH264, or a VA-API driver). This is a machine with neither, running the harness
+//!   on the libx264 stand-in.
 //!
-//! `JSTREAM_E2E_OPENH264` (the xtask's `--openh264`) names Cisco's library. Once the pin
-//! is recorded the test installs it in the daemon's store, where the daemon checks it
-//! against the pin, and then requires the stream. Before that the daemon would refuse it
-//! (it never loads an unpinned copy), so the test leaves it out.
+//! When `JSTREAM_E2E_OPENH264` is set (the xtask's `--openh264-download`, which CI runs,
+//! or `--openh264 <library>`), the test puts Cisco's library in the daemon's store, where
+//! the daemon checks it against the pin, and then requires the stream.
 
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -30,11 +29,11 @@ use jstream_control::protocol::{
     ProtocolError, SecretString,
 };
 use jstream_control::{Control, ControlError, WsConfig, WsControl};
-use jstream_platform_linux::{OPENH264_PIN, OpenH264Store};
+use jstream_platform_linux::OpenH264Store;
 use serde_json::{Value, json};
 
 use crate::probe::{Receiver, free_port, pixel, probe};
-use crate::{CANVAS, KEY, near, scratch};
+use crate::{CANVAS, KEY, near, openh264_library, scratch};
 
 /// A running daemon, killed when the test ends.
 struct Daemon {
@@ -101,19 +100,12 @@ fn start_daemon(dir: &Path) -> Daemon {
     Daemon { child, url, token }
 }
 
-/// Puts Cisco's library from `JSTREAM_E2E_OPENH264` in the daemon's store, when the pin
-/// has the SHA-256 the daemon checks it against. Whether it did.
+/// Puts Cisco's library from `JSTREAM_E2E_OPENH264` ([`openh264_library`]) in the
+/// daemon's store, which checks it against the pin when it loads. Whether it did.
 fn install_openh264(home: &Path) -> bool {
-    let Some(library) = std::env::var_os("JSTREAM_E2E_OPENH264") else {
+    let Some(library) = openh264_library() else {
         return false;
     };
-    if OPENH264_PIN.library_sha256.is_none() {
-        eprintln!(
-            "JSTREAM_E2E_OPENH264 is set, but OpenH264's pin has no SHA-256 yet, so the \
-             daemon would refuse the library: testing the daemon without it"
-        );
-        return false;
-    }
     let store = OpenH264Store::new(data_dir(home).join("codecs").join("openh264"));
     let path = store.library_path();
     std::fs::create_dir_all(path.parent().expect("a folder")).expect("the store's folder");
