@@ -2220,6 +2220,69 @@ mod tests {
         pixels
     }
 
+    /// The program scene's background is in the mix the output stage filters (ADR-0089
+    /// §4): an output with a master chain draws the background through it, where nothing
+    /// covers it, and one with none draws it as it is.
+    #[test]
+    fn the_output_stage_filters_the_programs_background() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let mut g = Graph::new().with_kinds(crate::kinds::builtin());
+        apply(
+            &mut g,
+            vec![
+                Edit::SceneCreate {
+                    scene_id: SceneId::new("main"),
+                    name: "Main".into(),
+                    role: None,
+                },
+                Edit::SceneSetOptions {
+                    scene_id: SceneId::new("main"),
+                    options: jstream_protocol::SceneOptions {
+                        background: Some("#ff00ff".into()),
+                        ..jstream_protocol::SceneOptions::default()
+                    },
+                },
+                record("rec"),
+            ],
+        );
+        let magenta = [255, 0, 255, 255];
+        let plain = shot(&g);
+        let canvas = plain.canvas().expect("canvas");
+        let pixels = draw_views(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            &plain,
+            &[(
+                snapshot::View::output(None, Some(&OutputId::new("rec"))),
+                canvas,
+            )],
+        );
+        assert_eq!(pixels, [magenta], "no chain: the background as it is");
+
+        apply(&mut g, vec![multiply(FilterOwner::Master, "m", "#0000ff")]);
+        let staged = shot(&g);
+        let pixels = draw_views(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            &staged,
+            &[
+                (snapshot::View::default(), canvas),
+                (
+                    snapshot::View::output(None, Some(&OutputId::new("rec"))),
+                    canvas,
+                ),
+            ],
+        );
+        assert_eq!(
+            pixels,
+            [magenta, [0, 0, 255, 255]],
+            "the editing canvas shows the background, the output it filtered"
+        );
+    }
+
     /// The master stage's chain shows on every output's frame and not before it (the
     /// editing canvas, a preview); an output's own shows on its frame alone, after the
     /// master's. Two outputs drawing the program at different sizes composite it and run
