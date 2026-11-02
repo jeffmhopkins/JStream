@@ -92,8 +92,8 @@ pub(super) fn chroma_descriptor() -> KindDescriptor {
                 "spill",
                 "Key color spill reduction",
                 100,
-                "How far past the similarity kept colour is desaturated, removing the \
-                 key colour's cast from edges.",
+                "How far past the similarity kept color is desaturated, removing the \
+                 key color's cast from edges.",
             ),
         ],
     )

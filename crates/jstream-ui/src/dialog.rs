@@ -28,6 +28,10 @@ pub fn Modal(
     class: &'static str,
     /// Cancels the dialog: the backdrop, Escape and the header's ×.
     cancel: impl Fn() + Copy + 'static,
+    /// Leaves what is under it undimmed, as the Filters window does, so the canvas
+    /// shows the change.
+    #[prop(optional)]
+    undimmed: bool,
     children: Children,
 ) -> impl IntoView {
     let dialog = NodeRef::<html::Div>::new();
@@ -85,7 +89,7 @@ pub fn Modal(
         _ => {}
     };
     view! {
-        <div class="modal-backdrop" on:pointerdown=move |_| cancel()>
+        <div class="modal-backdrop" class:undimmed=undimmed on:pointerdown=move |_| cancel()>
             <div
                 class=format!("modal {class}")
                 role="dialog"

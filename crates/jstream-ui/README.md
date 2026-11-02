@@ -107,10 +107,10 @@ Contents ([Design](#design) explains the choices):
   context that opens it, with the edits OK sends and the hotkey chords tested
   natively), the Filters
   panel and its dialogs (`filters.rs`: `Filters`, `Chains`, which the Properties dialog
-  shows too, `AddFilter`, `FilterSettings` and the `FilterDialogs` context that opens
+  shows too, `AddFilter`, `FilterSettings` (the Filters window) and the `FilterDialogs` context that opens
   them and holds the chain an FX button picked, with the catalogue (a scanned CLAP plugin's `clap/` kind under Plugins), the row summaries,
   the choice of in place or dialog, each owner's chains, name and note (an item's
-  effects too), and Cancel's restore patch tested natively), the number
+  effects too), the window's scope tabs (`window_scopes`) and Cancel's restore patch tested natively), the number
   field the panels share (`number.rs`) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
   (the program output and each output with its FX button, creating, editing and
   deleting streams, recordings and the virtual camera, their stream keys, start and
@@ -484,20 +484,23 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   drag within its chain `filter.reorder` (the tree rows' pointer drag). Its summary and
   its settings come from the kind's descriptor, read once per kind and kept; a kind the
   engine doesn't describe shows its name alone. A filter with three settings or fewer
-  opens the properties form under its row, any other opens the Filter settings dialog,
-  and a double-click always does: in the Filters panel, the panel opens the dialog of
+  opens the properties form under its row, any other opens the Filters window (the
+  scope tabs from `window_scopes`, the chain on the left and the selected filter's
+  settings on the right, over an undimmed canvas, Cancel putting back every filter it
+  changed), as the panel's head button does, and a double-click always does: in the
+  Filters panel, the panel opens the window on
   the row the double-click's first click landed on (`double_click_target`, within
   800 ms), as that click's fold can scroll the row from under the second, which
   toggles nothing, and a first click anywhere else in the panel forgets that row (#984);
   each field's change is a one-parameter
-  `filter.set_settings`. The dialog applies every change at once and, on Cancel, Escape
-  or the backdrop, sends one batch putting back the settings and the switch it opened
-  with, including each one it sent whose change the engine hasn't reported yet; an
-  edit that fails after the dialog, or the row edited in place, has closed shows in the
+  `filter.set_settings`. The window applies every change at once and, on Cancel, Escape
+  or the backdrop, sends one batch putting back the settings and the switch of each
+  filter it changed, as it first showed them, including each one it sent whose change the engine hasn't reported yet; an
+  edit that fails after the window, or the row edited in place, has closed shows in the
   problem bar. Defaults resets each setting but a scene input's scene. The Add filter
   dialog offers `kind.list`'s filter kinds for the source's chains under the prototype's
   groups, names and hints for the kinds it knows, and sends `filter.add` with an ID from
-  `fresh_id`; the new filter opens in place, or in the settings dialog when it has more
+  `fresh_id`; the new filter opens in place, or in the Filters window when it has more
   than three settings or isn't described yet. Edit filters… in the item menus selects the item and shows the
   panel. Names come from the prototype's catalogue, then `kind.list`, then the kind's ID.
   A filter whose kind `kind.list` marks quarantined (ADR-0087: an effect-pack kind a GPU
