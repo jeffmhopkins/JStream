@@ -4539,13 +4539,13 @@ stamp = { hash = "b3:ed0c43359af13ff3", by = "agent:claude-window-picker", note 
 stamp = { hash = "b3:441254768c65164d", by = "agent:ui-parity", note = "Scene Properties paragraph: the draft has the Background color (swatch keeping alpha, blank none, a keyframe's disabled showing its parent's), Show in multiview and Include its audio when nested; OK sends scene.set_meta (other metadata kept) and scene.set_options with both; a bad colour or bound chord is refused; Defaults clears the background and checks both; Duplicate copies the options (clipboard.rs); the multiview paragraph names the dialog as where scenes are marked; the other files only fill SceneInfo's options in test literals; control#design's checks match. Merged main's #974 (plugin.list, 0.58), which main's text covers." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/scenes.rs"]
-stamp = { hash = "b3:1298126420ef4f79", by = "agent:obs-ui-thread", note = "Re-read Scenes and sources: the panels are Scenes and Sources (the prototype's Scene objects), each with ToolBar (add, remove, properties, filters, up, down) sticky at the foot; dock list says Sources; the rest holds against the diff." }
+stamp = { hash = "b3:923b4208a62224ce", by = "agent:obs-ui-thread", note = "Re-read after round 1: the Scenes and sources bullet lists the tool bar's add, remove, properties, filters and one step up or down; which buttons are off when (keyframes, stack ends) is UI-FEATURES detail, so it holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/source_properties.rs"]
 stamp = { hash = "b3:6e1d285f54124b67", by = "agent:claude", note = "Properties dialog gains the live-picture paragraph (draft-source stream, 0.49, on a tap channel from 2^31, follows the capture's settings, reopens on change without sending a subscribe whose channel was closed meanwhile, closes with the dialog, window hint); style.css adds the props-preview classes; app.rs, taps.rs and canvas/mod.rs as in #canvas." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/sources.rs"]
-stamp = { hash = "b3:e6e27d92bdc1cafb", by = "agent:obs-ui-thread", note = "Re-read Scenes and sources: the panels are Scenes and Sources (the prototype's Scene objects), each with ToolBar (add, remove, properties, filters, up, down) sticky at the foot; dock list says Sources; the rest holds against the diff." }
+stamp = { hash = "b3:dd8d82b345518c02", by = "agent:obs-ui-thread", note = "Re-read after round 1: the Scenes and sources bullet lists the tool bar's add, remove, properties, filters and one step up or down; which buttons are off when (keyframes, stack ends) is UI-FEATURES detail, so it holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/stats.rs"]
 stamp = { hash = "b3:1bdc5602ebe7bbc4", by = "agent:ui-encoders-pr", note = "Re-read the Stream stats paragraph against stats.rs and style.css: added the hover readout (nearest reading, vertical line, dot, tooltip 'x.xx Mbps · N s ago' or 'now', anchored by the 30%/70% rule) and that the dot and tooltip use style: properties because the CSP refuses style attributes. | merge: Merged main at 68905e2 (#992): the Contents gain encoders.rs and the Outputs bullet the Encoders and Video mixes forms and the Video select (none on the virtual camera's card); style.css gains the profile list and form classes. This PR's Stats paragraph (hover readout, style: properties) and its chart hover rules sit apart from them and hold. | kept from the merged side: Re-read the Contents and Outputs bullets: added encoders.rs (Profiles: encoder and video mix lists and forms checked with the protocol's problem, create/update/delete, delete disabled while used), the card's Video select (output.set_video_mix), state.get now read for video_mixes and scenes; style.css gains the profile list and form classes. | merge: #973 (FL-07) rewrote the Filters paragraph for outputs' and the master's video chains and the first-video-filter cost note; re-read it beside the Outputs and encoders.rs text, which it doesn't touch, and both hold. | kept from the merged side: #973, whole PR: the FX-button paragraph says the Filters panel shows the program output's and outputs' video and audio chains (the virtual camera video only), Add filter refuses referring kinds (refers), and states an output's first video filter's cost from output.status (first_video_cost: an encoder session for a stream or recording, a GPU pass only for the camera). Merge with main (#970): filters.rs's FilterSettings waits for a just-added filter (by revision), which this section's DL-04 sentence matches; #970's keyframe-children and live-value paragraphs don't touch filters, and FL-07's text stands beside them. | merge: Merged main at e3b44e0 (#969, protocol 0.56: preview.subscribe's source_id, a source popped out alone): the design gains #969's projector of one source; this PR's FX-button paragraph (both chains, refers, first_video_cost) is unchanged. 272 UI tests and wasm clippy pass. | merge: Merged main at 2c841b8: #972 (0.57, stats.tick's per-output stats and the Stream stats panel), #974 (0.58, plugin.list and the WASM plugin grants UI) and #975 (0.59, outputs carry an audio bus via output.set_audio_buses): the body gains the Audio select, the Stream stats panel and the plugin grants; this PR's FX-button paragraph (both chains, refers, first_video_cost) is unchanged. filters.rs only gains the fixture's audio_buses. 284 UI tests and wasm clippy pass. | kept from the merged side: #846/#970, whole PR: Scenes and sources says a keyframe lists its groups' children at its overrides; their eye writes the override; a click selects the child in the keyframe where the Inspector writes it; their item menu is the keyframe's, with Center/Fit/Stretch/Reset rotation and Clear crop (crop::clear via keyframe_child) writing the override, parent-changing entries and Crop off; plain nested scenes still open their scene; every Transform button but Clear crop leaves such a child as it is. The Store line names keyframe_children and the Canvas paragraph says keyframe drags send live values. Checked against sources.rs, item_menu.rs, crop.rs, transform.rs, store.rs and canvas/mod.rs. | kept from the merged side: The projectors paragraph now says any single object's Pop out opens its source alone with its own filters, the query takes source:<id>, and a picture subscribes with source_id (0.56), as projector.rs's Target::Source, Request, subscribe and Picture do; item_menu.rs's pop_out match is what calls it. | merge: main's #968 adds the Filters panel's item effects paragraph (Collection::chains from ItemInfo.effects) and the vignette under Style; this PR's projectors paragraph (Target::Source, source:<id>, Source: <name> title) is apart from it and both hold | merge: main's #970 adds keyframe group children (keyframe_children, their rows and item menu writing overrides, Crop off for them) and keyframe live values; this branch's projectors paragraph and item_menu's pop_out_source for a single non-scene item sit beside it and both hold | kept from the merged side: #862, whole PR: the Filters bullet now says the panel shows the selected item's own effects (owner item, ADR-0065) under its source's chains, for an item with a picture, with the same rows and dialogs, read by Collection::chains from ItemInfo.effects, their scene picker leaving out scenes holding the item's scene, and the vignette under Style; checked against filters.rs and store.rs. | kept from the merged side: Protocol 0.59. Outputs bullet: the panel reads buses, and each card's Audio select sends output.set_audio_buses. The select is disabled and titled Stop the output to change its bus while the output runs, and a virtual camera has none; checked against outputs.rs. stats.rs (#972's Stream stats panel, merged in) only gained audio_buses in a fixture. The merge's other text (#969 projectors, #970 keyframe children, #974 Plugins section) is main's and unrelated | kept from the merged side: Docking names Plugins under the Inspector, and the Plugins bullet describes the section: plugin.list on open and on plugin.state_changed or events.dropped, the row texts, install with no grant and the grant dialog opened when the manifest asks for more than read; the dialog is titled Plugin permissions with the plugin's name quoted under it beside its ID and path (N1), offers only requested classes, hosts and folders, and reads Grant and turn on for needs_grant; style.css adds the section's and dialogs' rules. | merge: #970 (keyframe editing on a group's children) changed the canvas and keyframe parts of the design; Docking's Plugins line and the Plugins bullet still hold. | merge: #969 (pop out a source alone: preview.subscribe's source_id, 0.56) and #972 (per-output stats in stats.tick and the Stream stats panel, 0.57) added the source pop-out and the Stream stats panel (workspace.rs's Stats panel, style.css); the Inspector still shows Pairing and Plugins, and the Plugins text still holds. | kept from the merged side: This PR: docking paragraph — Live chat alone waits on YouTube; Stream stats reads stats.tick outputs (protocol 0.57), picks the output, keeps 120 kbps samples per output and resets on a stop or restart; the Live layout has Stream stats, Outputs and Agent as tabs; style.css stats rules on tokens. Merge of main brought #969 (0.56: preview.subscribe's source_id), so this PR's stats.tick outputs moved from 0.58 to 0.57. | Round 1 B1: outputs.rs now hides the Video select on a virtual camera's card (with Encoder and Audio), as the engine's own_target sends the vcam the program at canvas size; the Outputs bullet now says the camera's card has no Video select. Re-read: holds. | Round 1 (#996): B1: .stats-hover-dot is now centred (margin -4px, ring as box-shadow 0 0 0 2px var(--panel), 8 px core as spec-panels Y4); N1: the Stats paragraph now says the tooltip sits inside the plot; N2: the tooltip is aria-hidden (the chart keeps its aria-label); N3: .stats-chart-box uses touch-action: pan-y, so a drag still scrolls vertically. The paragraph now says each, and holds. | Round 2 (#996, B2): the round-1 pan-y had landed on .splitter by mistake; .splitter is back to touch-action: none and .stats-chart-box now has pan-y, so the paragraph's 'a drag on the chart still scrolls vertically' holds; stats.rs clears the hover on pointercancel when the browser takes the pan." }
@@ -4698,13 +4698,13 @@ stamp = { hash = "b3:ed0c43359af13ff3", by = "agent:claude-window-picker", note 
 stamp = { hash = "b3:441254768c65164d", by = "agent:ui-parity", note = "scene_properties.rs gains the Background color swatch and text, Show in multiview and Include its audio when nested; clipboard.rs's duplicate copies the options; crop.rs, item_menu.rs, add_source.rs, scenes.rs and sources.rs fill SceneInfo's options in one test literal each and filters.rs in three; the module list holds. Merged main's #974 (plugin.list, 0.58), which main's text covers." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/scenes.rs"]
-stamp = { hash = "b3:1298126420ef4f79", by = "agent:obs-ui-thread", note = "Re-read: Panels now names tree.rs's tool bar and the arrows' edits tested natively in scenes.rs; icons.rs gains the tool bars' icons; the panel is Sources everywhere (dock title, labels, clipboard docs)." }
+stamp = { hash = "b3:923b4208a62224ce", by = "agent:obs-ui-thread", note = "Re-read after round 1: scenes.rs turns Scene filters off for a keyframe and Add scene uses a keyframe parent's folder; sources.rs turns each arrow off when restack would move nothing. The module list (the tool bar's arrows' edits tested natively) still holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/source_properties.rs"]
 stamp = { hash = "b3:6e1d285f54124b67", by = "agent:claude", note = "Properties dialog bullet names device_preview.rs (the live picture of a capture source, with its request, follow rules, close-race guard and live step tested natively); app.rs provides the PreviewTaps context, canvas/taps.rs is new, canvas/mod.rs hands taps their frames; projector.rs and canvas/preview.rs only gain source: None." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/sources.rs"]
-stamp = { hash = "b3:e6e27d92bdc1cafb", by = "agent:obs-ui-thread", note = "Re-read: Panels now names tree.rs's tool bar and the arrows' edits tested natively in scenes.rs; icons.rs gains the tool bars' icons; the panel is Sources everywhere (dock title, labels, clipboard docs)." }
+stamp = { hash = "b3:dd8d82b345518c02", by = "agent:obs-ui-thread", note = "Re-read after round 1: scenes.rs turns Scene filters off for a keyframe and Add scene uses a keyframe parent's folder; sources.rs turns each arrow off when restack would move nothing. The module list (the tool bar's arrows' edits tested natively) still holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/stats.rs"]
 stamp = { hash = "b3:1bdc5602ebe7bbc4", by = "agent:ui-encoders-pr", note = "Edited the stats.rs line in Contents: the Stream stats chart gains its hover readout, tested natively; the crate's role and layering are unchanged. | merge: Merged main at 68905e2 (#992): Contents gain encoders.rs (Encoders and Video mixes); still a Leptos WASM client over dyn Control, and this PR's stats.rs line holds. | kept from the merged side: Re-read against the new panels/encoders.rs (Profiles) and outputs.rs reading video mixes and scenes: still a Leptos WASM client over dyn Control at layer 3; nothing in the purpose changes. | Round 1 (#996): B1/N2 touch only stats.rs's tooltip attribute (aria-hidden instead of role=status); purpose unchanged. | Round 2 (#996, B2): stats.rs also clears the hover on pointercancel; purpose unchanged." }
@@ -4737,10 +4737,10 @@ stamp = { hash = "b3:21cfe4851f757fa5", by = "agent:ui-layouts", note = "This br
 stamp = { hash = "b3:c2d21e7dc85691ba", by = "agent:claude-wa1", note = "Contents gains plugins.rs (Plugins section, install and grant dialogs, GrantForm, suggested_id, not_granted), and lib.rs's module doc lists it; workspace.rs puts Plugins under Pairing in the Inspector. | merge: #969 (pop out a source alone: preview.subscribe's source_id, 0.56) and #972 (per-output stats in stats.tick and the Stream stats panel, 0.57) added the source pop-out and the Stream stats panel (workspace.rs's Stats panel, style.css); the Inspector still shows Pairing and Plugins, and the Plugins text still holds. | kept from the merged side: Panels list adds stats.rs (StreamStats, its figures, chart and choice of output tested natively); dock.rs Live layout, mod.rs and workspace.rs wiring fit the contents" }
 
 ["CRATE-jstream-ui-e2e#harness"."body"]
-stamp = { hash = "b3:9c9084095dcbe850", by = "agent:obs-ui-thread", note = "Re-read: openAddSource right-clicks under the last row or the empty scene's hint, since the tool bar opens no menu; Scene objects renamed Sources in the fixtures' docs." }
+stamp = { hash = "b3:9c9084095dcbe850", by = "agent:obs-ui-thread", note = "Harness body: the openAddSource bullet now says it right-clicks under the last Sources row or on an empty scene's hint, since the tool bar opens no menu; Scene objects renamed Sources throughout." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/fixtures.js"]
-stamp = { hash = "b3:cd846fff4169fb2d", by = "agent:obs-ui-thread", note = "Re-read: openAddSource right-clicks under the last row or the empty scene's hint, since the tool bar opens no menu; Scene objects renamed Sources in the fixtures' docs." }
+stamp = { hash = "b3:cd846fff4169fb2d", by = "agent:obs-ui-thread", note = "fixtures.js: openAddSource right-clicks just under the last Sources row, or on the empty scene's .placeholder, since a right-click on the tool bar opens no menu; doc comments say Sources. The harness text says the same." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/global-setup.js"]
 stamp = { hash = "b3:cd1222001aad0cda" }
@@ -4764,7 +4764,7 @@ stamp = { hash = "b3:0b33fafc1e51563f", by = "agent:claude", note = "canvas.spec
 stamp = { hash = "b3:e4c9da41bb20c50f", by = "agent:claude-window-picker", note = "New spec capture-targets.spec.js uses the existing describeKinds and openAddSource fixtures as described; the mock daemon's MockEngine now also lists a window in capture.targets, which the harness text doesn't enumerate. Still holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/clipboard.spec.js"]
-stamp = { hash = "b3:1a68e3c3e43d8957", by = "agent:obs-ui-thread", note = "Re-read: openAddSource right-clicks under the last row or the empty scene's hint, since the tool bar opens no menu; Scene objects renamed Sources in the fixtures' docs." }
+stamp = { hash = "b3:1a68e3c3e43d8957", by = "agent:obs-ui-thread", note = "clipboard.spec.js: only the doc comments rename Scene objects to Sources; it uses connect and rev as the harness describes, so the harness holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/connect.spec.js"]
 stamp = { hash = "b3:ca6c5e8ea0b9bbaa", by = "agent:ui-polish", note = "connect.spec.js gained a fonts test using the existing connect fixture and page.request against the daemon's URL, loading all five bundled faces; the daemon, seed and setup are unchanged. | kept from the merged side: fixtures.js: connect waits for header.app-header, new disconnect (File menu) and rev (header data-rev), now listed in the Harness bullet; connect.spec.js uses the disconnect fixture and the File menu; outputs.spec.js adds header Record steps using connect and inspectorPage as described. Daemon, console-error and setup behaviour unchanged." }
@@ -4773,19 +4773,19 @@ stamp = { hash = "b3:ca6c5e8ea0b9bbaa", by = "agent:ui-polish", note = "connect.
 stamp = { hash = "b3:8eaa166c878b6436", by = "agent:claude-crop-ui", note = "Re-read against the whole PR: the body's sourceSizes note matches fixtures.js, which answers source.sizes through the WebSocket route and sends source.size_changed (a null size leaves size out). crop.spec.js is its new user: three of its four tests call sourceSizes, and the first runs without it, as the mock reports no sizes; it uses connect and rev like the other specs." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/docking.spec.js"]
-stamp = { hash = "b3:4f09516304bbf2e7", by = "agent:obs-ui-thread", note = "Re-read: openAddSource right-clicks under the last row or the empty scene's hint, since the tool bar opens no menu; Scene objects renamed Sources in the fixtures' docs." }
+stamp = { hash = "b3:4f09516304bbf2e7", by = "agent:obs-ui-thread", note = "docking.spec.js: the Left sidebar's tabs are now Scenes and Sources, after PanelId::Objects' new label; it uses the existing fixtures, so the harness holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/effects.spec.js"]
 stamp = { hash = "b3:4db148b93ed8d269", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Whole change (ADR-0088, protocol 0.63): ItemOverride.effects, OverrideField::Effects, item.set_effects, FilterOwner::Keyframe (copy-on-write, undone by item.clear_override effects); anim effects type param; graph checks/edges/blockers/plan/touched/schema 3 + v2_to_v3 + v3 fixture; mock parity; core draws overridden effects and pairs by look; UI Filters panel keyframe owner, Follow the item, Reset clears effects. e2e harness: re-read; the new test uses connect, describeKinds and rev as described; no fixture change." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/filters.spec.js"]
-stamp = { hash = "b3:6b93749e265d0625", by = "agent:obs-ui-thread", note = "Re-read: openAddSource right-clicks under the last row or the empty scene's hint, since the tool bar opens no menu; Scene objects renamed Sources in the fixtures' docs." }
+stamp = { hash = "b3:6b93749e265d0625", by = "agent:obs-ui-thread", note = "filters.spec.js: one doc comment says Sources row instead of Scene objects row; no fixture use changed, so the harness holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/folders.spec.js"]
-stamp = { hash = "b3:1cdd53ac5e952fe6", by = "agent:obs-ui-thread", note = "Re-read: openAddSource right-clicks under the last row or the empty scene's hint, since the tool bar opens no menu; Scene objects renamed Sources in the fixtures' docs." }
+stamp = { hash = "b3:1cdd53ac5e952fe6", by = "agent:obs-ui-thread", note = "folders.spec.js: the drag helper scrolls both rows clear of the sticky tool bar, and the panel right-click lands 10px above .tool-bar, since the bar opens no menu; both are in-spec, so no fixture or daemon change and the harness holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/groups.spec.js"]
-stamp = { hash = "b3:ef9f6d4510d7fc0d", by = "agent:obs-ui-thread", note = "Re-read: openAddSource right-clicks under the last row or the empty scene's hint, since the tool bar opens no menu; Scene objects renamed Sources in the fixtures' docs." }
+stamp = { hash = "b3:ef9f6d4510d7fc0d", by = "agent:obs-ui-thread", note = "groups.spec.js: the empty-panel right-click lands 10px above the Sources .tool-bar instead of at the panel's foot, and the doc comment says Sources; in-spec only, so the harness holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/header-stats.spec.js"]
 stamp = { hash = "b3:3b3dcdb075c256a6", by = "agent:ui-parity", note = "Fixtures now list statsTicks, which routes the socket like meterTicks and sends the page stats.ticks, as fixtures.js has it; it sits after main's re-sending meterTicks text." }
@@ -4794,13 +4794,13 @@ stamp = { hash = "b3:3b3dcdb075c256a6", by = "agent:ui-parity", note = "Fixtures
 stamp = { hash = "b3:32ba4ec89e87990c", by = "agent:ui-parity", note = "Checked fixtures.js: openAddSource right-clicks just under the last row of Scene objects and nestScene goes through it; the other helpers are as described." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/keyframes.spec.js"]
-stamp = { hash = "b3:67aa0c3282237e9a", by = "agent:obs-ui-thread", note = "Re-read: openAddSource right-clicks under the last row or the empty scene's hint, since the tool bar opens no menu; Scene objects renamed Sources in the fixtures' docs." }
+stamp = { hash = "b3:67aa0c3282237e9a", by = "agent:obs-ui-thread", note = "keyframes.spec.js: one doc comment says Sources for the seed's Backdrop row; the mock seed it relies on is as described, so the harness holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/labels.spec.js"]
-stamp = { hash = "b3:9ecee40f1fed87c4", by = "agent:obs-ui-thread", note = "Re-read: openAddSource right-clicks under the last row or the empty scene's hint, since the tool bar opens no menu; Scene objects renamed Sources in the fixtures' docs." }
+stamp = { hash = "b3:9ecee40f1fed87c4", by = "agent:obs-ui-thread", note = "labels.spec.js: the funnel is found by name 'Filter' with exact: true, since the tool bars add 'Filters' and 'Scene filters' buttons; doc comments say Sources. Fixtures unchanged, so the harness holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/menus.spec.js"]
-stamp = { hash = "b3:61a1e15fc5f9a603", by = "agent:obs-ui-thread", note = "Re-read: openAddSource right-clicks under the last row or the empty scene's hint, since the tool bar opens no menu; Scene objects renamed Sources in the fixtures' docs." }
+stamp = { hash = "b3:61a1e15fc5f9a603", by = "agent:obs-ui-thread", note = "menus.spec.js: a test title and doc comments rename Scene objects to Sources; its right-clicks go through openAddSource as the harness describes, so the harness holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/mixer.spec.js"]
 stamp = { hash = "b3:c564a6cf6337a77c", by = "agent:mx05-monitoring", note = "This PR: the monitoring test uses only connect, showPanel and rev against the seed's master bus. Merge of wave/m1-6 at ec32e95: #864's FX check in the first mixer test clicks FX 0 and reads the Filters panel's title, with the existing fixtures; no fixture, daemon or setup change. | kept from the merged side: mixer.spec.js now clicks the master card's FX button; the harness itself (mock daemon seed, fixtures, describeKinds) is unchanged, and the seed still has no outputs, which output-chains.spec.js adds through the form. | merge: wave/m1-6 brought #809's vertical master strip; this PR now gives it the same FX N button (MasterFx, shared with the card); mixer.spec.js now expects the strip's FX 0 enabled; harness unchanged; all 65 browser tests pass locally. | kept from the merged side: mixer.spec.js uses only the existing fixtures (connect, showPanel, meterTicks, rev) plus page.mouse drags and tab clicks; nothing in the mock daemon, fixtures or setup changes." }
@@ -4815,13 +4815,13 @@ stamp = { hash = "b3:8638d2422f6bd12a", by = "agent:ui-parity", note = "Re-read 
 stamp = { hash = "b3:52cf88dcf36b3b97", by = "agent:claude-wa1", note = "Re-read against plugins.spec.js: it routes the page's WebSocket inside the spec, so the fixtures, mock daemon and their description are unchanged." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/polish.spec.js"]
-stamp = { hash = "b3:b0e705b8e53f1e79", by = "agent:obs-ui-thread", note = "Re-read: openAddSource right-clicks under the last row or the empty scene's hint, since the tool bar opens no menu; Scene objects renamed Sources in the fixtures' docs." }
+stamp = { hash = "b3:b0e705b8e53f1e79", by = "agent:obs-ui-thread", note = "polish.spec.js: the expected panel names list Sources for Scene objects; no fixture change, so the harness holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/projectors.spec.js"]
 stamp = { hash = "b3:1fcf0952741df4ac", by = "agent:ui-parity", note = "Re-read: projectors.spec.js gains a test but no fixture; the harness text holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/properties.spec.js"]
-stamp = { hash = "b3:1a48bfaebf6aab5c", by = "agent:obs-ui-thread", note = "Re-read: openAddSource right-clicks under the last row or the empty scene's hint, since the tool bar opens no menu; Scene objects renamed Sources in the fixtures' docs." }
+stamp = { hash = "b3:1a48bfaebf6aab5c", by = "agent:obs-ui-thread", note = "properties.spec.js: one doc comment says Sources panel; it uses connect and openAddSource as described, so the harness holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/scene-filters.spec.js"]
 stamp = { hash = "b3:0b51d78a47c23360", by = "agent:scene-filters", note = "#897 review N4: scene-filters.spec.js selects the Backdrop before the margin's Edit scene filters…; same seed and fixtures" }
@@ -4830,7 +4830,7 @@ stamp = { hash = "b3:0b51d78a47c23360", by = "agent:scene-filters", note = "#897
 stamp = { hash = "b3:30c9d70da9b2b731", by = "agent:ui-parity", note = "scene-refs.spec.js uses connect, describeKinds and showPanel from fixtures.js as described, with a scene_mask descriptor whose scene param the Add filter dialog fills; no fixture or daemon change, so the harness text holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/scenes.spec.js"]
-stamp = { hash = "b3:eddd853fbaab0be8", by = "agent:obs-ui-thread", note = "Re-read: openAddSource right-clicks under the last row or the empty scene's hint, since the tool bar opens no menu; Scene objects renamed Sources in the fixtures' docs." }
+stamp = { hash = "b3:eddd853fbaab0be8", by = "agent:obs-ui-thread", note = "scenes.spec.js: the search box is now 'Search sources' and the funnel is matched with exact: true next to the tool bar's buttons; fixtures unchanged, so the harness holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/stream-stats.spec.js"]
 stamp = { hash = "b3:1c247e1d066e4b31", by = "agent:ui-parity", note = "Re-read against stream-stats.spec.js's hover step: it uses showPanel and the existing statsTicks fixture, so the harness description holds." }
@@ -4839,7 +4839,7 @@ stamp = { hash = "b3:1c247e1d066e4b31", by = "agent:ui-parity", note = "Re-read 
 stamp = { hash = "b3:8d7ee11b9ff325d1", by = "agent:claude", note = "Re-read for #868: recordCalls joined the fixtures (passes every message on; sent(type) finds edits and actions in the requests); the new transitions.spec.js uses it, and no longer checks an Inspector hotkey row since IN-08 is #865's; daemon, seed and setup unchanged. | kept from the merged side: #304's studio.spec.js uses the harness's connect and showPanel (Transitions is a tab behind Outputs); docking.spec.js expects the sixth panel; harness text unchanged and accurate; holds" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/tool-bars.spec.js"]
-stamp = { hash = "b3:d4d4896c7c23dea5", by = "agent:obs-ui-thread", note = "Re-read: openAddSource right-clicks under the last row or the empty scene's hint, since the tool bar opens no menu; Scene objects renamed Sources in the fixtures' docs." }
+stamp = { hash = "b3:00887e9e0f4637d3", by = "agent:obs-ui-thread", note = "tool-bars.spec.js (new): uses connect and openAddSource, the latter on an empty scene, which is why openAddSource now anchors on the .placeholder; the keyframe test makes its keyframe through the scene menu, so no mock-daemon change. The harness holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/transform.spec.js"]
 stamp = { hash = "b3:285e4d0549930d74", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against the #946 change to transform.spec.js (a selectOnly helper that waits for the row's selected class, the one-item summary and a single-box readout before reading the readout): harness fixtures unchanged; the Transform entry's coverage (summary, buttons, Stretch undo, two-item Selection/Distribute, Match giving both the primary's size) still holds." }
@@ -4857,7 +4857,7 @@ stamp = { hash = "b3:e7d2b3325e5ac572", by = "agent:a2656", note = "Dependabot #
 stamp = { hash = "b3:063a37f95f399bff" }
 
 ["CRATE-jstream-ui-e2e#tests"."body"]
-stamp = { hash = "b3:5b259d121b12de3d", by = "agent:obs-ui-thread", note = "Re-read: added the Tool bars bullet for tool-bars.spec.js; specs say Sources and Search sources; folders and groups specs right-click above the tool bar and scroll rows clear of it." }
+stamp = { hash = "b3:2385310c60ead0cc", by = "agent:obs-ui-thread", note = "Tests body: the Tool bars bullet lists tool-bars.spec.js, now with the Scenes bar off for a keyframe (Scene properties, Scene filters, arrows; Add source too) and each Sources arrow off at its end of the stack; folders and groups specs right-click above the bar." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/canvas.spec.js"]
 stamp = { hash = "b3:0b33fafc1e51563f", by = "agent:claude", note = "canvas.spec.js's drag and nudge specs now poll the revision until it reaches startRev + 1 and startRev + 3 rather than reading it once (#848). The assertions are as strict as before, so the Canvas bullet (one edit ending the gesture, Ctrl+Z and Ctrl+Shift+Z reverse it, nudges and Ctrl+Z) still holds." }
@@ -4866,7 +4866,7 @@ stamp = { hash = "b3:0b33fafc1e51563f", by = "agent:claude", note = "canvas.spec
 stamp = { hash = "b3:e4c9da41bb20c50f", by = "agent:claude-window-picker", note = "Added the Capture targets bullet for capture-targets.spec.js: describes the window kind, lists only the mock window after None, OK is one edit, reopened shows mock:window; matches the spec, which passes locally with the full suite (106)." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/clipboard.spec.js"]
-stamp = { hash = "b3:1a68e3c3e43d8957", by = "agent:obs-ui-thread", note = "Re-read: added the Tool bars bullet for tool-bars.spec.js; specs say Sources and Search sources; folders and groups specs right-click above the tool bar and scroll rows clear of it." }
+stamp = { hash = "b3:1a68e3c3e43d8957", by = "agent:obs-ui-thread", note = "clipboard.spec.js: only the doc comments rename Scene objects to Sources; it uses connect and rev as the harness describes, and the Tests list, which names no Scene objects any more, holds." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/connect.spec.js"]
 stamp = { hash = "b3:ca6c5e8ea0b9bbaa", by = "agent:ui-polish", note = "The Connecting entry says the bundled Plex Sans and Mono load from the page's origin and fonts/OFL.txt is served; connect.spec.js's test loads each of the five faces (Sans 400/600/700, Mono 400/600) and reads OFL.txt. | kept from the merged side: connect.spec.js: File menu shows URL and protocol, Escape closes it, Disconnect through it, as the Connecting bullet says; outputs.spec.js: Go Live and End stream from the header and the header's Record starting and stopping a recording, as the Outputs bullet says." }
@@ -4875,19 +4875,19 @@ stamp = { hash = "b3:ca6c5e8ea0b9bbaa", by = "agent:ui-polish", note = "The Conn
 stamp = { hash = "b3:8eaa166c878b6436", by = "agent:claude-crop-ui", note = "Re-read against the whole PR: the Crop bullet matches crop.spec.js's four tests: crop mode switched by the tool, C, V, Escape, the menu and a scene switch, with a handle drag resizing as usual while no size is known, then undone (review N1); a crop-mode drag as one undoable edit with the ghost; Alt crop then Clear crop; and W % and H % following the source's size. All 63 specs pass locally on Chromium 1243." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/docking.spec.js"]
-stamp = { hash = "b3:4f09516304bbf2e7", by = "agent:obs-ui-thread", note = "Re-read: added the Tool bars bullet for tool-bars.spec.js; specs say Sources and Search sources; folders and groups specs right-click above the tool bar and scroll rows clear of it." }
+stamp = { hash = "b3:4f09516304bbf2e7", by = "agent:obs-ui-thread", note = "docking.spec.js: the Left sidebar's tabs are now Scenes and Sources, after PanelId::Objects' new label; it uses the existing fixtures, and the Tests list, which names no Scene objects any more, holds." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/effects.spec.js"]
 stamp = { hash = "b3:4db148b93ed8d269", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Whole change (ADR-0088, protocol 0.63): ItemOverride.effects, OverrideField::Effects, item.set_effects, FilterOwner::Keyframe (copy-on-write, undone by item.clear_override effects); anim effects type param; graph checks/edges/blockers/plan/touched/schema 3 + v2_to_v3 + v3 fixture; mock parity; core draws overridden effects and pairs by look; UI Filters panel keyframe owner, Follow the item, Reset clears effects. e2e tests: added the keyframe effects test's description to Item effects; checked against effects.spec.js." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/filters.spec.js"]
-stamp = { hash = "b3:6b93749e265d0625", by = "agent:obs-ui-thread", note = "Re-read: added the Tool bars bullet for tool-bars.spec.js; specs say Sources and Search sources; folders and groups specs right-click above the tool bar and scroll rows clear of it." }
+stamp = { hash = "b3:6b93749e265d0625", by = "agent:obs-ui-thread", note = "filters.spec.js: one doc comment says Sources row instead of Scene objects row; no fixture use changed, and the Tests list, which names no Scene objects any more, holds." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/folders.spec.js"]
-stamp = { hash = "b3:1cdd53ac5e952fe6", by = "agent:obs-ui-thread", note = "Re-read: added the Tool bars bullet for tool-bars.spec.js; specs say Sources and Search sources; folders and groups specs right-click above the tool bar and scroll rows clear of it." }
+stamp = { hash = "b3:1cdd53ac5e952fe6", by = "agent:obs-ui-thread", note = "folders.spec.js: the drag helper scrolls both rows clear of the sticky tool bar, and the panel right-click lands 10px above .tool-bar, since the bar opens no menu; both are in-spec, so no fixture or daemon change and the harness holds." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/groups.spec.js"]
-stamp = { hash = "b3:ef9f6d4510d7fc0d", by = "agent:obs-ui-thread", note = "Re-read: added the Tool bars bullet for tool-bars.spec.js; specs say Sources and Search sources; folders and groups specs right-click above the tool bar and scroll rows clear of it." }
+stamp = { hash = "b3:ef9f6d4510d7fc0d", by = "agent:obs-ui-thread", note = "groups.spec.js: the empty-panel right-click lands 10px above the Sources .tool-bar instead of at the panel's foot, and the doc comment says Sources; in-spec only, and the Tests list, which names no Scene objects any more, holds." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/header-stats.spec.js"]
 stamp = { hash = "b3:3b3dcdb075c256a6", by = "agent:ui-parity", note = "New Header stats entry for header-stats.spec.js: with no output the readout shows 0 dropped, a tick with a load adds CPU <1%, and an output running at 60 fps with 2 dropped frames reads 60 fps · 2 dropped · CPU 3%, as the spec asserts." }
@@ -4896,13 +4896,13 @@ stamp = { hash = "b3:3b3dcdb075c256a6", by = "agent:ui-parity", note = "New Head
 stamp = { hash = "b3:32ba4ec89e87990c", by = "agent:ui-parity", note = "Checked each spec against its bullet: canvas live.set and live.cancel checks and the double click opening Properties, the new menus and properties specs, and inspector and transform now adding their second item through the Add source dialog and a nested scene." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/keyframes.spec.js"]
-stamp = { hash = "b3:67aa0c3282237e9a", by = "agent:obs-ui-thread", note = "Re-read: added the Tool bars bullet for tool-bars.spec.js; specs say Sources and Search sources; folders and groups specs right-click above the tool bar and scroll rows clear of it." }
+stamp = { hash = "b3:67aa0c3282237e9a", by = "agent:obs-ui-thread", note = "keyframes.spec.js: one doc comment says Sources for the seed's Backdrop row; the mock seed it relies on is as described, and the Tests list, which names no Scene objects any more, holds." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/labels.spec.js"]
-stamp = { hash = "b3:9ecee40f1fed87c4", by = "agent:obs-ui-thread", note = "Re-read: added the Tool bars bullet for tool-bars.spec.js; specs say Sources and Search sources; folders and groups specs right-click above the tool bar and scroll rows clear of it." }
+stamp = { hash = "b3:9ecee40f1fed87c4", by = "agent:obs-ui-thread", note = "labels.spec.js: the funnel is found by name 'Filter' with exact: true, since the tool bars add 'Filters' and 'Scene filters' buttons; doc comments say Sources. Fixtures unchanged, and the Tests list, which names no Scene objects any more, holds." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/menus.spec.js"]
-stamp = { hash = "b3:61a1e15fc5f9a603", by = "agent:obs-ui-thread", note = "Re-read: added the Tool bars bullet for tool-bars.spec.js; specs say Sources and Search sources; folders and groups specs right-click above the tool bar and scroll rows clear of it." }
+stamp = { hash = "b3:61a1e15fc5f9a603", by = "agent:obs-ui-thread", note = "menus.spec.js: a test title and doc comments rename Scene objects to Sources; its right-clicks go through openAddSource as the harness describes, and the Tests list, which names no Scene objects any more, holds." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/mixer.spec.js"]
 stamp = { hash = "b3:c564a6cf6337a77c", by = "agent:mx05-monitoring", note = "This PR: the monitoring test and the Hear button enabled on the card and strip. Merge of wave/m1-6 at ec32e95: #864's FX 0 click into the Filters panel and the strip's enabled FX are kept beside them; the bullet names both. | kept from the merged side: Added the output-chains.spec.js bullet (Outputs rows, footnote, FX into the Filters panel, master and output Gain chains counted separately) and changed the Mixer bullet: FX 0 now shows the program output's chain instead of being disabled. | merge: wave/m1-6 brought #809's vertical master strip; this PR now gives it the same FX N button (MasterFx, shared with the card); the Mixer bullet keeps #809's tooltip and vertical-strip text and says the strip's FX 0 is enabled. | kept from the merged side: Mixer bullet matches mixer.spec.js's seven tests: the fold's tooltip (N3), N1's U+2212 aria-valuetext, N2's status count, the vertical flip, side-column default and upward meters; review round 1 adds the dock-change test (Routing stays open after tab clicks, B1) and the strip's status appearing only over 0 dBTP (N1)." }
@@ -4917,13 +4917,13 @@ stamp = { hash = "b3:8638d2422f6bd12a", by = "agent:ui-parity", note = "Re-read 
 stamp = { hash = "b3:52cf88dcf36b3b97", by = "agent:claude-wa1", note = "Adds the Plugins bullet for plugins.spec.js: the install, the grant dialog offering only what the manifest asks, the grant sent, the row's not-granted line, and grant and turn on for needs_grant; both tests pass locally in Chromium." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/polish.spec.js"]
-stamp = { hash = "b3:b0e705b8e53f1e79", by = "agent:obs-ui-thread", note = "Re-read: added the Tool bars bullet for tool-bars.spec.js; specs say Sources and Search sources; folders and groups specs right-click above the tool bar and scroll rows clear of it." }
+stamp = { hash = "b3:b0e705b8e53f1e79", by = "agent:obs-ui-thread", note = "polish.spec.js: the expected panel names list Sources for Scene objects; no fixture change, and the Tests list, which names no Scene objects any more, holds." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/projectors.spec.js"]
 stamp = { hash = "b3:1fcf0952741df4ac", by = "agent:ui-parity", note = "The Projectors entry now covers Backdrop's object row Pop out: Source in a window or full screen, opening a ?projector=source: page titled Source: Backdrop, as the new test asserts." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/properties.spec.js"]
-stamp = { hash = "b3:1a48bfaebf6aab5c", by = "agent:obs-ui-thread", note = "Re-read: added the Tool bars bullet for tool-bars.spec.js; specs say Sources and Search sources; folders and groups specs right-click above the tool bar and scroll rows clear of it." }
+stamp = { hash = "b3:1a48bfaebf6aab5c", by = "agent:obs-ui-thread", note = "properties.spec.js: one doc comment says Sources panel; it uses connect and openAddSource as described, and the Tests list, which names no Scene objects any more, holds." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/scene-filters.spec.js"]
 stamp = { hash = "b3:0b51d78a47c23360", by = "agent:scene-filters", note = "#897 review N4: the Scene filters bullet says the margin entry shows the scene's chain in place of the selected item's, which the spec now checks" }
@@ -4932,7 +4932,7 @@ stamp = { hash = "b3:0b51d78a47c23360", by = "agent:scene-filters", note = "#897
 stamp = { hash = "b3:30c9d70da9b2b731", by = "agent:ui-parity", note = "Added the Scene-input rows entry for scene-refs.spec.js: a mask on Backdrop using Intro shows a child row with the purple badge and its tooltip, the caret folds it and brings it back, and a click selects Intro." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/scenes.spec.js"]
-stamp = { hash = "b3:eddd853fbaab0be8", by = "agent:obs-ui-thread", note = "Re-read: added the Tool bars bullet for tool-bars.spec.js; specs say Sources and Search sources; folders and groups specs right-click above the tool bar and scroll rows clear of it." }
+stamp = { hash = "b3:eddd853fbaab0be8", by = "agent:obs-ui-thread", note = "scenes.spec.js: the search box is now 'Search sources' and the funnel is matched with exact: true next to the tool bar's buttons; fixtures unchanged, and the Tests list, which names no Scene objects any more, holds." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/stream-stats.spec.js"]
 stamp = { hash = "b3:1c247e1d066e4b31", by = "agent:ui-parity", note = "Edited the Stream stats bullet: hovering the chart's right edge reads the newest sample 'now', further left the one before '1 s ago', and the tooltip goes when the pointer leaves." }
@@ -4941,7 +4941,7 @@ stamp = { hash = "b3:1c247e1d066e4b31", by = "agent:ui-parity", note = "Edited t
 stamp = { hash = "b3:8d7ee11b9ff325d1", by = "agent:claude", note = "Re-read for #868 after merging wave/m1-5: scenes.spec covers a click switching program and studio mode's preview, hover button and kept mode; studio.spec turns studio mode on and covers the bar's visibility and the preset picker's sent edits; the new transitions.spec covers the submenus, the Properties dialog (hotkey read back by the dialog), the canvas margin and the Inspector's scene switches; the wave's mixer spec text holds. | kept from the merged side: #304's Studio mode bullet now runs on the Transitions tab and drops the canvas-follows-program check (the wave's canvas follows the selected scene); Docking names Transitions beside Outputs; 29 tests pass locally against Chromium; holds" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/tool-bars.spec.js"]
-stamp = { hash = "b3:d4d4896c7c23dea5", by = "agent:obs-ui-thread", note = "Re-read: added the Tool bars bullet for tool-bars.spec.js; specs say Sources and Search sources; folders and groups specs right-click above the tool bar and scroll rows clear of it." }
+stamp = { hash = "b3:00887e9e0f4637d3", by = "agent:obs-ui-thread", note = "tool-bars.spec.js (new): uses connect and openAddSource, the latter on an empty scene, which is why openAddSource now anchors on the .placeholder; the keyframe test makes its keyframe through the scene menu, so no mock-daemon change. The Tool bars bullet now lists the keyframe test and the arrows turning off at the stack ends." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/transform.spec.js"]
 stamp = { hash = "b3:285e4d0549930d74", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against the #946 change to transform.spec.js (a selectOnly helper that waits for the row's selected class, the one-item summary and a single-box readout before reading the readout): harness fixtures unchanged; the Transform entry's coverage (summary, buttons, Stretch undo, two-item Selection/Distribute, Match giving both the primary's size) still holds." }
@@ -5313,7 +5313,7 @@ stamp = { hash = "b3:ceed924dbd7c8fb7", by = "agent:ui-parity", note = "Added a 
 stamp = { hash = "b3:d18db666e0b8c7d1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against desktop Usage's change: only the crash-reports bullet gained the pack-load exception (#1001 N3); this section's steps and claims are unaffected (the PR also rewords count_sent docs and the receiver test)" }
 
 ["GETTING-STARTED#live"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:f16fe8aeb7e6e9f8", by = "agent:obs-ui-thread", note = "Re-read against UI-FEATURES' tool-bar rows: Going live is about Outputs and the header, unchanged." }
+stamp = { hash = "b3:8d29db97e82602e5", by = "agent:obs-ui-thread", note = "Re-read against UI-FEATURES' round 1 edits (keyframe and stack-end states of the tool bars, Sources naming in SC-08, SC-09, OB-07): this section's steps still match; nothing it says changed." }
 
 ["GETTING-STARTED#record"."body"]
 stamp = { hash = "b3:b21c49ef28545229", by = "agent:wave-owner", note = "merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: Recording (MP4) output with a file path, the header's Record/Stop recording (HD-07)" }
@@ -5322,7 +5322,7 @@ stamp = { hash = "b3:b21c49ef28545229", by = "agent:wave-owner", note = "merge: 
 stamp = { hash = "b3:d18db666e0b8c7d1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against desktop Usage's change: only the crash-reports bullet gained the pack-load exception (#1001 N3); this section's steps and claims are unaffected (the PR also rewords count_sent docs and the receiver test)" }
 
 ["GETTING-STARTED#record"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:f16fe8aeb7e6e9f8", by = "agent:obs-ui-thread", note = "Re-read against UI-FEATURES' tool-bar rows: Recording is about Outputs and Record, unchanged." }
+stamp = { hash = "b3:8d29db97e82602e5", by = "agent:obs-ui-thread", note = "Re-read against UI-FEATURES' round 1 edits (keyframe and stack-end states of the tool bars, Sources naming in SC-08, SC-09, OB-07): this section's steps still match; nothing it says changed." }
 
 ["GETTING-STARTED#requirements"."body"]
 stamp = { hash = "b3:33e39447d2457615", by = "agent:wave-owner", note = "merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: Windows 11 x64 build 22000 per README Platforms (fact min-windows-build), D3D12, Media Feature Pack on N editions (the desktop app's can't-start window), WebView2, no installer or admin per ADR-0066" }
@@ -5340,7 +5340,7 @@ stamp = { hash = "b3:67130f6f84b33399", by = "agent:wave-owner", note = "merge: 
 stamp = { hash = "b3:aa5e8822b3759f1e", by = "agent:obs-ui-thread", note = "Re-read: steps 1 and 2 now point to the + under Scenes and Sources, with the right-click menus as the other way; the rest matches the UI." }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:f16fe8aeb7e6e9f8", by = "agent:obs-ui-thread", note = "Re-read: steps 1 and 2 now point to the + under Scenes and Sources, with the right-click menus as the other way; the rest matches the UI." }
+stamp = { hash = "b3:8d29db97e82602e5", by = "agent:obs-ui-thread", note = "Re-read against UI-FEATURES' round 1 edits (keyframe and stack-end states of the tool bars, Sources naming in SC-08, SC-09, OB-07): this section's steps still match; nothing it says changed." }
 
 ["GETTING-STARTED#trouble"."body"]
 stamp = { hash = "b3:cdea88ae9fde1c6f", by = "agent:wave-owner", note = '''merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: logs\jstream-desktop.log and cef.log, crash-*.txt with secrets redacted and never uploaded (R-SEC-004, desktop Usage), issue and private-advisory links (registered in external.toml), SECURITY.md''' }
@@ -5844,13 +5844,13 @@ stamp = { hash = "b3:15f728c24aa44db0", by = "agent:claude", note = "Re-read Mix
 stamp = { hash = "b3:6dce7f4d2aa99be9", by = "agent:claude", note = "Re-read: MX-06 is ⏸, the privacy mark and privacy_mutes are gone from mixer.rs; the other mixer rows unchanged." }
 
 ["UI-FEATURES#objects"."body"]
-stamp = { hash = "b3:6a06f27b4779438a", by = "agent:obs-ui-thread", note = "Re-read: heading is Sources panel with the rename's reason; OB-09 adds the tool bar route; OB-10 describes the bar as built, matching sources.rs." }
+stamp = { hash = "b3:bfe6ecdf268b5943", by = "agent:obs-ui-thread", note = "OB-07 now notes the box reads Search sources and narrows rows by name (tree.rs matches); OB-10 adds that each arrow is off when it would move nothing, as sources.rs's moves() does." }
 
 ["UI-FEATURES#objects"."file:crates/jstream-ui/src/panels/labels.rs"]
 stamp = { hash = "b3:a7891554f45f37fa", by = "agent:obs-ui-thread", note = "Re-read: heading is Sources panel with the rename's reason; OB-09 adds the tool bar route; OB-10 describes the bar as built, matching sources.rs." }
 
 ["UI-FEATURES#objects"."file:crates/jstream-ui/src/panels/sources.rs"]
-stamp = { hash = "b3:e6e27d92bdc1cafb", by = "agent:obs-ui-thread", note = "Re-read: heading is Sources panel with the rename's reason; OB-09 adds the tool bar route; OB-10 describes the bar as built, matching sources.rs." }
+stamp = { hash = "b3:dd8d82b345518c02", by = "agent:obs-ui-thread", note = "OB-07 now notes the box reads Search sources and narrows rows by name (tree.rs matches); OB-10 adds that each arrow is off when it would move nothing, as sources.rs's moves() does." }
 
 ["UI-FEATURES#objects"."file:crates/jstream-ui/src/panels/tree.rs"]
 stamp = { hash = "b3:c8528921f39d7446", by = "agent:obs-ui-thread", note = "Re-read: heading is Sources panel with the rename's reason; OB-09 adds the tool bar route; OB-10 describes the bar as built, matching sources.rs." }
@@ -5865,10 +5865,10 @@ stamp = { hash = "b3:478bfe7fd756e011", by = "agent:ui-parity", note = "Added 'e
 stamp = { hash = "b3:738d0cc853fe0f96", by = "agent:ui-encoders-pr", note = "Added 'encoders and video mixes' to the intro (the editing itself is in Beyond, and encoders.rs stays covered by the UI README, so covers is unchanged); OU-01 to OU-04 unchanged, as the program and output rows are untouched. | Round 1 B1: outputs.rs hides the Video select on the virtual camera's card; OU-01 to OU-04 describe the program and output rows, which are untouched, and hold." }
 
 ["UI-FEATURES#scenes"."body"]
-stamp = { hash = "b3:f86a5c5151df8687", by = "agent:obs-ui-thread", note = "Re-read: SC-11 describes the Scenes tool bar as built (add in the folder, delete with plan or keyframe at once, properties off for keyframes, filters, arrows within the folder via scene.reorder, the empty hint)." }
+stamp = { hash = "b3:b707dc391261c445", by = "agent:obs-ui-thread", note = "SC-11 now says Add scene uses a keyframe's parent's folder, and Scene properties and Scene filters are both off for a keyframe, as scenes.rs does; SC-08 and SC-09 say Sources panel instead of Scene objects panel." }
 
 ["UI-FEATURES#scenes"."file:crates/jstream-ui/src/panels/scenes.rs"]
-stamp = { hash = "b3:1298126420ef4f79", by = "agent:obs-ui-thread", note = "Re-read: SC-11 describes the Scenes tool bar as built (add in the folder, delete with plan or keyframe at once, properties off for keyframes, filters, arrows within the folder via scene.reorder, the empty hint)." }
+stamp = { hash = "b3:923b4208a62224ce", by = "agent:obs-ui-thread", note = "SC-11 now says Add scene uses a keyframe's parent's folder, and Scene properties and Scene filters are both off for a keyframe, as scenes.rs does; SC-08 and SC-09 say Sources panel instead of Scene objects panel." }
 
 ["UI-FEATURES#scenes"."file:crates/jstream-ui/src/panels/tree.rs"]
 stamp = { hash = "b3:c8528921f39d7446", by = "agent:obs-ui-thread", note = "Re-read: SC-11 describes the Scenes tool bar as built (add in the folder, delete with plan or keyframe at once, properties off for keyframes, filters, arrows within the folder via scene.reorder, the empty hint)." }
@@ -5907,13 +5907,13 @@ stamp = { hash = "b3:4d196e04afd9e803", by = "agent:obs-ui-thread", note = "Re-r
 stamp = { hash = "b3:15f728c24aa44db0", by = "agent:claude", note = "Re-read Summary: counted rows per section again, Header 9|6|1|0|1|1, Canvas 18|15|1|0|1|1, Mixer 7|6|0|0|0|1, Keyboard 7|5|0|1|0|1, Total 130|104|10|1|11|4, with the four privacy rows ⏸; batch 9 no longer lists them." }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#objects"]
-stamp = { hash = "b3:6a06f27b4779438a", by = "agent:obs-ui-thread", note = "Re-read: Scenes 11 rows (SC-11 added), Sources panel 10 rows (OB-10 added), all built; other counts unchanged." }
+stamp = { hash = "b3:bfe6ecdf268b5943", by = "agent:obs-ui-thread", note = "Re-read: round 1 edits only notes in SC-08, SC-09, SC-11, OB-07 and OB-10; no status changes, so the counts hold." }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#outputs"]
 stamp = { hash = "b3:478bfe7fd756e011", by = "agent:ui-parity", note = "Re-read against the Outputs change: no row added or changed status (the work is in Beyond), so 131 rows and the counts hold." }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#scenes"]
-stamp = { hash = "b3:f86a5c5151df8687", by = "agent:obs-ui-thread", note = "Re-read: Scenes 11 rows (SC-11 added), Sources panel 10 rows (OB-10 added), all built; other counts unchanged." }
+stamp = { hash = "b3:b707dc391261c445", by = "agent:obs-ui-thread", note = "Re-read: round 1 edits only notes in SC-08, SC-09, SC-11, OB-07 and OB-10; no status changes, so the counts hold." }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#theme"]
 stamp = { hash = "b3:0f91aec44760eb21", by = "agent:obs-ui-thread", note = "Re-read: Scenes 11 rows (SC-11 added), Sources panel 10 rows (OB-10 added), all built; other counts unchanged." }

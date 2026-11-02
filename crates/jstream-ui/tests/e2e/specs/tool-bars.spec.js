@@ -75,8 +75,11 @@ test('the Sources bar adds, restacks, opens and removes the selected source', as
   const [top, bottom] = await ids();
   await items(page).last().locator('.row-main').click();
   await expect(sources.getByRole('button', { name: 'Move up' })).toBeEnabled();
+  // At the bottom it can't go down; at the top it can't go up.
+  await expect(sources.getByRole('button', { name: 'Move down' })).toBeDisabled();
   await sources.getByRole('button', { name: 'Move up' }).click();
   await expect.poll(ids).toEqual([bottom, top]);
+  await expect(sources.getByRole('button', { name: 'Move up' })).toBeDisabled();
   await sources.getByRole('button', { name: 'Move down' }).click();
   await expect.poll(ids).toEqual([top, bottom]);
 
@@ -102,4 +105,19 @@ test('a right-click on a tool bar opens no menu, and the panel menu still opens 
   await page.keyboard.press('Enter');
   const dialog = await openAddSource(page);
   await expect(dialog).toBeVisible();
+});
+
+test('with a keyframe selected, the Scenes bar turns off what a keyframe has no own of', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  const main = page.locator('.scenes-panel li.row').filter({ hasText: 'Main' }).locator('.row-main');
+  await main.click({ button: 'right' });
+  await page.getByRole('menu', { name: 'Context menu' }).getByRole('menuitem', { name: 'New keyframe' }).click();
+  await expect(page.locator('.scenes-panel li.row').filter({ hasText: 'Keyframe 1' })).toHaveClass(/selected/);
+  const scenes = bar(page, 'Scene tools');
+  // A keyframe keeps its parent's properties and filters, and doesn't move on its own.
+  for (const name of ['Scene properties', 'Scene filters', 'Move up', 'Move down']) {
+    await expect(scenes.getByRole('button', { name })).toBeDisabled();
+  }
+  await expect(scenes.getByRole('button', { name: 'Add scene' })).toBeEnabled();
+  await expect(bar(page, 'Source tools').getByRole('button', { name: 'Add source' })).toBeDisabled();
 });

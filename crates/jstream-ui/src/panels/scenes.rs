@@ -1160,10 +1160,14 @@ pub fn Scenes() -> impl IntoView {
             "plus",
             move || studio.collection.with(Option::is_none),
             move || {
+                // A keyframe sits under its parent: the new scene goes in the parent's folder.
                 let folder = selected().and_then(|id| {
-                    studio
-                        .collection
-                        .with_untracked(|c| c.as_ref().and_then(|c| folder_of(c, &id)))
+                    studio.collection.with_untracked(|c| {
+                        c.as_ref().and_then(|c| {
+                            let id = c.parent_of(&id).map_or(&id, |p| &p.scene_id);
+                            folder_of(c, id)
+                        })
+                    })
                 });
                 new_scene(folder);
             },
@@ -1202,7 +1206,8 @@ pub fn Scenes() -> impl IntoView {
         Tool::new(
             "Scene filters",
             "sliders",
-            move || selected().is_none(),
+            // A keyframe has no chain of its own: the graph refuses filter edits there.
+            move || selected().is_none() || selected_keyframe(),
             move || {
                 if let Some(scene_id) = selected() {
                     show_filters(filters, dock, FilterOwner::Scene { scene_id });

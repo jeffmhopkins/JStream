@@ -869,19 +869,25 @@ pub fn Sources() -> impl IntoView {
             })
         })
     };
-    let restack = move |layer: item_menu::Layer| {
-        let Some(scene_id) = scene() else { return };
+    // The reorders one arrow would send: none at the edge, so the arrow turns off there.
+    let moves = move |layer: item_menu::Layer| -> Vec<Edit> {
+        let Some(scene_id) = scene() else {
+            return Vec::new();
+        };
         let items = chosen();
-        let order: Vec<ItemId> = studio.collection.with_untracked(|c| {
+        let order: Vec<ItemId> = studio.collection.with(|c| {
             c.as_ref()
                 .and_then(|c| c.scene(&scene_id))
                 .map(|s| s.items.iter().map(|i| i.item_id.clone()).collect())
                 .unwrap_or_default()
         });
-        let edits: Vec<Edit> = item_menu::restack(&order, &items, layer)
+        item_menu::restack(&order, &items, layer)
             .into_iter()
             .map(|(item_id, index)| Edit::ItemReorder { item_id, index })
-            .collect();
+            .collect()
+    };
+    let restack = move |layer: item_menu::Layer| {
+        let edits = untrack(|| moves(layer));
         if let Some(s) = session.get()
             && !edits.is_empty()
         {
@@ -933,13 +939,13 @@ pub fn Sources() -> impl IntoView {
         Tool::new(
             "Move up",
             "up",
-            move || chosen().is_empty() || in_keyframe(),
+            move || in_keyframe() || moves(item_menu::Layer::Forward).is_empty(),
             move || restack(item_menu::Layer::Forward),
         ),
         Tool::new(
             "Move down",
             "down",
-            move || chosen().is_empty() || in_keyframe(),
+            move || in_keyframe() || moves(item_menu::Layer::Backward).is_empty(),
             move || restack(item_menu::Layer::Backward),
         ),
     ];

@@ -97,9 +97,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 - **Tool bars** (`tool-bars.spec.js`): the Scenes bar's arrows moving the selected
   scene up and back down, off at either end; Add scene making a scene with its name
   open, whose empty Sources list says how to add one; Scene properties and Scene
-  filters on the selected scene. The Sources bar with nothing selected (only Add source
+  filters on the selected scene, and both off, with the arrows, for a keyframe, as Add source is. The Sources bar with nothing selected (only Add source
   on); Add source opening the dialog, placing the Backdrop again; the arrows restacking
-  the selected item; Properties and Filters on it; Remove from scene taking it out. A
+  the selected item, each off at its end of the stack; Properties and Filters on it; Remove from scene taking it out. A
   right-click on a bar opens no menu, and the panel menu still opens on an empty scene.
   Delete scene needs `delete.plan`, so it is tested natively.
 - **Scene folders** (`folders.spec.js`): New folder from the panel's and a folder's menu,
