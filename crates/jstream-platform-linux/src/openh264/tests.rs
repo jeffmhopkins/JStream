@@ -1,6 +1,6 @@
 //! The store against a fake download: no test touches the network (R-TEST-004). The one
 //! that does, `downloads_the_pinned_release_from_cisco`, needs the `openh264-download`
-//! feature and `--ignored`, and CI runs neither.
+//! feature and `--ignored`. `cargo test` runs neither; CI's `e2e-stream` job runs it.
 
 use std::cell::RefCell;
 use std::path::PathBuf;
