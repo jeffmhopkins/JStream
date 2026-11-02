@@ -446,8 +446,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   runs from a source to a bus. A compressor's `key` (protocol 0.64, ADR-0028's
   sidechain key) is a source reference in a source's filter, and so an edge of that
   source: an edit that would close a cycle of keys, or key a source on itself, is
-  refused, and a key blocks deleting the source it names. The engine routes these into the program stage's mixer while it
-  runs, and plays each bus's monitor on its device (one it can't open stays silent and
+  refused, and a key blocks deleting the source it names. The engine routes these into
+  the program stage's mixer while it runs, and plays each bus's monitor on its device (one it can't open stays silent and
   is retried). Each output's audio bus (protocol 0.59, `output.set_audio_buses`) and
   its filter chains are saved with it.
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
