@@ -241,7 +241,9 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   `logs::create_new`, #656) are created with a protected DACL for SYSTEM and the user,
   and the directories keep what they inherit.
 - **Crash reports.** A panic writes `crash-<UTC time>-<pid>-<n>.txt` into the log
-  directory and prints `crash report: <path>` to stderr; the newest 10 are kept.
+  directory and prints `crash report: <path>` to stderr; the newest 10 are kept. An
+  effect pack whose shader panics the validator writes none: it is logged as a pack
+  that failed to load.
   Nothing is uploaded ([R-SEC-004](../../docs/RULES.md#R-SEC-004)): attach the report
   to a bug report yourself. What it holds is in [Design](#design).
 - **Stopping.** Ctrl-C (SIGINT) or SIGTERM on Unix, Ctrl-C or Ctrl-Break on Windows:

@@ -37,7 +37,9 @@ state machine. Contents:
   and `start_stats_heartbeat` (`stats.tick`'s load, below); `open_plugin_dir`
   (where installed WASM plugins are saved, ADR-0076), called once the engine is built;
   `scan_clap_plugins` adds the CLAP filter kinds; `watch_effect_packs` loads and
-  hot-reloads the WGSL effect packs (video filter kinds, below);
+  hot-reloads the WGSL effect packs (video filter kinds, below), and
+  `HANDLED_PANIC_THREADS` names the pack load thread, whose panics the engine catches,
+  for the apps' crash hook to leave out (#999);
   `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
   frame of a source; `output_stats` reads a running output's pipeline counters
   (`output_stats_of` names the output); `output_kind` reads a
