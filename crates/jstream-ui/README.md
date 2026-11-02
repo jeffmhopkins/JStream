@@ -278,8 +278,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   sources lists their panels' menus, and a scene row its scene's (Show in preview,
   Rename, Transition in and out, Properties…, New scene, New keyframe, New folder and
   Delete scene work, as do a folder's own menu's, and Edit filters… shows the scene's
-  chain in the Filters panel; Pop out opens the scene in a projector window, and
-  Duplicate scene sends `clipboard.rs`'s copy of it). The
+  chain in the Filters panel; Pop out opens the scene in a projector window, Show in
+  multiview toggles the scene's flag (`scene.set_meta`), Copy and Paste scene do what
+  Ctrl+C and Ctrl+V do, and Duplicate scene sends `clipboard.rs`'s copy of it). A
+  Sources row's menu for one item starts with Rename, as F2. The
   Transition in and out submenus,
   on a scene row and on the canvas margin for the scene it shows
   (`studio::override_submenu`), start with "Default (<the default preset>)", checked
@@ -293,9 +295,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   unless it was selected and opens `item_menu.rs`'s menu for the selection: Properties
   (the Properties dialog), for one item a Labels submenu (each label checked while the
   source carries it, with its colour as the swatch, then Edit labels…), the Audio check
-  (`source.set_audio`), layer order
-  (`item.reorder`s that keep the selected items' order), Center, Fit and Stretch to
-  canvas and Reset rotation (`item.set_geometry`), Clear crop (`item.set_crop`, with
+  (`source.set_audio`), the Visible check (`item.set_visible`), Copy and Paste, layer order
+  (`item.reorder`s that keep the selected items' order), a Transform submenu of Center,
+  Fit and Stretch to canvas and Reset rotation (`item.set_geometry`), a Blending submenu
+  (`item.set_blend`), Clear crop (`item.set_crop`, with
   each item's uncropped extent as its box while its source's size is known), Crop
   (crop mode, for one item), Duplicate as reference
   (`item.add` of the same source, 40 pixels down and right, just above the original)

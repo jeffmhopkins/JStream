@@ -78,8 +78,10 @@ on **program**, drawn on the canvas in the middle.
    a click puts the scene on preview instead, and the button on its row, or
    **Transition** in the Transitions panel, takes it live.
 
-Ctrl+C and Ctrl+V copy sources from one scene to another, and **Duplicate scene** on a
-scene's right-click menu (or Ctrl+C then Ctrl+V on its row) copies the whole scene. A
+Ctrl+C and Ctrl+V (or **Copy** and **Paste** on a source's right-click menu) copy
+sources from one scene to another, and **Duplicate scene** on a scene's right-click menu
+(or **Copy** then **Paste scene**, or Ctrl+C then Ctrl+V on its row) copies the whole
+scene. A
 scene's **Properties** (double-click its row) also set the colour it is drawn over,
 which shows wherever no item covers it.
 
@@ -87,10 +89,10 @@ Panels can be moved, hidden and brought back from the **View** menu; **Layout** 
 and resets arrangements.
 
 To watch a scene, a source, the program or a multiview on another screen, choose
-**Pop out** on a scene's or an object's right-click menu, or a projector under **View**: each opens in a window of its
+**Pop out** on a scene's or a source's right-click menu, or a projector under **View**: each opens in a window of its
 own, or full screen. Drag a window to the monitor you want and double-click it to fill
-that screen; Esc closes it. A multiview tiles the scenes whose Properties have **Show
-in multiview** checked.
+that screen; Esc closes it. A multiview tiles the scenes with **Show in multiview** checked, in their
+Properties or on their right-click menu.
 
 <a id="live"></a>
 ## Going live

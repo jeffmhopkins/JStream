@@ -1,31 +1,34 @@
-//! The right-click menu of the selected items, shared by the canvas and the Scene
-//! objects panel (spec-workspace.md 5.2.8 to 5.2.12): Properties, the Audio check,
-//! layer order, Center, Fit and Stretch to canvas, Reset rotation, Clear crop, Crop
-//! (crop mode), the two duplicates and Remove from scene, and for a placement of a shared
-//! or copied source the switch between a reference and a clone (decision register D3,
-//! ADR-0023). Each choice sends one batch, so one undo step. In a keyframe scene only
-//! geometry, crop, visibility and opacity change (ADR-0049), so what would change the
-//! parent's items (layer order, the duplicates, Remove, the reference or clone switch,
-//! Group selection, New group, Ungroup, Add source) is disabled, and the placement
-//! choices write the keyframe's overrides.
+//! The right-click menu of the selected items, shared by the canvas and the Sources
+//! panel (spec-workspace.md 5.2.8 to 5.2.12): Properties, the Audio and Visible checks,
+//! Copy and Paste, layer order, a Transform submenu (Center, Fit and Stretch to canvas,
+//! Reset rotation), a Blending submenu, Clear crop, Crop (crop mode), the two duplicates
+//! and Remove from scene, and for a placement of a shared or copied source the switch
+//! between a reference and a clone (decision register D3, ADR-0023). Each choice sends
+//! one batch, so one undo step. In a keyframe scene only geometry, crop, visibility and
+//! opacity change (ADR-0049), so what would change the parent's items (layer order,
+//! blending, the duplicates, Paste, Remove, the reference or clone switch, Group
+//! selection, New group, Ungroup, Add source) is disabled, and the placement choices
+//! write the keyframe's overrides.
 //!
 //! Docs: docs/UI-FEATURES.md#menus
 
 use crate::app::SessionContext;
 use crate::canvas::snap::Bounds;
 use crate::canvas::transform::{nudge, with_box};
+use crate::clipboard::Pasting;
 use crate::dock::PanelId;
 use crate::menu::Entry;
 use crate::panels::add_source::{AddSourceDialog, REFERENCE_ADDED, has_picture};
 use crate::panels::filters::FilterDialogs;
+use crate::panels::inspector::blend_name;
 use crate::panels::labels::{self, LabelManager};
 use crate::panels::scene_properties::SceneDialog;
 use crate::panels::source_properties::{self, PropertiesDialog};
 use crate::store::{Collection, Studio};
 use crate::workspace::DockState;
 use jstream_control::protocol::{
-    Canvas, Crop, Edit, Finite32, FitMode, ItemGeometry, ItemId, ItemInfo, SceneId, SceneRole,
-    Settings, Size, SourceId, SourceKind, Vec2,
+    BlendMode, Canvas, Crop, Edit, Finite32, FitMode, ItemGeometry, ItemId, ItemInfo, SceneId,
+    SceneRole, Settings, Size, SourceId, SourceKind, Vec2,
 };
 use leptos::prelude::*;
 use std::rc::Rc;
@@ -667,6 +670,9 @@ struct Facts {
     placed: Vec<(ItemId, ItemGeometry)>,
     /// Whether any selected item is cropped.
     cropped: bool,
+    /// Whether the primary item is shown, and how it blends.
+    visible: bool,
+    blend: BlendMode,
     /// The primary item's source, its name and kind, and whether it has a picture.
     source_id: SourceId,
     name: String,
@@ -714,6 +720,8 @@ impl Facts {
                 .filter_map(|i| Some((i.item_id.clone(), i.geometry?)))
                 .collect(),
             cropped: selected.iter().any(|i| i.crop != Crop::NONE),
+            visible: primary.visible,
+            blend: primary.blend,
             source_id: source.source_id.clone(),
             name: source.name.clone(),
             kind: source.kind.clone(),
@@ -1047,6 +1055,37 @@ fn sharing_entries(cx: Context, facts: &Facts) -> Vec<Entry> {
     vec![Entry::Head(head), reference, independent, Entry::Sep]
 }
 
+/// Copy (the `items` of `scene_id`) and Paste (into the shown scene), as Ctrl+C and
+/// Ctrl+V do (KB-05). Paste is off while the clipboard holds no items, or the shown
+/// scene is a keyframe, which can't add any.
+fn clip_entries(cx: Context, scene_id: &SceneId, items: &[ItemId]) -> Vec<Entry> {
+    let pasting = Pasting::from_page();
+    let copy = {
+        let (scene, ids) = (scene_id.clone(), items.to_vec());
+        Entry::item("Copy", move || {
+            if let Some(p) = pasting {
+                p.copy_items(&scene, &ids);
+            }
+        })
+        .hint("Ctrl+C")
+        .disabled_if(pasting.is_none())
+    };
+    let shown = cx.studio.selection.with_untracked(|s| s.scene.clone());
+    let fixed = shown.as_ref().is_none_or(|id| {
+        cx.studio
+            .collection
+            .with_untracked(|c| c.as_ref().is_some_and(|c| c.is_keyframe(id)))
+    });
+    let paste = Entry::item("Paste", move || {
+        if let (Some(p), Some(target)) = (pasting, shown.as_ref()) {
+            p.paste(target);
+        }
+    })
+    .hint("Ctrl+V")
+    .disabled_if(fixed || !pasting.is_some_and(|p| p.clipboard.has_items()));
+    vec![copy, paste]
+}
+
 /// The menu for the selected `items` of `scene_id`, the primary one first; empty when
 /// none of them is in the scene.
 pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) -> Vec<Entry> {
@@ -1098,6 +1137,24 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
             .hint("Del")
             .disabled_if(keyframe)
     };
+    // Shows or hides every selected item, after the primary one (in a keyframe, its
+    // override).
+    let visible = {
+        let (ids, scene, on) = (facts.items.clone(), scene_id.clone(), facts.visible);
+        Entry::item("Visible", move || {
+            cx.send(
+                ids.iter()
+                    .map(|item_id| Edit::ItemSetVisible {
+                        item_id: item_id.clone(),
+                        scene_id: Some(scene.clone()),
+                        visible: !on,
+                    })
+                    .collect(),
+            );
+        })
+        .checked(on)
+    };
+    let clip = clip_entries(cx, scene_id, &facts.items);
 
     // A nested scene (5.2.8).
     if let (false, SourceKind::Scene { scene_id: nested }) = (many, &facts.kind) {
@@ -1117,7 +1174,9 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
                 None => entry.disabled_if(keyframe),
             })
         });
-        let mut list = vec![properties, filters, labels, pop_out, Entry::Sep];
+        let mut list = vec![visible, properties, filters, labels, pop_out, Entry::Sep];
+        list.extend(clip);
+        list.push(Entry::Sep);
         list.extend(audio);
         list.extend([
             Entry::item("Add source…", move || cx.add_source(into.clone()))
@@ -1134,6 +1193,8 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
     // A source with no picture (5.2.9).
     if !many && !facts.picture {
         let mut list = vec![properties, filters, labels, Entry::Sep];
+        list.extend(clip);
+        list.push(Entry::Sep);
         if let Some(audio) = audio {
             list.extend([audio, Entry::Sep]);
         }
@@ -1151,14 +1212,18 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
                 Entry::item("Group selection", move || cx.group(&scene, &ids)).disabled_if(keyframe)
             },
             Entry::Sep,
+            visible,
+            Entry::Sep,
         ]);
     } else {
         if let Some(audio) = audio {
             list.extend([audio, Entry::Sep]);
         }
-        list.extend([properties, filters, labels, pop_out, Entry::Sep]);
+        list.extend([visible, properties, filters, labels, pop_out, Entry::Sep]);
         list.extend(sharing_entries(cx, &facts));
     }
+    list.extend(clip);
+    list.push(Entry::Sep);
     let layer = |label: &str, layer: Layer| {
         let facts = Rc::clone(&facts);
         Entry::item(label, move || {
@@ -1220,6 +1285,29 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
     // The canvas draws no box for a keyframe's group child, so crop mode has nothing
     // to crop there; leaving it stays on.
     .disabled_if(many || (facts.child && !crop_mode.get_untracked()));
+    // Blending sets every selected item's mode; a keyframe doesn't override it.
+    let blending = {
+        let modes = BlendMode::ALL
+            .into_iter()
+            .map(|mode| {
+                let ids = facts.items.clone();
+                Entry::item(blend_name(mode), move || {
+                    cx.send(
+                        ids.iter()
+                            .map(|item_id| Edit::ItemSetBlend {
+                                item_id: item_id.clone(),
+                                blend: mode,
+                            })
+                            .collect(),
+                    );
+                })
+                .checked(mode == facts.blend)
+            })
+            .collect();
+        Entry::submenu("Blending", modes)
+            .hint(blend_name(facts.blend))
+            .disabled_if(keyframe)
+    };
     let duplicate = |label: &str, clone: bool| {
         let facts = Rc::clone(&facts);
         let scene = scene_id.clone();
@@ -1232,10 +1320,16 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
         layer("Send backward", Layer::Backward),
         layer("Send to back", Layer::Back),
         Entry::Sep,
-        arrange("Center on canvas", |f| centered(&f.placed, f.canvas)),
-        arrange("Fit to canvas", |f| f.each(fitted)),
-        arrange("Stretch to canvas", |f| f.each(stretched)),
-        arrange("Reset rotation", |f| f.each(|g, _| Some(unrotated(g)))),
+        Entry::submenu(
+            "Transform",
+            vec![
+                arrange("Center on canvas", |f| centered(&f.placed, f.canvas)),
+                arrange("Fit to canvas", |f| f.each(fitted)),
+                arrange("Stretch to canvas", |f| f.each(stretched)),
+                arrange("Reset rotation", |f| f.each(|g, _| Some(unrotated(g)))),
+            ],
+        ),
+        blending,
         clear_crop,
         Entry::Sep,
         crop,

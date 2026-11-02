@@ -177,7 +177,11 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   inputs, and its Color type places the seed's Backdrop again as a reference 40 px
   down and right, selected (the mock lists no kinds, so Color can't create); a scene nests once and isn't offered again, and the backdrop
   cancels the dialog. An item row's menu lists the item menu's lines and Delete source everywhere…, Send to back
-  restacks in one edit and Stretch to canvas fills the canvas; on the canvas the menu
+  restacks in one edit and Stretch to canvas, from the Transform submenu, fills the
+  canvas; the item menu's Rename opens the row's name, Visible hides and shows the item
+  with its check following, Blending's Multiply replaces the checked Normal, and Paste
+  stays off until Copy, then places the source again; a scene row's Show in multiview
+  toggles its check, and Copy then Paste scene adds a copy of the scene; on the canvas the menu
   ends with Select all, Duplicate as clone adds "Backdrop copy" selected, two selected
   items get a counted head with the duplicates disabled, and Remove from scene removes
   both; a placement of a shared source switches to an independent clone and back to a
