@@ -466,7 +466,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   its settings come from the kind's descriptor, read once per kind and kept; a kind the
   engine doesn't describe shows its name alone. A filter with three settings or fewer
   opens the properties form under its row, any other opens the Filter settings dialog,
-  and a double-click always does; each field's change is a one-parameter
+  and a double-click always does: in the Filters panel, the panel opens the dialog of
+  the row the double-click's first click landed on (`double_click_target`, within
+  800 ms), as that click's fold can scroll the row from under the second, which
+  toggles nothing (#984); each field's change is a one-parameter
   `filter.set_settings`. The dialog applies every change at once and, on Cancel, Escape
   or the backdrop, sends one batch putting back the settings and the switch it opened
   with, including each one it sent whose change the engine hasn't reported yet; an

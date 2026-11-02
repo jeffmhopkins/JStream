@@ -757,6 +757,22 @@ pub struct FilterDialogs {
     /// The revision of the batch that added the filter the settings dialog opened on,
     /// when it opened right after that add.
     added_at: RwSignal<Option<Rev>>,
+    /// The row an in-place click last landed on, and when (the event's `timeStamp`), so
+    /// a double-click opens that row's settings even when the first click folded its
+    /// editor and the panel scrolled another element under the pointer (#984).
+    clicked: StoredValue<Option<(Target, f64)>>,
+}
+
+/// How long after a row's first click a double-click still opens that row's settings:
+/// longer than any platform's double-click interval.
+const DOUBLE_CLICK_MS: f64 = 800.0;
+
+/// The filter a double-click at `at` opens: the row whose first click came at most
+/// [`DOUBLE_CLICK_MS`] before it, wherever the pointer is now (#984).
+pub fn double_click_target(clicked: Option<&(Target, f64)>, at: f64) -> Option<&Target> {
+    clicked
+        .filter(|(_, when)| at >= *when && at - when <= DOUBLE_CLICK_MS)
+        .map(|(target, _)| target)
 }
 
 impl FilterDialogs {
@@ -768,6 +784,19 @@ impl FilterDialogs {
             fresh: RwSignal::new(None),
             picked: RwSignal::new(None),
             added_at: RwSignal::new(None),
+            clicked: StoredValue::new(None),
+        }
+    }
+
+    /// Opens the Filter settings dialog on the row an in-place click landed on just
+    /// before a double-click at `at`, if one did ([`double_click_target`]).
+    fn open_double_clicked(&self, at: f64) {
+        let target = self
+            .clicked
+            .with_value(|c| double_click_target(c.as_ref(), at).cloned());
+        if let Some(target) = target {
+            self.clicked.set_value(None);
+            self.edit(target.owner, target.filter_id);
         }
     }
 
@@ -917,7 +946,10 @@ pub fn Filters() -> impl IntoView {
         (source && video).then_some(owner)
     });
     view! {
-        <section class="panel filters-panel">
+        <section
+            class="panel filters-panel"
+            on:dblclick=move |event: leptos::ev::MouseEvent| dialogs.open_double_clicked(event.time_stamp())
+        >
             {move || match shown.with(|s| s.as_ref().map(|(_, head, _)| head.clone())) {
                 None => view! {
                     <div class="filters-head">
@@ -1222,10 +1254,19 @@ fn Row(
     let on_click = {
         let filter_id = filter_id.clone();
         let open_dialog = open_dialog.clone();
-        move |_| {
+        let target = target.clone();
+        move |event: leptos::ev::MouseEvent| {
             if !in_place {
                 return;
             }
+            // A double-click's second click does nothing: its first already toggled
+            // this row, and the panel may have scrolled another row under it (#984).
+            if event.detail() > 1 {
+                return;
+            }
+            dialogs
+                .clicked
+                .set_value(Some((target.clone(), event.time_stamp())));
             match how() {
                 Opens::InPlace => expanded.update(|e| {
                     *e = if e.as_ref() == Some(&filter_id) {
@@ -1239,9 +1280,16 @@ fn Row(
             }
         }
     };
+    // In place, the panel opens the double-clicked row's settings, as the first click
+    // can move it from under the pointer (#984); in a dialog the row opens its own.
     let on_dblclick = {
         let open_dialog = open_dialog.clone();
-        move |_| open_dialog()
+        move |event: leptos::ev::MouseEvent| {
+            if !in_place {
+                event.stop_propagation();
+                open_dialog();
+            }
+        }
     };
     let title = move || match (in_place, how()) {
         (true, Opens::InPlace) => "Click to adjust here · double-click for the full dialog",
@@ -2725,6 +2773,22 @@ mod tests {
 
     /// The cost of an output's first video filter names the sessions in use, and says
     /// when it takes effect for a running output (ADR-0080 §3).
+    #[test]
+    fn a_double_click_opens_the_row_its_first_click_landed_on() {
+        let gain = Target {
+            owner: FilterOwner::Master,
+            filter_id: FilterId::new("gain"),
+        };
+        let clicked = Some((gain.clone(), 1000.0));
+        // Wherever the second click landed, the first click's row opens.
+        assert_eq!(double_click_target(clicked.as_ref(), 1250.0), Some(&gain));
+        assert_eq!(double_click_target(clicked.as_ref(), 1800.0), Some(&gain));
+        // Too late, before it, or with no click on a row: nothing opens.
+        assert_eq!(double_click_target(clicked.as_ref(), 1801.0), None);
+        assert_eq!(double_click_target(clicked.as_ref(), 999.0), None);
+        assert_eq!(double_click_target(None, 1000.0), None);
+    }
+
     #[test]
     fn the_first_video_filter_states_its_cost() {
         assert_eq!(
