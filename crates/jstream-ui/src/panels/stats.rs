@@ -1,7 +1,8 @@
 //! The Stream stats panel (ST-01, spec-panels.md 6): one output's live stats from
 //! `stats.tick`'s `outputs` (protocol 0.57). The status line has the LIVE or READY pill,
 //! the output and its uptime; under it the bitrate and the dropped frames, the health the
-//! engine works out, a two-minute bitrate chart kept here, and the output's details.
+//! engine works out, a two-minute bitrate chart kept here with a hover readout of one
+//! reading, and the output's details.
 //!
 //! The panel shows the output the person picks, or else the first running stream, the
 //! first running output, then the first stream. What only YouTube knows (watching,
@@ -19,6 +20,7 @@ use jstream_control::protocol::{
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
+use leptos::wasm_bindgen::JsCast;
 use std::collections::{BTreeMap, VecDeque};
 
 /// How many samples the chart keeps: two minutes of ticks, about one a second.
@@ -249,6 +251,65 @@ pub fn chart_points(samples: &VecDeque<u32>, range: (f64, f64)) -> String {
         .join(" ")
 }
 
+/// The sample under the pointer, `fraction` of the way across the chart (0 the left
+/// edge, 1 the right): the nearest one, as [`chart_points`] places them from the right.
+/// Left of the oldest sample it is the oldest. `None` with no samples.
+pub fn hovered_sample(fraction: f64, len: usize) -> Option<usize> {
+    let len = len.min(CHART_SAMPLES);
+    if len == 0 {
+        return None;
+    }
+    let slot = (fraction.clamp(0.0, 1.0) * (CHART_SAMPLES - 1) as f64).round() as usize;
+    Some(slot.saturating_sub(CHART_SAMPLES - len).min(len - 1))
+}
+
+/// What the chart's hover shows for sample `index` of `samples`: where it sits, as
+/// percentages of the chart's width and height, and its tooltip ("6.12 Mbps · 14 s
+/// ago", or "· now" for the newest; a tick comes about once a second).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Hover {
+    /// Its x, in the chart's user units.
+    pub x: f64,
+    /// Its x, as a percentage of the chart's width.
+    pub x_pct: f64,
+    /// Its y, as a percentage of the chart's height.
+    pub y_pct: f64,
+    /// The tooltip's text.
+    pub text: String,
+}
+
+/// The hover at sample `index` of `samples`, drawn in `range`.
+pub fn hover_at(samples: &VecDeque<u32>, index: usize, range: (f64, f64)) -> Option<Hover> {
+    let kbps = *samples.get(index)?;
+    let len = samples.len().min(CHART_SAMPLES);
+    let step = CHART_W / (CHART_SAMPLES - 1) as f64;
+    let x = (CHART_SAMPLES - len + index) as f64 * step;
+    let ago = samples.len() - 1 - index;
+    let when = if ago == 0 {
+        "now".to_owned()
+    } else {
+        format!("{ago} s ago")
+    };
+    Some(Hover {
+        x,
+        x_pct: x / CHART_W * 100.0,
+        y_pct: chart_y(f64::from(kbps), range) / CHART_H * 100.0,
+        text: format!("{} · {when}", mbps(kbps)),
+    })
+}
+
+/// How the tooltip sits against the hover line: from its left edge in the chart's left
+/// 30%, ending at it in the right 30%, centred on it between, as the prototype's.
+pub fn tooltip_shift(x_pct: f64) -> &'static str {
+    if x_pct > 70.0 {
+        "-100%"
+    } else if x_pct < 30.0 {
+        "0%"
+    } else {
+        "-50%"
+    }
+}
+
 /// The Stream stats panel. Reads the open session from [`SessionContext`] context.
 #[component]
 pub fn StreamStats() -> impl IntoView {
@@ -372,60 +433,130 @@ pub fn StreamStats() -> impl IntoView {
         })
     };
 
+    // The sample under the pointer, while it is over the chart.
+    let hovered = RwSignal::new(None::<usize>);
+    let series = Memo::new(move |_| samples());
+    let has_data = Memo::new(move |_| live() && series.with(|s| !s.is_empty()));
+    let range = move || series.with(|s| chart_range(s, target()));
+    let hover = move || {
+        let index = hovered.get()?;
+        series.with(|s| hover_at(s, index.min(s.len().checked_sub(1)?), range()))
+    };
+    let on_move = move |event: leptos::ev::PointerEvent| {
+        let Some(chart) = event
+            .current_target()
+            .and_then(|target| target.dyn_into::<leptos::web_sys::Element>().ok())
+        else {
+            return;
+        };
+        let rect = chart.get_bounding_client_rect();
+        if rect.width() <= 0.0 {
+            return;
+        }
+        let fraction = (f64::from(event.client_x()) - rect.left()) / rect.width();
+        let index = series.with_untracked(|s| hovered_sample(fraction, s.len()));
+        if hovered.get_untracked() != index {
+            hovered.set(index);
+        }
+    };
     let chart = move || {
-        let samples = samples();
-        if samples.is_empty() || !live() {
+        if !has_data.get() {
             return view! {
                 <div class="stats-nodata">"No data yet. Start the output to see its bitrate."</div>
             }
             .into_any();
         }
-        let target = target();
-        let range = chart_range(&samples, target);
-        let points = chart_points(&samples, range);
-        let target_line = target.map(|kbps| {
-            let y = format!("{:.1}", chart_y(f64::from(kbps), range));
-            view! {
-                <line
-                    x1="0"
-                    x2=CHART_W
-                    y1=y.clone()
-                    y2=y
-                    class="target"
-                    stroke-dasharray="3 3"
-                    vector-effect="non-scaling-stroke"
-                />
-            }
-        });
-        let caption = target.map_or_else(
-            || "bitrate".to_owned(),
-            |kbps| format!("target {:.1} Mbps · dashed", f64::from(kbps) / 1000.0),
-        );
+        let target_line = move || {
+            target().map(|kbps| {
+                let y = format!("{:.1}", chart_y(f64::from(kbps), range()));
+                view! {
+                    <line
+                        x1="0"
+                        x2=CHART_W
+                        y1=y.clone()
+                        y2=y
+                        class="target"
+                        stroke-dasharray="3 3"
+                        vector-effect="non-scaling-stroke"
+                    />
+                }
+            })
+        };
+        let points = move || series.with(|s| chart_points(s, range()));
+        let hover_line = move || {
+            hover().map(|h| {
+                let x = format!("{:.1}", h.x);
+                view! {
+                    <line
+                        x1=x.clone()
+                        x2=x
+                        y1="0"
+                        y2=CHART_H
+                        class="hover"
+                        vector-effect="non-scaling-stroke"
+                    />
+                }
+            })
+        };
+        let hover_marks = move || {
+            hover().map(|h| {
+                view! {
+                    <span
+                        class="stats-hover-dot"
+                        style:left=format!("{:.2}%", h.x_pct)
+                        style:top=format!("{:.2}%", h.y_pct)
+                    ></span>
+                    <span
+                        class="stats-hover-tip mono"
+                        aria-hidden="true"
+                        style:left=format!("{:.2}%", h.x_pct)
+                        style:transform=format!("translateX({})", tooltip_shift(h.x_pct))
+                    >
+                        {h.text}
+                    </span>
+                }
+            })
+        };
+        let caption = move || {
+            target().map_or_else(
+                || "bitrate".to_owned(),
+                |kbps| format!("target {:.1} Mbps · dashed", f64::from(kbps) / 1000.0),
+            )
+        };
         view! {
-            <svg
-                class="stats-chart"
-                viewBox=format!("0 0 {CHART_W} {CHART_H}")
-                preserveAspectRatio="none"
-                role="img"
-                aria-label="Bitrate over the last two minutes"
+            <div
+                class="stats-chart-box"
+                on:pointermove=on_move
+                on:pointerleave=move |_| hovered.set(None)
+                on:pointercancel=move |_| hovered.set(None)
             >
-                {target_line}
-                <line
-                    x1="0"
-                    x2=CHART_W
-                    y1=CHART_H
-                    y2=CHART_H
-                    class="baseline"
-                    vector-effect="non-scaling-stroke"
-                />
-                <polyline
-                    points=points
-                    class="line"
-                    fill="none"
-                    stroke-width="2"
-                    vector-effect="non-scaling-stroke"
-                />
-            </svg>
+                <svg
+                    class="stats-chart"
+                    viewBox=format!("0 0 {CHART_W} {CHART_H}")
+                    preserveAspectRatio="none"
+                    role="img"
+                    aria-label="Bitrate over the last two minutes"
+                >
+                    {target_line}
+                    <line
+                        x1="0"
+                        x2=CHART_W
+                        y1=CHART_H
+                        y2=CHART_H
+                        class="baseline"
+                        vector-effect="non-scaling-stroke"
+                    />
+                    <polyline
+                        points=points
+                        class="line"
+                        fill="none"
+                        stroke-width="2"
+                        vector-effect="non-scaling-stroke"
+                    />
+                    {hover_line}
+                </svg>
+                {hover_marks}
+            </div>
             <div class="stats-axis">
                 <span>"2 min ago"</span>
                 <span>{caption}</span>
@@ -574,8 +705,9 @@ pub fn StreamStats() -> impl IntoView {
 #[cfg(test)]
 mod tests {
     use super::{
-        Readings, audio_line, bytes, chart_points, chart_range, dropped_share, health_text, mbps,
-        shown_output, target_kbps, uptime, video_line,
+        Readings, audio_line, bytes, chart_points, chart_range, dropped_share, health_text,
+        hover_at, hovered_sample, mbps, shown_output, target_kbps, tooltip_shift, uptime,
+        video_line,
     };
     use crate::panels::outputs::OutputRow;
     use jstream_control::protocol::{
@@ -720,5 +852,32 @@ mod tests {
             chart_points(&samples, (4000.0, 7000.0)),
             "238.0,21.3 240.0,21.3"
         );
+    }
+
+    #[test]
+    fn the_hover_reads_the_nearest_sample_and_how_long_ago() {
+        assert_eq!(hovered_sample(0.5, 0), None);
+        // A full window: the slot under the pointer.
+        assert_eq!(hovered_sample(0.0, 120), Some(0));
+        assert_eq!(hovered_sample(1.0, 120), Some(119));
+        assert_eq!(hovered_sample(0.5, 120), Some(60));
+        // Three samples fill the right edge; left of them is the oldest.
+        assert_eq!(hovered_sample(0.1, 3), Some(0));
+        assert_eq!(hovered_sample(1.0, 3), Some(2));
+        assert_eq!(hovered_sample(2.0, 3), Some(2));
+
+        let samples = VecDeque::from([6000, 5000, 6120]);
+        let range = (4000.0, 7000.0);
+        let newest = hover_at(&samples, 2, range).expect("a hover");
+        assert_eq!(newest.text, "6.12 Mbps · now");
+        assert!((newest.x_pct - 100.0).abs() < 1e-9);
+        let older = hover_at(&samples, 1, range).expect("a hover");
+        assert_eq!(older.text, "5.00 Mbps · 1 s ago");
+        assert!((older.y_pct - 200.0 / 3.0).abs() < 1e-9, "{older:?}");
+        assert_eq!(hover_at(&samples, 3, range), None);
+
+        assert_eq!(tooltip_shift(10.0), "0%");
+        assert_eq!(tooltip_shift(50.0), "-50%");
+        assert_eq!(tooltip_shift(90.0), "-100%");
     }
 }
