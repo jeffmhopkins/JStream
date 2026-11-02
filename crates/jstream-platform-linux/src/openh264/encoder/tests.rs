@@ -292,7 +292,7 @@ fn refuses_what_it_cant_encode() {
             codec: Codec::Hevc,
             ..config(PixelFormat::Nv12, RateControl::Cbr { kbps: 1 })
         },
-        config(PixelFormat::Bgra8, RateControl::Cbr { kbps: 2500 }),
+        config(PixelFormat::P010, RateControl::Cbr { kbps: 2500 }),
         VideoEncoderConfig {
             size: FrameSize::new(5, 2).expect("valid size"),
             ..config(PixelFormat::Nv12, RateControl::Cbr { kbps: 2500 })
@@ -322,5 +322,61 @@ fn refuses_what_it_cant_encode() {
             matches!(super::params(&bad), Err(PlatformError::Unsupported { .. })),
             "{bad:?}"
         );
+    }
+}
+
+/// A 4x2 frame of one packed 8-bit colour in `format` (RGBA or BGRA), at `ms`.
+fn packed(format: PixelFormat, pixel: [u8; 4], ms: i64) -> VideoFrame {
+    let info = VideoFrameInfo {
+        size: FrameSize::new(4, 2).expect("valid size"),
+        format,
+        color: ColorInfo::default(),
+        pts: MediaTime::new(ms, Timebase::MILLIS),
+    };
+    VideoFrame::new(info, vec![Plane::new(pixel.repeat(8), 16)]).expect("frame")
+}
+
+/// RGBA, the compositor's read-back, and BGRA reach the library as I420 through the
+/// platforms' shared converter: the chroma the library sees is the converter's, the same
+/// colour gives the same samples in either order, and each packet keeps its frame's time.
+#[test]
+fn converts_rgba_and_bgra_input_with_the_shared_converter() {
+    let mut want = VideoFrame::zeroed(VideoFrameInfo {
+        size: FrameSize::new(4, 2).expect("valid size"),
+        format: PixelFormat::Nv12,
+        color: ColorInfo::default(),
+        pts: MediaTime::new(0, Timebase::MILLIS),
+    })
+    .expect("frame");
+    jstream_platform::nv12::rgb_to_nv12(
+        &[255, 0, 0, 255].repeat(8),
+        16,
+        jstream_platform::nv12::RgbOrder::Rgba,
+        &mut want,
+    )
+    .expect("converts");
+    let uv = want.row(1, 0).expect("a chroma row");
+    let (u, v) = (uv[0], uv[1]);
+    assert!(v > 200 && u < 128, "red has high V and low U: {u}, {v}");
+
+    for (format, red) in [
+        (PixelFormat::Rgba8, [255, 0, 0, 255]),
+        (PixelFormat::Bgra8, [0, 0, 255, 255]),
+    ] {
+        let mut enc = open(&config(format, RateControl::Cbr { kbps: 2500 }));
+        enc.encode(VideoSurface::Cpu(packed(format, red, 0)))
+            .expect("encodes");
+        enc.encode(VideoSurface::Cpu(packed(format, red, 33)))
+            .expect("encodes");
+        let mut out = Vec::new();
+        enc.poll(&mut out).expect("polls");
+        assert_eq!(out.len(), 2, "{format:?}");
+        assert_eq!(out[1].pts(), MediaTime::new(33, Timebase::MILLIS));
+        LOG.with_borrow(|l| assert_eq!(l.frames, [(u, v, 0), (u, v, 33)], "{format:?}"));
+        // A frame in another format than the session's is refused, not converted.
+        assert!(matches!(
+            enc.encode(nv12(66)),
+            Err(PlatformError::Unsupported { .. })
+        ));
     }
 }

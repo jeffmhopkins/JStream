@@ -23,6 +23,7 @@
     reason = "the log shows what each receiver got, which a passing run's assertions don't"
 )]
 
+mod binary;
 mod probe;
 mod x264;
 
