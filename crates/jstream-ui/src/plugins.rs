@@ -17,8 +17,9 @@
 //!   waits until the dialog closes), and OK, and so Enter, stays disabled while a list
 //!   is on its way. A list sent before the dialog opened that answers a different
 //!   request for its plugin draws the dialog again before OK can act. When the enable
-//!   after a grant fails because the plugin now asks for more, the dialog opens again on
-//!   what it asks for now, with why.
+//!   after a grant fails, for example because the plugin now asks for more or its module
+//!   traps on load, the dialog opens again on what it asks for now, with the engine's
+//!   reason.
 //! - **The plugin's name** comes from its manifest: the plugin's own text, shown as data
 //!   and never followed (ADR-0059). The ID and the package path are shown beside it.
 //!
@@ -430,9 +431,9 @@ impl Section {
 
     /// The grant dialog's OK: sends `grant` for the plugin it shows and, for one disabled
     /// as `needs_grant`, enables it. Does nothing while a list is on its way. A failed
-    /// grant keeps the dialog open, its re-read held back. A failed enable after a grant
-    /// (an update that asks for still more) closes it, re-reads, and opens it again on
-    /// what the plugin asks for now, with why.
+    /// grant keeps the dialog open, its re-read held back. Any failed enable after a
+    /// grant (an update that asks for still more, or a module that traps on load) closes
+    /// it, re-reads, and opens it again on what the plugin asks for now, with the error.
     async fn submit_grant(self, grant_to: PluginGrant) {
         let Some(shown) = self.granting.try_get_untracked().flatten() else {
             return;
@@ -1036,7 +1037,8 @@ mod tests {
     /// An engine with one plugin, as far as a grant goes (ADR-0090): each `plugin.list`
     /// notes, when it is handled, the request it shows, and a grant acknowledges the last
     /// one noted. An enable fails while the plugin asks for more than was acknowledged.
-    /// While `hold` is set, a list is handled but its answer doesn't arrive.
+    /// While `hold` is set, a list is handled but its answer doesn't arrive. While
+    /// `fail_list` is set, a list fails as if the connection dropped, and notes nothing.
     struct NotingEngine {
         inner: MockControl,
         request: Mutex<PluginRequest>,
@@ -1045,6 +1047,7 @@ mod tests {
         acknowledged: Mutex<Option<PluginRequest>>,
         calls: Mutex<Vec<&'static str>>,
         hold: Arc<AtomicBool>,
+        fail_list: AtomicBool,
     }
 
     impl NotingEngine {
@@ -1057,6 +1060,7 @@ mod tests {
                 acknowledged: Mutex::new(None),
                 calls: Mutex::new(Vec::new()),
                 hold: Arc::new(AtomicBool::new(false)),
+                fail_list: AtomicBool::new(false),
             })
         }
 
@@ -1092,15 +1096,22 @@ mod tests {
                     query: Query::PluginList,
                 } => {
                     calls.push("plugin.list");
-                    *self.noted.lock().expect("not poisoned") = Some(request.clone());
-                    let mut listed = plugin(request, PluginGrant::default());
-                    listed.state = PluginState::Disabled;
-                    listed.reason = *self.reason.lock().expect("not poisoned");
-                    let mut result = Some(answer(CallResult::Query {
-                        result: QueryResult::PluginList {
-                            plugins: vec![listed],
-                        },
-                    }));
+                    let listed = if self.fail_list.load(Ordering::SeqCst) {
+                        Err(ControlError::Disconnected {
+                            reason: "the link went down".into(),
+                        })
+                    } else {
+                        *self.noted.lock().expect("not poisoned") = Some(request.clone());
+                        let mut listed = plugin(request, PluginGrant::default());
+                        listed.state = PluginState::Disabled;
+                        listed.reason = *self.reason.lock().expect("not poisoned");
+                        answer(CallResult::Query {
+                            result: QueryResult::PluginList {
+                                plugins: vec![listed],
+                            },
+                        })
+                    };
+                    let mut result = Some(listed);
                     let hold = Arc::clone(&self.hold);
                     return Box::pin(std::future::poll_fn(move |_| {
                         if hold.load(Ordering::SeqCst) {
@@ -1289,6 +1300,45 @@ mod tests {
         assert_eq!(shown(section).request, asks_all(), "open on the update");
         let problem = section.grant_problem.get_untracked().expect("why");
         assert!(problem.contains("`edit`"), "{problem}");
+    }
+
+    /// #1004 review N6: a list sent before the grant dialog opened that fails while it is
+    /// open still counts as answered, so OK acts again, the dialog stays as it was, and
+    /// the section shows why.
+    #[test]
+    fn a_list_that_fails_while_the_dialog_is_open_lets_ok_act_again() {
+        let engine = NotingEngine::new();
+        let section = section(&engine);
+        engine.hold.store(true, Ordering::SeqCst);
+        engine.fail_list.store(true, Ordering::SeqCst);
+        let event = state_changed();
+        let mut refresh: Pin<Box<dyn Future<Output = ()>>> = Box::pin(section.on_event(&event));
+        let mut cx = Context::from_waker(Waker::noop());
+        assert!(refresh.as_mut().poll(&mut cx).is_pending());
+        section.open_grant(&PluginId::new("plg_timer"), None);
+        assert!(ok_waits(section), "OK waits for the list");
+
+        engine.hold.store(false, Ordering::SeqCst);
+        assert!(refresh.as_mut().poll(&mut cx).is_ready());
+        assert!(!ok_waits(section), "the failed list was answered");
+        let problem = section.problem.get_untracked().expect("why");
+        assert!(problem.contains("the link went down"), "{problem}");
+        assert_eq!(
+            shown(section).request,
+            PluginRequest::default(),
+            "as it was"
+        );
+        assert_eq!(section.grant_problem.get_untracked(), None);
+
+        engine.fail_list.store(false, Ordering::SeqCst);
+        let shown = shown(section);
+        now(section.submit_grant(GrantForm::of(&shown).grant(&shown.request)));
+        assert_eq!(engine.acknowledged(), Some(PluginRequest::default()));
+        assert_eq!(section.granting.get_untracked(), None, "the dialog closed");
+        assert_eq!(
+            engine.calls(),
+            ["plugin.list", "plugin.list", "plugin.grant", "plugin.list"]
+        );
     }
 
     #[test]
