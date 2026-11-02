@@ -5517,6 +5517,94 @@ mod cpu_pipeline {
         block_on(control.call(output_call("yt", false))).expect("yt stop");
     }
 
+    /// A recording on a bus other than the master (`output.set_audio_buses`) gets an
+    /// output tap on that bus and its own audio encode, while its video still shares the
+    /// stream's session; its file finishes. While it runs it can't move off `vod`, so
+    /// `vod` can't be deleted under it.
+    #[test]
+    fn an_output_on_another_bus_encodes_that_bus() {
+        let dir = TempDir::new("bus-audio");
+        let path = dir.join("vod.mp4");
+        let fakes = fakes();
+        let publish = RecordingPublish::new();
+        let (engine, control, mut events) =
+            streaming_and_recording(&fakes, cpu_draw(), &publish, &path);
+        let vod = jstream_protocol::BusId::new("vod");
+        batch(
+            &control,
+            edits(vec![
+                Edit::BusCreate {
+                    bus_id: vod.clone(),
+                    name: "VOD".into(),
+                },
+                Edit::OutputSetAudioBuses {
+                    output_id: OutputId::new("rec"),
+                    audio_buses: vec![vod.clone()],
+                },
+            ]),
+        )
+        .expect("a bus, and the recording on it");
+        drain(&mut events);
+
+        block_on(control.call(output_call("yt", true))).expect("yt start");
+        block_on(control.call(output_call("rec", true))).expect("rec start");
+        let (_, encoder, sessions, _) = encoder_status(&control, "rec");
+        assert_eq!(
+            encoder.map(|encoder| encoder.shared_with),
+            Some(vec![OutputId::new("yt")]),
+            "the video session is still shared"
+        );
+        assert_eq!(sessions, 1);
+        assert_eq!(
+            engine.routed_bus_hosted().1.get(&OutputId::new("rec")),
+            Some(&vod),
+            "the recording taps its bus"
+        );
+        // The plan to delete `vod` moves the recording to the master first, which is
+        // refused while it runs and reads `vod`.
+        let refused = batch(
+            &control,
+            edits(vec![
+                Edit::OutputSetAudioBuses {
+                    output_id: OutputId::new("rec"),
+                    audio_buses: vec![jstream_protocol::BusId::master()],
+                },
+                Edit::BusDelete {
+                    bus_id: vod.clone(),
+                },
+            ]),
+        )
+        .expect_err("a running output keeps its bus");
+        assert_eq!(
+            refused.protocol(),
+            Some(&jstream_protocol::ProtocolError::invalid_argument(
+                "edits.0.output_id",
+                "output `rec` is running; stop it first"
+            ))
+        );
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || {
+                engine
+                    .output_stats_of(&OutputId::new("rec"))
+                    .is_some_and(|stats| {
+                        stats.video_subscriber.delivered >= 70
+                            && stats.audio_subscriber.delivered >= 10
+                    })
+            }),
+            "the recording never got its bus's audio"
+        );
+        assert_eq!(
+            engine.routed_bus_hosted().1.get(&OutputId::new("rec")),
+            Some(&vod),
+            "a running output keeps its bus"
+        );
+        block_on(control.call(output_call("rec", false))).expect("rec stop");
+        let bytes = std::fs::read(&path).expect("the finished recording");
+        let found = boxes(&bytes);
+        assert_eq!(found.get(1).map(String::as_str), Some("moov"), "{found:?}");
+        block_on(control.call(output_call("yt", false))).expect("yt stop");
+    }
+
     /// A program-stage failure fails every output on it. A start after that waits for
     /// the failed stage to go and opens a new one.
     #[test]
@@ -6150,6 +6238,7 @@ fn output_edits_configure_the_collection() {
             encoder_profile: None,
             filters: Default::default(),
             video_mix: None,
+            audio_buses: vec![jstream_protocol::BusId::master()],
         }]
     );
     assert_eq!(
@@ -6176,6 +6265,7 @@ fn output_edits_configure_the_collection() {
                 encoder_profile: None,
                 filters: Default::default(),
                 video_mix: None,
+                audio_buses: vec![jstream_protocol::BusId::master()],
             }]
         ),
         other => panic!("not a state: {other:?}"),

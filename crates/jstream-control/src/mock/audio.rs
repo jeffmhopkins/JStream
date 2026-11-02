@@ -5,8 +5,8 @@
 
 use super::{Collection, already_exists, check_id, check_name, invalid, not_found};
 use jstream_protocol::{
-    AudioFollow, BusId, BusInfo, BusMonitor, Edit, EntityKind, Finite32, MAX_BUSES, ProtocolError,
-    Reference, SendInfo, SourceAudio, SourceId, SourceKind, gain_db_problem,
+    AudioFollow, Blocker, BusId, BusInfo, BusMonitor, Edit, EntityKind, Finite32, MAX_BUSES,
+    ProtocolError, Reference, SendInfo, SourceAudio, SourceId, SourceKind, gain_db_problem,
 };
 use std::collections::BTreeMap;
 
@@ -319,6 +319,32 @@ impl Collection {
                 "bus_id",
                 format!("bus `{id}` is referred to by settings; clear them first"),
             ));
+        }
+        // An output carrying the bus holds it too, as the engine has it.
+        let blockers: Vec<Blocker> = self
+            .output_buses
+            .iter()
+            .filter(|(_, bus_id)| *bus_id == id)
+            .map(|(output_id, _)| Blocker {
+                entity: EntityKind::Output,
+                id: output_id.as_str().to_owned(),
+                field: "audio_buses".into(),
+            })
+            .collect();
+        if !blockers.is_empty() {
+            let list: Vec<String> = blockers
+                .iter()
+                .map(|b| format!("{} `{}` ({})", b.entity, b.id, b.field))
+                .collect();
+            return Err(ProtocolError::InvalidArgument {
+                field: format!("edits.{at}.bus_id"),
+                reason: format!(
+                    "bus `{id}` is still referred to by {}; remove those references first, \
+                     or send the batch `delete.plan` returns",
+                    list.join(", ")
+                ),
+                blockers,
+            });
         }
         let bus = self
             .buses

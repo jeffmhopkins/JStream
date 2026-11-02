@@ -11,7 +11,8 @@ use crate::deps::{self, Node};
 use crate::model::Graph;
 use jstream_protocol::{
     DeleteTarget, Edit, EntityKind, FilterId, FilterOwner, HotkeyBinding, ItemId, MixInput,
-    ProtocolError, QueryResult, SceneId, Settings, SourceId, SourceKind, VideoMix, VideoMixId,
+    OutputId, ProtocolError, QueryResult, SceneId, Settings, SourceId, SourceKind, VideoMix,
+    VideoMixId,
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -24,7 +25,8 @@ impl Graph {
     /// Deleting a scene also deletes its keyframe scenes and the `scene` sources that show
     /// it or them. Deleting a source
     /// never deletes a scene, so the cascade stops there. A bus is held only by settings
-    /// values, which the plan clears; `bus.delete` takes its sends itself. The edits are, in order:
+    /// values, which the plan clears, and by the outputs that carry it, which the plan
+    /// moves to the master bus; `bus.delete` takes its sends itself. The edits are, in order:
     /// - `item.remove` for each item that places a deleted source;
     /// - one `source.set_settings` per remaining source whose settings refer to a deleted
     ///   object, setting each such parameter to `null`;
@@ -34,6 +36,8 @@ impl Graph {
     /// - `source.delete` for each `scene` source that shows a deleted scene;
     /// - `video_mix.update` for each video mix that shows a deleted scene, keeping its
     ///   name, resolution and rate and showing the program instead;
+    /// - `output.set_audio_buses` to the master bus for each output that carries a
+    ///   deleted bus;
     /// - `scene.delete` for each keyframe scene of a deleted scene;
     /// - the delete of the target.
     ///
@@ -129,6 +133,8 @@ impl Graph {
 
         let mut removes: Vec<ItemId> = Vec::new();
         let mut repoints: Vec<VideoMixId> = Vec::new();
+        // The outputs that carry a deleted bus, moved to the master.
+        let mut moves: Vec<OutputId> = Vec::new();
         let mut clears: BTreeMap<SourceId, Settings> = BTreeMap::new();
         let mut filter_clears: BTreeMap<(SourceId, FilterId), Settings> = BTreeMap::new();
         // A scene filter's or an item effect's reference (ADR-0065 §3), cleared after the
@@ -155,6 +161,10 @@ impl Graph {
                 }
                 if blocker.entity == EntityKind::VideoMix {
                     repoints.push(VideoMixId::new(blocker.id));
+                    continue;
+                }
+                if blocker.entity == EntityKind::Output {
+                    moves.push(OutputId::new(blocker.id));
                     continue;
                 }
                 // A keyframe scene, already in `variants`.
@@ -263,6 +273,14 @@ impl Graph {
                 mix_id,
             })
         }));
+        edits.extend(
+            moves
+                .into_iter()
+                .map(|output_id| Edit::OutputSetAudioBuses {
+                    output_id,
+                    audio_buses: vec![jstream_protocol::BusId::master()],
+                }),
+        );
         edits.extend(
             variants
                 .into_iter()

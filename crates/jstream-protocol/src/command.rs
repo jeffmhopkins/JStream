@@ -618,6 +618,21 @@ pub enum Edit {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         mix_id: Option<VideoMixId>,
     },
+    /// Chooses the buses whose audio an output carries (since 0.59), one per audio
+    /// track, in track order. Every output writes one audio track for now, so the list
+    /// holds exactly one bus; any other length is `invalid_argument` on `audio_buses`,
+    /// as is an output with no audio (a virtual camera). Each bus must exist, else
+    /// `not_found`. The master stage's audio chain runs on the bus, then the output's
+    /// own chain (ADR-0080 §1). A running output reads its bus, so moving it to another
+    /// is `invalid_argument` on `output_id` until it stops. Inverse:
+    /// `output.set_audio_buses` with the previous buses.
+    #[serde(rename = "output.set_audio_buses")]
+    OutputSetAudioBuses {
+        /// The output to change.
+        output_id: OutputId,
+        /// The buses, in track order.
+        audio_buses: Vec<BusId>,
+    },
     /// Adds a folder to the scene list, last in folder order (ADR-0024 §3). Folders
     /// organise only: they change no rendering, switching or nesting. Inverse:
     /// `folder.delete`.
@@ -942,8 +957,10 @@ pub enum Edit {
         monitor: Option<BusMonitor>,
     },
     /// Deletes a bus and every send into it. The master bus can't be deleted
-    /// (`invalid_argument`), nor (since 0.24) a bus a source's settings refer to: that
-    /// `invalid_argument` lists the `blockers`, and `delete.plan` clears them. Inverse: `bus.create` with its name, `bus.set_fader` if
+    /// (`invalid_argument`), nor (since 0.24) a bus a source's settings refer to, nor
+    /// (since 0.59) a bus an output carries: that `invalid_argument` lists the
+    /// `blockers`, and `delete.plan` clears them, moving such an output to the master
+    /// bus. Inverse: `bus.create` with its name, `bus.set_fader` if
     /// its fader or mute were not the defaults, `bus.set_monitor` if it had a monitor
     /// (since 0.42), then `send.set` for each send it had.
     #[serde(rename = "bus.delete")]
@@ -1029,6 +1046,7 @@ impl Edit {
             Edit::VideoMixUpdate { .. } => "video_mix.update",
             Edit::VideoMixDelete { .. } => "video_mix.delete",
             Edit::OutputSetVideoMix { .. } => "output.set_video_mix",
+            Edit::OutputSetAudioBuses { .. } => "output.set_audio_buses",
             Edit::FolderCreate { .. } => "folder.create",
             Edit::FolderRename { .. } => "folder.rename",
             Edit::FolderSetParent { .. } => "folder.set_parent",

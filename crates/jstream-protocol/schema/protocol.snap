@@ -3035,6 +3035,32 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Chooses the buses whose audio an output carries (since 0.59), one per audio\ntrack, in track order. Every output writes one audio track for now, so the list\nholds exactly one bus; any other length is `invalid_argument` on `audio_buses`,\nas is an output with no audio (a virtual camera). Each bus must exist, else\n`not_found`. The master stage's audio chain runs on the bus, then the output's\nown chain (ADR-0080 §1). A running output reads its bus, so moving it to another\nis `invalid_argument` on `output_id` until it stops. Inverse:\n`output.set_audio_buses` with the previous buses.",
+          "properties": {
+            "audio_buses": {
+              "description": "The buses, in track order.",
+              "items": {
+                "$ref": "#/$defs/BusId"
+              },
+              "type": "array"
+            },
+            "output_id": {
+              "$ref": "#/$defs/OutputId",
+              "description": "The output to change."
+            },
+            "type": {
+              "const": "output.set_audio_buses",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "output_id",
+            "audio_buses"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Adds a folder to the scene list, last in folder order (ADR-0024 §3). Folders\norganise only: they change no rendering, switching or nesting. Inverse:\n`folder.delete`.",
           "properties": {
             "folder_id": {
@@ -3787,7 +3813,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Deletes a bus and every send into it. The master bus can't be deleted\n(`invalid_argument`), nor (since 0.24) a bus a source's settings refer to: that\n`invalid_argument` lists the `blockers`, and `delete.plan` clears them. Inverse: `bus.create` with its name, `bus.set_fader` if\nits fader or mute were not the defaults, `bus.set_monitor` if it had a monitor\n(since 0.42), then `send.set` for each send it had.",
+          "description": "Deletes a bus and every send into it. The master bus can't be deleted\n(`invalid_argument`), nor (since 0.24) a bus a source's settings refer to, nor\n(since 0.59) a bus an output carries: that `invalid_argument` lists the\n`blockers`, and `delete.plan` clears them, moving such an output to the master\nbus. Inverse: `bus.create` with its name, `bus.set_fader` if\nits fader or mute were not the defaults, `bus.set_monitor` if it had a monitor\n(since 0.42), then `send.set` for each send it had.",
           "properties": {
             "bus_id": {
               "$ref": "#/$defs/BusId",
@@ -5764,6 +5790,13 @@ source: crates/jstream-protocol/src/fixtures.rs
     "OutputInfo": {
       "description": "One output, as `output.list` and `state.get` report it: its collection state.\nWhether it runs, and whether its stream key is set, are in `output.status`.",
       "properties": {
+        "audio_buses": {
+          "description": "The buses whose audio it carries (`output.set_audio_buses`, since 0.59), one per\naudio track, in track order: for now always one, as every output writes one\naudio track. The master stage's audio chain runs on each of them before the\noutput's own chain (ADR-0080 §1). Absent means `[\"master\"]`, as from a server\nolder than 0.59; a virtual camera, which has no audio, always reports that.",
+          "items": {
+            "$ref": "#/$defs/BusId"
+          },
+          "type": "array"
+        },
         "encoder_profile": {
           "anyOf": [
             {

@@ -21,7 +21,9 @@
 //! settings it refuses are tried again on the next pass; both are logged.
 //!
 //! The thread also runs the plugin hosts of the CLAP filters (ADR-0035) on the master
-//! chain and on each output tap's chain (ADR-0080), which the engine's audio routing
+//! chain, one per bus that feeds an output (ADR-0086: the master bus's, and one for each
+//! other bus an output tap reads), and on each output tap's chain (ADR-0080), which the
+//! engine's audio routing
 //! (`crate::audio`) keeps in line under the collection lock: the routing names those
 //! chains ([`Wanted::set_routed_chains`]), and the thread starts, supervises and stops
 //! their hosts here, sends them their settings, and lists each ready host's block
@@ -152,18 +154,23 @@ impl Wanted {
 }
 
 /// The audio chains the routing runs that may hold CLAP filters: the master chain and
-/// each output tap's, by output.
+/// each output tap's, by output, and the buses other than the master that feed an output,
+/// each of which runs the master chain's CLAP filters on hosts of its own (ADR-0086).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct RoutedChains {
     pub(crate) master: Vec<Chained>,
     pub(crate) outputs: BTreeMap<OutputId, Vec<Chained>>,
+    pub(crate) buses: BTreeSet<BusId>,
 }
 
-/// The ready block of each CLAP filter in [`RoutedChains`], by filter ID.
+/// The ready block of each CLAP filter in [`RoutedChains`], by filter ID: the master
+/// bus's copies of the master chain's, each output tap's, and each other bus's copies
+/// of the master chain's, by bus.
 #[derive(Clone, Default)]
 pub(crate) struct RoutedBlocks {
     pub(crate) master: BTreeMap<FilterId, HostBlock>,
     pub(crate) outputs: BTreeMap<OutputId, BTreeMap<FilterId, HostBlock>>,
+    pub(crate) buses: BTreeMap<BusId, BTreeMap<FilterId, HostBlock>>,
 }
 
 /// Blocks compare by identity: a restarted host has a new one.
@@ -175,13 +182,18 @@ impl PartialEq for RoutedBlocks {
                     .zip(b)
                     .all(|((ia, ba), (ib, bb))| ia == ib && Arc::ptr_eq(ba, bb))
         }
+        fn all_same<K: PartialEq>(
+            a: &BTreeMap<K, BTreeMap<FilterId, HostBlock>>,
+            b: &BTreeMap<K, BTreeMap<FilterId, HostBlock>>,
+        ) -> bool {
+            a.len() == b.len()
+                && a.iter()
+                    .zip(b)
+                    .all(|((ka, a), (kb, b))| ka == kb && same(a, b))
+        }
         same(&self.master, &other.master)
-            && self.outputs.len() == other.outputs.len()
-            && self
-                .outputs
-                .iter()
-                .zip(&other.outputs)
-                .all(|((ia, a), (ib, b))| ia == ib && same(a, b))
+            && all_same(&self.outputs, &other.outputs)
+            && all_same(&self.buses, &other.buses)
     }
 }
 
@@ -592,6 +604,9 @@ struct Open {
     master_hosts: ClapHosts,
     /// The hosts of each output tap's CLAP filters, by output.
     output_hosts: BTreeMap<OutputId, ClapHosts>,
+    /// The hosts of the master chain's CLAP filters on each other bus that feeds an
+    /// output, by bus (ADR-0086).
+    bus_hosts: BTreeMap<BusId, ClapHosts>,
 }
 
 /// One wanted bus monitor, and its stream while it plays.
@@ -662,6 +677,7 @@ impl AudioInputs {
             monitors: BTreeMap::new(),
             master_hosts: ClapHosts::default(),
             output_hosts: BTreeMap::new(),
+            bus_hosts: BTreeMap::new(),
         }));
         let stop = Arc::new(AtomicBool::new(false));
         let mut inputs = Self {
@@ -717,6 +733,7 @@ impl AudioInputs {
         // mixer goes too.
         open.master_hosts = ClapHosts::default();
         open.output_hosts.clear();
+        open.bus_hosts.clear();
         open.wanted.routed.set_blocks(RoutedBlocks::default());
         for slot in std::mem::take(&mut open.monitors).into_values() {
             if let Some(live) = slot.live {
@@ -778,6 +795,8 @@ enum Note {
     MonitorUnavailable(BusId, String),
     /// A CLAP filter's host on the master chain, or on this output's tap.
     Routed(Option<OutputId>, String),
+    /// A master CLAP filter's host on this bus, which feeds an output.
+    RoutedBus(BusId, String),
 }
 
 impl Pass {
@@ -811,6 +830,9 @@ impl Pass {
                 }
                 Note::Routed(Some(output_id), reason) => {
                     tracing::warn!(output_id = %output_id, reason, "output filter");
+                }
+                Note::RoutedBus(bus_id, reason) => {
+                    tracing::warn!(bus_id = %bus_id, reason, "master filter on a bus");
                 }
             }
         }
@@ -964,6 +986,15 @@ impl Open {
             notes.push(Note::Routed(None, reason));
         }
         self.master_hosts.send(&routed.master);
+        // A bus that no longer feeds an output stops its hosts.
+        self.bus_hosts.retain(|id, _| routed.buses.contains(id));
+        for bus_id in &routed.buses {
+            let hosts = self.bus_hosts.entry(bus_id.clone()).or_default();
+            for reason in hosts.sync(&routed.master, clap, format, now) {
+                notes.push(Note::RoutedBus(bus_id.clone(), reason));
+            }
+            hosts.send(&routed.master);
+        }
         // An output no longer tapped stops its hosts.
         self.output_hosts
             .retain(|id, _| routed.outputs.contains_key(id));
@@ -978,6 +1009,12 @@ impl Open {
             master: self.master_hosts.blocks(),
             outputs: self
                 .output_hosts
+                .iter()
+                .map(|(id, hosts)| (id.clone(), hosts.blocks()))
+                .filter(|(_, blocks)| !blocks.is_empty())
+                .collect(),
+            buses: self
+                .bus_hosts
                 .iter()
                 .map(|(id, hosts)| (id.clone(), hosts.blocks()))
                 .filter(|(_, blocks)| !blocks.is_empty())
