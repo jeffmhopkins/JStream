@@ -123,9 +123,9 @@ Contents ([Design](#design) explains the choices):
   (`override_submenu`); and
   `transform.rs`: `Transform`, the Transform panel (align, distribute and arrange the
   selected items); and `stats.rs`: `StreamStats`, the Stream stats panel (one output's
-  pill, uptime, bitrate, dropped frames, health, two-minute bitrate chart and details,
-  from `stats.tick`'s `outputs`), whose figures, chart and choice of output are tested
-  natively.
+  pill, uptime, bitrate, dropped frames, health, two-minute bitrate chart with its
+  hover readout, and details, from `stats.tick`'s `outputs`), whose figures, chart,
+  hover and choice of output are tested natively.
 - **Pairing** (`pairing.rs`): `Pairing`, the pairing panel under the properties in the
   Inspector, shown only when the server pairs devices (start pairing and show the code, list and
   revoke devices), and the calls behind it, tested natively against `MockEngine` and a
@@ -523,7 +523,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   first running output, then the first stream. It reads the outputs and profiles as
   the Outputs panel does, keeps the last 120 `kbps` readings of each listed output for
   the bitrate chart (an output a tick leaves out, or whose uptime went down, starts
-  over), and shows the YouTube-only tiles not at all.
+  over), and shows the YouTube-only tiles not at all. Hovering the chart picks the
+  nearest reading and draws a vertical line, a dot on the line and a tooltip
+  ("2.65 Mbps · 14 s ago", or "now"), anchored left in the chart's left 30%, right in
+  its right 30% and centred between, as the prototype's; the dot and tooltip are
+  placed with `style:` properties, which the page's CSP allows where a `style`
+  attribute is refused.
   Agent activity (`panels/agent.rs`) lists what agents did from the engine's
   `activity.list` ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md)),
   leaving out JStream's own UIs, and asks again after each `state.changed`,
