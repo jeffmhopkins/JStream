@@ -443,11 +443,12 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   runs from a source to a bus, and filters have no sidechain keys yet, so no edit can
   close an audio cycle. The engine routes these into the program stage's mixer while it
   runs, and plays each bus's monitor on its device (one it can't open stays silent and
-  is retried).
+  is retried). Each output's audio bus (protocol 0.59, `output.set_audio_buses`) and
+  its filter chains are saved with it.
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
   and hotkey bindings (protocol 0.25), as the organisation bullet above describes.
   Not yet: settings migrations between kind versions (a source saved at another
-  version is refused on load), `background`, output audio buses and chains, the `YouTube` kind, a virtual
+  version is refused on load), `background`, the `YouTube` kind, a virtual
   camera's video mix (it always shows the program), and everything outside `sources`,
   `scenes`, `outputs`, `encoders`, `video_mixes`, `audio`, `folders`, `labels`,
   `hotkeys` and `transitions`. The collection file saves everything built so far,
