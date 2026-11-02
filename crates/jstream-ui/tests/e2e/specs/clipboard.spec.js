@@ -1,4 +1,4 @@
-// Copy and paste (KB-05): Ctrl+C and Ctrl+V on the canvas, the Scene objects rows and the
+// Copy and paste (KB-05): Ctrl+C and Ctrl+V on the canvas, the Sources rows and the
 // Scenes rows, the menus' Paste and Paste scene, and Duplicate scene. The clipboard is the
 // page's own, so the tests read the rows and the sent batches, not the system clipboard.
 import { test, expect, connect, rev } from '../fixtures.js';
@@ -8,7 +8,7 @@ function menu(page) {
   return page.getByRole('menu', { name: 'Context menu' });
 }
 
-/** The Scene objects rows, top of the stack first. */
+/** The Sources rows, top of the stack first. */
 function rows(page) {
   return page.locator('.sources-panel li.row');
 }

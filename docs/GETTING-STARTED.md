@@ -57,11 +57,13 @@ A new JStream starts empty, but for four sample labels (Intro / outro, Gameplay,
 and Sponsor) to rename, use or delete. What the program shows (and every output sends) is the scene
 on **program**, drawn on the canvas in the middle.
 
-1. In **Scenes**, right-click and choose **New scene**, then type its name.
-2. In **Scene objects**, right-click and choose **Add source…**. Pick a type: display or
-   window capture, a webcam, an audio input (your microphone), a media file, an image, a
-   browser page, text (it starts bold with a soft shadow), a colour, a backdrop (a
-   painted studio backdrop, generated), or an audio visualiser. Name it and press **Create**
+1. In **Scenes**, click **+** under the list (or right-click and choose **New scene**),
+   then type its name.
+2. In **Sources**, click **+** under the list (or right-click and choose **Add source…**).
+   Pick a type: display or window capture, a webcam, an audio input (your microphone), a
+   media file, an image, a browser page, text (it starts bold with a soft shadow), a
+   colour, a backdrop (a painted studio backdrop, generated), or an audio visualiser.
+   Name it and press **Create**
    (or pick an existing source to reuse it); its properties open, so you can choose the
    display or window from the list of those open now, the device or the file. A display,
    window or webcam shows its live picture at the top of the dialog as you pick it,

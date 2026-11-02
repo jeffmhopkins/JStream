@@ -1,5 +1,5 @@
 // The right-click menus and the Add source dialog: the canvas's menus on the frame and on
-// the margin, the Scene objects panel's menu, moving through a menu with the keyboard,
+// the margin, the Sources panel's menu, moving through a menu with the keyboard,
 // and adding through the dialog. The mock engine lists no kinds, so the dialog offers the
 // Color type of the seed's Backdrop (placed again, not created) and Scene; creating a
 // source of a new kind is covered natively.
@@ -85,7 +85,7 @@ test('the arrow keys move through a menu, and a press outside closes it', async 
   await expect(menu(page)).toBeHidden();
 });
 
-test('the Scene objects panel adds a source as a reference', async ({ page, daemon }) => {
+test('the Sources panel adds a source as a reference', async ({ page, daemon }) => {
   await connect(page, daemon);
   const dialog = await openAddSource(page);
   await expect(dialog.getByText('Into “Main”')).toBeVisible();
@@ -132,7 +132,7 @@ test('a scene is nested once, and a nested one is not offered again', async ({ p
   await expect(dialog).toBeHidden();
 });
 
-/** The rows of the Scene objects panel, top of the stack first. */
+/** The rows of the Sources panel, top of the stack first. */
 function rows(page) {
   return page.locator('.sources-panel li.row');
 }

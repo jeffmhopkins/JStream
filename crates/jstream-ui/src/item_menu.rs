@@ -38,7 +38,7 @@ const DUPLICATE_OFFSET: f32 = 40.0;
 pub enum Scope {
     /// On the canvas: the menu ends with Select all, which runs this.
     Canvas(Rc<dyn Fn()>),
-    /// In the Scene objects panel: it ends with Add source and New group.
+    /// In the Sources panel: it ends with Add source and New group.
     Objects,
 }
 

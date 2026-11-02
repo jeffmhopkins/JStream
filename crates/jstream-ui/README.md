@@ -86,13 +86,14 @@ Contents ([Design](#design) explains the choices):
   ungrouping they send, tested natively), `clipboard.rs` (copy and paste, KB-05: the
   page's own clipboard of items or a scene, and the batches Paste, Paste scene and
   Duplicate scene send, tested natively), `dialog.rs` (`Modal`,
-  the modal dialog frame) and `icons.rs` (`Icon`, the prototype's stroke icons).
+  the modal dialog frame) and `icons.rs` (`Icon`, the prototype's stroke icons, plus
+  the tool bars' own).
 - **Panels** (`panels/`): the scene list (`scenes.rs`, with its folders: the rows each
-  level shows and the edits a drop sends are tested natively), the sources list
-  (`sources.rs`), what those two share (`tree.rs`: the search box, the favourites and
-  labels filter, the star and drag reordering, with the matching and the drop's index
+  level shows and the edits a drop or the tool bar's arrows send are tested natively),
+  the sources list (`sources.rs`), what those two share (`tree.rs`: the search box, the
+  favourites and labels filter, the star, the tool bar and drag reordering, with the matching and the drop's index
   tested natively), labels (`labels.rs`: the chips, the tag button and its popover, the label manager
-  and the `LabelManager` context that opens it in the Scenes or Scene objects panel,
+  and the `LabelManager` context that opens it in the Scenes or Sources panel,
   with the edits they send to a scene or a source tested natively), the Inspector (`inspector.rs`: the selected item's box, 3D, crop,
   blending, scene switches and settings, or the selected scene's objects, uses and transitions, in
   sections whose folds `Folds` remembers by title), the
@@ -203,8 +204,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   item that left the scene is dropped, the next selected one becoming primary. The
   canvas edits the same scene and selects the same items, so a click on a box selects
   its row and opens its properties, and every selected item's row is highlighted.
-- **Scenes and sources.** The Scenes and Scene objects panels are the prototype's
-  trees (spec-panels.md 1 and 2). The scene list shows each
+- **Scenes and sources.** The Scenes and Sources panels are the prototype's
+  trees (spec-panels.md 1 and 2; the prototype calls the second Scene objects), each
+  with OBS's tool bar under its rows (`tree.rs`'s `ToolBar`: add, remove, properties,
+  filters, one step up and one down), which stays at the panel's foot while the rows
+  scroll. The scene list shows each
   folder level's folders in folder order, then its scenes in display order (ADR-0064),
   indented by depth, with a caret that folds a folder, and leaves out groups (ADR-0024). It marks the program scene
   "program". A click selects a scene and puts it on program (`scene.switch`, naming no
@@ -537,7 +541,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the canvas, outer columns, full-width top and bottom, sidebars, and above and below
   the canvas. A zone stacks groups (columns top to bottom, rows side by side); a group
   shows one panel with its title, or tabs. Panels are the prototype's eleven: Scenes,
-  Scene objects (`Sources`), the Inspector (`Inspector`, with `Pairing` and `Plugins` under it), the
+  Sources (`Sources`), the Inspector (`Inspector`, with `Pairing` and `Plugins` under it), the
   Transform, Filters, Live chat, Stream stats, Audio mixer, Outputs, Agent activity and
   Transitions (`StudioMode`); `panel_view` maps each to its component, and a new panel
   adds a `PanelId` and a line there. Live chat waits on the engine (YouTube sign-in),
