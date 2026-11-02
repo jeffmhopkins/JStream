@@ -3831,8 +3831,10 @@ fn output_loop(job: OutputJob) {
 /// publish target then drops it and counts it with the link's drops, or delivers it on
 /// a link that came back but isn't stable yet. A video frame either way is counted as
 /// lost for the health, so a flapping server stays `poor` (#994). `link` is the state
-/// the previous pass read, so the first packet after the link drops still counts as
-/// sent.
+/// the previous pass read, so this pass's packets count by the link before it changed,
+/// video and audio alike: those of the pass in which the link drops as sent, and the
+/// video frame of the pass in which it becomes `active` again as lost, though it
+/// reached the server.
 fn count_sent(
     sent: &SentCounters,
     packet: &jstream_media::Packet,

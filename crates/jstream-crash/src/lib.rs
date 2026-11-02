@@ -99,6 +99,10 @@ pub struct Program {
     pub version: &'static str,
     /// The names of threads whose panics the program's own code catches and reports, such
     /// as `jstream_core::HANDLED_PANIC_THREADS`: a panic on one writes no report (#999).
+    ///
+    /// That holds for a second panic too. A `Drop` that panics while the thread unwinds
+    /// from the first aborts the process, and neither panic writes a report: the hook
+    /// skips every panic on the thread, and nothing gets to catch either.
     pub handled: &'static [&'static str],
 }
 
@@ -289,7 +293,8 @@ impl<S: OAuthTokenStore + ?Sized> OAuthTokenStore for Redacting<S> {
 ///
 /// A panic on a thread named in `program.handled` writes no report and calls no
 /// `notify`: the code that runs those threads catches their panics and reports them
-/// itself (#999).
+/// itself (#999). A second panic there, which aborts the process, writes none either
+/// ([`Program::handled`]).
 pub fn install(dir: PathBuf, program: Program, secrets: Secrets, notify: Notify) {
     install_creating(dir, program, secrets, notify, create_new);
 }

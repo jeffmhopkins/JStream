@@ -589,9 +589,22 @@ async fn a_stream_reaches_a_real_receiver_with_its_encoder_settings_and_stats() 
         (Some(48_000), Some(2)),
         "{p:?}"
     );
+    // The file is checked against the stats by its frame count, and its duration by
+    // the frames' own timestamps. The pts are wall clock and a stalled tick is counted
+    // in `render_ticks`, not `frames`, so a runner stall lengthens the file without
+    // adding frames: `frames / 30` is not its duration then (#1007).
     assert!(
-        close(p.duration, last.frames as f64 / 30.0, 1.0),
-        "the file holds what the stats counted: {p:?} vs {last:?}"
+        close(p.video_packets.len() as f64, last.frames as f64, 30.0),
+        "the file holds the frames the stats counted, within a tick: {} vs {last:?}",
+        p.video_packets.len()
+    );
+    let span = match (p.video_packets.first(), p.video_packets.last()) {
+        (Some((start, _)), Some((end, _))) => end - start + 1.0 / 30.0,
+        _ => 0.0,
+    };
+    assert!(
+        close(p.duration, span, 1.0),
+        "the file lasts as long as its frames: {span:.3} s vs {p:?}"
     );
     assert_eq!(
         p.video_packets.first().map(|(_, k)| *k),
