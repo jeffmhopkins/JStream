@@ -2370,8 +2370,9 @@ The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in proc
   collection lock held: each plugin's state and reason, its manifest's name, its
   package path, what its manifest asks for as last read (`Request`, as `PluginRequest`)
   and its grant. It notes that request as what the calling client was shown. A plugin
-  being installed, or started with the saved plugins, is listed as enabled; one being enabled keeps the reason it was disabled for until it loads
-  (`Run::Starting` holds it). Built without `wasm-plugins`, the engine lists none, from
+  being installed, or started with the saved plugins, is listed as enabled; one being
+  enabled keeps the reason it was disabled for until it loads (`Run::Starting` holds
+  it). Built without `wasm-plugins`, the engine lists none, from
   the collection's query match (`plugin_list_is_empty_until_a_plugin_is_installed`).
 - **Not yet:** a private data folder per plugin, deferred until the file imports a plugin
   would need to use it are designed (ADR-0076); and a way to remove one (no

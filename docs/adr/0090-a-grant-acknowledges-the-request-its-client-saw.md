@@ -54,15 +54,19 @@ rest of ADR-0076 stands.
 <a id="consequences"></a>
 ## Consequences
 - The guarantee is exactly this: a grant acknowledges the request in its client's
-  latest `plugin.list`. For a client that sends no `plugin.list` while its grant dialog
-  is open, that is the request the dialog showed, so an update the person wasn't shown
-  still reaches a dialog. A client that re-lists while its dialog is open acknowledges
-  its latest list, whatever the dialog shows.
-- The jstream UI keeps to that: while its grant dialog is open it sends no
+  latest `plugin.list`, as the engine handled it. For a client that sends no
+  `plugin.list` while its grant dialog is open, and sends a grant only once every list
+  it sent has been answered and shown, that is the request the dialog showed, so an
+  update the person wasn't shown still reaches a dialog. A client that re-lists while
+  its dialog is open, or grants while a list is unanswered, acknowledges its latest
+  list, whatever the dialog shows.
+- The jstream UI keeps to both conditions. While its grant dialog is open it sends no
   `plugin.list`, and a re-read it would have made (on `plugin.state_changed`,
-  `events.dropped` or a failed grant) goes out once the dialog closes. A list already on
-  its way when the dialog opened, that answers another request, draws the dialog again
-  with it.
+  `events.dropped` or a failed grant) goes out once the dialog closes. Its OK, and so
+  Enter, is disabled while any list is on its way, so a list sent before the dialog
+  opened, answering another request, has drawn the dialog again with it before a grant
+  can go out. When the enable after a grant fails because the plugin now asks for more,
+  the dialog closes, the list is read again, and the dialog opens on the update.
 - A UI that grants after a stale list sees `plugin.enable` answer `action_failed` naming
   what is new, lists again, and shows the update.
 - The engine keeps one request per client and plugin listed, until the session ends.
