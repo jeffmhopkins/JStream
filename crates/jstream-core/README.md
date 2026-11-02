@@ -1678,7 +1678,8 @@ Each tick also lists every running output's live stats (protocol 0.57;
 `output_stats.rs`). The output thread counts each packet the muxer takes while the
 publish link is up into its `SentCounters` (two relaxed atomic adds: the bytes, and a
 frame for video), so a link that is down sends nothing and its tags count as the
-link's drops instead. `output.start` registers an `OutputMeter` for the run once it is
+link's drops instead. A video frame handed over while the link is down also adds to a
+third counter, which only the health reads (#994). `output.start` registers an `OutputMeter` for the run once it is
 armed, with its uptime counted from when the engine received the `output.start`
 (before the start waits for an earlier one, opens the destination and starts the
 program stage), whose read gathers those counts with the output's drops: its video encode
@@ -1691,7 +1692,9 @@ never with it. Each meter keeps the samples of the last ten seconds: `kbps` is t
 bytes since the previous sample over the time between them, and `health` compares the
 newest sample with the one at the window's start (`waiting` until a video frame was
 sent, `good` with nothing new lost, `poor` with 2% or more of the video frames lost,
-`fair` otherwise). Under the collection lock the engine then makes an output that is
+`fair` otherwise). Lost video frames there are the `dropped_frames` and the frames lost
+on a down link, so an outage keeps the output `poor` until it leaves the window, not
+just while it reconnects. Under the collection lock the engine then makes an output that is
 `reconnecting` `poor`. The stop drops the meter with the output's drop guard, so the
 next tick leaves the output out. A virtual camera output has no meter yet.
 
