@@ -54,7 +54,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `set_density(d)` asks a source to draw its frames `d` times as many pixels each way
   as its own size, so an item that shows it enlarged stays sharp, and returns that own
   size, which its frames are placed at; the default is `None`, a kind whose frames are
-  their own size whatever is asked. Only `text` and `timer` draw at a density (see *Kinds*).
+  their own size whatever is asked. Only `text` draws at a density (see *Kinds*).
 - `Painter`: `paint(at)` draws the frame for `at` ahead of `frame`, for a source
   whose frames follow something live. Drawing can take milliseconds, so a host that
   asks for frames under a lock paints before taking it, when `next_change` said a
@@ -202,7 +202,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   and background are blended on sRGB values, not in linear light. The frame must fit
   `Limits`: its sides within `max_side`, and its working memory (8 bytes a pixel, 4
   more with an outline and 8 more with a shadow) within `max_decoded_bytes`; otherwise `create` or `update` fails
-  naming `text`. It draws at a density (as `timer` does, the same way)
+  naming `text`. It is the one kind that draws at a density
   ([ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)):
   `set_density(d)` draws the same layout with every length (the em size, the glyphs'
   positions, the outline, the padding, the shadow) multiplied by `d`, so the frame has `d` times the
@@ -212,16 +212,6 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   ([ADR-0079](../../docs/adr/0079-text-density-bounded-by-pixels.md)); one whose frame
   would still be over the limits is halved until it fits, down to 1. An update draws at
   the density set last, lowered the same way.
-- `timer`: a countdown or stopwatch drawn as `text` draws (every `text` setting but
-  `text` itself), redrawn when the time it shows changes, once a second. It counts on
-  the media clock from the first frame asked for after it starts, or after an update
-  that changes `mode` or `duration`; any other update keeps counting. A `countdown`
-  shows the seconds left of `duration`, rounded up (05:00 at the start, 00:00 at the
-  end), then `end_text` when that isn't empty, and `next_change` is `None` from then;
-  a `stopwatch` shows the whole seconds since its start. `format` writes `auto`
-  (`mm:ss`, or `h:mm:ss` from an hour), `mm:ss` (minutes past an hour keep counting) or
-  `hh:mm:ss`. Every setting but `font` is live, and it draws at a density as `text`
-  does. It has no time of day: that needs the machine's time zone.
 - `display` and `window`: what the platform captures, by the `target` setting, a
   capture-backend target ID (on Windows `monitor:` and the display's GDI device name, or
   `hwnd:0x` and the window handle). An empty `display` target is the primary display,
@@ -489,12 +479,8 @@ them the styled text at a density of 2^0.75 (`JSTREAM_BLESS=1` rewrites them). `
 rectangle at its exact size, a pill whose corners are clear and whose edge is
 antialiased, a circle that is symmetric, linear gradients that run their angle without
 banding and mix in linear light, a radial one, and a border inside the edge, and
-checks that every setting is live. `tests/timer.rs` compares a countdown's and a
-stopwatch's frames with text drawn by the `text` kind, second by second: rounding,
-`end_text`, `next_change`, a style update that keeps counting and a mode change that
-restarts it. The unit tests check the shape's distances (a rectangle's, a pill's
-corner, an ellipse's axes) and premultiplied mixing, and the timer's text in every
-mode and format. The scope's unit tests check the
+checks that every setting is live. The unit tests check the shape's distances (a
+rectangle's, a pill's corner, an ellipse's axes) and premultiplied mixing. The scope's unit tests check the
 ring (latest window, wrap-around, and a reader racing a writer never seeing a torn
 window), the frame ticks and easing, and draw both kinds from known audio: each
 waveform column's range, the dB scale, a tone lighting its own spectrum bar, every

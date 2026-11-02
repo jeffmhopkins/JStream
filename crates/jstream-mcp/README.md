@@ -135,8 +135,8 @@ type, boxes that don't fit their text. It says what a broadcast designer would: 
 title-safe area, alignment and spacing, a `backdrop` source rather than a flat colour,
 `shape` sources sized to their boxes for plates, pills, circles and gradients, the
 `text` faces, sizes, letter spacing and shadow to use, restrained colour and contrast,
-recipes for a lower third, a ticker (`scroll` with a negative speed and a `gap_x`) and
-a countdown (`timer`), grouping a multi-part graphic as a nested scene whose item's
+recipes for a lower third and a ticker (`scroll` with a negative speed and a `gap_x`),
+grouping a multi-part graphic as a nested scene whose item's
 effects clip and shadow it as one, fitting an item to its text's `source.sizes`,
 animating with keyframe scenes, a `move` preset, crop reveals and staggered
 `delay_ms`, and checking each step with `video.snapshot` (building on preview when a

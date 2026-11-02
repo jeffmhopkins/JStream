@@ -189,13 +189,6 @@ fn known(kind: &str) -> Option<Known> {
             Generated,
             Some((400.0, 120.0)),
         ),
-        "timer" => (
-            "Timer",
-            "A countdown or stopwatch, styled like text.",
-            "clock",
-            Generated,
-            Some((300.0, 90.0)),
-        ),
         "waveform" => (
             "Audio waveform",
             "Draws an audio source as a moving wave.",
@@ -215,7 +208,7 @@ fn known(kind: &str) -> Option<Known> {
 }
 
 /// The prototype's order of the kinds it knows.
-const ORDER: [&str; 16] = [
+const ORDER: [&str; 15] = [
     "display",
     "window",
     "webcam",
@@ -229,7 +222,6 @@ const ORDER: [&str; 16] = [
     "color",
     "backdrop",
     "shape",
-    "timer",
     "waveform",
     "spectrum",
 ];
@@ -487,11 +479,11 @@ pub fn add_edits(
 }
 
 /// The settings a new source of `kind` starts with, over its kind's defaults. A new text
-/// or timer starts bold with a soft shadow, which reads on any picture (#1020); the
-/// kinds' own defaults stay plain, so texts saved before keep their look.
+/// starts bold with a soft shadow, which reads on any picture (#1020); the kind's own
+/// defaults stay plain, so texts saved before keep their look.
 fn starting_settings(kind: &str) -> Settings {
     match kind {
-        "text" | "timer" => [
+        "text" => [
             ("face", serde_json::json!("bold")),
             ("shadow_color", serde_json::json!("#000000a0")),
             ("shadow_y", serde_json::json!(3.0)),
@@ -1356,11 +1348,9 @@ mod tests {
     /// kind's defaults.
     #[test]
     fn a_new_text_starts_bold_with_a_shadow() {
-        for kind in ["text", "timer"] {
-            let text = super::starting_settings(kind);
-            assert_eq!(text.get("face"), Some(&serde_json::json!("bold")), "{kind}");
-            assert!(text.get("shadow_color").is_some(), "{kind}");
-        }
+        let text = super::starting_settings("text");
+        assert_eq!(text.get("face"), Some(&serde_json::json!("bold")));
+        assert!(text.get("shadow_color").is_some());
         assert!(super::starting_settings("color").is_empty());
     }
 }
