@@ -149,11 +149,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md"]
   ([ADR-0035](docs/adr/0035-clap-plugins-out-of-process.md)), as plugin kinds whose
   parameters and opaque saved state are the filter's settings
   ([ADR-0037](docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md)). A
-  `state` may be 2 MiB, so a batch carrying two can pass the server's 4 MiB message
-  limit, which closes the connection. The maintainer deferred this to M3 (issue
-  #102): a maintainer-tier ADR superseding ADR-0037's `state` clause adds a stable
-  `too_large` error for requests over a soft limit, read below a higher hard frame
-  limit, so an oversized batch fails cleanly.
+  `state` may be 2 MiB, so a batch carrying two can pass the server's 4 MiB request
+  limit. [ADR-0074](docs/adr/0074-too-large-requests.md) (issue #102) amends ADR-0037's
+  `state` clause: such a request, read below a 16 MiB frame limit, is refused with a
+  stable `too_large` error and the connection stays open, so an oversized batch fails
+  cleanly (protocol 0.62).
 - macOS: the platform crate per [ADR-0063](docs/adr/0063-macos-platform-support.md)
   (ScreenCaptureKit capture, Core Audio with process taps, VideoToolbox and AudioToolbox,
   the Keychain), on macOS 14 and later, Apple Silicon supported and Intel best effort.

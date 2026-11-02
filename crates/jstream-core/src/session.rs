@@ -89,6 +89,7 @@ impl Control for InProcessControl {
                 protocol: PROTOCOL_VERSION,
                 client_id,
                 rev,
+                max_request_bytes: None,
             })
         } else {
             tracing::debug!(

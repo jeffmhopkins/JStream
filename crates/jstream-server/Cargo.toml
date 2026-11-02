@@ -27,6 +27,9 @@ jstream-control.workspace = true
 # MCP's streamable-HTTP transport feeds request bodies to `jstream_mcp::Server`.
 jstream-mcp.workspace = true
 jstream-protocol.workspace = true
+# Reads only the envelope (`type`, `id`) of a message over the request limit, skipping
+# the rest unparsed (ADR-0074); already in the tree through every protocol crate.
+serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["macros", "net", "rt", "sync", "time"] }
