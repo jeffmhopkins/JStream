@@ -292,7 +292,7 @@ fn refuses_what_it_cant_encode() {
             codec: Codec::Hevc,
             ..config(PixelFormat::Nv12, RateControl::Cbr { kbps: 1 })
         },
-        config(PixelFormat::P010, RateControl::Cbr { kbps: 2500 }),
+        config(PixelFormat::Bgra8, RateControl::Cbr { kbps: 2500 }),
         VideoEncoderConfig {
             size: FrameSize::new(5, 2).expect("valid size"),
             ..config(PixelFormat::Nv12, RateControl::Cbr { kbps: 2500 })
@@ -322,68 +322,5 @@ fn refuses_what_it_cant_encode() {
             matches!(super::params(&bad), Err(PlatformError::Unsupported { .. })),
             "{bad:?}"
         );
-    }
-}
-
-/// A 4x2 frame of one colour, `rgb`, in `format` (RGBA or BGRA), at `ms`.
-fn rgb_frame(format: PixelFormat, rgb: [u8; 3], ms: i64) -> VideoFrame {
-    let info = VideoFrameInfo {
-        size: FrameSize::new(4, 2).expect("valid size"),
-        format,
-        color: ColorInfo::default(),
-        pts: MediaTime::new(ms, Timebase::MILLIS),
-    };
-    let [r, g, b] = rgb;
-    let pixel = match format {
-        PixelFormat::Bgra8 => [b, g, r, 255],
-        _ => [r, g, b, 255],
-    };
-    VideoFrame::new(info, vec![Plane::new(pixel.repeat(8), 16)]).expect("frame")
-}
-
-/// The compositor's CPU path hands the encoder RGBA (#1015), so the session takes RGBA
-/// and BGRA and converts them with the shared converter before the library sees them.
-#[test]
-fn converts_the_compositors_rgb_output() {
-    let orange = [230, 120, 20];
-    // What the shared converter makes of the colour: the U and V the library must get.
-    let mut want = VideoFrame::zeroed(VideoFrameInfo {
-        size: FrameSize::new(4, 2).expect("valid size"),
-        format: PixelFormat::Nv12,
-        color: ColorInfo::default(),
-        pts: MediaTime::new(0, Timebase::MILLIS),
-    })
-    .expect("frame");
-    let src = rgb_frame(PixelFormat::Rgba8, orange, 0);
-    let plane = src.plane(0).expect("plane");
-    jstream_platform::nv12::rgb_to_nv12(
-        plane.data(),
-        plane.stride(),
-        jstream_platform::nv12::RgbOrder::Rgba,
-        &mut want,
-    )
-    .expect("converts");
-    let uv = want.plane(1).expect("chroma").data();
-    let (u, v) = (uv[0], uv[1]);
-    assert_ne!((u, v), (128, 128), "a colour, not grey");
-
-    for format in [PixelFormat::Rgba8, PixelFormat::Bgra8] {
-        let mut enc = open(&config(format, RateControl::Cbr { kbps: 2500 }));
-        let mut out = Vec::new();
-        enc.encode(VideoSurface::Cpu(rgb_frame(format, orange, 0)))
-            .expect("encodes");
-        enc.encode(VideoSurface::Cpu(rgb_frame(format, orange, 33)))
-            .expect("encodes");
-        enc.poll(&mut out).expect("polls");
-        assert_eq!(out.len(), 2, "{format:?}");
-        assert!(out[0].is_keyframe());
-        // Each packet keeps its own frame's timestamp, not the scratch frame's.
-        assert_eq!(out[1].pts(), MediaTime::new(33, Timebase::MILLIS));
-        LOG.with_borrow(|l| assert_eq!(l.frames, [(u, v, 0), (u, v, 33)], "{format:?}"));
-        // A frame in another format than the session's is still refused.
-        assert!(matches!(
-            enc.encode(nv12(66)),
-            Err(PlatformError::Unsupported { .. })
-        ));
     }
 }

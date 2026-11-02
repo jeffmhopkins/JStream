@@ -365,9 +365,7 @@ It has:
   values, taken from Cisco's server by the `openh264-download` test; a pin without them
   makes `install` refuse before any request is made. **`HttpsFetch`** is the real `Fetch`:
   one `GET` over rustls with the OS trust store, no redirects. **`OpenH264Encoder`**
-  (`VideoEncoder`) takes CPU NV12 or I420 frames of even size, or the compositor's RGBA
-  (or BGRA), which it converts to NV12 with the shared `jstream_platform::nv12` converter
-  first, CBR or VBR (a peak at
+  (`VideoEncoder`) takes CPU NV12 or I420 frames of even size, CBR or VBR (a peak at
   least the target, set on its one spatial layer; OpenH264 enforces it only by skipping
   frames, which is off, so VBR encodes at the target rate) and a keyframe interval of at
   least one frame, and encodes each frame synchronously (camera real-time mode, no frame skipping, the configured

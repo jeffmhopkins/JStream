@@ -4,20 +4,13 @@
 //! unit (or none, for a skipped frame) before the call returns, already Annex B with start
 //! codes. It never reorders, so a packet's `dts` is its `pts`. Input is CPU frames in
 //! I420, passed to the library as they are, or NV12, whose chroma is split into two
-//! planes first (the library takes only I420). RGBA and BGRA, which the compositor's CPU
-//! path delivers, are converted to NV12 first by the converter every platform shares
-//! (`jstream_platform::nv12`), so OpenH264 encodes the same pixels as the other
-//! platforms' encoders.
+//! planes first (the library takes only I420).
 
 use std::ffi::{c_int, c_void};
 use std::ptr::NonNull;
 use std::sync::Arc;
 
-use jstream_platform::media::{
-    Codec, ColorInfo, MediaTime, Packet, PixelFormat, Rounding, Timebase, VideoFrame,
-    VideoFrameInfo,
-};
-use jstream_platform::nv12::{RgbOrder, rgb_to_nv12};
+use jstream_platform::media::{Codec, MediaTime, Packet, PixelFormat, Rounding, Timebase};
 use jstream_platform::{
     CodecInfo, CodecRole, PlatformError, RateControl, VideoEncoder, VideoEncoderConfig,
     VideoSurface,
@@ -52,8 +45,6 @@ pub struct OpenH264Encoder {
     config: VideoEncoderConfig,
     /// Scratch U and V planes for NV12 input, allocated once.
     chroma: [Vec<u8>; 2],
-    /// The NV12 frame RGBA or BGRA input is converted into, allocated once.
-    converted: Option<VideoFrame>,
     /// Where the library describes each frame's output.
     out: Box<FrameBsInfo>,
     packets: Vec<Packet>,
@@ -103,7 +94,7 @@ fn bps(kbps: u32) -> Result<c_int, PlatformError> {
 ///
 /// # Errors
 /// [`PlatformError::Unsupported`] for a codec other than H.264, an input format other
-/// than NV12, I420, RGBA or BGRA, an odd frame size, a keyframe interval of 0, a bit rate that
+/// than NV12 or I420, an odd frame size, a keyframe interval of 0, a bit rate that
 /// doesn't fit, or a VBR peak below its target.
 pub(super) fn params(config: &VideoEncoderConfig) -> Result<EncParamBase, PlatformError> {
     if config.codec != Codec::H264 {
@@ -111,13 +102,10 @@ pub(super) fn params(config: &VideoEncoderConfig) -> Result<EncParamBase, Platfo
             what: format!("{:?} encoding with OpenH264 (H.264 only)", config.codec),
         });
     }
-    if !matches!(
-        config.input_format,
-        PixelFormat::Nv12 | PixelFormat::I420 | PixelFormat::Rgba8 | PixelFormat::Bgra8
-    ) {
+    if !matches!(config.input_format, PixelFormat::Nv12 | PixelFormat::I420) {
         return Err(PlatformError::Unsupported {
             what: format!(
-                "{:?} input to OpenH264 (NV12, I420, RGBA or BGRA only)",
+                "{:?} input to OpenH264 (NV12 or I420 only)",
                 config.input_format
             ),
         });
@@ -184,7 +172,7 @@ impl OpenH264Encoder {
             .filter(|_| rc == 0)
             .ok_or_else(|| os("WelsCreateSVCEncoder", rc))?;
         let chroma_len = (config.size.width() / 2) as usize * (config.size.height() / 2) as usize;
-        let chroma = if config.input_format != PixelFormat::I420 {
+        let chroma = if config.input_format == PixelFormat::Nv12 {
             [vec![0; chroma_len], vec![0; chroma_len]]
         } else {
             [Vec::new(), Vec::new()]
@@ -196,7 +184,6 @@ impl OpenH264Encoder {
             info: openh264_encoder_info(),
             config: *config,
             chroma,
-            converted: None,
             out: FrameBsInfo::zeroed(),
             packets: Vec::new(),
             keyframe_requested: false,
@@ -246,34 +233,11 @@ impl OpenH264Encoder {
         }
     }
 
-    /// Converts `frame`, RGBA or BGRA (already checked), into the session's NV12 frame,
-    /// then encodes that at `frame`'s `pts`.
-    fn encode_rgb(&mut self, frame: &VideoFrame, order: RgbOrder) -> Result<(), PlatformError> {
-        let info = *frame.info();
-        let mut converted = match self.converted.take() {
-            Some(c) => c,
-            None => VideoFrame::zeroed(VideoFrameInfo {
-                size: info.size,
-                format: PixelFormat::Nv12,
-                color: ColorInfo::default(),
-                pts: info.pts,
-            })
-            .map_err(|_| PlatformError::Unsupported {
-                what: format!("NV12 at {}x{}", info.size.width(), info.size.height()),
-            })?,
-        };
-        // One plane: `VideoFrame` checks the plane count of a packed format.
-        let plane = frame.plane(0).ok_or(PlatformError::Unsupported {
-            what: "a frame missing a plane".into(),
-        })?;
-        let result = rgb_to_nv12(plane.data(), plane.stride(), order, &mut converted)
-            .and_then(|()| self.encode_cpu(&converted, info.pts));
-        self.converted = Some(converted);
-        result
-    }
-
-    /// Encodes `frame`, NV12 or I420 (already checked), at `pts` and queues its packet.
-    fn encode_cpu(&mut self, frame: &VideoFrame, pts: MediaTime) -> Result<(), PlatformError> {
+    /// Encodes `frame` (already checked) and queues its packet.
+    fn encode_cpu(
+        &mut self,
+        frame: &jstream_platform::media::VideoFrame,
+    ) -> Result<(), PlatformError> {
         let info = *frame.info();
         let (w, h) = (info.size.width() as usize, info.size.height() as usize);
         let plane = |i: usize| {
@@ -298,7 +262,8 @@ impl OpenH264Encoder {
             ],
             pic_width: c_int::try_from(w).unwrap_or(c_int::MAX),
             pic_height: c_int::try_from(h).unwrap_or(c_int::MAX),
-            time_stamp: pts
+            time_stamp: info
+                .pts
                 .rescale(Timebase::MILLIS, Rounding::Nearest)
                 .map(MediaTime::ticks)
                 .unwrap_or(0),
@@ -383,7 +348,13 @@ impl OpenH264Encoder {
         if data.is_empty() {
             return Ok(());
         }
-        let packet = Packet::new(Codec::H264, frame_type == FRAME_TYPE_IDR, pts, pts, data)?;
+        let packet = Packet::new(
+            Codec::H264,
+            frame_type == FRAME_TYPE_IDR,
+            info.pts,
+            info.pts,
+            data,
+        )?;
         self.packets.push(packet);
         Ok(())
     }
@@ -424,14 +395,7 @@ impl VideoEncoder for OpenH264Encoder {
                 ),
             });
         }
-        match info.format {
-            PixelFormat::Rgba8 => self.encode_rgb(&frame, RgbOrder::Rgba),
-            PixelFormat::Bgra8 => self.encode_rgb(&frame, RgbOrder::Bgra),
-            _ => {
-                let pts = info.pts;
-                self.encode_cpu(&frame, pts)
-            }
-        }
+        self.encode_cpu(&frame)
     }
 
     fn poll(&mut self, out: &mut Vec<Packet>) -> Result<(), PlatformError> {
