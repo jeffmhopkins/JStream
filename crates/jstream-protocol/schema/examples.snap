@@ -67,8 +67,9 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"request","id":"r48","call":{"kind":"query","query":{"type":"activity.list"}}}
 {"type":"request","id":"r49","call":{"kind":"query","query":{"type":"activity.list","after_seq":41,"limit":20}}}
 {"type":"request","id":"r50","call":{"kind":"query","query":{"type":"ui_settings.get","key":"workspace.dock"}}}
-{"type":"request","id":"r51","call":{"kind":"query","query":{"type":"youtube.stats"}}}
-{"type":"request","id":"r52","call":{"kind":"query","query":{"type":"source.sizes"}}}
+{"type":"request","id":"r51","call":{"kind":"query","query":{"type":"plugin.list"}}}
+{"type":"request","id":"r52","call":{"kind":"query","query":{"type":"youtube.stats"}}}
+{"type":"request","id":"r53","call":{"kind":"query","query":{"type":"source.sizes"}}}
 {"type":"request","id":"r30","call":{"kind":"history","op":{"type":"history.undo"}}}
 {"type":"request","id":"r31","call":{"kind":"history","op":{"type":"history.redo"},"expected_rev":15,"idempotency_key":"k-2"}}
 # server -> client
@@ -112,6 +113,7 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"response","id":"r20","result":{"kind":"query","result":{"type":"device.list","devices":[{"device_id":"dev_1","name":"Tablet","paired_at":1790000000,"last_used_at":1790003600}]}}}
 {"type":"response","id":"r20","result":{"kind":"query","result":{"type":"activity.list","now_ms":1790000120000,"entries":[{"seq":42,"time_ms":1790000000042,"client_id":"client_3","client_name":"claude-desktop","call":"scene.switch","summary":"Switched to “Desktop + Cam”"},{"seq":41,"time_ms":1790000000041,"client_id":"client_3","client_name":"claude-desktop","call":"scene.switch","summary":"Switched to “Desktop + Cam”","error":"rev_conflict"}]}}}
 {"type":"response","id":"r20","result":{"kind":"query","result":{"type":"ui_settings.get","key":"workspace.dock","value":{"current":"Live","version":1}}}}
+{"type":"response","id":"r20","result":{"kind":"query","result":{"type":"plugin.list","plugins":[{"plugin_id":"chat_switcher","state":"enabled","remote_name":"Chat switcher","path":"/home/me/plugins/chat-switcher","request":{"classes":["live"],"hosts":["https://api.example.com:443"]},"grant":{"classes":["live"]}},{"plugin_id":"scene_timer","state":"disabled","reason":"needs_grant","path":"/home/me/plugins/scene-timer","request":{"classes":["edit","live"],"folders":true},"grant":{}}]}}}
 {"type":"error","id":"r1","error":{"code":"unsupported_version","client":{"major":9,"minor":0},"server":{"major":0,"minor":65},"message":"protocol version 9.0 is not supported; this server speaks 0.65"}}
 {"type":"error","id":"r1","error":{"code":"handshake_required","message":"send `hello` before any request"}}
 {"type":"error","id":"r1","error":{"code":"malformed","reason":"missing field `id`","message":"malformed message: missing field `id`"}}

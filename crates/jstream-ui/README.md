@@ -130,6 +130,10 @@ Contents ([Design](#design) explains the choices):
   Inspector, shown only when the server pairs devices (start pairing and show the code, list and
   revoke devices), and the calls behind it, tested natively against `MockEngine` and a
   stub that answers them as the server does.
+- **Plugins** (`plugins.rs`): `Plugins`, the WASM automation plugins section under the
+  pairing panel in the Inspector, with its install and grant dialogs, the calls behind
+  them, and `GrantForm`, `suggested_id`, `not_granted` and the row texts, tested
+  natively.
 - **Canvas** (`canvas/`): the canvas editor. It draws the selected scene's item boxes
   over that scene's live picture (the program mix while it is on program), edits their geometry with the pointer and the keyboard, and undoes and
   redoes ([Canvas](#canvas)).
@@ -508,7 +512,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the canvas, outer columns, full-width top and bottom, sidebars, and above and below
   the canvas. A zone stacks groups (columns top to bottom, rows side by side); a group
   shows one panel with its title, or tabs. Panels are the prototype's eleven: Scenes,
-  Scene objects (`Sources`), the Inspector (`Inspector`, with `Pairing` under it), the
+  Scene objects (`Sources`), the Inspector (`Inspector`, with `Pairing` and `Plugins` under it), the
   Transform, Filters, Live chat, Stream stats, Audio mixer, Outputs, Agent activity and
   Transitions (`StudioMode`); `panel_view` maps each to its component, and a new panel
   adds a `PanelId` and a line there. Live chat waits on the engine (YouTube sign-in),
@@ -613,6 +617,23 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   name and its paired and last-used dates (UTC), with a button that calls
   `device.revoke` and re-reads the list. The code is never logged or stored by the page,
   and `OpenCode`'s `Debug` form hides it.
+- **Plugins** (WA1, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md),
+  [ADR-0076](../../docs/adr/0076-saved-wasm-plugins-and-manifest-requests.md)). The
+  Plugins section reads `plugin.list` when it opens and shows once that answers; it
+  re-reads after each of its calls and on `plugin.state_changed` and `events.dropped`.
+  Each plugin shows its manifest's name (the plugin's own text, shown as data), its
+  state with why it is off, its ID and package path, what its manifest asks for that
+  isn't granted, Permissions…, and Turn on (`plugin.enable`) when it is off. Install
+  plugin asks for the package folder and an ID, suggested from the folder's name
+  (`plg_<name>`, numbered when taken) until it is typed, and sends `plugin.install`
+  with no grant beyond `read`; when the manifest asks for more, the grant dialog opens
+  next. The grant dialog, titled "Plugin permissions" with the plugin's name quoted
+  under it beside its ID and path, so a name can't pass for the dialog's own text,
+  offers only what the manifest asks for: `read`, ticked and
+  fixed, then each class asked for with what it lets the plugin do, each host, and,
+  when it asks for folders, a box of absolute paths, one a line. Its OK sends
+  `plugin.grant` with the ticked choices; for a plugin off as `needs_grant` it reads
+  "Grant and turn on" and sends `plugin.enable` after it.
 - **Studio mode** ([ADR-0029](../../docs/adr/0029-transitions.md)).
   The Transitions panel (a tab beside Outputs in the Editing layout, under the canvas
   in Live) reads the scenes (groups left out) and presets with

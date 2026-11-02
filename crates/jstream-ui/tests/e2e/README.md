@@ -105,6 +105,14 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   recording; clearing the key; deleting; editing the
   server URL and choosing an encoder profile, both read back by a fresh page; a second
   client sees outputs created, started and deleted.
+- **Plugins** (`plugins.spec.js`, under the Inspector): the mock engine runs no plugins,
+  so the spec routes the page's WebSocket itself and answers `plugin.list`,
+  `plugin.install`, `plugin.grant` and `plugin.enable` from a list it keeps. An install
+  sends the folder and the ID suggested from its name with no grant, and, since the
+  manifest asks for more than `read`, opens the grant dialog, which offers `read` ticked
+  and fixed and only the classes and host asked for, and sends just what was ticked; the
+  row then names what is asked for and not granted. A plugin off as `needs_grant` is
+  granted a class and a folder and turned on in one step.
 - **Header stats** (`header-stats.spec.js`): the readout shows the dropped count from
   the first `stats.tick`, the CPU share ("<1%") from the second while the program draws
   nothing, and "60 fps · 2 dropped · CPU 3%" once the load says it drew 60 frames in a
