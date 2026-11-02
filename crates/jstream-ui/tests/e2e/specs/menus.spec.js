@@ -15,6 +15,13 @@ async function labels(page) {
   return menu(page).locator('.ctx-label').allTextContents();
 }
 
+/** The open menu's or submenu's entry labelled `name` exactly, whatever its role or hint. */
+function entry(page, name) {
+  return page
+    .locator('.context-menu .ctx-item')
+    .filter({ has: page.locator('.ctx-label').getByText(name, { exact: true }) });
+}
+
 /** Where canvas point (`x`, `y`) is on the screen. */
 async function onScreen(page, x, y) {
   const m = await page.locator('svg.stage-overlay').evaluate((svg) => {
@@ -150,20 +157,22 @@ test('an item row has the item menu, which restacks and arranges', async ({ page
   await placeBackdropAgain(page);
   await rows(page).first().click({ button: 'right' });
   expect(await labels(page)).toEqual([
+    'Rename',
+    'Visible',
     'Properties…',
     'Edit filters…',
     'Labels',
     'Pop out',
     'Reference to original',
     'Independent clone',
+    'Copy',
+    'Paste',
     'Bring to front',
     'Bring forward',
     'Send backward',
     'Send to back',
-    'Center on canvas',
-    'Fit to canvas',
-    'Stretch to canvas',
-    'Reset rotation',
+    'Transform',
+    'Blending',
     'Clear crop',
     'Crop',
     'Duplicate as reference',
@@ -181,9 +190,10 @@ test('an item row has the item menu, which restacks and arranges', async ({ page
   await expect.poll(() => rev(page)).toBe(startRev + 1);
   await expect(rows(page).last()).toHaveClass(/selected/);
 
-  // Stretch to canvas, from the row's menu again.
+  // Stretch to canvas, from the row's menu's Transform submenu.
   await rows(page).last().click({ button: 'right' });
-  await menu(page).getByRole('menuitem', { name: 'Stretch to canvas' }).click();
+  await entry(page, 'Transform').hover();
+  await entry(page, 'Stretch to canvas').click();
   await expect(page.locator('.stage-overlay .readout text')).toHaveText('1920 × 1080');
 });
 
@@ -385,4 +395,64 @@ test('an arrow key pressed before the next menu is drawn still moves along the b
   await page.keyboard.press('ArrowLeft');
   await expect(dropdown('File').getByRole('menuitem', { name: 'Disconnect' })).toBeFocused();
   await expect(dropdown('Edit')).toHaveCount(0);
+});
+
+test('the item menu renames, hides, blends, copies and pastes, as OBS\'s does', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  const item = (name) => entry(page, name);
+
+  // Rename opens the row's name, as F2 does.
+  await rows(page).first().click({ button: 'right' });
+  await item('Rename').click();
+  await expect(page.locator('.sources-panel input.rename')).toBeFocused();
+  await page.keyboard.press('Escape');
+
+  // Visible is checked; choosing it hides the item, and again shows it.
+  await rows(page).first().click({ button: 'right' });
+  await expect(item('Visible')).toHaveAttribute('aria-checked', 'true');
+  let at = await rev(page);
+  await item('Visible').click();
+  await expect.poll(() => rev(page)).toBe(at + 1);
+  await rows(page).first().click({ button: 'right' });
+  await expect(item('Visible')).toHaveAttribute('aria-checked', 'false');
+  await item('Visible').click();
+  await expect.poll(() => rev(page)).toBe(at + 2);
+
+  // Blending lists the modes, Normal checked; Multiply sets it, as the Inspector shows.
+  await rows(page).first().click({ button: 'right' });
+  await item('Blending').hover();
+  await expect(item('Normal')).toHaveAttribute('aria-checked', 'true');
+  at = await rev(page);
+  await item('Multiply').click();
+  await expect.poll(() => rev(page)).toBe(at + 1);
+  await rows(page).first().click({ button: 'right' });
+  await item('Blending').hover();
+  await expect(item('Multiply')).toHaveAttribute('aria-checked', 'true');
+  await page.keyboard.press('Escape');
+
+  // Paste is off until Copy fills the clipboard; then it places the source again.
+  await rows(page).first().click({ button: 'right' });
+  await expect(item('Paste')).toBeDisabled();
+  await item('Copy').click();
+  await rows(page).first().click({ button: 'right' });
+  await item('Paste').click();
+  await expect(rows(page)).toHaveCount(2);
+});
+
+test('the scene menu copies and pastes the scene, and sets whether a multiview shows it', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  const scenes = page.locator('.scenes-panel li.row');
+  const item = (name) => entry(page, name);
+  await scenes.filter({ hasText: 'Intro' }).locator('.row-main').click({ button: 'right' });
+  await expect(item('Paste scene')).toBeDisabled();
+  const on = await item('Show in multiview').getAttribute('aria-checked');
+  const at = await rev(page);
+  await item('Show in multiview').click();
+  await expect.poll(() => rev(page)).toBe(at + 1);
+  await scenes.filter({ hasText: 'Intro' }).locator('.row-main').click({ button: 'right' });
+  await expect(item('Show in multiview')).toHaveAttribute('aria-checked', on === 'true' ? 'false' : 'true');
+  await item('Copy').click();
+  await scenes.filter({ hasText: 'Intro' }).locator('.row-main').click({ button: 'right' });
+  await item('Paste scene').click();
+  await expect(scenes).toHaveCount(3);
 });

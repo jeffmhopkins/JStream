@@ -670,6 +670,13 @@ pub fn Sources() -> impl IntoView {
                     return;
                 }
                 if items.len() == 1 {
+                    // F2's rename, first, as OBS's menu has it.
+                    let rename = id.clone();
+                    entries.insert(
+                        0,
+                        Entry::item("Rename", move || renaming.set(Some(rename.clone())))
+                            .hint("F2"),
+                    );
                     let (source, name) = (source.clone(), name.clone());
                     entries.extend([
                         Entry::Sep,
