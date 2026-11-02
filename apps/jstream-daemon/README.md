@@ -118,13 +118,16 @@ reconnects, and `ffmpeg -listen 1` as the server, which writes the stream to FLV
 
 The H.264 encoder is Cisco's OpenH264, Linux's software encoder
 ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), when
-`JSTREAM_E2E_OPENH264` (`cargo xtask e2e-stream --openh264 <library>`) names its
-library. The harness stores the library under a pin made from its own hash, and
+`JSTREAM_E2E_OPENH264` asks for it. `cargo xtask e2e-stream --openh264-download`, which
+CI runs, sets it to `download`: the harness installs the pinned release from Cisco's
+server through `OpenH264Store::install`, as the app does, into one store the run's tests
+share. `--openh264 <library>` names a copy of that release already on disk, which the
+harness stores. Either way the store checks the library against the pin's SHA-256, and
 `VaapiCodecs` loads it the way it loads a download. Otherwise the encoder is
 `tests/receiver/x264.rs`, a test stand-in that pipes frames to `ffmpeg`'s libx264 in a
 child process. Product code never encodes through FFmpeg
-([R-DEP-002](../../docs/RULES.md#R-DEP-002)). The stand-in exists because OpenH264
-can't be loaded until it is downloaded from Cisco.
+([R-DEP-002](../../docs/RULES.md#R-DEP-002)). The stand-in is for machines with no
+route to Cisco.
 
 The tests need `ffmpeg`, `ffprobe` and a Vulkan adapter, which
 [R-TEST-004](../../docs/RULES.md#R-TEST-004) keeps out of `cargo test`, so they are
