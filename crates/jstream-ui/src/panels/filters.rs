@@ -765,7 +765,7 @@ pub struct FilterDialogs {
 
 /// How long after a row's first click a double-click still opens that row's settings:
 /// longer than any platform's double-click interval.
-const DOUBLE_CLICK_MS: f64 = 800.0;
+pub const DOUBLE_CLICK_MS: f64 = 800.0;
 
 /// The filter a double-click at `at` opens: the row whose first click came at most
 /// [`DOUBLE_CLICK_MS`] before it, wherever the pointer is now (#984).
@@ -785,6 +785,20 @@ impl FilterDialogs {
             picked: RwSignal::new(None),
             added_at: RwSignal::new(None),
             clicked: StoredValue::new(None),
+        }
+    }
+
+    /// Forgets the row a click landed on when a first click lands anywhere else in the
+    /// panel (an editor's field, Add filter), so a double-click there opens nothing. The
+    /// row's own click reaches the panel too, with the time it recorded.
+    fn click_elsewhere(&self, event: &leptos::ev::MouseEvent) {
+        let at = event.time_stamp();
+        if event.detail() == 1
+            && self
+                .clicked
+                .with_value(|c| c.as_ref().is_some_and(|(_, when)| *when != at))
+        {
+            self.clicked.set_value(None);
         }
     }
 
@@ -948,6 +962,7 @@ pub fn Filters() -> impl IntoView {
     view! {
         <section
             class="panel filters-panel"
+            on:click=move |event: leptos::ev::MouseEvent| dialogs.click_elsewhere(&event)
             on:dblclick=move |event: leptos::ev::MouseEvent| dialogs.open_double_clicked(event.time_stamp())
         >
             {move || match shown.with(|s| s.as_ref().map(|(_, head, _)| head.clone())) {
@@ -2771,8 +2786,7 @@ mod tests {
         )])));
     }
 
-    /// The cost of an output's first video filter names the sessions in use, and says
-    /// when it takes effect for a running output (ADR-0080 §3).
+    /// A double-click opens the row its first click landed on, within the window (#984).
     #[test]
     fn a_double_click_opens_the_row_its_first_click_landed_on() {
         let gain = Target {
@@ -2789,6 +2803,8 @@ mod tests {
         assert_eq!(double_click_target(None, 1000.0), None);
     }
 
+    /// The cost of an output's first video filter names the sessions in use, and says
+    /// when it takes effect for a running output (ADR-0080 §3).
     #[test]
     fn the_first_video_filter_states_its_cost() {
         assert_eq!(

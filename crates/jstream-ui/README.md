@@ -469,7 +469,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   and a double-click always does: in the Filters panel, the panel opens the dialog of
   the row the double-click's first click landed on (`double_click_target`, within
   800 ms), as that click's fold can scroll the row from under the second, which
-  toggles nothing (#984); each field's change is a one-parameter
+  toggles nothing, and a first click anywhere else in the panel forgets that row (#984);
+  each field's change is a one-parameter
   `filter.set_settings`. The dialog applies every change at once and, on Cancel, Escape
   or the backdrop, sends one batch putting back the settings and the switch it opened
   with, including each one it sent whose change the engine hasn't reported yet; an
