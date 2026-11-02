@@ -64,13 +64,13 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Scene objects panel](#objects) | 9 | 9 | 0 | 0 | 0 | 0 |
 | [Inspector](#inspector) | 10 | 10 | 0 | 0 | 0 | 0 |
 | [Transform panel](#transform) | 4 | 4 | 0 | 0 | 0 | 0 |
-| [Filters](#filters) | 9 | 9 | 0 | 0 | 0 | 0 |
+| [Filters](#filters) | 10 | 10 | 0 | 0 | 0 | 0 |
 | [Mixer](#mixer) | 7 | 6 | 0 | 0 | 0 | 1 |
 | [Outputs](#outputs) | 4 | 3 | 0 | 0 | 1 | 0 |
 | [Transitions](#transitions) | 6 | 6 | 0 | 0 | 0 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 1 | 1 | 0 | 2 | 0 |
 | [Keyboard](#keyboard) | 7 | 6 | 0 | 0 | 0 | 1 |
-| **Total** | **131** | **118** | **4** | **0** | **5** | **4** |
+| **Total** | **132** | **119** | **4** | **0** | **5** | **4** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -455,6 +455,8 @@ not remove them; they move into the prototype's look.
   dialog, before OK, as in OBS ([DL-02](#dialogs)).
 - Item effects: one placement's own filters, after its crop, in the Filters panel
   ([FL-09](#filters)).
+- Quarantined effects: a filter whose effect-pack kind a GPU device loss quarantined
+  shows a badge and a Re-enable button ([FL-10](#filters)).
 
 <a id="plan"></a>
 ## Delivery plan
