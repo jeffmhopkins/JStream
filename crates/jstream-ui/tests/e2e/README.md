@@ -126,8 +126,10 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   there are no outputs; with a recording added it is READY with no uptime and shows
   the default profile's H.264 at 2500 kbps; once the recording starts it is LIVE with
   the no-data box, and the ticks the test sends give the uptime, the bitrate against
-  the target, the dropped share, Excellent then Poor, the chart and what was sent; a
-  stop puts it back to READY and Waiting.
+  the target, the dropped share, Excellent then Poor, the chart and what was sent;
+  hovering the chart's right edge reads the newest sample "now" and further left the
+  one before "1 s ago", gone when the pointer leaves; a stop puts it back to READY and
+  Waiting.
 - **Docking** (`docking.spec.js`): the Editing layout's zones (Filters and Transform as
   tabs under the Inspector, Transitions as a tab beside Outputs), with empty zones hidden; the View
   menu hiding and adding a panel at the end of its home zone, and the layout marked

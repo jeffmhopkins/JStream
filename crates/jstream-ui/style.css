@@ -1573,6 +1573,18 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .stats-chart .target { stroke: var(--border-strong); }
 .stats-chart .baseline { stroke: var(--border); }
 .stats-chart .line { stroke: var(--accent); }
+.stats-chart .hover { stroke: var(--muted); }
+.stats-chart-box { position: relative; cursor: crosshair; touch-action: pan-y; }
+.stats-hover-dot {
+  position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px;
+  border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--panel);
+  pointer-events: none;
+}
+.stats-hover-tip {
+  position: absolute; top: 2px; padding: 2px 6px; white-space: nowrap;
+  background: var(--menu); border: 1px solid var(--border); border-radius: 4px;
+  font-size: 11px; color: var(--text); pointer-events: none;
+}
 .stats-axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--dim); }
 .stats-nodata {
   display: flex; align-items: center; justify-content: center; height: 72px;

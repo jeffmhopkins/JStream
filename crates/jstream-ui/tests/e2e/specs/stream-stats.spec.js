@@ -1,5 +1,5 @@
 // The Stream stats panel (ST-01): one output's pill, uptime, bitrate, dropped frames,
-// health and bitrate chart, from `stats.tick`'s `outputs` (protocol 0.57). The mock
+// health and bitrate chart with its hover readout, from `stats.tick`'s `outputs` (protocol 0.57). The mock
 // engine runs no pipeline, so the test sends the ticks (`statsTicks`).
 import { test, expect, connect, showPanel, statsTicks } from '../fixtures.js';
 
@@ -58,6 +58,20 @@ test('the panel follows a running output from its ticks', async ({ page, daemon 
   await expect(stats.locator('.stats-health')).toContainText('Stream health: Poor');
   await expect(tiles.nth(1).locator('.value')).toHaveText('30');
   await expect(tiles.nth(1)).toContainText('0.81% this run');
+
+  // Hovering the chart reads one sample: the right edge is now, a step left a tick ago.
+  await showPanel(page, 'Stream stats');
+  const chart = stats.locator('.stats-chart-box');
+  await chart.scrollIntoViewIfNeeded();
+  const box = await chart.boundingBox();
+  await page.mouse.move(box.x + box.width - 1, box.y + box.height / 2);
+  const tip = stats.locator('.stats-hover-tip');
+  await expect(tip).toHaveText('2.00 Mbps · now');
+  await expect(stats.locator('.stats-chart line.hover')).toHaveCount(1);
+  await page.mouse.move(box.x + box.width * 0.5, box.y + box.height / 2);
+  await expect(tip).toHaveText('2.65 Mbps · 1 s ago');
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height + 60);
+  await expect(tip).toHaveCount(0);
 
   await card.getByRole('button', { name: 'Stop' }).click();
   await expect(stats.locator('.stats-pill')).toHaveText('READY');
