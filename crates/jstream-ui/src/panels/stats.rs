@@ -528,6 +528,7 @@ pub fn StreamStats() -> impl IntoView {
                 class="stats-chart-box"
                 on:pointermove=on_move
                 on:pointerleave=move |_| hovered.set(None)
+                on:pointercancel=move |_| hovered.set(None)
             >
                 <svg
                     class="stats-chart"

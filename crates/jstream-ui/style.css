@@ -253,7 +253,7 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
   font-size: 12px;
 }
 .zone.vertical .zone-placeholder { writing-mode: vertical-rl; }
-.splitter { flex: 0 0 5px; background: var(--app); touch-action: pan-y; }
+.splitter { flex: 0 0 5px; background: var(--app); touch-action: none; }
 .splitter[hidden] { display: none; }
 .splitter:hover { background: var(--selection); }
 .splitter.cols, .divider.cols { cursor: col-resize; }
@@ -1572,7 +1572,7 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .stats-chart .baseline { stroke: var(--border); }
 .stats-chart .line { stroke: var(--accent); }
 .stats-chart .hover { stroke: var(--muted); }
-.stats-chart-box { position: relative; cursor: crosshair; touch-action: none; }
+.stats-chart-box { position: relative; cursor: crosshair; touch-action: pan-y; }
 .stats-hover-dot {
   position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px;
   border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--panel);
