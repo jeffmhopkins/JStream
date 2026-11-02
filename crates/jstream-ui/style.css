@@ -832,6 +832,29 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .output .buttons { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .output .encoder, .new-output label { display: grid; gap: 0.25rem; color: var(--muted); font-size: 0.85rem; }
 .outputs form.inline { display: flex; gap: 0.4rem; }
+.outputs .profiles { display: grid; gap: 0.4rem; }
+.outputs .profiles > .hint { margin: 0; color: var(--dim); font-size: 11px; }
+.outputs .profiles > button { justify-self: start; }
+.profile-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.profile {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.4rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.profile strong { flex: 1 1 auto; min-width: 0; }
+.profile-summary { flex: 1 0 100%; order: 1; color: var(--muted); font-size: 0.8rem; overflow-wrap: anywhere; }
+.profile-form { display: grid; gap: 0.5rem; padding: 0.6rem; border: 1px solid var(--accent); border-radius: 8px; }
+.profile-form .hint { margin: 0; color: var(--muted); font-size: 0.8rem; }
+.profile-form .problem { margin: 0; }
+.profile-form .buttons { display: flex; gap: 0.4rem; }
+.profile-field, .profile-field.size-pair label { display: grid; gap: 0.25rem; }
+.profile-field .label { color: var(--muted); font-size: 0.85rem; }
+.profile-field input, .profile-field select { min-width: 0; }
+.profile-field.size-pair { grid-template-columns: 1fr 1fr; gap: 0.4rem; }
 .outputs form.inline input { flex: 1; min-width: 0; }
 .outputs .key { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .outputs .key input { flex: 1 0 100%; }

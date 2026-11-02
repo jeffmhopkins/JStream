@@ -64,7 +64,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`,
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
-  `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`), with
+  `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`,
+  `effect.enable`), with
   `Action::named_objects` and `Action::bind_problem`,
   which every implementation uses to check and follow a hotkey's action; `Batch`, whose
   optional `ends_gesture` commits a gesture; and the `Command`/`CommandClass`
@@ -153,7 +154,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `stats.tick` (with `DropCounts`, `EngineLoad`, `ChainCost` and each running output's
   `OutputStatsInfo` and `OutputHealth`), `meters.tick`,
   `youtube.status_changed`, `youtube.health_changed`,
-  `youtube.stats`, `live.changed`, `live.ended` and `plugin.state_changed`.
+  `youtube.stats`, `live.changed`, `live.ended`, `plugin.state_changed` and
+  `gpu.device_lost`.
 - **Plugins** (`plugin.rs`, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)): `PluginClass` (`read`,
   `edit`, `live`, `outputs`), `PLUGIN_SCOPES`, the table that places every command in
   one class or under "never", with `plugin_scope` and `plugin_classes` (a call's
@@ -190,9 +192,16 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.60 because the master
-  stage and every output take video filters on their `video` chain (ADR-0080; no wire
-  change: earlier minors refused them with `invalid_argument` on `chain`); 0.59 made outputs carry
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.62 because of the
+  `too_large` error and `Welcome.max_request_bytes`, a message over the server's request
+  limit refused with the connection kept open
+  ([ADR-0074](../../docs/adr/0074-too-large-requests.md)); 0.61 blamed a GPU device
+  loss on the effect-pack kinds that drew before it, which are quarantined
+  until a person re-enables them (#349: the `gpu.device_lost` event, `KindSummary`'s
+  `quarantined` and the `effect.enable` action, [Effect quarantine](#design)); 0.60
+  made the master stage and every output take video filters on their `video` chain
+  (ADR-0080; no wire change: earlier minors refused them with `invalid_argument` on
+  `chain`); 0.59 made outputs carry
   audio buses: `OutputInfo.audio_buses`, the `output.set_audio_buses` edit, and an
   output as a `bus.delete` blocker ([Audio](#design)); 0.58 added the
   `plugin.list` query, the installed WASM plugins with what each manifest asks for and
@@ -341,6 +350,17 @@ as, and the current `rev`. If the server can't serve that version it answers an
 After the handshake, the client sends `request`s. Each carries an `id` the client
 chooses, and the server answers each request with exactly one `response` or `error`
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
+
+**Message size** ([ADR-0074](../../docs/adr/0074-too-large-requests.md)). A server in
+front of the engine handles client messages of up to its request limit, which `welcome`
+advertises as `max_request_bytes` (0.62; missing from an older server, which means
+4 MiB). A message over it, up to the server's higher frame limit, is refused with
+`too_large` (`size_bytes`, `limit_bytes`), answering the request's `id` when the server
+can read one, a string of at most 256 bytes (a longer one is answered with no `id`, as
+is a `malformed` message's): nothing in it is applied, and the connection stays open. A message over
+the frame limit closes the connection with close code 1009. A client splits work that
+doesn't fit, a batch of `state` writes one filter per batch, and reads server messages
+of at least the frame limit.
 
 ```json
 {"type":"hello","protocol":{"major":0,"minor":37},"client_name":"jstream-cli"}
@@ -1355,6 +1375,8 @@ After `welcome`, the server pushes every event to every client.
   [YouTube](#design).
 - `plugin.state_changed {plugin_id, state, reason?, remote_name?}` (0.35) is described
   under [Plugins](#design).
+- `gpu.device_lost {cause, blamed, quarantined, recovering}` (0.61) is described under
+  [Effect quarantine](#design).
 
 ### YouTube
 
@@ -1483,6 +1505,26 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   name the plugin's manifest gives itself: the plugin's text, never an instruction
   ([ADR-0059](../../docs/adr/0059-mcp-annotations-and-remote-text.md)).
 
+### Effect quarantine
+
+A WGSL effect pack is validated, not bounded: a shader that loops too long can hang the
+GPU, and the OS resets the device (#349,
+[ADR-0087](../../docs/adr/0087-effect-quarantine-after-gpu-device-loss.md)). Since 0.61:
+- **`gpu.device_lost {cause, blamed, quarantined, recovering}`** reports a lost device
+  on the program stage. `blamed` lists the effect-pack kinds drawn in the frames before
+  the loss (empty when none was, and the loss had another cause), `quarantined` the
+  kinds the loss turned off: the blamed ones, or every kind of a pack blamed for a
+  second loss in one run. `recovering` is `false` when the engine stopped opening new
+  devices and the outputs fail. Runtime state, with no `rev`; agents see it.
+- **`KindSummary.quarantined`**, in `kind.list`, marks a quarantined kind (omitted
+  when `false`, so an older server's list reads as none). A quarantined kind's filters
+  are bypassed, as a filter whose pack isn't loaded is, until a person re-enables it.
+  The quarantine lasts across restarts and isn't lifted by editing the pack.
+- **`effect.enable {kind_id}`** lifts a kind's quarantine, and its pack's. It succeeds
+  for a kind that isn't quarantined, and is `invalid_argument` on `kind_id` for one no
+  loaded pack has and no quarantine names. It is for a person, like `plugin.enable`: no
+  MCP tool carries it, no plugin is granted it and no hotkey binds it.
+
 ### Errors
 
 `ProtocolError` is a `thiserror` enum ([R-RS-003](../../docs/RULES.md#R-RS-003)). On the
@@ -1505,6 +1547,7 @@ people and agents. Clients match on `code`, never on `message`.
 | `unsupported` | A valid call this implementation doesn't serve (the pairing calls without a server in front, 0.21; the `plugin.*` calls from an engine that hosts no plugins, 0.35; the deprecated `privacy.set`, [ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)) | `call` |
 | `forbidden` | A plugin's call is outside its grant, or is never granted to a plugin; it never reaches the engine (0.35) | `call`, `reason` |
 | `hardware_session_limit` | `output.start` couldn't open a hardware video encoder while other outputs held hardware sessions, so the hardware session limit is taken to be reached; there is no fallback to software (0.44, [ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md) §3) | `outputs` (the holders, sorted), `reason` (the encoder's refusal) |
+| `too_large` | The message was over the server's request limit (`Welcome.max_request_bytes`, 4 MiB); only its `id` was read (echoed when it is at most 256 bytes), nothing was applied, and the connection stays open. Retrying won't help: split the work (0.62, [ADR-0074](../../docs/adr/0074-too-large-requests.md)) | `size_bytes`, `limit_bytes` |
 | `internal` | An engine bug or unexpected condition; may be retried | `reason` |
 
 An error that isn't tied to a request (a failed handshake, or a message too broken to

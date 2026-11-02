@@ -444,11 +444,12 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   runs from a source to a bus, and filters have no sidechain keys yet, so no edit can
   close an audio cycle. The engine routes these into the program stage's mixer while it
   runs, and plays each bus's monitor on its device (one it can't open stays silent and
-  is retried).
+  is retried). Each output's audio bus (protocol 0.59, `output.set_audio_buses`) and
+  its filter chains are saved with it.
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
   and hotkey bindings (protocol 0.25), as the organisation bullet above describes.
   Not yet: settings migrations between kind versions (a source saved at another
-  version is refused on load), `background`, output audio buses and chains, the `YouTube` kind, a virtual
+  version is refused on load), `background`, the `YouTube` kind, a virtual
   camera's video mix (it always shows the program), and everything outside `sources`,
   `scenes`, `outputs`, `encoders`, `video_mixes`, `audio`, `folders`, `labels`,
   `hotkeys` and `transitions`. The collection file saves everything built so far,
@@ -613,7 +614,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
 
 - **Envelope:** JSON messages tagged by `type`. A `hello`/`welcome` handshake exchanges
   the protocol version, then each `request` (with a client-chosen `id`) gets exactly one
-  `response` or `error`, and `event`s arrive at any time.
+  `response` or `error`, and `event`s arrive at any time. A message over the server's
+  4 MiB request limit, which `welcome` advertises as `max_request_bytes`, is refused
+  with `too_large` and the connection stays open; one over its 16 MiB frame limit
+  closes it with code 1009 ([ADR-0074](adr/0074-too-large-requests.md), protocol 0.62).
 - **Edits** (`scene.create`, `item.set_transform`, `send.set`, …): typed, undoable,
   always sent in an atomic batch (of one or more), which carries the optional
   `expected_rev` and idempotency key ([R-API-004](RULES.md#R-API-004)). Each applied
@@ -702,7 +706,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `plugin.list` (0.58) lists the installed plugins with what each manifest asks for and
   what was granted; they are for a person, so no MCP tool, plugin or hotkey carries
   them. The event `plugin.state_changed` reports
-  a plugin enabled or disabled, with why the engine disabled it. A plugin calls the API
+  a plugin enabled or disabled, with why the engine disabled it. Likewise
+  `effect.enable` (0.61, #349) is for a person: it re-enables an effect-pack kind the
+  engine quarantined because a GPU device loss was blamed on it, which the event
+  `gpu.device_lost` reports and `kind.list` marks (`quarantined`). A plugin calls the API
   through a scoped `Control` that checks each call against its grant, using
   `jstream-protocol`'s table of every command's class (`read`, `edit`, `live`, `outputs`
   or never), and the hosts and files a call's settings name against the grant's hosts
@@ -885,7 +892,10 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   the `events` feed: YouTube is for people, through
   the UI ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md) §3). The same
   holds for the `plugin.*` ops and events: only a person installs or grants a plugin
-  (ADR-0069 G1).
+  (ADR-0069 G1). And for the `effect.*` ops: only a person re-enables an effect pack
+  quarantined after a GPU device loss
+  ([ADR-0087](adr/0087-effect-quarantine-after-gpu-device-loss.md) §4), though the
+  `gpu.device_lost` event that reports it reaches agents.
 - **Events** reach agents through the `events` tool, which returns the engine's events
   after a cursor from a bounded buffer and reports any it dropped
   ([ADR-0036](adr/0036-mcp-events-polling-tool.md)). The high-rate `stats.tick` is kept
@@ -898,7 +908,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 764 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 770 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking
@@ -1053,12 +1063,16 @@ context device fails its outputs at once instead
 ([jstream-core › Runtime](../crates/jstream-core/README.md#runtime)); the NV12 pass
 reports the loss as an error rather than panicking. The third loss within
 60 s fails the output instead. Each loss is logged and counted in the output's stats
+([jstream-core › Design](../crates/jstream-core/README.md#design)). Each loss is blamed
+on the effect-pack kinds the shot being drawn draws, which are quarantined (their
+filters bypassed, and the whole pack after a second loss blamed on one of its effects
+in a run) until a person re-enables them with `effect.enable`, and reported in the
+engine event `gpu.device_lost` (protocol 0.61). The quarantine is kept in the packs
+folder, across restarts and pack edits
 ([jstream-core › Design](../crates/jstream-core/README.md#design)). Not built yet: the
-engine event for a loss (a protocol change), attributing a loss to the effect pack that
-was drawing, quarantining that pack, and the GPU-time guard (timestamp queries that
-quarantine an effect whose pass runs over half the frame budget for 30 frames running,
-before Windows' TDR fires). The engine draws pack kinds now
-([jstream-core › Design](../crates/jstream-core/README.md#design)), so these can be built.
+GPU-time guard (timestamp queries that quarantine an effect whose pass runs over half
+the frame budget for 30 frames running, before Windows' TDR fires), and a forced TDR on
+Windows hardware, which only a hardware run can check.
 
 **Transitions** ([ADR-0029](adr/0029-transitions.md), with
 [ADR-0052](adr/0052-transition-mechanics-and-studio-preview.md)'s mechanics). A Move is not a texture blend:
