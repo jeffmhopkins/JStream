@@ -175,8 +175,8 @@ source: crates/jstream-render/tests/kinds.rs
         "type": "color",
         "alpha": true,
         "default": "#000000ff",
-        "label": "Pad colour",
-        "description": "The colour of the bars; may be transparent.",
+        "label": "Pad color",
+        "description": "The color of the bars; may be transparent.",
         "visible_if": {
           "param": "mode",
           "equals": "pad"
@@ -346,7 +346,7 @@ source: crates/jstream-render/tests/kinds.rs
         "max": 1000,
         "default": 400,
         "label": "Similarity",
-        "description": "How far in chroma from the key colour is removed, in thousandths.",
+        "description": "How far in chroma from the key color is removed, in thousandths.",
         "live": true
       },
       {
@@ -427,7 +427,7 @@ source: crates/jstream-render/tests/kinds.rs
         "unit": "°",
         "default": 0.0,
         "label": "Hue shift",
-        "description": "Rotates every colour around the grey axis; 120° turns red green.",
+        "description": "Rotates every color around the grey axis; 120° turns red green.",
         "live": true
       },
       {
@@ -474,7 +474,7 @@ source: crates/jstream-render/tests/kinds.rs
         "max": 1000,
         "default": 80,
         "label": "Similarity",
-        "description": "How far in RGB from the key colour is removed, in thousandths.",
+        "description": "How far in RGB from the key color is removed, in thousandths.",
         "live": true
       },
       {
@@ -1008,7 +1008,7 @@ source: crates/jstream-render/tests/kinds.rs
         "max": 1.0,
         "default": 0.5,
         "label": "Strength",
-        "description": "How much of the colour the edges take: 0 is none.",
+        "description": "How much of the color the edges take: 0 is none.",
         "live": true
       },
       {

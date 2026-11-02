@@ -330,8 +330,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   backdrop cancel, and Enter presses the button marked `data-primary`. The Add source
   dialog (`panels/add_source.rs`, opened through `AddSourceDialog` context) lists the
   source kinds `kind.list` reports, under the prototype's groups, names, icons and
-  descriptions, plus the kinds of placed sources it didn't report, which can be
-  placed again but not created, and Scene. "Create new" sends `source.create` and
+  descriptions (Display capture's says "A whole monitor or screen.", naming no one
+  platform's API), plus the kinds of placed sources it didn't report, which can be
+  placed again but not created, and Scene. A search box above the list narrows it by
+  name, description or group (`type_matches`, tested natively), keeping the pick while
+  it is shown, else the first match. "Create new" sends `source.create` and
   `item.add` as one batch, with a box of the prototype's native size for the type,
   centred and scaled down to fit the canvas (ADR-0022's `fit` keeps the picture's
   aspect within it). An existing source is placed again 40 pixels right of and below

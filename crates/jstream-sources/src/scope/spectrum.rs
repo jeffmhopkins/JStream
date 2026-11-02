@@ -33,7 +33,7 @@ impl SpectrumKind {
                 param("height", "Height", size(), json!(240)),
                 live(param(
                     "color",
-                    "Colour",
+                    "Color",
                     ParamType::Color { alpha: true },
                     json!("#ffffffff"),
                 )),
