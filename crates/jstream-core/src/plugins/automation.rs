@@ -30,8 +30,8 @@ use jstream_plugin_wasm::{
 };
 use jstream_protocol::{
     Action, Call, CallResult, ClientId, EntityKind, Event, Hello, PluginClass,
-    PluginDisabledReason, PluginGrant, PluginId, PluginState, ProtocolError, RequestId, Response,
-    Welcome,
+    PluginDisabledReason, PluginGrant, PluginId, PluginInfo, PluginRequest, PluginState,
+    ProtocolError, RequestId, Response, Welcome,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -98,8 +98,10 @@ struct Entry {
 }
 
 enum Run {
-    /// Being loaded by an install or an enable, which waits for it with no lock held.
-    Starting,
+    /// Being loaded by an install or an enable, which waits for it with no lock held. An
+    /// enable keeps the reason it was disabled for, so `plugin.list` lists it as it was
+    /// until it loads.
+    Starting(Option<PluginDisabledReason>),
     Running(Running),
     Disabled(PluginDisabledReason),
 }
@@ -137,6 +139,15 @@ pub(crate) struct Request {
 }
 
 impl Request {
+    /// This request as `plugin.list` reports it.
+    fn wire(&self) -> PluginRequest {
+        PluginRequest {
+            classes: self.classes.clone(),
+            hosts: self.hosts.clone(),
+            folders: self.folders,
+        }
+    }
+
     /// The first part of `grant` this request doesn't ask for, as the grant's field and
     /// why, or `None` when it asks for all of it.
     fn excess(&self, grant: &PluginGrant) -> Option<(String, String)> {
@@ -228,6 +239,33 @@ struct SavedPlugin {
     disabled: Option<PluginDisabledReason>,
 }
 
+/// `plugin.list`: every installed plugin, ordered by ID. One being installed or started
+/// with the saved plugins is listed as enabled, and one being enabled as it was.
+pub(crate) fn list(engine: &Engine) -> Vec<PluginInfo> {
+    lock(&engine.automation().plugins)
+        .iter()
+        .map(|(plugin_id, entry)| {
+            let reason = match entry.state {
+                Run::Disabled(reason) | Run::Starting(Some(reason)) => Some(reason),
+                Run::Starting(None) | Run::Running(_) => None,
+            };
+            PluginInfo {
+                plugin_id: plugin_id.clone(),
+                state: if reason.is_some() {
+                    PluginState::Disabled
+                } else {
+                    PluginState::Enabled
+                },
+                reason,
+                remote_name: entry.name.clone(),
+                path: entry.package.to_string_lossy().into_owned(),
+                request: entry.request.wire(),
+                grant: lock(&entry.grant).clone(),
+            }
+        })
+        .collect()
+}
+
 /// Answers a plugin action, or `None` for any other action.
 pub(crate) fn action(
     engine: &Engine,
@@ -275,7 +313,7 @@ fn install(
                 name: read.name.clone(),
                 request: read.request.clone(),
                 granted: read.request,
-                state: Run::Starting,
+                state: Run::Starting(None),
             },
         );
     }
@@ -319,7 +357,7 @@ fn enable(engine: &Engine, plugin_id: &PluginId) -> Result<(), ProtocolError> {
             // Running, or being started by another call: already enabled.
             return Ok(());
         };
-        entry.state = Run::Starting;
+        entry.state = Run::Starting(Some(reason));
         reason
     };
     let loaded = load(engine, plugin_id, was);
@@ -488,7 +526,7 @@ pub(crate) fn open_dir(engine: &Engine, dir: PathBuf) {
             let state = match disabled {
                 None => {
                     enabled.push(plugin.plugin_id.clone());
-                    Run::Starting
+                    Run::Starting(None)
                 }
                 // A reason this version doesn't know is a fault, as far as it can tell.
                 Some(PluginDisabledReason::Unknown) => Run::Disabled(PluginDisabledReason::Trap),
@@ -538,7 +576,7 @@ fn save(engine: &Engine) {
             granted: entry.granted.clone(),
             disabled: match entry.state {
                 Run::Disabled(reason) => Some(reason),
-                Run::Starting | Run::Running(_) => None,
+                Run::Starting(_) | Run::Running(_) => None,
             },
         })
         .collect();

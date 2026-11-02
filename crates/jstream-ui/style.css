@@ -1063,6 +1063,29 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .device-name { font-weight: 600; }
 .device-dates { flex: 1; color: var(--muted); font-size: 0.8rem; }
 
+/* The Plugins section and its install and grant dialogs (plugins.rs). */
+.plugins { display: grid; gap: 0.6rem; margin-top: 1rem; justify-items: start; }
+.plugins .problem { margin: 0; }
+.plugin-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; width: 100%; }
+.plugin { display: grid; gap: 0.2rem; min-width: 0; }
+.plugin-head { display: flex; align-items: baseline; gap: 0.5rem; }
+.plugin-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plugin-state { color: var(--problem); font-size: 0.8rem; }
+.plugin-state.on { color: var(--muted); }
+.plugin-meta { color: var(--muted); font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plugin-actions { display: flex; gap: 0.4rem; }
+.modal.plugin-dialog { width: 480px; }
+.plugin-dialog-body { display: grid; gap: 10px; padding: 14px 16px; overflow: auto; max-height: 60vh; }
+.plugin-dialog-body .field { display: grid; grid-template-columns: 1fr; align-items: start; gap: 0.35rem; margin: 0; }
+.plugin-dialog-body textarea { width: 100%; box-sizing: border-box; }
+.plugin-dialog-body .menu-head { margin: 6px 0 0; }
+.plugin-note { margin: 0; color: var(--muted); font-size: 12px; }
+.plugin-choice { display: flex; align-items: flex-start; gap: 8px; }
+.plugin-choice input[type="checkbox"] { width: auto; margin: 2px 0 0; accent-color: var(--accent); }
+.plugin-choice-text { display: grid; gap: 2px; }
+.plugin-choice-name { font-weight: 600; }
+.plugin-choice-what { color: var(--muted); font-size: 12px; }
+
 /* The Transitions panel (panels/studio.rs): studio mode and the presets. */
 .studio { display: grid; gap: 0.5rem; }
 .studio h3 { margin: 0.5rem 0 0; font-size: 0.85rem; font-weight: 600; }

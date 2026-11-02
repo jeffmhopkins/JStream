@@ -157,9 +157,10 @@ fn color(id: &str, follow: Option<&str>) -> Edit {
 
 /// The parity collection, plus `a_tint`, whose settings refer to `z_base`, which sorts
 /// after it, and scene `b` made a group, in one more batch: rev 2. That batch also
-/// deletes the virtual camera `vcam` and clears the hotkeys, which the parity collection
-/// gained after the fixture was written; `a_virtual_camera_round_trips` and
-/// `hotkeys_round_trip` cover them.
+/// deletes the virtual camera `vcam`, clears the hotkeys and moves output `rec` back to
+/// the master bus, which the parity collection gained after the fixture was written;
+/// `a_virtual_camera_round_trips`, `hotkeys_round_trip` and
+/// `an_outputs_audio_bus_round_trips` cover them.
 fn fixture_graph() -> Graph {
     let mut graph = Graph::new().with_kinds(kinds());
     let applied = graph.apply_batch(&parity::collection());
@@ -174,6 +175,10 @@ fn fixture_graph() -> Graph {
             },
             Edit::OutputDelete {
                 output_id: OutputId::new("vcam"),
+            },
+            Edit::OutputSetAudioBuses {
+                output_id: OutputId::new("rec"),
+                audio_buses: vec![BusId::master()],
             },
             Edit::HotkeyClear {
                 chord: Chord::new("F1"),
@@ -301,6 +306,33 @@ fn a_virtual_camera_round_trips() {
         ),
         "{json}"
     );
+    assert_eq!(load(&json), Ok(graph));
+}
+
+/// An output's bus other than the master is saved as `audio_bus`, after the buses
+/// on load, and the master is left out.
+#[test]
+fn an_outputs_audio_bus_round_trips() {
+    let mut graph = fixture_graph();
+    let applied = graph.apply(
+        &[Edit::OutputSetAudioBuses {
+            output_id: OutputId::new("rec"),
+            audio_buses: vec![BusId::new("vod")],
+        }],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let json = graph.to_collection_json();
+    let saved: Value = serde_json::from_str(&json).unwrap_or_default();
+    let outputs = saved["outputs"].as_array().cloned().unwrap_or_default();
+    let bus_of = |id: &str| {
+        outputs
+            .iter()
+            .find(|o| o["id"] == id)
+            .map(|o| o.get("audio_bus").cloned())
+    };
+    assert_eq!(bus_of("rec"), Some(Some(json!("vod"))), "{json}");
+    assert_eq!(bus_of("yt"), Some(None), "{json}");
     assert_eq!(load(&json), Ok(graph));
 }
 

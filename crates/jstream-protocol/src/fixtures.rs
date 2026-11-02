@@ -376,6 +376,10 @@ pub(crate) fn edits() -> Vec<Edit> {
             output_id: OutputId::new("out_yt"),
             mix_id: None,
         },
+        Edit::OutputSetAudioBuses {
+            output_id: OutputId::new("out_rec"),
+            audio_buses: vec![BusId::new("bus_vod")],
+        },
         Edit::VideoMixDelete {
             mix_id: VideoMixId::new("mix_old"),
         },
@@ -873,6 +877,7 @@ fn output_infos() -> Vec<OutputInfo> {
                 }],
             },
             video_mix: Some(VideoMixId::new("mix_cam")),
+            audio_buses: vec![BusId::new("bus_vod")],
         },
         OutputInfo {
             output_id: OutputId::new("out_yt"),
@@ -880,6 +885,7 @@ fn output_infos() -> Vec<OutputInfo> {
             encoder_profile: None,
             filters: FilterChains::default(),
             video_mix: None,
+            audio_buses: vec![BusId::master()],
         },
     ]
 }
@@ -984,6 +990,9 @@ pub(crate) fn actions() -> Vec<Action> {
         },
         Action::PluginEnable {
             plugin_id: PluginId::new("plg_1"),
+        },
+        Action::EffectEnable {
+            kind_id: "fx/blur".into(),
         },
         Action::PrivacySet { on: true },
         Action::PreviewSubscribe {
@@ -1131,6 +1140,7 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::UiSettingsGet {
             key: "workspace.dock".into(),
         },
+        Query::PluginList,
         Query::YoutubeStats,
         Query::SourceSizes,
     ]
@@ -1645,18 +1655,21 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     category: KindCategory::VideoFilter,
                     name: "Blur".into(),
                     version: 2,
+                    quarantined: true,
                 },
                 KindSummary {
                     kind_id: "gain".into(),
                     category: KindCategory::AudioFilter,
                     name: "Gain".into(),
                     version: 1,
+                    quarantined: false,
                 },
                 KindSummary {
                     kind_id: "move".into(),
                     category: KindCategory::Transition,
                     name: "Move".into(),
                     version: 1,
+                    quarantined: false,
                 },
             ],
         },
@@ -1828,6 +1841,40 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             key: "workspace.dock".into(),
             value: Some(serde_json::json!({"version": 1, "current": "Live"})),
         },
+        QueryResult::PluginList {
+            plugins: vec![
+                crate::PluginInfo {
+                    plugin_id: crate::PluginId::new("chat_switcher"),
+                    state: crate::PluginState::Enabled,
+                    reason: None,
+                    remote_name: Some("Chat switcher".into()),
+                    path: "/home/me/plugins/chat-switcher".into(),
+                    request: crate::PluginRequest {
+                        classes: [crate::PluginClass::Live].into(),
+                        hosts: vec!["https://api.example.com:443".into()],
+                        folders: false,
+                    },
+                    grant: crate::PluginGrant {
+                        classes: [crate::PluginClass::Live].into(),
+                        hosts: Vec::new(),
+                        folders: Vec::new(),
+                    },
+                },
+                crate::PluginInfo {
+                    plugin_id: crate::PluginId::new("scene_timer"),
+                    state: crate::PluginState::Disabled,
+                    reason: Some(crate::PluginDisabledReason::NeedsGrant),
+                    remote_name: None,
+                    path: "/home/me/plugins/scene-timer".into(),
+                    request: crate::PluginRequest {
+                        classes: [crate::PluginClass::Edit, crate::PluginClass::Live].into(),
+                        hosts: Vec::new(),
+                        folders: true,
+                    },
+                    grant: crate::PluginGrant::default(),
+                },
+            ],
+        },
     ]
 }
 
@@ -1926,6 +1973,12 @@ pub(crate) fn events() -> Vec<Event> {
             remote_name: None,
         });
     }
+    events.push(Event::GpuDeviceLost {
+        cause: "Device lost (DXGI_ERROR_DEVICE_HUNG)".into(),
+        blamed: vec!["fx/blur".into()],
+        quarantined: vec!["fx/blur".into()],
+        recovering: true,
+    });
     events.push(Event::StatsTick {
         seq: 4,
         drops: DropCounts {

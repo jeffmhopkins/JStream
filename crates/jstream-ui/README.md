@@ -130,6 +130,10 @@ Contents ([Design](#design) explains the choices):
   Inspector, shown only when the server pairs devices (start pairing and show the code, list and
   revoke devices), and the calls behind it, tested natively against `MockEngine` and a
   stub that answers them as the server does.
+- **Plugins** (`plugins.rs`): `Plugins`, the WASM automation plugins section under the
+  pairing panel in the Inspector, with its install and grant dialogs, the calls behind
+  them, and `GrantForm`, `suggested_id`, `not_granted` and the row texts, tested
+  natively.
 - **Canvas** (`canvas/`): the canvas editor. It draws the selected scene's item boxes
   over that scene's live picture (the program mix while it is on program), edits their geometry with the pointer and the keyboard, and undoes and
   redoes ([Canvas](#canvas)).
@@ -475,9 +479,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   panel. Names come from the prototype's catalogue, then `kind.list`, then the kind's ID.
   An FX button (the Outputs panel's rows, the Mixer's master card or strip) picks the program
   output's chain (owner `master`) or an output's (ADR-0080) instead, and shows the
-  panel; the same rows and dialogs edit it with that owner. Only their audio chains
-  show, since the engine refuses their video chains so far, and the virtual camera,
-  which has no sound, has none. A scene's chain (owner `scene`, ADR-0065) shows while no
+  panel; the same rows and dialogs edit it with that owner. Both chains show, and the
+  virtual camera, which has no sound, has a video chain only. The Add filter dialog
+  won't add a kind whose settings name a scene, a source, a bus or a file there
+  (`refers`: the engine refuses those references yet), and, for an output whose video
+  chain is empty, reads `output.status` and states what its first video filter costs
+  (`first_video_cost`, ADR-0080 §3): its own GPU pass and encoder session, with the
+  encoder sessions in use now, or for the virtual camera, which opens no encoder
+  session, a GPU pass only, from its next start if it runs. A scene's chain (owner `scene`, ADR-0065) shows while no
   item is selected, for the selected scene, or a keyframe's parent, since a keyframe has
   none of its own; a scene row's Edit filters… and the canvas margin's Edit scene
   filters… pick it as an FX button does (`show_filters`). It is a video chain, and the
@@ -504,7 +513,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the canvas, outer columns, full-width top and bottom, sidebars, and above and below
   the canvas. A zone stacks groups (columns top to bottom, rows side by side); a group
   shows one panel with its title, or tabs. Panels are the prototype's eleven: Scenes,
-  Scene objects (`Sources`), the Inspector (`Inspector`, with `Pairing` under it), the
+  Scene objects (`Sources`), the Inspector (`Inspector`, with `Pairing` and `Plugins` under it), the
   Transform, Filters, Live chat, Stream stats, Audio mixer, Outputs, Agent activity and
   Transitions (`StudioMode`); `panel_view` maps each to its component, and a new panel
   adds a `PanelId` and a line there. Live chat waits on the engine (YouTube sign-in),
@@ -569,12 +578,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Redo in the Edit menu call `history.undo` and `history.redo`, like the canvas's
   buttons. A failed call shows in the shell's problem bar. The menus close on Escape
   or on a press anywhere outside them.
-- **Outputs.** The panel reads the outputs and encoder profiles with `state.get`, then
+- **Outputs.** The panel reads the outputs, encoder profiles and buses with `state.get`, then
   each output's `output.status`, and re-reads them on `state.changed` and
   `events.dropped`; `output.state_changed` updates one output's state in place. It
   creates RTMP(S), recording and virtual camera outputs (IDs `output-N`, the first free one), changes
   an RTMP server URL (`output.set_target`) and the encoder profile, deletes a stopped
-  output, and starts and stops each. Above the cards, the program output's row
+  output, and starts and stops each. A card's Audio select picks the bus the output
+  carries (`output.set_audio_buses`, one bus); while the output runs it is disabled and
+  titled "Stop the output to change its bus", as the engine refuses the move. A virtual
+  camera's card has none. Above the cards, the program output's row
   ("master") and a row per output with its state each have an "FX N" button counting
   that chain's filters, which shows the chain in the Filters panel (below the rows,
   the prototype's footnote). The header's "Go Live" starts every stopped or
@@ -609,6 +621,23 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   name and its paired and last-used dates (UTC), with a button that calls
   `device.revoke` and re-reads the list. The code is never logged or stored by the page,
   and `OpenCode`'s `Debug` form hides it.
+- **Plugins** (WA1, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md),
+  [ADR-0076](../../docs/adr/0076-saved-wasm-plugins-and-manifest-requests.md)). The
+  Plugins section reads `plugin.list` when it opens and shows once that answers; it
+  re-reads after each of its calls and on `plugin.state_changed` and `events.dropped`.
+  Each plugin shows its manifest's name (the plugin's own text, shown as data), its
+  state with why it is off, its ID and package path, what its manifest asks for that
+  isn't granted, Permissions…, and Turn on (`plugin.enable`) when it is off. Install
+  plugin asks for the package folder and an ID, suggested from the folder's name
+  (`plg_<name>`, numbered when taken) until it is typed, and sends `plugin.install`
+  with no grant beyond `read`; when the manifest asks for more, the grant dialog opens
+  next. The grant dialog, titled "Plugin permissions" with the plugin's name quoted
+  under it beside its ID and path, so a name can't pass for the dialog's own text,
+  offers only what the manifest asks for: `read`, ticked and
+  fixed, then each class asked for with what it lets the plugin do, each host, and,
+  when it asks for folders, a box of absolute paths, one a line. Its OK sends
+  `plugin.grant` with the ticked choices; for a plugin off as `needs_grant` it reads
+  "Grant and turn on" and sends `plugin.enable` after it.
 - **Studio mode** ([ADR-0029](../../docs/adr/0029-transitions.md)).
   The Transitions panel (a tab beside Outputs in the Editing layout, under the canvas
   in Live) reads the scenes (groups left out) and presets with

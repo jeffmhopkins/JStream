@@ -47,7 +47,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `canvas.set_size`, `source.create`, `source.rename`, `source.set_settings`,
   `source.duplicate`, `source.delete`, `filter.add`, `filter.remove`,
   `filter.set_enabled`, `filter.set_settings`, `filter.reorder`, `output.create`,
-  `output.set_target`, `output.set_encoder`, `output.set_video_mix`, `output.delete`,
+  `output.set_target`, `output.set_encoder`, `output.set_video_mix`,
+  `output.set_audio_buses`, `output.delete`,
   `encoder.create`, `encoder.update`, `encoder.delete`, `video_mix.create`,
   `video_mix.update`, `video_mix.delete`, `source.set_audio`, `bus.create`,
   `bus.rename`, `bus.set_fader`, `bus.set_monitor`, `bus.delete`, `send.set`,
@@ -63,7 +64,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`,
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
-  `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`), with
+  `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`,
+  `effect.enable`), with
   `Action::named_objects` and `Action::bind_problem`,
   which every implementation uses to check and follow a hotkey's action; `Batch`, whose
   optional `ends_gesture` commits a gesture; and the `Command`/`CommandClass`
@@ -110,7 +112,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `live.list`, `capture.targets`,
-  `source.sizes` and `activity.list`, with `QueryResult`
+  `source.sizes`, `activity.list` and `plugin.list`, with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
   `CaptureTargetInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
   (`activity.rs` holds the last, with `MAX_ACTIVITY_ENTRIES` and
@@ -152,7 +154,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `stats.tick` (with `DropCounts`, `EngineLoad`, `ChainCost` and each running output's
   `OutputStatsInfo` and `OutputHealth`), `meters.tick`,
   `youtube.status_changed`, `youtube.health_changed`,
-  `youtube.stats`, `live.changed`, `live.ended` and `plugin.state_changed`.
+  `youtube.stats`, `live.changed`, `live.ended`, `plugin.state_changed` and
+  `gpu.device_lost`.
 - **Plugins** (`plugin.rs`, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)): `PluginClass` (`read`,
   `edit`, `live`, `outputs`), `PLUGIN_SCOPES`, the table that places every command in
   one class or under "never", with `plugin_scope` and `plugin_classes` (a call's
@@ -160,7 +163,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `PluginDenial` no grant overrides), `PluginGrant` (the classes, hosts and folders a
   person grants, with `check`, which returns the `forbidden` error, and `problem`),
   `settings_reach` and `Reach` (the hosts and files a settings map names),
-  `plugin_may_bind`, `PluginState` and `PluginDisabledReason` ([Plugins](#design)).
+  `plugin_may_bind`, `PluginState`, `PluginDisabledReason`, and `PluginInfo` and
+  `PluginRequest`, what `plugin.list` reports ([Plugins](#design)).
 - **Preview streams** (`preview.rs`, [ADR-0045](../../docs/adr/0045-leptos-web-ui.md)):
   `PreviewCodec` (`h264`, `jpeg`), `PreviewSettings` (`preview.subscribe`'s fields with
   their defaults and range checks, which the engine applies), `PreviewDraft` (its
@@ -188,7 +192,17 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.57 because of
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.61 because a GPU device
+  loss is blamed on the effect-pack kinds that drew before it, which are quarantined
+  until a person re-enables them (#349: the `gpu.device_lost` event, `KindSummary`'s
+  `quarantined` and the `effect.enable` action, [Effect quarantine](#design)); 0.60
+  made the master stage and every output take video filters on their `video` chain
+  (ADR-0080; no wire change: earlier minors refused them with `invalid_argument` on
+  `chain`); 0.59 made outputs carry
+  audio buses: `OutputInfo.audio_buses`, the `output.set_audio_buses` edit, and an
+  output as a `bus.delete` blocker ([Audio](#design)); 0.58 added the
+  `plugin.list` query, the installed WASM plugins with what each manifest asks for and
+  what a person granted ([Plugins](#design)); 0.57 added
   `stats.tick`'s `outputs`, each running output's live stats (`OutputStatsInfo`); 0.56
   added `preview.subscribe`'s `source_id`, a stream of one of the collection's sources alone
   (a projector of the source); 0.55 made a keyframe
@@ -512,6 +526,21 @@ the inverses put them back. Since 0.24 a setting can refer to a bus (a `bus`
 reference, which the `waveform` and `spectrum` kinds' `audio` uses to draw it), and
 `bus.delete` is refused while one does, as for a scene or source. Every gain is in dB from −100 to +24; silence is `muted`.
 
+**Output buses** (0.59): an output carries the audio of the buses in its
+`audio_buses`, one per audio track, in track order. Every output writes one audio track
+so far, so the list holds exactly one bus; `OutputInfo` leaves it out while it is
+`["master"]`, the default and what a server older than 0.59 means. `output.set_audio_buses
+{ output_id, audio_buses }` chooses it: any other length, or an output with no audio (a
+virtual camera), is `invalid_argument` on `audio_buses`, and a bus that doesn't exist
+`not_found`. A running output reads its bus, so moving it to another one is
+`invalid_argument` on `output_id` until it stops; that also refuses `delete.plan`'s
+batch for a bus a running output carries, rather than leave the output silent. The master stage's audio chain runs on the bus before the output's own
+chain ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md) §1), a
+CLAP filter there on a plugin host of that bus's own
+([ADR-0086](../../docs/adr/0086-master-clap-filter-one-host-per-output-bus.md)). An
+output that carries a bus blocks its `bus.delete` (blocker field `audio_buses`), and
+`delete.plan` moves it back to the master.
+
 **Monitors** (0.42, ADR-0028's D22): any bus, the master's included, may have a monitor,
 an output device the engine plays the bus on while the program mixer runs, so the
 operator hears it. `bus.set_monitor { bus_id, monitor? }` sets one, and with `monitor`
@@ -606,10 +635,12 @@ never a type per kind.
   ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)).
   `source.delete` is refused while an item places the source, and `scene.delete` while a
   `scene` source or a video mix shows the scene; either, and `bus.delete` (0.24), is
-  refused while a setting refers to its target. The `invalid_argument` lists every blocker in `blockers`, each a `Blocker`
+  refused while a setting refers to its target, and `bus.delete` (0.59) while an output
+  carries the bus. The `invalid_argument` lists every blocker in `blockers`, each a `Blocker`
   `{entity, id, field}`: the item (`source_id`), the `scene` source (`kind.scene_id`),
-  the video mix (`mix.input.scene_id`) or the source whose setting refers to it
-  (`settings.<param>`, or `filters.<filter_id>.<param>` for a filter's setting).
+  the video mix (`mix.input.scene_id`), the output (`audio_buses`) or the source whose
+  setting refers to it (`settings.<param>`, or `filters.<filter_id>.<param>` for a
+  filter's setting).
   `delete.plan` returns
   the batch that removes them with the target (see [Queries](#design)). Hotkey
   bindings are never blockers: a delete removes the bindings that name its target
@@ -647,10 +678,15 @@ From 0.29 the master stage and each output own chains too
 `{"type":"master"}` and `{"type":"output","output_id":…}` and the same edits. The
 master's audio chain runs on every bus that feeds an output, after that bus's own chain;
 an output's runs after it, for that output only, and gives the output its own audio
-encode from its next start (edits to a chain it started with apply live). Only their
-audio chains hold filters so far: a video filter is `invalid_argument` on
-`edits.N.chain` until video mixes run them, and so is an audio filter on an output that
-carries no audio (a `virtual_cam`). A missing output is `not_found` with entity
+encode from its next start (edits to a chain it started with apply live). From 0.60
+their video chains take filters too (earlier minors refused them with
+`invalid_argument` on `edits.N.chain`): the master's runs once per frame on each mix an
+output draws, and an output's after it, for that output only. A stream or recording
+with a video filter, even a disabled one, gets its own render pass and encoder session
+from its next start (`output.status` reports it `dedicated`); a virtual camera has a
+video chain only, and with a filter gets a render pass of its own but no encoder
+session. An audio filter on an output that carries no audio (a `virtual_cam`) is
+`invalid_argument` on `edits.N.chain`. A missing output is `not_found` with entity
 `output`. Their filters can't hold a reference yet (a scene, source, bus or asset;
 `invalid_argument` on the parameter), since the delete checks follow only a source's
 references. `output.delete`'s
@@ -988,6 +1024,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
   collection state, so no `rev`. Added in 0.21 (see *Pairing* below).
 - `ui_settings.get {key}`: the UI setting kept under `key`, or no `value` when there is
   none. Not collection state, so no `rev`. Added in 0.52 (see *UI settings* below).
+- `plugin.list`: the installed WASM automation plugins, ordered by ID. Not collection
+  state, so no `rev`. Added in 0.58 (see *Plugins* below).
 - `delete.plan {target}`: the batch that deletes a scene, source or bus (`target` is
   `{"type":"scene","scene_id":…}`, `{"type":"source","source_id":…}` or, since 0.24,
   `{"type":"bus","bus_id":…}`), or a folder or label (`{"type":"folder","folder_id":…}`,
@@ -999,11 +1037,13 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `source.set_settings` per source, which keeps the source, and one
   `filter.set_settings` per filter), delete the `scene` sources
   that show a deleted scene, point every video mix that shows it at `program` (one
-  `video_mix.update`, which keeps the mix), and last delete the target. Deleting a
+  `video_mix.update`, which keeps the mix), move every output that carries a deleted bus
+  to the master (`output.set_audio_buses`, 0.59), and last delete the target. Deleting a
   scene deletes the
   `scene` sources that show it, and the cascade stops there, since deleting a source
-  deletes no scene. A bus is held only by settings references, which the plan clears;
-  its `bus.delete` takes its sends. A target nothing refers to plans just its own
+  deletes no scene. A bus is held only by settings references, which the plan clears,
+  and by the outputs that carry it, which the plan moves; its `bus.delete` takes its
+  sends. A target nothing refers to plans just its own
   delete. `hotkeys` lists the bindings the batch removes with what they name, ordered
   by chord (0.25; omitted when there are none); they need no edit of their own. The client
   shows the plan, then sends it as an ordinary batch with that `expected_rev`, so it is
@@ -1321,6 +1361,8 @@ After `welcome`, the server pushes every event to every client.
   [YouTube](#design).
 - `plugin.state_changed {plugin_id, state, reason?, remote_name?}` (0.35) is described
   under [Plugins](#design).
+- `gpu.device_lost {cause, blamed, quarantined, recovering}` (0.61) is described under
+  [Effect quarantine](#design).
 
 ### YouTube
 
@@ -1433,12 +1475,41 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   `plugin`; an engine that can't run plugins
   answers `plugin.install` with `unsupported`, as the mock and an engine built without
   its `wasm-plugins` feature do.
+- **`plugin.list`** lists the installed plugins for a person, ordered by ID, each a
+  `PluginInfo`: `plugin_id`, `state` and `reason` as `plugin.state_changed` gives them,
+  `remote_name`, `path` (its package, as installed), `request` (what its manifest asks
+  for, a `PluginRequest`: `{classes, hosts, folders}`, with `folders` true when it wants
+  folders a person picks) and `grant`. For a plugin disabled as `needs_grant`, `request`
+  is the update's, which a `plugin.grant` acknowledges. A plugin being enabled is listed
+  as it was until it loads. Like the actions, it is a person's: no MCP tool carries it
+  and no plugin is granted it. An engine that runs no plugins, the mock among them,
+  lists none.
 - **`plugin.state_changed {plugin_id, state, reason?, remote_name?}`** reports a plugin
   `enabled` or `disabled`. The engine disables a plugin that runs past a limit or traps
   (`reason`: `cpu_limit`, `memory_limit`, `trap`), or whose update asks for more than
   its grant (`needs_grant`), and never re-enables one by itself. `remote_name` is the
   name the plugin's manifest gives itself: the plugin's text, never an instruction
   ([ADR-0059](../../docs/adr/0059-mcp-annotations-and-remote-text.md)).
+
+### Effect quarantine
+
+A WGSL effect pack is validated, not bounded: a shader that loops too long can hang the
+GPU, and the OS resets the device (#349,
+[ADR-0087](../../docs/adr/0087-effect-quarantine-after-gpu-device-loss.md)). Since 0.61:
+- **`gpu.device_lost {cause, blamed, quarantined, recovering}`** reports a lost device
+  on the program stage. `blamed` lists the effect-pack kinds drawn in the frames before
+  the loss (empty when none was, and the loss had another cause), `quarantined` the
+  kinds the loss turned off: the blamed ones, or every kind of a pack blamed for a
+  second loss in one run. `recovering` is `false` when the engine stopped opening new
+  devices and the outputs fail. Runtime state, with no `rev`; agents see it.
+- **`KindSummary.quarantined`**, in `kind.list`, marks a quarantined kind (omitted
+  when `false`, so an older server's list reads as none). A quarantined kind's filters
+  are bypassed, as a filter whose pack isn't loaded is, until a person re-enables it.
+  The quarantine lasts across restarts and isn't lifted by editing the pack.
+- **`effect.enable {kind_id}`** lifts a kind's quarantine, and its pack's. It succeeds
+  for a kind that isn't quarantined, and is `invalid_argument` on `kind_id` for one no
+  loaded pack has and no quarantine names. It is for a person, like `plugin.enable`: no
+  MCP tool carries it, no plugin is granted it and no hotkey binds it.
 
 ### Errors
 

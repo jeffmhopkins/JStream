@@ -149,6 +149,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   - video mixes: `VideoMix::problem`'s checks and a missing scene in
     `video_mix.create` and `video_mix.update`, deleting a mix an output shows, and
     `output.set_video_mix` naming a missing output, then a missing mix;
+  - output buses: `output.set_audio_buses` naming a missing output, a list that isn't
+    exactly one bus, a virtual camera, a missing bus and a running output moving, and
+    `bus.delete` of a bus an output carries, with the graph's reason and blocker;
   - an `opacity` outside 0 to 1, in `item.add` and `item.set_opacity` (every blend
     mode is taken, as the engine draws them all,
     [ADR-0082](../../docs/adr/0082-blend-modes-drawn.md));
@@ -156,8 +159,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     a missing owner (a source, output, scene or item) or filter, an empty or duplicate
     filter ID, an audio chain on a `scene` source, a full chain and an index out of range. The master stage and
     outputs ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)) take
-    audio filters only, an output only if it carries audio, and their filters no scene
-    or source reference; a scene and an item (ADR-0065) take video filters only, and
+    video filters, and audio filters on the master and an output that carries audio,
+    and their filters no scene or source reference; a scene and an item (ADR-0065) take video filters only, and
     `scene.delete`'s and `item.remove`'s inverses re-add theirs. `source.duplicate`
     copies the chains, and `source.delete`'s and `output.delete`'s inverses re-add them; a reference in a filter's settings
     blocks deleting its target, as a source's own does;
@@ -233,7 +236,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md));
 - `plugin.install` answered with `unsupported`, since the mock can't run a plugin, and
   `plugin.grant` and `plugin.enable` with `not_found` (entity `plugin`), as the engine
-  answers them for a plugin that isn't installed: none ever is in the mock;
+  answers them for a plugin that isn't installed: none ever is in the mock, so
+  `plugin.list` lists none;
+- `effect.enable` answered with `invalid_argument` on `kind_id`, as an engine that loads
+  no effect packs answers it: the mock quarantines nothing;
 - the stream-key actions with the engine's checks and errors. `output.set_key` answers
   `not_found` for an output not in the collection, then `invalid_argument` (field
   `key`) for an empty or over-long key, or one with whitespace, control or non-ASCII

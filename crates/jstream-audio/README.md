@@ -85,8 +85,8 @@ stamped on the clock, and no device is the master.
   it). The block must be initialised for the mixer's rate
   and block size (`mixer_rate` and `mixer_block_frames` on each of those handles) and
   its host ready, with one filter on it at a time. On the master chain the plugin runs
-  on the master bus's copy only, and every other bus's copy delays its dry signal by
-  the filter's latency instead, until outputs take other buses
+  on the master bus's copy, and another bus's copy delays its dry signal by the
+  filter's latency until `FilterControl::set_bus_host` gives that bus a host of its own
   ([ADR-0086](../../docs/adr/0086-master-clap-filter-one-host-per-output-bus.md); see
   [Master chain and output taps](#realtime)).
   `Mixer::latency_frames` is the
@@ -199,7 +199,9 @@ not start. No variant allocates.
   a bus added later, an output tap's own chain and stamp, a tap reading silence once
   its bus is gone, and the 16-tap limit; a CLAP filter on the master chain heard
   through the plugin on the master bus and as delayed dry, with the same stamp, on a
-  tapped bus and on a bus added later;
+  tapped bus and on a bus added later; each bus that feeds an output running it on a
+  host of its own once `set_bus_host` gives one, and back to delayed dry when it is
+  taken away;
 - inputs added from another thread while the mixer runs, then removed, the 64-input
   limit, and the ring freed on the collector thread whichever of the mixer and the
   producer lets go last, and the collector ending with its last handle.
@@ -427,15 +429,19 @@ stops feeding outputs skips its copy, and the copy restarts from silence when th
 feeds one again. An output tap (at most 16, reserved in `Mixer::new`) is built on the
 control thread with its block buffer and its own chain; it reads silence once its bus
 is removed. Removed taps and master copies go to the collector. A CLAP filter on the
-master chain is the exception to one copy per bus: its host takes one chain's blocks
-([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md) › 1, one host per filter
-instance), so the plugin runs on the master bus's copy, and every other bus's copy,
-one added later included, holds a stand-in that delays its dry signal by the filter's
-latency, so the master chain's latency stays the same on every bus. The engine taps
-only the master bus, so every output hears the plugin. Once outputs take other buses,
-each bus that feeds one gets its own host instead
-([ADR-0086](../../docs/adr/0086-master-clap-filter-one-host-per-output-bus.md), not
-built yet, #922).
+master chain runs one host per bus that feeds an output
+([ADR-0086](../../docs/adr/0086-master-clap-filter-one-host-per-output-bus.md)), since
+a host takes one chain's blocks
+([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md) › 1). The master bus's
+copy runs on the host the filter was added with. Every other bus's copy, one added
+later included, starts as a stand-in that delays its dry signal by the filter's
+latency, so the master chain's latency stays the same on every bus, until
+`FilterControl::set_bus_host` gives it a host of its own. That builds the copy's new
+kernel on the control thread, refuses a host that isn't ready or whose latency differs
+from the filter's, and queues it; the mixer swaps it in place at the start of a block,
+with no allocation, and hands the replaced kernel to the collector. With no host it
+goes back to the stand-in. The engine gives a bus its hosts while an output taps it
+(`jstream-core`'s routing).
 
 **Adding and removing inputs and buses** (`cmd.rs`, `retire.rs`). The control thread
 allocates the ring and the producer (or a bus's shared state) and sends them on a

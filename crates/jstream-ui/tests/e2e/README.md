@@ -103,8 +103,17 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   or go live until its key is set; the key field empties on save and the key never
   appears in the page; go live and end stream; the header's Record starts and stops a
   recording; clearing the key; deleting; editing the
-  server URL and choosing an encoder profile, both read back by a fresh page; a second
+  server URL and choosing an encoder profile, both read back by a fresh page; a
+  recording's Audio select moving it to another bus, read back by a fresh page; a second
   client sees outputs created, started and deleted.
+- **Plugins** (`plugins.spec.js`, under the Inspector): the mock engine runs no plugins,
+  so the spec routes the page's WebSocket itself and answers `plugin.list`,
+  `plugin.install`, `plugin.grant` and `plugin.enable` from a list it keeps. An install
+  sends the folder and the ID suggested from its name with no grant, and, since the
+  manifest asks for more than `read`, opens the grant dialog, which offers `read` ticked
+  and fixed and only the classes and host asked for, and sends just what was ticked; the
+  row then names what is asked for and not granted. A plugin off as `needs_grant` is
+  granted a class and a folder and turned on in one step.
 - **Header stats** (`header-stats.spec.js`): the readout shows the dropped count from
   the first `stats.tick`, the CPU share ("<1%") from the second while the program draws
   nothing, and "60 fps · 2 dropped · CPU 3%" once the load says it drew 60 frames in a
@@ -243,14 +252,15 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 - **Program and output chains** (`output-chains.spec.js`): the Outputs panel's Program
   output row ("master", "FX 0"), a recording's row under it with its state and FX
   button, and the footnote; the program's FX showing the master chain in the Filters
-  panel from behind the Transform tab, with its note, its one audio chain and the note
-  on video, the output's FX its own chain, and selecting an item going back to its
-  source's. With Gain and Sharpen described: Add filter on the master offering only
-  Gain, with its foot, as one edit that the program's FX and the Mixer's count; the new
-  filter opening in place, a setting there as one more edit; the output's chain adding
-  its own Gain, counted on its FX button alone, whose eye and × edit the output's chain,
-  not the master's; and the master's filter in the Filter settings dialog, whose Remove
-  deletes it.
+  panel from behind the Transform tab, with its note and its video and audio chains,
+  the output's FX its own chain, and selecting an item going back to its source's. With
+  Gain and Sharpen described: Add filter on the master offering both, with its foot,
+  Gain added as one edit that the program's FX and the Mixer's count; the new filter
+  opening in place, a setting there as one more edit; on the output, Sharpen showing
+  the first video filter's cost note, then its own Gain, counted on its FX button
+  alone, whose eye and × edit the output's chain, not the master's; and the master's
+  filter in the Filter settings dialog on a double-click (the dblclick event alone, as
+  the panel scrolls), whose Remove deletes it.
 - **Mixer** (`mixer.spec.js`, on the Audio mixer tab): the master card counting the
   seed's two channels, its Hear button enabled, its "FX 0" showing the program
   output's chain in the Filters panel, and its button (with its tooltip) unfolding the

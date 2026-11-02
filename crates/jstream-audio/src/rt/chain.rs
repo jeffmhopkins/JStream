@@ -134,7 +134,8 @@ pub(crate) enum Kernel {
     Limiter(Limiter),
     Delay(Delay),
     Host(HostFilter),
-    /// A master-chain CLAP filter on a bus other than the master: delayed dry.
+    /// A master-chain CLAP filter on a bus other than the master whose own host isn't
+    /// running: delayed dry.
     HostStandIn(HostStandIn),
 }
 
@@ -346,6 +347,23 @@ impl Chain {
         let (_, kernel) = self.filters.remove(index);
         self.latency -= kernel.latency_frames();
         Some(kernel)
+    }
+
+    /// Puts `kernel` in place of filter `id`, keeping its place in the chain, and
+    /// gives back the kernel it replaces. Gives `kernel` back instead when the chain has
+    /// no filter `id`, or when its latency differs, which would move the chain's.
+    /// Never allocates.
+    pub(crate) fn replace(
+        &mut self,
+        id: u64,
+        kernel: Box<Kernel>,
+    ) -> Result<Box<Kernel>, Box<Kernel>> {
+        match self.filters.iter_mut().find(|(f, _)| *f == id) {
+            Some((_, old)) if old.latency_frames() == kernel.latency_frames() => {
+                Ok(std::mem::replace(old, kernel))
+            }
+            _ => Err(kernel),
+        }
     }
 
     /// Clears every filter's state and the compensation delay, as if the chain had only

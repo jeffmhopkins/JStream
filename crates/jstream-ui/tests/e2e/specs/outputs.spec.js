@@ -1,6 +1,7 @@
 // The Outputs panel and the header: adding outputs, the write-only stream key, start and
 // stop, Go Live and Record in the header,
-// the encoder profile and deleting, through a real browser and the WebSocket API.
+// the encoder profile, the audio bus and deleting, through a real browser and the
+// WebSocket API.
 import { test, expect, connect, showPanel } from '../fixtures.js';
 
 /** Connects and opens the inspector's Outputs page. */
@@ -90,6 +91,26 @@ test('a server URL edit and an encoder choice reach the engine', async ({ page, 
   await openOutputs(page, daemon);
   await expect(stream).toContainText('Stream to rtmps://127.0.0.1/app');
   await expect(stream.getByLabel('Encoder')).toHaveValue('hq');
+});
+
+test('an output carries the bus its Audio select picks', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  await showPanel(page, 'Audio mixer');
+  const buses = page.locator('.mixer-panel .fold');
+  await buses.locator('.fold-toggle').click();
+  await buses.getByRole('textbox', { name: 'New bus name' }).fill('Stream');
+  await buses.getByRole('button', { name: 'Add bus' }).click();
+  await expect(buses.locator('.strip .strip-name')).toHaveText(['Master', 'Stream']);
+
+  await showPanel(page, 'Outputs');
+  await addOutput(page, 'record', '/tmp/a.mp4');
+  const recording = card(page, 'output-1');
+  const audio = recording.getByLabel('Audio');
+  await expect(audio.locator('option:checked')).toHaveText('Master');
+  await audio.selectOption({ label: 'Stream' });
+  // A fresh page reads it back from the engine.
+  await openOutputs(page, daemon);
+  await expect(card(page, 'output-1').getByLabel('Audio').locator('option:checked')).toHaveText('Stream');
 });
 
 test('another client sees outputs come and go', async ({ page, context, daemon }) => {

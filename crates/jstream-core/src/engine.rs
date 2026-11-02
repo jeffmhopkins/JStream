@@ -13,6 +13,7 @@ use crate::audio_sources::AudioSources;
 use crate::audit::{self, Audit, AuditEntry, AuditSink};
 use crate::collection::{CollectionFile, CollectionFileError};
 use crate::drops::{self, DropLedger, DropSource, DropSourceId};
+use crate::effect_packs::Packs;
 use crate::events::{QueueRef, Subscribers, Subscription};
 use crate::forget::ForgetSources;
 use crate::gesture::{Ended, Gestures};
@@ -126,6 +127,9 @@ struct Shared {
     /// never taken with the collection lock held, nor while a plugin runs.
     #[cfg(feature = "wasm-plugins")]
     automation: crate::plugins::automation::Registry,
+    /// The effect packs and their quarantine, once `watch_effect_packs` runs. On its own
+    /// lock, never taken with the collection lock held: a poll reads files under it.
+    effect_packs: Mutex<Option<crate::effect_packs::Packs>>,
 }
 
 /// A handle to an [`Engine`] that doesn't keep it alive: what a plugin's thread holds,
@@ -179,6 +183,7 @@ impl Default for Engine {
                 output_meters: Arc::default(),
                 #[cfg(feature = "wasm-plugins")]
                 automation: crate::plugins::automation::Registry::default(),
+                effect_packs: Mutex::new(None),
             }),
             media: None,
             drops: Arc::new(Mutex::new(DropLedger::default())),
@@ -285,10 +290,22 @@ impl Engine {
     /// next poll. A pack that fails to load is logged; one that fails a reload keeps its
     /// last good version. A filter of a kind no loaded pack has is bypassed, as before its
     /// pack loads. A missing `root` holds no packs, and is watched for packs to appear.
+    ///
+    /// The quarantine of effects a GPU device loss was blamed on (#349) is kept in
+    /// `root` too. Call it once: a second call is logged and ignored.
     pub fn watch_effect_packs(&self, root: impl Into<PathBuf>) {
-        let mut packs = crate::effect_packs::Packs::new(root.into());
-        if let Some(update) = packs.poll() {
-            self.shared.install_effects(update);
+        {
+            let mut packs = lock(&self.shared.effect_packs);
+            if packs.is_some() {
+                tracing::warn!("effect packs are already watched; one folder per engine");
+                return;
+            }
+            let update = packs
+                .insert(crate::effect_packs::Packs::new(root.into()))
+                .poll();
+            if let Some(update) = update {
+                self.shared.install_effects(update);
+            }
         }
         let shared = Arc::downgrade(&self.shared);
         let spawned = thread::Builder::new()
@@ -296,20 +313,64 @@ impl Engine {
             .spawn(move || {
                 loop {
                     thread::sleep(jstream_effects::DEFAULT_POLL_INTERVAL);
-                    if shared.strong_count() == 0 {
-                        return;
-                    }
-                    let update = packs.poll();
                     let Some(shared) = shared.upgrade() else {
                         return;
                     };
-                    if let Some(update) = update {
+                    // Installed under the packs' lock, so an update can't land after
+                    // a newer one (a blame's or an enable's) and undo it.
+                    let mut packs = lock(&shared.effect_packs);
+                    if let Some(update) = packs.as_mut().and_then(Packs::poll) {
                         shared.install_effects(update);
                     }
                 }
             });
         if let Err(error) = spawned {
             tracing::error!(%error, "effect pack watcher did not start; packs won't reload");
+        }
+    }
+
+    /// `effect.enable`: lifts a quarantine, then re-plans. Runs with no engine lock
+    /// held, as the poll takes the packs' lock. Every pack update is installed under
+    /// the packs' lock (then the collection's; nothing takes them the other way round),
+    /// so an older update can't overwrite a newer one.
+    fn effect_enable(&self, kind_id: &str) -> Result<CallResult, ProtocolError> {
+        let mut packs = lock(&self.shared.effect_packs);
+        let update = match packs.as_mut() {
+            Some(packs) => packs.enable(kind_id)?,
+            None => {
+                return Err(ProtocolError::invalid_argument(
+                    "kind_id",
+                    format!("no effect pack has a kind `{kind_id}`: the engine loads no packs"),
+                ));
+            }
+        };
+        if let Some(update) = update {
+            self.shared.install_effects(update);
+        }
+        Ok(CallResult::action())
+    }
+
+    /// Installs a pack update as the watcher, a blame or `effect.enable` does.
+    #[cfg(test)]
+    pub(crate) fn install_effects(&self, update: crate::effect_packs::Update) {
+        self.shared.install_effects(update);
+    }
+
+    /// The body of the program stage's `jstream-device-losses` thread: for each GPU
+    /// device the render thread lost (#349), with the pack kinds the frames before the
+    /// loss drew, blames and quarantines them, re-plans without them, and sends
+    /// `gpu.device_lost`. The render thread hands the loss over a channel, so it takes
+    /// no lock and writes no file itself (R-RT-003). It ends once the render thread
+    /// drops its sender, and holds the shared collection like the capture-sizes thread.
+    pub(crate) fn device_loss_watch(
+        &self,
+        losses: Receiver<crate::runtime::DeviceLoss>,
+    ) -> impl FnOnce() + Send + 'static {
+        let shared = Arc::clone(&self.shared);
+        move || {
+            for loss in losses {
+                shared.device_lost(loss);
+            }
         }
     }
 
@@ -1052,6 +1113,11 @@ impl Engine {
         };
         let result = if let Some(result) = self.plugin_call(&call) {
             result
+        } else if let Call::Action {
+            action: Action::EffectEnable { kind_id },
+        } = &call
+        {
+            self.effect_enable(kind_id)
         } else if let Some(result) = self.youtube_call(&call) {
             result
         } else if let Call::Action {
@@ -1134,13 +1200,20 @@ impl Engine {
         Executed::Ready(Box::new(result))
     }
 
-    /// `plugin.install`, `plugin.grant` and `plugin.enable`, or `None` for any other call
+    /// `plugin.install`, `plugin.grant`, `plugin.enable` and `plugin.list`, or `None` for any other call
     /// or without the `wasm-plugins` feature. They run with no engine lock held: a plugin
     /// loads, and may call back into the engine, while its install waits.
     #[cfg(feature = "wasm-plugins")]
     fn plugin_call(&self, call: &Call) -> Option<Result<CallResult, ProtocolError>> {
         match call {
             Call::Action { action } => crate::plugins::automation::action(self, action),
+            Call::Query {
+                query: Query::PluginList,
+            } => Some(Ok(CallResult::Query {
+                result: QueryResult::PluginList {
+                    plugins: crate::plugins::automation::list(self),
+                },
+            })),
             _ => None,
         }
     }
@@ -1544,7 +1617,8 @@ impl Engine {
     }
 
     /// `output.start` / `output.stop` when backends are injected. Events are emitted
-    /// on this thread. The pipeline threads never take the collection lock.
+    /// on this thread. The real-time pipeline threads (render, mixer) never take the
+    /// collection lock.
     fn run_media_action(&self, call: Call) -> Result<CallResult, ProtocolError> {
         let Call::Action { action } = call else {
             return Err(not_implemented("this kind of call"));
@@ -1625,7 +1699,7 @@ impl Engine {
                 });
             }
             let key = encode_key(&state.graph, &output_id);
-            let own_audio = has_audio_chain(&state.graph, &output_id);
+            let own_audio = encodes_own_audio(&state.graph, &output_id);
             let publish = match (
                 own_target(&state.graph, &output_id),
                 youtube_broadcast(&state.graph, &output_id),
@@ -1764,7 +1838,7 @@ impl Engine {
                             program,
                             vcam,
                             canvas,
-                            output_id.clone(),
+                            (output_id.clone(), key.0.owner.clone()),
                             generation,
                             fail_tx,
                         )
@@ -2072,6 +2146,18 @@ impl Engine {
         lock(&self.shared.state).routing.hosted()
     }
 
+    /// How many master CLAP filters each bus other than the master runs on hosts of its
+    /// own (ADR-0086), and the bus each output tap reads, for tests.
+    #[cfg(test)]
+    pub(crate) fn routed_bus_hosted(
+        &self,
+    ) -> (
+        BTreeMap<jstream_protocol::BusId, usize>,
+        BTreeMap<OutputId, jstream_protocol::BusId>,
+    ) {
+        lock(&self.shared.state).routing.bus_hosted()
+    }
+
     /// How the program stage fares with audio source `source_id`, for tests.
     #[cfg(test)]
     pub(crate) fn audio_status(
@@ -2202,15 +2288,15 @@ fn encode_key(graph: &Graph, output_id: &OutputId) -> EncodeKey {
     (MixKey { owner, ..mix }, profile_id, profile)
 }
 
-/// Whether `output_id` starts with its own audio encode: it has an audio chain
-/// (ADR-0080), even one whose filters are all off, so switching one on later changes
-/// nothing but the chain. A chain added to a running output takes effect at its next
+/// Whether `output_id` starts with its own audio encode, from a tap on its bus: it has
+/// an audio chain (ADR-0080), even one whose filters are all off, so switching one on
+/// later changes nothing but the chain, or it carries a bus other than the master. A
+/// chain added to a running output, or another bus chosen, takes effect at its next
 /// start.
-fn has_audio_chain(graph: &Graph, output_id: &OutputId) -> bool {
-    graph
-        .state()
-        .output(output_id)
-        .is_some_and(|output| !output.filters().chain(FilterChain::Audio).is_empty())
+fn encodes_own_audio(graph: &Graph, output_id: &OutputId) -> bool {
+    graph.state().output(output_id).is_some_and(|output| {
+        !output.filters().chain(FilterChain::Audio).is_empty() || !output.audio_bus().is_master()
+    })
 }
 
 /// Where an output the engine sends to itself goes, rather than to a publish target
@@ -2642,6 +2728,11 @@ fn command_name(call: &Call) -> &'static str {
 struct State {
     /// The collection and its `rev`. Only `Graph::apply` changes it.
     graph: Graph,
+    /// The effect-pack kinds quarantined after a GPU device loss (#349), which
+    /// `kind.list` marks.
+    quarantined: BTreeSet<String>,
+    /// The last effect-pack update installed ([`crate::effect_packs::Update::seq`]).
+    effects_seq: u64,
     outputs: Outputs,
     /// The result of each batch, undo or redo applied with an idempotency key, per
     /// client: batches and history calls share a client's keys (ADR-0032). Kept for the
@@ -3095,6 +3186,12 @@ impl State {
     /// `privacy.get` always answers off (ADR-0080 §4).
     fn query(&self, query: &Query) -> Result<CallResult, ProtocolError> {
         let result = match self.graph.query(query) {
+            Some(Ok(QueryResult::KindList { mut kinds })) => {
+                for kind in &mut kinds {
+                    kind.quarantined = self.quarantined.contains(&kind.kind_id);
+                }
+                QueryResult::KindList { kinds }
+            }
             Some(result) => result?,
             None => match query {
                 // `key_set` and the encoder session are filled in after the lock is
@@ -3122,6 +3219,11 @@ impl State {
                 Query::DeviceList | Query::UiSettingsGet { .. } => {
                     return Err(served_by_the_server(query.name()));
                 }
+                // Built without the `wasm-plugins` feature, no plugin is ever installed.
+                // With it, `Engine::execute` answers it before taking the collection lock.
+                Query::PluginList => QueryResult::PluginList {
+                    plugins: Vec::new(),
+                },
                 Query::ActivityList { after_seq, limit } => QueryResult::ActivityList {
                     now_ms: activity_log::unix_ms(std::time::SystemTime::now()),
                     entries: self.activity.list(*after_seq, *limit),
@@ -3604,19 +3706,73 @@ impl Shared {
         wake_all(wake);
     }
 
-    /// Applies a poll of the effect packs: their kinds to `kind.list`, their effects to
-    /// the chains, then re-plans.
+    /// Applies a change to the effect packs: their kinds to `kind.list`, their effects
+    /// (the quarantined ones left out) to the chains, then re-plans.
     fn install_effects(&self, update: crate::effect_packs::Update) {
         let mut wake = Vec::new();
         {
             let mut state = lock(&self.state);
+            // Every caller installs under the packs' lock, so updates come in order; one
+            // older than the last would put back what a newer one (a blame) took out.
+            if update.seq <= state.effects_seq {
+                tracing::warn!(
+                    seq = update.seq,
+                    installed = state.effects_seq,
+                    "an effect-pack update older than the installed one was ignored"
+                );
+                return;
+            }
+            state.effects_seq = update.seq;
             state.graph = std::mem::take(&mut state.graph)
                 .without_kinds(update.removed.iter().map(String::as_str))
                 .with_kinds(update.described);
+            state.quarantined = update.quarantined;
             state.live.set_effects(update.effects);
             state.publish_render();
             state.sync_sizes(&mut wake);
         }
+        wake_all(wake);
+    }
+
+    /// A GPU device loss on the program stage (#349): blames the pack kinds it drew,
+    /// quarantines them and re-plans without them, then sends `gpu.device_lost`.
+    fn device_lost(&self, loss: crate::runtime::DeviceLoss) {
+        let crate::runtime::DeviceLoss {
+            cause,
+            drawn,
+            recovering,
+            handled,
+        } = loss;
+        // Installed under the packs' lock, so a poll's update computed before the blame
+        // can't land after it and draw the blamed effect again.
+        let mut packs = lock(&self.effect_packs);
+        let (blamed, quarantined) = match packs.as_mut().map(|packs| packs.blame(&drawn)) {
+            Some(crate::effect_packs::Blame {
+                blamed,
+                quarantined,
+                update,
+            }) => {
+                if let Some(update) = update {
+                    self.install_effects(update);
+                }
+                (blamed, quarantined)
+            }
+            None => (Vec::new(), Vec::new()),
+        };
+        drop(packs);
+        // The render snapshot without the quarantined kinds is published: the render
+        // thread may draw on its new device.
+        drop(handled);
+        let mut wake = Vec::new();
+        lock(&self.state).subscribers.emit(
+            &Event::GpuDeviceLost {
+                cause,
+                blamed,
+                quarantined,
+                recovering,
+            },
+            &mut wake,
+        );
         wake_all(wake);
     }
 

@@ -529,6 +529,24 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Re-enables an effect-pack kind the engine quarantined after a GPU device loss was\nblamed on it (0.61, #349; `gpu.device_lost`), and the whole pack when the pack\nwas quarantined. Its filters draw again from the next frame. The engine never\nlifts a quarantine by itself, nor when the pack's files change. Succeeds for a\nkind that isn't quarantined. Fails with `invalid_argument` on `kind_id`, as\n`kind.describe` does, for a kind that no loaded pack has and no quarantine names. For a person only, like\n`plugin.enable`.",
+          "properties": {
+            "kind_id": {
+              "description": "The kind, `<pack>/<effect>`.",
+              "type": "string"
+            },
+            "type": {
+              "const": "effect.enable",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "kind_id"
+          ],
+          "type": "object"
+        },
+        {
           "description": "**Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy\nscreen: the engine refuses this with `unsupported` and covers nothing.",
           "properties": {
             "on": {
@@ -3017,6 +3035,32 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Chooses the buses whose audio an output carries (since 0.59), one per audio\ntrack, in track order. Every output writes one audio track for now, so the list\nholds exactly one bus; any other length is `invalid_argument` on `audio_buses`,\nas is an output with no audio (a virtual camera). Each bus must exist, else\n`not_found`. The master stage's audio chain runs on the bus, then the output's\nown chain (ADR-0080 §1). A running output reads its bus, so moving it to another\nis `invalid_argument` on `output_id` until it stops. Inverse:\n`output.set_audio_buses` with the previous buses.",
+          "properties": {
+            "audio_buses": {
+              "description": "The buses, in track order.",
+              "items": {
+                "$ref": "#/$defs/BusId"
+              },
+              "type": "array"
+            },
+            "output_id": {
+              "$ref": "#/$defs/OutputId",
+              "description": "The output to change."
+            },
+            "type": {
+              "const": "output.set_audio_buses",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "output_id",
+            "audio_buses"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Adds a folder to the scene list, last in folder order (ADR-0024 §3). Folders\norganise only: they change no rendering, switching or nesting. Inverse:\n`folder.delete`.",
           "properties": {
             "folder_id": {
@@ -3769,7 +3813,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Deletes a bus and every send into it. The master bus can't be deleted\n(`invalid_argument`), nor (since 0.24) a bus a source's settings refer to: that\n`invalid_argument` lists the `blockers`, and `delete.plan` clears them. Inverse: `bus.create` with its name, `bus.set_fader` if\nits fader or mute were not the defaults, `bus.set_monitor` if it had a monitor\n(since 0.42), then `send.set` for each send it had.",
+          "description": "Deletes a bus and every send into it. The master bus can't be deleted\n(`invalid_argument`), nor (since 0.24) a bus a source's settings refer to, nor\n(since 0.59) a bus an output carries: that `invalid_argument` lists the\n`blockers`, and `delete.plan` clears them, moving such an output to the master\nbus. Inverse: `bus.create` with its name, `bus.set_fader` if\nits fader or mute were not the defaults, `bus.set_monitor` if it had a monitor\n(since 0.42), then `send.set` for each send it had.",
           "properties": {
             "bus_id": {
               "$ref": "#/$defs/BusId",
@@ -3888,7 +3932,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "description": "The encoder session a running output uses, as `output.status` reports it.",
       "properties": {
         "dedicated": {
-          "description": "Whether the output has the session to itself by rule: an output with its own\nvideo chain never shares (ADR-0080 §2), so its picture costs one more GPU pass\nand one more encoder session. Omitted when false, which is every output until\nvideo chains exist.",
+          "description": "Whether the output has the session to itself by rule: an output with its own\nvideo chain never shares (ADR-0080 §2), so its picture costs one more GPU pass\nand one more encoder session. Omitted when false: an output whose video chain\nwas empty when it started.",
           "type": "boolean"
         },
         "hardware": {
@@ -4595,6 +4639,45 @@ source: crates/jstream-protocol/src/fixtures.rs
             "state"
           ],
           "type": "object"
+        },
+        {
+          "description": "The program stage's GPU device was lost (0.61, #349): a GPU hang that the OS\nreset (Windows' TDR), a driver reset or a removed GPU. The engine opens a new\ndevice and the outputs repeat their last frame meanwhile, unless `recovering` is\n`false`. A loss is blamed on the effect-pack kinds drawn in the frames before it;\neach blamed kind is quarantined, its filters bypassed, until a person re-enables\nit (`effect.enable`). Runtime state: a client that misses it sees the quarantine\nin `kind.list`.",
+          "properties": {
+            "blamed": {
+              "default": [],
+              "description": "The effect-pack kinds drawn in the frames before the loss, ordered by ID:\nempty when none was, and the loss had another cause.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "cause": {
+              "description": "What the driver or the engine said about the loss.",
+              "type": "string"
+            },
+            "quarantined": {
+              "default": [],
+              "description": "The kinds this loss quarantined, ordered by ID: the blamed ones, or every kind\nof a pack blamed for a second loss in this run.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "recovering": {
+              "description": "Whether the engine is opening a new device. `false` when it gave up (too many\nlosses, or nothing it could switch to): the outputs that drew on it fail.",
+              "type": "boolean"
+            },
+            "type": {
+              "const": "gpu.device_lost",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "cause",
+            "recovering"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -4699,7 +4782,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it.",
+          "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it. Its video chain (since 0.60)\nruns once per frame on each mix an output draws, at the canvas size; the\nediting canvas, previews and `video.snapshot` show the mix before it. Its\nfilters can't hold a reference.",
           "properties": {
             "type": {
               "const": "master",
@@ -4712,7 +4795,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "An output's own chains, which run after the master stage for that output only\n(ADR-0080 §2). An output with filters on its audio chain gets its own audio\nencode from its next start; edits to a chain it started with apply live.",
+          "description": "An output's own chains, which run after the master stage for that output only\n(ADR-0080 §2). An output with filters on its audio chain gets its own audio\nencode from its next start; edits to a chain it started with apply live. Every\noutput, the virtual camera included, has a video chain (since 0.60). A stream\nor recording with a filter on it, even a disabled one, gets its own render\npass and encoder session from its next start, which `output.status` reports as\n`dedicated`; a virtual camera, which opens no encoder session, gets its own\nrender pass (a program frame of its own) and is never reported `dedicated`.",
           "properties": {
             "output_id": {
               "$ref": "#/$defs/OutputId",
@@ -5447,6 +5530,10 @@ source: crates/jstream-protocol/src/fixtures.rs
           "description": "Display name.",
           "type": "string"
         },
+        "quarantined": {
+          "description": "An effect-pack kind the engine quarantined after a GPU device loss was blamed on\nit (0.61, `gpu.device_lost`): its filters are bypassed until a person re-enables\nit (`effect.enable`). Omitted when `false`.",
+          "type": "boolean"
+        },
         "version": {
           "description": "The descriptor's version. Stored settings record the version they were written\nwith.",
           "format": "uint32",
@@ -5560,7 +5647,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "properties": {
         "filters": {
           "$ref": "#/$defs/FilterChains",
-          "description": "Its chains, which `filter.*` edits with the owner `{\"type\":\"master\"}`. Only the\naudio chain holds filters so far. Omitted while both are empty."
+          "description": "Its chains, which `filter.*` edits with the owner `{\"type\":\"master\"}`. Both hold\nfilters (the video chain since 0.60). Omitted while both are empty."
         }
       },
       "type": "object"
@@ -5703,6 +5790,13 @@ source: crates/jstream-protocol/src/fixtures.rs
     "OutputInfo": {
       "description": "One output, as `output.list` and `state.get` report it: its collection state.\nWhether it runs, and whether its stream key is set, are in `output.status`.",
       "properties": {
+        "audio_buses": {
+          "description": "The buses whose audio it carries (`output.set_audio_buses`, since 0.59), one per\naudio track, in track order: for now always one, as every output writes one\naudio track. The master stage's audio chain runs on each of them before the\noutput's own chain (ADR-0080 §1). Absent means `[\"master\"]`, as from a server\nolder than 0.59; a virtual camera, which has no audio, always reports that.",
+          "items": {
+            "$ref": "#/$defs/BusId"
+          },
+          "type": "array"
+        },
         "encoder_profile": {
           "anyOf": [
             {
@@ -5716,7 +5810,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         "filters": {
           "$ref": "#/$defs/FilterChains",
-          "description": "Its own chains, which `filter.*` edits with the owner\n`{\"type\":\"output\",\"output_id\":…}` and which run after the master stage\n(ADR-0080 §2). Only the audio chain holds filters so far, and a virtual camera,\nwhich has no audio, has none. Omitted while both are empty."
+          "description": "Its own chains, which `filter.*` edits with the owner\n`{\"type\":\"output\",\"output_id\":…}` and which run after the master stage\n(ADR-0080 §2). Both hold filters (the video chain since 0.60); a virtual camera,\nwhich has no audio, has a video chain only. Omitted while both are empty."
         },
         "kind": {
           "$ref": "#/$defs/OutputKind",
@@ -6361,6 +6455,82 @@ source: crates/jstream-protocol/src/fixtures.rs
       "description": "An installed WASM automation plugin (ADR-0069), chosen by the person who installs\nit.",
       "type": "string"
     },
+    "PluginInfo": {
+      "description": "One installed plugin, as `plugin.list` lists it (0.58).",
+      "properties": {
+        "grant": {
+          "$ref": "#/$defs/PluginGrant",
+          "description": "What a person granted it."
+        },
+        "path": {
+          "description": "Its package directory on the engine's machine, as `plugin.install` named it.",
+          "type": "string"
+        },
+        "plugin_id": {
+          "$ref": "#/$defs/PluginId",
+          "description": "The plugin."
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginDisabledReason"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why the engine disabled it, as `plugin.state_changed` says. Omitted when it is\nenabled."
+        },
+        "remote_name": {
+          "description": "The name the plugin's manifest gives itself: the plugin's own text, never an\ninstruction (ADR-0059). Omitted when it gives none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "request": {
+          "$ref": "#/$defs/PluginRequest",
+          "description": "What its manifest asks for, as the engine last read it. For a plugin disabled as\n`needs_grant`, this is the update's request, which a `plugin.grant` acknowledges."
+        },
+        "state": {
+          "$ref": "#/$defs/PluginState",
+          "description": "Whether it runs. A plugin being enabled is listed as it was until it loads."
+        }
+      },
+      "required": [
+        "plugin_id",
+        "state",
+        "path",
+        "request",
+        "grant"
+      ],
+      "type": "object"
+    },
+    "PluginRequest": {
+      "description": "What a plugin's manifest asks for (ADR-0076): the classes, hosts and folders a\nperson may grant it. A grant may give less, never more. `read` is every plugin's,\nasked for or not.\n\n```json\n{\"classes\": [\"edit\"], \"hosts\": [\"https://api.example.com:443\"], \"folders\": true}\n```",
+      "properties": {
+        "classes": {
+          "description": "The classes it asks for. Omitted for none.",
+          "items": {
+            "$ref": "#/$defs/PluginClass"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "folders": {
+          "description": "Whether it wants folders a person picks. Omitted when `false`.",
+          "type": "boolean"
+        },
+        "hosts": {
+          "description": "The hosts it asks to reach, each as `scheme://host:port`. Omitted for none.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
     "PluginState": {
       "description": "Whether a plugin runs.",
       "oneOf": [
@@ -6822,6 +6992,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "key"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Lists the installed WASM automation plugins (0.58, ADR-0069), ordered by ID: each\none's state, its package, what its manifest asks for and what a person granted it,\nso a client can show them and offer a grant. For a person only, like\n`plugin.install`: no plugin is ever granted it, and no MCP tool carries it. Not\ncollection state, so the result carries no `rev`. An engine built without WASM\nplugins lists none.",
+          "properties": {
+            "type": {
+              "const": "plugin.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
           ],
           "type": "object"
         }
@@ -7603,6 +7786,27 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "key"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `plugin.list` (0.58). Installed plugins are not collection state, so\nit carries no `rev`.",
+          "properties": {
+            "plugins": {
+              "description": "The installed plugins, ordered by ID.",
+              "items": {
+                "$ref": "#/$defs/PluginInfo"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "plugin.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "plugins"
           ],
           "type": "object"
         }
@@ -9058,5 +9262,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.57"
+  "title": "JStream protocol 0.61"
 }

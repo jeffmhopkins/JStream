@@ -47,7 +47,8 @@ state machine. Contents:
   (*Stream keys* below). It holds the
   `jstream-graph` `Graph`, the outputs, those frames, the idempotency keys, the undo
   history, the open gestures and the subscribers behind one lock, and the drop ledger behind another, and executes
-  batches, history calls, actions and queries. The pipeline threads do not take the collection lock.
+  batches, history calls, actions and queries. The real-time pipeline threads (render,
+  mixer) do not take the collection lock.
 - **YouTube** (`youtube.rs`, [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)):
   `with_youtube(YoutubeSetup)` gives the engine a Google OAuth client, the HTTPS
   transport and the `OAuthTokenStore`. `YoutubeSetup::built_in` uses JStream's built-in
@@ -144,9 +145,10 @@ state machine. Contents:
     the master stage's audio chain or an output's (ADR-0080), the program stage's
     `jstream-audio-sources` thread owns it (`filters::ClapHosts`), and the routing puts
     the filter on its host's block once that is ready (see *Audio routing*): on the
-    master bus's copy of the mixer's master chain, every other bus's copy delaying its
-    dry signal by the same latency (until outputs take other buses: then each bus that
-    feeds one gets its own host, ADR-0086, not built yet). A collection holding one
+    master bus's copy of the mixer's master chain, and on each other bus that feeds an
+    output (an output tap reads it) its copy on a host of that bus's own (ADR-0086).
+    A bus's copy delays its dry signal by the filter's latency while its host starts
+    and once the bus feeds no output. A collection holding one
     loads before the scan describes its kind (the graph keeps such a filter verbatim),
     and the filter is bypassed until then.
   - **Not yet:** writing the plugin's own parameter changes and saved state back to the
@@ -161,7 +163,8 @@ state machine. Contents:
   [ADR-0076](../../docs/adr/0076-saved-wasm-plugins-and-manifest-requests.md)):
   `plugin.install` loads a package's module on `jstream-plugin-wasm`'s host,
   `plugin.grant` replaces what it may do, never past what its manifest asks for, and
-  `plugin.enable` loads it again after the engine disabled it. With a plugin folder
+  `plugin.enable` loads it again after the engine disabled it, and `plugin.list` lists
+  them. With a plugin folder
   (`open_plugin_dir`), the installed plugins and their grants are saved in its
   `plugins.json` and loaded again at the next start. See *WASM plugins* under Design.
 - **Live sources** (`live.rs`): a running `jstream-sources` source for every source
@@ -252,7 +255,8 @@ state machine. Contents:
   moves to CPU frames on its own device (see *Runtime*). Encode threads live in the encoder
   sessions: one video session per video mix and encoder profile in use, shared by the
   outputs on that pair, one audio session of the master bus per such pair, shared by
-  its outputs with no audio chain, and one per output with an audio chain. Each
+  its outputs with no audio chain that carry the master bus, and one per output with an
+  audio chain or carrying another bus. Each
   output's own thread muxes FLV and publishes it, or muxes MP4 and records it
   ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)). A virtual camera's
   thread converts and publishes the frames the render thread sends it through a tap
@@ -263,7 +267,8 @@ state machine. Contents:
   mixer input has its fader and its sends (silenced while it is `muted`), scaled by
   its activity gain (`activity.rs`): a `when_shown` source is heard only while the
   Program mix shows it. The master stage's audio chain runs on the mixer's master
-  chain, and an output with an audio chain has an output tap running it
+  chain, and an output with an audio chain, or on a bus other than the master, has an
+  output tap on its bus running it
   ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md));
   `meters.tick` carries their levels about ten times a second, with the master's true
   peak and BS.1770 loudness, which the mixer thread measures on each block, and
@@ -1000,12 +1005,17 @@ doesn't show its unfiltered input, so a failing key or mask reveals nothing it h
 **Effect packs** (`effect_packs.rs`, [ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md),
 X1). `Engine::watch_effect_packs(root)` watches a folder of pack folders with
 `jstream-effects`' `PackWatcher`: it loads them before it returns, then a
-`jstream-effect-packs` thread polls every 500 ms while the engine lives. Each effect is a
+`jstream-effect-packs` thread polls every 500 ms while the engine lives. It is called
+once; a second call is logged and ignored. A poll that panics (naga parsing or
+validating untrusted WGSL) is caught, logged once and changes nothing. Each effect is a
 `video_filter` kind, `<pack>/<effect>`, added to the graph's kinds, so `kind.list` and
 `kind.describe` report it and a video chain, a scene's or an item's effects take it. A
 poll that changes kinds applies them under the collection lock (`Graph::without_kinds`
 for the ones gone, `with_kinds` for the added and changed ones), hands the effects to
-the live sources' `FilterAssets`, which every plan reads, and re-plans. A chain's filter
+the live sources' `FilterAssets`, which every plan reads, and re-plans. Every pack
+update, a poll's, a blame's or an `effect.enable`'s, is installed with the packs' lock
+still held (then the collection's; nothing takes them the other way round), so an
+older update can't land after a newer one and undo it. A chain's filter
 of a pack kind carries its `PackEffect`, so each compositor draws it through
 `Effect::video_filter` like a built-in kind. A reload is a new `PackEffect`, so the
 running filter is made again with the new WGSL and uniform layout; an effect that didn't
@@ -1015,6 +1025,18 @@ in the collection and is bypassed, as before its pack loaded. The daemon watches
 `--effects-dir` (default `effects` in the data folder, `paths::EFFECTS_DIR`) and the
 desktop app the data folder's `effects`. A filter's stored settings are not migrated
 through the effect's renames yet.
+A GPU device loss on the program stage (#349, [Runtime](#runtime),
+[ADR-0087](../../docs/adr/0087-effect-quarantine-after-gpu-device-loss.md)) is blamed on the pack
+kinds the frames before it drew (`Packs::blame`): each is quarantined, and a pack one
+of whose effects is blamed a second time in a run is quarantined whole. A quarantined
+kind stays in `kind.list`, marked `quarantined`, and is left out of the effects plans
+read, so its filters are bypassed. The quarantine is kept in `quarantine.json` in the
+packs folder (`QUARANTINE_FILE`; the watcher reads only sub-folders), not in the
+collection, so it isn't undoable and survives restarts; editing the pack doesn't lift
+it, and a file that can't be read quarantines nothing. Only `effect.enable` lifts it,
+for the kind and its pack, run before the collection lock is taken. The engine then
+sends `gpu.device_lost` with the cause, the blamed and quarantined kinds, and whether
+it is recovering. The GPU-time guard of #349 is not built.
 Each filter's layer key is made when the chain's shape changes, so a steady frame
 builds none. A shot with a chain counts as
 changing with time (`Shot::changes_with_time`), so the preview redraws it like a
@@ -1071,6 +1093,28 @@ so the render thread does no extra work. Not counted: a source's own chain, a sc
 `scene_mask` reads, and the canvas-sized layer a nested scene without a chain is drawn
 into for an item's effects (it takes the place of the layer it would be drawn into
 anyway).
+
+**The output stage** ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)).
+Planning the program stage's shot (not a preview's) copies the master stage's video
+chain into `Shot::stages` once for the program and once for each video mix, keyed
+`ChainOwner::Master(mix)` over `GpuKey::Mixed(mix)`, and each output's own chain,
+keyed `ChainOwner::Output(id)`, over the master chain's output for the mix it shows
+(its mix if the collection has it, else the program, as its encoder session is keyed),
+or over the mix itself when the master chain is empty. The render thread draws each
+output's frame with `View::output(mix, owner)`, `owner` being the output whose session
+is its own. When the frame's mix has a master chain or its owner a chain of its own,
+`compose` draws the mix at the canvas size into `GpuKey::Mixed` instead of straight to
+the output, runs the master chain over it, then the owner's, and fits the last output
+inside the output's frame, centred, with black bars. `Chains::stage` records what the
+cache's frame has drawn, so a mix that two outputs draw at different sizes is composited
+and its master chain run once per tick, as ADR-0080 §1 asks, and each output chain runs
+once. A failed stage chain draws a black frame: the unfiltered mix never leaves in its
+place. A frame without either chain draws as before, with no extra layer. The editing
+canvas, previews and `video.snapshot` draw with `View::default()`, before the master
+stage. The stage's chains count toward `Shot::changes_with_time`, and `Chains::begin`
+keeps their filters with the shot's other chains, so a stateful kind sees each frame
+of its mix in order. Their filters hold no references (the graph refuses one), so none
+reads a scene or an asset.
 
 A filter that reads an asset (`apply_lut`'s `lut`, a `.cube` file or a tiled PNG, and
 `image_mask`'s `image`, whose first frame is the mask) gets it through the live
@@ -1250,7 +1294,8 @@ differs from what the host was sent, all of them when a new host is ready. A CLA
 filter with no plugin for its kind (no scan yet, or the plugin is gone) is logged once
 and bypassed; one removed from the chain, or on a closed input, stops its host. The
 same thread runs the hosts of the master stage's and the running output taps' CLAP
-filters (`filters::ClapHosts`), which the routing names with
+filters (`filters::ClapHosts`), the master stage's once more for each bus other than
+the master that a running tap reads (ADR-0086), which the routing names with
 `Wanted::set_routed_chains`: started, ticked, sent their settings and stopped as a
 source's are, at the mixer's rate and block size, and each ready host's block listed in
 `Routed` (`Wanted::routed_blocks`) for the routing (see *Audio routing*). A change to
@@ -1719,16 +1764,30 @@ brings the mixer in line with the collection under the collection lock:
   it ready (see *Audio sources*), bypassed until then, and a new tap for an output
   that already has one queues the old tap's removal first, so a block never feeds two
   taps; while the mixer hasn't taken that removal, the new tap's CLAP filters wait.
+  A master CLAP filter runs one host per bus that feeds an output
+  ([ADR-0086](../../docs/adr/0086-master-clap-filter-one-host-per-output-bus.md)): the
+  master bus's copy on the filter's own host, and each other bus a running tap reads
+  on hosts of that bus's own, which the routing names to the same thread
+  (`RoutedChains::buses`) and puts on that bus's copy with
+  `FilterControl::set_bus_host` once both the bus's host and the master bus's filter
+  are ready and the master chain has no removal pending. Until then, and once the bus
+  feeds no output, the copy passes the bus's dry signal at the filter's latency. A host
+  whose latency differs from the master bus's is refused, logged once per block, and
+  the copy stays dry. Every host gets the filter's settings; each keeps its own state.
 
 An output whose audio chain holds a filter, even a disabled one
-([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), gets an output
-tap on the master bus when it starts (`Engine::add_output_tap`), and its own audio
-encode fed from the tap's blocks, stamped earlier by its chain's latency. Its video
+([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), or that
+carries a bus other than the master (`output.set_audio_buses`, protocol 0.59), gets an
+output tap on its bus when it starts (`Engine::add_output_tap`), and its own audio
+encode fed from the tap's blocks, stamped earlier by its chain's latency. The graph
+refuses to move a running output to another bus, so the bus its tap reads can't be
+deleted while it runs. Its video
 still shares a session as *Encoder profiles* says. The other outputs on its video
 session (the same video mix and encoder profile) share one audio encode of the master
 bus, opened when the first of them starts; each video session has its own. The tap is
 removed when the output stops; a chain added to a running output takes effect at its
-next start, while edits to an existing tap's chain apply live.
+next start, while edits to an existing tap's chain apply
+live.
 
 The `jstream-stats` sampler also emits `meters.tick` on each of its 100 ms wakes: a
 reading of every routed source's meter (if its audio is on) and every bus's, peak (held since the last
@@ -1746,7 +1805,8 @@ An output's configuration is collection state (`output.create`, `output.set_targ
 `output.delete`, kept by `jstream-graph`); whether it runs is runtime state, which never
 changes `rev`. After each applied batch the runtime states follow the collection: a
 created output starts `stopped`, and a deleted one is forgotten. The graph refuses to
-delete a running output (`invalid_argument`), so the batch passes it the running set.
+delete a running output or move one to another bus (`invalid_argument`), so the batch
+passes it the running set.
 A host can also declare an output with `Engine::with_output(id)`, outside the
 collection: it starts `stopped`, has no target and stays known whatever the collection
 holds. A live host reads a collection output's target with `output_kind` when its
@@ -1784,9 +1844,11 @@ entries.
 `EncoderProfile::DEFAULT` when it has none. Running outputs share an encoder session
 when they have the same key: the video mix (or none, for the program at the canvas
 size and base rate), its resolution and rate, and the profile ID and its settings, all
-as they were at start. An output with its own video chain adds its ID to the key, so
-its session and its drawn frame are its own; outputs carry no chain yet
-(`Output::has_video_chain` is false), so none does so far. So `encoder.update`, `output.set_encoder`, a mix's new
+as they were at start. An output with its own video chain (`Output::has_video_chain`:
+a filter on it, even a disabled one) adds its ID to the key, so its session and its
+drawn frame are its own and it shares with no one, which `output.status` reports as
+`dedicated`. A chain added to a running output that started without one takes effect at
+its next start; edits to a chain it started with apply live. So `encoder.update`, `output.set_encoder`, a mix's new
 resolution or rate, or `output.set_video_mix` on a running output changes nothing until
 it restarts, and an
 output started after the update opens a session of its own rather than joining one
@@ -2004,7 +2066,9 @@ it. It starts the camera at the canvas size the collection has then, as BGRA8 at
 the render thread a tap, and starts the output's camera thread, `jstream-vcam`. The
 tap and that thread share only the output's stop flag and two bounded channels, never
 a lock ([R-RT-003](../../docs/RULES.md#R-RT-003)). Each tick the tap copies the
-program frame (RGBA) into a buffer the camera thread handed back and sends it,
+program frame (RGBA) into a buffer the camera thread handed back and sends it (a
+camera with its own video chain is fed a program frame of its own, drawn through that
+chain, which the render thread holds for it as it holds the shared one),
 without blocking: with a frame still waiting, it drops this one and counts it in
 `output_stats`' output drops. The camera thread converts each frame to BGRA at the
 canvas size (as is when the program frame is the canvas size, otherwise fitted inside
@@ -2279,10 +2343,17 @@ The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in proc
   `error`, and the next change saves again. A file that can't be read, or of a version
   it doesn't know, is logged at `error` and left as it is, and nothing is loaded or saved
   that run. Without a plugin folder, the installed plugins last for the run.
+- **Listing.** `plugin.list` (`automation::list`) answers from the registry with no
+  collection lock held: each plugin's state and reason, its manifest's name, its
+  package path, what its manifest asks for as last read (`Request`, as `PluginRequest`)
+  and its grant. A plugin being installed, or started with the saved plugins, is listed
+  as enabled; one being enabled keeps the reason it was disabled for until it loads
+  (`Run::Starting` holds it). Built without `wasm-plugins`, the engine lists none, from
+  the collection's query match (`plugin_list_is_empty_until_a_plugin_is_installed`).
 - **Not yet:** a private data folder per plugin, deferred until the file imports a plugin
-  would need to use it are designed (ADR-0076); a query that lists the installed plugins;
-  a way to remove one (no `plugin.uninstall` yet, so an unwanted plugin stays saved,
-  disabled, until `plugins.json` is edited); and the UI's grant flow.
+  would need to use it are designed (ADR-0076); and a way to remove one (no
+  `plugin.uninstall` yet, so an unwanted plugin stays saved, disabled, until
+  `plugins.json` is edited).
 
 ### Locking
 
@@ -2590,9 +2661,17 @@ test pattern. Each loss is logged as a warning and counted
 (`OutputStats::gpu_device_losses`; leaving the context also counts in
 `gpu_fallbacks`). The third loss within 60 s fails the output instead ("the GPU was
 lost ... and the compositor could not reopen"), as does a switch that fails as above.
-There is no engine event for a loss yet (a protocol change), and no attribution of a
-loss to the pack effects drawn before it, or quarantine of them, though packs are drawn
-now (X1).
+The render thread then sends a `DeviceLoss` over a channel to `jstream-device-losses`
+(`Engine::device_loss_watch`), with the cause, whether it is switching, and the
+effect-pack kinds the held shot draws (`Shot::pack_kinds`): the frames submitted just
+before the loss drew the same, unless the shot changed in the frame or two a loss takes
+to surface. That thread blames and quarantines them ([Design](#design), *Effect
+packs*), which takes the packs' and the collection's locks, writes the quarantine file
+and publishes a render snapshot without them, and then sends `gpu.device_lost`; the
+render thread does none of it. It doesn't adopt the new device until the engine has
+handled the loss (`LossHandled`, set once the snapshot is published, or when the loss
+is dropped unhandled), and adopts that snapshot first, so a shader that hangs at once
+isn't drawn again.
 
 A session on the GPU encode path rules the fallback out: its encode targets are the
 context's, which a compositor on its own device can't write. If one runs when the
@@ -2672,9 +2751,9 @@ routing* in Design). Every running output shares that one program stage (capture
 render, mixer, audio inputs); the first `output.start` builds it and the
 last `output.stop` tears it down, and starts are serialized. Encode threads are the
 ones inside the encoder sessions: outputs with the same video mix and encoder profile
-share one video session (an output with its own video chain would get its own); those of them with no audio chain share one audio session of
-the master bus; an output with an audio chain has an audio session of its own that the
-mixer thread feeds from the output's tap. The render and mixer threads take a new
+share one video session (an output with its own video chain would get its own); those of them with no audio chain that carry the master bus share one audio session of
+it; an output with an audio chain, or one carrying another bus, has an audio session of
+its own that the mixer thread feeds from the output's tap. The render and mixer threads take a new
 session's inputs from a channel, never a lock, and hand a finished session's input to
 the collector rather than drop it. While the stage has no session and no virtual
 camera, or no mix is due on a tick, it draws nothing but still adopts the latest render
@@ -2697,7 +2776,8 @@ output stops, and `meters.tick` about ten times a second. The stage also starts
 render thread sends under the collection lock and announces the sources it changes
 (`source.size_changed`, *Source sizes* in [Design](#design)), and when the render thread
 lets go of its captures it forgets them all and ends. `Program`'s drop joins it after
-the render thread. The render loop counts each tick it composites into the render hub
+the render thread. It also joins `jstream-device-losses`, which hands each lost device
+the render thread sends to the engine (the lost-device paragraph above). The render loop counts each tick it composites into the render hub
 (`stats.tick`'s `program_frames`), and publishes capture mailbox skips and the frames an encode ring drops
 (`encode_frames`), and a tick that falls a
 whole period behind the clock skips to the current tick and counts the skipped ones in
