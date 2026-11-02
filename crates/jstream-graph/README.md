@@ -95,7 +95,7 @@ protocol's types (`Overrides`).
   broadcast by its ID, a recording to an MP4 file, or the virtual camera, which has
   nothing to check), the encoder profile it uses, if not the default (a virtual
   camera encodes nothing, so it ignores its profile), and the video mix it shows, if
-  not the program. Whether it
+  not the program (a virtual camera keeps the mix it names but shows the program). Whether it
   runs is the engine's runtime state, and its stream key is in the OS credential store,
   never here ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 

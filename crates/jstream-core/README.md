@@ -1111,8 +1111,10 @@ Planning the program stage's shot (not a preview's) copies the master stage's vi
 chain into `Shot::stages` once for the program and once for each video mix, keyed
 `ChainOwner::Master(mix)` over `GpuKey::Mixed(mix)`, and each output's own chain,
 keyed `ChainOwner::Output(id)`, over the master chain's output for the mix it shows
-(its mix if the collection has it, else the program, as its encoder session is keyed),
-or over the mix itself when the master chain is empty. The render thread draws each
+(`snapshot::shown_mix`: its mix if the collection has it, else the program, as its
+encoder session is keyed; a virtual camera, drawn as the program at the canvas size, is
+always planned over the program, whatever mix it names, #1006), or over the mix itself
+when the master chain is empty. The render thread draws each
 output's frame with `View::output(mix, owner)`, `owner` being the output whose session
 is its own. When the frame's mix has a master chain or its owner a chain of its own,
 `compose` draws the mix at the canvas size into `GpuKey::Mixed` instead of straight to

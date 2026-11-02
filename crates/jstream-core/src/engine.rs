@@ -2275,8 +2275,8 @@ fn encode_key(graph: &Graph, output_id: &OutputId) -> EncodeKey {
         .encoding_of(output_id)
         .unwrap_or(EncoderProfile::DEFAULT);
     let mix = output
-        .and_then(|output| output.video_mix())
-        .and_then(|id| state.video_mix(id))
+        .and_then(|output| crate::snapshot::shown_mix(state, output))
+        .and_then(|id| state.video_mix(&id))
         .map_or(MixKey::PROGRAM, |mix| {
             let spec = mix.mix();
             MixKey {
