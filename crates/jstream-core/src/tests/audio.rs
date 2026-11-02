@@ -1198,15 +1198,15 @@ fn a_webcam_records_its_paired_audio_input() {
     assert!(eventually(|| audio.open_streams() == 0));
 }
 
-/// A CLAP filter on the master chain (ADR-0035, ADR-0080) gets its own plugin host,
-/// started by the program stage's audio thread, and runs on the host's block once it is
-/// ready; removing the filter stops the host.
-#[test]
-fn a_master_clap_filter_runs_on_a_host() {
+/// An engine whose scan found one CLAP plugin, `clap/org.example.gain`, hosted by the
+/// returned fakes.
+fn clap_engine(
+    audio: &FakeAudioIo,
+    clock: &FakeClock,
+) -> (Engine, jstream_platform::plugin_host::fake::FakePluginHosts) {
     use jstream_platform::plugin_host::fake::{FakePluginHosts, fake_param};
     use jstream_platform::{HostRequest, PlatformError, PluginHost, PluginHosts};
     use jstream_plugin_proto::control::PluginDesc;
-    use jstream_protocol::{FilterChain, FilterId, FilterOwner};
     use std::path::{Path, PathBuf};
 
     struct OneDir(PathBuf, FakePluginHosts);
@@ -1222,10 +1222,12 @@ fn a_master_clap_filter_runs_on_a_host() {
         }
     }
 
-    let clock = FakeClock::new(Timebase::MICROS);
-    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
-    let engine = engine(&audio, &clock);
-    let dir = std::env::temp_dir().join(format!("jstream-master-clap-{}", std::process::id()));
+    let engine = engine(audio, clock);
+    let dir = std::env::temp_dir().join(format!(
+        "jstream-master-clap-{}-{}",
+        std::process::id(),
+        NEXT_CLAP_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
     std::fs::create_dir_all(&dir).expect("dir");
     let file = dir.join("gain.clap");
     std::fs::write(&file, b"").expect("file");
@@ -1244,22 +1246,38 @@ fn a_master_clap_filter_runs_on_a_host() {
     let scan = engine.scan_clap_plugins(Arc::new(OneDir(dir.clone(), fake.clone())));
     std::fs::remove_dir_all(&dir).expect("cleaned up");
     assert_eq!(scan.kinds.len(), 1);
+    (engine, fake)
+}
+
+/// Each [`clap_engine`]'s own scan directory, so tests running at once don't share one.
+static NEXT_CLAP_DIR: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+/// A gain CLAP filter on the master chain.
+fn master_clap() -> Edit {
+    Edit::FilterAdd {
+        owner: jstream_protocol::FilterOwner::Master,
+        chain: jstream_protocol::FilterChain::Audio,
+        filter_id: jstream_protocol::FilterId::new("plugin"),
+        kind: "clap/org.example.gain".into(),
+        settings: Settings::default(),
+        enabled: None,
+        index: None,
+    }
+}
+
+/// A CLAP filter on the master chain (ADR-0035, ADR-0080) gets its own plugin host,
+/// started by the program stage's audio thread, and runs on the host's block once it is
+/// ready; removing the filter stops the host.
+#[test]
+fn a_master_clap_filter_runs_on_a_host() {
+    use jstream_protocol::{FilterId, FilterOwner};
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let (engine, fake) = clap_engine(&audio, &clock);
     let control = connected(&engine);
     block_on(control.call(output_call("yt", true))).expect("output.start");
 
-    batch(
-        &control,
-        Batch::single(Edit::FilterAdd {
-            owner: FilterOwner::Master,
-            chain: FilterChain::Audio,
-            filter_id: FilterId::new("plugin"),
-            kind: "clap/org.example.gain".into(),
-            settings: Settings::default(),
-            enabled: None,
-            index: None,
-        }),
-    )
-    .expect("a master CLAP filter");
+    batch(&control, Batch::single(master_clap())).expect("a master CLAP filter");
     assert!(
         eventually(|| engine.routed_clap_hosted().0 == 1),
         "the master chain runs it on its host's block: {:?}",
@@ -1280,4 +1298,85 @@ fn a_master_clap_filter_runs_on_a_host() {
     assert!(eventually(|| hosts[0].has_exited()), "its host stopped");
     assert_eq!(engine.routed_clap_hosted().0, 0);
     block_on(control.call(output_call("yt", false))).expect("output.stop");
+}
+
+/// An output on a bus other than the master (`output.set_audio_buses`) taps that bus,
+/// and the bus runs a master CLAP filter on a host of its own (ADR-0086): two hosts, one
+/// per bus that feeds an output. Stopping that output stops the bus's host only, while
+/// the stream on the master runs on; disabling the filter stops the other.
+#[test]
+fn a_master_clap_filter_runs_one_host_per_bus_that_feeds_an_output() {
+    use jstream_protocol::{BusId, OutputKind, RecordContainer};
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let (engine, fake) = clap_engine(&audio, &clock);
+    let control = connected(&engine);
+    let dir = std::env::temp_dir().join(format!("jstream-bus-clap-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("dir");
+    let path = dir.join("vod.mp4");
+    batch(
+        &control,
+        Batch {
+            edits: vec![
+                Edit::BusCreate {
+                    bus_id: BusId::new("vod"),
+                    name: "VOD".into(),
+                },
+                Edit::OutputCreate {
+                    output_id: OutputId::new("rec"),
+                    kind: OutputKind::Record {
+                        path: path.to_str().expect("a UTF-8 temp path").into(),
+                        container: RecordContainer::Mp4,
+                    },
+                },
+                Edit::OutputSetAudioBuses {
+                    output_id: OutputId::new("rec"),
+                    audio_buses: vec![BusId::new("vod")],
+                },
+                master_clap(),
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+            ends_gesture: None,
+        },
+    )
+    .expect("a bus, a recording on it, a master CLAP filter");
+    block_on(control.call(output_call("yt", true))).expect("yt start");
+    block_on(control.call(output_call("rec", true))).expect("rec start");
+    let vod = BusId::new("vod");
+    assert!(
+        eventually(|| {
+            let (buses, taps) = engine.routed_bus_hosted();
+            engine.routed_clap_hosted().0 == 1
+                && buses.get(&vod) == Some(&1)
+                && taps.get(&OutputId::new("rec")) == Some(&vod)
+        }),
+        "the recording taps `vod`, whose copy runs on its own host: {:?} {:?}",
+        engine.routed_clap_hosted(),
+        engine.routed_bus_hosted()
+    );
+    let hosts = fake.hosts();
+    assert_eq!(hosts.len(), 2, "one host per bus that feeds an output");
+
+    block_on(control.call(output_call("rec", false))).expect("rec stop");
+    assert!(
+        eventually(|| hosts.iter().filter(|h| h.has_exited()).count() == 1),
+        "the bus's host stopped"
+    );
+    assert!(eventually(|| engine.routed_bus_hosted().0.is_empty()));
+    assert_eq!(engine.routed_clap_hosted().0, 1, "the master bus's runs on");
+    assert_eq!(output_state(&control, "yt"), OutputState::Active);
+
+    batch(
+        &control,
+        Batch::single(Edit::FilterSetEnabled {
+            owner: jstream_protocol::FilterOwner::Master,
+            filter_id: jstream_protocol::FilterId::new("plugin"),
+            enabled: false,
+        }),
+    )
+    .expect("disabled");
+    assert!(eventually(|| hosts.iter().all(|h| h.has_exited())));
+    block_on(control.call(output_call("yt", false))).expect("yt stop");
+    std::fs::remove_dir_all(&dir).expect("cleaned up");
 }

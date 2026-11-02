@@ -340,8 +340,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   outputs whose video chain is empty share one encoder session when they have the same
   `(video_mix, encoder_profile)`, the master stage counting as part of the mix. An
   output with a video chain, even one holding only disabled filters, gets its own render
-  pass and session, keyed by its output ID. An output's own audio chain gives it its own
-  audio encode and never affects video sharing. Hardware session caps differ by GPU
+  pass and session, keyed by its output ID. An output's own audio chain, or a bus other
+  than the master (`output.set_audio_buses`), gives it its own audio encode and never
+  affects video sharing. Hardware session caps differ by GPU
   vendor, so the engine reports, per output, whether it shares and with which outputs
   and whether its session is its own, plus the sessions in use. It does not guess the
   caps. Outputs carry no video chain until filters land, so for now every output shares
@@ -493,8 +494,9 @@ model; a change that would contradict it edits it in the same PR.
 process (`jstream-plugin-host`) are built, and so are starting hosts
 (`jstream-platform-windows`) and watching and restarting them on a control thread
 (`jstream-core`'s `HostSupervisor`), and a source's, the master's and each output's
-audio chain runs CLAP filters, each with its own supervisor (on the master chain, the
-plugin on the master bus and a delayed-dry stand-in on the other buses, #922); the
+audio chain runs CLAP filters, each with its own supervisor (on the master chain, one
+host per bus that feeds an output,
+[ADR-0086](adr/0086-master-clap-filter-one-host-per-output-bus.md)); the
 `stats.tick` count is not yet. Each CLAP filter
 instance runs in its own `jstream-plugin-host` process, on a real-time thread registered
 with MMCSS "Pro Audio" and woken by its own timer on the media clock, which both
@@ -634,6 +636,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   (an input, a resolution and a divisor of the base rate), and `output.set_video_mix`
   points an output at one or back at the program (protocol 0.28). A mix an output shows
   can't be deleted, and a mix showing a scene blocks that scene's delete.
+  `output.set_audio_buses` chooses the bus an output carries, one per audio track and
+  one track so far (protocol 0.59); an output carrying a bus blocks its delete, and
+  `delete.plan` moves it to the master, which is refused while the output runs.
   `item.set_opacity` and `item.set_blend` set a placement's opacity and blend mode
   (`item.add` takes both too), and `filter.add`, `filter.remove`, `filter.set_enabled`,
   `filter.set_settings` and `filter.reorder` edit the filter chains of a source, the
@@ -891,7 +896,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 758 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 764 KB
   of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
   of the edit schemas `item` and `batch` do, because `live.set` takes edits and
   `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking
@@ -1182,7 +1187,7 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   `jstream-graph`, which checks a loaded collection as it checks edits. A field added
   for new collection state (encoder profiles, hotkey bindings, transition presets and
   settings, folders, labels and organisation metadata, keyframe scenes' `variant_of` and
-  `overrides`) is omitted when empty or at its default (for presets, a new collection's one `cut`), so a file without it is still
+  `overrides`, an output's `audio_bus`) is omitted when empty or at its default (for presets, a new collection's one `cut`), so a file without it is still
   valid at the same `schema_version`. `jstream-core`
   loads the file the host names and replaces it atomically after every change.
 - **Asset files** named in settings are stored relative to the collection folder or the

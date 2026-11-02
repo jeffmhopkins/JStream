@@ -2560,6 +2560,7 @@ mod tests {
             encoder_profile: None,
             filters: Default::default(),
             video_mix: None,
+            audio_buses: vec![jstream_protocol::BusId::master()],
         };
         let collection = Collection {
             outputs: vec![

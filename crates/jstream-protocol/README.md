@@ -47,7 +47,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `canvas.set_size`, `source.create`, `source.rename`, `source.set_settings`,
   `source.duplicate`, `source.delete`, `filter.add`, `filter.remove`,
   `filter.set_enabled`, `filter.set_settings`, `filter.reorder`, `output.create`,
-  `output.set_target`, `output.set_encoder`, `output.set_video_mix`, `output.delete`,
+  `output.set_target`, `output.set_encoder`, `output.set_video_mix`,
+  `output.set_audio_buses`, `output.delete`,
   `encoder.create`, `encoder.update`, `encoder.delete`, `video_mix.create`,
   `video_mix.update`, `video_mix.delete`, `source.set_audio`, `bus.create`,
   `bus.rename`, `bus.set_fader`, `bus.set_monitor`, `bus.delete`, `send.set`,
@@ -189,7 +190,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.58 because it added the
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.59 because outputs carry
+  audio buses: `OutputInfo.audio_buses`, the `output.set_audio_buses` edit, and an
+  output as a `bus.delete` blocker ([Audio](#design)); 0.58 added the
   `plugin.list` query, the installed WASM plugins with what each manifest asks for and
   what a person granted ([Plugins](#design)); 0.57 added
   `stats.tick`'s `outputs`, each running output's live stats (`OutputStatsInfo`); 0.56
@@ -515,6 +518,21 @@ the inverses put them back. Since 0.24 a setting can refer to a bus (a `bus`
 reference, which the `waveform` and `spectrum` kinds' `audio` uses to draw it), and
 `bus.delete` is refused while one does, as for a scene or source. Every gain is in dB from −100 to +24; silence is `muted`.
 
+**Output buses** (0.59): an output carries the audio of the buses in its
+`audio_buses`, one per audio track, in track order. Every output writes one audio track
+so far, so the list holds exactly one bus; `OutputInfo` leaves it out while it is
+`["master"]`, the default and what a server older than 0.59 means. `output.set_audio_buses
+{ output_id, audio_buses }` chooses it: any other length, or an output with no audio (a
+virtual camera), is `invalid_argument` on `audio_buses`, and a bus that doesn't exist
+`not_found`. A running output reads its bus, so moving it to another one is
+`invalid_argument` on `output_id` until it stops; that also refuses `delete.plan`'s
+batch for a bus a running output carries, rather than leave the output silent. The master stage's audio chain runs on the bus before the output's own
+chain ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md) §1), a
+CLAP filter there on a plugin host of that bus's own
+([ADR-0086](../../docs/adr/0086-master-clap-filter-one-host-per-output-bus.md)). An
+output that carries a bus blocks its `bus.delete` (blocker field `audio_buses`), and
+`delete.plan` moves it back to the master.
+
 **Monitors** (0.42, ADR-0028's D22): any bus, the master's included, may have a monitor,
 an output device the engine plays the bus on while the program mixer runs, so the
 operator hears it. `bus.set_monitor { bus_id, monitor? }` sets one, and with `monitor`
@@ -609,10 +627,12 @@ never a type per kind.
   ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)).
   `source.delete` is refused while an item places the source, and `scene.delete` while a
   `scene` source or a video mix shows the scene; either, and `bus.delete` (0.24), is
-  refused while a setting refers to its target. The `invalid_argument` lists every blocker in `blockers`, each a `Blocker`
+  refused while a setting refers to its target, and `bus.delete` (0.59) while an output
+  carries the bus. The `invalid_argument` lists every blocker in `blockers`, each a `Blocker`
   `{entity, id, field}`: the item (`source_id`), the `scene` source (`kind.scene_id`),
-  the video mix (`mix.input.scene_id`) or the source whose setting refers to it
-  (`settings.<param>`, or `filters.<filter_id>.<param>` for a filter's setting).
+  the video mix (`mix.input.scene_id`), the output (`audio_buses`) or the source whose
+  setting refers to it (`settings.<param>`, or `filters.<filter_id>.<param>` for a
+  filter's setting).
   `delete.plan` returns
   the batch that removes them with the target (see [Queries](#design)). Hotkey
   bindings are never blockers: a delete removes the bindings that name its target
@@ -1004,11 +1024,13 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `source.set_settings` per source, which keeps the source, and one
   `filter.set_settings` per filter), delete the `scene` sources
   that show a deleted scene, point every video mix that shows it at `program` (one
-  `video_mix.update`, which keeps the mix), and last delete the target. Deleting a
+  `video_mix.update`, which keeps the mix), move every output that carries a deleted bus
+  to the master (`output.set_audio_buses`, 0.59), and last delete the target. Deleting a
   scene deletes the
   `scene` sources that show it, and the cascade stops there, since deleting a source
-  deletes no scene. A bus is held only by settings references, which the plan clears;
-  its `bus.delete` takes its sends. A target nothing refers to plans just its own
+  deletes no scene. A bus is held only by settings references, which the plan clears,
+  and by the outputs that carry it, which the plan moves; its `bus.delete` takes its
+  sends. A target nothing refers to plans just its own
   delete. `hotkeys` lists the bindings the batch removes with what they name, ordered
   by chord (0.25; omitted when there are none); they need no edit of their own. The client
   shows the plan, then sends it as an ordinary batch with that `expected_rev`, so it is

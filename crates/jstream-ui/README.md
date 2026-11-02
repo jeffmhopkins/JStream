@@ -573,12 +573,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Redo in the Edit menu call `history.undo` and `history.redo`, like the canvas's
   buttons. A failed call shows in the shell's problem bar. The menus close on Escape
   or on a press anywhere outside them.
-- **Outputs.** The panel reads the outputs and encoder profiles with `state.get`, then
+- **Outputs.** The panel reads the outputs, encoder profiles and buses with `state.get`, then
   each output's `output.status`, and re-reads them on `state.changed` and
   `events.dropped`; `output.state_changed` updates one output's state in place. It
   creates RTMP(S), recording and virtual camera outputs (IDs `output-N`, the first free one), changes
   an RTMP server URL (`output.set_target`) and the encoder profile, deletes a stopped
-  output, and starts and stops each. Above the cards, the program output's row
+  output, and starts and stops each. A card's Audio select picks the bus the output
+  carries (`output.set_audio_buses`, one bus); while the output runs it is disabled and
+  titled "Stop the output to change its bus", as the engine refuses the move. A virtual
+  camera's card has none. Above the cards, the program output's row
   ("master") and a row per output with its state each have an "FX N" button counting
   that chain's filters, which shows the chain in the Filters panel (below the rows,
   the prototype's footnote). The header's "Go Live" starts every stopped or
