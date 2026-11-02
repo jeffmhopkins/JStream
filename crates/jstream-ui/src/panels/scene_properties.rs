@@ -498,7 +498,6 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
     .into_any()
 }
 
-/// The scene's video chain (FL-06), each change sent at once, and the Add filter button.
 /// The `#rrggbb` a colour swatch shows for `background`: its colour without alpha, or
 /// black for none or for text that isn't a colour.
 fn background_swatch(background: &str) -> String {
@@ -517,6 +516,7 @@ fn with_swatch(background: Option<&str>, picked: &str) -> String {
     }
 }
 
+/// The scene's video chain (FL-06), each change sent at once, and the Add filter button.
 /// A keyframe scene shows its parent's chain, which it has no other of (ADR-0065 §3).
 #[component]
 fn SceneFilterSide(owner: FilterOwner, parent: Option<String>) -> impl IntoView {

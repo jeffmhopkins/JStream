@@ -438,9 +438,9 @@ pub(crate) struct Shot {
     /// The scene on program (ADR-0030). `None` when the collection has no scene.
     program: Option<SceneId>,
     scenes: BTreeMap<SceneId, Vec<Placed>>,
-    /// The background each copied scene has, by scene, straight sRGB (ADR-0024 §4): a
-    /// keyframe scene's and a group view's are its parent's. A scene without one isn't
-    /// here, and is transparent.
+    /// The background each copied scene has, by scene, straight sRGB (ADR-0089 §4): a
+    /// keyframe scene's is its parent's, and a group, or a group's view, has none. A
+    /// scene without one isn't here, and is transparent.
     backgrounds: BTreeMap<SceneId, Color>,
     /// The frames the copied scenes place, by source.
     frames: BTreeMap<SourceId, Frame>,
