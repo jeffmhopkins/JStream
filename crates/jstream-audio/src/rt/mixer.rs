@@ -726,6 +726,20 @@ impl Mixer {
                         chain.edit(id, &params);
                     }
                 }
+                Command::SetMasterKernel {
+                    slot,
+                    bus,
+                    id,
+                    kernel,
+                } => {
+                    let replaced = match self.buses.get_mut(slot).and_then(Option::as_mut) {
+                        Some(entry) if entry.id == bus => entry.master.replace(id, kernel),
+                        _ => Err(kernel),
+                    };
+                    // The kernel it replaced, or the one refused.
+                    let (Ok(kernel) | Err(kernel)) = replaced;
+                    self.plane.retirer().kernel(kernel);
+                }
                 Command::AddTap(tap) => {
                     if self.taps.len() >= MAX_OUTPUT_TAPS {
                         self.plane.retirer().tap(tap);
@@ -881,6 +895,7 @@ impl Drop for Mixer {
                     }
                     self.plane.retirer().kernels(kernels);
                 }
+                Ok(Command::SetMasterKernel { kernel, .. }) => self.plane.retirer().kernel(kernel),
                 Ok(Command::AddTap(tap)) => self.plane.retirer().tap(tap),
                 Ok(
                     Command::RemoveFilter { .. }
@@ -1757,6 +1772,108 @@ mod tests {
         m.mix(at, &mut out).unwrap();
         assert_eq!(m.latency_frames(), 0);
         assert_frames(&out, [0.5; 2], "removed");
+    }
+
+    /// ADR-0086: a bus that feeds an output runs its copy of a master CLAP filter on a
+    /// host of its own once it gets one, at the filter's latency, so each output hears
+    /// the plugin with its own state; taking the host away goes back to delayed dry.
+    /// The master bus keeps the host it was added with, a host of another latency is
+    /// refused, and a built-in filter has no hosts.
+    #[test]
+    fn each_bus_that_feeds_an_output_runs_a_master_clap_filter_on_its_own_host() {
+        use crate::{AudioError, FilterSpec, HostMemory};
+        use jstream_plugin_proto::{Config, EngineBlock, Shared, first_useful};
+        let block = 480;
+        let mut m = Mixer::new(config(block)).unwrap();
+        let (mut a, ca) = m.add_input(stereo48()).unwrap();
+        feed(&mut a, 0.5, 0.5, 1.0);
+        let aux = m.add_bus().unwrap();
+        ca.set_send(aux.id(), 1.0);
+        let tap = m.add_output_tap(aux.id()).unwrap();
+        let host_block = |latency: u32| {
+            let shared: Arc<Shared> = Arc::from(Shared::new_boxed());
+            shared
+                .init(Config {
+                    sample_rate: RATE,
+                    block_frames: block as u32,
+                    depth: 1,
+                })
+                .unwrap();
+            shared.publish_ready(latency);
+            let memory: HostMemory = Arc::new(EngineBlock::new(Arc::clone(&shared)));
+            (shared, memory)
+        };
+        // A host, inline: scales every block the mixer wrote by `gain`.
+        let serve = |shared: &Shared, next: &mut u64, gain: f32| {
+            let head = shared.input.head();
+            *next = (*next).max(first_useful(head, 1));
+            let mut buf = vec![0.0; 2 * block];
+            while *next < head {
+                if shared.input.read(*next, &mut buf) {
+                    buf.iter_mut().for_each(|s| *s *= gain);
+                    shared.output.write(*next, &buf);
+                }
+                *next += 1;
+            }
+        };
+        let (master_shared, master_memory) = host_block(0);
+        let clap = m.master().insert_host_filter(0, master_memory).unwrap();
+        let (aux_shared, aux_memory) = host_block(0);
+        clap.set_bus_host(aux.id(), Some(aux_memory)).unwrap();
+        let (mut master_next, mut aux_next) = (0, 0);
+        let mut out = vec![0.0; 2 * block];
+        let mut at = 40_000i64;
+        let mut last = None;
+        for _ in 0..4 {
+            last = Some(m.mix(at, &mut out).unwrap());
+            serve(&master_shared, &mut master_next, 0.5);
+            serve(&aux_shared, &mut aux_next, 0.25);
+            at += block as i64;
+        }
+        assert_eq!(m.latency_frames(), block);
+        assert_frames(&out, [0.25; 2], "the master bus through its host");
+        let (pts, tapped) = m.output_block(tap.id()).unwrap();
+        assert_frames(tapped, [0.125; 2], "aux through its own host");
+        assert_eq!(pts, last.unwrap().pts, "the same stamp");
+
+        // Refused: the master bus, a host of another latency, a built-in filter.
+        let (_, other) = host_block(0);
+        assert!(matches!(
+            clap.set_bus_host(BusId::MASTER, Some(other)),
+            Err(AudioError::InvalidConfig { .. })
+        ));
+        let (_, slower) = host_block(64);
+        assert!(matches!(
+            clap.set_bus_host(aux.id(), Some(slower)),
+            Err(AudioError::InvalidConfig { .. })
+        ));
+        let gain = m
+            .master()
+            .add_filter(FilterSpec::Gain { gain_db: 0.0 })
+            .unwrap();
+        assert!(matches!(
+            gain.set_bus_host(aux.id(), None),
+            Err(AudioError::InvalidConfig { .. })
+        ));
+        assert!(gain.remove());
+
+        // Back to delayed dry.
+        clap.set_bus_host(aux.id(), None).unwrap();
+        for _ in 0..3 {
+            m.mix(at, &mut out).unwrap();
+            serve(&master_shared, &mut master_next, 0.5);
+            at += block as i64;
+        }
+        assert_frames(&out, [0.25; 2], "the master bus keeps its host");
+        assert_frames(m.output_block(tap.id()).unwrap().1, [0.5; 2], "aux: dry");
+        assert_eq!(m.latency_frames(), block, "the same latency");
+
+        assert!(clap.remove());
+        assert!(matches!(
+            clap.set_bus_host(aux.id(), None),
+            Err(AudioError::Removed)
+        ));
+        assert!(aux.remove());
     }
 
     /// An output tap's own chain changes only that tap's blocks, and its latency only

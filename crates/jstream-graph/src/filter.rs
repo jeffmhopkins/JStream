@@ -1,7 +1,8 @@
 //! Filter chains: the `filter.*` edits (ADR-0026, docs/adr/0026-source-filter-chains.md).
 //!
-//! A source has a video chain and an audio chain. The master stage and each output that
-//! carries audio have an audio chain (ADR-0080); their video chains wait for video mixes.
+//! A source has a video chain and an audio chain. The master stage and every output have
+//! a video chain, and the master stage and each output that carries audio an audio
+//! chain (ADR-0080).
 //! A filter's kind is a filter kind of its chain, and its settings are checked and
 //! completed against the kind's descriptor exactly as a source's are (ADR-0025). Scene
 //! and source references in a source's filter settings are edges of that source
@@ -242,9 +243,9 @@ fn unknown_owner() -> ProtocolError {
 /// Checks that `owner` has `chain`, or `invalid_argument` on `chain`. A source has a
 /// video chain if its kind produces video, and an audio chain if it produces audio and
 /// is not a `scene` source (ADR-0026 §1); a kind the graph doesn't describe has neither.
-/// The master stage and an output that carries audio have an audio chain; their video
-/// chains wait for video mixes (ADR-0080). A scene and an item have a video chain only
-/// (ADR-0065 §1).
+/// The master stage and every output have a video chain, and the master stage and an
+/// output that carries audio an audio chain (ADR-0080). A scene and an item have a
+/// video chain only (ADR-0065 §1).
 fn check_chain(
     state: &State,
     kinds: &Kinds,
@@ -277,11 +278,11 @@ fn check_chain(
                 ))
             }
         }
-        (FilterOwner::Master | FilterOwner::Output { .. }, FilterChain::Video) => missing(
-            "the master stage's and outputs' video chains are not available yet; only \
-             their audio chains hold filters"
-                .into(),
-        ),
+        (FilterOwner::Output { output_id }, FilterChain::Video) => match state.output(output_id) {
+            None => Err(not_found(EntityKind::Output, output_id.as_str())),
+            Some(_) => Ok(()),
+        },
+        (FilterOwner::Master, FilterChain::Video) => Ok(()),
         (FilterOwner::Output { output_id }, FilterChain::Audio) => match state.output(output_id) {
             None => Err(not_found(EntityKind::Output, output_id.as_str())),
             Some(output) if output.has_audio() => Ok(()),

@@ -81,8 +81,8 @@ scene's right-click menu (or Ctrl+C then Ctrl+V on its row) copies the whole sce
 Panels can be moved, hidden and brought back from the **View** menu; **Layout** saves
 and resets arrangements.
 
-To watch a scene, the program or a multiview on another screen, choose **Pop out** on a
-scene's right-click menu, or a projector under **View**: each opens in a window of its
+To watch a scene, a source, the program or a multiview on another screen, choose
+**Pop out** on a scene's or an object's right-click menu, or a projector under **View**: each opens in a window of its
 own, or full screen. Drag a window to the monitor you want and double-click it to fill
 that screen; Esc closes it.
 

@@ -254,7 +254,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Opens a preview stream of the program mix, or of the scene `scene_id`, for this\nsession: low-resolution pictures sent as binary frames on `channel`, only to this\nsession (ADR-0045). The picture is the canvas scaled down to fit `max_width` ×\n`max_height`, with even sides; it follows the canvas when that changes. A picture\nis sent when what the stream shows changes, at most `fps` times a second, and at\nleast once every 2 s (a keyframe), so a client that lost frames recovers. The\nengine picks the first of `codecs` it can encode, and every frame names its codec.\nThe stream shows the mix before any master stage. A scene's stream shows the\nscene alone, as program would show it with no transition running, and never makes\na source shown or heard (ADR-0028). It lasts until `preview.unsubscribe`, the\nsession's end, or an end frame (the engine could not go on, or the scene was\ndeleted; the frame says why).\n\nWith `source`, the stream shows that source alone, fitted into the canvas as an\nitem filling it would show it, with no filters: what a display, window or webcam\nsource would capture, before it exists or before its new settings are saved (the\nProperties dialog's picture). The engine opens the capture for the stream alone;\na webcam or capture card already open is shared, not opened twice. The canvas\nsize is the one at the subscription: subscribe again for other settings.\n\nFails with `invalid_argument` for a field out of range (`max_width` 16 to 1920,\ndefault 640; `max_height` 16 to 1080, default 360; `fps` 1 to 30, default 15), a\ncodec named twice, a `channel` this session already has open (`channel`), a\nseventeenth open stream, both `scene_id` and `source` (`source`), or a `source`\nwhose kind is not a capture kind or whose settings its kind refuses\n(`source.kind`, `source.settings.<param>`); with `not_found` for a `scene_id` the collection doesn't\nhave; and with `action_failed` when the session cannot receive binary frames (an\nMCP session) or none of `codecs` can be encoded here.",
+          "description": "Opens a preview stream of the program mix, or of the scene `scene_id`, for this\nsession: low-resolution pictures sent as binary frames on `channel`, only to this\nsession (ADR-0045). The picture is the canvas scaled down to fit `max_width` ×\n`max_height`, with even sides; it follows the canvas when that changes. A picture\nis sent when what the stream shows changes, at most `fps` times a second, and at\nleast once every 2 s (a keyframe), so a client that lost frames recovers. The\nengine picks the first of `codecs` it can encode, and every frame names its codec.\nThe stream shows the mix before any master stage. A scene's stream shows the\nscene alone, as program would show it with no transition running, and never makes\na source shown or heard (ADR-0028). It lasts until `preview.unsubscribe`, the\nsession's end, or an end frame (the engine could not go on, or the scene was\ndeleted; the frame says why).\n\nWith `source`, the stream shows that source alone, fitted into the canvas as an\nitem filling it would show it, with no filters: what a display, window or webcam\nsource would capture, before it exists or before its new settings are saved (the\nProperties dialog's picture). The engine opens the capture for the stream alone;\na webcam or capture card already open is shared, not opened twice. The canvas\nsize is the one at the subscription: subscribe again for other settings.\n\nWith `source_id`, the stream shows that source of the collection alone, fitted\ninto the canvas as an item filling it would show it, with the source's own\nfilters and none of an item's: a projector of the source. It follows the\nsource's settings and filters as they change, and the canvas too. Like a scene's\nstream it never makes the source shown or heard. It ends, with an end frame, when\nthe source is deleted.\n\nFails with `invalid_argument` for a field out of range (`max_width` 16 to 1920,\ndefault 640; `max_height` 16 to 1080, default 360; `fps` 1 to 30, default 15), a\ncodec named twice, a `channel` this session already has open (`channel`), a\nseventeenth open stream, more than one of `scene_id`, `source` and `source_id` (the\nlater field), or a `source`\nwhose kind is not a capture kind or whose settings its kind refuses\n(`source.kind`, `source.settings.<param>`); with `not_found` for a `scene_id` or a\n`source_id` the collection doesn't have; and with `action_failed` when the session cannot receive binary frames (an\nMCP session) or none of `codecs` can be encoded here.",
           "properties": {
             "channel": {
               "description": "The number this stream's binary frames carry, chosen by the client. Not an\nID: it only tells this session's streams apart, and can be reused once the\nstream has ended.",
@@ -317,6 +317,17 @@ source: crates/jstream-protocol/src/fixtures.rs
                 }
               ],
               "description": "A source to show alone instead, one the collection doesn't hold (since 0.49).\nOmitted for the program mix or `scene_id`'s scene."
+            },
+            "source_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SourceId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A source of the collection to show alone (since 0.56), as a projector of it\ndoes. Omitted for the program mix, `scene_id`'s scene or `source`."
             },
             "type": {
               "const": "preview.subscribe",
@@ -514,6 +525,24 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "plugin_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Re-enables an effect-pack kind the engine quarantined after a GPU device loss was\nblamed on it (0.61, #349; `gpu.device_lost`), and the whole pack when the pack\nwas quarantined. Its filters draw again from the next frame. The engine never\nlifts a quarantine by itself, nor when the pack's files change. Succeeds for a\nkind that isn't quarantined. Fails with `invalid_argument` on `kind_id`, as\n`kind.describe` does, for a kind that no loaded pack has and no quarantine names. For a person only, like\n`plugin.enable`.",
+          "properties": {
+            "kind_id": {
+              "description": "The kind, `<pack>/<effect>`.",
+              "type": "string"
+            },
+            "type": {
+              "const": "effect.enable",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "kind_id"
           ],
           "type": "object"
         },
@@ -3006,6 +3035,32 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Chooses the buses whose audio an output carries (since 0.59), one per audio\ntrack, in track order. Every output writes one audio track for now, so the list\nholds exactly one bus; any other length is `invalid_argument` on `audio_buses`,\nas is an output with no audio (a virtual camera). Each bus must exist, else\n`not_found`. The master stage's audio chain runs on the bus, then the output's\nown chain (ADR-0080 §1). A running output reads its bus, so moving it to another\nis `invalid_argument` on `output_id` until it stops. Inverse:\n`output.set_audio_buses` with the previous buses.",
+          "properties": {
+            "audio_buses": {
+              "description": "The buses, in track order.",
+              "items": {
+                "$ref": "#/$defs/BusId"
+              },
+              "type": "array"
+            },
+            "output_id": {
+              "$ref": "#/$defs/OutputId",
+              "description": "The output to change."
+            },
+            "type": {
+              "const": "output.set_audio_buses",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "output_id",
+            "audio_buses"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Adds a folder to the scene list, last in folder order (ADR-0024 §3). Folders\norganise only: they change no rendering, switching or nesting. Inverse:\n`folder.delete`.",
           "properties": {
             "folder_id": {
@@ -3758,7 +3813,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Deletes a bus and every send into it. The master bus can't be deleted\n(`invalid_argument`), nor (since 0.24) a bus a source's settings refer to: that\n`invalid_argument` lists the `blockers`, and `delete.plan` clears them. Inverse: `bus.create` with its name, `bus.set_fader` if\nits fader or mute were not the defaults, `bus.set_monitor` if it had a monitor\n(since 0.42), then `send.set` for each send it had.",
+          "description": "Deletes a bus and every send into it. The master bus can't be deleted\n(`invalid_argument`), nor (since 0.24) a bus a source's settings refer to, nor\n(since 0.59) a bus an output carries: that `invalid_argument` lists the\n`blockers`, and `delete.plan` clears them, moving such an output to the master\nbus. Inverse: `bus.create` with its name, `bus.set_fader` if\nits fader or mute were not the defaults, `bus.set_monitor` if it had a monitor\n(since 0.42), then `send.set` for each send it had.",
           "properties": {
             "bus_id": {
               "$ref": "#/$defs/BusId",
@@ -3877,7 +3932,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "description": "The encoder session a running output uses, as `output.status` reports it.",
       "properties": {
         "dedicated": {
-          "description": "Whether the output has the session to itself by rule: an output with its own\nvideo chain never shares (ADR-0080 §2), so its picture costs one more GPU pass\nand one more encoder session. Omitted when false, which is every output until\nvideo chains exist.",
+          "description": "Whether the output has the session to itself by rule: an output with its own\nvideo chain never shares (ADR-0080 §2), so its picture costs one more GPU pass\nand one more encoder session. Omitted when false: an output whose video chain\nwas empty when it started.",
           "type": "boolean"
         },
         "hardware": {
@@ -4307,6 +4362,13 @@ source: crates/jstream-protocol/src/fixtures.rs
               ],
               "description": "The engine's load: how many frames the program drew and how much CPU time\nthe engine's process used, as running totals beside the time they were read\nat (0.48). An older engine leaves it out."
             },
+            "outputs": {
+              "description": "Each running output's live stats, by output ID: what it has sent and lost\nsince it started, its bitrate over the last tick and its health (0.57).\nEmpty, and left out, while no output runs or on an engine with no media\nbackends; an older engine leaves it out too.",
+              "items": {
+                "$ref": "#/$defs/OutputStatsInfo"
+              },
+              "type": "array"
+            },
             "seq": {
               "description": "Monotonic sample number, starting at 1.",
               "format": "uint64",
@@ -4577,6 +4639,45 @@ source: crates/jstream-protocol/src/fixtures.rs
             "state"
           ],
           "type": "object"
+        },
+        {
+          "description": "The program stage's GPU device was lost (0.61, #349): a GPU hang that the OS\nreset (Windows' TDR), a driver reset or a removed GPU. The engine opens a new\ndevice and the outputs repeat their last frame meanwhile, unless `recovering` is\n`false`. A loss is blamed on the effect-pack kinds drawn in the frames before it;\neach blamed kind is quarantined, its filters bypassed, until a person re-enables\nit (`effect.enable`). Runtime state: a client that misses it sees the quarantine\nin `kind.list`.",
+          "properties": {
+            "blamed": {
+              "default": [],
+              "description": "The effect-pack kinds drawn in the frames before the loss, ordered by ID:\nempty when none was, and the loss had another cause.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "cause": {
+              "description": "What the driver or the engine said about the loss.",
+              "type": "string"
+            },
+            "quarantined": {
+              "default": [],
+              "description": "The kinds this loss quarantined, ordered by ID: the blamed ones, or every kind\nof a pack blamed for a second loss in this run.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "recovering": {
+              "description": "Whether the engine is opening a new device. `false` when it gave up (too many\nlosses, or nothing it could switch to): the outputs that drew on it fail.",
+              "type": "boolean"
+            },
+            "type": {
+              "const": "gpu.device_lost",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "cause",
+            "recovering"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -4681,7 +4782,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it.",
+          "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it. Its video chain (since 0.60)\nruns once per frame on each mix an output draws, at the canvas size; the\nediting canvas, previews and `video.snapshot` show the mix before it. Its\nfilters can't hold a reference.",
           "properties": {
             "type": {
               "const": "master",
@@ -4694,7 +4795,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "An output's own chains, which run after the master stage for that output only\n(ADR-0080 §2). An output with filters on its audio chain gets its own audio\nencode from its next start; edits to a chain it started with apply live.",
+          "description": "An output's own chains, which run after the master stage for that output only\n(ADR-0080 §2). An output with filters on its audio chain gets its own audio\nencode from its next start; edits to a chain it started with apply live. Every\noutput, the virtual camera included, has a video chain (since 0.60). A stream\nor recording with a filter on it, even a disabled one, gets its own render\npass and encoder session from its next start, which `output.status` reports as\n`dedicated`; a virtual camera, which opens no encoder session, gets its own\nrender pass (a program frame of its own) and is never reported `dedicated`.",
           "properties": {
             "output_id": {
               "$ref": "#/$defs/OutputId",
@@ -5429,6 +5530,10 @@ source: crates/jstream-protocol/src/fixtures.rs
           "description": "Display name.",
           "type": "string"
         },
+        "quarantined": {
+          "description": "An effect-pack kind the engine quarantined after a GPU device loss was blamed on\nit (0.61, `gpu.device_lost`): its filters are bypassed until a person re-enables\nit (`effect.enable`). Omitted when `false`.",
+          "type": "boolean"
+        },
         "version": {
           "description": "The descriptor's version. Stored settings record the version they were written\nwith.",
           "format": "uint32",
@@ -5542,7 +5647,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "properties": {
         "filters": {
           "$ref": "#/$defs/FilterChains",
-          "description": "Its chains, which `filter.*` edits with the owner `{\"type\":\"master\"}`. Only the\naudio chain holds filters so far. Omitted while both are empty."
+          "description": "Its chains, which `filter.*` edits with the owner `{\"type\":\"master\"}`. Both hold\nfilters (the video chain since 0.60). Omitted while both are empty."
         }
       },
       "type": "object"
@@ -5648,6 +5753,36 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "OutputHealth": {
+      "description": "How a running output is doing, from its own drops and link over the last ten\nseconds: the share of its video frames lost there, and whether its live link is up.\nSerialized as a snake_case string.",
+      "oneOf": [
+        {
+          "const": "waiting",
+          "description": "It hasn't sent a video frame yet: it is connecting, or its encoder is starting.",
+          "type": "string"
+        },
+        {
+          "const": "good",
+          "description": "Nothing lost in the last ten seconds.",
+          "type": "string"
+        },
+        {
+          "const": "fair",
+          "description": "Something lost in the last ten seconds, but under 2% of its video frames.",
+          "type": "string"
+        },
+        {
+          "const": "poor",
+          "description": "2% or more of its video frames lost in the last ten seconds, or its live link is\ndown and reconnecting.",
+          "type": "string"
+        },
+        {
+          "const": "other",
+          "description": "A value this version doesn't know, from a newer server.",
+          "type": "string"
+        }
+      ]
+    },
     "OutputId": {
       "description": "An output (RTMP(S), recording, virtual camera).",
       "type": "string"
@@ -5655,6 +5790,13 @@ source: crates/jstream-protocol/src/fixtures.rs
     "OutputInfo": {
       "description": "One output, as `output.list` and `state.get` report it: its collection state.\nWhether it runs, and whether its stream key is set, are in `output.status`.",
       "properties": {
+        "audio_buses": {
+          "description": "The buses whose audio it carries (`output.set_audio_buses`, since 0.59), one per\naudio track, in track order: for now always one, as every output writes one\naudio track. The master stage's audio chain runs on each of them before the\noutput's own chain (ADR-0080 §1). Absent means `[\"master\"]`, as from a server\nolder than 0.59; a virtual camera, which has no audio, always reports that.",
+          "items": {
+            "$ref": "#/$defs/BusId"
+          },
+          "type": "array"
+        },
         "encoder_profile": {
           "anyOf": [
             {
@@ -5668,7 +5810,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         "filters": {
           "$ref": "#/$defs/FilterChains",
-          "description": "Its own chains, which `filter.*` edits with the owner\n`{\"type\":\"output\",\"output_id\":…}` and which run after the master stage\n(ADR-0080 §2). Only the audio chain holds filters so far, and a virtual camera,\nwhich has no audio, has none. Omitted while both are empty."
+          "description": "Its own chains, which `filter.*` edits with the owner\n`{\"type\":\"output\",\"output_id\":…}` and which run after the master stage\n(ADR-0080 §2). Both hold filters (the video chain since 0.60); a virtual camera,\nwhich has no audio, has a video chain only. Omitted while both are empty."
         },
         "kind": {
           "$ref": "#/$defs/OutputKind",
@@ -5789,6 +5931,66 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "string"
         }
       ]
+    },
+    "OutputStatsInfo": {
+      "description": "One running output's live stats in a `stats.tick` (0.57): what it has sent and lost\nsince its `output.start`, its bitrate and its health.\n\nThe counts are running totals for this run of the output: they start at 0 on each\n`output.start`, and a client that misses a tick subtracts the last one it did see.\n`kbps` and `health` are gauges the engine works out from its own previous samples, so\nthey don't depend on the client seeing every tick.\n\nEvery field but `output_id` may be missing and parses as 0 (or `waiting`), so a\nfield added later can be left out by an older sender (R-API-001). Unknown fields are\nignored.",
+      "properties": {
+        "bytes": {
+          "default": 0,
+          "description": "Encoded bytes, video and audio, the output has handed to its muxer this run,\nleft out while its live link is down: the publish target drops what it is handed\nthen, and counts it in `dropped_packets`.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "dropped_frames": {
+          "default": 0,
+          "description": "Video frames the output lost this run: frames its video encoder dropped (its\ninput queue was full or it was busy), and encoded frames dropped on their way to\nthis output because it fell behind. An encoder session that two outputs share\ncounts its drops for each.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "dropped_packets": {
+          "default": 0,
+          "description": "Other encoded packets the output lost this run: audio packets that it fell\nbehind on, packets the muxer refused or a stop's drain gave up on, and what the\npublish target dropped while its link was down.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "frames": {
+          "default": 0,
+          "description": "Video frames the output has handed to its muxer this run, left out like `bytes`\nwhile its live link is down.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "health": {
+          "$ref": "#/$defs/OutputHealth",
+          "default": "waiting",
+          "description": "How the output is doing over the last ten seconds."
+        },
+        "kbps": {
+          "default": 0,
+          "description": "What the output sent over the last tick's interval, in kilobits a second (bytes\ntimes 8 over the milliseconds since the previous sample). 0 on the first tick of\na run that hasn't sent anything yet.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "output_id": {
+          "$ref": "#/$defs/OutputId",
+          "description": "The output."
+        },
+        "uptime_ms": {
+          "default": 0,
+          "description": "Milliseconds since the engine received this run's `output.start`, on its\nmonotonic clock: it includes opening the destination and starting the pipeline.\nIt keeps counting while the output reconnects.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "output_id"
+      ],
+      "type": "object"
     },
     "OverrideField": {
       "description": "One of the four fields a keyframe scene can override. Each is overridden whole: a\nvariant that overrides `geometry` overrides all of it.",
@@ -6253,6 +6455,82 @@ source: crates/jstream-protocol/src/fixtures.rs
       "description": "An installed WASM automation plugin (ADR-0069), chosen by the person who installs\nit.",
       "type": "string"
     },
+    "PluginInfo": {
+      "description": "One installed plugin, as `plugin.list` lists it (0.58).",
+      "properties": {
+        "grant": {
+          "$ref": "#/$defs/PluginGrant",
+          "description": "What a person granted it."
+        },
+        "path": {
+          "description": "Its package directory on the engine's machine, as `plugin.install` named it.",
+          "type": "string"
+        },
+        "plugin_id": {
+          "$ref": "#/$defs/PluginId",
+          "description": "The plugin."
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginDisabledReason"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why the engine disabled it, as `plugin.state_changed` says. Omitted when it is\nenabled."
+        },
+        "remote_name": {
+          "description": "The name the plugin's manifest gives itself: the plugin's own text, never an\ninstruction (ADR-0059). Omitted when it gives none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "request": {
+          "$ref": "#/$defs/PluginRequest",
+          "description": "What its manifest asks for, as the engine last read it. For a plugin disabled as\n`needs_grant`, this is the update's request, which a `plugin.grant` acknowledges."
+        },
+        "state": {
+          "$ref": "#/$defs/PluginState",
+          "description": "Whether it runs. A plugin being enabled is listed as it was until it loads."
+        }
+      },
+      "required": [
+        "plugin_id",
+        "state",
+        "path",
+        "request",
+        "grant"
+      ],
+      "type": "object"
+    },
+    "PluginRequest": {
+      "description": "What a plugin's manifest asks for (ADR-0076): the classes, hosts and folders a\nperson may grant it. A grant may give less, never more. `read` is every plugin's,\nasked for or not.\n\n```json\n{\"classes\": [\"edit\"], \"hosts\": [\"https://api.example.com:443\"], \"folders\": true}\n```",
+      "properties": {
+        "classes": {
+          "description": "The classes it asks for. Omitted for none.",
+          "items": {
+            "$ref": "#/$defs/PluginClass"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "folders": {
+          "description": "Whether it wants folders a person picks. Omitted when `false`.",
+          "type": "boolean"
+        },
+        "hosts": {
+          "description": "The hosts it asks to reach, each as `scheme://host:port`. Omitted for none.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
     "PluginState": {
       "description": "Whether a plugin runs.",
       "oneOf": [
@@ -6714,6 +6992,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "key"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Lists the installed WASM automation plugins (0.58, ADR-0069), ordered by ID: each\none's state, its package, what its manifest asks for and what a person granted it,\nso a client can show them and offer a grant. For a person only, like\n`plugin.install`: no plugin is ever granted it, and no MCP tool carries it. Not\ncollection state, so the result carries no `rev`. An engine built without WASM\nplugins lists none.",
+          "properties": {
+            "type": {
+              "const": "plugin.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
           ],
           "type": "object"
         }
@@ -7495,6 +7786,27 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "key"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `plugin.list` (0.58). Installed plugins are not collection state, so\nit carries no `rev`.",
+          "properties": {
+            "plugins": {
+              "description": "The installed plugins, ordered by ID.",
+              "items": {
+                "$ref": "#/$defs/PluginInfo"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "plugin.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "plugins"
           ],
           "type": "object"
         }

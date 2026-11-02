@@ -29,8 +29,9 @@
 //! latency, so the compensation delays move), master filters added to every bus's copy,
 //! edited and removed, output taps added (one with its own chain, on a bus that is
 //! later removed) and removed, and a CLAP filter whose host keeps up, then goes missing
-//! and comes back (its blocks bypassed and crossfaded), then is removed. The test
-//! asserts afterwards that each path actually ran.
+//! and comes back (its blocks bypassed and crossfaded), then is removed, and a master
+//! CLAP filter whose aux-bus copy swaps to a host of its own and back to its stand-in.
+//! The test asserts afterwards that each path actually ran.
 //!
 //! Dropping an input's producer frees its resampler state, so a producer is dropped
 //! outside the checked scope: that is stream teardown, not steady state.
@@ -482,6 +483,8 @@ mod rt {
         let mut extra = None;
         let mut clap = None;
         let mut host: Option<FakeHost> = None;
+        let mut master_clap = None;
+        let mut aux_host: Option<HostMemory> = None;
         let mut latencies = std::collections::BTreeSet::new();
 
         reset_violation_count();
@@ -558,6 +561,43 @@ mod rt {
                     });
                 }
                 2_450 => assert!(clap.take().expect("added").remove(), "removal queued"),
+                // A CLAP filter on the master chain whose copy on the aux bus, which
+                // feeds the aux tap, runs on a host of its own (ADR-0086), then goes
+                // back to delayed dry; neither host is served, so both miss every block.
+                1_590 => {
+                    let block = sim.mixer.config().block_frames;
+                    let ready = || {
+                        let shared: Arc<Shared> = Arc::from(Shared::new_boxed());
+                        shared
+                            .init(Config {
+                                sample_rate: ENGINE,
+                                block_frames: block as u32,
+                                depth: DEFAULT_DEPTH,
+                            })
+                            .expect("valid config");
+                        shared.publish_ready(0);
+                        let memory: HostMemory = Arc::new(EngineBlock::new(shared));
+                        memory
+                    };
+                    let filter = master
+                        .insert_host_filter(usize::MAX, ready())
+                        .expect("a ready host");
+                    let memory = ready();
+                    filter
+                        .set_bus_host(aux.as_ref().expect("added").id(), Some(Arc::clone(&memory)))
+                        .expect("the aux bus's own host");
+                    aux_host = Some(memory);
+                    master_clap = Some(filter);
+                }
+                2_420 => master_clap
+                    .as_ref()
+                    .expect("added")
+                    .set_bus_host(aux.as_ref().expect("added").id(), None)
+                    .expect("back to the stand-in"),
+                2_440 => assert!(
+                    master_clap.take().expect("added").remove(),
+                    "removal queued"
+                ),
                 2_600 => assert!(
                     aux_limiter.take().expect("added").remove(),
                     "removal queued"
@@ -708,6 +748,15 @@ mod rt {
             host.processed > 100 && misses > 10,
             "{} {misses}",
             host.processed
+        );
+        let aux_misses = aux_host
+            .expect("added")
+            .misses()
+            .total
+            .load(std::sync::atomic::Ordering::Relaxed);
+        assert!(
+            aux_misses > 100,
+            "the aux bus ran its own host: {aux_misses}"
         );
         let aux = aux.expect("added").stats();
         // 11.5 s of blocks, minus the stall's.

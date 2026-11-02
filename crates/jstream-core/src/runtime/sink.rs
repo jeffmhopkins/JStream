@@ -181,13 +181,13 @@ impl Sink {
     }
 
     /// Muxes one packet and sends or writes it. A packet the muxer rejects is dropped
-    /// and counted in `output_drops`. An error means the destination is gone and ends
-    /// the output.
+    /// and counted in `output_drops`, and the call returns `false`; `true` means the
+    /// muxer took it. An error means the destination is gone and ends the output.
     pub(crate) fn forward(
         &mut self,
         packet: &Packet,
         output_drops: &AtomicU64,
-    ) -> Result<(), String> {
+    ) -> Result<bool, String> {
         let rejected = |err: &dyn std::fmt::Display| {
             output_drops.fetch_add(1, Ordering::Relaxed);
             tracing::warn!(error = %err, "dropping a packet the muxer rejected");
@@ -232,7 +232,7 @@ impl Sink {
                 Self::Record(sink) => sink.avc_known = true,
             }
         }
-        Ok(())
+        Ok(taken)
     }
 
     /// Reads what a live destination sent and moves a reconnect along.

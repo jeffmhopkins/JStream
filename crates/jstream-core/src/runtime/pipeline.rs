@@ -80,6 +80,7 @@ use crate::drops::{
 };
 use crate::engine::Engine;
 use crate::lock;
+use crate::output_stats::{MeterGuard, OutputSample, ReadSample, SentCounters};
 use crate::runtime::captures::{self, RenderCaptures};
 use crate::runtime::sink::{Destination, Sink, StreamInfo};
 use crate::runtime::vcam::{VcamOut, VcamSlot, VcamTap, camera_channels, run_camera};
@@ -551,6 +552,9 @@ pub(crate) struct OutputEncode {
     /// one, a new video session opens with `require`, and a refused open is the
     /// hardware session limit (ADR-0080 §3, #443), not a fallback to software.
     pub(crate) hardware_held: Vec<OutputId>,
+    /// When its `output.start` call began, before any wait for an earlier start, the
+    /// destination's open and the program stage's launch: where its uptime counts from.
+    pub(crate) started: Instant,
 }
 
 /// Why an output could not start.
@@ -639,6 +643,9 @@ pub(crate) struct Program {
     /// Hands the captures' sizes to the engine. It ends once the render thread has let
     /// go of its captures.
     sizes: Option<JoinHandle<()>>,
+    /// Hands each lost device to the engine, which blames and quarantines the pack
+    /// effects drawn before it (#349). It ends once the render thread has ended.
+    device_losses: Option<JoinHandle<()>>,
     clock: Arc<dyn MediaClock>,
     codecs: Arc<dyn Codecs>,
     size: FrameSize,
@@ -859,6 +866,7 @@ impl Drop for Program {
         join("collector", self.collector.take());
         join("program watch", self.forward.take());
         join("capture sizes", self.sizes.take());
+        join("device losses", self.device_losses.take());
         join("stats", self.ticker.take());
         // After the threads stop, so the latch sees their final counters.
         self.drop_guard.take();
@@ -1137,6 +1145,13 @@ pub(crate) struct Running {
     /// no encoder queues.
     queues: Weak<Queues>,
     drop_guard: Option<DropGuard>,
+    /// What the output thread has handed its muxer this run, for `stats.tick`.
+    sent: Arc<SentCounters>,
+    /// When this run's `output.start` call began, for its uptime; a vcam, which has no
+    /// meter, takes its launch instead.
+    started: Instant,
+    /// Its meter in each `stats.tick`'s `outputs`, removed with the drop guard.
+    meter: Option<MeterGuard>,
     /// Its failure channel's place in the program, given up once its thread is gone.
     registration: Option<Registration>,
     /// Dropped last: when this was the program's last output, that stops the render
@@ -1202,6 +1217,56 @@ impl Running {
             )
         }))];
         self.drop_guard = Some(DropGuard::new(engine.drop_ledger(), ids));
+        self.meter =
+            Some(engine.add_output_meter(self.output_id.clone(), self.started, self.read_sample()));
+    }
+
+    /// How this output's meter reads its counters: what the output thread sent, and
+    /// what it lost on the way, from its video encoder (counted from the time it was
+    /// armed: a session another output already ran may have dropped frames before)
+    /// to the publish target.
+    fn read_sample(&self) -> ReadSample {
+        let sent = Arc::clone(&self.sent);
+        let stats = Arc::clone(&self.stats);
+        let own = Arc::clone(&self.output_drops);
+        let link = Arc::clone(&self.link_drops);
+        let video = self
+            .encoders
+            .as_ref()
+            .map(|encoders| Arc::downgrade(&encoders.video));
+        let encode_drops = |video: &Option<Weak<VideoSession>>| {
+            video.as_ref().and_then(Weak::upgrade).map_or(0, |video| {
+                let stats = video.stats();
+                stats
+                    .dropped_queue_full
+                    .saturating_add(stats.dropped_encoder_busy)
+            })
+        };
+        let base = encode_drops(&video);
+        // The last count while the session was alive, so the total doesn't fall once
+        // the session closes.
+        let last = AtomicU64::new(0);
+        Box::new(move || {
+            let (bytes, frames) = sent.read();
+            let video_sub = *lock(&stats.video_subscriber);
+            let audio_sub = *lock(&stats.audio_subscriber);
+            let encoded = match video.as_ref().and_then(Weak::upgrade) {
+                Some(_) => {
+                    let now = encode_drops(&video).saturating_sub(base);
+                    last.fetch_max(now, Ordering::Relaxed).max(now)
+                }
+                None => last.load(Ordering::Relaxed),
+            };
+            OutputSample {
+                bytes,
+                frames,
+                dropped_frames: encoded.saturating_add(video_sub.dropped),
+                dropped_packets: audio_sub
+                    .dropped
+                    .saturating_add(own.load(Ordering::Relaxed))
+                    .saturating_add(link.load(Ordering::Relaxed)),
+            }
+        })
     }
 }
 
@@ -1268,6 +1333,7 @@ impl Drop for Running {
         // After the thread stops, or after the count above, so the latch sees the
         // final counters.
         self.drop_guard.take();
+        self.meter.take();
         if let Some((left, held)) = abandoned {
             drop(held);
             tracing::warn!(
@@ -1385,15 +1451,13 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
                     &mut compositor,
                     (&mut cache, &mut chains),
                     shot,
-                    frame.mix.as_ref(),
+                    View::output(frame.mix.as_ref(), frame.owner.as_ref()),
                     frame.size,
                 );
                 claimed.map_err(|err| draw_error(&compositor, &err))?;
             }
             for frame in frames.iter_mut().filter(|frame| frame.due) {
-                let view = View {
-                    mix: frame.mix.as_ref(),
-                };
+                let view = View::output(frame.mix.as_ref(), frame.owner.as_ref());
                 let drawn = snapshot::compose(
                     &mut compositor,
                     (&mut cache, &mut chains),
@@ -1508,6 +1572,45 @@ pub(crate) enum PipelineEvent {
     LinkUp,
 }
 
+/// A lost GPU device on the program stage's render thread (#349), for the engine to
+/// blame on the pack effects drawn before it.
+#[derive(Debug)]
+pub(crate) struct DeviceLoss {
+    /// What the compositor said about the loss.
+    pub(crate) cause: String,
+    /// The effect-pack kinds the shot being drawn when the loss surfaced draws: the
+    /// frames submitted just before it drew the same, unless the shot changed in the
+    /// frame or two a loss takes to surface.
+    pub(crate) drawn: BTreeSet<String>,
+    /// Whether the render thread is switching to a new device; `false` when it gave up
+    /// and the outputs fail.
+    pub(crate) recovering: bool,
+    /// Dropped once the engine has handled the loss, which tells the render thread it
+    /// may draw on the new device.
+    pub(crate) handled: LossHandled,
+}
+
+/// Set when dropped: the engine has handled a [`DeviceLoss`] and published the render
+/// snapshot without the kinds it quarantined, or the loss was dropped unhandled (the
+/// engine is gone). The render thread doesn't draw on a new device before then, so a
+/// shader that hangs the GPU at once isn't drawn again (#349).
+#[derive(Debug)]
+pub(crate) struct LossHandled(Arc<AtomicBool>);
+
+impl LossHandled {
+    /// A token, and the flag its drop sets.
+    fn new() -> (Self, Arc<AtomicBool>) {
+        let flag = Arc::new(AtomicBool::new(false));
+        (Self(Arc::clone(&flag)), flag)
+    }
+}
+
+impl Drop for LossHandled {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::Release);
+    }
+}
+
 /// Sends a fatal pipeline error to the publish watcher, which settles `failed`.
 fn report(fail: &Sender<PipelineEvent>, reason: String) {
     tracing::error!(error = %reason, "pipeline failed");
@@ -1574,6 +1677,9 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
     // Ends once the captures' sender goes, so on an early return it ends by itself.
     let (size_tx, size_rx) = mpsc::channel();
     let sizes = spawn("jstream-capture-sizes", engine.capture_sizes_watch(size_rx))?;
+    // Ends once the render thread's sender goes, so on an early return it ends by itself.
+    let (loss_tx, loss_rx) = mpsc::channel();
+    let device_losses = spawn("jstream-device-losses", engine.device_loss_watch(loss_rx))?;
     let captures = captures::spawn(backends, parts.clock.timebase(), size_tx)?;
     let format = engine_format()?;
     let mixer = Mixer::new(MixerConfig::default()).map_err(|err| format!("mixer: {err}"))?;
@@ -1652,6 +1758,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             gpu_gate: Arc::clone(&gpu_gate),
             drops: capture_drops.clone(),
             fail: fail_tx.clone(),
+            losses: loss_tx,
         };
         move || render_thread(job)
     });
@@ -1696,6 +1803,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         mixer: Some(mixer_thread),
         forward: Some(forward),
         sizes: Some(sizes),
+        device_losses: Some(device_losses),
         clock: Arc::clone(&parts.clock),
         codecs: Arc::clone(&parts.codecs),
         size,
@@ -1776,6 +1884,7 @@ pub(crate) fn launch(
         key,
         own_audio,
         hardware_held,
+        started,
     } = encode;
     let encoders = program.encoders(engine, key, &output_id, &hardware_held)?;
     let origin = program.origin()?;
@@ -1809,6 +1918,7 @@ pub(crate) fn launch(
     let stats = PipelineStats::new();
     let output_drops = Arc::new(AtomicU64::new(0));
     let link_drops = Arc::new(AtomicU64::new(0));
+    let sent = Arc::new(SentCounters::default());
 
     // Subscribe before a new session is fed, so its first packets (the first video
     // keyframe among them) are not encoded before the output thread is listening. A
@@ -1836,6 +1946,7 @@ pub(crate) fn launch(
         let stats = Arc::clone(&stats);
         let own = Arc::clone(&output_drops);
         let link = Arc::clone(&link_drops);
+        let sent = Arc::clone(&sent);
         let stop = Arc::clone(&stop);
         let drain_by = Arc::clone(&drain_by);
         let cut = Arc::clone(&cut);
@@ -1850,6 +1961,7 @@ pub(crate) fn launch(
                 stats,
                 output_drops: own,
                 link_drops: link,
+                sent,
                 stop,
                 drain_by,
                 cut,
@@ -1878,6 +1990,9 @@ pub(crate) fn launch(
         link_drops,
         queues: shared_queues,
         drop_guard: None,
+        sent,
+        started,
+        meter: None,
         registration: Some(registration),
         program: Some(program),
     };
@@ -1896,7 +2011,7 @@ pub(crate) fn launch_vcam(
     program: Arc<Program>,
     mut vcam: VcamOut,
     canvas: FrameSize,
-    output_id: OutputId,
+    (output_id, owner): (OutputId, Option<OutputId>),
     generation: u64,
     fail_tx: Sender<PipelineEvent>,
 ) -> Result<Running, String> {
@@ -1911,7 +2026,7 @@ pub(crate) fn launch_vcam(
     })?;
     let stop = Arc::new(AtomicBool::new(false));
     let output_drops = Arc::new(AtomicU64::new(0));
-    let (tap, frames, spare) = camera_channels(Arc::clone(&stop), Arc::clone(&output_drops));
+    let (tap, frames, spare) = camera_channels(Arc::clone(&stop), Arc::clone(&output_drops), owner);
     // The tap goes first: a tap the render thread can't take drops here, with `vcam`
     // still on this thread. A camera thread that fails to start drops its channel
     // ends, and the tap leaves.
@@ -1944,6 +2059,9 @@ pub(crate) fn launch_vcam(
         link_drops: Arc::new(AtomicU64::new(0)),
         queues: Weak::new(),
         drop_guard: None,
+        sent: Arc::default(),
+        started: Instant::now(),
+        meter: None,
         registration: Some(registration),
         program: Some(program),
     })
@@ -2381,6 +2499,9 @@ struct RenderJob {
     gpu_gate: Arc<GpuGate>,
     drops: DropSnapshot,
     fail: Sender<PipelineEvent>,
+    /// Told of each lost device, with the pack kinds drawn before it (#349): the
+    /// engine handles it on its `jstream-device-losses` thread, never on this one.
+    losses: Sender<DeviceLoss>,
 }
 
 /// The render thread's boundary: a panic outside a tick (opening the compositor,
@@ -2407,9 +2528,11 @@ struct Frames {
     targets: Vec<Vec<VideoTap>>,
     /// For each of `mixes`, its encode targets, for the sessions on the GPU path.
     encode: Vec<MixEncode>,
-    /// Whether a virtual camera needs the program at the program stage's size, so that feed is
-    /// drawn even with no session on it.
-    program_held: bool,
+    /// The owners of the program frames at the program stage's size that the virtual
+    /// cameras need, so each is drawn even with no session on it: `None` for a camera
+    /// without its own video chain, which shares the program frame of an output that
+    /// shows no mix, or the camera's output for one with a chain (ADR-0080 §2).
+    held: Vec<Option<OutputId>>,
 }
 
 impl Frames {
@@ -2441,7 +2564,7 @@ impl Frames {
     fn prune(&mut self, mut free: impl FnMut(Garbage)) {
         let mut at = 0;
         while at < self.targets.len() {
-            let held = self.program_held && is_program(&self.mixes[at], self.mixes[at].size);
+            let held = self.holds(&self.mixes[at], self.mixes[at].size);
             if self.targets[at].is_empty() && !held {
                 free(Garbage::Inputs(self.targets.swap_remove(at)));
                 free(Garbage::Pixels(self.mixes.swap_remove(at).out));
@@ -2456,22 +2579,48 @@ impl Frames {
         }
     }
 
-    /// Keeps the program at the program stage's `size` drawn on every tick while `held`, for the
-    /// virtual cameras, adding its frame if no session has it yet. Once no longer held,
-    /// [`prune`](Self::prune) drops it like any feed with no session left.
-    fn hold_program(&mut self, held: bool, size: FrameSize) {
-        self.program_held = held;
-        if held && self.program_frame(size).is_none() {
-            self.mixes.push(MixFrame::new(None, size, 1, None));
-            self.shown.push(Vec::new());
-            self.targets.push(Vec::new());
-            self.encode.push(MixEncode::default());
+    /// Keeps the program at the program stage's `size` drawn on every tick for each of
+    /// `owners`, the virtual cameras' ([`Frames::held`]), adding its frame if no session
+    /// has it yet. Once no longer held, [`prune`](Self::prune) drops it like any feed
+    /// with no session left. Allocates only when the owners change.
+    fn hold_program<'a>(
+        &mut self,
+        owners: impl Iterator<Item = Option<&'a OutputId>> + Clone,
+        size: FrameSize,
+    ) {
+        let same = owners.clone().count() == self.held.len()
+            && owners
+                .clone()
+                .zip(&self.held)
+                .all(|(new, old)| new == old.as_ref());
+        if !same {
+            self.held = owners.map(Option::<&OutputId>::cloned).collect();
+        }
+        for at in 0..self.held.len() {
+            if self.program_frame(size, self.held[at].as_ref()).is_none() {
+                let owner = self.held[at].clone();
+                self.mixes.push(MixFrame::new(None, size, 1, owner));
+                self.shown.push(Vec::new());
+                self.targets.push(Vec::new());
+                self.encode.push(MixEncode::default());
+            }
         }
     }
 
-    /// Where the program at the program stage's `size`, drawn on every tick, is kept.
-    fn program_frame(&self, size: FrameSize) -> Option<usize> {
-        self.mixes.iter().position(|frame| is_program(frame, size))
+    /// Whether a virtual camera needs `frame`, the program at the program stage's
+    /// `size`.
+    fn holds(&self, frame: &MixFrame, size: FrameSize) -> bool {
+        self.held
+            .iter()
+            .any(|owner| is_program(frame, size, owner.as_ref()))
+    }
+
+    /// Where the program at the program stage's `size` for `owner`, drawn on every
+    /// tick, is kept.
+    fn program_frame(&self, size: FrameSize, owner: Option<&OutputId>) -> Option<usize> {
+        self.mixes
+            .iter()
+            .position(|frame| is_program(frame, size, owner))
     }
 
     /// Marks the mixes due on base tick `index` and returns how many are. A mix is due
@@ -2497,7 +2646,7 @@ impl Frames {
 
     /// Sets out what each due mix is drawn into on this tick: a readback while a session
     /// on the CPU path is fed it (or, for the program at the stage's `size`, while a
-    /// virtual camera runs, as `cams` says), and the next free encode target of its ring
+    /// virtual camera needs it, [`Frames::held`]), and the next free encode target of its ring
     /// while a session on the GPU path is. A mix whose ring has none free gets no
     /// target, and its GPU sessions miss the tick's frame. Returns how many sessions
     /// missed it, for [`encode_frame_drops`].
@@ -2510,18 +2659,19 @@ impl Frames {
         gpu: &dyn GpuInterop,
         context: Option<&GpuContext>,
         size: FrameSize,
-        cams: bool,
     ) -> Result<u64, String> {
-        let program = if cams { self.program_frame(size) } else { None };
+        let held = &self.held;
         let mut missed: u64 = 0;
-        for (at, ((frame, taps), encode)) in self
+        for ((frame, taps), encode) in self
             .mixes
             .iter_mut()
             .zip(&self.targets)
             .zip(&mut self.encode)
-            .enumerate()
         {
-            frame.readback = program == Some(at) || taps.iter().any(|tap| !tap.gpu);
+            let held = held
+                .iter()
+                .any(|owner| is_program(frame, size, owner.as_ref()));
+            frame.readback = held || taps.iter().any(|tap| !tap.gpu);
             encode.starved = false;
             let gpu_taps = taps.iter().filter(|tap| tap.gpu).count() as u64;
             if !frame.due || gpu_taps == 0 {
@@ -2585,7 +2735,8 @@ impl Frames {
 ///
 /// Each tick first adopts the render snapshot the control side published last, then the
 /// live values on the parameter channel, which costs two pointer compares unless a new
-/// one arrived ([`RenderReader::adopt`]); the thread never takes the collection lock. Its generation is stamped as the thread
+/// one arrived ([`RenderReader::adopt`]); the thread never takes the collection lock,
+/// and hands a lost device to the engine's `jstream-device-losses` thread. Its generation is stamped as the thread
 /// starts and whenever it changes. The stopped marker is published when the loop ends,
 /// and when a fatal error stops the drawing.
 ///
@@ -2642,6 +2793,7 @@ fn render_loop(job: RenderJob) {
         gpu_gate,
         drops,
         fail,
+        losses: loss_sender,
     } = job;
     let mut cams: Vec<VcamTap> = Vec::new();
     let mut draw = match open(context.as_deref()) {
@@ -2665,7 +2817,7 @@ fn render_loop(job: RenderJob) {
         shown: Vec::new(),
         targets: Vec::new(),
         encode: Vec::new(),
-        program_held: false,
+        held: Vec::new(),
     };
     let mut next: Option<MediaTime> = None;
     // Base ticks since the thread started, skipped ones included: the mixes with a
@@ -2678,6 +2830,8 @@ fn render_loop(job: RenderJob) {
     // When the device was lost, within the last `LOSS_WINDOW`: at most
     // `MAX_DEVICE_LOSSES`, as the third ends the drawing.
     let mut losses: Vec<Instant> = Vec::with_capacity(MAX_DEVICE_LOSSES);
+    // Set once the engine has handled the last loss: a new device draws only after.
+    let mut loss_handled: Option<Arc<AtomicBool>> = None;
     // Set by a fatal error: stop drawing and repeat `shown` until the pipeline stops. A
     // session that arrives afterwards with a new feed has nothing drawn to repeat, so
     // it gets no frames until the pipeline (already failing) stops.
@@ -2687,7 +2841,7 @@ fn render_loop(job: RenderJob) {
             frames.add(feed, tap);
         }
         cams.extend(cam_inputs.try_iter());
-        frames.hold_program(!cams.is_empty(), size);
+        frames.hold_program(cams.iter().map(VcamTap::owner), size);
         frames.prune(|garbage| collector.free(garbage));
         if frames.mixes.is_empty() {
             // No session to draw for, so no tick is due and none counts as skipped;
@@ -2721,7 +2875,7 @@ fn render_loop(job: RenderJob) {
         // session on the GPU path has none, which fails the pipeline.
         if !broken && switch.is_none() && drawn > 0 {
             let on = context.as_deref().filter(|_| on_context);
-            match frames.prepare(gpu.as_ref(), on, size, !cams.is_empty()) {
+            match frames.prepare(gpu.as_ref(), on, size) {
                 Ok(missed) => encode_held = encode_held.saturating_add(missed),
                 Err(err) => {
                     broken = true;
@@ -2734,12 +2888,21 @@ fn render_loop(job: RenderJob) {
             // Repeating the shown frames, below.
         } else if let Some(pending) = &switch {
             // The last frames repeat while the compositor opens; snapshots are still
-            // adopted, so a gesture never waits on the fallback.
+            // adopted, so a gesture never waits on the fallback. After a loss the new
+            // device waits for the engine to quarantine the blamed pack effects, and
+            // adopts the snapshot it published before drawing.
+            let handled = loss_handled
+                .as_ref()
+                .is_none_or(|handled| handled.load(Ordering::Acquire));
             let adopted = panic::catch_unwind(AssertUnwindSafe(|| {
                 reader.adopt();
             }));
             let done = match adopted {
-                Ok(()) => pending.poll(Instant::now()),
+                Ok(()) if handled => {
+                    loss_handled = None;
+                    pending.poll(Instant::now())
+                }
+                Ok(()) => None,
                 Err(panic) => Some(Err(format!("panicked: {}", panic_message(&*panic)))),
             };
             if let Some(done) = done {
@@ -2812,7 +2975,9 @@ fn render_loop(job: RenderJob) {
                     gpu_losses.fetch_add(1, Ordering::Relaxed);
                     losses.retain(|lost: &Instant| at.duration_since(*lost) < LOSS_WINDOW);
                     losses.push(at);
-                    let why = SwitchWhy::Lost { cause };
+                    let why = SwitchWhy::Lost {
+                        cause: cause.clone(),
+                    };
                     let started = if losses.len() >= MAX_DEVICE_LOSSES {
                         Err(format!(
                             "it was lost {} times within {}s, so the engine stopped \
@@ -2834,6 +2999,18 @@ fn render_loop(job: RenderJob) {
                     on_context = false;
                     gpu_gate.shut();
                     draw_errors = 0;
+                    // The pack effects the lost frames drew are blamed for the loss and
+                    // quarantined (#349); a loss with none drawn had another cause. The
+                    // engine does that on its own thread: this one takes no lock and
+                    // writes no file. A loss it can't take is handled (dropped) here.
+                    let (handled, flag) = LossHandled::new();
+                    loss_handled = Some(flag);
+                    let _unsent = loss_sender.send(DeviceLoss {
+                        cause,
+                        drawn: reader.held().0.shot().pack_kinds(),
+                        recovering: started.is_ok(),
+                        handled,
+                    });
                     match started {
                         Ok(started) => switch = Some(started),
                         Err(fell) => {
@@ -2937,10 +3114,12 @@ fn render_loop(job: RenderJob) {
         }
         // A camera whose output is stopping, or whose thread has ended, goes to the
         // collector.
-        let program = frames.program_frame(size).map(|at| &frames.shown[at]);
         let mut at = 0;
         while at < cams.len() {
             let cam = &mut cams[at];
+            let program = frames
+                .program_frame(size, cam.owner())
+                .map(|at| &frames.shown[at]);
             let stays = match program {
                 Some(shown) if !shown.is_empty() => cam.push(size, due, shown),
                 _ => cam.stay(),
@@ -3076,8 +3255,10 @@ impl Switch {
 
 /// Whether `frame` is the program at the program stage's `size` on every base tick: what an
 /// output with no mix, and every virtual camera, is fed.
-fn is_program(frame: &MixFrame, size: FrameSize) -> bool {
-    frame.mix.is_none() && frame.size == size && frame.divisor == 1 && frame.owner.is_none()
+/// For a camera with its own video chain, `owner` is its output, whose frame it alone
+/// is fed (ADR-0080 §2).
+fn is_program(frame: &MixFrame, size: FrameSize, owner: Option<&OutputId>) -> bool {
+    frame.mix.is_none() && frame.size == size && frame.divisor == 1 && frame.owner.as_ref() == owner
 }
 
 /// One mix's encode targets, for the sessions on the GPU path it feeds.
@@ -3458,6 +3639,8 @@ struct OutputJob {
     stats: Arc<PipelineStats>,
     output_drops: Arc<AtomicU64>,
     link_drops: Arc<AtomicU64>,
+    /// What it hands the muxer while the link is up.
+    sent: Arc<SentCounters>,
     stop: Arc<AtomicBool>,
     drain_by: Arc<OnceLock<Instant>>,
     cut: Arc<AtomicBool>,
@@ -3507,6 +3690,7 @@ fn output_loop(job: OutputJob) {
         stats,
         output_drops,
         link_drops,
+        sent,
         stop,
         drain_by,
         cut,
@@ -3568,8 +3752,9 @@ fn output_loop(job: OutputJob) {
             match received {
                 Ok(Some(packet)) => {
                     got = true;
-                    if let Err(err) = sink.forward(&packet, &output_drops) {
-                        failed = Some(err);
+                    match sink.forward(&packet, &output_drops) {
+                        Ok(taken) => count_sent(&sent, &packet, taken, link, true),
+                        Err(err) => failed = Some(err),
                     }
                 }
                 Ok(None) => {}
@@ -3591,8 +3776,9 @@ fn output_loop(job: OutputJob) {
             match received {
                 Ok(Some(packet)) => {
                     got = true;
-                    if let Err(err) = sink.forward(&packet, &output_drops) {
-                        failed = Some(err);
+                    match sink.forward(&packet, &output_drops) {
+                        Ok(taken) => count_sent(&sent, &packet, taken, link, false),
+                        Err(err) => failed = Some(err),
                     }
                 }
                 Ok(None) => {}
@@ -3638,6 +3824,20 @@ fn output_loop(job: OutputJob) {
     }
     link_drops.store(sink.dropped(), Ordering::Relaxed);
     sink.finish();
+}
+
+/// Counts a packet the muxer `taken` in `sent`, unless the live link is down: the
+/// publish target drops it then, and counts it with the link's drops.
+fn count_sent(
+    sent: &SentCounters,
+    packet: &jstream_media::Packet,
+    taken: bool,
+    link: LinkState,
+    video: bool,
+) {
+    if taken && link == LinkState::Active {
+        sent.add(packet.data().len(), video);
+    }
 }
 
 /// Takes and counts the packets queued on `sub` without sending them. Nothing when
@@ -4242,7 +4442,7 @@ mod tests {
             shown: Vec::new(),
             targets: Vec::new(),
             encode: Vec::new(),
-            program_held: false,
+            held: Vec::new(),
         }
     }
 
@@ -4505,10 +4705,10 @@ mod tests {
     fn a_camera_holds_the_program_frame() {
         let size = FrameSize::new(64, 36).expect("size");
         let mut frames = no_frames();
-        frames.hold_program(true, size);
-        frames.hold_program(true, size);
+        frames.hold_program(std::iter::once(None), size);
+        frames.hold_program(std::iter::once(None), size);
         frames.prune(|_| panic!("held"));
-        assert_eq!(frames.program_frame(size), Some(0));
+        assert_eq!(frames.program_frame(size, None), Some(0));
         assert_eq!(frames.mixes.len(), 1);
         assert_eq!(frames.schedule(1), 1, "drawn on every tick");
 
@@ -4534,10 +4734,32 @@ mod tests {
 
         frames.targets[0].clear();
         frames.prune(|_| panic!("still held"));
-        frames.hold_program(false, size);
+        frames.hold_program(std::iter::empty(), size);
         let mut freed = 0;
         frames.prune(|_| freed += 1);
         assert_eq!((freed, frames.mixes.len()), (4, 0));
+    }
+
+    /// A virtual camera with its own video chain holds a program frame of its own,
+    /// drawn through its chain, beside the shared one another camera holds; each is
+    /// dropped once its camera goes (ADR-0080 §2).
+    #[test]
+    fn a_camera_with_a_chain_holds_a_frame_of_its_own() {
+        let size = FrameSize::new(64, 36).expect("size");
+        let cam = OutputId::new("cam");
+        let mut frames = no_frames();
+        frames.hold_program([None, Some(&cam)].into_iter(), size);
+        frames.prune(|_| panic!("held"));
+        assert_eq!(frames.mixes.len(), 2);
+        assert_eq!(frames.program_frame(size, None), Some(0));
+        assert_eq!(frames.program_frame(size, Some(&cam)), Some(1));
+        assert_eq!(frames.mixes[1].owner.as_ref(), Some(&cam));
+
+        frames.hold_program(std::iter::once(Some(&cam)), size);
+        let mut freed = 0;
+        frames.prune(|_| freed += 1);
+        assert_eq!(freed, 4, "the shared frame goes");
+        assert_eq!(frames.program_frame(size, Some(&cam)), Some(0));
     }
 
     fn us(ticks: i64) -> MediaTime {

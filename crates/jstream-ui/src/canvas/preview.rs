@@ -54,6 +54,7 @@ pub fn subscribe(width: f32, height: f32, pixel_ratio: f32, h264: bool) -> Actio
         codecs,
         scene_id: None,
         source: None,
+        source_id: None,
     }
 }
 
@@ -115,6 +116,7 @@ impl Stream {
                 codecs,
                 scene_id: self.scene.clone(),
                 source: None,
+                source_id: None,
             },
             other => other,
         }

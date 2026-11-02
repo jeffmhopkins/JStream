@@ -654,6 +654,7 @@ fn outputs_are_created_retargeted_and_deleted_with_exact_inverses() {
                 encoder_profile: None,
                 filters: Default::default(),
                 video_mix: None,
+                audio_buses: vec![BusId::master()],
             }],
         }
     );
@@ -761,6 +762,7 @@ fn a_recording_output_is_created_and_deleted_with_exact_inverses() {
                 encoder_profile: None,
                 filters: Default::default(),
                 video_mix: None,
+                audio_buses: vec![BusId::master()],
             }],
         }
     );
@@ -1326,7 +1328,7 @@ mod property {
         let owner = |source: String| jstream_protocol::FilterOwner::Source {
             source_id: SourceId::new(source),
         };
-        match rng.below(68) {
+        match rng.below(69) {
             0 => scene_create(&pool(rng, "s")),
             1 => Edit::SceneRename {
                 scene_id: SceneId::new(scene(rng)),
@@ -1771,6 +1773,13 @@ mod property {
                     favourite: rng.below(2) == 0,
                 },
             },
+            // Sometimes two buses or none, which are refused.
+            67 => Edit::OutputSetAudioBuses {
+                output_id: OutputId::new(output(rng)),
+                audio_buses: (0..[1, 1, 1, 0, 2][rng.below(5)])
+                    .map(|_| bus(rng))
+                    .collect(),
+            },
             _ => Edit::CanvasSetSize {
                 width: u32::try_from(rng.below(3000)).expect("fits"),
                 height: 720,
@@ -1903,6 +1912,7 @@ mod property {
             "label.reorder",
             "label.delete",
             "source.set_meta",
+            "output.set_audio_buses",
         ]
         .into();
         assert_eq!(applied_names, all);
@@ -4194,6 +4204,121 @@ fn deleting_a_bus_takes_its_sends_and_undoes_exactly() {
             "the master bus can't be deleted".to_owned()
         )
     );
+}
+
+/// An output carries one bus (0.59): the edit sets it and undoes exactly, an output's
+/// delete gives it back, and a bus an output carries blocks its delete until
+/// `delete.plan` moves the output to the master, which a running output refuses.
+#[test]
+fn an_output_carries_a_bus_that_blocks_its_delete() {
+    let mut graph = fixture();
+    let vod = BusId::new("vod");
+    let yt = OutputId::new("yt");
+    apply_ok(
+        &mut graph,
+        vec![
+            output_create("yt", "rtmp://live.example.com/app"),
+            Edit::BusCreate {
+                bus_id: vod.clone(),
+                name: "VOD".into(),
+            },
+        ],
+    );
+    let bus_of = |graph: &Graph| graph.state().output(&yt).map(|o| o.audio_bus().clone());
+    assert_eq!(bus_of(&graph), Some(BusId::master()));
+    let applied = apply_ok(
+        &mut graph,
+        vec![Edit::OutputSetAudioBuses {
+            output_id: yt.clone(),
+            audio_buses: vec![vod.clone()],
+        }],
+    );
+    assert_eq!(bus_of(&graph), Some(vod.clone()));
+    assert_eq!(
+        applied.inverse.edits,
+        vec![Edit::OutputSetAudioBuses {
+            output_id: yt.clone(),
+            audio_buses: vec![BusId::master()],
+        }]
+    );
+    assert_eq!(
+        graph.state().output(&yt).map(|o| o.to_info().audio_buses),
+        Some(vec![vod.clone()])
+    );
+
+    let error = apply_err(
+        &mut graph,
+        vec![Edit::BusDelete {
+            bus_id: vod.clone(),
+        }],
+    );
+    let ProtocolError::InvalidArgument { blockers, .. } = error else {
+        panic!("not blocked: {error:?}");
+    };
+    assert_eq!(
+        blockers,
+        vec![jstream_protocol::Blocker {
+            entity: EntityKind::Output,
+            id: "yt".into(),
+            field: "audio_buses".into(),
+        }]
+    );
+    let plan = graph.delete_plan(&jstream_protocol::DeleteTarget::Bus {
+        bus_id: vod.clone(),
+    });
+    let Ok(QueryResult::DeletePlan { edits, .. }) = plan else {
+        panic!("no plan: {plan:?}");
+    };
+    assert_eq!(
+        edits,
+        vec![
+            Edit::OutputSetAudioBuses {
+                output_id: yt.clone(),
+                audio_buses: vec![BusId::master()],
+            },
+            Edit::BusDelete {
+                bus_id: vod.clone()
+            },
+        ]
+    );
+    // While `yt` runs it reads `vod`, so the plan is refused rather than leave it
+    // silent; keeping its bus is fine.
+    let running = BTreeSet::from([yt.clone()]);
+    let refused = graph
+        .clone()
+        .apply_with_running(&edits, None, &running)
+        .expect_err("a running output can't move");
+    assert_eq!(
+        refused,
+        ProtocolError::invalid_argument(
+            "edits.0.output_id",
+            "output `yt` is running; stop it first"
+        )
+    );
+    graph
+        .clone()
+        .apply_with_running(
+            &[Edit::OutputSetAudioBuses {
+                output_id: yt.clone(),
+                audio_buses: vec![vod.clone()],
+            }],
+            None,
+            &running,
+        )
+        .expect("the same bus");
+
+    let applied = apply_ok(
+        &mut graph,
+        vec![Edit::OutputDelete {
+            output_id: yt.clone(),
+        }],
+    );
+    assert!(applied.inverse.edits.contains(&Edit::OutputSetAudioBuses {
+        output_id: yt.clone(),
+        audio_buses: vec![vod.clone()],
+    }));
+    apply_ok(&mut graph, applied.inverse.edits);
+    assert_eq!(bus_of(&graph), Some(vod));
 }
 
 /// A bus's monitor (0.42) is set, changed and taken away, each undone exactly; a

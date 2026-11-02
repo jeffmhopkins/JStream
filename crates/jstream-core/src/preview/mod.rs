@@ -79,7 +79,7 @@ use jstream_platform::{
 };
 use jstream_protocol::{
     BinaryFrame, BinaryHeader, KeyframeGate, PreviewCodec, PreviewSettings, ProtocolError, Rev,
-    SceneId, StreamKind,
+    SceneId, SourceId, StreamKind,
 };
 use jstream_render::{Compositor, OpenOptions, ResourceCache};
 
@@ -116,6 +116,8 @@ pub(crate) struct Current {
     pub(crate) program: Arc<RenderSnapshot>,
     /// What each scene with an open stream draws, once the engine has planned it.
     pub(crate) scenes: Arc<BTreeMap<SceneId, Arc<RenderSnapshot>>>,
+    /// What each source with an open stream draws alone, once the engine has planned it.
+    pub(crate) sources: Arc<BTreeMap<SourceId, Arc<RenderSnapshot>>>,
     /// The live values (ADR-0032) on the render parameter channel now.
     pub(crate) live: Arc<LiveParams>,
     /// The `rev` the snapshots were published at.
@@ -275,6 +277,8 @@ pub(crate) struct Opening {
     pub(crate) rev: Rev,
     /// The scene the stream shows, or `None` for the program mix.
     pub(crate) scene: Option<SceneId>,
+    /// The collection's source the stream shows alone, in place of the program mix.
+    pub(crate) source_id: Option<SourceId>,
     /// What a stream of a source the collection doesn't hold draws ([`plan_draft`]),
     /// in place of the program mix or a scene.
     pub(crate) draft: Option<Arc<RenderSnapshot>>,
@@ -335,6 +339,7 @@ impl SessionPreviews {
             codec,
             settings,
             scene: opening.scene,
+            source_id: opening.source_id,
             draft: opening.draft,
             codecs: opening.codecs,
             sink,
@@ -382,7 +387,7 @@ impl SessionPreviews {
         };
         stream.closed.store(true, Ordering::Release);
         tracing::debug!(channel, "preview stream closed");
-        stream.scene.is_some()
+        stream.planned()
     }
 
     /// Ends every stream and the binary channel: the session is gone. Returns whether
@@ -400,7 +405,7 @@ impl SessionPreviews {
         let mut scenes = false;
         for stream in streams.into_values() {
             stream.closed.store(true, Ordering::Release);
-            scenes |= stream.scene.is_some();
+            scenes |= stream.planned();
         }
         scenes
     }
@@ -417,6 +422,8 @@ pub(crate) struct PreviewStream {
     settings: PreviewSettings,
     /// The scene it shows, or `None` for the program mix.
     scene: Option<SceneId>,
+    /// The collection's source it shows alone instead.
+    source_id: Option<SourceId>,
     /// The draft source it shows instead, planned once at the subscription.
     draft: Option<Arc<RenderSnapshot>>,
     /// The platform's encoders, when the engine has backends.
@@ -431,6 +438,16 @@ pub(crate) struct PreviewStream {
 }
 
 impl PreviewStream {
+    /// Whether the engine plans what it shows for it: a scene, or a source alone.
+    fn planned(&self) -> bool {
+        self.scene.is_some() || self.source_id.is_some()
+    }
+
+    /// Whether it shows the program mix.
+    fn shows_program(&self) -> bool {
+        !self.planned() && self.draft.is_none()
+    }
+
     /// Sends the end frame with `reason` and marks the stream ended.
     fn end(&self, rev: Rev, reason: &str) {
         if self.ended.swap(true, Ordering::AcqRel) {
@@ -632,6 +649,31 @@ impl PreviewHub {
             .collect()
     }
 
+    /// The collection's sources the live streams show alone, which the engine plans
+    /// for them.
+    pub(crate) fn sources(&self) -> BTreeSet<SourceId> {
+        lock(&self.inner.state)
+            .streams
+            .iter()
+            .filter_map(Weak::upgrade)
+            .filter(|stream| stream.live())
+            .filter_map(|stream| stream.source_id.clone())
+            .collect()
+    }
+
+    /// Ends every stream of the source `source_id` with `reason`.
+    pub(crate) fn end_source(&self, source_id: &SourceId, rev: Rev, reason: &str) {
+        let streams: Vec<Arc<PreviewStream>> = lock(&self.inner.state)
+            .streams
+            .iter()
+            .filter_map(Weak::upgrade)
+            .filter(|stream| stream.source_id.as_ref() == Some(source_id))
+            .collect();
+        for stream in streams {
+            stream.end(rev, reason);
+        }
+    }
+
     /// Ends every stream of `scene_id` with `reason`.
     pub(crate) fn end_scene(&self, scene_id: &SceneId, rev: Rev, reason: &str) {
         let streams: Vec<Arc<PreviewStream>> = lock(&self.inner.state)
@@ -740,6 +782,7 @@ fn run(
         let Current {
             program,
             scenes,
+            sources,
             live,
             rev,
             at,
@@ -749,12 +792,14 @@ fn run(
         // A closed stream's encoder is dropped (and its thread joined) here.
         works.retain(|id, _| streams.iter().any(|stream| stream.id == *id));
         // The program's captures only while a stream shows the program.
-        let shows_program = streams
-            .iter()
-            .any(|stream| stream.scene.is_none() && stream.draft.is_none());
+        let shows_program = streams.iter().any(|stream| stream.shows_program());
+        // A source's own snapshot is captured as a draft's is.
         let drafts: Vec<Arc<RenderSnapshot>> = streams
             .iter()
-            .filter_map(|stream| stream.draft.clone())
+            .filter_map(|stream| match &stream.source_id {
+                Some(source_id) => sources.get(source_id).cloned(),
+                None => stream.draft.clone(),
+            })
             .collect();
         captures.tick((shows_program.then_some(&program), &scenes, &drafts), at);
         let shown: &dyn Captures = match &captures.running {
@@ -765,10 +810,15 @@ fn run(
             let work = works
                 .entry(stream.id)
                 .or_insert_with(|| Work::new(stream, now));
-            let snapshot = match (&stream.draft, &stream.scene) {
+            let planned = match (&stream.source_id, &stream.scene) {
+                (Some(source_id), _) => Some(sources.get(source_id)),
+                (None, Some(scene_id)) => Some(scenes.get(scene_id)),
+                (None, None) => None,
+            };
+            let snapshot = match (&stream.draft, planned) {
                 (Some(draft), _) => draft,
                 (None, None) => &program,
-                (None, Some(scene_id)) => match scenes.get(scene_id) {
+                (None, Some(planned)) => match planned {
                     Some(snapshot) => snapshot,
                     // Not planned yet: the engine re-plans once the stream is open.
                     None => {
@@ -802,6 +852,7 @@ fn run(
         drop(drafts);
         drop(program);
         drop(scenes);
+        drop(sources);
         drop(live);
         let state = lock(&inner.state);
         if state.stop {
