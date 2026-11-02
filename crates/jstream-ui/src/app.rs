@@ -287,8 +287,9 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
             <AddSource />
             <SourceProperties />
             <SceneProperties />
-            <AddFilter />
+            // The Add filter dialog opens over the Filters window, so it comes after.
             <FilterSettings />
+            <AddFilter />
             <ContextMenu />
         </div>
     }

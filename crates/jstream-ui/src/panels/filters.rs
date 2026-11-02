@@ -8,7 +8,7 @@
 //! opens in place under its row; one with more opens the Filters window (after OBS's):
 //! a scope switcher (Source, This item, Scene), the chain on the left and the selected
 //! filter's settings on the right, over an undimmed canvas. Its changes apply at once
-//! and Cancel puts back every filter it changed. Settings forms come from the kind's
+//! and Cancel puts back what it did (`window_restore`). Settings forms come from the kind's
 //! descriptor (ADR-0025) through the Inspector's form (`properties.rs`).
 //!
 //! `kind.list` names the engine's filter kinds; the prototype's catalogue gives the
@@ -27,15 +27,16 @@ use crate::panels::tree::{Reorder, Side, dropped_at};
 use crate::store::{Collection, Studio, apply, query};
 use crate::workspace::DockState;
 use jstream_control::protocol::{
-    Edit, FilterChain, FilterId, FilterInfo, FilterOwner, ItemId, KindCategory, KindDescriptor,
-    KindSummary, MAX_CHAIN_FILTERS, OutputKind, OutputState, ParamType, Query, QueryResult,
-    Reference, Rev, SceneId, Settings, SourceId, SourceInfo, SourceKind,
+    Edit, FilterChain, FilterChains, FilterId, FilterInfo, FilterOwner, ItemId, KindCategory,
+    KindDescriptor, KindSummary, MAX_CHAIN_FILTERS, OutputKind, OutputState, ParamType, Query,
+    QueryResult, Reference, Rev, SceneId, Settings, SourceId, SourceInfo, SourceKind,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// The most settings a filter has to open in place under its row (F7).
 pub const EASY_PARAMS: usize = 3;
@@ -829,6 +830,13 @@ pub struct FilterDialogs {
     /// a double-click opens that row's settings even when the first click folded its
     /// editor and the panel scrolled another element under the pointer (#984).
     clicked: StoredValue<Option<(Target, f64)>>,
+    /// While the Filters window is open: the window's number and every filter edit sent
+    /// from it (its rows, its pane and the Add filter dialog over it), so Cancel can put
+    /// each back.
+    log: StoredValue<Option<(u64, Vec<Edit>)>>,
+    /// A filter the Add filter dialog added while the window was open, and the revision
+    /// of its batch: the window selects it, keeping what it changed before.
+    landed: RwSignal<Option<(FilterId, Rev)>>,
 }
 
 /// How long after a row's first click a double-click still opens that row's settings:
@@ -853,7 +861,31 @@ impl FilterDialogs {
             picked: RwSignal::new(None),
             added_at: RwSignal::new(None),
             clicked: StoredValue::new(None),
+            log: StoredValue::new(None),
+            landed: RwSignal::new(None),
         }
+    }
+
+    /// Notes filter edits just sent, while the Filters window is open.
+    fn sent(&self, edits: &[Edit]) {
+        self.log.update_value(|log| {
+            if let Some((_, log)) = log {
+                log.extend(edits.iter().filter(|e| is_filter_edit(e)).cloned());
+            }
+        });
+    }
+
+    /// Whether the open Filters window has sent `param` of `target`.
+    fn sent_param(&self, target: &Target, param: &str) -> bool {
+        self.log.with_value(|log| {
+            log.as_ref().is_some_and(|(_, log)| {
+                log.iter().any(|e| {
+                    matches!(e, Edit::FilterSetSettings { owner, filter_id, patch }
+                        if *owner == target.owner && *filter_id == target.filter_id
+                            && patch.get(param).is_some())
+                })
+            })
+        })
     }
 
     /// Forgets the row a click landed on when a first click lands anywhere else in the
@@ -1235,14 +1267,13 @@ pub fn Chains(
                 })
             });
             if let (Some(index), Some(s)) = (index, session.get()) {
-                studio.apply(
-                    &s,
-                    vec![Edit::FilterReorder {
-                        owner: owner.clone(),
-                        filter_id: moved,
-                        index,
-                    }],
-                );
+                let edits = vec![Edit::FilterReorder {
+                    owner: owner.clone(),
+                    filter_id: moved,
+                    index,
+                }];
+                dialogs.sent(&edits);
+                studio.apply(&s, edits);
             }
         }
     };
@@ -1417,7 +1448,9 @@ fn Row(
     };
     let send = move |edit: Edit| {
         if let Some(s) = session.get() {
-            studio.apply(&s, vec![edit]);
+            let edits = vec![edit];
+            dialogs.sent(&edits);
+            studio.apply(&s, edits);
         }
     };
     let toggle = {
@@ -1724,86 +1757,155 @@ pub fn window_scopes(
     scopes
 }
 
-/// What the Filters window has changed, so Cancel puts each filter back as the window
-/// first showed it: its settings and switch then, the parameters sent since (whose edits
-/// may still be on their way back), and whether its switch was pressed.
-#[derive(Clone, Copy)]
-struct Changes {
-    opened: StoredValue<HashMap<Target, (Settings, bool)>>,
-    touched: StoredValue<HashMap<Target, HashSet<String>>>,
-    switched: StoredValue<HashSet<Target>>,
+/// Numbers each Filters window, so one closing never forgets a later one's log.
+static WINDOWS: AtomicU64 = AtomicU64::new(0);
+
+/// Whether `edit` changes a filter chain: what the Filters window notes for Cancel.
+fn is_filter_edit(edit: &Edit) -> bool {
+    matches!(
+        edit,
+        Edit::FilterAdd { .. }
+            | Edit::FilterRemove { .. }
+            | Edit::FilterSetEnabled { .. }
+            | Edit::FilterSetSettings { .. }
+            | Edit::FilterReorder { .. }
+    )
 }
 
-impl Changes {
-    fn new() -> Changes {
-        Changes {
-            opened: StoredValue::new(HashMap::new()),
-            touched: StoredValue::new(HashMap::new()),
-            switched: StoredValue::new(HashSet::new()),
+/// The edits, one batch, that put back what the Filters window did: `opened` holds each
+/// of its scopes' chains as the window opened, `log` the filter edits it sent in order,
+/// and `now` reads a filter as the store shows it now.
+///
+/// It works from what the window sent, not from how the chains differ now, so an edit
+/// still on its way back is put back too, and what another client changed meanwhile
+/// stays (but for a setting of a filter the window also edited, which goes back to what
+/// it opened with). In order: a filter the window added is removed; one it removed is
+/// added again where it was, with its settings and switch then; a chain it reordered is
+/// put back in its first order; then each setting it sent goes back
+/// ([`restore_patch`]), and each switch it pressed.
+pub fn window_restore(
+    opened: &[(FilterOwner, FilterChains)],
+    log: &[Edit],
+    now: impl Fn(&FilterOwner, &FilterId) -> Option<FilterInfo>,
+) -> Vec<Edit> {
+    let mut edits = Vec::new();
+    for (owner, chains) in opened {
+        let mine = |e: &&Edit| match e {
+            Edit::FilterAdd { owner: o, .. }
+            | Edit::FilterRemove { owner: o, .. }
+            | Edit::FilterSetEnabled { owner: o, .. }
+            | Edit::FilterSetSettings { owner: o, .. }
+            | Edit::FilterReorder { owner: o, .. } => o == owner,
+            _ => false,
+        };
+        let log: Vec<&Edit> = log.iter().filter(mine).collect();
+        if log.is_empty() {
+            continue;
         }
-    }
-
-    /// Notes what `target` holds now, the first time the window shows it.
-    fn note(&self, target: &Target, filter: &FilterInfo) {
-        self.opened.update_value(|o| {
-            o.entry(target.clone())
-                .or_insert_with(|| (filter.settings.clone(), filter.enabled));
-        });
-    }
-
-    fn touch(&self, target: &Target, param: &str) {
-        self.touched.update_value(|t| {
-            t.entry(target.clone())
-                .or_default()
-                .insert(param.to_owned());
-        });
-    }
-
-    fn touched(&self, target: &Target, param: &str) -> bool {
-        self.touched
-            .with_value(|t| t.get(target).is_some_and(|p| p.contains(param)))
-    }
-
-    /// The edits that put every filter the window changed back, one batch.
-    fn restore(&self, studio: Studio) -> Vec<Edit> {
-        let opened = self.opened.get_value();
-        let mut edits = Vec::new();
-        for (target, (base, was_on)) in opened {
-            // A filter removed meanwhile has nothing to put back.
-            let Some((_, now)) = untrack(|| filter_of(studio, &target)) else {
-                continue;
-            };
-            let patch = self.touched.with_value(|t| {
-                restore_patch(
-                    &now.settings,
-                    &base,
-                    t.get(&target).unwrap_or(&HashSet::new()),
-                )
+        let first = |id: &FilterId| {
+            [FilterChain::Video, FilterChain::Audio]
+                .into_iter()
+                .find_map(|which| {
+                    let chain = chains.chain(which);
+                    chain
+                        .iter()
+                        .position(|f| f.filter_id == *id)
+                        .map(|i| (which, i, &chain[i]))
+                })
+        };
+        let removed: HashSet<&FilterId> = log
+            .iter()
+            .filter_map(|e| match e {
+                Edit::FilterRemove { filter_id, .. } => Some(filter_id),
+                _ => None,
+            })
+            .collect();
+        // Added by the window, and not removed again by it.
+        for edit in &log {
+            if let Edit::FilterAdd { filter_id, .. } = edit
+                && first(filter_id).is_none()
+                && !removed.contains(filter_id)
+            {
+                edits.push(Edit::FilterRemove {
+                    owner: owner.clone(),
+                    filter_id: filter_id.clone(),
+                });
+            }
+        }
+        // Removed by the window: back where it was, first position first.
+        let mut back: Vec<_> = removed.iter().filter_map(|id| first(id)).collect();
+        back.sort_by_key(|(which, i, _)| (which.as_str(), *i));
+        for (which, i, f) in &back {
+            edits.push(Edit::FilterAdd {
+                owner: owner.clone(),
+                chain: *which,
+                filter_id: f.filter_id.clone(),
+                kind: f.kind.clone(),
+                settings: f.settings.clone(),
+                enabled: Some(f.enabled),
+                index: u32::try_from(*i).ok(),
             });
-            if !patch.is_empty() {
-                edits.push(Edit::FilterSetSettings {
-                    owner: target.owner.clone(),
-                    filter_id: target.filter_id.clone(),
-                    patch,
-                });
-            }
-            let switched = self.switched.with_value(|s| s.contains(&target));
-            if switched || now.enabled != was_on {
-                edits.push(Edit::FilterSetEnabled {
-                    owner: target.owner.clone(),
-                    filter_id: target.filter_id.clone(),
-                    enabled: was_on,
-                });
+        }
+        if log.iter().any(|e| matches!(e, Edit::FilterReorder { .. })) {
+            for which in [FilterChain::Video, FilterChain::Audio] {
+                for (i, f) in chains.chain(which).iter().enumerate() {
+                    edits.push(Edit::FilterReorder {
+                        owner: owner.clone(),
+                        filter_id: f.filter_id.clone(),
+                        index: u32::try_from(i).unwrap_or(u32::MAX),
+                    });
+                }
             }
         }
-        edits
+        for which in [FilterChain::Video, FilterChain::Audio] {
+            for f in chains.chain(which) {
+                if removed.contains(&f.filter_id) {
+                    continue;
+                }
+                let touched: HashSet<String> = log
+                    .iter()
+                    .filter_map(|e| match e {
+                        Edit::FilterSetSettings {
+                            filter_id, patch, ..
+                        } if *filter_id == f.filter_id => {
+                            Some(patch.iter().map(|(k, _)| k.to_owned()))
+                        }
+                        _ => None,
+                    })
+                    .flatten()
+                    .collect();
+                if !touched.is_empty()
+                    && let Some(now) = now(owner, &f.filter_id)
+                {
+                    let patch = restore_patch(&now.settings, &f.settings, &touched);
+                    if !patch.is_empty() {
+                        edits.push(Edit::FilterSetSettings {
+                            owner: owner.clone(),
+                            filter_id: f.filter_id.clone(),
+                            patch,
+                        });
+                    }
+                }
+                let switched = log.iter().any(|e| {
+                    matches!(e, Edit::FilterSetEnabled { filter_id, .. } if *filter_id == f.filter_id)
+                });
+                if switched {
+                    edits.push(Edit::FilterSetEnabled {
+                        owner: owner.clone(),
+                        filter_id: f.filter_id.clone(),
+                        enabled: f.enabled,
+                    });
+                }
+            }
+        }
     }
+    edits
 }
 
 /// The Filters window (spec-workspace.md 6.3, after OBS's): the scope switcher across the
 /// top, the chain on the left and the selected filter's settings on the right, drawn
 /// while it is open. It doesn't dim the canvas, so the picture stays in view. Changes
-/// apply at once; Cancel or Escape puts back every filter it changed, OK keeps them.
+/// apply at once; Cancel or Escape puts back what it did ([`window_restore`]), OK keeps it.
 #[component]
 pub fn FilterSettings() -> impl IntoView {
     let dialogs = expect_context::<FilterDialogs>();
@@ -1824,7 +1926,6 @@ fn WindowBody(
     let studio = expect_context::<Studio>();
     let session = expect_context::<SessionContext>();
     let dialogs = expect_context::<FilterDialogs>();
-    let changes = Changes::new();
     let scopes = {
         let owner = owner.clone();
         studio.collection.with_untracked(|c| {
@@ -1835,11 +1936,39 @@ fn WindowBody(
             })
         })
     };
+    // Each scope's chains as the window opened, and from now on every filter edit it
+    // sends, which Cancel puts back.
+    let opened: Vec<(FilterOwner, FilterChains)> = studio.collection.with_untracked(|c| {
+        scopes
+            .iter()
+            .filter_map(|(_, o)| {
+                let chains = c.as_ref()?.chains(o)?.into_owned();
+                Some((o.clone(), chains))
+            })
+            .collect()
+    });
+    let window = WINDOWS.fetch_add(1, Ordering::Relaxed);
+    dialogs.log.set_value(Some((window, Vec::new())));
+    on_cleanup(move || {
+        dialogs.log.update_value(|log| {
+            if log.as_ref().is_some_and(|(n, _)| *n == window) {
+                *log = None;
+            }
+        });
+    });
     let scope = RwSignal::new(owner.clone());
     let selected = RwSignal::new(first);
     // A just-added filter may not be in the collection yet: the window waits for it
     // until a state at or after the batch's revision lacks it.
-    let added_at = dialogs.added_at.get_untracked();
+    let added_at = RwSignal::new(dialogs.added_at.get_untracked());
+    // A filter the Add filter dialog over the window just added: the window shows it.
+    Effect::new(move |_| {
+        if let Some((filter_id, rev)) = dialogs.landed.get() {
+            dialogs.landed.set(None);
+            added_at.set(Some(rev));
+            selected.set(Some(filter_id));
+        }
+    });
     let chain_ids = Memo::new(move |_| {
         let owner = scope.get();
         studio.collection.with(|c| {
@@ -1860,7 +1989,7 @@ fn WindowBody(
     Effect::new(move |_| {
         let ids = chain_ids.get();
         let rev = studio.collection.with(|c| c.as_ref().map(|c| c.rev));
-        let waiting = added_at.is_some_and(|at| rev < Some(at));
+        let waiting = added_at.get().is_some_and(|at| rev < Some(at));
         let here = selected.with(|s| s.as_ref().is_some_and(|id| ids.contains(id)));
         let next = ids.first().cloned();
         // Set only on a change, or an empty chain would wake this again and again.
@@ -1868,8 +1997,25 @@ fn WindowBody(
             selected.set(next);
         }
     });
+    let opened = StoredValue::new(opened);
     let cancel = move || {
-        let edits = changes.restore(studio);
+        let log = dialogs
+            .log
+            .with_value(|log| log.as_ref().map(|(_, l)| l.clone()).unwrap_or_default());
+        let edits = opened.with_value(|opened| {
+            window_restore(opened, &log, |owner, filter_id| {
+                untrack(|| {
+                    filter_of(
+                        studio,
+                        &Target {
+                            owner: owner.clone(),
+                            filter_id: filter_id.clone(),
+                        },
+                    )
+                })
+                .map(|(_, f)| f)
+            })
+        });
         if let (false, Some(s)) = (edits.is_empty(), session.get()) {
             studio.apply(&s, edits);
         }
@@ -1944,7 +2090,7 @@ fn WindowBody(
         let owner = scope.get();
         match shown.get() {
             Some(filter_id) => view! {
-                <FilterPane target=Target { owner, filter_id } changes=changes />
+                <FilterPane target=Target { owner, filter_id } />
             }
             .into_any(),
             None => view! { <p class="placeholder">"No filter selected. Add one on the left."</p> }
@@ -1983,13 +2129,13 @@ fn WindowBody(
 /// The Filters window's right pane: the selected filter's name, switch, hint and
 /// settings, with Remove and Defaults.
 #[component]
-fn FilterPane(target: Target, changes: Changes) -> impl IntoView {
+fn FilterPane(target: Target) -> impl IntoView {
     let studio = expect_context::<Studio>();
     let session = expect_context::<SessionContext>();
+    let dialogs = expect_context::<FilterDialogs>();
     let Some((chain, filter)) = untrack(|| filter_of(studio, &target)) else {
         return view! { <p class="placeholder">"Loading…"</p> }.into_any();
     };
-    changes.note(&target, &filter);
     let problem = RwSignal::new(None::<String>);
     let errors = RwSignal::new(HashMap::<String, String>::new());
     let kind_id = filter.kind.clone();
@@ -2038,6 +2184,7 @@ fn FilterPane(target: Target, changes: Changes) -> impl IntoView {
         let Some(s) = session.get() else {
             return;
         };
+        dialogs.sent(&edits);
         spawn_local(async move {
             if let Err(error) = apply(&s, edits, None).await
                 && problem.try_set(Some(error.to_string())).is_some()
@@ -2048,7 +2195,6 @@ fn FilterPane(target: Target, changes: Changes) -> impl IntoView {
     };
     let target = StoredValue::new(target);
     let switch = move |_| {
-        target.with_value(|t| changes.switched.update_value(|s| _ = s.insert(t.clone())));
         send(vec![Edit::FilterSetEnabled {
             owner: target.with_value(|t| t.owner.clone()),
             filter_id: target.with_value(|t| t.filter_id.clone()),
@@ -2057,7 +2203,6 @@ fn FilterPane(target: Target, changes: Changes) -> impl IntoView {
     };
     let commit = move |_: SourceId, param: String, value: Value| {
         errors.update(|e| _ = e.remove(&param));
-        target.with_value(|t| changes.touch(t, &param));
         let mut patch = Settings::new();
         patch.insert(param.clone(), value);
         let edit = Edit::FilterSetSettings {
@@ -2068,6 +2213,7 @@ fn FilterPane(target: Target, changes: Changes) -> impl IntoView {
         let Some(s) = session.get() else {
             return;
         };
+        dialogs.sent(std::slice::from_ref(&edit));
         spawn_local(async move {
             if let Err(error) = apply(&s, vec![edit], None).await
                 && errors
@@ -2088,9 +2234,8 @@ fn FilterPane(target: Target, changes: Changes) -> impl IntoView {
         let mut patch = Settings::new();
         settings.with_untracked(|now| {
             for p in kind.params.iter().filter(|p| p.ty != ParamType::Scene) {
-                let touched = target.with_value(|t| changes.touched(t, &p.id));
+                let touched = target.with_value(|t| dialogs.sent_param(t, &p.id));
                 if *value_of(p, now) != p.default || touched {
-                    target.with_value(|t| changes.touch(t, &p.id));
                     patch.insert(p.id.clone(), Value::Null);
                 }
             }
@@ -2329,11 +2474,17 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
                 enabled: None,
                 index: None,
             };
+            let added = edit.clone();
             spawn_local(async move {
                 match apply(&s, vec![edit], None).await {
                     Ok(rev) => {
                         close();
-                        if many {
+                        if dialogs.edit.with_untracked(Option::is_some) {
+                            // Over the Filters window: it shows the new filter, keeping
+                            // what it changed before for Cancel.
+                            dialogs.sent(&[added]);
+                            dialogs.landed.set(Some((filter_id, rev)));
+                        } else if many {
                             dialogs.edit_added(owner.get_value(), filter_id, rev);
                         } else {
                             dialogs.fresh.set(Some(filter_id));
@@ -3452,6 +3603,137 @@ mod tests {
         let camera = first_video_cost(false, 2, false);
         assert!(camera.contains("its own GPU pass") && camera.contains("no encoder session"));
         assert!(!camera.contains("in use now"));
+    }
+
+    /// Cancel in the Filters window puts back what the window sent, from its rows as from
+    /// its pane: an eye on a filter it never showed, a removal (back where it was), a
+    /// reorder, a filter it added, and a setting still on its way back. An owner it left
+    /// alone, and a switch another client pressed, are not touched.
+    #[test]
+    fn window_restore_puts_back_what_the_window_sent() {
+        let source = FilterOwner::Source {
+            source_id: SourceId::new("src_bg"),
+        };
+        let scene = FilterOwner::Scene {
+            scene_id: SceneId::new("scn_main"),
+        };
+        let filter = |id: &str, enabled: bool, amount: f64| FilterInfo {
+            filter_id: FilterId::new(id),
+            kind: "sharpen".into(),
+            enabled,
+            settings: [("amount", json!(amount))].into_iter().collect(),
+        };
+        let opened = vec![
+            (
+                source.clone(),
+                FilterChains {
+                    video: vec![
+                        filter("a", true, 0.1),
+                        filter("b", true, 0.2),
+                        filter("c", false, 0.3),
+                    ],
+                    ..FilterChains::default()
+                },
+            ),
+            (
+                scene.clone(),
+                FilterChains {
+                    video: vec![filter("s", true, 0.5)],
+                    ..FilterChains::default()
+                },
+            ),
+        ];
+        let id = |s: &str| FilterId::new(s);
+        let mut amount = Settings::new();
+        amount.insert("amount", json!(0.9));
+        let log = vec![
+            Edit::FilterSetEnabled {
+                owner: source.clone(),
+                filter_id: id("c"),
+                enabled: true,
+            },
+            Edit::FilterReorder {
+                owner: source.clone(),
+                filter_id: id("a"),
+                index: 2,
+            },
+            Edit::FilterRemove {
+                owner: source.clone(),
+                filter_id: id("b"),
+            },
+            Edit::FilterAdd {
+                owner: source.clone(),
+                chain: FilterChain::Video,
+                filter_id: id("new"),
+                kind: "blur".into(),
+                settings: Settings::new(),
+                enabled: None,
+                index: None,
+            },
+            Edit::FilterSetSettings {
+                owner: source.clone(),
+                filter_id: id("a"),
+                patch: amount,
+            },
+        ];
+        // The store hasn't caught up with the setting yet; another client turned `a` off.
+        let now = |_: &FilterOwner, f: &FilterId| (*f == id("a")).then(|| filter("a", false, 0.1));
+        let edits = window_restore(&opened, &log, now);
+        let mut back = Settings::new();
+        back.insert("amount", json!(0.1));
+        let reorder = |f: &str, index| Edit::FilterReorder {
+            owner: source.clone(),
+            filter_id: id(f),
+            index,
+        };
+        assert_eq!(
+            edits,
+            vec![
+                Edit::FilterRemove {
+                    owner: source.clone(),
+                    filter_id: id("new")
+                },
+                Edit::FilterAdd {
+                    owner: source.clone(),
+                    chain: FilterChain::Video,
+                    filter_id: id("b"),
+                    kind: "sharpen".into(),
+                    settings: filter("b", true, 0.2).settings,
+                    enabled: Some(true),
+                    index: Some(1),
+                },
+                reorder("a", 0),
+                reorder("b", 1),
+                reorder("c", 2),
+                Edit::FilterSetSettings {
+                    owner: source.clone(),
+                    filter_id: id("a"),
+                    patch: back
+                },
+                Edit::FilterSetEnabled {
+                    owner: source.clone(),
+                    filter_id: id("c"),
+                    enabled: false
+                },
+            ]
+        );
+        // A filter added and removed again by the window leaves nothing to do.
+        let log = vec![
+            Edit::FilterAdd {
+                owner: scene.clone(),
+                chain: FilterChain::Video,
+                filter_id: id("tmp"),
+                kind: "blur".into(),
+                settings: Settings::new(),
+                enabled: None,
+                index: None,
+            },
+            Edit::FilterRemove {
+                owner: scene,
+                filter_id: id("tmp"),
+            },
+        ];
+        assert!(window_restore(&opened, &log, |_, _| None).is_empty());
     }
 
     #[test]

@@ -247,6 +247,10 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   head it opens on the first filter with Source, This item and Scene tabs, a row's click
   shows that filter, the Scene tab shows its empty chain, and Remove deletes the filter
   shown and shows the next, the window staying open.
+  With three kinds described, Cancel in the window putting back what its own list did
+  (an eye on a filter never shown, × on Sharpen) and dropping a Blur added from the
+  window, which the Add filter dialog opened over and which the window then showed,
+  keeping those earlier changes.
   With three kinds described (`describeKinds`): the rows' summaries and carets, a click
   on a filter with four settings opening the dialog, Cancel pressed straight after a
   change there still putting the filter back (the change and its restore as two

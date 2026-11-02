@@ -110,7 +110,7 @@ Contents ([Design](#design) explains the choices):
   shows too, `AddFilter`, `FilterSettings` (the Filters window) and the `FilterDialogs` context that opens
   them and holds the chain an FX button picked, with the catalogue (a scanned CLAP plugin's `clap/` kind under Plugins), the row summaries,
   the choice of in place or dialog, each owner's chains, name and note (an item's
-  effects too), the window's scope tabs (`window_scopes`) and Cancel's restore patch tested natively), the number
+  effects too), the window's scope tabs (`window_scopes`) and Cancel's restore (`window_restore`, `restore_patch`) tested natively), the number
   field the panels share (`number.rs`) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
   (the program output and each output with its FX button, creating, editing and
   deleting streams, recordings and the virtual camera, their stream keys, start and
@@ -486,16 +486,22 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   engine doesn't describe shows its name alone. A filter with three settings or fewer
   opens the properties form under its row, any other opens the Filters window (the
   scope tabs from `window_scopes`, the chain on the left and the selected filter's
-  settings on the right, over an undimmed canvas, Cancel putting back every filter it
-  changed), as the panel's head button does, and a double-click always does: in the
+  settings on the right, over an undimmed canvas, Cancel putting back what it did),
+  as the panel's head button does, and a double-click always does: in the
   Filters panel, the panel opens the window on
   the row the double-click's first click landed on (`double_click_target`, within
   800 ms), as that click's fold can scroll the row from under the second, which
   toggles nothing, and a first click anywhere else in the panel forgets that row (#984);
   each field's change is a one-parameter
-  `filter.set_settings`. The window applies every change at once and, on Cancel, Escape
-  or the backdrop, sends one batch putting back the settings and the switch of each
-  filter it changed, as it first showed them, including each one it sent whose change the engine hasn't reported yet; an
+  `filter.set_settings`. The window applies every change at once and notes each filter
+  edit sent while it is open (`FilterDialogs::sent`: its rows' eyes, × and drags, its
+  pane, and the Add filter dialog over it, whose new filter the window then shows,
+  keeping its notes). On Cancel, Escape or the backdrop it sends one batch
+  (`window_restore`) from those notes and each scope's chains as it opened: a filter it
+  added removed, one it removed added back where it was, a chain it reordered put back
+  in order, each setting it sent and each switch it pressed put back, including those
+  whose change the engine hasn't reported yet; what another client changed stays, but
+  for the settings of a filter the window also edited. An
   edit that fails after the window, or the row edited in place, has closed shows in the
   problem bar. Defaults resets each setting but a scene input's scene. The Add filter
   dialog offers `kind.list`'s filter kinds for the source's chains under the prototype's

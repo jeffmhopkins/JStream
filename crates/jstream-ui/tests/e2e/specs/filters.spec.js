@@ -160,6 +160,42 @@ test('the Filters window applies at once, Cancel puts the filter back, and its c
   await expect(videoRows(panel(page)).locator('.filter-name')).toHaveText(['Sharpen']);
 });
 
+test('Cancel in the Filters window puts back what its rows did too, and adding a filter there keeps the earlier changes', async ({ page, daemon }) => {
+  await describeKinds(page, KINDS);
+  await connect(page, daemon);
+  await selectBackdrop(page);
+  await panel(page).getByRole('button', { name: 'Open the Filters window' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Filters', exact: true });
+  await expect(dialog.locator('.filter-pane-title')).toHaveText('Sharpen');
+  const list = dialog.locator('.filters-window-list');
+  const rows = list.locator('li.filter');
+
+  // The eye of a filter never shown in the pane, then × on the one shown.
+  await list.getByRole('button', { name: 'Turn on Blur' }).click();
+  await expect(rows.nth(1)).not.toHaveClass(/\boff\b/);
+  await rows.first().hover();
+  await list.getByRole('button', { name: 'Remove Sharpen' }).click();
+  await expect(rows.locator('.filter-name')).toHaveText(['Blur']);
+
+  // A filter with four settings added from the window: the window shows it, keeping
+  // what it changed before.
+  await dialog.getByRole('button', { name: '+ Add filter…' }).click();
+  const add = page.getByRole('dialog', { name: 'Add filter' });
+  await add.getByRole('listbox', { name: 'Filter type' }).getByRole('option', { name: 'Blur' }).click();
+  await add.getByRole('button', { name: 'Add filter' }).click();
+  await expect(add).toBeHidden();
+  await expect(rows.locator('.filter-name')).toHaveText(['Blur', 'Blur']);
+  await expect(rows.nth(1)).toHaveClass(/\bselected\b/);
+  await expect(dialog.locator('.filter-pane-title')).toHaveText('Blur');
+
+  // Cancel: Sharpen back first, Blur off again, the new Blur gone.
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(videoRows(panel(page)).locator('.filter-name')).toHaveText(['Sharpen', 'Blur']);
+  await expect(videoRows(panel(page)).nth(1)).toHaveClass(/\boff\b/);
+  await expect(videoRows(panel(page)).first()).not.toHaveClass(/\boff\b/);
+});
+
 /** A float setting as `kind.describe` reports it. */
 function float(id, label, min, max, step, value, unit) {
   return { id, type: 'float', min, max, step, unit, default: value, label, live: true };
