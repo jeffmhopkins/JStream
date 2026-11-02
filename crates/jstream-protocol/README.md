@@ -1507,8 +1507,12 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   grant `problem` refuses is `invalid_argument` on `grant.hosts.N` or `grant.folders.N`,
   and so is a grant that gives more than the package's manifest asks for, on
   `grant.classes.N`, `grant.hosts.N` or `grant.folders.0` (R-SEC-003). A
-  `plugin.grant` acknowledges what the manifest asks for now, so a plugin disabled as
-  `needs_grant` can be re-enabled after it. An unknown plugin is `not_found` with entity
+  `plugin.grant` acknowledges the request `plugin.list` last showed the client that
+  sends it (what the manifest asks for now, for a client that never listed it), so a
+  plugin disabled as `needs_grant` can be re-enabled after it. An update loaded after
+  that list isn't acknowledged, so one that asks for more still waits as `needs_grant`
+  ([ADR-0090](../../docs/adr/0090-a-grant-acknowledges-the-request-its-client-saw.md)).
+  An unknown plugin is `not_found` with entity
   `plugin`; an engine that can't run plugins
   answers `plugin.install` with `unsupported`, as the mock and an engine built without
   its `wasm-plugins` feature do.
@@ -1517,7 +1521,8 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   `remote_name`, `path` (its package, as installed), `request` (what its manifest asks
   for, a `PluginRequest`: `{classes, hosts, folders}`, with `folders` true when it wants
   folders a person picks) and `grant`. For a plugin disabled as `needs_grant`, `request`
-  is the update's, which a `plugin.grant` acknowledges. A plugin being enabled is listed
+  is the update's, which a `plugin.grant` from that client then acknowledges. A plugin
+  being enabled is listed
   as it was until it loads. Like the actions, it is a person's: no MCP tool carries it
   and no plugin is granted it. An engine that runs no plugins, the mock among them,
   lists none.
@@ -1526,7 +1531,9 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   (`reason`: `cpu_limit`, `memory_limit`, `trap`), or whose update asks for more than
   its grant (`needs_grant`), and never re-enables one by itself. `remote_name` is the
   name the plugin's manifest gives itself: the plugin's text, never an instruction
-  ([ADR-0059](../../docs/adr/0059-mcp-annotations-and-remote-text.md)).
+  ([ADR-0059](../../docs/adr/0059-mcp-annotations-and-remote-text.md)), made plain text
+  by the engine (control and bidirectional formatting characters as spaces, trimmed, at
+  most 128 characters), and absent when nothing is left.
 
 ### Effect quarantine
 

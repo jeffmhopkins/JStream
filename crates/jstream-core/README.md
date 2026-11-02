@@ -116,8 +116,8 @@ state machine. Contents:
     stepped one is an `int`, any other a `float`, both with the plugin's range; hidden,
     read-only and bypass parameters and ones without a finite range are left out. When
     two files offer one plugin id, the first found wins. A plugin's names reach clients
-    through `plugin_text` (#351): control characters become spaces, trimmed, at most 128
-    characters. The scan returns a `ClapScan`
+    through `plugin_text` (#351, #977): control and bidirectional formatting characters
+    become spaces, trimmed, at most 128 characters. The scan returns a `ClapScan`
     with each kind's file and plugin id, and the files that failed. Kinds stay until
     the engine ends. It is slow, so a host calls it on a worker thread; the engine's
     lock is held only to add the kinds and hand the audio thread a `ClapCatalog` (the
@@ -1017,7 +1017,8 @@ once; a second call is logged and ignored. A pack whose load panics (naga parsin
 validating untrusted WGSL) is one that failed to load: the watcher catches the panic
 around that pack, so the other packs keep loading and hot-reloading. The load runs on
 `jstream_effects::LOAD_THREAD`, which `HANDLED_PANIC_THREADS` lists, so the apps' crash
-hook writes no report for it (#999). Each effect is a
+hook writes no report for it (#999), unless its load thread can't start: the load then
+runs on the poll thread, still caught, and its panic writes a report. Each effect is a
 `video_filter` kind, `<pack>/<effect>`, added to the graph's kinds, so `kind.list` and
 `kind.describe` report it and a video chain, a scene's or an item's effects take it. A
 poll that changes kinds applies them under the collection lock (`Graph::without_kinds`
@@ -1692,8 +1693,10 @@ link's drops instead. A link that came back but isn't stable yet is still
 `reconnecting`: its packets reach the server, but they aren't counted as sent either.
 A video frame handed over while the link isn't `active` also adds to a third counter,
 which only the health reads (#994), so a flapping server stays `poor`. The link state
-is the one the output thread's previous pass read, so the first packet after the link
-drops still counts as sent. `output.start` registers an `OutputMeter` for the run once it is
+is the one the output thread's previous pass read, so a pass's packets count by the
+link before it changed, in both directions: every packet of the pass in which the link
+drops, video and audio, counts as sent, and the video frame of the pass in which it
+becomes `active` again counts as lost, though it reached the server. `output.start` registers an `OutputMeter` for the run once it is
 armed, with its uptime counted from when the engine received the `output.start`
 (before the start waits for an earlier one, opens the destination and starts the
 program stage), whose read gathers those counts with the output's drops: its video encode
@@ -2293,7 +2296,10 @@ The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in proc
 
 - **Package.** `plugin.install`'s `path` is an absolute directory on the engine's machine
   holding `plugin.wasm` and, optionally, `manifest.json`, a JSON object. Its `name`, a
-  string, is the plugin's own text: `plugin.state_changed` carries it as `remote_name`.
+  string, is the plugin's own text: `plugin.state_changed` carries it as `remote_name`,
+  made plain as a CLAP plugin's name is (`kinds::plugin_text`: control and bidirectional
+  formatting characters become spaces, trimmed, cut to 128 characters), and none when
+  nothing is left. A name read from `plugins.json` is made plain the same way.
   What it asks for (`Request`) is its `classes` (capability classes), `hosts` (as
   `scheme://host:port`) and `folders` (true for folders a person picks), each optional.
   Other manifest fields are ignored. Like the ABI, the layout is version 0.
@@ -2347,7 +2353,12 @@ The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in proc
   the plugin, at install or with `plugin.grant`. One that asks for more stays disabled
   as `needs_grant` (`plugin.state_changed` says so when the reason changes), and
   `plugin.enable` answers `action_failed` naming what is new; a `plugin.grant`
-  acknowledges what it asks for now, and the plugin can be enabled after it. One that
+  acknowledges what `plugin.list` last showed its client (`Entry::seen`, forgotten when
+  the session ends, never saved), or what it asks for now from a client that never
+  listed it, and the plugin can be enabled after it. An update another client's
+  `plugin.enable` loaded since that list isn't acknowledged, so one that asks for more
+  still waits as `needs_grant`
+  ([ADR-0090](../../docs/adr/0090-a-grant-acknowledges-the-request-its-client-saw.md)). One that
   asks for less has its grant narrowed to match. A running plugin keeps the module it
   loaded.
 - **Saving.** `open_plugin_dir(dir)` creates `dir` if missing and reads its
@@ -2368,9 +2379,10 @@ The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in proc
 - **Listing.** `plugin.list` (`automation::list`) answers from the registry with no
   collection lock held: each plugin's state and reason, its manifest's name, its
   package path, what its manifest asks for as last read (`Request`, as `PluginRequest`)
-  and its grant. A plugin being installed, or started with the saved plugins, is listed
-  as enabled; one being enabled keeps the reason it was disabled for until it loads
-  (`Run::Starting` holds it). Built without `wasm-plugins`, the engine lists none, from
+  and its grant. It notes that request as what the calling client was shown. A plugin
+  being installed, or started with the saved plugins, is listed as enabled; one being
+  enabled keeps the reason it was disabled for until it loads (`Run::Starting` holds
+  it). Built without `wasm-plugins`, the engine lists none, from
   the collection's query match (`plugin_list_is_empty_until_a_plugin_is_installed`).
 - **Not yet:** a private data folder per plugin, deferred until the file imports a plugin
   would need to use it are designed (ADR-0076); and a way to remove one (no

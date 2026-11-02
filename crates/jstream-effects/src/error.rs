@@ -66,6 +66,11 @@ pub enum PackError {
     },
     /// Loading the pack panicked: naga, parsing or validating its WGSL, is the part
     /// that can. The pack counts as one that failed to load.
+    ///
+    /// Only the payload's message is kept: a caught panic carries no location, and the
+    /// apps' crash hook writes no report for the load thread. For a naga bug report,
+    /// load the pack's folder with [`crate::Pack::load`] in a test, where the default
+    /// panic hook runs: it prints the location, and `RUST_BACKTRACE=1` adds a backtrace.
     #[error("{}: loading the pack panicked: {message}", path.display())]
     Panicked {
         /// The pack's manifest.

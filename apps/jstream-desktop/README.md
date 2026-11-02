@@ -119,7 +119,9 @@ folder, and its log `logs\cef.log`.
   its console; a release build has no console window. The audit log goes in the same
   folder, as the daemon's does. The token is never logged.
 - **Crash reports.** A panic writes `logs\crash-<UTC time>-<pid>-<n>.txt` in the data
-  folder; the newest 10 are kept. Nothing is uploaded
+  folder; the newest 10 are kept. An effect pack whose shader panics the validator
+  writes none (unless its load thread can't start): it is logged as a pack that failed
+  to load. Nothing is uploaded
   ([R-SEC-004](../../docs/RULES.md#R-SEC-004)).
 - **When it can't start** (no data folder, Media Foundation missing, the collection
   file unreadable, no UI bundle), the window shows what went wrong and the log has the

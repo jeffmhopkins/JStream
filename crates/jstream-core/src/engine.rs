@@ -968,7 +968,7 @@ impl Engine {
     /// Drops `client_id`'s undo and redo history and expires its open gestures: its
     /// session ended (ADR-0032). Each gesture's parameters show their collection values
     /// again, `live.ended` (`expired`) goes out after any values not sent yet, and each
-    /// gets an audit entry.
+    /// gets an audit entry. What `plugin.list` showed it is forgotten too.
     pub(crate) fn forget_client(&self, client_id: &ClientId) {
         let mut wake = Vec::new();
         let (ended, rev, client_name) = {
@@ -992,6 +992,8 @@ impl Engine {
         };
         wake_all(wake);
         self.audit_gestures(ended, rev, &client_name);
+        #[cfg(feature = "wasm-plugins")]
+        crate::plugins::automation::forget(self, client_id);
     }
 
     /// Records one audit entry for each gesture in `ended`, which ended at `rev`
@@ -1111,7 +1113,7 @@ impl Engine {
             } => Some(output_id.clone()),
             _ => None,
         };
-        let result = if let Some(result) = self.plugin_call(&call) {
+        let result = if let Some(result) = self.plugin_call(client_id, &call) {
             result
         } else if let Call::Action {
             action: Action::EffectEnable { kind_id },
@@ -1204,14 +1206,18 @@ impl Engine {
     /// or without the `wasm-plugins` feature. They run with no engine lock held: a plugin
     /// loads, and may call back into the engine, while its install waits.
     #[cfg(feature = "wasm-plugins")]
-    fn plugin_call(&self, call: &Call) -> Option<Result<CallResult, ProtocolError>> {
+    fn plugin_call(
+        &self,
+        client_id: &ClientId,
+        call: &Call,
+    ) -> Option<Result<CallResult, ProtocolError>> {
         match call {
-            Call::Action { action } => crate::plugins::automation::action(self, action),
+            Call::Action { action } => crate::plugins::automation::action(self, client_id, action),
             Call::Query {
                 query: Query::PluginList,
             } => Some(Ok(CallResult::Query {
                 result: QueryResult::PluginList {
-                    plugins: crate::plugins::automation::list(self),
+                    plugins: crate::plugins::automation::list(self, client_id),
                 },
             })),
             _ => None,
@@ -1219,7 +1225,7 @@ impl Engine {
     }
 
     #[cfg(not(feature = "wasm-plugins"))]
-    fn plugin_call(&self, _: &Call) -> Option<Result<CallResult, ProtocolError>> {
+    fn plugin_call(&self, _: &ClientId, _: &Call) -> Option<Result<CallResult, ProtocolError>> {
         None
     }
 

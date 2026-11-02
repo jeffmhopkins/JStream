@@ -269,8 +269,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   opening in place, a setting there as one more edit; on the output, Sharpen showing
   the first video filter's cost note, then its own Gain, counted on its FX button
   alone, whose eye and × edit the output's chain, not the master's; and the master's
-  filter in the Filter settings dialog on a double-click (the dblclick event alone, as
-  the panel scrolls), whose Remove deletes it.
+  filter in the Filter settings dialog on a real double-click, which opens it even
+  though the first click's toggle scrolls the taller panel (#984), and whose Remove
+  deletes it.
 - **Mixer** (`mixer.spec.js`, on the Audio mixer tab): the master card counting the
   seed's two channels, its Hear button enabled, its "FX 0" showing the program
   output's chain in the Filters panel, and its button (with its tooltip) unfolding the
