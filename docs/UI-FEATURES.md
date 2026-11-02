@@ -350,8 +350,8 @@ covers = ["crates/jstream-ui/src/panels/outputs.rs"]
 -->
 
 Spec: [panels › outputs](../design/ui-prototype/spec-panels.md#outputs-panel). The real
-panel manages outputs (create, keys, start and stop, encoders), which the prototype
-doesn't show; that stays ([Beyond](#beyond)).
+panel manages outputs (create, keys, start and stop, encoders and video mixes), which the
+prototype doesn't show; that stays ([Beyond](#beyond)).
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
@@ -443,9 +443,16 @@ not remove them; they move into the prototype's look.
 - Undo and redo, with the engine's history.
 - Delete plans: deleting a scene, source or bus shows what else it takes.
 - Outputs: creating stream, recording and virtual camera outputs, the write-only stream
-  key, per-output start and stop, encoder profiles, the audio bus each output carries
-  (its card's Audio select, while it is stopped), virtual camera registration hints,
-  and the pipeline's health line.
+  key, per-output start and stop, the encoder profile, video mix and audio bus each
+  output uses (its card's Encoder, Video and Audio selects, which a virtual camera's
+  card doesn't have; the bus only while it is stopped), virtual camera registration hints, and the pipeline's health line.
+- Encoder profiles and video mixes, under the output cards (`encoders.rs`): each listed
+  with what it encodes or shows, made or edited in a form checked as the engine checks
+  it, and deleted once no output uses it. A profile has the video codec (H.264, HEVC or
+  AV1), constant or variable bit rate with its peak, the keyframe interval, the hardware
+  preference and the AAC bit rate. A mix has what it shows (the program, the preview or
+  one scene), its size, with vertical 1080 × 1920 and 720 × 1280 among the presets, and
+  its rate as a share of the base rate.
 - Mixer: buses, sends, "heard always or when on program", mute, the console-taper fader,
   peak hold, loudness reset, and a monitor on any bus, with its output device.
 - Settings forms generated from kind descriptors, with groups, advanced settings,

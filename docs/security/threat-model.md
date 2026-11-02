@@ -319,9 +319,12 @@ before they reach the UI, agents or the log (#351).
   context's GPU encode path fails at once instead), the third loss
   within 60 s fails the output, and each loss is logged and counted in the output's stats
   ([ARCH › GPU pipeline](../ARCHITECTURE.md#gpu-pipeline)). The static load limits are
-  enforced (`jstream-effects`' shader contract, plus #538's 16 KiB value cap). The engine
-  draws packs now. Not built yet: the engine event for a loss, blaming a loss on the pack
-  effect that was drawing and quarantining it, and the GPU-time guard against long loops.
+  enforced (`jstream-effects`' shader contract, plus #538's 16 KiB value cap). A loss is
+  blamed on the pack effects drawn before it, which are quarantined until a person
+  re-enables them (`effect.enable`, which no MCP tool, plugin or hotkey carries), the
+  whole pack after a second blame in a run, and reported in `gpu.device_lost` (protocol
+  0.61). Not built yet: the GPU-time guard against long loops, which would turn an
+  effect off before the OS resets the device.
 
 <a id="mcp"></a>
 ## MCP agents
@@ -489,7 +492,7 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 | #345 | Files | `absolute` asset paths accept UNC and device paths | Medium |
 | #347 | Browser | Permissions Chromium grants without a prompt; public names resolving locally (`*.nip.io`, DNS rebinding) and requests the handler doesn't see | Medium |
 | #348 | WASM | ADR-0069's capability checks on a plugin's calls, installing and granting plugins, disabling a failing plugin and untrusted-output handling are decided but not built; the protocol's command classes, `PluginGrant` and `forbidden` error are (#642), and so are the host's CPU and memory limits, command cap and event queue | Medium |
-| #349 | WGSL | A hanging shader can still reset the GPU: the engine survives a lost device (#604), but the loss event, blaming and quarantining the pack, and a GPU-time guard are not built yet, and packs are drawn now | Medium |
+| #349 | WGSL | A hanging shader can still reset the GPU: the engine survives a lost device (#604), and quarantines the pack effect blamed for it, but the GPU-time guard that would stop a hang before the reset is not built, and a forced TDR hasn't run on Windows hardware | Medium |
 | #355 | Files | A recording can replace a file created just before its rename | Low |
 | #356 | Virtual camera | A pre-created control mapping keeps its own DACL | Low |
 | #273 | Server | A hung engine hello escapes the handshake deadline | Low |

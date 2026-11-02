@@ -104,8 +104,12 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   appears in the page; go live and end stream; the header's Record starts and stops a
   recording; clearing the key; deleting; editing the
   server URL and choosing an encoder profile, both read back by a fresh page; a
-  recording's Audio select moving it to another bus, read back by a fresh page; a second
-  client sees outputs created, started and deleted.
+  recording's Audio select moving it to another bus, read back by a fresh page; making an
+  AV1 VBR encoder profile (a peak under the average is named in the form, which stays
+  open) and a vertical video mix, a recording using both (neither can then be deleted),
+  both read back by a fresh page, the mix resized from its Edit form and deleted once the
+  recording is back on the program; a second client sees outputs created, started and
+  deleted.
 - **Plugins** (`plugins.spec.js`, under the Inspector): the mock engine runs no plugins,
   so the spec routes the page's WebSocket itself and answers `plugin.list`,
   `plugin.install`, `plugin.grant` and `plugin.enable` from a list it keeps. An install
