@@ -77,8 +77,8 @@ source: crates/jstream-sources/tests/kinds.rs
         "type": "color",
         "alpha": false,
         "default": "#56697f",
-        "label": "Colour",
-        "description": "The backdrop's main colour, where the light falls.",
+        "label": "Color",
+        "description": "The backdrop's main color, where the light falls.",
         "live": true
       },
       {
@@ -87,7 +87,7 @@ source: crates/jstream-sources/tests/kinds.rs
         "alpha": false,
         "default": "#202c3a",
         "label": "Accent",
-        "description": "The second colour mottled in. A darker or shifted shade of Colour looks most like paint.",
+        "description": "The second color mottled in. A darker or shifted shade of Color looks most like paint.",
         "live": true
       },
       {
@@ -98,7 +98,7 @@ source: crates/jstream-sources/tests/kinds.rs
         "step": 0.01,
         "default": 0.6,
         "label": "Texture",
-        "description": "How strongly the two colours mottle. 0 is a plain gradient.",
+        "description": "How strongly the two colors mottle. 0 is a plain gradient.",
         "live": true
       },
       {
@@ -806,7 +806,7 @@ source: crates/jstream-sources/tests/kinds.rs
         "type": "color",
         "alpha": true,
         "default": "#00000000",
-        "label": "Shadow colour",
+        "label": "Shadow color",
         "description": "The text's shadow, drawn under its outline and fill. Fully transparent draws none.",
         "live": true
       },

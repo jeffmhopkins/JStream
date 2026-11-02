@@ -67,17 +67,17 @@ impl BackdropKind {
                      seamless paper is a smooth sweep with almost none.",
                 )),
                 live(described(
-                    param("color", "Colour", colour(), json!("#56697f")),
-                    "The backdrop's main colour, where the light falls.",
+                    param("color", "Color", colour(), json!("#56697f")),
+                    "The backdrop's main color, where the light falls.",
                 )),
                 live(described(
                     param("accent", "Accent", colour(), json!("#202c3a")),
-                    "The second colour mottled in. A darker or shifted shade of Colour \
+                    "The second color mottled in. A darker or shifted shade of Color \
                      looks most like paint.",
                 )),
                 live(described(
                     param("texture", "Texture", amount(), json!(0.6)),
-                    "How strongly the two colours mottle. 0 is a plain gradient.",
+                    "How strongly the two colors mottle. 0 is a plain gradient.",
                 )),
                 live(described(
                     param(
@@ -294,7 +294,7 @@ fn colour(settings: &Settings, id: &str) -> Result<[u8; 4], SourceError> {
     setting(settings, id)?
         .as_str()
         .and_then(parse_color)
-        .ok_or_else(|| bad(id, "must be a colour as `#rrggbb` or `#rrggbbaa`"))
+        .ok_or_else(|| bad(id, "must be a color as `#rrggbb` or `#rrggbbaa`"))
 }
 
 fn amount(settings: &Settings, id: &str, min: f64, max: f64) -> Result<f32, SourceError> {

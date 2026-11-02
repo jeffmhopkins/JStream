@@ -190,12 +190,7 @@ impl TextKind {
                          transparent draws none."
                             .into(),
                     ),
-                    ..param(
-                        "shadow_color",
-                        "Shadow colour",
-                        colour(),
-                        json!("#00000000"),
-                    )
+                    ..param("shadow_color", "Shadow color", colour(), json!("#00000000"))
                 }),
                 live(param(
                     "shadow_x",

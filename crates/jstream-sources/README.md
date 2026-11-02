@@ -461,8 +461,8 @@ the test's header describes. `tests/text.rs` draws with the bundled font: wrappi
 alignment, padding, outline, live updates, font assets and limits, drawing at a
 density (twice the pixels for the same extent, kept across an update, clamped to
 `MAX_DENSITY`, lowered to a 4K canvas's pixels, halved to fit the limits, and a short
-line filling the canvas drawn at the 13x it is shown at), plus golden PNGs in `tests/data/text`, one of
-them the styled text at a density of 2^0.75 (`JSTREAM_BLESS=1` rewrites them). The scope's unit tests check the
+line filling the canvas drawn at the 13x it is shown at, a bundled face picked live, letter spacing widening a line, and a shadow growing the frame but not the background), plus golden PNGs in `tests/data/text`, one of
+them the styled text at a density of 2^0.75 (`JSTREAM_BLESS=1` rewrites them). `tests/backdrop.rs` checks the backdrop's descriptor (all but the size live), that a backdrop is opaque and the same for the same settings, that the light and vignette brighten its pool and darken its edges, that the style and texture set how much it mottles, and that a look changes live while a new size restarts it. The scope's unit tests check the
 ring (latest window, wrap-around, and a reader racing a writer never seeing a torn
 window), the frame ticks and easing, and draw both kinds from known audio: each
 waveform column's range, the dB scale, a tone lighting its own spectrum bar, every
