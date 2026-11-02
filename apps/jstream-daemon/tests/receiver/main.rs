@@ -643,7 +643,11 @@ async fn a_stream_reaches_a_real_receiver_with_its_encoder_settings_and_stats() 
     // The profile's interval is in frames (one second's worth), so it is checked in
     // frames, then in seconds from the second keyframe on: the render loop skips ticks
     // while lavapipe draws its first frames on a slow machine, which stretches the
-    // first gap. Those are engine-wide `render_ticks` drops, not the output's.
+    // first gap. Those are engine-wide `render_ticks` drops, not the output's. A runner
+    // stall later on stretches the gaps it falls in the same way, by the ticks it
+    // skipped, which `stats.tick` doesn't place in time (#1012). So each gap is a second
+    // within 0.1 s plus at most the run's skipped ticks, and together the gaps stretch
+    // by no more than those ticks: with none skipped, each is a second within 0.1 s.
     let spacing = p.keyframe_spacing();
     assert!(spacing.len() >= 3, "{spacing:?}");
     assert!(
@@ -651,9 +655,16 @@ async fn a_stream_reaches_a_real_receiver_with_its_encoder_settings_and_stats() 
         "a keyframe every 30 frames: {spacing:?}"
     );
     let gaps = p.keyframe_gaps();
+    let stall = skipped as f64 / 30.0;
     assert!(
-        gaps[1..].iter().all(|g| close(*g, 1.0, 0.1)),
-        "a keyframe every second once running: {gaps:?}"
+        gaps[1..].iter().all(|g| *g >= 0.9 && *g <= 1.1 + stall),
+        "a keyframe every second once running, or later by the {skipped} skipped ticks: \
+         {gaps:?}"
+    );
+    let stretch: f64 = gaps[1..].iter().map(|g| g - 1.0).sum();
+    assert!(
+        stretch <= stall + 0.1,
+        "the gaps stretch by at most the {skipped} skipped ticks: {stretch:.3} s, {gaps:?}"
     );
     let rgb = pixel(&file, 2.0, 160, 90);
     assert!(near(rgb, [255, 0, 0]), "the canvas is red: {rgb:?}");

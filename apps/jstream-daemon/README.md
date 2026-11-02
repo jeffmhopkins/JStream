@@ -132,7 +132,8 @@ The tests need `ffmpeg`, `ffprobe` and a Vulkan adapter, which
 when it is installed, and runs them one at a time, in about half a minute. They check:
 
 - **A stream on an encoder profile.** H.264 at the canvas size and 30 fps, a keyframe
-  at the profile's interval, and AAC stereo at 48 kHz with the microphone in it. The
+  every 30 frames, which from the second keyframe on is a second apart within 0.1 s,
+  stretched by at most the render ticks the run skipped (#1012), and AAC stereo at 48 kHz with the microphone in it. The
   decoded pixels match the scene, and the file holds the frames the stats counted and
   lasts as long as their timestamps span. That span, in ticks, is those frames plus the
   render ticks the engine skipped over the run (`stats.tick` drops), within a second, so
