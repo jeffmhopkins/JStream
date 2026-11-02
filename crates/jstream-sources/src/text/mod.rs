@@ -132,7 +132,7 @@ impl TextKind {
                     },
                     json!(64.0),
                 )),
-                live(param("color", "Colour", colour(), json!("#ffffffff"))),
+                live(param("color", "Color", colour(), json!("#ffffffff"))),
                 live(param(
                     "align",
                     "Alignment",
@@ -157,7 +157,7 @@ impl TextKind {
                 )),
                 live(param(
                     "outline_color",
-                    "Outline colour",
+                    "Outline color",
                     colour(),
                     json!("#000000ff"),
                 )),
@@ -474,5 +474,5 @@ pub(crate) fn color(settings: &Settings, id: &str) -> Result<[u8; 4], SourceErro
     setting(settings, id)?
         .as_str()
         .and_then(parse_color)
-        .ok_or_else(|| bad(id, "must be a colour as `#rrggbb` or `#rrggbbaa`"))
+        .ok_or_else(|| bad(id, "must be a color as `#rrggbb` or `#rrggbbaa`"))
 }

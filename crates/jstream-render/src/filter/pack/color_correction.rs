@@ -44,7 +44,7 @@ pub(super) fn descriptor() -> KindDescriptor {
                 float("saturation", "Saturation", -1.0, 5.0, 0.0, ""),
             ),
             described(
-                "Rotates every colour around the grey axis; 120° turns red green.",
+                "Rotates every color around the grey axis; 120° turns red green.",
                 float("hue_shift", "Hue shift", -180.0, 180.0, 0.0, "°"),
             ),
             described(

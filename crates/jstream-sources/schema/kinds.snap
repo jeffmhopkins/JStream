@@ -324,7 +324,7 @@ source: crates/jstream-sources/tests/kinds.rs
         "type": "color",
         "alpha": true,
         "default": "#ffd54fff",
-        "label": "Author colour",
+        "label": "Author color",
         "live": true
       },
       {
@@ -332,7 +332,7 @@ source: crates/jstream-sources/tests/kinds.rs
         "type": "color",
         "alpha": true,
         "default": "#ffffffff",
-        "label": "Text colour",
+        "label": "Text color",
         "live": true
       },
       {
@@ -382,7 +382,7 @@ source: crates/jstream-sources/tests/kinds.rs
         "type": "color",
         "alpha": true,
         "default": "#000000ff",
-        "label": "Outline colour",
+        "label": "Outline color",
         "live": true
       }
     ]
@@ -390,7 +390,7 @@ source: crates/jstream-sources/tests/kinds.rs
   {
     "kind_id": "color",
     "category": "source",
-    "name": "Colour",
+    "name": "Color",
     "version": 1,
     "video": true,
     "audio": false,
@@ -400,7 +400,7 @@ source: crates/jstream-sources/tests/kinds.rs
         "type": "color",
         "alpha": true,
         "default": "#000000ff",
-        "label": "Colour",
+        "label": "Color",
         "live": true
       },
       {
@@ -595,7 +595,7 @@ source: crates/jstream-sources/tests/kinds.rs
         "type": "color",
         "alpha": true,
         "default": "#ffffffff",
-        "label": "Colour",
+        "label": "Color",
         "live": true
       },
       {
@@ -715,7 +715,7 @@ source: crates/jstream-sources/tests/kinds.rs
         "type": "color",
         "alpha": true,
         "default": "#ffffffff",
-        "label": "Colour",
+        "label": "Color",
         "live": true
       },
       {
@@ -767,7 +767,7 @@ source: crates/jstream-sources/tests/kinds.rs
         "type": "color",
         "alpha": true,
         "default": "#000000ff",
-        "label": "Outline colour",
+        "label": "Outline color",
         "live": true
       },
       {
@@ -898,7 +898,7 @@ source: crates/jstream-sources/tests/kinds.rs
         "type": "color",
         "alpha": true,
         "default": "#ffffffff",
-        "label": "Colour",
+        "label": "Color",
         "live": true
       },
       {

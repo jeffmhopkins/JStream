@@ -43,7 +43,7 @@ pub enum RenderError {
         expected: usize,
     },
     /// A texture is not a single-sample 2D sRGB RGBA or BGRA image this compositor can sample.
-    #[error("texture format {format:?} cannot be sampled as sRGB colour")]
+    #[error("texture format {format:?} cannot be sampled as sRGB color")]
     UnsupportedFormat {
         /// The texture's format.
         format: wgpu::TextureFormat,

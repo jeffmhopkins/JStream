@@ -22,7 +22,7 @@ pub(super) fn descriptor() -> KindDescriptor {
         "Vignette",
         vec![
             ParamDescriptor {
-                description: Some("How much of the colour the edges take: 0 is none.".into()),
+                description: Some("How much of the color the edges take: 0 is none.".into()),
                 ..float("strength", "Strength", 0.0, 1.0, 0.5, "")
             },
             ParamDescriptor {

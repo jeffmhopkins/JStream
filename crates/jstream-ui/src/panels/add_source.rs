@@ -100,7 +100,7 @@ fn known(kind: &str) -> Option<Known> {
     Some(match kind {
         "display" => (
             "Display capture",
-            "A whole monitor, through Windows Graphics Capture.",
+            "A whole monitor or screen.",
             "monitor",
             Capture,
             Some((1920.0, 1080.0)),
@@ -568,13 +568,30 @@ fn AddSourceBody(
             .unwrap_or_default()
     });
     let picked = RwSignal::new(first);
+    // The search box narrows the list, by name, description or group.
+    let search = RwSignal::new(String::new());
+    let shown = Memo::new(move |_| {
+        let search = search.get();
+        types.with(|t| {
+            t.iter()
+                .filter(|t| type_matches(t, &search))
+                .cloned()
+                .collect::<Vec<_>>()
+        })
+    });
     // `None` until the user picks: Create new, or for Scene the first scene listed.
     let chosen = RwSignal::new(None::<Choice>);
     let name = RwSignal::new(String::new());
 
+    // The picked type while the search shows it, else the first type it shows.
     let current = move || {
         let key = picked.get();
-        types.with(|t| t.iter().find(|t| t.key() == key).cloned())
+        shown.with(|t| {
+            t.iter()
+                .find(|t| t.key() == key)
+                .or_else(|| t.first())
+                .cloned()
+        })
     };
     let existing_list = {
         let scene_id = scene_id.clone();
@@ -678,7 +695,10 @@ fn AddSourceBody(
     let ok = StoredValue::new(ok);
 
     let type_list = move || {
-        let types = types.get();
+        let types = shown.get();
+        if types.is_empty() {
+            return view! { <p class="placeholder">"No source type matches."</p> }.into_any();
+        }
         let mut groups: Vec<(Category, Vec<SourceType>)> = Vec::new();
         for t in types {
             match groups.last_mut() {
@@ -696,7 +716,7 @@ fn AddSourceBody(
                         let creatable = t.creatable;
                         let on = {
                             let key = key.clone();
-                            move || picked.with(|p| *p == key)
+                            move || current().is_some_and(|t| t.key() == key)
                         };
                         let pick = {
                             let key = key.clone();
@@ -740,6 +760,7 @@ fn AddSourceBody(
                 }
             })
             .collect_view()
+            .into_any()
     };
 
     let detail = move || {
@@ -845,7 +866,18 @@ fn AddSourceBody(
                 </button>
             </div>
             <div class="add-body">
-                <div class="add-types" role="listbox" aria-label="Source type">{type_list}</div>
+                <div class="add-filter-left">
+                    <label class="tree-search add-filter-search">
+                        <Icon name="search" size=14 />
+                        <input
+                            type="text"
+                            aria-label="Search source types"
+                            placeholder="Search source types"
+                            bind:value=search
+                        />
+                    </label>
+                    <div class="add-types" role="listbox" aria-label="Source type">{type_list}</div>
+                </div>
                 <div class="add-detail">{detail}</div>
             </div>
             <div class="modal-footer">
@@ -862,6 +894,16 @@ fn AddSourceBody(
             </div>
         </Modal>
     }
+}
+
+/// Whether a type matches the dialog's search: its name, description or group, in any
+/// case.
+pub fn type_matches(t: &SourceType, search: &str) -> bool {
+    let search = search.trim().to_lowercase();
+    search.is_empty()
+        || [t.name.as_str(), t.description.as_str(), t.category.title()]
+            .iter()
+            .any(|s| s.to_lowercase().contains(&search))
 }
 
 #[cfg(test)]
@@ -990,6 +1032,32 @@ mod tests {
             .iter()
             .map(|t| (t.name.as_str(), t.category))
             .collect()
+    }
+
+    #[test]
+    fn the_search_matches_name_description_and_group_in_any_case() {
+        let types = catalogue(&engine_kinds(), &[]);
+        let found = |search: &str| -> Vec<String> {
+            types
+                .iter()
+                .filter(|t| type_matches(t, search))
+                .map(|t| t.name.clone())
+                .collect()
+        };
+        assert_eq!(
+            found("").len(),
+            types.len(),
+            "an empty search keeps them all"
+        );
+        assert_eq!(found("  TEXT "), ["Text"]);
+        assert_eq!(
+            found("webcam"),
+            ["Video capture device"],
+            "by its description"
+        );
+        assert_eq!(found("audio"), ["Audio input"], "by its group's title");
+        assert_eq!(found("monitor"), ["Display capture"]);
+        assert!(found("zebra").is_empty());
     }
 
     #[test]

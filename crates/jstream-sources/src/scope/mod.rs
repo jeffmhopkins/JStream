@@ -710,7 +710,7 @@ fn color(settings: &Settings, id: &str) -> Result<[u8; 4], SourceError> {
     setting(settings, id)?
         .as_str()
         .and_then(parse_color)
-        .ok_or_else(|| bad(id, "must be a colour as `#rrggbb` or `#rrggbbaa`"))
+        .ok_or_else(|| bad(id, "must be a color as `#rrggbb` or `#rrggbbaa`"))
 }
 
 /// The `smoothing` setting: how much of the last frame each new one keeps, 0 to 0.99.

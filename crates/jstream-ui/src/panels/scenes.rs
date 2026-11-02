@@ -791,17 +791,22 @@ pub fn Scenes() -> impl IntoView {
                     .with_untracked(|c| c.as_ref().and_then(|c| folder_of(c, &id)));
                 let scene_folder = folder.clone();
                 // Whether a multiview shows it, set here as in Scene properties (DL-03).
+                // The meta is read on the click, so a change since the menu opened stays.
                 let multiview = {
                     let id = id.clone();
-                    let meta = studio.collection.with_untracked(|c| {
+                    let on = studio.collection.with_untracked(|c| {
                         c.as_ref()
                             .and_then(|c| c.scene(&id))
-                            .map(|s| s.meta.clone())
+                            .is_some_and(|s| s.meta.show_in_multiview)
                     });
-                    let on = meta.as_ref().is_some_and(|m| m.show_in_multiview);
                     Entry::item("Show in multiview", move || {
-                        if let Some(mut meta) = meta.clone() {
-                            meta.show_in_multiview = !on;
+                        let meta = studio.collection.with_untracked(|c| {
+                            c.as_ref()
+                                .and_then(|c| c.scene(&id))
+                                .map(|s| s.meta.clone())
+                        });
+                        if let Some(mut meta) = meta {
+                            meta.show_in_multiview = !meta.show_in_multiview;
                             send_all(vec![Edit::SceneSetMeta {
                                 scene_id: id.clone(),
                                 meta,
