@@ -113,33 +113,38 @@ struct RealCodecs {
     openh264: bool,
 }
 
-/// Cisco's library from `JSTREAM_E2E_OPENH264`. `download` installs the pinned release
-/// from Cisco's server, as the app does on the user's request, into a store the run's
-/// tests share (under `CARGO_TARGET_TMPDIR`), so it downloads once. Any other value names
-/// a copy of that release, which is stored in `dir`. Either way the store holds it to
+/// Cisco's library from `JSTREAM_E2E_OPENH264`, as a file: `download` installs the
+/// pinned release from Cisco's server, as the app does on the user's request, into a
+/// store the run's tests share (under `CARGO_TARGET_TMPDIR`), so it downloads once; any
+/// other value names a copy of that release. `None` when the variable isn't set.
+pub(crate) fn openh264_library() -> Option<PathBuf> {
+    let source = std::env::var_os("JSTREAM_E2E_OPENH264")?;
+    if source != "download" {
+        return Some(PathBuf::from(source));
+    }
+    let store = OpenH264Store::new(Path::new(env!("CARGO_TARGET_TMPDIR")).join("openh264"));
+    if !store.is_installed() {
+        let fetch = HttpsFetch::new().expect("a TLS client on the OS's roots");
+        store
+            .install(&fetch)
+            .expect("OpenH264 downloads from Cisco and matches the pin");
+        eprintln!(
+            "OpenH264 downloaded from {} into {}",
+            OPENH264_PIN.url,
+            store.library_path().display()
+        );
+    }
+    Some(store.library_path())
+}
+
+/// [`openh264_library`]'s file, stored in `dir`. The store holds it to
 /// [`OPENH264_PIN`]'s SHA-256 and `VaapiCodecs` loads it the way it loads a download, so
 /// a library that isn't the pinned one fails the test.
 fn openh264(dir: &Path) -> Option<OpenH264Store> {
-    let source = std::env::var_os("JSTREAM_E2E_OPENH264")?;
-    if source == "download" {
-        let store = OpenH264Store::new(Path::new(env!("CARGO_TARGET_TMPDIR")).join("openh264"));
-        if !store.is_installed() {
-            let fetch = HttpsFetch::new().expect("a TLS client on the OS's roots");
-            store
-                .install(&fetch)
-                .expect("OpenH264 downloads from Cisco and matches the pin");
-            eprintln!(
-                "OpenH264 downloaded from {} into {}",
-                OPENH264_PIN.url,
-                store.library_path().display()
-            );
-        }
-        return Some(store);
-    }
-    let bytes = std::fs::read(&source).expect("JSTREAM_E2E_OPENH264 names a readable file");
+    let library = openh264_library()?;
     let store = OpenH264Store::new(dir.join("openh264"));
     std::fs::create_dir_all(dir.join("openh264")).expect("the store's folder");
-    std::fs::write(store.library_path(), bytes).expect("the library is stored");
+    std::fs::copy(&library, store.library_path()).expect("the library is stored");
     Some(store)
 }
 

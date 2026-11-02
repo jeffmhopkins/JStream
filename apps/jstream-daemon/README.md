@@ -167,11 +167,11 @@ when it is installed, and runs them one at a time, in about half a minute. They 
   file, which the test checks. A client drives it over the WebSocket API: a red colour
   source, an RTMP output with its key, `output.start`. With an H.264 encoder (VA-API, or
   OpenH264 in the daemon's store) the receiver must get H.264 at the canvas size and
-  AAC, with red pixels. Without one, as on CI, the start must fail with a reason that
-  names OpenH264 and VA-API. `JSTREAM_E2E_OPENH264` installs Cisco's library in the
-  daemon's store only once OpenH264's pin has its SHA-256 (LNX2), because the daemon
-  refuses a library the pin doesn't vouch for; until then the stream branch needs
-  VA-API hardware.
+  AAC, with red pixels. Without one, as on a machine running the stand-in, the start
+  must fail with a reason that names OpenH264 and VA-API. When `JSTREAM_E2E_OPENH264` is
+  set, as on CI, the test copies the same library the other tests use (downloaded once,
+  or the named file) into the daemon's store, where the daemon checks it against the
+  pin, so the stream branch runs.
 
 They don't cover what needs hardware or another OS: VA-API, NVENC, QSV, AMF, Media
 Foundation and VideoToolbox, the virtual camera, real capture devices, or the platform
