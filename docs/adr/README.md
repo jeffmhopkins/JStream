@@ -102,4 +102,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0086](0086-master-clap-filter-one-host-per-output-bus.md) | A master-chain CLAP filter runs one plugin host per bus that feeds an output | accepted | agent |  |
 | [ADR-0087](0087-effect-quarantine-after-gpu-device-loss.md) | A GPU device loss quarantines the effect-pack kinds drawn before it, until a person re-enables them | accepted | agent |  |
 | [ADR-0088](0088-keyframe-scenes-override-item-effects.md) | Keyframe scenes override an item's effects | accepted | agent |  |
+| [ADR-0090](0090-a-grant-acknowledges-the-request-its-client-saw.md) | A plugin grant acknowledges the request its client was shown | accepted | agent |  |
 <!-- @generated end adr-index -->

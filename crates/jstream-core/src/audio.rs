@@ -592,6 +592,21 @@ impl AudioRouting {
         };
         attached.removing.retain(|bus| !bus.remove());
         attached.removing_taps.retain(|(_, tap)| !tap.remove());
+        // Deleted buses leave the mixer first, so the chains named below never name
+        // one as tapped (#983 N1).
+        let gone: Vec<BusId> = attached
+            .buses
+            .keys()
+            .filter(|id| state.bus(id).is_none())
+            .cloned()
+            .collect();
+        for id in gone {
+            if let Some(bus) = attached.buses.remove(&id)
+                && !bus.remove()
+            {
+                attached.removing.push(bus);
+            }
+        }
         attached.name_routed(state);
         let blocks = attached.wanted.routed_blocks();
         for reason in attached.master_chain.apply(
@@ -621,19 +636,6 @@ impl AudioRouting {
                     .apply(&tap.control, wanted, Clap::Blocks(blocks), Instant::now())
             {
                 tracing::warn!(output_id = %output_id, reason, "output filter not applied");
-            }
-        }
-        let gone: Vec<BusId> = attached
-            .buses
-            .keys()
-            .filter(|id| state.bus(id).is_none())
-            .cloned()
-            .collect();
-        for id in gone {
-            if let Some(bus) = attached.buses.remove(&id)
-                && !bus.remove()
-            {
-                attached.removing.push(bus);
             }
         }
         for bus in state.buses() {
@@ -903,13 +905,13 @@ impl MasterMetering {
 
 #[cfg(test)]
 mod tests {
-    use super::{AudioRouting, MasterMetering, MixerHandles, ScopeTaps};
+    use super::{AudioRouting, Chain, MasterMetering, MixerHandles, ScopeTaps, Tap};
     use jstream_audio::{Mixer, MixerConfig};
     use jstream_graph::Graph;
     use jstream_media::{AudioFormat, ChannelLayout, SampleFormat};
     use jstream_protocol::{
-        AudioFollow, BusId, Edit, Finite32, KindCategory, KindDescriptor, Settings, SourceId,
-        SourceKind,
+        AudioFollow, BusId, Edit, Finite32, KindCategory, KindDescriptor, OutputId, Settings,
+        SourceId, SourceKind,
     };
     use std::collections::BTreeMap;
     use std::sync::Arc;
@@ -1081,6 +1083,57 @@ mod tests {
         );
         routing.detach(generation);
         assert!(routing.meters(graph.state(), &inputs).is_none());
+    }
+
+    /// A deleted bus that an output tap still reads is not named as tapped, even on the
+    /// sync that removes it from the mixer (#983 N1).
+    #[test]
+    fn a_deleted_bus_is_not_named_as_tapped() {
+        let mixer = Mixer::new(MixerConfig::default()).expect("mixer");
+        let (_metering, meters) = MasterMetering::new(48_000).expect("meters");
+        let mut graph = graph();
+        let inputs = BTreeMap::new();
+        let mut routing = AudioRouting::default();
+        routing.attach(
+            MixerHandles {
+                control: mixer.control(),
+                master: mixer.bus(),
+                meters,
+                scopes: Arc::default(),
+                taps: Arc::new(ScopeTaps::default()),
+                wanted: Arc::default(),
+            },
+            graph.state(),
+            None,
+            &inputs,
+        );
+        let vod = BusId::new("vod");
+        let attached = routing.attached.as_mut().expect("attached");
+        let control = attached
+            .control
+            .add_output_tap(attached.buses[&vod].id())
+            .expect("tap");
+        attached.output_taps.insert(
+            OutputId::new("out"),
+            Tap {
+                control,
+                bus: vod.clone(),
+                chain: Chain::default(),
+            },
+        );
+        routing.sync(graph.state(), None, &inputs);
+        let attached = routing.attached.as_ref().expect("attached");
+        assert!(attached.routed.buses.contains(&vod), "a live bus is tapped");
+
+        apply(&mut graph, vec![Edit::BusDelete { bus_id: vod }]);
+        routing.sync(graph.state(), None, &inputs);
+        let attached = routing.attached.as_ref().expect("attached");
+        assert!(attached.buses.is_empty());
+        assert!(
+            attached.routed.buses.is_empty(),
+            "{:?}",
+            attached.routed.buses
+        );
     }
 
     #[test]

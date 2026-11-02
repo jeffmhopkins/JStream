@@ -488,7 +488,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Replaces an installed plugin's grant, widening or narrowing it (0.35), never past\nwhat its manifest asks for (`invalid_argument`, as for `plugin.install`). The\nperson grants it knowing what the manifest asks for now, so a plugin disabled\nbecause an update asks for more (`needs_grant`) can then be re-enabled. For a\nperson only, like `plugin.install`. Fails with `not_found` (entity `plugin`) for a\nplugin that isn't installed.",
+          "description": "Replaces an installed plugin's grant, widening or narrowing it (0.35), never past\nwhat its manifest asks for (`invalid_argument`, as for `plugin.install`). The\nperson grants it knowing what `plugin.list` last showed their client the manifest\nasks for (what it asks for now, if their client never listed it), so a plugin\ndisabled because an update asks for more (`needs_grant`) can then be re-enabled.\nAn update loaded after that list isn't acknowledged, and one that asks for more\nstill waits as `needs_grant`. For a person only, like `plugin.install`. Fails with\n`not_found` (entity `plugin`) for a plugin that isn't installed.",
           "properties": {
             "grant": {
               "$ref": "#/$defs/PluginGrant",
@@ -6569,7 +6569,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         "request": {
           "$ref": "#/$defs/PluginRequest",
-          "description": "What its manifest asks for, as the engine last read it. For a plugin disabled as\n`needs_grant`, this is the update's request, which a `plugin.grant` acknowledges."
+          "description": "What its manifest asks for, as the engine last read it. For a plugin disabled as\n`needs_grant`, this is the update's request, which a `plugin.grant` from the\nclient it was listed to then acknowledges."
         },
         "state": {
           "$ref": "#/$defs/PluginState",

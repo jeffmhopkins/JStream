@@ -37,7 +37,9 @@ state machine. Contents:
   and `start_stats_heartbeat` (`stats.tick`'s load, below); `open_plugin_dir`
   (where installed WASM plugins are saved, ADR-0076), called once the engine is built;
   `scan_clap_plugins` adds the CLAP filter kinds; `watch_effect_packs` loads and
-  hot-reloads the WGSL effect packs (video filter kinds, below);
+  hot-reloads the WGSL effect packs (video filter kinds, below), and
+  `HANDLED_PANIC_THREADS` names the pack load thread, whose panics the engine catches,
+  for the apps' crash hook to leave out (#999);
   `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
   frame of a source; `output_stats` reads a running output's pipeline counters
   (`output_stats_of` names the output); `output_kind` reads a
@@ -123,8 +125,8 @@ state machine. Contents:
     stepped one is an `int`, any other a `float`, both with the plugin's range; hidden,
     read-only and bypass parameters and ones without a finite range are left out. When
     two files offer one plugin id, the first found wins. A plugin's names reach clients
-    through `plugin_text` (#351): control characters become spaces, trimmed, at most 128
-    characters. The scan returns a `ClapScan`
+    through `plugin_text` (#351, #977): control and bidirectional formatting characters
+    become spaces, trimmed, at most 128 characters. The scan returns a `ClapScan`
     with each kind's file and plugin id, and the files that failed. Kinds stay until
     the engine ends. It is slow, so a host calls it on a worker thread; the engine's
     lock is held only to add the kinds and hand the audio thread a `ClapCatalog` (the
@@ -770,7 +772,8 @@ collection lock:
   naming the first such entry, nothing applied, and the step dropped. Edits that
   pass the check but no longer apply also fail with `undo_conflict`, naming the latest
   entry by another client, and drop the step. Edits that fail only because an output
-  is running (undoing `output.create` while it runs) answer the graph's own
+  is running (undoing `output.create` while it runs, or a running output's
+  `output.set_audio_buses`, which would move it to another bus) answer the graph's own
   `invalid_argument` and keep the step for a retry once it is stopped; with no other
   client's entry to blame, any other failure does too. The log is pruned to the oldest
   `since` of any kept step. Only when there is no conflict does the copy replace the
@@ -1022,7 +1025,10 @@ X1). `Engine::watch_effect_packs(root)` watches a folder of pack folders with
 `jstream-effect-packs` thread polls every 500 ms while the engine lives. It is called
 once; a second call is logged and ignored. A pack whose load panics (naga parsing or
 validating untrusted WGSL) is one that failed to load: the watcher catches the panic
-around that pack, so the other packs keep loading and hot-reloading. Each effect is a
+around that pack, so the other packs keep loading and hot-reloading. The load runs on
+`jstream_effects::LOAD_THREAD`, which `HANDLED_PANIC_THREADS` lists, so the apps' crash
+hook writes no report for it (#999), unless its load thread can't start: the load then
+runs on the poll thread, still caught, and its panic writes a report. Each effect is a
 `video_filter` kind, `<pack>/<effect>`, added to the graph's kinds, so `kind.list` and
 `kind.describe` report it and a video chain, a scene's or an item's effects take it. A
 poll that changes kinds applies them under the collection lock (`Graph::without_kinds`
@@ -1115,8 +1121,10 @@ Planning the program stage's shot (not a preview's) copies the master stage's vi
 chain into `Shot::stages` once for the program and once for each video mix, keyed
 `ChainOwner::Master(mix)` over `GpuKey::Mixed(mix)`, and each output's own chain,
 keyed `ChainOwner::Output(id)`, over the master chain's output for the mix it shows
-(its mix if the collection has it, else the program, as its encoder session is keyed),
-or over the mix itself when the master chain is empty. The render thread draws each
+(`snapshot::shown_mix`: its mix if the collection has it, else the program, as its
+encoder session is keyed; a virtual camera, drawn as the program at the canvas size, is
+always planned over the program, whatever mix it names, #1006), or over the mix itself
+when the master chain is empty. The render thread draws each
 output's frame with `View::output(mix, owner)`, `owner` being the output whose session
 is its own. When the frame's mix has a master chain or its owner a chain of its own,
 `compose` draws the mix at the canvas size into `GpuKey::Mixed` instead of straight to
@@ -1528,7 +1536,9 @@ revision it was made at (`SourceCopies`, `source_copies`), and made again only o
 revision has moved on: the collection changes only through edits, which move it, so a
 re-plan with no edit (a new frame, an installed asset, a timed wake) copies nothing,
 and loading a collection file forgets every copy. A source no longer previewed lets its
-copy go at the next re-plan. Its shots are kept beside the scenes'
+copy go at the next re-plan. The cost is memory: each previewed source keeps a whole
+copy of the collection (its state and kind descriptors, not the undo history) while a
+stream shows it, so the copies grow with the collection times the sources previewed. Its shots are kept beside the scenes'
 (`source_shots`), replaced only when what they draw changed, and read by the preview
 thread alone, which captures what they show as it does a draft's. Like a scene stream
 it looks its source up quietly, so it never makes the source shown or heard, and a
@@ -1687,10 +1697,16 @@ the desktop app start it; tests and an embedding host call `emit_stats_tick` as 
 
 Each tick also lists every running output's live stats (protocol 0.57;
 `output_stats.rs`). The output thread counts each packet the muxer takes while the
-publish link is up into its `SentCounters` (two relaxed atomic adds: the bytes, and a
+publish link is `active` into its `SentCounters` (two relaxed atomic adds: the bytes, and a
 frame for video), so a link that is down sends nothing and its tags count as the
-link's drops instead. A video frame handed over while the link is down also adds to a
-third counter, which only the health reads (#994). `output.start` registers an `OutputMeter` for the run once it is
+link's drops instead. A link that came back but isn't stable yet is still
+`reconnecting`: its packets reach the server, but they aren't counted as sent either.
+A video frame handed over while the link isn't `active` also adds to a third counter,
+which only the health reads (#994), so a flapping server stays `poor`. The link state
+is the one the output thread's previous pass read, so a pass's packets count by the
+link before it changed, in both directions: every packet of the pass in which the link
+drops, video and audio, counts as sent, and the video frame of the pass in which it
+becomes `active` again counts as lost, though it reached the server. `output.start` registers an `OutputMeter` for the run once it is
 armed, with its uptime counted from when the engine received the `output.start`
 (before the start waits for an earlier one, opens the destination and starts the
 program stage), whose read gathers those counts with the output's drops: its video encode
@@ -1703,8 +1719,8 @@ never with it. Each meter keeps the samples of the last ten seconds: `kbps` is t
 bytes since the previous sample over the time between them, and `health` compares the
 newest sample with the one at the window's start (`waiting` until a video frame was
 sent, `good` with nothing new lost, `poor` with 2% or more of the video frames lost,
-`fair` otherwise). Lost video frames there are the `dropped_frames` and the frames lost
-on a down link, so an outage keeps the output `poor` until it leaves the window, not
+`fair` otherwise). Lost video frames there are the `dropped_frames` and the frames
+handed over while the link isn't `active`, so an outage keeps the output `poor` until it leaves the window, not
 just while it reconnects. Under the collection lock the engine then makes an output that is
 `reconnecting` `poor`. The stop drops the meter with the output's drop guard, so the
 next tick leaves the output out. A virtual camera output has no meter yet.
@@ -2292,7 +2308,10 @@ The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in proc
 
 - **Package.** `plugin.install`'s `path` is an absolute directory on the engine's machine
   holding `plugin.wasm` and, optionally, `manifest.json`, a JSON object. Its `name`, a
-  string, is the plugin's own text: `plugin.state_changed` carries it as `remote_name`.
+  string, is the plugin's own text: `plugin.state_changed` carries it as `remote_name`,
+  made plain as a CLAP plugin's name is (`kinds::plugin_text`: control and bidirectional
+  formatting characters become spaces, trimmed, cut to 128 characters), and none when
+  nothing is left. A name read from `plugins.json` is made plain the same way.
   What it asks for (`Request`) is its `classes` (capability classes), `hosts` (as
   `scheme://host:port`) and `folders` (true for folders a person picks), each optional.
   Other manifest fields are ignored. Like the ABI, the layout is version 0.
@@ -2346,7 +2365,12 @@ The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in proc
   the plugin, at install or with `plugin.grant`. One that asks for more stays disabled
   as `needs_grant` (`plugin.state_changed` says so when the reason changes), and
   `plugin.enable` answers `action_failed` naming what is new; a `plugin.grant`
-  acknowledges what it asks for now, and the plugin can be enabled after it. One that
+  acknowledges what `plugin.list` last showed its client (`Entry::seen`, forgotten when
+  the session ends, never saved), or what it asks for now from a client that never
+  listed it, and the plugin can be enabled after it. An update another client's
+  `plugin.enable` loaded since that list isn't acknowledged, so one that asks for more
+  still waits as `needs_grant`
+  ([ADR-0090](../../docs/adr/0090-a-grant-acknowledges-the-request-its-client-saw.md)). One that
   asks for less has its grant narrowed to match. A running plugin keeps the module it
   loaded.
 - **Saving.** `open_plugin_dir(dir)` creates `dir` if missing and reads its
@@ -2367,9 +2391,10 @@ The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in proc
 - **Listing.** `plugin.list` (`automation::list`) answers from the registry with no
   collection lock held: each plugin's state and reason, its manifest's name, its
   package path, what its manifest asks for as last read (`Request`, as `PluginRequest`)
-  and its grant. A plugin being installed, or started with the saved plugins, is listed
-  as enabled; one being enabled keeps the reason it was disabled for until it loads
-  (`Run::Starting` holds it). Built without `wasm-plugins`, the engine lists none, from
+  and its grant. It notes that request as what the calling client was shown. A plugin
+  being installed, or started with the saved plugins, is listed as enabled; one being
+  enabled keeps the reason it was disabled for until it loads (`Run::Starting` holds
+  it). Built without `wasm-plugins`, the engine lists none, from
   the collection's query match (`plugin_list_is_empty_until_a_plugin_is_installed`).
 - **Not yet:** a private data folder per plugin, deferred until the file imports a plugin
   would need to use it are designed (ADR-0076); and a way to remove one (no
