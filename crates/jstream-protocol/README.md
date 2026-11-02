@@ -1363,9 +1363,11 @@ After `welcome`, the server pushes every event to every client.
   (it takes the place of the layer that scene would be drawn into anyway). Since 0.66
   `chains` also counts the output stage
   ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), for the
-  running outputs only, as it runs only for an output's frame: `stage_chains` counts
-  the master video chain once for each mix a running output gets through it, and each
-  running output's own video chain; `stage_layers` and `stage_passes` count each
+  running outputs only, as it runs only for an output's frame, and as each one's frames
+  are drawn since its `output.start` (a video filter or mix set on a running output
+  counts from its next start, and a virtual camera is drawn as the program):
+  `stage_chains` counts the master video chain once for each mix a running output gets
+  through it, and the own video chain of each running output that started with one; `stage_layers` and `stage_passes` count each
   staged mix's canvas-sized layer and the pass compositing the mix into it, once
   however many outputs get the mix, and one per enabled filter of those chains; their
   bytes are in `layer_bytes`. A mix with neither a master chain nor an output's own is

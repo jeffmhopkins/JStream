@@ -2071,7 +2071,6 @@ mod tests {
         use jstream_protocol::ChainCost;
 
         let rec = OutputId::new("rec");
-        let vod = OutputId::new("vod");
         let mut g = graph(&[]);
         apply(
             &mut g,
@@ -2086,12 +2085,12 @@ mod tests {
         let canvas_bytes = u64::from(canvas.width()) * u64::from(canvas.height()) * 8;
         assert_eq!(plain.chain_cost([]), ChainCost::default(), "nothing runs");
         assert_eq!(
-            plain.chain_cost([(None, &vod)]),
+            plain.chain_cost([(None, None)]),
             ChainCost::default(),
             "no master chain and none of its own: drawn straight to the output"
         );
         assert_eq!(
-            plain.chain_cost([(None, &vod), (None, &rec)]),
+            plain.chain_cost([(None, None), (None, Some(&rec))]),
             ChainCost {
                 stage_chains: 1,
                 stage_layers: 2,
@@ -2127,7 +2126,7 @@ mod tests {
         );
         let staged = shot(&g);
         assert_eq!(
-            staged.chain_cost([(None, &vod)]),
+            staged.chain_cost([(None, None)]),
             ChainCost {
                 stage_chains: 1,
                 stage_layers: 2,
@@ -2138,13 +2137,13 @@ mod tests {
             "the program's layer and the master chain; the vertical mix's isn't drawn"
         );
         assert_eq!(
-            staged.chain_cost([(None, &vod), (None, &rec)]),
-            staged.chain_cost([(None, &vod)]),
+            staged.chain_cost([(None, None), (None, Some(&rec))]),
+            staged.chain_cost([(None, None)]),
             "rec drawn on the program shares its layer and master chain, and its own \
              chain, which follows the vertical mix, doesn't run there"
         );
         assert_eq!(
-            staged.chain_cost([(None, &vod), (Some(&vertical), &rec)]),
+            staged.chain_cost([(None, None), (Some(&vertical), Some(&rec))]),
             ChainCost {
                 stage_chains: 3,
                 stage_layers: 5,

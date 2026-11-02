@@ -53,7 +53,7 @@ use jstream_protocol::{
     HistoryCall, HistoryDirection, IdempotencyKey, LiveOutcome, OutputHealth, OutputId, OutputKind,
     OutputState, OutputStatsInfo, PixelSize, PreviewSettings, ProtocolError, Query, QueryResult,
     RecordContainer, RequestId, Rev, RtmpTarget, SceneId, SecretString, SourceId, SourceSize,
-    TransitionPresetId, TransitionStarted, YoutubeAuth,
+    TransitionPresetId, TransitionStarted, VideoMixId, YoutubeAuth,
 };
 use jstream_sources::AudioScopes;
 use std::collections::{BTreeMap, BTreeSet};
@@ -1770,7 +1770,18 @@ impl Engine {
                     .map(|output| output.kind().clone()),
             });
             match state.outputs.begin(&output_id, true) {
-                Ok(step) => emit_output(&mut state, &output_id, step, &mut wake),
+                Ok(step) => {
+                    // What this run's frames are drawn as, for `stats.tick`'s output
+                    // stage: its session's mix and owner, or a camera's program frame.
+                    let mix = match &publish {
+                        Target::Vcam(..) => None,
+                        _ => key.0.mix.clone(),
+                    };
+                    state
+                        .started_frames
+                        .insert(output_id.clone(), (mix, key.0.owner.clone()));
+                    emit_output(&mut state, &output_id, step, &mut wake);
+                }
                 Err(err) => {
                     gate.pending = None;
                     publish.give_back(host);
@@ -2808,6 +2819,10 @@ struct State {
     /// The size of each capture the program stage runs, as its render thread reports
     /// it: what a `display`, `window` or `webcam` source's size comes from.
     capture_sizes: BTreeMap<CaptureKey, FrameSize>,
+    /// What each output's frames are drawn as since its latest `output.start`, the mix
+    /// and owner of its session (a virtual camera's are the program's), for
+    /// `stats.tick`'s output stage. Read for the running outputs only.
+    started_frames: BTreeMap<OutputId, (Option<VideoMixId>, Option<OutputId>)>,
 }
 
 impl State {
@@ -3666,18 +3681,15 @@ impl State {
             }
         }
         self.stats_seq = self.stats_seq.saturating_add(1);
-        // The output stage runs for the running outputs' frames only, each on its mix.
-        let state = self.graph.state();
+        // The output stage runs for the running outputs' frames only, each drawn as
+        // its run started.
         let running = self.outputs.running();
-        let mixes: Vec<_> = running
-            .iter()
-            .map(|id| (snapshot::output_mix(state, id), id))
-            .collect();
-        let chains = self
-            .render
-            .load()
-            .shot()
-            .chain_cost(mixes.iter().map(|(mix, id)| (mix.as_ref(), *id)));
+        self.started_frames.retain(|id, _| running.contains(id));
+        let chains = self.render.load().shot().chain_cost(
+            self.started_frames
+                .values()
+                .map(|(mix, owner)| (mix.as_ref(), owner.as_ref())),
+        );
         self.subscribers.emit(
             &Event::StatsTick {
                 seq: self.stats_seq,

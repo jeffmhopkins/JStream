@@ -1058,7 +1058,7 @@ fn plan_stages(state: &State, assets: &FilterAssets) -> BTreeMap<ChainOwner, Cha
 
 /// The mix `output_id` shows, as its encoder session is keyed (`engine::encode_key`): its
 /// mix if the collection has it, else `None`, the program.
-pub(crate) fn output_mix(state: &State, output_id: &OutputId) -> Option<VideoMixId> {
+fn output_mix(state: &State, output_id: &OutputId) -> Option<VideoMixId> {
     state
         .output(output_id)
         .and_then(|output| output.video_mix())
@@ -2952,14 +2952,15 @@ impl Shot {
     /// would be drawn into anyway) are not counted.
     ///
     /// The output stage runs only for an output's frame, so it is counted for
-    /// `running`, each running output and the mix it shows ([`output_mix`]): what
-    /// [`Shot::stage_of`] gives that output's frame, each mix's canvas-sized layer and
-    /// master chain once however many outputs get it ([`Chains::stage`]), and each
-    /// output's own chain over what the master chain makes. The pass fitting the result
-    /// into the output's frame, which every output frame draws, is not counted.
+    /// `running`, the mix and owner each running output's frames are drawn with (its
+    /// session's, as the render thread draws `View::output`): what [`Shot::stage_of`]
+    /// gives that frame, each mix's canvas-sized layer and master chain once however
+    /// many outputs get it ([`Chains::stage`]), and the owner's own chain over what the
+    /// master chain makes. The pass fitting the result into the output's frame, which
+    /// every output frame draws, is not counted.
     pub(crate) fn chain_cost<'a>(
         &self,
-        running: impl IntoIterator<Item = (Option<&'a VideoMixId>, &'a OutputId)>,
+        running: impl IntoIterator<Item = (Option<&'a VideoMixId>, Option<&'a OutputId>)>,
     ) -> ChainCost {
         let mut cost = ChainCost::default();
         let canvas = (self.canvas.width, self.canvas.height);
@@ -3003,8 +3004,8 @@ impl Shot {
             cost.layer_bytes = cost.layer_bytes.saturating_add(bytes);
         }
         let mut staged = BTreeSet::new();
-        for (mix, output_id) in running {
-            let Some(stage) = self.stage_of(mix, Some(output_id)) else {
+        for (mix, owner) in running {
+            let Some(stage) = self.stage_of(mix, owner) else {
                 continue;
             };
             // What the output's own chain reads: the master chain's output, or the mix.

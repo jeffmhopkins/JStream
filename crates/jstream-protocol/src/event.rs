@@ -330,10 +330,13 @@ pub struct EngineLoad {
 /// the place of the layer the scene would be drawn into anyway).
 ///
 /// The output stage (0.66) is counted for the running outputs only, as it runs only
-/// when an output's frame is drawn. A mix that a running output gets through a master
-/// or output video chain is drawn once per frame into a canvas-sized layer (one layer
-/// and one pass, however many outputs get it), the master chain runs once over it, and
-/// each such output's own chain runs once after that; each enabled filter of either
+/// when an output's frame is drawn, and as each output's frames are drawn since it
+/// started: a video filter or mix set on a running output counts from its next start,
+/// as it draws from then, and a virtual camera is drawn as the program. A mix that a
+/// running output gets through a master or output video chain is drawn once per frame
+/// into a canvas-sized layer (one layer and one pass, however many outputs get it), the
+/// master chain runs once over it, and the own chain of each output that started with
+/// one runs once after that; each enabled filter of either
 /// draws one pass into a layer of its own. Not counted: the pass that fits the result
 /// into each output's frame, which every output frame draws with or without a stage.
 ///
