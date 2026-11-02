@@ -14,13 +14,16 @@
 //!
 //! A grant never gives more than the package's manifest asks for ([`Request`],
 //! R-SEC-003), and a package whose manifest asks for more than it did when a person last
-//! granted it is disabled as `needs_grant` until a person grants it again. Once the host
+//! granted it is disabled as `needs_grant` until a person grants it again, a grant
+//! acknowledging the request `plugin.list` last showed that person's client (ADR-0090).
+//! Once the host
 //! names a folder ([`open_dir`]), the installed plugins and their grants are saved in
 //! [`PLUGINS_FILE`] there after every change, and loaded again when it is opened.
 
 use crate::engine::{Engine, Executed, WeakEngine};
 use crate::events::{self, QueueRef, Subscription};
 use crate::lock;
+use crate::plugins::kinds::plugin_text;
 use crate::preview::SessionPreviews;
 use futures_core::Stream;
 use jstream_control::{BoxFuture, Control, ControlError, EventStream};
@@ -94,6 +97,9 @@ struct Entry {
     /// its grant). A manifest that asks for more than this is an update that needs a
     /// person's grant.
     granted: Request,
+    /// The request `plugin.list` last showed each client, which a `plugin.grant` from it
+    /// acknowledges (#978): not saved, and dropped when the client's session ends.
+    seen: BTreeMap<ClientId, Request>,
     state: Run,
 }
 
@@ -239,12 +245,15 @@ struct SavedPlugin {
     disabled: Option<PluginDisabledReason>,
 }
 
-/// `plugin.list`: every installed plugin, ordered by ID. One being installed or started
-/// with the saved plugins is listed as enabled, and one being enabled as it was.
-pub(crate) fn list(engine: &Engine) -> Vec<PluginInfo> {
+/// `plugin.list` for `client_id`: every installed plugin, ordered by ID. One being
+/// installed or started with the saved plugins is listed as enabled, and one being
+/// enabled as it was. What each asks for is noted as what this client was shown, for its
+/// next `plugin.grant` to acknowledge.
+pub(crate) fn list(engine: &Engine, client_id: &ClientId) -> Vec<PluginInfo> {
     lock(&engine.automation().plugins)
-        .iter()
+        .iter_mut()
         .map(|(plugin_id, entry)| {
+            entry.seen.insert(client_id.clone(), entry.request.clone());
             let reason = match entry.state {
                 Run::Disabled(reason) | Run::Starting(Some(reason)) => Some(reason),
                 Run::Starting(None) | Run::Running(_) => None,
@@ -266,9 +275,10 @@ pub(crate) fn list(engine: &Engine) -> Vec<PluginInfo> {
         .collect()
 }
 
-/// Answers a plugin action, or `None` for any other action.
+/// Answers a plugin action from `client_id`, or `None` for any other action.
 pub(crate) fn action(
     engine: &Engine,
+    client_id: &ClientId,
     action: &Action,
 ) -> Option<Result<CallResult, ProtocolError>> {
     let result = match action {
@@ -277,7 +287,9 @@ pub(crate) fn action(
             path,
             grant,
         } => install(engine, plugin_id, path, grant.clone()),
-        Action::PluginGrant { plugin_id, grant } => set_grant(engine, plugin_id, grant.clone()),
+        Action::PluginGrant { plugin_id, grant } => {
+            set_grant(engine, client_id, plugin_id, grant.clone())
+        }
         Action::PluginEnable { plugin_id } => enable(engine, plugin_id),
         _ => return None,
     };
@@ -313,6 +325,7 @@ fn install(
                 name: read.name.clone(),
                 request: read.request.clone(),
                 granted: read.request,
+                seen: BTreeMap::new(),
                 state: Run::Starting(None),
             },
         );
@@ -324,8 +337,14 @@ fn install(
     started
 }
 
+/// Replaces `plugin_id`'s grant for `client_id`. The person granted it knowing what
+/// `plugin.list` last showed their client (#978, ADR-0090): if another client's
+/// `plugin.enable` loaded an update since, that update isn't acknowledged, so one that
+/// asks for more than they saw still waits as `needs_grant`. A client that never listed
+/// it acknowledges what it asks for now.
 fn set_grant(
     engine: &Engine,
+    client_id: &ClientId,
     plugin_id: &PluginId,
     grant: PluginGrant,
 ) -> Result<(), ProtocolError> {
@@ -339,8 +358,7 @@ fn set_grant(
             return Err(invalid(field, reason));
         }
         *lock(&entry.grant) = grant;
-        // The person granted it knowing what it asks for now.
-        entry.granted = entry.request.clone();
+        entry.granted = entry.seen.get(client_id).unwrap_or(&entry.request).clone();
     }
     save(engine);
     Ok(())
@@ -537,9 +555,11 @@ pub(crate) fn open_dir(engine: &Engine, dir: PathBuf) {
                 Entry {
                     package: plugin.package,
                     grant: Arc::new(Mutex::new(grant)),
-                    name: plugin.name,
+                    // Made plain again, as the file may have been edited.
+                    name: plugin.name.as_deref().and_then(manifest_name),
                     request: plugin.request,
                     granted,
+                    seen: BTreeMap::new(),
                     state,
                 },
             );
@@ -650,7 +670,7 @@ fn read_manifest(bytes: &[u8]) -> Result<(Option<String>, Request), String> {
     let field = |name: &str| fields.get(name).filter(|value| !value.is_null());
     let name = match field("name") {
         None => None,
-        Some(serde_json::Value::String(name)) => Some(name.clone()),
+        Some(serde_json::Value::String(name)) => manifest_name(name),
         Some(_) => return Err("has a `name` that isn't a string".into()),
     };
     let classes = match field("classes") {
@@ -682,6 +702,19 @@ fn read_manifest(bytes: &[u8]) -> Result<(Option<String>, Request), String> {
         },
     ))
 }
+/// A manifest's `name` as clients and agents read it (#977): plain text, capped as a CLAP
+/// plugin's name is ([`plugin_text`]), or `None` when nothing is left.
+fn manifest_name(name: &str) -> Option<String> {
+    Some(plugin_text(name)).filter(|name| !name.is_empty())
+}
+
+/// Forgets what `plugin.list` showed `client_id`, as its session ended.
+pub(crate) fn forget(engine: &Engine, client_id: &ClientId) {
+    for entry in lock(&engine.automation().plugins).values_mut() {
+        entry.seen.remove(client_id);
+    }
+}
+
 /// Loads `wasm` on a new thread for `plugin_id`, whose entry is `Starting`, and waits for
 /// the load. On success the entry is `Running` and `plugin.state_changed` (`enabled`) has
 /// gone out, and only then is the plugin handed its first event: so a plugin that faults

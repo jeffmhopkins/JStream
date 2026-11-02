@@ -2280,7 +2280,10 @@ The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in proc
 
 - **Package.** `plugin.install`'s `path` is an absolute directory on the engine's machine
   holding `plugin.wasm` and, optionally, `manifest.json`, a JSON object. Its `name`, a
-  string, is the plugin's own text: `plugin.state_changed` carries it as `remote_name`.
+  string, is the plugin's own text: `plugin.state_changed` carries it as `remote_name`,
+  made plain as a CLAP plugin's name is (`kinds::plugin_text`: control and bidirectional
+  formatting characters become spaces, trimmed, cut to 128 characters), and none when
+  nothing is left. A name read from `plugins.json` is made plain the same way.
   What it asks for (`Request`) is its `classes` (capability classes), `hosts` (as
   `scheme://host:port`) and `folders` (true for folders a person picks), each optional.
   Other manifest fields are ignored. Like the ABI, the layout is version 0.
@@ -2334,7 +2337,12 @@ The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in proc
   the plugin, at install or with `plugin.grant`. One that asks for more stays disabled
   as `needs_grant` (`plugin.state_changed` says so when the reason changes), and
   `plugin.enable` answers `action_failed` naming what is new; a `plugin.grant`
-  acknowledges what it asks for now, and the plugin can be enabled after it. One that
+  acknowledges what `plugin.list` last showed its client (`Entry::seen`, forgotten when
+  the session ends, never saved), or what it asks for now from a client that never
+  listed it, and the plugin can be enabled after it. An update another client's
+  `plugin.enable` loaded since that list isn't acknowledged, so one that asks for more
+  still waits as `needs_grant`
+  ([ADR-0090](../../docs/adr/0090-a-grant-acknowledges-the-request-its-client-saw.md)). One that
   asks for less has its grant narrowed to match. A running plugin keeps the module it
   loaded.
 - **Saving.** `open_plugin_dir(dir)` creates `dir` if missing and reads its
@@ -2355,7 +2363,7 @@ The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in proc
 - **Listing.** `plugin.list` (`automation::list`) answers from the registry with no
   collection lock held: each plugin's state and reason, its manifest's name, its
   package path, what its manifest asks for as last read (`Request`, as `PluginRequest`)
-  and its grant. A plugin being installed, or started with the saved plugins, is listed
+  and its grant. It notes that request as what the calling client was shown. A plugin being installed, or started with the saved plugins, is listed
   as enabled; one being enabled keeps the reason it was disabled for until it loads
   (`Run::Starting` holds it). Built without `wasm-plugins`, the engine lists none, from
   the collection's query match (`plugin_list_is_empty_until_a_plugin_is_installed`).

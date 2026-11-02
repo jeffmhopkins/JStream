@@ -1405,10 +1405,12 @@ pub enum Action {
     },
     /// Replaces an installed plugin's grant, widening or narrowing it (0.35), never past
     /// what its manifest asks for (`invalid_argument`, as for `plugin.install`). The
-    /// person grants it knowing what the manifest asks for now, so a plugin disabled
-    /// because an update asks for more (`needs_grant`) can then be re-enabled. For a
-    /// person only, like `plugin.install`. Fails with `not_found` (entity `plugin`) for a
-    /// plugin that isn't installed.
+    /// person grants it knowing what `plugin.list` last showed their client the manifest
+    /// asks for (what it asks for now, if their client never listed it), so a plugin
+    /// disabled because an update asks for more (`needs_grant`) can then be re-enabled.
+    /// An update loaded after that list isn't acknowledged, and one that asks for more
+    /// still waits as `needs_grant`. For a person only, like `plugin.install`. Fails with
+    /// `not_found` (entity `plugin`) for a plugin that isn't installed.
     #[serde(rename = "plugin.grant")]
     PluginGrant {
         /// The plugin.

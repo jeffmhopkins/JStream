@@ -294,7 +294,10 @@ engine's memory, not the block. Parameter descriptions with an unusable range or
 repeated id are dropped; a parameter change coming back (a control message or the
 block's ring) must name a described parameter and be finite and in range; a saved
 state over 2 MiB is ignored; and plugin-chosen names are made plain text and capped
-before they reach the UI, agents or the log (#351).
+before they reach the UI, agents or the log (#351). A WASM plugin's manifest `name` is
+treated the same way, and both drop bidirectional formatting characters (#977). A
+person's `plugin.grant` acknowledges only the manifest request their client was shown,
+so an update loaded meanwhile still asks for its grant (#978).
 
 **Gaps:**
 - WASM (#348): [ADR-0069](../adr/0069-wasm-plugin-limits-and-capabilities.md) decided
