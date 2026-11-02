@@ -53,6 +53,12 @@ mod tests;
 mod transition;
 mod youtube;
 
+/// The threads whose panics the engine catches and reports itself, for an app's crash
+/// hook to leave out of its reports (`jstream_crash::Program::handled`, #999): the
+/// effect-pack loads (`jstream_effects::LOAD_THREAD`), where naga may panic on a pack's
+/// untrusted WGSL and the pack then counts as one that failed to load.
+pub const HANDLED_PANIC_THREADS: &[&str] = &[jstream_effects::LOAD_THREAD];
+
 pub use audit::{
     AUDIT_FILE, AUDIT_FILE_OLD, AuditEntry, AuditFile, AuditMemory, AuditSink,
     DEFAULT_MAX_FILE_BYTES, MAX_CLIENT_NAME_BYTES, QUEUE_ENTRIES,

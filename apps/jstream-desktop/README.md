@@ -43,7 +43,8 @@ Contents (a first cut; Windows first, because the window needs WebView2):
   a new user-only file at each start, through `create_private_file` on Windows and
   `jstream-crash`'s `create_new` elsewhere.
 - **Crash reports**: `jstream-crash`'s panic hook, which writes a redacted report beside
-  the log file, and its `Redacting` key store wrapper, which registers each stream key
+  the log file (none for a panic on a thread in `jstream_core::HANDLED_PANIC_THREADS`,
+  an effect-pack load the engine catches and logs, #999), and its `Redacting` key store wrapper, which registers each stream key
   with the redaction.
 - **Tests** (unit tests in each module, run on every platform: the server behind the
   token and the webview's origin, the bundle's paths, types and CSP, the bootstrap

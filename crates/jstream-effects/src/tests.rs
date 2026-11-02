@@ -682,6 +682,23 @@ fn a_pack_that_panics_fails_alone() {
     assert!(watcher.effect("neo/scanlines").is_some());
 }
 
+/// Each pack loads on a [`crate::LOAD_THREAD`], so an app's panic hook can tell its
+/// caught panics from others (#999).
+#[test]
+fn a_pack_loads_on_its_own_named_thread() {
+    let temp = Temp::new("load-thread");
+    retro(&temp.0.join("retro"), MANIFEST, SCANLINES);
+    let mut watcher = PackWatcher::with_loader(&temp.0, PRELUDE, |_, _| {
+        panic!("{}", std::thread::current().name().unwrap_or("<unnamed>"))
+    });
+    let changes = watcher.poll();
+    assert!(
+        matches!(&changes.errors[..], [PackError::Panicked { message, .. }] if message == crate::LOAD_THREAD),
+        "{:?}",
+        changes.errors
+    );
+}
+
 /// A pack whose load panics with a payload that isn't a string says so.
 #[test]
 fn a_panic_without_a_message_is_named() {

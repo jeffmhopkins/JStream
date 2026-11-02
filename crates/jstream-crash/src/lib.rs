@@ -10,7 +10,8 @@
 //! (the control token, every stream key and OAuth refresh token that passes through a
 //! [`Redacting`] store, and what a client hands [`Secrets::hook`]) are replaced by `***` wherever they appear (R-SEC-001), and
 //! only their BLAKE3 digests are kept for that, never their text. The newest
-//! [`MAX_REPORTS`] reports are kept.
+//! [`MAX_REPORTS`] reports are kept. A panic on a thread named in [`Program::handled`],
+//! whose panics the app's own code catches and reports, writes no report (#999).
 //!
 //! Native crashes (access violations, aborts) write no report yet: see
 //! crates/jstream-crash/README.md#purpose.
@@ -88,13 +89,17 @@ impl Registry {
     }
 }
 
-/// The program a report names on its `program:` line.
+/// The program a report names on its `program:` line, and the threads whose panics it
+/// handles itself.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Program {
     /// The binary's package name, such as `jstream-daemon`.
     pub name: &'static str,
     /// Its version, usually `env!("CARGO_PKG_VERSION")`.
     pub version: &'static str,
+    /// The names of threads whose panics the program's own code catches and reports, such
+    /// as `jstream_core::HANDLED_PANIC_THREADS`: a panic on one writes no report (#999).
+    pub handled: &'static [&'static str],
 }
 
 /// What [`Secrets::hook`] makes: a closure a client calls with each secret it gets and
@@ -281,6 +286,10 @@ impl<S: OAuthTokenStore + ?Sized> OAuthTokenStore for Redacting<S> {
 /// the report instead. Each report is a new file, user-only on Unix (mode 0600); on
 /// Windows it gets its folder's ACL, so an app that can make a user-only file there
 /// uses [`install_creating`].
+///
+/// A panic on a thread named in `program.handled` writes no report and calls no
+/// `notify`: the code that runs those threads catches their panics and reports them
+/// itself (#999).
 pub fn install(dir: PathBuf, program: Program, secrets: Secrets, notify: Notify) {
     install_creating(dir, program, secrets, notify, create_new);
 }
@@ -300,8 +309,17 @@ pub fn install_creating(
     let _ = create_dir(&dir);
     prune(&dir, MAX_REPORTS);
     std::panic::set_hook(Box::new(move |info| {
+        if handled(program, std::thread::current().name()) {
+            return;
+        }
         on_panic(&dir, program, &secrets, (notify, create), info);
     }));
+}
+
+/// Whether a panic on the thread named `thread` is one `program` catches and reports
+/// itself ([`Program::handled`]).
+fn handled(program: Program, thread: Option<&str>) -> bool {
+    thread.is_some_and(|name| program.handled.contains(&name))
 }
 
 /// How the hook makes a report file: a new file at the path, failing with
