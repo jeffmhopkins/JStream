@@ -565,6 +565,8 @@ struct Scene {
     /// The folder it is filed in, if any.
     folder: Option<jstream_protocol::FolderId>,
     meta: jstream_protocol::SceneMeta,
+    /// Its options (ADR-0089).
+    options: jstream_protocol::SceneOptions,
     /// Its filters (ADR-0065), settings as given: a video chain only.
     filters: jstream_protocol::FilterChains,
     /// The scene it is a keyframe scene of (ADR-0024 §2), whose items it shows.
@@ -1064,6 +1066,7 @@ impl State {
                         transition_out: None,
                         folder: scene.folder.clone(),
                         meta: scene.meta.clone(),
+                        options: scene.options.clone(),
                     })
                     .collect(),
                 outputs: self.collection.output_infos(),
@@ -1361,6 +1364,7 @@ impl Collection {
                     items: Vec::new(),
                     folder: None,
                     meta: Default::default(),
+                    options: Default::default(),
                     filters: Default::default(),
                     variant_of: None,
                     overrides: keyframe::Overrides::new(),
@@ -1465,6 +1469,12 @@ impl Collection {
                     inverse.push(Edit::SceneSetMeta {
                         scene_id: scene.id.clone(),
                         meta: scene.meta.clone(),
+                    });
+                }
+                if !scene.options.is_default() {
+                    inverse.push(Edit::SceneSetOptions {
+                        scene_id: scene.id.clone(),
+                        options: scene.options.clone(),
                     });
                 }
                 let owner = jstream_protocol::FilterOwner::Scene {

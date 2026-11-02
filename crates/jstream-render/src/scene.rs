@@ -46,6 +46,41 @@ impl Color {
     pub const fn rgb(r: f32, g: f32, b: f32) -> Self {
         Self { r, g, b, a: 1.0 }
     }
+
+    /// A colour from straight sRGB RGBA8.
+    pub fn from_rgba8([r, g, b, a]: [u8; 4]) -> Self {
+        let unit = |c: u8| f32::from(c) / 255.0;
+        Self {
+            r: unit(r),
+            g: unit(g),
+            b: unit(b),
+            a: unit(a),
+        }
+    }
+
+    /// The opaque colour this one shows over black, blended in linear light as the
+    /// compositor blends: a scene background where a video mix shows it (ADR-0024 §4).
+    pub fn over_black(self) -> Self {
+        let [r, g, b, _] = crate::color::premultiplied_linear(self);
+        crate::color::from_premultiplied_linear([r, g, b, 1.0])
+    }
+
+    /// The colour `t` of the way from `self` to `other`, `t` clamped to `0..=1`, mixed
+    /// premultiplied in linear light, as a cross-fade of the two would show.
+    pub fn mix(self, other: Self, t: f32) -> Self {
+        let t = if t.is_finite() {
+            t.clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+        let from = crate::color::premultiplied_linear(self);
+        let to = crate::color::premultiplied_linear(other);
+        let mut out = [0.0; 4];
+        for (o, (f, t2)) in out.iter_mut().zip(from.iter().zip(to)) {
+            *o = f + (t2 - f) * t;
+        }
+        crate::color::from_premultiplied_linear(out)
+    }
 }
 
 /// Source pixels cut off each edge before the placement is applied.

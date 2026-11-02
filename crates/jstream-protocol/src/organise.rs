@@ -148,6 +148,18 @@ pub fn check_color(color: &str) -> Result<(), String> {
     }
 }
 
+/// Parses a colour with optional alpha: sRGB `#rrggbb` (opaque) or `#rrggbbaa`, in
+/// either case, as straight RGBA8.
+pub fn parse_rgba(color: &str) -> Option<[u8; 4]> {
+    let hex = color.strip_prefix('#')?;
+    if !matches!(hex.len(), 6 | 8) || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    let byte = |i: usize| u8::from_str_radix(hex.get(i..i + 2)?, 16).ok();
+    let alpha = if hex.len() == 8 { byte(6)? } else { 0xff };
+    Some([byte(0)?, byte(2)?, byte(4)?, alpha])
+}
+
 fn is_false(value: &bool) -> bool {
     !*value
 }
@@ -158,7 +170,7 @@ fn is_true(value: &bool) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{SceneMeta, SourceMeta, check_color, check_icon};
+    use super::{SceneMeta, SourceMeta, check_color, check_icon, parse_rgba};
     use crate::LabelId;
     use serde_json::json;
 
@@ -202,5 +214,28 @@ mod tests {
             ..SceneMeta::default()
         };
         assert_eq!(meta.problem().map(|(f, _)| f), Some("color"));
+    }
+
+    #[test]
+    fn colours_with_alpha_parse_straight() {
+        assert_eq!(parse_rgba("#1E1e2e"), Some([0x1e, 0x1e, 0x2e, 0xff]));
+        assert_eq!(parse_rgba("#0f111580"), Some([0x0f, 0x11, 0x15, 0x80]));
+        for bad in [
+            "",
+            "1e1e2e",
+            "#1e1e2",
+            "#1e1e2ef",
+            "#gggggg",
+            "#ééé",
+            "#1e1e2eff0",
+        ] {
+            assert_eq!(parse_rgba(bad), None, "{bad:?}");
+        }
+        let options = crate::SceneOptions {
+            background: Some("blue".into()),
+            ..crate::SceneOptions::default()
+        };
+        assert_eq!(options.problem().map(|(f, _)| f), Some("background"));
+        assert_eq!(crate::SceneOptions::default().problem(), None);
     }
 }

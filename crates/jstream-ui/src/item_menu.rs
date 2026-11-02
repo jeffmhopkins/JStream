@@ -1396,6 +1396,7 @@ mod tests {
                 transition_out: None,
                 folder: None,
                 meta: Default::default(),
+                options: Default::default(),
                 variant_of: None,
                 overrides: Vec::new(),
                 items,

@@ -381,6 +381,12 @@ pub fn duplicate_scene_edits(
             meta: scene.meta.clone(),
         });
     }
+    if !scene.options.is_default() {
+        edits.push(Edit::SceneSetOptions {
+            scene_id: new_id.clone(),
+            options: scene.options.clone(),
+        });
+    }
     if scene.transition_in.is_some() || scene.transition_out.is_some() {
         edits.push(Edit::SceneSetTransitions {
             scene_id: new_id.clone(),
@@ -461,6 +467,7 @@ mod tests {
             transition_out: None,
             folder: None,
             meta: Default::default(),
+            options: Default::default(),
             variant_of: None,
             overrides: Vec::new(),
             items,
@@ -623,6 +630,7 @@ mod tests {
         let mut c = collection();
         c.scenes[0].folder = Some(FolderId::new("fld"));
         c.scenes[0].transition_in = Some(TransitionPresetId::new("fade"));
+        c.scenes[0].options.include_audio = false;
         c.scenes[0].filters = FilterChains {
             video: vec![blur()],
             audio: Vec::new(),
@@ -640,6 +648,10 @@ mod tests {
                     "reorder"
                 }
                 Edit::SceneSetFolder { .. } => "folder",
+                Edit::SceneSetOptions { scene_id, options } => {
+                    assert_eq!((scene_id.as_str(), options.include_audio), ("copy", false));
+                    "options"
+                }
                 Edit::SceneSetTransitions { .. } => "transitions",
                 Edit::FilterAdd {
                     owner: FilterOwner::Scene { scene_id },
@@ -664,6 +676,7 @@ mod tests {
                 "create",
                 "reorder",
                 "folder",
+                "options",
                 "transitions",
                 "scene filter",
                 "item",

@@ -213,6 +213,15 @@ fn describe_edit(edit: &Edit, state: &State) -> String {
         Edit::SceneSetMeta { scene_id, .. } => {
             format!("Changed the details of scene {}", scene(state, scene_id))
         }
+        Edit::SceneSetOptions { scene_id, options } => format!(
+            "{} the audio of scene {} when nested",
+            if options.include_audio {
+                "Included"
+            } else {
+                "Left out"
+            },
+            scene(state, scene_id)
+        ),
         Edit::SceneSetTransitions { scene_id, .. } => {
             format!(
                 "Changed the transitions of scene {}",

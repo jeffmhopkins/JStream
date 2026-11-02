@@ -22,7 +22,8 @@ use crate::model::{Chains, Filter, MAX_CHAIN_FILTERS, Overrides, Placement, Scen
 use jstream_anim::{Field, Inverse, Override, Value};
 use jstream_protocol::{
     Crop, DroppedOverride, Edit, EntityKind, FilterInfo, Finite32, ItemId, ItemOverride,
-    KindCategory, OverrideField, ProtocolError, Reference, SceneId, SceneMeta, SceneRole,
+    KindCategory, OverrideField, ProtocolError, Reference, SceneId, SceneMeta, SceneOptions,
+    SceneRole,
 };
 use std::collections::BTreeSet;
 
@@ -259,6 +260,7 @@ fn create(
         transition_out: None,
         folder: None,
         meta: SceneMeta::default(),
+        options: SceneOptions::default(),
         items: Vec::new(),
         variant_of: Some(variant_of.clone()),
         overrides: Overrides::new(),
