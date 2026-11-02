@@ -282,6 +282,26 @@ impl InputControl {
         self.shared.gain.muted()
     }
 
+    /// Sets whether a keyed filter that reads this input as its key
+    /// ([`FilterSpec::KeyedCompressor`](crate::FilterSpec::KeyedCompressor)) hears
+    /// silence instead of the input's block. The engine sets it while a source is muted
+    /// by turning its sends off, which leaves its block, and so its scopes, sounding: a
+    /// muted mic must duck nothing (ADR-0028). An input's own mute ([`Self::set_muted`])
+    /// silences its block, and so its key, by itself.
+    pub fn set_key_silenced(&self, silenced: bool) {
+        self.shared
+            .key_silenced
+            .store(silenced, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Whether a keyed filter reading this input hears silence
+    /// ([`Self::set_key_silenced`]).
+    pub fn key_silenced(&self) -> bool {
+        self.shared
+            .key_silenced
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
     /// Sets the input's activity gain, linear, clamped to 0..=1; NaN is ignored. It is
     /// applied after the fader and the input's meter, and scales every send: the
     /// engine's audio that follows the program (ADR-0028's `when_shown`). The mixer

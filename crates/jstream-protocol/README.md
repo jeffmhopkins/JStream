@@ -193,8 +193,11 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.63 because a keyframe
-  scene overrides an item's effects
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.64 because the engine's
+  `compressor` audio filter kind takes a sidechain `key`, a `source` reference it ducks
+  under (ADR-0028; no wire change: `kind.describe` reports the new parameter and the
+  engine accepts it); 0.63 made a keyframe
+  scene override an item's effects
   ([ADR-0088](../../docs/adr/0088-keyframe-scenes-override-item-effects.md):
   `ItemOverride.effects`, `OverrideField`'s `effects`, `item.set_effects` and the
   `keyframe` filter owner); 0.62 added the
