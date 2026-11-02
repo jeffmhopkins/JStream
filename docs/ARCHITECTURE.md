@@ -99,7 +99,7 @@ JStream/
 ├── tests/                  # cross-crate scenario + golden tests
 ├── spikes/                 # M0 technical spikes (throwaway, not workspace members)
 ├── design/                 # UI design references (prototype source); not normative
-├── xtask/                  # docs, lint-deps, governance, dist (the portable zip), gen-schema, golden
+├── xtask/                  # docs, lint-deps, governance, dist (the portable zip), e2e-stream, gen-schema, golden
 ├── docs/
 │   ├── ARCHITECTURE.md  RULES.md  DOCS.md
 │   ├── external.toml       # external resources we rely on (URL + what we rely on)
