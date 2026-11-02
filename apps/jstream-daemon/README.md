@@ -39,8 +39,9 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   ([Design](#design)).
 - **Serving** (`serve.rs`): builds the engine (with the audit log, the `--collection`
   file, the plugin folder, the effect packs folder and the placeholder outputs; on Windows a live one, through `live.rs`, that scans
-  the CLAP plugins, and with the `cef` feature also opens browser sources, and on
-  macOS a live one on the macOS backends built so far, [Design](#design)), installs the signal handlers that stop it, then binds the server
+  the CLAP plugins, and with the `cef` feature also opens browser sources, on
+  macOS a live one on the macOS backends built so far, and on 64-bit Linux a live one
+  on the Linux backends, [Design](#design)), installs the signal handlers that stop it, then binds the server
   with MCP on, the UI settings file in the data directory and, with `--ui-dir`, the web
   UI's files.
 - **Media Foundation check** (`main.rs`, `components.rs`, Windows only): exits with
@@ -80,10 +81,11 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   scene and creates an RTMP output to a local
   loopback sink and a recording, the WebSocket client sets the key and starts the
   stream, MCP starts the recording, and the test checks `stats.tick`, what the sink
-  received and the recorded MP4. The binary has no backends on Linux, so it runs
-  in process, on the library's `live` and `rtmp`, the wiring `serve.rs` uses;
+  received and the recorded MP4. It runs in process, on the library's `live` and
+  `rtmp`, the wiring `serve.rs` uses, so it runs the same on every OS;
   `tests/receiver/`, the same wiring streaming to a real RTMP server and decoding what
-  it got, ignored by `cargo test` ([Real-receiver end to end](#receiver-e2e));
+  it got, and the built binary on its own Linux backends streaming to one, ignored by
+  `cargo test` ([Real-receiver end to end](#receiver-e2e));
   `tests/delay_load.rs`, Windows MSVC only, which reads the built binary's PE headers to check that the
   backends' Media Foundation DLLs are delay-loaded and none is a load-time import;
   `tests/info_plist.rs`, which checks on every OS that `Info.plist` has each usage
@@ -91,8 +93,9 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   binary carries it).
 
 Not here yet: YouTube sign-in for users (it waits on JStream's own OAuth client,
-[ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)), YouTube outside Windows (it needs an OS credential store the daemon has
-only there), a default collection file, a
+[ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)), YouTube outside Windows (the daemon sets up its OAuth token store
+only there), on Linux a way to download OpenH264 (LNX2) and the UI's warning while
+stream keys are in ADR-0071's fallback file, a default collection file, a
 default port and a default token file
 location ([Design › Open questions](#open-questions)).
 
@@ -114,7 +117,8 @@ capture and the microphone are fakes. Their fake clock is kept level with real t
 Everything after them is real: the GPU compositor on a software Vulkan adapter
 (lavapipe), JStream's AAC-LC encoder, an H.264 encoder, the RTMP publisher with its
 reconnects, and `ffmpeg -listen 1` as the server, which writes the stream to FLV.
-`ffprobe` and `ffmpeg` then read the file back.
+`ffprobe` and `ffmpeg` then read the file back. One more test runs the built daemon
+binary on its own Linux backends, with nothing faked, against the same receiver.
 
 The H.264 encoder is Cisco's OpenH264, Linux's software encoder
 ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), when
@@ -153,6 +157,18 @@ when it is installed, and runs them one at a time, in about half a minute. They 
   reconnects by itself and goes `active`. It stays `poor` while the video lost in the
   outage is inside the health's ten-second window (#994). The new connection opens on a
   keyframe, with audio.
+- **The daemon binary on its own backends** (`binary.rs`). The built `jstream-daemon`
+  runs as a user runs it, on the Linux backends `serve.rs` builds, with no fakes and
+  nothing in process. Its data, config and log folders are in the test's scratch
+  folder, and it has no session bus, so the stream key goes to ADR-0071's fallback
+  file, which the test checks. A client drives it over the WebSocket API: a red colour
+  source, an RTMP output with its key, `output.start`. With an H.264 encoder (VA-API, or
+  OpenH264 in the daemon's store) the receiver must get H.264 at the canvas size and
+  AAC, with red pixels. Without one, as on CI, the start must fail with a reason that
+  names OpenH264 and VA-API. `JSTREAM_E2E_OPENH264` installs Cisco's library in the
+  daemon's store only once OpenH264's pin has its SHA-256 (LNX2), because the daemon
+  refuses a library the pin doesn't vouch for; until then the stream branch needs
+  VA-API hardware.
 
 They don't cover what needs hardware or another OS: VA-API, NVENC, QSV, AMF, Media
 Foundation and VideoToolbox, the virtual camera, real capture devices, or the platform
@@ -180,7 +196,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | `--effects-dir <dir>` | The folder of WGSL effect packs, one pack folder each, that the engine loads at startup and reloads when they change (`Engine::watch_effect_packs`, [jstream-core › Design](../../crates/jstream-core/README.md#design)). Each effect is a video filter kind, `<pack>/<effect>`. A missing folder holds no packs, and is watched for packs to appear. Default: `effects` in the platform data directory; without a data directory, no packs load. |
 | `--plugin-dir <dir>` | Where installed WASM plugins and their grants are saved (`plugins.json`) and loaded from at startup, created if missing ([ADR-0076](../../docs/adr/0076-saved-wasm-plugins-and-manifest-requests.md)). A file there that can't be read, or that a newer version wrote, is logged at `error` and left as it is, and plugins aren't loaded or saved that run. Default: `plugins` in the platform data directory; without a data directory, plugins aren't saved. |
 | `--ui-dir <dir>` | Serves the web UI's built files (`trunk build`'s `dist`) from this directory at `http://127.0.0.1:<port>/`. The browser asks for a user name and password: the password is the token (see **Web UI** below). A path that isn't a directory fails with exit code 1, before the token or collection file is written. Default: no UI. |
-| `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. On Windows and macOS it has no target, so starting it fails: create outputs with `output.create` instead. |
+| `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. Where the daemon is live (Windows, macOS and 64-bit Linux) it has no target, so starting it fails: create outputs with `output.create` instead. |
 | `--log-dir <dir>` | Where the log files, crash reports and the audit log go, created (with its parents) if missing. Default: `logs` in the platform data directory (see **Log files** below). |
 | `--log-level <spec>` | The log filter, in `RUST_LOG`'s syntax, which it overrides. |
 | `--youtube-client <path>` | Windows, for developers: a Google OAuth client to use for YouTube sign-in instead of JStream's built-in one, the JSON Google Cloud gives for a "Desktop app" client (see **YouTube** below). Default: the `JSTREAM_YOUTUBE_CLIENT_ID` and `JSTREAM_YOUTUBE_CLIENT_SECRET` environment variables, else the built-in client. |
@@ -271,12 +287,17 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   or a secret set without an ID, is a startup failure (exit 1); the message names the
   file but never its contents or the secret
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
-- **Going live (Windows and macOS).** `output.create` with an RTMP(S) server URL, then
-  `output.set_key` (stored in Windows Credential Manager, or the login keychain on
-  macOS), then `output.start`
-  connects and streams. A start fails with `action_failed` and a reason that says what
-  to fix when the output has no target (a `--output` placeholder), no stream key, or
-  the key can't be read. Elsewhere, `output.start` only steps the placeholder state
+- **Going live (Windows, macOS and 64-bit Linux).** `output.create` with an RTMP(S)
+  server URL, then `output.set_key` (stored in Windows Credential Manager, the login
+  keychain on macOS, or on Linux the Secret Service, else the `0600` file
+  `~/.config/jstream/secrets`, [ADR-0071](../../docs/adr/0071-linux-secret-store.md)),
+  then `output.start` connects and streams. A start fails with `action_failed` and a
+  reason that says what to fix when the output has no target (a `--output`
+  placeholder), no stream key, or the key can't be read. On Linux it also fails, naming
+  both ways to get one, when the machine has no H.264 encoder: neither VA-API nor
+  Cisco's OpenH264, which is downloaded on the user's request
+  ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)). Elsewhere
+  (32-bit Linux and other Unixes), `output.start` only steps the placeholder state
   machine and `output.set_key` fails: there is no key store.
 - **Media Foundation (Windows).** On a Windows without Media Foundation (an N or KN
   edition without the Media Feature Pack, or Windows Server without its "Server Media
@@ -391,8 +412,42 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   Capture, webcams and Core Audio refuse a release below the floor when created, which fails
   startup. Creating them asks for no permission: that happens when a pipeline first
   uses them.
-- **Elsewhere** (Linux) there are no backends yet, so outputs stay the placeholder
-  state machine ([jstream-core › Design](../../crates/jstream-core/README.md#design)).
+- **Live on Linux** (`serve.rs`, 64-bit, as `LinuxBackends` is). Under
+  `cfg(all(target_os = "linux", target_pointer_width = "64"))` the engine gets the
+  `jstream-platform-linux` backends
+  (`linux_backends`, [ADR-0060](../../docs/adr/0060-linux-platform-support.md)):
+  - `LinuxBackends` for the session `Session::from_env` reports: `MonotonicClock`,
+    `PortalCapture` (its restore tokens in the data directory's `capture-tokens`
+    folder, so a portal grant survives restarts), `V4l2Devices`, PipeWire audio, else
+    ALSA, and `VaapiCodecs`. The audio choice is logged, and so is why PipeWire wasn't
+    used, since desktop and application audio need it;
+  - `LinuxGpu` as the GPU interop. On a machine without a Vulkan hardware adapter its
+    `open_device` fails, and the engine composites on its own software device with CPU
+    frames, as core logs;
+  - the stand-in `NoMediaDecoders`, so a media-file source fails with its reason until
+    [ADR-0072](../../docs/adr/0072-linux-media-file-decoding.md)'s decoders exist, no
+    virtual camera (ADR-0060 §9), no CLAP scan and no YouTube sign-in;
+  - `LinuxSecrets` as its stream key store
+    ([ADR-0071](../../docs/adr/0071-linux-secret-store.md)): the Secret Service, else
+    the `0600` file `secrets` in the config folder. At startup the daemon logs
+    ADR-0071 §4's warning once while that file holds a secret; it names the file, never
+    a key. A machine with neither an absolute `XDG_CONFIG_HOME` nor `HOME` fails startup.
+    The store sits behind `jstream_crash::Redacting` through `live_redacting`, with the
+    same publish opener as on Windows.
+
+  H.264 comes from VA-API, else from Cisco's OpenH264 in the data directory's
+  `codecs/openh264` once the user has downloaded it
+  ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)). Until one of
+  them is there, `output.start` fails with the platform's reason, which names both. AAC
+  is JStream's own encoder. Creating the backends lists the audio devices and probes
+  the VA-API render nodes, and opens nothing else: the portal is asked when a pipeline
+  first captures. A headless machine has no screen capture, but streams every other
+  source. Startup fails when neither PipeWire nor ALSA can be used (the error names both
+  reasons and how to fix them), when there is no config folder for the key store, or
+  when the media clock can't be read.
+- **Elsewhere** (32-bit Linux and other Unixes) there are no backends yet, so outputs
+  stay the placeholder state machine
+  ([jstream-core › Design](../../crates/jstream-core/README.md#design)).
 - **The publish opener.** On each `output.start` it reads the output's server URL with
   `Engine::output_kind` and its key from the store, then calls `connect_rtmp`, so each
   start connects anew. It fails the start with its own reason (`PublishError::new`)
@@ -404,14 +459,15 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   keeps the engine and its running pipeline alive after the server lets go. The
   opener upgrades it only to read the target. `live` (`live.rs`, in the library
   target) is that wiring over any backends, key store and connect function, and `rtmp`
-  the `connect_rtmp` connect function: `serve.rs` passes them the Windows backends and
-  Credential Manager (behind `jstream_crash::Redacting`, which the binary adds, so the
+  the `connect_rtmp` connect function: `serve.rs` passes them the platform's backends
+  and key store (behind `jstream_crash::Redacting`, which the binary adds, so the
   library never sees it), and the tests (`live.rs`'s and `tests/e2e.rs`) the platform
   fakes, so the end-to-end test runs the daemon's wiring, not a copy of it.
 - **Engine load.** `serve.rs` starts the engine's stats heartbeat, so a client gets a
   `stats.tick` about once a second while no output runs, and hands the engine the
-  process CPU reader on Windows (`WindowsProcessCpu`) and macOS (`MacosProcessCpu`),
-  for the ticks' `load` (protocol 0.48). Elsewhere the ticks leave `cpu_ms` out.
+  process CPU reader on Windows (`WindowsProcessCpu`), macOS (`MacosProcessCpu`) and
+  Linux (`LinuxProcessCpu`), for the ticks' `load` (protocol 0.48). Elsewhere the ticks
+  leave `cpu_ms` out.
 - **Media Foundation check and delay-load.** The `windows` crate imports Media
   Foundation's DLLs as load-time imports, so on a Windows without Media Foundation
   the loader would refuse to start the binary, naming a DLL, before `main` runs.
@@ -650,7 +706,10 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   feature; already in the tree through core), `jstream-platform-windows` on Windows only
   (the backends, the key store, the Media Foundation check and the user-only token
   and log files), `jstream-platform-macos` on macOS only (the backends built so far,
-  the GPU-interop stand-in and the Keychain key store),
+  the GPU-interop stand-in and the Keychain key store), `jstream-platform-linux` on
+  Linux only (the backends, the media-file stand-in, the Secret Service key store and
+  the process CPU reader; the integration tests use its AAC-LC encoder and OpenH264
+  loader too),
   `jstream-protocol` (`OutputId`, `OutputKind`), `jstream-media` (`Codec`, for the AAC
   check), `jstream-youtube` on Windows only (the HTTPS transport) and `serde_json` (the
   OAuth client file), `anyhow` and `tracing` (the startup line), all already in the
@@ -668,10 +727,9 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   `jstream-platform` (feature `fake`), for the live engine and opener tests;
   `jstream-browser` (feature `fake`), for the browser wiring's test;
   `jstream-youtube` (feature `fake`), for the YouTube setup's test; `jstream-render`
-  (the compositor on a software adapter) and, on Linux, `jstream-platform-linux` (its
-  AAC-LC encoder and OpenH264 loader), for the [real-receiver harness](#receiver-e2e).
-  `jstream-render` is already in the tree through core, and `jstream-platform-linux` is
-  a workspace crate. Neither ships in the daemon binary.
+  (the compositor on a software adapter), for the
+  [real-receiver harness](#receiver-e2e). It is already in the tree through core, and
+  doesn't ship in the daemon binary.
 
 <a id="open-questions"></a>
 ### Open questions

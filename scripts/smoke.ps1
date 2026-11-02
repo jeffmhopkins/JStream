@@ -6,9 +6,11 @@ its key, going live, sampling stats.tick, taking a snapshot and stopping.
 .DESCRIPTION
 The steps and what each one checks are in docs/runbooks/go-live.md (Smoke script). By
 default it streams to a local RTMP sink (an ffmpeg listen process) with a throwaway key,
-so it needs no real stream key. On Windows the daemon really encodes and publishes, and
-the script checks it. On Linux the daemon only steps the placeholder output, so the key,
-stats and sink checks are skipped. On macOS the daemon goes live, but the script doesn't
+so it needs no real stream key. On Windows and Linux the daemon really encodes and
+publishes, and the script checks it. Linux needs an H.264 encoder for that (VA-API, or
+Cisco's OpenH264 once downloaded): without one the daemon refuses the start with a reason
+naming both, and the script records the live steps as skipped with that reason, not as a
+failure. On macOS the daemon goes live, but the script doesn't
 drive that yet (its key would go to the login keychain), so it refuses to run there with
 exit 2: going live on a Mac is checked by hand (#644).
 
@@ -30,7 +32,7 @@ How long to stay live. Default 20.
 The local RTMP sink's port on 127.0.0.1. Default 1935.
 
 .PARAMETER RtmpUrl
-Stream to this server URL instead of the local sink (Windows only; needs -KeyFile).
+Stream to this server URL instead of the local sink (needs -KeyFile).
 
 .PARAMETER KeyFile
 The file holding the stream key for -RtmpUrl. Only its path is used.
@@ -68,17 +70,15 @@ if (-not $OnWindows -and $IsMacOS) {
     Stop-Usage 'macOS: going live is checked by hand, #644'
 }
 $Repo = Split-Path -Parent $PSScriptRoot
-# The output the run creates. Its key lives in Credential Manager as
-# JStream/stream-key/smoke_test while the run lasts, and is cleared at the end.
+# The output the run creates. Its key lives in the OS store (Credential Manager, or on
+# Linux the Secret Service, else ~/.config/jstream/secrets) as stream key smoke_test
+# while the run lasts, and is cleared at the end.
 $OutputId = 'smoke_test'
 # The local sink's stream key: a placeholder, not a secret.
 $SinkKey = 'smoke'
 
 if ($RtmpUrl -and -not $KeyFile) { Stop-Usage '-RtmpUrl needs -KeyFile' }
 if ($KeyFile -and -not $RtmpUrl) { Stop-Usage '-KeyFile needs -RtmpUrl' }
-if ($RtmpUrl -and -not $OnWindows) {
-    Stop-Usage '-RtmpUrl needs Windows: on Linux the daemon does not publish yet'
-}
 if ($KeyFile) {
     if (-not (Test-Path -LiteralPath $KeyFile -PathType Leaf)) {
         Stop-Usage "-KeyFile: no such file: $KeyFile"
@@ -96,6 +96,8 @@ function Add-Result([string]$Status, [string]$Step, [string]$Detail) {
 }
 # A failed step that the later ones depend on: recorded, then the run goes to cleanup.
 $StepFailed = 'jstream-smoke: step failed'
+# Not a failure: Linux has no H.264 encoder, so the run goes to cleanup after the snapshot.
+$NoEncoderDone = 'jstream-smoke: no H.264 encoder'
 function Fail([string]$Step, [string]$Detail) {
     Add-Result 'FAIL' $Step $Detail
     throw $StepFailed
@@ -244,7 +246,12 @@ $LogDir = Join-Path $OutDir 'logs'
 $SnapshotFile = Join-Path $OutDir 'snapshot.png'
 $SinkFile = Join-Path $OutDir 'sink.flv'
 $SinkKeyFile = Join-Path $OutDir 'sink-key'
-$UseSink = $OnWindows -and -not $RtmpUrl
+$UseSink = -not $RtmpUrl
+# Where the stream key goes, for the messages.
+$KeyStore = 'the Secret Service (else ~/.config/jstream/secrets)'
+if ($OnWindows) { $KeyStore = 'Credential Manager' }
+# Set when Linux has no H.264 encoder: the live steps are skipped with this reason.
+$NoEncoder = $null
 
 $daemonProc = $null; $eventsProc = $null; $sinkProc = $null
 $daemonOut = $null; $daemonErr = $null; $eventsOut = $null; $sinkErr = $null
@@ -286,8 +293,6 @@ try {
         Add-Result 'PASS' 'sink' "ffmpeg listening on rtmp://127.0.0.1:$SinkPort/live"
     } elseif ($RtmpUrl) {
         Add-Result 'SKIP' 'sink' 'streaming to -RtmpUrl instead'
-    } else {
-        Add-Result 'SKIP' 'sink' 'not Windows: the daemon does not publish here'
     }
 
     # 3. Start the daemon and wait for its `listening on` line.
@@ -343,18 +348,14 @@ try {
     Add-Result 'PASS' 'output.create (MCP)' "$OutputId at rev $($create.result.structuredContent.result.rev)"
 
     # 5. The stream key, through the CLI so it never passes through an agent.
-    if ($OnWindows) {
-        $kf = $SinkKeyFile
-        if ($KeyFile) { $kf = $KeyFile }
-        $r = Invoke-Cli @('output', 'set-key', $OutputId, '--key-file', $kf)
-        if (-not $r) { Fail 'output.set_key' (Get-CliError) }
-        $keySet = $true
-        $s = Get-OutputState
-        if (-not $s -or -not $s.key_set) { Fail 'output.set_key' 'output.status says no key is set' }
-        Add-Result 'PASS' 'output.set_key' 'stored in Credential Manager; status says key set'
-    } else {
-        Add-Result 'SKIP' 'output.set_key' 'Linux: this daemon has no key store'
-    }
+    $kf = $SinkKeyFile
+    if ($KeyFile) { $kf = $KeyFile }
+    $r = Invoke-Cli @('output', 'set-key', $OutputId, '--key-file', $kf)
+    if (-not $r) { Fail 'output.set_key' (Get-CliError) }
+    $keySet = $true
+    $s = Get-OutputState
+    if (-not $s -or -not $s.key_set) { Fail 'output.set_key' 'output.status says no key is set' }
+    Add-Result 'PASS' 'output.set_key' "stored in $KeyStore; status says key set"
 
     # 6. Subscribe to events before going live, so the first stats.tick is caught.
     $eventsProc = Start-Native $Cli @('--json', '--url', $WsUrl, '--token-file', $TokenFile, 'events', '--count', '1000000')
@@ -364,24 +365,36 @@ try {
 
     # 7. Go live.
     $r = Invoke-Cli @('output', 'start', $OutputId)
-    if (-not $r) { Fail 'output.start' (Get-CliError) }
-    if (-not (Wait-OutputState 'active' 30)) {
-        Fail 'output.start' "never became active (last state: $script:LastState); see $LogDir"
+    if (-not $r) {
+        $why = Get-CliError
+        # Linux without VA-API or OpenH264: the daemon says so, and that is not a fault.
+        if (-not $OnWindows -and $why -match 'OpenH264') { $NoEncoder = $why }
+        else { Fail 'output.start' $why }
     }
-    Add-Result 'PASS' 'output.start' 'active'
+    if ($NoEncoder) {
+        Add-Result 'SKIP' 'output.start' "no H.264 encoder on this machine: $NoEncoder"
+    } elseif (-not (Wait-OutputState 'active' 30)) {
+        Fail 'output.start' "never became active (last state: $script:LastState); see $LogDir"
+    } else {
+        Add-Result 'PASS' 'output.start' 'active'
+    }
 
     # 8. Stay live, watching the state each second.
-    $states = @{}
-    $end = (Get-Date).AddSeconds($Seconds)
-    while ((Get-Date) -lt $end) {
-        $s = Get-OutputState
-        if ($s) { $states[$s.state] = 1 + [int]$states[$s.state] }
-        Start-Sleep -Seconds 1
+    if ($NoEncoder) {
+        Add-Result 'SKIP' 'live' 'not live: no H.264 encoder'
+    } else {
+        $states = @{}
+        $end = (Get-Date).AddSeconds($Seconds)
+        while ((Get-Date) -lt $end) {
+            $s = Get-OutputState
+            if ($s) { $states[$s.state] = 1 + [int]$states[$s.state] }
+            Start-Sleep -Seconds 1
+        }
+        $seen = ($states.Keys | Sort-Object | ForEach-Object { "$_ x$($states[$_])" }) -join ', '
+        if ($states.ContainsKey('failed')) { Fail 'live' "the output failed while live ($seen)" }
+        if ($states.Keys | Where-Object { $_ -ne 'active' }) { Add-Result 'WARN' 'live' "not active throughout: $seen" }
+        else { Add-Result 'PASS' 'live' "active for $Seconds s ($seen)" }
     }
-    $seen = ($states.Keys | Sort-Object | ForEach-Object { "$_ x$($states[$_])" }) -join ', '
-    if ($states.ContainsKey('failed')) { Fail 'live' "the output failed while live ($seen)" }
-    if ($states.Keys | Where-Object { $_ -ne 'active' }) { Add-Result 'WARN' 'live' "not active throughout: $seen" }
-    else { Add-Result 'PASS' 'live' "active for $Seconds s ($seen)" }
 
     # 9. Snapshot of the program mix.
     $r = Invoke-Cli @('video', 'snapshot')
@@ -394,6 +407,7 @@ try {
     Add-Result 'PASS' 'video.snapshot' "$($snap.width)x$($snap.height), $($bytes.Length) bytes, saved to $SnapshotFile"
 
     # 10. Stop.
+    if ($NoEncoder) { throw $NoEncoderDone }
     $r = Invoke-Cli @('output', 'stop', $OutputId)
     if (-not $r) { Fail 'output.stop' (Get-CliError) }
     if (-not (Wait-OutputState 'stopped' 30)) { Fail 'output.stop' "never stopped (last state: $script:LastState)" }
@@ -402,7 +416,7 @@ try {
     Start-Sleep -Seconds 2
 } catch {
     # A failed step is recorded already; anything else is a fault in the run itself.
-    if ($_.Exception.Message -ne $StepFailed) { Add-Result 'FAIL' 'script' $_.Exception.Message }
+    if ($_.Exception.Message -ne $StepFailed -and $_.Exception.Message -ne $NoEncoderDone) { Add-Result 'FAIL' 'script' $_.Exception.Message }
 } finally {
     # Events: stats.tick and state changes seen while live.
     if ($eventsProc) {
@@ -413,10 +427,12 @@ try {
         $outStates = ($events | Where-Object { $_.type -eq 'output.state_changed' -and $_.output_id -eq $OutputId } |
             ForEach-Object { $_.state }) -join ' > '
         $dropped = @($events | Where-Object { $_.type -eq 'events.dropped' })
-        if ($outStates) { Add-Result 'PASS' 'events' "states: $outStates" }
+        # Without an encoder the output goes `starting > failed`: not a live run to check.
+        if ($NoEncoder) { Add-Result 'SKIP' 'events' "not live: no H.264 encoder (states: $outStates)" }
+        elseif ($outStates) { Add-Result 'PASS' 'events' "states: $outStates" }
         else { Add-Result 'FAIL' 'events' 'no output.state_changed event' }
         if ($dropped) { Add-Result 'WARN' 'events' "the server dropped events $($dropped.Count) time(s)" }
-        if ($OnWindows) {
+        if (-not $NoEncoder) {
             if ($ticks.Count -eq 0) {
                 Add-Result 'FAIL' 'stats.tick' 'none while live'
             } else {
@@ -429,15 +445,15 @@ try {
                 else { Add-Result 'PASS' 'stats.tick' $msg }
             }
         } else {
-            Add-Result 'SKIP' 'stats.tick' 'not Windows: no pipeline runs here'
+            Add-Result 'SKIP' 'stats.tick' 'not live: no H.264 encoder'
         }
     }
 
     # The test key must not outlive the run.
     if ($keySet) {
         $r = Invoke-Cli @('output', 'clear-key', $OutputId)
-        if ($r) { Add-Result 'PASS' 'output.clear_key' "JStream/stream-key/$OutputId removed" }
-        else { Add-Result 'FAIL' 'output.clear_key' "$(Get-CliError); remove JStream/stream-key/$OutputId in Credential Manager" }
+        if ($r) { Add-Result 'PASS' 'output.clear_key' "the key for $OutputId removed from $KeyStore" }
+        else { Add-Result 'FAIL' 'output.clear_key' "$(Get-CliError); remove JStream/stream-key/$OutputId from $KeyStore" }
     }
 
     # The sink saw the stream end when the output stopped; give it a moment to close.
@@ -460,6 +476,8 @@ try {
                 if ($len -gt 0) { Add-Result 'PASS' 'sink' "received $len bytes in $SinkFile (no ffprobe to check codecs)" }
                 else { Add-Result 'FAIL' 'sink' 'received nothing' }
             }
+        } elseif ($NoEncoder) {
+            Add-Result 'SKIP' 'sink' 'not live: no H.264 encoder'
         } elseif ($Results | Where-Object { $_.Step -eq 'output.start' -and $_.Status -eq 'PASS' }) {
             Add-Result 'FAIL' 'sink' "received nothing: $($sinkErr.Result.Trim())"
         }
