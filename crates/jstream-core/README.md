@@ -116,8 +116,8 @@ state machine. Contents:
     stepped one is an `int`, any other a `float`, both with the plugin's range; hidden,
     read-only and bypass parameters and ones without a finite range are left out. When
     two files offer one plugin id, the first found wins. A plugin's names reach clients
-    through `plugin_text` (#351): control characters become spaces, trimmed, at most 128
-    characters. The scan returns a `ClapScan`
+    through `plugin_text` (#351, #977): control and bidirectional formatting characters
+    become spaces, trimmed, at most 128 characters. The scan returns a `ClapScan`
     with each kind's file and plugin id, and the files that failed. Kinds stay until
     the engine ends. It is slow, so a host calls it on a worker thread; the engine's
     lock is held only to add the kinds and hand the audio thread a `ClapCatalog` (the
@@ -2369,8 +2369,8 @@ The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in proc
 - **Listing.** `plugin.list` (`automation::list`) answers from the registry with no
   collection lock held: each plugin's state and reason, its manifest's name, its
   package path, what its manifest asks for as last read (`Request`, as `PluginRequest`)
-  and its grant. It notes that request as what the calling client was shown. A plugin being installed, or started with the saved plugins, is listed
-  as enabled; one being enabled keeps the reason it was disabled for until it loads
+  and its grant. It notes that request as what the calling client was shown. A plugin
+  being installed, or started with the saved plugins, is listed as enabled; one being enabled keeps the reason it was disabled for until it loads
   (`Run::Starting` holds it). Built without `wasm-plugins`, the engine lists none, from
   the collection's query match (`plugin_list_is_empty_until_a_plugin_is_installed`).
 - **Not yet:** a private data folder per plugin, deferred until the file imports a plugin

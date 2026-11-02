@@ -6569,7 +6569,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         "request": {
           "$ref": "#/$defs/PluginRequest",
-          "description": "What its manifest asks for, as the engine last read it. For a plugin disabled as\n`needs_grant`, this is the update's request, which a `plugin.grant` acknowledges."
+          "description": "What its manifest asks for, as the engine last read it. For a plugin disabled as\n`needs_grant`, this is the update's request, which a `plugin.grant` from the\nclient it was listed to then acknowledges."
         },
         "state": {
           "$ref": "#/$defs/PluginState",

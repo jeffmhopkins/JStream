@@ -657,7 +657,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **Plugins** (WA1, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md),
   [ADR-0076](../../docs/adr/0076-saved-wasm-plugins-and-manifest-requests.md)). The
   Plugins section reads `plugin.list` when it opens and shows once that answers; it
-  re-reads after each of its calls and on `plugin.state_changed` and `events.dropped`.
+  re-reads after each of its calls and on `plugin.state_changed` and `events.dropped`,
+  except while the grant dialog is open (`ListGate`): the engine takes a grant to
+  acknowledge the request this client was last listed
+  ([ADR-0090](../../docs/adr/0090-a-grant-acknowledges-the-request-its-client-saw.md)),
+  so a re-read waits until the dialog closes, failed grants included, and goes out once
+  then. A list already on its way when the dialog opened, that answers another request
+  for its plugin, draws the dialog again with that request.
   Each plugin shows its manifest's name (the plugin's own text, shown as data), its
   state with why it is off, its ID and package path, what its manifest asks for that
   isn't granted, Permissions…, and Turn on (`plugin.enable`) when it is off. Install

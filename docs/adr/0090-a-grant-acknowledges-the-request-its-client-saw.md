@@ -53,11 +53,18 @@ rest of ADR-0076 stands.
 
 <a id="consequences"></a>
 ## Consequences
-- A person's grant can no longer acknowledge an update they weren't shown, so the
-  update's new asks always reach a dialog.
+- The guarantee is exactly this: a grant acknowledges the request in its client's
+  latest `plugin.list`. For a client that sends no `plugin.list` while its grant dialog
+  is open, that is the request the dialog showed, so an update the person wasn't shown
+  still reaches a dialog. A client that re-lists while its dialog is open acknowledges
+  its latest list, whatever the dialog shows.
+- The jstream UI keeps to that: while its grant dialog is open it sends no
+  `plugin.list`, and a re-read it would have made (on `plugin.state_changed`,
+  `events.dropped` or a failed grant) goes out once the dialog closes. A list already on
+  its way when the dialog opened, that answers another request, draws the dialog again
+  with it.
 - A UI that grants after a stale list sees `plugin.enable` answer `action_failed` naming
-  what is new, lists again, and shows the update. The jstream UI's grant dialog already
-  shows the request from its own `plugin.list`.
+  what is new, lists again, and shows the update.
 - The engine keeps one request per client and plugin listed, until the session ends.
 - A client that grants without listing still acknowledges whatever the manifest asks
   for now. A client that shows a person a request must get it from `plugin.list`.

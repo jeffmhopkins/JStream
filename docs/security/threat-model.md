@@ -296,8 +296,11 @@ block's ring) must name a described parameter and be finite and in range; a save
 state over 2 MiB is ignored; and plugin-chosen names are made plain text and capped
 before they reach the UI, agents or the log (#351). A WASM plugin's manifest `name` is
 treated the same way, and both drop bidirectional formatting characters (#977). A
-person's `plugin.grant` acknowledges only the manifest request their client was shown,
-so an update loaded meanwhile still asks for its grant (#978).
+person's `plugin.grant` acknowledges the manifest request their client was last listed
+(#978, [ADR-0090](../adr/0090-a-grant-acknowledges-the-request-its-client-saw.md)). For
+a client that sends no `plugin.list` while its grant dialog is open, as the jstream UI
+does, that is the request the dialog showed, so an update loaded meanwhile still asks
+for its grant; a client that re-lists acknowledges its latest list.
 
 **Gaps:**
 - WASM (#348): [ADR-0069](../adr/0069-wasm-plugin-limits-and-capabilities.md) decided

@@ -16,9 +16,9 @@
 //! R-SEC-003), and a package whose manifest asks for more than it did when a person last
 //! granted it is disabled as `needs_grant` until a person grants it again, a grant
 //! acknowledging the request `plugin.list` last showed that person's client (ADR-0090).
-//! Once the host
-//! names a folder ([`open_dir`]), the installed plugins and their grants are saved in
-//! [`PLUGINS_FILE`] there after every change, and loaded again when it is opened.
+//! Once the host names a folder ([`open_dir`]), the installed plugins and their grants
+//! are saved in [`PLUGINS_FILE`] there after every change, and loaded again when it is
+//! opened.
 
 use crate::engine::{Engine, Executed, WeakEngine};
 use crate::events::{self, QueueRef, Subscription};
@@ -702,6 +702,7 @@ fn read_manifest(bytes: &[u8]) -> Result<(Option<String>, Request), String> {
         },
     ))
 }
+
 /// A manifest's `name` as clients and agents read it (#977): plain text, capped as a CLAP
 /// plugin's name is ([`plugin_text`]), or `None` when nothing is left.
 fn manifest_name(name: &str) -> Option<String> {
