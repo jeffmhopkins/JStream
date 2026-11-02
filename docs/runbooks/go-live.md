@@ -156,9 +156,10 @@ to the Secret Service, else to the `0600` file `~/.config/jstream/secrets`
 ([ADR-0071](../adr/0071-linux-secret-store.md)), and is cleared at the end. Streaming
 needs an H.264 encoder: VA-API, or Cisco's OpenH264 once it has been downloaded
 ([ADR-0061](../adr/0061-source-types-and-decoding-scope-v2.md)). Without one the daemon
-refuses `output.start` with a reason naming both. The run then records the start, the
-live steps, the events, `stats.tick` and the sink as `SKIP` with that reason, still
-takes the snapshot and checks the graceful stop, and passes. On
+refuses `output.start` with a reason naming both, and the output goes `starting`, then
+`failed`. The run then records the start, the live steps, the events (with those two
+states), `stats.tick` and the sink as `SKIP` with that reason, still takes the snapshot
+and checks the graceful stop, and passes. On
 macOS the daemon goes live, but the script doesn't drive that yet, so it refuses to
 run there with exit 2 ("macOS: going live is checked by hand, #644").
 

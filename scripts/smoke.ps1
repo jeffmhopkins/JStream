@@ -427,8 +427,9 @@ try {
         $outStates = ($events | Where-Object { $_.type -eq 'output.state_changed' -and $_.output_id -eq $OutputId } |
             ForEach-Object { $_.state }) -join ' > '
         $dropped = @($events | Where-Object { $_.type -eq 'events.dropped' })
-        if ($outStates) { Add-Result 'PASS' 'events' "states: $outStates" }
-        elseif ($NoEncoder) { Add-Result 'SKIP' 'events' 'the output never started: no H.264 encoder' }
+        # Without an encoder the output goes `starting > failed`: not a live run to check.
+        if ($NoEncoder) { Add-Result 'SKIP' 'events' "not live: no H.264 encoder (states: $outStates)" }
+        elseif ($outStates) { Add-Result 'PASS' 'events' "states: $outStates" }
         else { Add-Result 'FAIL' 'events' 'no output.state_changed event' }
         if ($dropped) { Add-Result 'WARN' 'events' "the server dropped events $($dropped.Count) time(s)" }
         if (-not $NoEncoder) {
@@ -451,7 +452,7 @@ try {
     # The test key must not outlive the run.
     if ($keySet) {
         $r = Invoke-Cli @('output', 'clear-key', $OutputId)
-        if ($r) { Add-Result 'PASS' 'output.clear_key' "JStream/stream-key/$OutputId removed" }
+        if ($r) { Add-Result 'PASS' 'output.clear_key' "the key for $OutputId removed from $KeyStore" }
         else { Add-Result 'FAIL' 'output.clear_key' "$(Get-CliError); remove JStream/stream-key/$OutputId from $KeyStore" }
     }
 

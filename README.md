@@ -287,9 +287,9 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 To run a release instead, see [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md).
 
 You need Rust through `rustup`; `rust-toolchain.toml` pins the version and
-adds the Windows and `wasm32` targets. The media backends are Windows only: on Linux and
-macOS everything builds and the tests run on fakes, and the daemon serves the API with
-placeholder outputs.
+adds the Windows and `wasm32` targets. The daemon runs live on Windows, macOS and 64-bit
+Linux, on each OS's media backends; elsewhere it serves the API with placeholder
+outputs. Everything builds on every OS, and the tests run on fakes.
 
 ```sh
 cargo build --release -p jstream-daemon -p jstream-cli
