@@ -734,7 +734,7 @@ fn a_move_within_a_family_moves_a_chained_groups_children_and_runs_only_whats_sh
     let ag = ItemId::new("ag");
     assert!(shot.item_chain(&SceneId::new("a"), &ag).is_none());
     assert!(shot.item_chain(&SceneId::new("k"), &ag).is_none());
-    let cost = shot.chain_cost();
+    let cost = shot.chain_cost([]);
     assert_eq!(
         (cost.scene_chains, cost.item_effects),
         (1, 2),

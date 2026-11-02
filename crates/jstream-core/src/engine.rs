@@ -3666,12 +3666,24 @@ impl State {
             }
         }
         self.stats_seq = self.stats_seq.saturating_add(1);
+        // The output stage runs for the running outputs' frames only, each on its mix.
+        let state = self.graph.state();
+        let running = self.outputs.running();
+        let mixes: Vec<_> = running
+            .iter()
+            .map(|id| (snapshot::output_mix(state, id), id))
+            .collect();
+        let chains = self
+            .render
+            .load()
+            .shot()
+            .chain_cost(mixes.iter().map(|(mix, id)| (mix.as_ref(), *id)));
         self.subscribers.emit(
             &Event::StatsTick {
                 seq: self.stats_seq,
                 drops,
                 load: Some(load),
-                chains: Some(self.render.load().shot().chain_cost()),
+                chains: Some(chains),
                 outputs,
             },
             wake,

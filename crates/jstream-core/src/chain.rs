@@ -1481,15 +1481,15 @@ mod tests {
     fn the_chain_cost_counts_scene_chains_and_item_effects() {
         use jstream_protocol::ChainCost;
 
-        assert_eq!(shot(&graph(&[])).chain_cost(), ChainCost::default());
+        assert_eq!(shot(&graph(&[])).chain_cost([]), ChainCost::default());
         assert_eq!(
-            shot(&graph(&[("cam", true)])).chain_cost(),
+            shot(&graph(&[("cam", true)])).chain_cost([]),
             ChainCost::default(),
             "a source's own chain is not counted"
         );
         let mut bypassed = graph(&[]);
         apply(&mut bypassed, vec![scene_red("main", false)]);
-        assert_eq!(shot(&bypassed).chain_cost(), ChainCost::default());
+        assert_eq!(shot(&bypassed).chain_cost([]), ChainCost::default());
 
         let mut both = graph(&[]);
         let mut second = item_tint("cam", "#00ff00");
@@ -1505,7 +1505,7 @@ mod tests {
         let canvas_bytes = u64::from(canvas.width()) * u64::from(canvas.height()) * 8;
         let box_bytes = 16 * 9 * 8;
         assert_eq!(
-            planned.chain_cost(),
+            planned.chain_cost([]),
             ChainCost {
                 scene_chains: 1,
                 scene_layers: 2,
@@ -1514,6 +1514,7 @@ mod tests {
                 item_layers: 3,
                 item_passes: 3,
                 layer_bytes: 2 * canvas_bytes + 3 * box_bytes,
+                ..ChainCost::default()
             },
             "the scene's composite and grade; cam's 16x9 box and its two tints"
         );
@@ -1563,7 +1564,7 @@ mod tests {
         let canvas = planned.canvas().expect("a canvas");
         let canvas_bytes = u64::from(canvas.width()) * u64::from(canvas.height()) * 8;
         assert_eq!(
-            planned.chain_cost(),
+            planned.chain_cost([]),
             ChainCost {
                 scene_chains: 3,
                 scene_layers: 6,
@@ -1572,6 +1573,7 @@ mod tests {
                 item_layers: 4,
                 item_passes: 4,
                 layer_bytes: 6 * canvas_bytes + 4 * box_bytes,
+                ..ChainCost::default()
             },
             "outer, main (placed twice) and key; cam in main and in key, one tint each"
         );
@@ -2057,6 +2059,100 @@ mod tests {
             staged.stage_chain(&ChainOwner::Output(OutputId::new("vod"))),
             None,
             "a disabled filter is bypassed"
+        );
+    }
+
+    /// `stats.tick`'s chain cost counts the output stage for the running outputs only
+    /// (ADR-0080): each staged mix's canvas-sized layer and its master chain once,
+    /// however many outputs get it, and each output's own chain; an output with neither
+    /// chain adds nothing.
+    #[test]
+    fn the_chain_cost_counts_the_running_outputs_stage() {
+        use jstream_protocol::ChainCost;
+
+        let rec = OutputId::new("rec");
+        let vod = OutputId::new("vod");
+        let mut g = graph(&[]);
+        apply(
+            &mut g,
+            vec![
+                record("rec"),
+                record("vod"),
+                multiply(output("rec"), "o", "#ff0000"),
+            ],
+        );
+        let plain = shot(&g);
+        let canvas = plain.canvas().expect("a canvas");
+        let canvas_bytes = u64::from(canvas.width()) * u64::from(canvas.height()) * 8;
+        assert_eq!(plain.chain_cost([]), ChainCost::default(), "nothing runs");
+        assert_eq!(
+            plain.chain_cost([(None, &vod)]),
+            ChainCost::default(),
+            "no master chain and none of its own: drawn straight to the output"
+        );
+        assert_eq!(
+            plain.chain_cost([(None, &vod), (None, &rec)]),
+            ChainCost {
+                stage_chains: 1,
+                stage_layers: 2,
+                stage_passes: 2,
+                layer_bytes: 2 * canvas_bytes,
+                ..ChainCost::default()
+            },
+            "the program's layer and rec's tint"
+        );
+
+        let vertical = VideoMixId::new("vertical");
+        apply(
+            &mut g,
+            vec![
+                Edit::VideoMixCreate {
+                    mix_id: vertical.clone(),
+                    name: "Vertical".into(),
+                    mix: jstream_protocol::VideoMix {
+                        input: jstream_protocol::MixInput::Program,
+                        resolution: jstream_protocol::MixResolution {
+                            width: 1080,
+                            height: 1920,
+                        },
+                        fps_divisor: 1,
+                    },
+                },
+                Edit::OutputSetVideoMix {
+                    output_id: rec.clone(),
+                    mix_id: Some(vertical.clone()),
+                },
+                multiply(FilterOwner::Master, "m", "#ff00ff"),
+            ],
+        );
+        let staged = shot(&g);
+        assert_eq!(
+            staged.chain_cost([(None, &vod)]),
+            ChainCost {
+                stage_chains: 1,
+                stage_layers: 2,
+                stage_passes: 2,
+                layer_bytes: 2 * canvas_bytes,
+                ..ChainCost::default()
+            },
+            "the program's layer and the master chain; the vertical mix's isn't drawn"
+        );
+        assert_eq!(
+            staged.chain_cost([(None, &vod), (None, &rec)]),
+            staged.chain_cost([(None, &vod)]),
+            "rec drawn on the program shares its layer and master chain, and its own \
+             chain, which follows the vertical mix, doesn't run there"
+        );
+        assert_eq!(
+            staged.chain_cost([(None, &vod), (Some(&vertical), &rec)]),
+            ChainCost {
+                stage_chains: 3,
+                stage_layers: 5,
+                stage_passes: 5,
+                layer_bytes: 5 * canvas_bytes,
+                ..ChainCost::default()
+            },
+            "each mix's layer and master chain, then rec's own"
         );
     }
 

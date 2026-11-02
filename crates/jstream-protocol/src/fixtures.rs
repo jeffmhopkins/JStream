@@ -2030,7 +2030,10 @@ pub(crate) fn events() -> Vec<Event> {
             item_effects: 1,
             item_layers: 3,
             item_passes: 3,
-            layer_bytes: 99_532_800,
+            layer_bytes: 132_710_400,
+            stage_chains: 1,
+            stage_layers: 2,
+            stage_passes: 2,
         }),
         outputs: vec![
             OutputStatsInfo {

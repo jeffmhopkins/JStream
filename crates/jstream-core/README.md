@@ -224,7 +224,8 @@ state machine. Contents:
   mixes are planned after the transition (#961). A switch mid-Move
   holds the children where they are on screen and moves them on from there.
   `Shot::chain_cost` is what its
-  scene chains and item effects add to each frame, for `stats.tick`'s `chains`.
+  scene chains, item effects and, for the running outputs, output stage add to each
+  frame, for `stats.tick`'s `chains`.
 - **Studio** (`studio.rs`): which scene is on program and which on preview, and the
   transition running onto program, runtime state under the collection lock that
   `scene.switch` and `studio.set_preview` set and `studio.get` reads
@@ -1098,7 +1099,14 @@ plus one per effect, with each layer's texture bytes at the sizes `Chains` makes
 so the render thread does no extra work. Not counted: a source's own chain, a scene a
 `scene_mask` reads, and the canvas-sized layer a nested scene without a chain is drawn
 into for an item's effects (it takes the place of the layer it would be drawn into
-anyway).
+anyway). The output stage (below) runs only for an output's frame, so the engine hands
+`chain_cost` each running output (`Outputs::running`) with the mix it shows
+(`snapshot::output_mix`, as its encoder session is keyed), and it counts what
+`Shot::stage_of` gives each one's frame: each staged mix's canvas-sized `GpuKey::Mixed`
+layer and composite pass and its master chain's layers and passes once, however many
+outputs get the mix, as `Chains::stage` draws them, and each output's own chain over
+the master chain's output size (0.66). The pass fitting the result into each output's
+frame is not counted, since every output frame draws one.
 
 **The output stage** ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)).
 Planning the program stage's shot (not a preview's) copies the master stage's video
