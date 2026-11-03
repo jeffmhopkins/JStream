@@ -86,7 +86,9 @@ jobs:
         run: cargo test --workspace --locked
 
   # Streams to a real RTMP server and decodes what it got (apps/jstream-daemon/README.md#receiver-e2e):
-  # lavapipe for the GPU compositor, ffmpeg as the server and ffprobe to check the file. Not
+  # lavapipe for the GPU compositor, Cisco's OpenH264 for H.264, ffmpeg as the server and
+  # ffprobe to check the file. It first downloads OpenH264 from Cisco and checks both of the
+  # pin's SHA-256 values (ADR-0061), then streams on the copy the harness downloads. Not
   # required: it reports, and a failure is looked into, but it doesn't block a merge.
   e2e-stream:
     if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && !startsWith(github.base_ref, 'wave/'))
@@ -100,8 +102,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y mesa-vulkan-drivers libvulkan1 ffmpeg
+      - name: Download OpenH264 from Cisco and check the pin
+        run: cargo test -p jstream-platform-linux --features openh264-download --locked -- --ignored downloads_the_pinned
       - name: Stream to a local receiver
-        run: cargo xtask e2e-stream
+        run: cargo xtask e2e-stream --openh264-download
 
   doc:
     if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && !startsWith(github.base_ref, 'wave/'))

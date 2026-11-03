@@ -6,7 +6,8 @@
 //! sandbox with no route to Cisco. Nothing in JStream encodes through FFmpeg
 //! (R-DEP-002); this file is test code that drives the `ffmpeg` program in a child
 //! process, the way the harness drives `ffprobe`, and is never linked into a product.
-//! When `JSTREAM_E2E_OPENH264` names Cisco's library the harness uses OpenH264 instead.
+//! When `JSTREAM_E2E_OPENH264` is set (CI's run downloads Cisco's library) the harness
+//! uses OpenH264 instead.
 //!
 //! Frames are written raw to the child's stdin from a writer thread; a reader thread
 //! splits its Annex B output into access units at each access unit delimiter (x264's

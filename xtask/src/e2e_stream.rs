@@ -3,8 +3,10 @@
 //!
 //! It checks that `ffmpeg` and `ffprobe` are installed, points Vulkan at lavapipe when
 //! `VK_DRIVER_FILES` isn't set and lavapipe is installed, then runs the harness's
-//! ignored tests one at a time. `--openh264 <library>` runs them on Cisco's OpenH264
-//! instead of the libx264 stand-in.
+//! ignored tests one at a time. `--openh264-download` runs them on Cisco's OpenH264,
+//! which the harness downloads from Cisco and checks against the pin, as CI does;
+//! `--openh264 <library>` runs them on a copy of the pinned library already on disk.
+//! With neither, they use the libx264 stand-in.
 //!
 //! Docs: apps/jstream-daemon/README.md#receiver-e2e
 
@@ -27,9 +29,12 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
                 let path = Path::new(path)
                     .canonicalize()
                     .with_context(|| format!("{path} doesn't exist"))?;
-                openh264 = Some(path);
+                openh264 = Some(path.into_os_string());
             }
-            other => bail!("unknown argument {other}; usage: e2e-stream [--openh264 <library>]"),
+            "--openh264-download" => openh264 = Some("download".into()),
+            other => bail!(
+                "unknown argument {other}; usage: e2e-stream [--openh264-download | --openh264 <library>]"
+            ),
         }
     }
     if !cfg!(target_os = "linux") {

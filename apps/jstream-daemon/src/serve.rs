@@ -1,14 +1,18 @@
 //! The engine behind the server: one `Engine`, one `InProcessControl` session per
-//! WebSocket connection and per MCP session, and the signals that stop it. On Windows
-//! and macOS the engine is live: it runs the media pipeline on the OS backends and
-//! publishes over RTMP(S).
+//! WebSocket connection and per MCP session, and the signals that stop it. On Windows,
+//! macOS and 64-bit Linux the engine is live: it runs the media pipeline on the OS
+//! backends and publishes over RTMP(S).
 
 use crate::args::Options;
 use crate::youtube;
 use anyhow::Context;
 use jstream_core::{AuditSink, Engine};
 use jstream_crash::Secrets;
-#[cfg(any(windows, target_os = "macos"))]
+#[cfg(any(
+    windows,
+    target_os = "macos",
+    all(target_os = "linux", target_pointer_width = "64")
+))]
 use jstream_daemon::live::rtmp;
 use jstream_server::{Connector, Server, ServerConfig, Token};
 use std::future::Future;
@@ -18,7 +22,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 #[cfg(any(all(windows, feature = "cef"), test))]
 use {jstream_browser::BrowserBackend, jstream_platform::GpuContext};
-#[cfg(any(windows, target_os = "macos", test))]
+#[cfg(any(
+    windows,
+    target_os = "macos",
+    all(target_os = "linux", target_pointer_width = "64"),
+    test
+))]
 use {
     jstream_crash::Redacting,
     jstream_daemon::live::{Connect, live},
@@ -34,14 +43,16 @@ use {
 /// Foundation codecs and webcams, the QPC clock), stream keys in Credential Manager, and a publish
 /// opener that connects RTMP(S) on each `output.start`. On macOS it is live the same
 /// way on the backends built so far (`macos_backends`), with stream keys in the
-/// Keychain. Elsewhere there are no backends yet, so output actions only step the
-/// placeholder state machine. On every platform it starts the engine's stats heartbeat,
-/// and on Windows and macOS each `stats.tick` carries the process's CPU time.
+/// Keychain, and on 64-bit Linux on `linux_backends`, with stream keys in the Secret
+/// Service (else its `0600` file, ADR-0071). Elsewhere there are no backends yet, so
+/// output actions only step the placeholder state machine. On every platform it starts
+/// the engine's stats heartbeat, and where it is live each `stats.tick` carries the
+/// process's CPU time.
 ///
 /// # Errors
-/// When the collection file can't be read, loaded or created, and on Windows and macOS,
-/// when a backend can't be created (the QPC or Mach clock, or on macOS a release below
-/// the floor).
+/// When the collection file can't be read, loaded or created, and where it is live,
+/// when a backend can't be created (the QPC or Mach clock, on macOS a release below
+/// the floor, on Linux neither PipeWire nor ALSA).
 pub fn engine(
     options: &Options,
     audit: Arc<dyn AuditSink>,
@@ -88,7 +99,13 @@ pub fn engine(
         rtmp(),
         secrets,
     );
-    #[cfg(not(any(windows, target_os = "macos")))]
+    #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+    let engine = live_redacting(engine, linux_backends()?, linux_keys()?, rtmp(), secrets);
+    #[cfg(not(any(
+        windows,
+        target_os = "macos",
+        all(target_os = "linux", target_pointer_width = "64")
+    )))]
     let engine = Arc::new(engine);
     if let Some(dir) = &options.plugin_dir {
         // Last, once the engine is built: a saved plugin keeps a handle to the engine as
@@ -105,6 +122,8 @@ pub fn engine(
     engine.set_process_cpu(Arc::new(jstream_platform_windows::WindowsProcessCpu));
     #[cfg(target_os = "macos")]
     engine.set_process_cpu(Arc::new(jstream_platform_macos::MacosProcessCpu));
+    #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+    engine.set_process_cpu(Arc::new(jstream_platform_linux::LinuxProcessCpu));
     engine.start_stats_heartbeat();
     Ok(engine)
 }
@@ -243,6 +262,70 @@ fn macos_backends() -> anyhow::Result<Backends> {
     })
 }
 
+/// The Linux backends (ADR-0060), as `LinuxBackends` builds them for this session:
+/// ScreenCast portal capture, whose restore tokens are kept in the data folder's
+/// [`CAPTURE_TOKEN_DIR`] so a grant survives restarts, V4L2 webcams and capture cards,
+/// PipeWire audio (else ALSA, with the reason logged), VA-API H.264 and HEVC with Cisco's
+/// OpenH264 as the software H.264 encoder once the user has downloaded it, JStream's
+/// AAC-LC encoder, and the Vulkan GPU interop. Media files are `Unsupported` until
+/// ADR-0072's decoders exist, and there is no virtual camera (ADR-0060 §9). Creating
+/// them lists the audio backend's devices and probes the VA-API render nodes, and opens
+/// nothing else: capture asks the portal only when a pipeline first uses it. A machine
+/// without a GPU composites on the engine's own software device (`open_capture` in core
+/// logs it), and one without a desktop session has no screen capture but streams every
+/// other source.
+///
+/// # Errors
+/// When neither PipeWire nor ALSA can be used (the message names both reasons and how
+/// to fix them), or the media clock can't be read.
+#[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+fn linux_backends() -> anyhow::Result<Backends> {
+    use jstream_platform_linux::{LinuxBackends, LinuxGpu, NoMediaDecoders, Session};
+    let session = Session::from_env();
+    let token_dir = jstream_platform::paths::data_dir().map(|dir| dir.join(CAPTURE_TOKEN_DIR));
+    let set = LinuxBackends::new(session.clone(), token_dir)
+        .context("could not open the Linux backends")?;
+    tracing::info!(
+        session = ?session.kind,
+        tier = ?session.tier(),
+        audio = ?set.audio_backend,
+        "Linux backends"
+    );
+    if let Some(error) = &set.pipewire_unavailable {
+        tracing::warn!(
+            %error,
+            "PipeWire is unavailable, so audio uses ALSA: no desktop or application audio"
+        );
+    }
+    Ok(set.into_backends(Arc::new(LinuxGpu::new()), Arc::new(NoMediaDecoders)))
+}
+
+/// The folder in the data folder that keeps the ScreenCast portal's restore tokens.
+#[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+const CAPTURE_TOKEN_DIR: &str = "capture-tokens";
+
+/// The stream key store on Linux (ADR-0071): the Secret Service, else `secrets` in the
+/// config folder, `0600`. While that file holds a secret the daemon logs ADR-0071 §4's
+/// warning once, here, naming the file and never a secret.
+///
+/// # Errors
+/// When there is no config folder: neither `XDG_CONFIG_HOME` nor `HOME` is absolute.
+#[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+fn linux_keys() -> anyhow::Result<Arc<dyn StreamKeyStore>> {
+    use jstream_platform_linux::LinuxSecrets;
+    let dir = LinuxSecrets::config_dir().context(
+        "could not find the config folder for the stream key store's fallback file \
+         (no absolute XDG_CONFIG_HOME or HOME)",
+    )?;
+    let keys = LinuxSecrets::new(dir);
+    match keys.fallback_warning() {
+        Ok(Some(warning)) => tracing::warn!("{warning}"),
+        Ok(None) => {}
+        Err(error) => tracing::warn!(%error, "could not check the stream key store"),
+    }
+    Ok(Arc::new(keys))
+}
+
 /// The CEF browser backend for `browser` sources (feature `cef`, ADR-0046), on a
 /// GPU device of the engine's media adapter, opened through the backends' `gpu`, with
 /// pages' audio stamped on their `clock`.
@@ -311,7 +394,12 @@ pub fn browse(
 /// opener, so every stream key stored (`output.set_key`) or read (each `output.start`)
 /// is registered with `secrets`, the crash reports' redaction (#353). It wraps the store
 /// here, before the library sees it.
-#[cfg(any(windows, target_os = "macos", test))]
+#[cfg(any(
+    windows,
+    target_os = "macos",
+    all(target_os = "linux", target_pointer_width = "64"),
+    test
+))]
 fn live_redacting(
     engine: Engine,
     backends: Backends,

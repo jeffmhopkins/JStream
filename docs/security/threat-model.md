@@ -26,7 +26,7 @@ depends_on = ["docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-004"]
 
 | Asset | Why it matters | Where it lives |
 |---|---|---|
-| Stream keys | Anyone holding one can broadcast as the user's channel | OS credential store only ([R-SEC-001](../RULES.md#R-SEC-001)); Windows Credential Manager, and the macOS Keychain ([ADR-0063](../adr/0063-macos-platform-support.md)), which the daemon uses where it is live on macOS (#639); and Linux's ([ADR-0071](../adr/0071-linux-secret-store.md): the Secret Service, else a `0600` plaintext file, see [Secrets](#secrets)) is built in `jstream-platform-linux` but no app uses it yet |
+| Stream keys | Anyone holding one can broadcast as the user's channel | OS credential store only ([R-SEC-001](../RULES.md#R-SEC-001)); Windows Credential Manager, and the macOS Keychain ([ADR-0063](../adr/0063-macos-platform-support.md)), which the daemon uses where it is live on macOS (#639); and on Linux ([ADR-0071](../adr/0071-linux-secret-store.md)) the Secret Service, else a `0600` plaintext file (see [Secrets](#secrets)), which the daemon uses where it is live on 64-bit Linux (#1016) |
 | YouTube OAuth refresh token | Manages the user's channel (the `youtube` scope) | OS credential store; access tokens stay in memory |
 | Control token | Full control of the engine, by design ([ADR-0006](../adr/0006-mcp-full-access.md)), including every stream key's use | The daemon's token file (user-chosen path); the desktop app's is in memory and new on every start |
 | Paired device tokens | Same power as the control token ([ADR-0044](../adr/0044-pairing-remote-browsers.md)) | A digest in the devices file beside the token file; the device's own copy; a browser's in a cookie, once there is a TLS listener |
@@ -384,10 +384,11 @@ intercepted connection.
 
 **Controls on main:**
 - Keys and refresh tokens live in Windows Credential Manager, and stream keys in the
-  macOS Keychain where the daemon is live on macOS (#639). Where an app has no store
-  (the desktop app on macOS; on Linux, where the Secret Service store is built but not
-  wired into an app yet) `set_key` fails rather than fall back to a
-  file. Secret types print `***` and
+  macOS Keychain where the daemon is live on macOS (#639). On Linux the daemon keeps
+  stream keys in `LinuxSecrets` (#1016): the Secret Service, and only where none is
+  reachable ADR-0071's `0600` plaintext file (Accepted, below). Where an app has no
+  store (the desktop app on macOS and Linux, and the daemon on 32-bit Linux) `set_key`
+  fails rather than fall back to a file. Secret types print `***` and
   are zeroed on drop. The collection never holds a key, and target URLs that could carry
   one (user info, query, fragment) are refused.
 - RTMPS and the YouTube API use rustls with the OS roots and hostname checks; nothing
@@ -420,7 +421,8 @@ show. The rule is `jstream-protocol`'s `rtmp_url_sends_key_in_cleartext`; `local
 and loopback are exempt.
 
 **Accepted** ([ADR-0071](../adr/0071-linux-secret-store.md)), built as `LinuxSecrets` in
-`jstream-platform-linux` and not yet used by an app: on Linux, keys and refresh tokens
+`jstream-platform-linux`, which the daemon uses for stream keys on 64-bit Linux (#1016;
+no app keeps OAuth tokens there yet): on Linux, keys and refresh tokens
 go to the Secret Service, and only where none is reachable to `secrets` in
 `~/.config/jstream`. That file is **plaintext at rest**: anyone with read
 access to the user's account or its files, or to a backup or sync of that folder, can
@@ -428,9 +430,9 @@ read the keys in it, and use them to broadcast as the user's channel. The mitiga
 - the file is written `0600` (through a fresh file and a rename) in a folder created
   `0700`, and refused, never repaired, if it is a symlink, another user owns it, or
   group or others can read or write it;
-- the UI shows a lasting warning while the fallback holds any secret, and the daemon
-  logs one at startup (the store gives the warning's text; the protocol field and the
-  daemon's log line come with the wiring);
+- the daemon logs a warning at startup while the fallback holds any secret, naming the
+  file and never a secret (the store gives the warning's text); the UI's lasting
+  warning needs a protocol field that is still to come;
 - secrets move into the keyring, and the file is deleted, once a keyring is reachable;
 - a later setting turns the fallback off, so a machine can be keyring-only.
 

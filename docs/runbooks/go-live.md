@@ -120,7 +120,7 @@ pwsh scripts/smoke.ps1                  # debug build, also on Linux
 | `-NoBuild` | Skip `cargo build -p jstream-daemon -p jstream-cli` |
 | `-Seconds <n>` | How long to stay live. Default 20 |
 | `-SinkPort <port>` | The local sink's port. Default 1935 |
-| `-RtmpUrl <url> -KeyFile <path>` | Stream to a real server instead of the sink (Windows only). Only the key file's path is used |
+| `-RtmpUrl <url> -KeyFile <path>` | Stream to a real server instead of the sink. Only the key file's path is used |
 | `-OutDir <dir>` | Where the run's files go. Default: a new `jstream-smoke-<time>` folder in the temp directory |
 
 What it does, in order, with a `PASS`, `FAIL`, `WARN` or `SKIP` line for each step:
@@ -140,7 +140,7 @@ What it does, in order, with a `PASS`, `FAIL`, `WARN` or `SKIP` line for each st
 9. Checks the events: the output's state changes, and at least one `stats.tick`.
    Fewer than one a second (allowing for start-up), or non-zero drop counters, are a
    warning.
-10. Clears the key from Credential Manager, and checks that the sink received H.264 and
+10. Clears the key from the OS store, and checks that the sink received H.264 and
     AAC lasting at least half the live time.
 11. Ends the daemon. On Linux it sends SIGINT and checks the graceful stop
     (`stopped`, exit 0). On Windows a process without a console can't be sent Ctrl-C,
@@ -151,9 +151,15 @@ macOS. The run's folder keeps the daemon's logs (and any crash report), the snap
 and the sink's recording. It holds the run's token file too, so don't attach the whole
 folder to an issue.
 
-On Linux the run skips the key, the sink and `stats.tick`, and checks the rest:
-start-up, MCP, the output's states, the snapshot and the graceful stop. The daemon only
-steps a placeholder output there, so that is what CI or a Linux machine can run. On
+On Linux the daemon goes live too, so the run is the same as on Windows. The key goes
+to the Secret Service, else to the `0600` file `~/.config/jstream/secrets`
+([ADR-0071](../adr/0071-linux-secret-store.md)), and is cleared at the end. Streaming
+needs an H.264 encoder: VA-API, or Cisco's OpenH264 once it has been downloaded
+([ADR-0061](../adr/0061-source-types-and-decoding-scope-v2.md)). Without one the daemon
+refuses `output.start` with a reason naming both, and the output goes `starting`, then
+`failed`. The run then records the start, the live steps, the events (with those two
+states), `stats.tick` and the sink as `SKIP` with that reason, still takes the snapshot
+and checks the graceful stop, and passes. On
 macOS the daemon goes live, but the script doesn't drive that yet, so it refuses to
 run there with exit 2 ("macOS: going live is checked by hand, #644").
 

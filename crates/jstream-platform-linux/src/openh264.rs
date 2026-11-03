@@ -71,15 +71,25 @@ pub struct OpenH264Pin {
 /// The pinned release: OpenH264 2.6.0 for 64-bit x86 Linux. A newer release reaches
 /// users through a JStream update that moves this pin (ADR-0061).
 ///
-/// The two SHA-256 values are recorded by downloading the file from Cisco and hashing
-/// it, which the `openh264-download` test does (feature `openh264-download`, never run
-/// in CI). Until they are recorded, the store refuses to download.
+/// The two SHA-256 values were recorded by downloading the file from Cisco and hashing
+/// it, which the `openh264-download` test does (feature `openh264-download`; CI's
+/// `e2e-stream` job runs it, and fails when Cisco's file stops matching):
+/// `27ab53323c110b76214c1c72222f459d17febbcd1e252136cadc292b0308d75b` for the download and
+/// `2f0cde7c6a6abcf5cae76942894ea42897fa677bce4ed6c91a24dd1b041d5f04` for the library.
 pub const OPENH264_PIN: OpenH264Pin = OpenH264Pin {
     version: (2, 6, 0),
     url: "https://ciscobinary.openh264.org/libopenh264-2.6.0-linux64.8.so.bz2",
     file_name: "libopenh264-2.6.0-linux64.8.so",
-    archive_sha256: None,
-    library_sha256: None,
+    archive_sha256: Some([
+        0x27, 0xab, 0x53, 0x32, 0x3c, 0x11, 0x0b, 0x76, 0x21, 0x4c, 0x1c, 0x72, 0x22, 0x2f, 0x45,
+        0x9d, 0x17, 0xfe, 0xbb, 0xcd, 0x1e, 0x25, 0x21, 0x36, 0xca, 0xdc, 0x29, 0x2b, 0x03, 0x08,
+        0xd7, 0x5b,
+    ]),
+    library_sha256: Some([
+        0x2f, 0x0c, 0xde, 0x7c, 0x6a, 0x6a, 0xbc, 0xf5, 0xca, 0xe7, 0x69, 0x42, 0x89, 0x4e, 0xa4,
+        0x28, 0x97, 0xfa, 0x67, 0x7b, 0xce, 0x4e, 0xd6, 0xc9, 0x1a, 0x24, 0xdd, 0x1b, 0x04, 0x1d,
+        0x5f, 0x04,
+    ]),
 };
 
 /// Fetches one file over the network: the download's seam, so the store's tests never

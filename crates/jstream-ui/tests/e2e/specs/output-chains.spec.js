@@ -141,15 +141,19 @@ test('filters added to the program output and to an output count on their FX but
   await expect(output).toHaveText('FX 0');
   await expect(program).toHaveText('FX 1');
 
-  // The master's filter opens in the Filter settings dialog on a double-click.
+  // The master's filter opens in the Filters window on a double-click.
   // A double-click's first click toggles its editor in place, which can scroll the
   // panel and move the row from under the second click: the dialog opens all the same
   // (#984).
   await program.click();
   await audioRows(page).first().locator('.filter-row').dblclick();
-  const dialog = page.getByRole('dialog', { name: 'Filter settings' });
-  await expect(dialog.locator('.modal-sub')).toHaveText('Audio filter on “Program output”');
-  await dialog.getByRole('button', { name: 'Remove' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Filters', exact: true });
+  await expect(dialog.locator('.filter-pane-sub')).toHaveText('Audio filter on “Program output”');
+  // The program output's chain stands alone: no scope tabs.
+  await expect(dialog.getByRole('tab')).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Remove', exact: true }).click();
+  await expect(dialog.locator('.filters-window-pane')).toHaveText('No filter selected. Add one on the left.');
+  await dialog.getByRole('button', { name: 'OK' }).click();
   await expect(dialog).toBeHidden();
   await expect(program).toHaveText('FX 0');
 });

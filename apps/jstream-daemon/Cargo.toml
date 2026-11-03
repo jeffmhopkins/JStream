@@ -67,6 +67,13 @@ jstream-youtube.workspace = true
 [target.'cfg(target_os = "macos")'.dependencies]
 jstream-platform-macos.workspace = true
 
+# The live engine on Linux (ADR-0060): ScreenCast portal capture, V4L2 webcams, PipeWire
+# or ALSA audio, VA-API and Cisco's OpenH264 (once the user has downloaded it) for H.264,
+# JStream's AAC-LC encoder, the Vulkan GPU interop, the CLOCK_MONOTONIC clock and the
+# Secret Service key store (ADR-0071).
+[target.'cfg(target_os = "linux")'.dependencies]
+jstream-platform-linux.workspace = true
+
 [dev-dependencies]
 # The tests drive the daemon through the WebSocket client, as the CLI does.
 futures-util.workspace = true
@@ -82,6 +89,3 @@ tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal", "
 # compositor on a software adapter, and Linux's codecs (JStream's AAC-LC encoder, and
 # Cisco's OpenH264 when the harness is given it).
 jstream-render.workspace = true
-
-[target.'cfg(target_os = "linux")'.dev-dependencies]
-jstream-platform-linux.workspace = true
