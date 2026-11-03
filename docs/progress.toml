@@ -956,6 +956,7 @@ title = "3D models with materials and live textures"
 status = "planned"
 prs = [1112]
 note = "ADR-0107 (#1112): a `model` source kind (glTF files and built-in shapes), lit with a studio rig or unlit, drawn through the scene camera with its own depth, filters and effects over its layer, other sources as its texture and reflection, and picking by its 3D bounds"
+needs = ["build"]
 
 [[item]]
 id = "Y4"
@@ -1034,7 +1035,7 @@ id = "F7"
 milestone = "M3"
 title = "Direct NVENC and AMF encoders, if measurements justify them"
 status = "planned"
-prs = [1112]
+prs = []
 note = "ROADMAP M3: measure Media Foundation's hardware encoders against direct NVENC and AMF first, and build the direct ones only where the numbers say so"
 needs = ["build"]
 
