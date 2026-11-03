@@ -189,7 +189,7 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `internal`, and its refused deletes carry no `blockers`, except a folder's, a
   label's and a scene's with keyframe scenes. The folder, label and metadata edits
   ([ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4: `folder.*`, `label.*`,
-  `scene.set_folder`, `scene.set_meta`, `scene.set_options` and `source.set_meta`, in `mock/organise.rs`)
+  `scene.set_folder`, `scene.set_meta`, `scene.set_options`, `scene.set_camera` and `source.set_meta`, in `mock/organise.rs`)
   make the graph's checks with the protocol's own `check_color`, `check_icon`,
   `SceneMeta::problem` and `SceneOptions::problem` (and refuse a keyframe scene's own
   background): a missing parent, folder or label, a folder inside itself, a
@@ -198,6 +198,11 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   [ADR-0078](../../docs/adr/0078-scenes-carry-labels.md)). Reads report the folders, labels and
   each scene's and source's metadata, `source.duplicate` copies a source's, and undoing
   a scene's or source's delete restores its folder and metadata;
+- scene cameras (`scene.set_camera`, in `mock/organise.rs`,
+  [ADR-0094](../../docs/adr/0094-scene-cameras.md)): `SceneCamera::validate` with the
+  graph's fields, an override on a keyframe scene refused while its parent has no
+  camera, and removing a parent's camera dropping its keyframes' overrides, which the
+  inverse restores; `SceneInfo.camera` reports each scene's own;
 - keyframe scenes (`mock/keyframe.rs`, [ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)):
   `scene.create_variant` (refused on a keyframe scene), placement edits addressed to a
   keyframe scene, which write its override of an item in its parent's tree (its own,

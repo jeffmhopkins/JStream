@@ -35,6 +35,12 @@ and calls this crate.
 - A canvas size (`jstream-media`'s `FrameSize`: both dimensions non-zero) and a
   straight-alpha sRGB clear colour.
 - Items in stacking order, bottom first, matching `Scene::items`.
+- An item may carry a **camera** (`Item.camera`, a `SceneCamera`,
+  [ADR-0094](../../docs/adr/0094-scene-cameras.md)): it then sits in its scene's 3D
+  space by its geometry and is seen through that camera, always by the 3D path, its own
+  `perspective_px` ignored. A legacy placement under a camera is drawn as before and
+  sorts at the canvas centre's depth. Items sort together only within one
+  `Item.depth_run` (`0` but for a stinger's items).
 - Each item places one image with one of
   [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)'s two placement forms:
   - a **geometry** (decisions 2 and 3): a box on the canvas. The image is cropped in
@@ -284,7 +290,11 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    into the backdrop, a grow-only `Rgba16Float` texture, and a new pass draws the item,
    whose `fs_<mode>` loads the backdrop at its own pixel and writes the W3C composite
    with blending off, and the items after it (ADR-0082). No depth buffer:
-   stacking order is draw order. No cull, so a negative scale still draws (it flips
+   stacking order is draw order, except that `prepare` sorts each run of consecutive
+   items that share one camera with `depth_sort` on and one `Item.depth_run` (a
+   transition gives a stinger's items their own), far to near by the depth of their
+   box centre along the viewing axis (`CameraView::depth_of`), stacking order breaking
+   ties (ADR-0094 decision 4). No cull, so a negative scale still draws (it flips
    the quad). The viewport clips to the canvas.
 4. **Resolve.** A second pass draws one fullscreen triangle into the sRGB target with
    blending off. It `textureLoad`s the FP16 texel, un-premultiplies (zero RGB where
@@ -434,6 +444,17 @@ corner for a sharp one), and that point is mapped back into the plane with
 `unplace` and `drawn_vertex`, so its `w` and UV stay exact. A point that can't be
 mapped back, past the near plane, keeps the unpushed vertex. An item seen edge-on or
 wholly behind the viewer draws nothing.
+
+**Through a camera.** An item with `camera` set takes this path whatever its angles:
+`prepare` builds the camera's `CameraView` for the canvas, again only when the camera
+changes from one item to the next, and `place` calls the `_seen` forms, `drawn_polygon_seen`, `unplace_seen` and
+`drawn_vertex_seen`, which place the box by its pose in the scene's space
+([ADR-0094](../../docs/adr/0094-scene-cameras.md)). The near plane, edge push and
+coverage are the same. An item the camera can't place, such as a box far past the
+drawable bound seen from close by, draws nothing rather than failing the frame, and a
+vertex the edge push can't move stays where it was. A camera that `SceneCamera::view`
+refuses makes the render `RenderError::Invalid` (`camera`), as a bad opacity does; the
+engine only passes cameras the graph accepted.
 
 **Legacy.** `place` asks [`legacy_quad`](../jstream-protocol/src/geometry.rs) for the
 quad. For a source of size `(sw, sh)`, the image's extent, and crop `(left, top, right, bottom)` that
@@ -835,7 +856,21 @@ p99 error per channel in sRGB 8-bit steps. On lavapipe:
 | D cropped, a smaller D cropped just past a texel ring | edge | 5 | 2.8 | 6.6 with the chain built from the whole source, 8.2 without the UV clamp either |
 | E, two items turned through each other | all | 2 | 0.53 | 15 affinely |
 
-The p99 limit is 40 throughout. C's pattern is much finer than the spike's (one-texel
+Three more run the same comparison through a scene camera
+([ADR-0094](../../docs/adr/0094-scene-cameras.md)), the reference mapping each sample
+back with `unplace_seen`:
+
+| Camera test | Pixels | Limit (mean, p99) | Measured |
+|---|---|---|---|
+| the framing camera: two flat items, one rotated 20°, against the 2D reference, and fewer than 40 interior pixels off the 2D draw | interior | the 2D draw's own + 1.5, + 25 (at least 3, 40) | 2.31, 21.1 (the 2D draw 3.47, 41.8; Metal 3.46, 41.8) |
+| an off-axis set, a back wall and a floor through a 50° camera, 16² samples | interior | 6, 40 | 3.57, 29.2 |
+| the same set | all | 6, 60 | 0.57, 14.3 |
+
+The set's floor is minified toward the horizon as in C, so its limit is C's kind. A
+third checks the draw order: a far item stacked above a near one is drawn under it
+with `depth_sort` on, and over it with it off.
+
+The p99 limit is 40 throughout the S5 table. C's pattern is much finer than the spike's (one-texel
 rings every 16 texels), which is why its mean is higher than the spike's 1.16. Further
 tests check:
 - that an upload's chain is rebuilt after `rewrite_rgba8`;

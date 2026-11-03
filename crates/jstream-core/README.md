@@ -236,6 +236,10 @@ state machine. Contents:
   that shows one of those scenes plans it again in full, chain and boxes, since the
   mixes are planned after the transition (#961). A switch mid-Move
   holds the children where they are on screen and moves them on from there.
+  A scene with a camera ([ADR-0094](../../docs/adr/0094-scene-cameras.md)) is planned
+  with it on its pass (`Pass.camera`, the variant's override or its parent's, a live
+  value winning), and every item it draws carries it to the compositor; a Move between
+  two 3D scenes moves the camera too (*Transitions* in [Design](#design)).
   `Shot::chain_cost` is what its
   scene chains, item effects and, for the running outputs, output stage add to each
   frame, for `stats.tick`'s `chains`.
@@ -928,6 +932,27 @@ two sides planned for it, with their chains and boxes, are dropped when no track
 them; a switch mid-Move holds them where `on_screen` finds them. Stagger delays only
 the incoming items (§3). Audio does not follow a transition
 yet (D29).
+
+Cameras ([ADR-0094](../../docs/adr/0094-scene-cameras.md) decision 7): each pass of a
+scene carries the cameras its effective camera comes from (its own or a keyframe
+variant's override, and a variant's parent's) as `Pass.camera`, and live
+`scene.set_camera` values resolve through them as committed ones do
+(`LiveParams::camera`): a live removal of a variant's override falls back to its
+parent's camera, and a live removal of the parent's makes its variants 2D. The switch records the camera on screen when it starts
+(`Running.from_camera`, which a switch mid-Move takes from the running Move). A Move
+between two 3D scenes interpolates the camera with the Move's own timing
+(`lerp_camera`) and draws both sides' tracks through it. A Move between a 3D scene and
+a 2D one has nothing to pair, so it runs as a Fade of the same duration, and a Fade
+keeps each side's own camera on its items. A stinger's items are seen through their
+own scene's camera (`TrackCameras.overlay`), none for a 2D stinger scene, in a
+`depth_run` of their own (one past every run held from the screen,
+`TrackCameras.overlay_run`), so they sort among themselves and stay over the scenes
+under them and over a stinger they cut short. A switch that cuts a transition short takes what is on screen with the
+camera each item was seen through and the depth run it sorted in (`Seen::Held`): it
+leaves through that camera, a stinger's items still over what they covered, and only a
+screen seen through one camera (a Move cut short) moves it toward the new scene's, for
+every track; one seen through several (a Fade or stinger between cameras) makes the
+switch a Fade (`transition::shared_camera`).
 
 ### No privacy screen
 

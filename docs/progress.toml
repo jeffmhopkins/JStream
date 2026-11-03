@@ -946,8 +946,8 @@ id = "3D2"
 milestone = "M3"
 title = "3D scenes with a camera"
 status = "review"
-prs = [1038]
-note = "ADR-0094 (#1038): items placed in one 3D space per scene and seen through the scene's camera; then the protocol, graph, render and core parts, and the UI's camera fields and orbit drag"
+prs = [1038, 1044]
+note = "ADR-0094 (#1038): items placed in one 3D space per scene and seen through the scene's camera; the engine half, scene.set_camera, the camera drawn through and sorted far to near, and a Move moving the camera (#1044, protocol 0.70); then the UI's camera fields and orbit drag"
 needs = ["build"]
 
 [[item]]
