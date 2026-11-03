@@ -352,7 +352,7 @@ impl ModelRuntime {
                 m.emissive[0],
                 m.emissive[1],
                 m.emissive[2],
-                0.0,
+                if m.normal_texture.is_some() { 1.0 } else { 0.0 },
                 m.metallic,
                 m.roughness,
                 m.normal_scale,

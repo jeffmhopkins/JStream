@@ -462,9 +462,10 @@ fn a_model_from_another_compositor_is_refused() {
 }
 
 /// ADR-0107 decisions 2 and 3: a normal map's green channel tilts the surface up its
-/// texture, toward the key light above, whether or not the placement mirrors the model.
+/// texture, toward the key light above, whether or not the placement mirrors the model;
+/// a double-sided surface seen from behind is turned over whole, its tilt with it.
 #[test]
-fn golden_model_a_normal_map_tilts_the_same_way_when_mirrored() {
+fn golden_model_a_normal_map_tilts_the_same_way_mirrored_and_from_behind() {
     let Some(mut opened) = open() else {
         return;
     };
@@ -472,6 +473,7 @@ fn golden_model_a_normal_map_tilts_the_same_way_when_mirrored() {
         .model(Material {
             base_color: [0.5, 0.5, 0.5, 1.0],
             roughness: 0.9,
+            double_sided: true,
             ..Material::default()
         })
         .expect("the plane builds");
@@ -507,6 +509,24 @@ fn golden_model_a_normal_map_tilts_the_same_way_when_mirrored() {
         plain.abs_diff(flipped) <= 6,
         "{plain} against {flipped} mirrored"
     );
+    // Turned to show its back, the whole surface is turned over: a bump tilted up the
+    // front tilts down at the back, so the back of `up` is lit like the front of `down`.
+    let mut behind = geometry;
+    behind.turn_deg = finite(180.0);
+    let back_up = luma(&draw(compositor, &up, behind, None, Lighting::Studio));
+    let back_down = luma(&draw(compositor, &down, behind, None, Lighting::Studio));
+    assert!(
+        back_up.abs_diff(away) <= 6,
+        "back of up {back_up}, front of down {away}"
+    );
+    assert!(
+        back_down.abs_diff(plain) <= 6,
+        "back of down {back_down}, front of up {plain}"
+    );
+    // With no normal map the back of a flat plane is lit as its front is.
+    let front = luma(&draw(compositor, &plane, geometry, None, Lighting::Studio));
+    let back = luma(&draw(compositor, &plane, behind, None, Lighting::Studio));
+    assert!(front.abs_diff(back) <= 6, "front {front}, back {back}");
 }
 
 /// Layers of different sizes each get a depth target of their own size: a pass's
