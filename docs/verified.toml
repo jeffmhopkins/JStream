@@ -4500,7 +4500,7 @@ stamp = { hash = "b3:985a99a13e4ba789", by = "agent:obs-ui-thread", note = "The 
 stamp = { hash = "b3:707b0d04d935b8ab", by = "agent:obs-ui-thread", note = "Modal gained the optional undimmed prop (a clear backdrop); the paragraph says the Filters window opens over an undimmed canvas, which matches." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/dock.rs"]
-stamp = { hash = "b3:211656bfb8cb9eaa", by = "agent:obs-ui-thread", note = "Re-read Scenes and sources: the panels are Scenes and Sources (the prototype's Scene objects), each with ToolBar (add, remove, properties, filters, up, down) sticky at the foot; dock list says Sources; the rest holds against the diff." }
+stamp = { hash = "b3:367da9f5cc37e69d", by = "agent:obs-ui-thread", note = "dock.rs: the Editing layout's right zone is now one full-height group with the Inspector, Filters and Transform as tabs (Inspector shown) in place of the Inspector over a Filters and Transform group; the design section's only Editing-layout detail (Transitions beside Outputs under the canvas) is unchanged, so it holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/header.rs"]
 stamp = { hash = "b3:612f14ba7d70d6fe", by = "agent:bus-outputs", note = "Outputs bullet now says the panel reads buses and each card's Audio select sends output.set_audio_buses, titled Applies from its next start while running, none for a virtual camera; checked against outputs.rs" }
@@ -4659,7 +4659,7 @@ stamp = { hash = "b3:985a99a13e4ba789", by = "agent:obs-ui-thread", note = "Re-r
 stamp = { hash = "b3:707b0d04d935b8ab", by = "agent:obs-ui-thread", note = "Modal gained the optional undimmed prop (a clear backdrop, for the Filters window); the section's 'Modal, the modal dialog frame' still holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/dock.rs"]
-stamp = { hash = "b3:211656bfb8cb9eaa", by = "agent:obs-ui-thread", note = "Re-read: Panels now names tree.rs's tool bar and the arrows' edits tested natively in scenes.rs; icons.rs gains the tool bars' icons; the panel is Sources everywhere (dock title, labels, clipboard docs)." }
+stamp = { hash = "b3:367da9f5cc37e69d", by = "agent:obs-ui-thread", note = "dock.rs: the Editing layout's right zone is now one full-height group with the Inspector, Filters and Transform as tabs (Inspector shown) in place of the Inspector over a Filters and Transform group; the purpose section's account of dock.rs (Dock, zones, groups, saved layouts with Editing and Live built in) names no group layout, so it holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/header.rs"]
 stamp = { hash = "b3:612f14ba7d70d6fe", by = "agent:bus-outputs", note = "outputs.rs adds the Audio select and bus_edit; header.rs and filters.rs only fill OutputInfo.audio_buses in fixtures; the purpose still holds" }
@@ -4809,10 +4809,10 @@ stamp = { hash = "b3:8eaa166c878b6436", by = "agent:claude-crop-ui", note = "Re-
 stamp = { hash = "b3:4f09516304bbf2e7", by = "agent:obs-ui-thread", note = "docking.spec.js: the Left sidebar's tabs are now Scenes and Sources, after PanelId::Objects' new label; it uses the existing fixtures, so the harness holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/effects.spec.js"]
-stamp = { hash = "b3:331b44d90198d842", by = "agent:obs-ui-thread", note = "The effects spec now finds the Filters window by its exact name and reads .filter-pane-sub; it uses the harness's fixtures as before, so the harness section holds." }
+stamp = { hash = "b3:789dfc836978a2c3", by = "agent:obs-ui-thread", note = "With Filters now a tab behind the Inspector in the Editing layout, the filter, effect and scene-filter tests show it with the existing showPanel fixture after connecting, and the Transform test shows Transform again after Add source showed the Inspector; no new fixture, so the harness section holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/filters.spec.js"]
-stamp = { hash = "b3:1341065eee159628", by = "agent:obs-ui-thread", note = "The filters spec now covers the Filters window (head button, scope tabs, row selection, Remove staying open), Cancel after the window's own list edits and an Add filter from it, and Cancel on a filter added from the panel; all with the existing fixtures (connect, describeKinds, rev, showPanel), so the harness section holds." }
+stamp = { hash = "b3:88ad1c4c7eb0fd20", by = "agent:obs-ui-thread", note = "With Filters now a tab behind the Inspector in the Editing layout, the filter, effect and scene-filter tests show it with the existing showPanel fixture after connecting, and the Transform test shows Transform again after Add source showed the Inspector; no new fixture, so the harness section holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/folders.spec.js"]
 stamp = { hash = "b3:1cdd53ac5e952fe6", by = "agent:obs-ui-thread", note = "folders.spec.js: the drag helper scrolls both rows clear of the sticky tool bar, and the panel right-click lands 10px above .tool-bar, since the bar opens no menu; both are in-spec, so no fixture or daemon change and the harness holds." }
@@ -4857,7 +4857,7 @@ stamp = { hash = "b3:1fcf0952741df4ac", by = "agent:ui-parity", note = "Re-read:
 stamp = { hash = "b3:06540ca412dbdd2b", by = "agent:obs-ui-thread", note = "properties.spec.js only adds a test using the existing describeKinds refuse hook to record requests; no fixture or mock-daemon change, so the harness section holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/scene-filters.spec.js"]
-stamp = { hash = "b3:0b51d78a47c23360", by = "agent:scene-filters", note = "#897 review N4: scene-filters.spec.js selects the Backdrop before the margin's Edit scene filters…; same seed and fixtures" }
+stamp = { hash = "b3:d08fd2eb9a4c024e", by = "agent:obs-ui-thread", note = "With Filters now a tab behind the Inspector in the Editing layout, the filter, effect and scene-filter tests show it with the existing showPanel fixture after connecting, and the Transform test shows Transform again after Add source showed the Inspector; no new fixture, so the harness section holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/scene-refs.spec.js"]
 stamp = { hash = "b3:30c9d70da9b2b731", by = "agent:ui-parity", note = "scene-refs.spec.js uses connect, describeKinds and showPanel from fixtures.js as described, with a scene_mask descriptor whose scene param the Add filter dialog fills; no fixture or daemon change, so the harness text holds." }
@@ -4875,7 +4875,7 @@ stamp = { hash = "b3:8d7ee11b9ff325d1", by = "agent:claude", note = "Re-read for
 stamp = { hash = "b3:00887e9e0f4637d3", by = "agent:obs-ui-thread", note = "tool-bars.spec.js (new): uses connect and openAddSource, the latter on an empty scene, which is why openAddSource now anchors on the .placeholder; the keyframe test makes its keyframe through the scene menu, so no mock-daemon change. The harness holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/transform.spec.js"]
-stamp = { hash = "b3:285e4d0549930d74", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against the #946 change to transform.spec.js (a selectOnly helper that waits for the row's selected class, the one-item summary and a single-box readout before reading the readout): harness fixtures unchanged; the Transform entry's coverage (summary, buttons, Stretch undo, two-item Selection/Distribute, Match giving both the primary's size) still holds." }
+stamp = { hash = "b3:08df4ff63f955950", by = "agent:obs-ui-thread", note = "With Filters now a tab behind the Inspector in the Editing layout, the filter, effect and scene-filter tests show it with the existing showPanel fixture after connecting, and the Transform test shows Transform again after Add source showed the Inspector; no new fixture, so the harness section holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/transitions.spec.js"]
 stamp = { hash = "b3:48bc8bdf021bdf82", by = "agent:ui-parity", note = "Re-read: the harness (mock engine, fixtures, how to run) is unchanged by the checks added to transitions.spec.js; the mock stores scene options, background included." }
@@ -4890,7 +4890,7 @@ stamp = { hash = "b3:e7d2b3325e5ac572", by = "agent:a2656", note = "Dependabot #
 stamp = { hash = "b3:063a37f95f399bff" }
 
 ["CRATE-jstream-ui-e2e#tests"."body"]
-stamp = { hash = "b3:e2b7012cfafff46a", by = "agent:obs-ui-thread", note = "Added to the Properties dialog bullet the new properties.spec.js test: live.set of source.set_settings with rev unchanged, Cancel sends live.cancel, OK's ends_gesture batch is one edit, the reopened dialog shows the value." }
+stamp = { hash = "b3:11af03699130f445", by = "agent:obs-ui-thread", note = "The Docking entry now says the Editing layout has the Inspector, Filters and Transform as tabs of one group on the right, as docking.spec checks." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/canvas.spec.js"]
 stamp = { hash = "b3:0b33fafc1e51563f", by = "agent:claude", note = "canvas.spec.js's drag and nudge specs now poll the revision until it reaches startRev + 1 and startRev + 3 rather than reading it once (#848). The assertions are as strict as before, so the Canvas bullet (one edit ending the gesture, Ctrl+Z and Ctrl+Shift+Z reverse it, nudges and Ctrl+Z) still holds." }
@@ -4911,10 +4911,10 @@ stamp = { hash = "b3:8eaa166c878b6436", by = "agent:claude-crop-ui", note = "Re-
 stamp = { hash = "b3:4f09516304bbf2e7", by = "agent:obs-ui-thread", note = "docking.spec.js: the Left sidebar's tabs are now Scenes and Sources, after PanelId::Objects' new label; it uses the existing fixtures, and the Tests list, which names no Scene objects any more, holds." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/effects.spec.js"]
-stamp = { hash = "b3:331b44d90198d842", by = "agent:obs-ui-thread", note = "Checked the effects entry: an effect with four settings opens the Filters window on it with Effect on “Backdrop”, as the spec now asserts through .filter-pane-sub." }
+stamp = { hash = "b3:789dfc836978a2c3", by = "agent:obs-ui-thread", note = "Only showPanel calls were added (Filters after connect in the filter, effect and scene-filter tests; Transform again in the align test after Add source showed the Inspector); what each test checks is unchanged, so its entry holds." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/filters.spec.js"]
-stamp = { hash = "b3:1341065eee159628", by = "agent:obs-ui-thread", note = "Checked the filters entry against the spec as this PR leaves it: the Filters window on a double-click and from the head (tabs, row selection, empty Scene tab, Remove staying open), Cancel undoing the list's eye and × and dropping a filter added from the window while keeping those changes, and Cancel on a Blur added from the panel putting back its size and switch; the late refusal after a cancelled window." }
+stamp = { hash = "b3:88ad1c4c7eb0fd20", by = "agent:obs-ui-thread", note = "Only showPanel calls were added (Filters after connect in the filter, effect and scene-filter tests; Transform again in the align test after Add source showed the Inspector); what each test checks is unchanged, so its entry holds." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/folders.spec.js"]
 stamp = { hash = "b3:1cdd53ac5e952fe6", by = "agent:obs-ui-thread", note = "folders.spec.js: the drag helper scrolls both rows clear of the sticky tool bar, and the panel right-click lands 10px above .tool-bar, since the bar opens no menu; both are in-spec, so no fixture or daemon change and the harness holds." }
@@ -4959,7 +4959,7 @@ stamp = { hash = "b3:1fcf0952741df4ac", by = "agent:ui-parity", note = "The Proj
 stamp = { hash = "b3:06540ca412dbdd2b", by = "agent:obs-ui-thread", note = "Added to the Properties dialog bullet the new properties.spec.js test: live.set of source.set_settings with rev unchanged, Cancel sends live.cancel, OK's ends_gesture batch is one edit, the reopened dialog shows the value." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/scene-filters.spec.js"]
-stamp = { hash = "b3:0b51d78a47c23360", by = "agent:scene-filters", note = "#897 review N4: the Scene filters bullet says the margin entry shows the scene's chain in place of the selected item's, which the spec now checks" }
+stamp = { hash = "b3:d08fd2eb9a4c024e", by = "agent:obs-ui-thread", note = "Only showPanel calls were added (Filters after connect in the filter, effect and scene-filter tests; Transform again in the align test after Add source showed the Inspector); what each test checks is unchanged, so its entry holds." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/scene-refs.spec.js"]
 stamp = { hash = "b3:30c9d70da9b2b731", by = "agent:ui-parity", note = "Added the Scene-input rows entry for scene-refs.spec.js: a mask on Backdrop using Intro shows a child row with the purple badge and its tooltip, the caret folds it and brings it back, and a click selects Intro." }
@@ -4977,7 +4977,7 @@ stamp = { hash = "b3:8d7ee11b9ff325d1", by = "agent:claude", note = "Re-read for
 stamp = { hash = "b3:00887e9e0f4637d3", by = "agent:obs-ui-thread", note = "tool-bars.spec.js (new): uses connect and openAddSource, the latter on an empty scene, which is why openAddSource now anchors on the .placeholder; the keyframe test makes its keyframe through the scene menu, so no mock-daemon change. The Tool bars bullet now lists the keyframe test and the arrows turning off at the stack ends." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/transform.spec.js"]
-stamp = { hash = "b3:285e4d0549930d74", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against the #946 change to transform.spec.js (a selectOnly helper that waits for the row's selected class, the one-item summary and a single-box readout before reading the readout): harness fixtures unchanged; the Transform entry's coverage (summary, buttons, Stretch undo, two-item Selection/Distribute, Match giving both the primary's size) still holds." }
+stamp = { hash = "b3:08df4ff63f955950", by = "agent:obs-ui-thread", note = "Only showPanel calls were added (Filters after connect in the filter, effect and scene-filter tests; Transform again in the align test after Add source showed the Inspector); what each test checks is unchanged, so its entry holds." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/transitions.spec.js"]
 stamp = { hash = "b3:48bc8bdf021bdf82", by = "agent:ui-parity", note = "Scene transitions bullet: the Properties test sets a background with alpha and unchecks Show in multiview and Include its audio when nested, then reads all three back after OK, the swatch without the alpha, as transitions.spec.js does. Merged main's #974 (plugin.list, 0.58), which main's text covers." }
@@ -5346,7 +5346,7 @@ stamp = { hash = "b3:ceed924dbd7c8fb7", by = "agent:ui-parity", note = "Added a 
 stamp = { hash = "b3:d18db666e0b8c7d1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against desktop Usage's change: only the crash-reports bullet gained the pack-load exception (#1001 N3); this section's steps and claims are unaffected (the PR also rewords count_sent docs and the receiver test)" }
 
 ["GETTING-STARTED#live"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:3af2aadc86c41770", by = "agent:obs-ui-thread", note = "UI-FEATURES changed only in DL-02 (Properties applies as you edit). This section doesn't describe the Properties dialog's apply behaviour, so it holds." }
+stamp = { hash = "b3:4f1e2ae1f59f69bc", by = "agent:obs-ui-thread", note = "Re-read against DK-08's change (the Editing layout's Inspector, Filters and Transform as tabs of one group); this section names the Inspector and Transform panels but not where they sit, so it holds. | merge: The merge brought #1022's DL-06 addition (new texts start bold with a shadow; Backdrop and Shape listed under Generated). This section's examples of source types aren't a full list and name no text defaults, so it holds. | kept from the merged side: Whole PR: UI-FEATURES' DL-06 note (bold text start, Backdrop, Shape) doesn't touch the Outputs steps. merge: #1023's context menus and #1024's search box don't either. | merge: #1026's DL rows don't touch the Outputs steps. | kept from the merged side: Re-read against UI-FEATURES' round 1 edits (keyframe and stack-end states of the tool bars, Sources naming in SC-08, SC-09, OB-07): this section's steps still match; nothing it says changed. | kept from the merged side: Re-read against UI-FEATURES' CM-02 to CM-04 additions (Visible, Copy/Paste, Transform and Blending submenus, scene Show in multiview, Rename): this section's going-live steps use none of them; holds. | kept from the merged side: Re-read against DL-06's search and description notes: the going-live steps don't use the Add source dialog; holds. | kept from the merged side: Re-read against this PR's UI-FEATURES changes: the Filters window replacing the Filter settings dialog (DL-04, DL-05, FL rows), the undimmed backdrop (DL-01) and the Add source search clearing the name and announcing no match (DL-06). This section's steps name none of those details, so they hold." }
 
 ["GETTING-STARTED#record"."body"]
 stamp = { hash = "b3:b21c49ef28545229", by = "agent:wave-owner", note = "merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: Recording (MP4) output with a file path, the header's Record/Stop recording (HD-07)" }
@@ -5355,7 +5355,7 @@ stamp = { hash = "b3:b21c49ef28545229", by = "agent:wave-owner", note = "merge: 
 stamp = { hash = "b3:d18db666e0b8c7d1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against desktop Usage's change: only the crash-reports bullet gained the pack-load exception (#1001 N3); this section's steps and claims are unaffected (the PR also rewords count_sent docs and the receiver test)" }
 
 ["GETTING-STARTED#record"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:3af2aadc86c41770", by = "agent:obs-ui-thread", note = "UI-FEATURES changed only in DL-02 (Properties applies as you edit). Nothing here depends on it." }
+stamp = { hash = "b3:4f1e2ae1f59f69bc", by = "agent:obs-ui-thread", note = "Re-read against DK-08's change (the Editing layout's Inspector, Filters and Transform as tabs of one group); this section names the Inspector and Transform panels but not where they sit, so it holds. | merge: The merge brought #1022's DL-06 addition (new texts start bold with a shadow; Backdrop and Shape listed under Generated). This section's examples of source types aren't a full list and name no text defaults, so it holds. | kept from the merged side: Whole PR: UI-FEATURES' DL-06 note (bold text start, Backdrop, Shape) doesn't touch the Recording steps. merge: #1023's context menus and #1024's search box don't either. | merge: #1026's DL rows don't touch the Recording steps. | kept from the merged side: Re-read against UI-FEATURES' round 1 edits (keyframe and stack-end states of the tool bars, Sources naming in SC-08, SC-09, OB-07): this section's steps still match; nothing it says changed. | kept from the merged side: Re-read against UI-FEATURES' CM-02 to CM-04 additions: the recording steps use none of the menu entries; holds. | kept from the merged side: Re-read against DL-06's search and description notes: the recording steps don't use the Add source dialog; holds. | kept from the merged side: Re-read against this PR's UI-FEATURES changes: the Filters window replacing the Filter settings dialog (DL-04, DL-05, FL rows), the undimmed backdrop (DL-01) and the Add source search clearing the name and announcing no match (DL-06). This section's steps name none of those details, so they hold." }
 
 ["GETTING-STARTED#requirements"."body"]
 stamp = { hash = "b3:33e39447d2457615", by = "agent:wave-owner", note = "merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: Windows 11 x64 build 22000 per README Platforms (fact min-windows-build), D3D12, Media Feature Pack on N editions (the desktop app's can't-start window), WebView2, no installer or admin per ADR-0066" }
@@ -5373,7 +5373,7 @@ stamp = { hash = "b3:67130f6f84b33399", by = "agent:wave-owner", note = "merge: 
 stamp = { hash = "b3:7c29fe1c4dc40ba0", by = "agent:claude", note = "Whole PR: step 2's type list names text starting bold with a soft shadow, the generated backdrop and shapes. merge: #1023 added the Copy and Paste wording on a source's menu, Copy then Paste scene, a source's right-click menu for Pop out, and Show in multiview on a scene's menu, after the steps; #1024 added the search box in step 2. Both are kept. No timer. | kept from the merged side: Re-read: steps 1 and 2 now point to the + under Scenes and Sources, with the right-click menus as the other way; the rest matches the UI. | kept from the merged side: Now names the source menu's Copy and Paste and the scene menu's Copy and Paste scene beside Ctrl+C/V, says a source's right-click menu instead of an object's, and that Show in multiview is also on a scene's right-click menu, matching CM-02 and CM-03. | kept from the merged side: Step 2 now says the Add source dialog's search box can find a type, per DL-06's new note; the rest of the section holds." }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:3af2aadc86c41770", by = "agent:obs-ui-thread", note = "UI-FEATURES DL-02 now says the Properties dialog applies live settings as you edit. This section says a new source's properties open so you can choose; that still holds." }
+stamp = { hash = "b3:4f1e2ae1f59f69bc", by = "agent:obs-ui-thread", note = "Re-read against DK-08's change (the Editing layout's Inspector, Filters and Transform as tabs of one group); this section names the Inspector and Transform panels but not where they sit, so it holds. | merge: The merge brought #1022's DL-06 addition (new texts start bold with a shadow; Backdrop and Shape listed under Generated). This section's examples of source types aren't a full list and name no text defaults, so it holds. | kept from the merged side: Whole PR: step 2's type list names text starting bold with a soft shadow, the generated backdrop and shapes. merge: #1023 added the Copy and Paste wording on a source's menu, Copy then Paste scene, a source's right-click menu for Pop out, and Show in multiview on a scene's menu, after the steps; #1024 added the search box in step 2. Both are kept. No timer. | merge: #1026's DL rows (the Filters window) don't touch steps 1 and 2; this PR's type list and the earlier merges' wording hold. | kept from the merged side: Re-read against UI-FEATURES' round 1 edits (keyframe and stack-end states of the tool bars, Sources naming in SC-08, SC-09, OB-07): this section's steps still match; nothing it says changed. | kept from the merged side: Now names the source menu's Copy and Paste and the scene menu's Copy and Paste scene beside Ctrl+C/V, says a source's right-click menu instead of an object's, and that Show in multiview is also on a scene's right-click menu, matching CM-02 and CM-03. | kept from the merged side: Step 2 now says the Add source dialog's search box can find a type, per DL-06's new note; the rest of the section holds. | kept from the merged side: Re-read against this PR's UI-FEATURES changes: the Filters window replacing the Filter settings dialog (DL-04, DL-05, FL rows), the undimmed backdrop (DL-01) and the Add source search clearing the name and announcing no match (DL-06). This section's steps name none of those details, so they hold." }
 
 ["GETTING-STARTED#trouble"."body"]
 stamp = { hash = "b3:cdea88ae9fde1c6f", by = "agent:wave-owner", note = '''merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: logs\jstream-desktop.log and cef.log, crash-*.txt with secrets redacted and never uploaded (R-SEC-004, desktop Usage), issue and private-advisory links (registered in external.toml), SECURITY.md''' }
@@ -5811,13 +5811,13 @@ stamp = { hash = "b3:8be198079aece1d0", by = "agent:obs-ui-thread", note = "DL-0
 stamp = { hash = "b3:4b8b8e0611017176", by = "agent:obs-ui-thread", note = "Edited DL-02's note for source_properties.rs: live settings apply as you edit, OK ends the gesture as one undo step, Cancel/Escape/backdrop cancel it (ADR-0091, 0.67). Status stays done." }
 
 ["UI-FEATURES#docking"."body"]
-stamp = { hash = "b3:8b4d2f99b1140095", by = "agent:obs-ui-thread", note = "Re-read: the dock lists Sources (the prototype's Scene objects); DK-07 and DK-08 say Sources; dock.rs only renames the title." }
+stamp = { hash = "b3:58b68f0c40555406", by = "agent:obs-ui-thread", note = "DK-08's notes now say Editing puts the Inspector, Filters and Transform as tabs of one full-height group on the right, Inspector shown, unlike the prototype, so the Filters panel gets the whole column." }
 
 ["UI-FEATURES#docking"."file:crates/jstream-ui/src/app.rs"]
 stamp = { hash = "b3:2fdf050b29131b69", by = "agent:obs-ui-thread", note = "app.rs only swapped the mount order of FilterSettings and AddFilter so the Add filter dialog draws over the Filters window; this section's header and docking rows are untouched." }
 
 ["UI-FEATURES#docking"."file:crates/jstream-ui/src/dock.rs"]
-stamp = { hash = "b3:211656bfb8cb9eaa", by = "agent:obs-ui-thread", note = "Re-read: the dock lists Sources (the prototype's Scene objects); DK-07 and DK-08 say Sources; dock.rs only renames the title." }
+stamp = { hash = "b3:367da9f5cc37e69d", by = "agent:obs-ui-thread", note = "editing() now builds the right zone as one group [Inspector, Filters, Transform] with weight 1; checked DK-08 says so and that DK-01 to DK-07 and DK-09 don't depend on the old split." }
 
 ["UI-FEATURES#docking"."file:crates/jstream-ui/src/workspace.rs"]
 stamp = { hash = "b3:c2d21e7dc85691ba", by = "agent:claude-wa1", note = "The docking intro now says the Plugins section sits under the pairing panel in the Inspector, as workspace.rs places it; no panel or layout changed. | merge: #969 (pop out a source alone: preview.subscribe's source_id, 0.56) and #972 (per-output stats in stats.tick and the Stream stats panel, 0.57) added the source pop-out and the Stream stats panel (workspace.rs's Stats panel, style.css); the Inspector still shows Pairing and Plugins, and the Plugins text still holds. | kept from the merged side: intro and DK-08: Stream stats is built in part and in the Live layout as the first of three tabs with Outputs and Agent activity; Live chat still left out; dock.rs and workspace.rs match" }
@@ -5916,7 +5916,7 @@ stamp = { hash = "b3:6e0c63f881116099", by = "agent:obs-ui-thread", note = "Re-r
 stamp = { hash = "b3:f8ece94ba976399e", by = "agent:obs-ui-thread", note = "DL-02 stays done and no row's status changed, so the counts hold." }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#docking"]
-stamp = { hash = "b3:8b4d2f99b1140095", by = "agent:obs-ui-thread", note = "Re-read: Scenes 11 rows (SC-11 added), Sources panel 10 rows (OB-10 added), all built; other counts unchanged." }
+stamp = { hash = "b3:58b68f0c40555406", by = "agent:obs-ui-thread", note = "DK-08 changed wording only (the Editing layout's right column is one tab group); it stays partial, so the Docking counts (10: 9 done, 1 partial) hold." }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#filters"]
 stamp = { hash = "b3:cd30ef29cc3865e0", by = "agent:obs-ui-thread", note = "Dialogs and Filters changed wording only (the Filters window replacing the settings dialog); no row changed status, so the counts (Dialogs 8: 6 done, 1 partial, 1 blocked; Filters 10 done) hold." }

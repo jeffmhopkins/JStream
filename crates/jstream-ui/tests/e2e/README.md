@@ -139,8 +139,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   hovering the chart's right edge reads the newest sample "now" and further left the
   one before "1 s ago", gone when the pointer leaves; a stop puts it back to READY and
   Waiting.
-- **Docking** (`docking.spec.js`): the Editing layout's zones (Filters and Transform as
-  tabs under the Inspector, Transitions as a tab beside Outputs), with empty zones hidden; the View
+- **Docking** (`docking.spec.js`): the Editing layout's zones (the Inspector, Filters and
+  Transform as tabs of one group on the right, Transitions as a tab beside Outputs), with empty zones hidden; the View
   menu hiding and adding a panel at the end of its home zone, and the layout marked
   "(modified)"; dragging a tab onto a tab strip groups it, and onto an empty zone,
   which shows while dragging, docks it there; a lone panel collapses by its title,

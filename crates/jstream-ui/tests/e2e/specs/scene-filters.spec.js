@@ -36,6 +36,7 @@ const KINDS = [
 test('with no item selected the panel shows the scene\'s chain, and a filter added there is the scene\'s', async ({ page, daemon }) => {
   await describeKinds(page, KINDS);
   await connect(page, daemon);
+  await showPanel(page, 'Filters');
   await expect(panel(page).locator('.filters-title')).toHaveText('Main');
   await expect(panel(page).locator('.filters-note')).toHaveText('Scene filters apply to the whole scene, top to bottom.');
   await expect(panel(page).locator('.filter-chain')).toHaveCount(1);
