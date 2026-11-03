@@ -2040,7 +2040,7 @@ stamp = { hash = "b3:2ab5528eec0ba929", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:0a5af57f1ce8c0be", by = "agent:claude", note = "token.rs: a test-only change. The cfg(windows) test a_file_other_users_can_read_is_refused_on_windows now passes &Secrets::new() to load_or_create, the signature #567 gave it, which the merge had missed. load_or_create's user-only creation and the check_private_file refusal are unchanged, so the token-file bullet's user-only and refusal text holds" }
 
 ["CRATE-jstream-desktop#design"."body"]
-stamp = { hash = "b3:1ff9934532dd5f1d", by = "agent:help-about", note = "Re-read after the review round: the window bullet now states the narrowed character set links.rs allows and that a page can make the app start Explorer for those URLs only, with no comma, backslash, quote, space or percent escape reaching its command line; matches links.rs and shell.rs; lib.rs only adds pub mod links" }
+stamp = { hash = "b3:1ff9934532dd5f1d", by = "agent:help-about", note = "Re-read the window bullet against the whole PR: a new window for a project page (the workspace's repository URL, then only ASCII letters, digits and / # ? . _ = & -) goes to Explorer as one argument and never loads in the window; every other new window is still refused, a projector opens none, and the navigation guard and no-IPC are unchanged" }
 
 ["CRATE-jstream-desktop#design"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:a71c0833188b98b6", by = "agent:acc756d9", note = "Re-read design against the R-SEC-001 exception: the desktop keeps keys in Credential Manager on Windows and has no backends elsewhere; the Linux-only exception does not touch it." }
@@ -2073,10 +2073,10 @@ stamp = { hash = "b3:79c52e0bc8185aad", by = "agent:claude@session_019dshZgpgXvz
 stamp = { hash = "b3:f7876d2ce1832d90", by = "agent:effect-packs", note = "Part 2 of #349 (device loss and effect quarantine, protocol 0.61 after the queue renumbering, ADR-0087), with round 1's fixes. host.rs: only engine()'s doc comment now names the effect-pack watch (#971 N4); the design's description of watching data/effects holds." }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/lib.rs"]
-stamp = { hash = "b3:1623266b66cf75be", by = "agent:help-about", note = "Re-read: the window-stays-on-the-app bullet now says a new window for one of the project's GitHub pages (links::is_project_page, under the workspace repository URL) opens in the system browser via Explorer with the URL as one argument, never in the window; navigation guard, projector rules and no-IPC still hold" }
+stamp = { hash = "b3:1623266b66cf75be", by = "agent:help-about", note = "lib.rs only adds `pub mod links;`, built on every platform (shell stays Windows-only); the module doc and Docs line are unchanged and still hold" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/links.rs"]
-stamp = { hash = "b3:b1a5cefcd687e90b", by = "agent:help-about", note = "Re-read after the review round: the window bullet now states the narrowed character set links.rs allows and that a page can make the app start Explorer for those URLs only, with no comma, backslash, quote, space or percent escape reaching its command line; matches links.rs and shell.rs; lib.rs only adds pub mod links" }
+stamp = { hash = "b3:b1a5cefcd687e90b", by = "agent:help-about", note = "Re-read links.rs against the window bullet: is_project_page takes the repository URL from CARGO_PKG_REPOSITORY, then nothing or / ? # and only ASCII letters, digits and / # ? . _ = & -, so no comma, backslash, quote, space or percent escape reaches Explorer; its native tests cover the bypasses" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/logs.rs"]
 stamp = { hash = "b3:cc576af06e07c96f", by = "agent:a2656", note = "#780: re-read against logs.rs creating the log file user-only; the design's token and crash-report bullets don't describe the log file's access, and the crash reports still leave the log file alone; holds" }
@@ -2085,7 +2085,7 @@ stamp = { hash = "b3:cc576af06e07c96f", by = "agent:a2656", note = "#780: re-rea
 stamp = { hash = "b3:6fe378871c2a3ee9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "main.rs only adds handled: jstream_core::HANDLED_PANIC_THREADS to the crash Program; Design's crash hook text (installed with the log file, redacted line through crash_line) still holds; Purpose names the handled threads" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/shell.rs"]
-stamp = { hash = "b3:17c21289c6bf4cb7", by = "agent:help-about", note = "Re-read: the window-stays-on-the-app bullet now says a new window for one of the project's GitHub pages (links::is_project_page, under the workspace repository URL) opens in the system browser via Explorer with the URL as one argument, never in the window; navigation guard, projector rules and no-IPC still hold" }
+stamp = { hash = "b3:17c21289c6bf4cb7", by = "agent:help-about", note = '''Re-read shell.rs against the window bullet: open_projector sends an https project page (links::is_project_page) to %SystemRoot%\explorer.exe with the URL as one argument and returns Deny, so it never loads in a webview; projector windows, on_navigation and the projectors' deny-all on_new_window are unchanged; no IPC added''' }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/ui.rs"]
 stamp = { hash = "b3:45624952598c1f3a" }
@@ -2097,7 +2097,7 @@ stamp = { hash = "b3:558b5c5512b30191" }
 stamp = { hash = "b3:149754bd87c54333", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Design against #327. build.rs no longer keeps the DLL list inline: it include!s media_foundation.rs (new, the same four DLLs mfplat/mf/mfreadwrite/mfsensorgroup, with rerun-if-changed) and still passes /DELAYLOAD per DLL plus delayimp.lib to bins with MSVC. New tests/delay_load.rs (media_foundation_is_delay_loaded) includes the same file and checks jstream.exe's delay-import and import tables with the daemon's PE reader; the failures bullet now says so and what it cannot catch (an unlisted import), and the Windows-only bullet now excludes that test from Linux CI. Vcam, scheme, bootstrap, CEF and token bullets unchanged" }
 
 ["CRATE-jstream-desktop#purpose"."body"]
-stamp = { hash = "b3:36f66b56ac0016ea", by = "agent:help-about", note = "Re-read: added links.rs to the Window bullet (project links handed to the system browser, tested everywhere); the rest of the contents still match lib.rs and shell.rs" }
+stamp = { hash = "b3:36f66b56ac0016ea", by = "agent:help-about", note = "Re-read: the Window bullet now names links.rs, the project links the window hands to the system browser, built and tested on every platform; the other bullets are unchanged" }
 
 ["CRATE-jstream-desktop#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:eaa5df84ce41e8df", by = "agent:browser-linux", note = "ARCH crate-map/apps change is the helper row (Linux executable) and the daemon's cef on Linux; the desktop app stays Windows-only and its browser text (bootstrap exe and DLL) still holds." }
@@ -2115,10 +2115,10 @@ stamp = { hash = "b3:79c52e0bc8185aad", by = "agent:claude@session_019dshZgpgXvz
 stamp = { hash = "b3:f7876d2ce1832d90", by = "agent:effect-packs", note = "Part 2 of #349 (device loss and effect quarantine, protocol 0.61 after the queue renumbering, ADR-0087), with round 1's fixes. host.rs changes only a doc comment (the effect-pack watch, #971 N4); purpose holds." }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/lib.rs"]
-stamp = { hash = "b3:1623266b66cf75be", by = "agent:help-about", note = "Re-read: added links.rs to the Window bullet (project links handed to the system browser, tested everywhere); the rest of the contents still match lib.rs and shell.rs" }
+stamp = { hash = "b3:1623266b66cf75be", by = "agent:help-about", note = "lib.rs only adds `pub mod links;` (not cfg(windows)), matching the contents list" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/links.rs"]
-stamp = { hash = "b3:b1a5cefcd687e90b", by = "agent:help-about", note = "Re-read after the review round: is_project_page now allows only ASCII letters, digits and / # ? . _ = & - after the repository URL (N1); the Window bullet naming links.rs and the lib.rs module list still hold" }
+stamp = { hash = "b3:b1a5cefcd687e90b", by = "agent:help-about", note = "links.rs is the new module the Window bullet names: is_project_page, built and tested everywhere" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/logs.rs"]
 stamp = { hash = "b3:cc576af06e07c96f", by = "agent:a2656", note = "Earlier note on body, kept: re-read (#565 B1): host.rs vcam_status now reports outdated as well; purpose says registered and current, and names the optional registration and unregistration modes the daemon provides for now | merge: re-read after merging wave/m1-3 (e993e0e): #567 replaced the desktop's crash.rs with jstream-crash (Crash reports and tests bullets, host.rs taking Secrets); this branch's vcam_status (registered and current) and the not-yet registration modes are untouched and hold | #780 (body and logs.rs): logs.rs deletes the old log file and creates a new user-only one at each start (create_private_file on Windows, jstream-crash's create_new, mode 0600, elsewhere) in a folder created 0700 on Unix; the Log file bullet says so, and the Tests bullet names the capped log file as user-only, checked on Unix (the_file_and_a_new_folder_are_user_only is cfg(unix), review N1)" }
@@ -2127,7 +2127,7 @@ stamp = { hash = "b3:cc576af06e07c96f", by = "agent:a2656", note = "Earlier note
 stamp = { hash = "b3:6fe378871c2a3ee9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Crash reports bullet edited: no report for a panic on a thread in jstream_core::HANDLED_PANIC_THREADS, an effect-pack load the engine catches and logs, matching main.rs's new handled field; the other bullets are unchanged" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/shell.rs"]
-stamp = { hash = "b3:17c21289c6bf4cb7", by = "agent:help-about", note = "Re-read: added links.rs to the Window bullet (project links handed to the system browser, tested everywhere); the rest of the contents still match lib.rs and shell.rs" }
+stamp = { hash = "b3:17c21289c6bf4cb7", by = "agent:help-about", note = "shell.rs gains the hand-off of project links to Explorer, which the Window bullet now names; still the Windows-only window, navigation guard, projectors and shutdown" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/ui.rs"]
 stamp = { hash = "b3:45624952598c1f3a" }
@@ -4683,7 +4683,7 @@ stamp = { hash = "b3:88be9db25a48df24", by = "agent:obs-ui-thread", note = "Re-r
 stamp = { hash = "b3:c6e8cbf2bc974d3b", by = "agent:claude-3d-cameras", note = "Re-read against the diff: the jstream-ui change is only camera: None added to SceneInfo literals in tests and fixtures (no behaviour); the UI does not read the camera yet, which is PR 3. | merge: Merged main with #1034 (shader-source programs, ADR-0093 part 1) and #1042 (copy and paste filters and transform, Inspector fit select): clipboard.rs and item_menu.rs gain filter and transform copy and paste; this branch only adds camera: None to fixtures. Holds. | kept from the merged side: Body: the font setting sentence (takes_fonts, font_choices, Bundled font / installed fonts / Other file…) for properties.rs, and #1031's N2 wording (live.cancel on any close but a committing OK, as source_properties.rs's on_cleanup does). The control dep changed by the mock's font.list. | kept from the merged side: Edited The Properties dialog paragraph for source_properties.rs: live settings shown as live.set of the dialog's gesture via live_patch, OK's batch carries ends_gesture as one undo step, Cancel/Escape/backdrop and any other close send live.cancel. The control design dep changed only by the mock's new setter. | kept from the merged side: Added the item menu's Copy/paste filters (FilterClip, append or replace per chain) and Copy/Paste transform (TransformClip, box and crop) to the clipboard paragraph; Inspector fit select is one item.set_geometry." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/lib.rs"]
-stamp = { hash = "b3:bd3df3921a4e65f0", by = "agent:help-about", note = "Re-read: the header bullet now describes the Help menu's links (new tab, system browser in the desktop app), the About dialog's version (version.workspace), build (GITHUB_SHA via option_env, else local build) and protocol, and the bundle icon for brand mark, favicon and dialog; style.css changes are the brand mark and About styles only" }
+stamp = { hash = "b3:bd3df3921a4e65f0", by = "agent:help-about", note = "lib.rs only adds `pub mod about;` and names about.rs (Help menu links and About dialog) in the module doc's list; the design bullets don't depend on more" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }

@@ -417,8 +417,8 @@ On #1083's branch, with the UI built (`trunk build --release` in `crates/jstream
    app, and no second JStream window opens.
 2. Choose Help › About JStream, then click Source code on GitHub and MIT. **Pass:** each
    opens in the browser the same way, and the dialog shows the icon and the version.
-3. **Pass:** the log has no `navigation away from the UI refused` or `could not open a
-   link in the browser` line for these clicks.
+3. **Pass:** the log has no `a new window refused`, `navigation away from the UI
+   refused` or `could not open a link in the browser` line for these clicks.
 
 <a id="waiting"></a>
 ## Waiting on a fix
