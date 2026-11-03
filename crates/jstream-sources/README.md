@@ -50,6 +50,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   returns it from `audio` as a `SourceAudio`: its format, and `open(handler)`, which
   feeds an `AudioInputHandler` until the returned stream is dropped. Only `browser` and
   its `youtube_chat` preset have either; `opens_browser(kind)` names those kinds.
+  `model()` (default `None`) is a `ShownModel` for a source that is a 3D model: the
+  `Model` the engine draws in 3D where an item places it, with its `Lighting`
+  ([ADR-0107](../../docs/adr/0107-3d-models.md)). Only the `model` kind has one.
   `capture()` is `Some` for a `display`, `window` or `webcam` source: what the platform
   captures for it (a `CaptureSpec`), and `show_cursor()` whether the pointer shows in it
   (`true`, the default, for a webcam and every other source). Its frames come from the
@@ -186,6 +189,22 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   NETSCAPE loop count, or forever; a WebP plays its loop count, or forever; after the
   last play the last frame stays. With no file, the source shows one transparent pixel.
   Colour profiles, gamma and JPEG EXIF orientation are not applied yet.
+- `model` ([ADR-0107](../../docs/adr/0107-3d-models.md)): `ModelKind`, a glTF 2.0 file
+  (`file`, a `.glb` or a `.gltf` whose buffers and images are read beside it under the
+  same asset root, or embedded as `data:` URIs) or a built-in `shape` (`plane`, `cube`,
+  `sphere`, `cylinder`, `cone`, one unit across). The loader is the crate's own, on
+  `serde_json`: the default scene's node transforms baked into one mesh, triangles,
+  strips and fans, the metallic-roughness material with its five textures (only
+  `TEXCOORD_0`), `KHR_materials_unlit` and `KHR_materials_emissive_strength`, with
+  normals and tangents made where the file has none. Skins, morph targets, animations,
+  cameras and lights are ignored with an `info` log; a required extension it doesn't
+  know, sparse accessors and a URL are errors, `SourceError::Model` naming the file.
+  Images decode as the `image` kind decodes them, within the same `Limits`, and over
+  4096 px are shrunk. `color` (multiplying a file's own), `metallic`, `roughness`,
+  `double_sided` (the last three for a shape only) and `lighting` (`studio` or
+  `unlit`) are live. Its frame is a transparent stand-in at the model's bounds, the
+  longer side 512 px (`NATURAL_SIDE`), which is the size a new item takes. The kind is
+  exported but not yet in `Registry::builtin()`: the engine doesn't draw models yet.
 - `audio_input` (a `device` ID; empty follows the system's default input),
   `desktop_audio` (what the default output plays) and `app_audio` (an `exe` file name,
   found again when the application restarts) are audio-only: their descriptors have
@@ -512,7 +531,8 @@ undecodable file is an error from `create`, never from the edit that set it.
 **Dependencies.** `jstream-media` (frames and the media clock), `jstream-platform`
 (the `MediaDecoders` trait the `media` kind plays through, GPU frames and audio
 handlers; its `fake` feature in tests), `jstream-protocol` (descriptors, settings and
-references), `jstream-browser` (the browser seam), `serde_json` (setting values),
+references), `jstream-browser` (the browser seam), `serde_json` (setting values)
+and `serde` (the glTF loader's typed JSON), `tracing` (what a model file holds that isn't drawn),
 `thiserror` (`SourceError`), the pure-Rust decoders `png`, `zune-jpeg` with
 `zune-core`, `image-webp` and `gif`, `realfft` (with `rustfft`, scalar only) for the
 spectrum's FFT, and for fonts `skrifa` (with `read-fonts`, `font-types`, `bytemuck`,
@@ -524,7 +544,10 @@ features off.
 ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)).
 
 **Tests.** Unit tests cover colour parsing, animation timing, the text outline's
-distance transform, reading an audio target from settings and taking a YouTube video
+distance transform, the glTF loader (`model/gltf/tests.rs`: GLB and `.gltf` files built
+by the test, node transforms and mirroring, materials and textures, refused extensions,
+URLs and overflowing accessors) and the `model` kind (`model/tests.rs`: shapes, live
+looks, the stand-in's size, buffers read beside a file and not outside its root), reading an audio target from settings and taking a YouTube video
 ID from an ID or link (`youtube_chat.rs`), and in `source.rs` the
 asset checks refuse a file swapped in from outside the root (Unix) and a junction or
 symbolic link inside the root that leads outside it (Windows, both when the path is
