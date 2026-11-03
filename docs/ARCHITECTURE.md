@@ -991,9 +991,10 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   are readable over the protocol (`activity.list`, ADR-0083) for the UI's Agent activity
   panel. Undo is per client, so an agent can never undo the user's work.
 - **Design guidance:** the server instructions end with how to build graphics that look
-  finished (the title-safe area, backdrops, shapes, type, colour, lower-third, ticker
-  and grouping recipes, fitting boxes to text, animating with keyframe
-  scenes, 3D sets through a scene camera, and checking each step with `video.snapshot`), since what an agent
+  finished (the title-safe area, backdrops, shapes, type, colour, lower-third, ticker,
+  countdown and grouping recipes, fitting boxes to text, animating with keyframe
+  scenes, layering light, masks and reflections, 3D sets through a scene camera, and
+  checking each step with `video.snapshot`), since what an agent
   builds is only as good as its choices
   ([jstream-mcp › Design](../crates/jstream-mcp/README.md#design)).
 

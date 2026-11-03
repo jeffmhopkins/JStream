@@ -552,7 +552,10 @@ state machine. Contents:
   isn't built showing the capture, a missing file showing nothing, an animated image
   advancing on the clock, on the sources thread by itself and after a clock swap, and
   a `waveform` source painted
-  by the sources thread (`a_waveform_source_is_painted_by_the_sources_thread`). The parity
+  by the sources thread (`a_waveform_source_is_painted_by_the_sources_thread`), and a
+  `timer` that keeps counting through a style change and a new density, showing the
+  count from the first plan after each, and starts again when its mode changes
+  (`a_timer_keeps_counting_through_a_style_change_and_a_density`). The parity
   tests add the fixture's `mic` kind, which no built-in kind matches.
 
 Not here yet: live audio values (faders), the audio and outputs snapshots, and the
@@ -636,7 +639,8 @@ settings, and the CLAP kinds' parameter defaults), `png`
 [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), `thiserror`
 (`SourceFrameError`), `futures-core` (the `Stream` trait of event streams),
 `arc-swap` (the published render snapshot and the mixer thread's list of bus and
-source scopes), `tracing` (see *Logging*) and, on Windows only,
+source scopes), `blake3` (the digests a quarantine keeps of each blamed
+shader, ADR-0097; already in the tree through `jstream-server`), `tracing` (see *Logging*) and, on Windows only,
 `jstream-platform-windows` (`create_private_file` and `check_private_file` for the audit
 log and the collection file, `src/private_file.rs`; the GPU capture hardware test,
 `src/tests/windows_gpu.rs`, compiled only with this crate's `hw-tests` feature, uses it
@@ -1119,8 +1123,16 @@ kind stays in `kind.list`, marked `quarantined`, and is left out of the effects 
 read, so its filters are bypassed. The quarantine is kept in `quarantine.json` in the
 packs folder (`QUARANTINE_FILE`; the watcher reads only sub-folders), not in the
 collection, so it isn't undoable and survives restarts; editing the pack doesn't lift
-it, and a file that can't be read quarantines nothing. Only `effect.enable` lifts it,
-for the kind and its pack, run before the collection lock is taken. The engine then
+it, and a file that can't be read quarantines nothing. It follows the shader too
+([ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md) decision 6): a blamed
+kind's entry keeps the BLAKE3 digest of each WGSL module it drew (the prelude, header
+and shader of an effect; each pass of a shader source), and any loaded kind that draws
+one of them is quarantined, under whatever pack or kind ID. A kind quarantined in a file
+from before that gains its digests when its pack loads. Only blamed kinds keep digests: the other
+kinds of a pack quarantined whole after a second blame are held by its pack ID alone,
+so a copy of that pack under another ID draws them (only the blamed one stays off). Only `effect.enable` lifts it,
+for the kind and its pack and for every entry whose digests the kind draws, run before
+the collection lock is taken. The engine then
 sends `gpu.device_lost` with the cause, the blamed and quarantined kinds, and whether
 it is recovering. The GPU-time guard of #349 is not built.
 **Shader sources** (`pack_source.rs`, `chain.rs`,
@@ -1305,7 +1317,13 @@ thread then installs the source under the lock and re-plans. Each build is numbe
 and only the latest build asked for a source installs, so a slow build can't replace
 a newer one. Until its build installs, a source keeps showing what it showed before,
 or nothing. A changed setting always rebuilds the source, live or not, so an
-animation restarts with it. A build that fails is logged at `warn` with the source ID
+animation restarts with it, unless its kind keeps the old instance's time zero for that
+change (`Registry::keeps_time`, `SourceKind::keeps_time`): a `timer` keeps counting
+through any change but its `mode` or `duration` (#1027). The build then carries that
+time zero (`Entry::anchor`; a build queued while another is in flight keeps what that
+one keeps, so a later style edit can't undo a restart), the thread paints the new
+instance for it as soon as it is created, off the lock, so its first plan already shows
+the count, and `install` gives it that start. A build that fails is logged at `warn` with the source ID
 and an error that never names a host path, and the source draws nothing; a kind that
 is only described (`NotBuilt`) draws nothing silently. Audio-only kinds
 (`audio_input`, `desktop_audio`, `app_audio`, whose descriptors have no video) get no
@@ -1344,7 +1362,7 @@ running source's own audio (`Source::audio`, heard whether or not it is shown) f
 *Audio sources*.
 
 A source the program mix shows enlarged is drawn at a density, when its kind can be
-(`Source::set_density`, the `text` kind,
+(`Source::set_density`, the `text` and `timer` kinds,
 [ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)). After each plan
 `Shot::scales` measures how much each frame its passes draw is enlarged: canvas pixels
 per pixel of the frame's extent, from the placements the collection holds (not a
@@ -1354,7 +1372,9 @@ their layer. A source a video chain runs over counts as 1,
 since its filters' settings are in its pixels. `LiveSources::densities` turns each scale
 into the next quarter step of a doubling at or above it (1, 1.19, 1.41, … up to 32, ADR-0079) and,
 when that differs from the source's density, queues a build at it: the thread creates the
-source and sets its density there, and `install` keeps the extent it returned. The
+source and sets its density there, and `install` keeps the extent it returned. A build at
+a new density keeps the running instance's time zero, so a `timer` keeps counting when its
+item is resized. The
 source's frames then reach the plan as `Frame`s placed at that extent, and `compose`
 gives their upload that extent (`ResourceCache::set_extent`), as the chains give their
 layers their input's. A source with a build in flight is not asked for another; the plan
@@ -1534,14 +1554,16 @@ audio.
 `snapshot::plan_with` asks what each source an item it reaches places shows: the
 stored frame if `set_source_frame` gave one, else, for a live `display` or `window`
 source, what the pipeline captures for it (`Source::capture`), else the live source's
-frame at the current time, counted from when the source was built. A live frame is shared with
+frame at the current time, counted from its time zero: when it was built, or the time
+zero its build kept (*Live sources*). A live frame is shared with
 the source (an `Arc` of its `VideoFrame`, not a copy) and gets a new version only when
 the source hands out a different one, so a still image is uploaded once. The plan also
 returns the earliest time one of its frames changes (`Source::next_change`), and the
 thread re-plans then, so an animated image or a video advances on the clock and a
 still one is never re-planned. A source with a `jstream_sources::Painter` (the
 `waveform` and `spectrum` kinds, which draw a whole frame and, for the spectrum, an
-FFT each 1/30 s, and `chat_message`, which redraws when another message is featured)
+FFT each 1/30 s, `chat_message`, which redraws when another message is featured, and
+`timer`, which redraws when the value it shows changes)
 is painted by that thread just before each re-plan, holding no engine
 lock, so under the collection lock the plan only takes the frame painted last;
 `install`, `sync` and a clock swap hand the thread the running painters and their time

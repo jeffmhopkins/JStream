@@ -238,6 +238,12 @@ impl Frame {
         ([self.width, self.height], self.extent)
     }
 
+    /// Every pixel, tightly packed, for tests that compare what a source shows.
+    #[cfg(test)]
+    pub(crate) fn pixels(&self) -> Vec<u8> {
+        self.rgba().to_vec()
+    }
+
     /// The first pixel, for tests that check what a source shows.
     #[cfg(test)]
     pub(crate) fn first_pixel(&self) -> Option<[u8; 4]> {

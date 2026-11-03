@@ -194,7 +194,7 @@ covers = [
   "crates/jstream-browser/src/helper/handlers.rs",
   "crates/jstream-browser/src/permission.rs",
 ]
-depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0048-sandboxed-browser-helper.md", "docs/adr/0095-browser-helper-on-linux.md"]
+depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0048-sandboxed-browser-helper.md", "docs/adr/0095-browser-helper-on-linux.md", "docs/adr/0102-page-api-for-browser-sources.md"]
 -->
 
 **Built** (C8, on Windows), as [ADR-0021](../adr/0021-browser-source.md) and
@@ -250,6 +250,17 @@ handler first, so for an origin the policy refuses they are refused there; that 
 enforces them in the pinned CEF's windowless pages is not yet confirmed on a Windows run
 (#347). ADR-0021's per-source
 "allow page to control JStream" opt-in must not hand the page the control token (#347).
+
+**Decided, not built** ([ADR-0102](../adr/0102-page-api-for-browser-sources.md)): a
+source may opt its page in to a read-only `window.jstream` with the engine animation clock
+and the page's own visibility, and, per further setting, the program and preview scenes,
+named shared values and one bus's levels and bands. The API exists only in the main frame
+while it shows the source's own document. Data flows one way, filtered to the grant in the
+engine, and the helper drops every message a renderer sends. A page has no path to the
+engine, and a compromised renderer holds only what the sources sharing its renderer were
+granted (each such page is to get a renderer of its own). Whatever a page is granted, a web
+page can send off the machine: preview scene names and a microphone bus's bands matter
+most.
 
 <a id="files"></a>
 ## Files and decoders
@@ -346,9 +357,10 @@ with its dialog open, or grants with a list unanswered, acknowledges its latest 
   within 60 s fails the output, and each loss is logged and counted in the output's stats
   ([ARCH › GPU pipeline](../ARCHITECTURE.md#gpu-pipeline)). The static load limits are
   enforced (`jstream-effects`' shader contract, plus #538's 16 KiB value cap). A loss is
-  blamed on the pack effects drawn before it, which are quarantined until a person
-  re-enables them (`effect.enable`, which no MCP tool, plugin or hotkey carries), the
-  whole pack after a second blame in a run, and reported in `gpu.device_lost` (protocol
+  blamed on the pack effects drawn before it, which are quarantined, under any pack or
+  kind ID that draws the same WGSL (the quarantine keeps each blamed module's digest,
+  ADR-0097), until a person re-enables them (`effect.enable`, which no MCP tool, plugin
+  or hotkey carries), the whole pack after a second blame in a run, and reported in `gpu.device_lost` (protocol
   0.61). Not built yet: the GPU-time guard against long loops, which would turn an
   effect off before the OS resets the device.
 
