@@ -252,6 +252,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `plugin.list` lists none;
 - `effect.enable` answered with `invalid_argument` on `kind_id`, as an engine that loads
   no effect packs answers it: the mock quarantines nothing;
+- `pack.write`, `pack.delete`, `pack.list` and `pack.read` answered with `unsupported`,
+  as an engine that watches no packs folder answers them
+  ([ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)): the mock has no disk;
 - the stream-key actions with the engine's checks and errors. `output.set_key` answers
   `not_found` for an output not in the collection, then `invalid_argument` (field
   `key`) for an empty or over-long key, or one with whitespace, control or non-ASCII

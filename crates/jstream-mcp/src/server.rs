@@ -505,8 +505,10 @@ impl Server {
              Tool annotations mark what undo can't take back and what reaches outside \
              JStream. `destructiveHint` is on `output`, which retargets an output, sets \
              its key and goes live, on `history`, whose undo can remove a stream key \
-             redo doesn't restore, and on `device`, `pairing` and `ui_settings`; every \
-             other edit, a delete included, is undone with `history`. `openWorldHint` is on \
+             redo doesn't restore, on `pack`, whose writes and deletes change files on \
+             disk that undo doesn't reach, and on `device`, `pairing` and \
+             `ui_settings`; every other edit, a delete included, is undone with \
+             `history`. `openWorldHint` is on \
              `output`, on `source`, whose `browser` kind loads any http or https page, or \
              HTML, it is given, and on `batch`, which carries `source` edits.\n\n{DESIGN}",
             groups.join(", ")

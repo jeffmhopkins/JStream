@@ -236,6 +236,7 @@ fn handshake_list_and_call_round_trip() {
             "label",
             "live",
             "output",
+            "pack",
             "pairing",
             "preview",
             "scene",
@@ -426,7 +427,7 @@ fn stateless_requests_round_trip() {
 
     let listed = f.modern("tools/list", json!({}));
     assert_eq!(listed["result"]["resultType"], "complete");
-    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(32));
+    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(33));
     assert!(listed["result"]["ttlMs"].as_u64().is_some());
 
     let called = f.modern(
@@ -546,6 +547,15 @@ fn instructions_mark_remote_text_and_tools_carry_annotations() {
     ] {
         assert!(legacy.contains(needle), "{needle}: {legacy}");
     }
+    // The sentence that names the destructive tools: the opening list names every tool.
+    let start = legacy
+        .find("`destructiveHint` is on")
+        .expect("destructive sentence");
+    let end = start
+        + legacy[start..]
+            .find("`openWorldHint`")
+            .expect("open-world sentence");
+    let destructive = &legacy[start..end];
     let list = f.legacy(2, "tools/list", json!({}));
     for tool in list["tools"].as_array().expect("tools") {
         assert!(
@@ -553,6 +563,14 @@ fn instructions_mark_remote_text_and_tools_carry_annotations() {
             "{}",
             tool["name"]
         );
+        // ADR-0098 §3: the instructions name every tool that is `destructiveHint`.
+        if tool["annotations"]["destructiveHint"] == true {
+            let name = format!("`{}`", tool["name"].as_str().expect("named"));
+            assert!(
+                destructive.contains(&name),
+                "{name} is destructive: {destructive}"
+            );
+        }
     }
 }
 
