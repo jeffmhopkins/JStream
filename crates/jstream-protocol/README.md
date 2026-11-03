@@ -56,7 +56,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `send.remove`, `hotkey.set`,
   `hotkey.clear`, `transition.create`, `transition.update`, `transition.delete`,
   `transition.set_default`, `scene.set_transitions`, `item.set_transition`,
-  `item.set_locked`, `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
+  `item.set_locked`, `item.set_effects_space`, `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
   `folder.delete`, `scene.set_folder`, `scene.set_meta`, `scene.set_options`,
   `scene.set_camera`, `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `source.set_meta`), with
@@ -203,7 +203,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.72 because of the
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.77 because of
+  `item.set_effects_space` and `ItemInfo.effects_space`
+  ([ADR-0106](../../docs/adr/0106-item-effects-in-canvas-space.md)), with 0.73 to 0.76
+  left to changes that claimed them first; 0.72 because of the
   effect-pack commands `pack.write`, `pack.delete`, `pack.list` and `pack.read`
   (`pack.rs`: `PackFile`, `PackContent`, `PackInfo`, `PackFileInfo` and the write's
   limits, [ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)), which agents
@@ -996,6 +999,15 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
   as `ItemInfo.locked`, omitted while false. It is an editing aid a client honours by
   not dragging the box; the engine still applies every edit to a locked item. It
   belongs to the item, so it takes no `scene_id` and a keyframe doesn't override it.
+- `item.set_effects_space {item_id, space}` sets where an item's effects run
+  ([ADR-0106](../../docs/adr/0106-item-effects-in-canvas-space.md), 0.77): `box`, the
+  default, over its cropped, fitted box before it is placed, or `canvas`, over a
+  canvas-sized layer it is drawn into where it is placed, which then covers the canvas
+  with the item's opacity and blend. So a canvas-sized mask lines up with the canvas
+  however the item is moved, scaled, turned or flipped. Reported as
+  `ItemInfo.effects_space`, omitted while `box`. Like a lock it belongs to the item:
+  no `scene_id`, and a keyframe doesn't override it. A canvas-space item never glides
+  in a Move.
 - `scene.switch {scene_id, preset_id?}` resolves the preset in order: the one it names
   (`not_found` when there is no such preset), else the new scene's `transition_in`,
   else the current scene's `transition_out`, else the default. A switch while a
@@ -1224,7 +1236,8 @@ that sets it: `scene.reorder` and `item.reorder` restore positions,
 `item.set_transform` each restore the previous placement in its own form. So undoing
 `item.remove` is `item.add` (with `geometry` or `transform`, matching the removed
 item's form) plus whichever of `item.reorder`, `item.set_crop`, `item.set_visible`,
-`item.set_transition` and `item.set_locked` the removed item needs, and undoing `scene.delete` is
+`item.set_transition`, `item.set_locked` and `item.set_effects_space` the removed item
+needs, and undoing `scene.delete` is
 `scene.create` with the scene's `role` (omitted for `scene`), `scene.reorder` unless it
 was last, `scene.set_transitions` if it had an override, and each item's restore,
 bottom to top. A variant's `scene.delete` is undone by `scene.create_variant`, its role

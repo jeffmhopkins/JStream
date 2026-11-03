@@ -2,7 +2,7 @@
 
 use crate::activity::ActivityEntry;
 use crate::audio::{BusInfo, SendInfo, SourceAudio};
-use crate::command::{BlendMode, Crop, Edit, ItemTransform, SceneRole, SourceKind};
+use crate::command::{BlendMode, Crop, Edit, EffectsSpace, ItemTransform, SceneRole, SourceKind};
 use crate::encoder::{EncoderProfileInfo, EncoderSessionInfo};
 use crate::event::OutputState;
 use crate::filter::{FilterChains, FilterInfo};
@@ -997,6 +997,11 @@ pub struct ItemInfo {
     /// missing (also from an older server) parses as unlocked.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub locked: bool,
+    /// Where its effects run (ADR-0106, since 0.77): see
+    /// [`Edit::ItemSetEffectsSpace`](crate::Edit::ItemSetEffectsSpace). Omitted while
+    /// `box`, so missing (also from an older server) parses as `box`.
+    #[serde(default, skip_serializing_if = "EffectsSpace::is_box")]
+    pub effects_space: EffectsSpace,
 }
 
 fn opaque() -> Finite32 {

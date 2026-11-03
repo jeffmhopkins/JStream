@@ -312,7 +312,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   scene, so it counts for cycles and blocks deleting its target. A keyframe scene has
   no scene filters of its own, but may override an item's effects, the `keyframe` owner
   of `filter.*` and `item.set_effects` (ADR-0088), whose references are its edges. The engine runs a scene's filters on its composite, and an item's
-  effects over its box in a layer grown by their outset, before its opacity and blend.
+  effects over its box in a layer grown by their outset, before its opacity and blend,
+  or with its `effects_space` `canvas` over a canvas-sized layer it is placed into
+  ([ADR-0106](adr/0106-item-effects-in-canvas-space.md)).
 - **Settings:** a source's `settings`, each filter's, and each transition preset's are a
   map of values described by its kind's descriptor, which the engine reports and
   validates against. References to scenes, sources, buses and asset files inside
@@ -773,7 +775,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `transition_in` and `transition_out`, and `item.set_transition` an item's transition
   settings. `item.set_locked` (0.71, [ADR-0096](adr/0096-item-lock-and-png-preview-frames.md))
   locks an item's canvas box, an editing aid clients honour and the engine never
-  enforces. `scene.switch` takes an optional `preset_id`, and the `studio.changed` it
+  enforces. `item.set_effects_space` (0.77,
+  [ADR-0106](adr/0106-item-effects-in-canvas-space.md)) makes an item's effects run over
+  the canvas after it is placed. `scene.switch` takes an optional `preset_id`, and the `studio.changed` it
   causes names the preset it ran and how long the transition lasts (0 for a cut).
   `state.get` reports the presets and the default under `transitions`, and `kind.list`
   the transition kinds.
@@ -1116,7 +1120,8 @@ import, a browser page's included) into a premultiplied `Rgba16Float` layer, of 
 `apply_filter_into` draws into a layer the caller keeps, which is how `jstream-core`'s
 chain runtime runs a source's video chain before placement, and a scene's over its
 composite once per frame wherever the scene shows, and an item's effects over its box
-([ADR-0065](adr/0065-scene-chains-and-item-effects.md)), without allocating per
+([ADR-0065](adr/0065-scene-chains-and-item-effects.md)), or over the canvas
+([ADR-0106](adr/0106-item-effects-in-canvas-space.md)), without allocating per
 frame. A shader source's program ([ADR-0093](adr/0093-shader-sources-from-effect-packs.md))
 draws through the same harness: a filter of several passes that ignores its input,
 reads its own earlier frames, the pack's images and the scenes the chain runtime hands
@@ -1285,7 +1290,7 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   `jstream-graph`, which checks a loaded collection as it checks edits. A field added
   for new collection state (encoder profiles, hotkey bindings, transition presets and
   settings, folders, labels and organisation metadata, keyframe scenes' `variant_of` and
-  `overrides`, an output's `audio_bus`, a scene's `camera` and a variant's override of it, an item's `locked`) is omitted when empty or at its default (for presets, a new collection's one `cut`), so a file without it is still
+  `overrides`, an output's `audio_bus`, a scene's `camera` and a variant's override of it, an item's `locked` and `effects_space`) is omitted when empty or at its default (for presets, a new collection's one `cut`), so a file without it is still
   valid at the same `schema_version`. Scene filters and item effects (version 2) and a
   keyframe override's `effects` (version 3, ADR-0088) bumped it instead, each with a
   migration that refuses the new field in an older file. `jstream-core`

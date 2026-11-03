@@ -380,6 +380,12 @@ fn place_edits(
                 locked: true,
             });
         }
+        if !item.effects_space.is_box() {
+            edits.push(Edit::ItemSetEffectsSpace {
+                item_id: item_id.clone(),
+                space: item.effects_space,
+            });
+        }
         let owner = FilterOwner::Item {
             item_id: item_id.clone(),
         };
@@ -553,6 +559,7 @@ mod tests {
             blend: Default::default(),
             transition: Default::default(),
             locked: false,
+            effects_space: jstream_protocol::EffectsSpace::Box,
         }
     }
 

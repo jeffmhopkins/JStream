@@ -16,12 +16,12 @@
 use crate::model::MASTER_NAME;
 use crate::{Graph, Placement, audio};
 use jstream_protocol::{
-    Action, BlendMode, BusId, BusMonitor, Canvas, Chord, Crop, Easing, Edit, EncoderProfile,
-    EncoderProfileId, FilterChain, FilterId, FilterInfo, FilterOwner, Finite32, FolderId,
-    INITIAL_PRESET, ItemGeometry, ItemId, ItemTransform, ItemTransition, LabelId, OutputId,
-    OutputKind, ProtocolError, Rev, SceneCamera, SceneId, SceneMeta, SceneOptions, SceneRole,
-    Settings, SourceAudio, SourceId, SourceKind, SourceMeta, TransitionPresetId, VideoMix,
-    VideoMixId,
+    Action, BlendMode, BusId, BusMonitor, Canvas, Chord, Crop, Easing, Edit, EffectsSpace,
+    EncoderProfile, EncoderProfileId, FilterChain, FilterId, FilterInfo, FilterOwner, Finite32,
+    FolderId, INITIAL_PRESET, ItemGeometry, ItemId, ItemTransform, ItemTransition, LabelId,
+    OutputId, OutputKind, ProtocolError, Rev, SceneCamera, SceneId, SceneMeta, SceneOptions,
+    SceneRole, Settings, SourceAudio, SourceId, SourceKind, SourceMeta, TransitionPresetId,
+    VideoMix, VideoMixId,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -372,6 +372,10 @@ struct FileItem {
     /// collection with no locked item saves as it did before, with no schema bump.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     locked: bool,
+    /// Where its effects run (ADR-0106); omitted while `box`, so a collection with no
+    /// canvas-space item saves as it did before, with no schema bump.
+    #[serde(default, skip_serializing_if = "EffectsSpace::is_box")]
+    effects_space: EffectsSpace,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -599,6 +603,7 @@ impl Graph {
                                 effects: self.file_filters(&item.effects.video),
                                 transition: item.transition,
                                 locked: item.locked,
+                                effects_space: item.effects_space,
                             }
                         })
                         .collect(),
@@ -1094,10 +1099,19 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
             }
             if item.locked {
                 edits.push((
-                    object,
+                    object.clone(),
                     Edit::ItemSetLocked {
                         item_id: item.id.clone(),
                         locked: true,
+                    },
+                ));
+            }
+            if !item.effects_space.is_box() {
+                edits.push((
+                    object,
+                    Edit::ItemSetEffectsSpace {
+                        item_id: item.id.clone(),
+                        space: item.effects_space,
                     },
                 ));
             }

@@ -330,6 +330,9 @@ pub(crate) struct Boxed {
     /// The size of the image the item shows, when known: what turns a legacy transform
     /// into its box.
     input: Option<[u32; 2]>,
+    /// Whether the effects run over the canvas after the item is placed (ADR-0106): the
+    /// layer is then the canvas, `size` is the canvas's and `outset` is 0.
+    canvas: bool,
 }
 
 impl Boxed {
@@ -350,6 +353,27 @@ impl Boxed {
             layer: [side(padded[0]), side(padded[1])],
             scale,
             input,
+            canvas: false,
+        })
+    }
+
+    /// The layer for an item whose effects run in canvas space (ADR-0106): the canvas,
+    /// scaled down to fit [`MAX_LAYER_SIDE`] when larger, with no outset, since what the
+    /// effects draw outside the canvas is never seen.
+    fn over_canvas(canvas: Canvas, input: Option<[u32; 2]>) -> Option<Self> {
+        let size = [canvas.width as f32, canvas.height as f32];
+        if !size.iter().all(|side| side.is_finite() && *side > 0.0) {
+            return None;
+        }
+        let scale = (MAX_LAYER_SIDE as f32 / size[0].max(size[1])).min(1.0);
+        let side = |px: f32| ((px * scale).ceil() as u32).clamp(1, MAX_LAYER_SIDE);
+        Some(Self {
+            size,
+            outset: 0.0,
+            layer: [side(size[0]), side(size[1])],
+            scale,
+            input,
+            canvas: true,
         })
     }
 
@@ -387,6 +411,28 @@ impl Boxed {
     /// flat and unrotated, with `geometry`'s fit and flips, so the effects see the
     /// cropped, fitted box in its own frame (ADR-0050 §7).
     fn inside(&self, geometry: &ItemGeometry) -> Option<ItemGeometry> {
+        if self.canvas {
+            // Placed where it is on the canvas, turned, tilted and flipped as it is, in
+            // layer pixels.
+            let px = |value: f32| jstream_protocol::Finite32::new(value * self.scale);
+            return Some(ItemGeometry {
+                center: jstream_protocol::Vec2::new(
+                    geometry.center.x.get() * self.scale,
+                    geometry.center.y.get() * self.scale,
+                )?,
+                size: jstream_protocol::Size::try_new(
+                    geometry.size.width.get() * self.scale,
+                    geometry.size.height.get() * self.scale,
+                )
+                .ok()?,
+                depth_px: px(geometry.depth_px.get())?,
+                perspective_px: match geometry.perspective_px {
+                    Some(perspective) => Some(px(perspective.get())?),
+                    None => None,
+                },
+                ..*geometry
+            });
+        }
         let centre =
             jstream_protocol::Vec2::new(self.layer[0] as f32 * 0.5, self.layer[1] as f32 * 0.5)?;
         Some(ItemGeometry {
@@ -407,6 +453,13 @@ impl Boxed {
     /// on every side, in proportion to the box the layer was planned for, the whole
     /// layer stretched over it, turned and projected as the box is.
     fn around(&self, geometry: &ItemGeometry) -> Option<ItemGeometry> {
+        if self.canvas {
+            // The whole canvas, flat: the item's own transform is inside the layer.
+            return Some(ItemGeometry {
+                fit_mode: jstream_protocol::FitMode::Stretch,
+                ..ItemGeometry::covering_canvas(self.size[0] as u32, self.size[1] as u32).ok()?
+            });
+        }
         let grow = |live: f32, planned: f32| live * (planned + 2.0 * self.outset) / planned;
         Some(ItemGeometry {
             size: jstream_protocol::Size::try_new(
@@ -1916,7 +1969,10 @@ impl<'a> Planner<'a, '_> {
             }
             _ => return None,
         };
-        let boxed = Boxed::new(&geometry, chain.outset(), input)?;
+        let boxed = match item.effects_space() {
+            jstream_protocol::EffectsSpace::Canvas => Boxed::over_canvas(canvas, input)?,
+            _ => Boxed::new(&geometry, chain.outset(), input)?,
+        };
         out.boxes.insert(
             owner.clone(),
             ItemBox {
@@ -2023,6 +2079,12 @@ impl<'a> Planner<'a, '_> {
             };
             // An item with effects is its effects' layer over its grown box, uncropped.
             let boxed = self.boxed(id, item, &image, out);
+            // An item whose effects run over the canvas covers the canvas on both sides
+            // of a switch, so it can't glide (ADR-0106): it disappears and appears.
+            let mut settings = *item.transition();
+            if boxed.is_some_and(|boxed| boxed.canvas) {
+                settings.glide = jstream_protocol::Glide::Never;
+            }
             let (image, geometry, cut, size, effects) = match boxed {
                 Some(boxed) => {
                     let owner = ChainOwner::Item(id.clone(), item.id().clone());
@@ -2051,7 +2113,7 @@ impl<'a> Planner<'a, '_> {
                     blend: item.blend(),
                 },
                 size,
-                settings: *item.transition(),
+                settings,
                 effects,
                 inside: None,
                 seen: Seen::AsPlanned,
@@ -4403,6 +4465,56 @@ pub(crate) mod tests {
         let of = known.geometry_of(legacy, Crop::NONE).expect("its box");
         assert_eq!((of.size.width.get(), of.size.height.get()), (32.0, 18.0));
         assert_eq!((of.center.x.get(), of.center.y.get()), (26.0, 29.0));
+    }
+
+    /// An item whose effects run in canvas space (ADR-0106) is drawn into a canvas-sized
+    /// layer where it is placed, turned and flipped as it is, and the layer covers the
+    /// canvas flat. A canvas too large for one texture is scaled down uniformly.
+    #[test]
+    fn a_canvas_space_effects_layer_is_the_canvas() {
+        use jstream_protocol::{Canvas, Finite32, FitMode, ItemGeometry, Size, Vec2};
+        let mut placed = ItemGeometry::try_new(
+            Vec2::new(500.0, 300.0).expect("finite"),
+            Size::try_new(100.0, 50.0).expect("positive"),
+        )
+        .expect("valid");
+        placed.rotation_deg = Finite32::new(30.0).expect("finite");
+        placed.flip_v = true;
+        let canvas = Canvas {
+            width: 1920,
+            height: 1080,
+        };
+        let boxed = super::Boxed::over_canvas(canvas, None).expect("finite");
+        assert_eq!(boxed.layer, [1920, 1080]);
+
+        let inside = boxed.inside(&placed).expect("inside");
+        assert_eq!(inside, placed, "placed in the layer as on the canvas");
+
+        let around = boxed.around(&placed).expect("around");
+        assert_eq!(
+            (around.center.x.get(), around.center.y.get()),
+            (960.0, 540.0)
+        );
+        assert_eq!(
+            (around.size.width.get(), around.size.height.get()),
+            (1920.0, 1080.0)
+        );
+        assert!(!around.flip_v && around.rotation_deg.get() == 0.0);
+        assert_eq!(around.fit_mode, FitMode::Stretch);
+
+        let huge = Canvas {
+            width: 16_384,
+            height: 4_096,
+        };
+        let scaled = super::Boxed::over_canvas(huge, None).expect("finite");
+        assert_eq!((scaled.layer, scaled.scale), ([8192, 2048], 0.5));
+        let inside = scaled.inside(&placed).expect("inside");
+        assert_eq!(
+            (inside.center.x.get(), inside.center.y.get()),
+            (250.0, 150.0)
+        );
+        assert_eq!(inside.size.width.get(), 50.0);
+        assert!(inside.flip_v, "the item's own flip");
     }
 
     fn placed(source: SourceRef, placement: Placement) -> Placed {
