@@ -1600,7 +1600,11 @@ snapshot. It owns the compositor, serves requests in order, and stops when the
 engine goes away. The compositor opens on the first snapshot, hardware adapter first,
 with lavapipe or WARP as the fallback (`OpenOptions::hardware`). No adapter is `action_failed` (#1073), as for
 `output.start`, and the reason starts with `no wgpu adapter` and, on Linux, ends naming
-the software Vulkan driver to install (`mesa-vulkan-drivers`). A failed open is cached: until its retry time,
+the software Vulkan driver to install (`mesa-vulkan-drivers`). The daemon asks the same
+thing at startup through `no_adapter_warning` (`lib.rs`): it lists the adapters wgpu can
+see, on every backend, without opening a device, and when there are none it returns
+"no graphics adapter, so scenes can't be drawn" for the daemon to log as a warning, with
+the same driver hint on Linux; it is `None` when an adapter is there. A failed open is cached: until its retry time,
 snapshots answer that error at once instead of probing adapters again. The first
 retry is 5 s after the failure, and each failure in a row doubles the wait, up to
 5 minutes; a successful open clears it. A panic while drawing answers `internal`,

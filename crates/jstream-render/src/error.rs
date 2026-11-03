@@ -94,9 +94,9 @@ pub enum RenderError {
 
 /// What a Linux machine with no GPU needs to composite (#1073): the engine's software
 /// device is a Vulkan software driver, Mesa's lavapipe, which a fresh install may lack.
-pub const NO_ADAPTER_HINT: &str = "no Vulkan driver could be loaded; on a machine without a \
-     GPU, install Mesa's software Vulkan driver (lavapipe): `mesa-vulkan-drivers` on Debian, \
-     Ubuntu and Fedora";
+pub const NO_ADAPTER_HINT: &str = "No Vulkan driver could be loaded. On a machine without a \
+     GPU, install Mesa's software Vulkan driver (lavapipe), from the mesa-vulkan-drivers package \
+     on Debian, Ubuntu and Fedora";
 
 /// [`NO_ADAPTER_HINT`], set off from the backends' report, on Linux; nothing elsewhere.
 fn no_adapter_hint() -> String {
