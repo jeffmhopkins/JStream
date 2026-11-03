@@ -193,8 +193,8 @@ returns what it frees as `Reclaimed`, so that thread can hand it to a collector
 multi-pass filter's scratch layers that a call replaces at a new size or no longer asks
 for, a video delay's held frames when its delay goes to 0, its input size changes or
 its memory cap shrinks, and a shader-source program's feedback layers when its size
-changes or it restarts on a show (**Filters**), so only when a filter's size or settings
-change or its source is shown again; the
+changes (**Filters**; a restart on a show clears them and keeps them), so only when a
+filter's size or settings change; the
 same goes for a filter draw's two small uniform buffers, which hold no texture. GPU
 calls may allocate inside the driver; this crate does not allocate per item on the
 steady path.
@@ -387,6 +387,9 @@ texture starts at its own size.
 `retire_filter` hands the cache a `VideoFilter` no frame runs any more: it may hold
 textures of its own (a video delay's ring), so it waits for the same fence and comes
 back in `Reclaimed` (`Reclaimed::filters` counts them) to be dropped with the images.
+`retire_image` does the same for an image handle a caller stops holding (a shader
+source's scene slot, when the scene's layer is remade), so a texture whose last handle it
+was is freed with the images.
 
 `import` keyed by an ID samples a `GpuFrame` with no copy (`import_premultiplied`
 does the same for a premultiplied texture, and `import_opaque` for a capture, and each
@@ -591,20 +594,25 @@ on first use, and caches pass pipelines as it caches filter shaders, under
 whole size. An input reads another pass (listed earlier, this frame's picture; the pass
 itself or one listed later, the frame before's), one of the program's images (uploaded
 on the first draw, and again for another compositor), or a slot the chain runtime fills
-(`VideoFilter::set_input`: a scene's composite, the audio data image), transparent while
-empty. A pass read back as feedback draws into one of two layers it keeps (`Ctx::layer`)
+(`VideoFilter::set_input`: a scene's composite), transparent while empty, or
+`ProgramInput::Audio`, the audio data image: `PROGRAM_AUDIO_BANDS` (64) by 2 data texels,
+row 0 the spectrum's bands and row 1 the waveform as `0.5 + 0.5 * sample`, made with the
+program's images, silent until the first `VideoFilter::set_audio`, and rewritten in place
+(`image::rewrite_unit_f16`, from a fixed array) when what it hears changes. A pass read back as feedback draws into one of two layers it keeps (`Ctx::layer`)
 and swaps every frame; they start transparent, are made again at a new size, and are
-dropped by `VideoFilter::restart`, which also starts `time` and the frame count from 0.
+cleared on the next draw after `VideoFilter::restart`, which also starts `time` and the
+frame count from 0 (kept, so a restart allocates nothing).
 A feedback last pass is copied into the output. Every other pass draws into scratch
 layers, and a non-feedback last pass straight into the output. `VideoFilter::set_audio`
-hands over the levels for the next frame. A program whose layers at its size (one per
+hands over the levels, bands and waveform (`ProgramAudio`) for the next frame. A program whose layers at its size (one per
 pass, two for a feedback pass, `Rgba16Float`) would take more than `MAX_PROGRAM_BYTES`
 (512 MiB) fails to draw, so a live `width` and `height` can't take gigabytes, and each
 side is held to 4096, so the output layer made before that check is at most 128 MiB.
 A steady frame allocates no list: the passes' pictures, a pass's inputs, the `sys`
 bytes and the bind group's entries live in kept or fixed-size storage, bounded by
 `PROGRAM_MAX_PASSES` and `PROGRAM_MAX_INPUTS`. Tests draw programs of one and two passes,
-feedback on the pass itself and on a later pass with a restart, images and slots, and
+feedback on the pass itself and on a later pass with a restart, images and slots, the
+audio image, and
 `sys`, and a program over the cap, on the test adapter.
 
 **The kinds.** Each group documents its kinds here as it lands.

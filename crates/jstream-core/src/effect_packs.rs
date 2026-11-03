@@ -16,7 +16,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use jstream_effects::{Effect, PackWatcher};
+use jstream_effects::{Effect, PackWatcher, ShaderSource};
 use jstream_protocol::{KindDescriptor, ProtocolError, Settings};
 use jstream_render::VideoFilter;
 use serde::{Deserialize, Serialize};
@@ -54,6 +54,52 @@ impl std::fmt::Debug for PackEffect {
 /// The loaded effects, by kind ID (`<pack>/<effect>`), as plans read them.
 pub(crate) type PackEffects = Arc<BTreeMap<String, PackEffect>>;
 
+/// One loaded shader source (ADR-0093), as a source's chain draws it: its program is
+/// the chain's first filter. Two are equal only when they are the same load, as
+/// [`PackEffect`]s are.
+#[derive(Clone)]
+pub(crate) struct PackSource(Arc<ShaderSource>);
+
+impl PackSource {
+    pub(crate) fn new(source: ShaderSource) -> Self {
+        Self(Arc::new(source))
+    }
+
+    /// A render filter drawing this source's program with `settings`.
+    pub(crate) fn video_filter(&self, settings: &Settings) -> VideoFilter {
+        let program: Arc<dyn jstream_render::ExternalProgram> = self.0.clone();
+        VideoFilter::program(self.0.kind_id(), program, settings)
+    }
+
+    /// Its kind's descriptor.
+    #[cfg(test)]
+    pub(crate) fn descriptor(&self) -> jstream_protocol::KindDescriptor {
+        self.0.descriptor().clone()
+    }
+
+    /// Its `scene` parameters, in the order they fill the program's input slots.
+    pub(crate) fn scene_params(&self) -> &[String] {
+        self.0.scene_params()
+    }
+}
+
+impl PartialEq for PackSource {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl std::fmt::Debug for PackSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("PackSource")
+            .field(&self.0.kind_id())
+            .finish()
+    }
+}
+
+/// The loaded shader sources, by kind ID (`<pack>/<source>`), as plans read them.
+pub(crate) type PackSources = Arc<BTreeMap<String, PackSource>>;
+
 /// The file in the packs folder that keeps the quarantine across restarts. The watcher
 /// reads only sub-folders, so it is never taken for a pack.
 pub(crate) const QUARANTINE_FILE: &str = "quarantine.json";
@@ -68,6 +114,8 @@ pub(crate) struct Update {
     pub(crate) described: Vec<KindDescriptor>,
     /// Every loaded effect that draws from now on: the quarantined ones left out.
     pub(crate) effects: PackEffects,
+    /// Every loaded shader source that draws from now on, as `effects` holds effects.
+    pub(crate) sources: PackSources,
     /// The kinds quarantined now, loaded or not, for `kind.list`.
     pub(crate) quarantined: BTreeSet<String>,
     /// Counts up with each update [`Packs`] makes. The engine installs each under the
@@ -120,6 +168,8 @@ pub(crate) struct Packs {
     watcher: PackWatcher,
     /// Every loaded effect, quarantined or not.
     loaded: BTreeMap<String, PackEffect>,
+    /// Every loaded shader source, quarantined or not.
+    sources: BTreeMap<String, PackSource>,
     quarantine: Quarantine,
     /// How many losses each kind was blamed for in this run.
     blamed: BTreeMap<String, u32>,
@@ -135,6 +185,7 @@ impl Packs {
         Self {
             watcher: PackWatcher::new(root, jstream_render::FILTER_PRELUDE),
             loaded: BTreeMap::new(),
+            sources: BTreeMap::new(),
             quarantine,
             blamed: BTreeMap::new(),
             seq: 0,
@@ -182,18 +233,40 @@ impl Packs {
                 )
             })
             .collect();
+        let sources: BTreeMap<String, PackSource> = self
+            .watcher
+            .packs()
+            .flat_map(jstream_effects::Pack::sources)
+            .map(|source| {
+                let id = source.kind_id();
+                let kept = self
+                    .sources
+                    .get(id)
+                    .filter(|_| !changed.contains(&id))
+                    .cloned();
+                (
+                    id.to_owned(),
+                    kept.unwrap_or_else(|| PackSource::new(source.clone())),
+                )
+            })
+            .collect();
         let removed = self
-            .loaded
-            .keys()
-            .filter(|id| !loaded.contains_key(*id))
+            .kinds()
+            .filter(|id| !loaded.contains_key(*id) && !sources.contains_key(*id))
             .cloned()
             .collect();
         let described = changed
             .iter()
-            .filter_map(|id| self.watcher.effect(id))
-            .map(|effect| effect.descriptor().clone())
+            .filter_map(|id| {
+                self.watcher
+                    .effect(id)
+                    .map(Effect::descriptor)
+                    .or_else(|| self.watcher.source(id).map(ShaderSource::descriptor))
+            })
+            .cloned()
             .collect();
         self.loaded = loaded;
+        self.sources = sources;
         for change in &changes.kinds {
             tracing::info!(?change, "effect pack kind");
         }
@@ -207,7 +280,7 @@ impl Packs {
     pub(crate) fn blame(&mut self, drawn: &BTreeSet<String>) -> Blame {
         let blamed: Vec<String> = drawn
             .iter()
-            .filter(|id| self.loaded.contains_key(*id))
+            .filter(|id| self.is_loaded(id))
             .cloned()
             .collect();
         let mut quarantined = BTreeSet::new();
@@ -217,8 +290,7 @@ impl Packs {
             if *count >= 2 {
                 let pack = pack_of(kind_id).to_owned();
                 quarantined.extend(
-                    self.loaded
-                        .keys()
+                    self.kinds()
                         .filter(|id| pack_of(id) == pack && !self.quarantine.holds(id))
                         .cloned(),
                 );
@@ -250,7 +322,7 @@ impl Packs {
     /// quarantine names.
     pub(crate) fn enable(&mut self, kind_id: &str) -> Result<Option<Update>, ProtocolError> {
         if !self.quarantine.holds(kind_id) {
-            if self.loaded.contains_key(kind_id) {
+            if self.is_loaded(kind_id) {
                 return Ok(None);
             }
             return Err(ProtocolError::invalid_argument(
@@ -265,6 +337,16 @@ impl Packs {
         Ok(Some(self.update(Vec::new(), Vec::new())))
     }
 
+    /// Every loaded kind, effect or shader source, quarantined or not.
+    fn kinds(&self) -> impl Iterator<Item = &String> {
+        self.loaded.keys().chain(self.sources.keys())
+    }
+
+    /// Whether a loaded pack has `kind_id`, an effect or a shader source.
+    fn is_loaded(&self, kind_id: &str) -> bool {
+        self.loaded.contains_key(kind_id) || self.sources.contains_key(kind_id)
+    }
+
     /// The update for the loaded effects and quarantine as they are now.
     fn update(&mut self, removed: Vec<String>, described: Vec<KindDescriptor>) -> Update {
         self.seq += 1;
@@ -274,14 +356,19 @@ impl Packs {
             .filter(|(id, _)| !self.quarantine.holds(id))
             .map(|(id, effect)| (id.clone(), effect.clone()))
             .collect();
+        let sources = self
+            .sources
+            .iter()
+            .filter(|(id, _)| !self.quarantine.holds(id))
+            .map(|(id, source)| (id.clone(), source.clone()))
+            .collect();
         let quarantined = self
             .quarantine
             .kinds
             .iter()
             .cloned()
             .chain(
-                self.loaded
-                    .keys()
+                self.kinds()
                     .filter(|id| self.quarantine.packs.contains(pack_of(id)))
                     .cloned(),
             )
@@ -290,6 +377,7 @@ impl Packs {
             removed,
             described,
             effects: Arc::new(effects),
+            sources: Arc::new(sources),
             quarantined,
             seq: self.seq,
         }
@@ -398,6 +486,85 @@ default = "#00ff00"
         super::PackEffect::new(pack.effect(KIND).expect("tint/mul").clone())
     }
 
+    /// A shader source kind, `glow/ramp` (ADR-0093): 16 by 9, each frame a quarter
+    /// brighter than the one before (its feedback), and showing the top-left texel of its
+    /// `sky` scene where that has any alpha.
+    pub(crate) const SOURCE_KIND: &str = "glow/ramp";
+
+    const SOURCE_MANIFEST: &str = r##"
+[pack]
+id = "glow"
+name = "Glow"
+
+[[source]]
+id = "ramp"
+name = "Ramp"
+version = 1
+width = 16
+height = 16
+
+[[source.param]]
+id = "sky"
+label = "Sky"
+type = "scene"
+
+[[source.pass]]
+id = "ramp"
+shader = "ramp.wgsl"
+inputs = ["ramp", "sky"]
+"##;
+
+    const RAMP: &str = "@fragment\nfn fs(in: VsOut) -> @location(0) vec4<f32> {\n    let last = ramp(in.uv).r;\n    let s = sky(vec2<f32>(0.0));\n    let up = vec4<f32>(vec3<f32>(min(last + 0.25, 1.0)), 1.0);\n    return select(up, s, s.a > 0.0);\n}\n";
+
+    /// A shader source that hears audio, `glow/ear`: white while its level and the band
+    /// a 1 kHz tone falls in are up, black otherwise.
+    pub(crate) const EAR_KIND: &str = "glow/ear";
+
+    const EAR_MANIFEST: &str = r##"
+
+[[source]]
+id = "ear"
+name = "Ear"
+version = 1
+width = 16
+height = 16
+audio = true
+
+[[source.pass]]
+id = "ear"
+shader = "ear.wgsl"
+inputs = ["audio"]
+"##;
+
+    const EAR: &str = "@fragment\nfn fs(in: VsOut) -> @location(0) vec4<f32> {\n    let on = sys.level > 0.1 && audio_band(36) > 0.5;\n    return vec4<f32>(vec3<f32>(select(0.0, 1.0, on)), 1.0);\n}\n";
+
+    /// The `glow/ear` source, loaded from a pack in `temp` beside `glow/ramp`.
+    pub(crate) fn ear(temp: &Temp) -> super::PackSource {
+        let dir = temp.0.join("glow");
+        std::fs::create_dir_all(&dir).expect("create pack dir");
+        std::fs::write(
+            dir.join("effect.toml"),
+            format!("{SOURCE_MANIFEST}{EAR_MANIFEST}"),
+        )
+        .expect("write manifest");
+        std::fs::write(dir.join("ramp.wgsl"), RAMP).expect("write shader");
+        std::fs::write(dir.join("ear.wgsl"), EAR).expect("write shader");
+        let pack = jstream_effects::Pack::load(&dir, jstream_render::FILTER_PRELUDE)
+            .expect("the test source pack loads");
+        super::PackSource::new(pack.source(EAR_KIND).expect("glow/ear").clone())
+    }
+
+    /// The `glow/ramp` source, loaded from a pack in `temp`.
+    pub(crate) fn source(temp: &Temp) -> super::PackSource {
+        let dir = temp.0.join("glow");
+        std::fs::create_dir_all(&dir).expect("create pack dir");
+        std::fs::write(dir.join("effect.toml"), SOURCE_MANIFEST).expect("write manifest");
+        std::fs::write(dir.join("ramp.wgsl"), RAMP).expect("write shader");
+        let pack = jstream_effects::Pack::load(&dir, jstream_render::FILTER_PRELUDE)
+            .expect("the test source pack loads");
+        super::PackSource::new(pack.source(SOURCE_KIND).expect("glow/ramp").clone())
+    }
+
     /// The `tint/mul` kind's descriptor.
     pub(crate) fn descriptor() -> jstream_protocol::KindDescriptor {
         let temp = Temp::new("descriptor");
@@ -503,6 +670,41 @@ mod tests {
         );
         let lifted = packs.enable(KIND).expect("enable").expect("lifted");
         assert!(lifted.effects.contains_key(KIND) && lifted.quarantined.is_empty());
+    }
+
+    /// A pack's shader source is a kind like its effects: described on load, drawn
+    /// until a device loss is blamed on it, then quarantined, and forgotten with its
+    /// pack.
+    #[test]
+    fn a_shader_source_is_described_quarantined_and_forgotten() {
+        use test_pack::SOURCE_KIND;
+
+        let temp = Temp::new("source");
+        let _ = test_pack::source(&temp);
+        let mut packs = Packs::new(temp.0.clone());
+        let loaded = packs.poll().expect("the pack loads");
+        let described = &loaded.described;
+        assert_eq!(described.len(), 1);
+        assert_eq!(described[0].kind_id, SOURCE_KIND);
+        assert_eq!(
+            described[0].category,
+            jstream_protocol::KindCategory::Source
+        );
+        assert!(loaded.sources.contains_key(SOURCE_KIND) && loaded.effects.is_empty());
+
+        let drawn = [SOURCE_KIND.to_owned()].into_iter().collect();
+        let blame = packs.blame(&drawn);
+        assert_eq!(blame.quarantined, [SOURCE_KIND.to_owned()]);
+        let update = blame.update.expect("the plans change");
+        assert!(!update.sources.contains_key(SOURCE_KIND));
+        assert!(update.quarantined.contains(SOURCE_KIND));
+        let lifted = packs.enable(SOURCE_KIND).expect("enable").expect("lifted");
+        assert!(lifted.sources.contains_key(SOURCE_KIND));
+
+        std::fs::remove_dir_all(temp.0.join("glow")).expect("remove the pack");
+        let removed = packs.poll().expect("the pack is gone");
+        assert_eq!(removed.removed, [SOURCE_KIND]);
+        assert!(removed.sources.is_empty());
     }
 
     /// A pack whose shader fails validation adds no kind.
