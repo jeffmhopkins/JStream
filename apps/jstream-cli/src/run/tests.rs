@@ -912,6 +912,15 @@ fn capture_targets_prints_each_target() {
 }
 
 #[test]
+fn font_list_prints_each_font() {
+    assert_eq!(
+        run_on(&MockEngine::new(), &["--mock", "font", "list"]),
+        ok("Mock Sans Bold: /mock/fonts/MockSans-Bold.ttf\n\
+             Mock Sans Regular: /mock/fonts/MockSans-Regular.ttf\n")
+    );
+}
+
+#[test]
 fn events_golden_unknown_skipped_and_an_ended_stream_is_disconnected() {
     let engine = populated();
     let control = session(&engine);

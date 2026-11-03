@@ -44,6 +44,8 @@ Commands:
   studio set-preview <scene-id>    put a scene on preview (action studio.set_preview)
   capture targets                  list the displays and windows a source can capture
                                    (query capture.targets)
+  font list                        list the installed fonts, each with its family,
+                                   style and path (query font.list)
   source list                      list the sources (query source.list)
   item list <scene-id>             list a scene's items, bottom first (query item.list)
   output list                      list the configured outputs (query output.list)
@@ -289,6 +291,7 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
             scene_id: SceneId::new(*id),
         }),
         ["capture", "targets"] => Command::Query(Query::CaptureTargets),
+        ["font", "list"] => Command::Query(Query::FontList),
         ["source", "list"] => Command::Query(Query::SourceList),
         ["item", "list", id] => Command::Query(Query::ItemList {
             scene_id: SceneId::new(*id),
@@ -870,6 +873,10 @@ mod tests {
         assert_eq!(
             ok(&["capture", "targets"]).command,
             Command::Query(Query::CaptureTargets)
+        );
+        assert_eq!(
+            ok(&["font", "list"]).command,
+            Command::Query(Query::FontList)
         );
     }
 

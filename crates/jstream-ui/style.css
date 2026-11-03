@@ -669,6 +669,10 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .field .control input[type="color"] { flex: none; width: 2.5rem; padding: 0.1rem; }
 .field .control input[type="range"] { padding: 0; }
 .field .control .asset-root { flex: none; width: 7rem; }
+.field .control:has(.font-pick) { flex-wrap: wrap; row-gap: 0.35rem; }
+.field .control .font-pick { flex: 1 1 100%; }
+.field .control .font-file { display: flex; gap: 0.35rem; flex: 1 1 100%; min-width: 0; }
+.field .control .font-file.hidden { display: none; }
 .field .unit { color: var(--muted); font-size: 0.8rem; }
 .field .reset { border-color: transparent; background: none; }
 .field .problem { grid-column: 1 / -1; }
