@@ -94,7 +94,8 @@ it must never hand a page the control token (#347).
      PR checks this on a run. Until that check passes, the threat model says "only what
      the sources sharing its renderer were granted".
    - **Rate.** Updates are coalesced to at most one per page frame (the source's
-     frame-rate cap, at most 60 a second).
+     frame-rate cap, at most 60 a second). An update larger than the pipe's limit spans
+     several messages.
    - **Size.** An update that would exceed the pipe's message limit (`MAX_MESSAGE_BYTES`)
      is split across consecutive messages, each value whole in one of them. This covers
      the on-load catch-up and a burst of value changes in one frame. A value is at most
@@ -139,8 +140,9 @@ it must never hand a page the control token (#347).
    - **The name.** These are not [ADR-0032](0032-live-edits-and-undo.md)'s live values,
      which are a gesture's uncommitted edits. The protocol and the docs call them shared
      values to keep the two apart. The native-motion ADR (ADR-0099, #1074) has a closed
-     cue set whose "set a live value" cue means `values.set` on this store, as the motion
-     work agreed. This ADR adds no cue.
+     cue set limited to actions, never edits. This ADR clarifies that set's "set a live
+     value" cue as `values.set` on this store: an ADR-0032 live value is an edit, so the
+     cue can't mean one. This ADR adds no cue.
 8. **Audio levels.** With `page_api_bus` set, `jstream.levels()` returns that bus's
    latest reading, and a `levels` event fires for each one. A reading has its post-fader
    `peak` and `rms` per channel, as `meters.tick` reports them, and `bands`, the bus's
@@ -178,8 +180,9 @@ it must never hand a page the control token (#347).
 - Shared values are lost when the engine restarts. A scene that needs a value at start
   sets it itself. Saving values with the collection could come later, as its own
   decision.
-- Each granted page costs one small pipe message per frame at most, and none when nothing
-  changed except the 250 ms clock anchor.
+- Each granted page costs at most one update per frame, usually one small pipe message
+  (a large catch-up spans several), and none when nothing changed except the 250 ms clock
+  anchor.
 - The protocol grows by `values.*` only. That is additive under
   [R-API-001](../RULES.md#R-API-001) and goes through the protocol merge queue.
 - Timelines (#1059) set shared values through ADR-0099's "set a live value" cue, which
