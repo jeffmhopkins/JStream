@@ -107,8 +107,8 @@ of queries only (and `describe_api`, `events`) is `readOnlyHint`. Any other tool
 `destructiveHint` when it has an action, a history call or a `delete`/`remove` edit, as
 `batch` is; `canvas`, whose edits only change, is not. `openWorldHint` is true for the
 group tools in `OPEN_WORLD`, today `output`, whose `output.start` publishes to a streaming
-server, and `source`, whose `browser` kind loads any http or https page set as its `url`,
-and for `batch`, which carries both tools' edits. No tool is `idempotentHint`. A hint
+server, and `source`, whose `browser` kind loads any http or https page set as its `url`
+(or HTML set as its `html`, which can load from the web), and for `batch`, which carries both tools' edits. No tool is `idempotentHint`. A hint
 covers the whole group, so a client that asks before `output.set_target`, `output.set_key`
 or `output.start` also asks before `output.list`.
 
@@ -143,11 +143,15 @@ recipes for a lower third and a ticker (`scroll` with a negative speed and a `ga
 grouping a multi-part graphic as a nested scene whose item's
 effects clip and shadow it as one, fitting an item to its text's `source.sizes`,
 animating with keyframe scenes, a `move` preset, crop reveals and staggered
-`delay_ms`, 3D sets through `scene.set_camera` (starting from the framing camera,
-floors and walls by tilt, turn and `depth_px`, camera moves animated by keyframe
-scenes, and flat overlays in a 2D scene above the set,
-[ADR-0094](../../docs/adr/0094-scene-cameras.md)), and checking each step with
-`video.snapshot` (building on preview when a scene is on air).
+`delay_ms`, 3D placement (`tilt_deg`, `turn_deg`, `depth_px`, `perspective_px`) in
+keyframe variants and blend modes (`item.set_blend`), 3D sets through
+`scene.set_camera` (starting from the framing camera, floors and walls by tilt, turn and
+`depth_px`, camera moves animated by keyframe scenes, and flat overlays in a 2D scene
+above the set, [ADR-0094](../../docs/adr/0094-scene-cameras.md)), choosing between
+`fade`, `move` and a `stinger` preset (its `scene`, `cut_ms` and items' appear and
+disappear effects), building what the built-in kinds can't draw as HTML in a `browser`
+source's `html` (and falling back to them where no browser is available), and checking
+each step with `video.snapshot` (building on preview when a scene is on air).
 It names engine kinds and settings, which this crate doesn't link, so a renamed setting
 must be renamed here too. Tested by `instructions_carry_the_design_guidance`.
 

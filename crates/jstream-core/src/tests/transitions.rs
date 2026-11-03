@@ -525,3 +525,159 @@ fn an_items_effects_run_once_a_transition_onto_its_scene_ends() {
     );
     assert_eq!(shot.chain_cost([]).item_effects, 1, "and run each frame");
 }
+
+/// A `stinger` preset (`scene`, `cut_ms`).
+fn stinger(id: &str, scene: Option<&str>, duration_ms: u32, cut_ms: u32) -> Edit {
+    let mut settings = Settings::default();
+    if let Some(scene) = scene {
+        settings.insert("scene", json!({"type": "scene", "scene_id": scene}));
+    }
+    settings.insert("cut_ms", json!(cut_ms));
+    Edit::TransitionCreate {
+        preset_id: TransitionPresetId::new(id),
+        name: id.into(),
+        kind: "stinger".into(),
+        duration_ms,
+        easing: Easing::Linear,
+        settings,
+    }
+}
+
+/// A stinger draws the old scene, then the new one from its cut point, and its own
+/// scene's items over both until it ends; without a scene it cuts at the cut point.
+#[test]
+fn a_stinger_plays_its_scene_over_the_cut() {
+    let (engine, clock) = studio();
+    let control = connected(&engine);
+    batch(
+        &control,
+        edits(vec![
+            stinger("sting", Some("c"), 1000, 400),
+            stinger("bare", None, 600, 600),
+        ]),
+    )
+    .expect("presets");
+    let mut events = control.events();
+    let hub = engine.render_hub();
+
+    switch(&control, "b", Some("sting")).expect("switch");
+    assert_eq!(started(drain(&mut events)), [Some(("sting".into(), 1000))]);
+    assert_eq!(
+        hub.load().shot().transition_tracks(),
+        Some(3),
+        "a1 until the cut, b1 from it, and c1 over both"
+    );
+    clock.advance(999_000);
+    engine.replan();
+    assert_eq!(hub.load().shot().transition_tracks(), Some(3), "running");
+    clock.advance(1_000);
+    engine.replan();
+    assert_eq!(hub.load().shot().transition_tracks(), None, "ended");
+
+    switch(&control, "a", Some("bare")).expect("switch");
+    assert_eq!(started(drain(&mut events)), [Some(("bare".into(), 600))]);
+    assert_eq!(hub.load().shot().transition_tracks(), Some(2));
+}
+
+/// What a stinger draws, read back from the program mix: the stinger scene comes in over
+/// the old picture, the picture under it changes at the cut, and it goes again.
+#[test]
+fn a_snapshot_shows_the_stinger_cover_the_cut() {
+    let _gpu = super::one_gpu_test_at_a_time();
+    use crate::snapshot::{decode_base64, decode_png, is_no_adapter};
+    use std::io::Write;
+
+    fn fill(id: &str, hex: &str) -> Edit {
+        let settings = [
+            ("color", json!(hex)),
+            ("width", json!(1920)),
+            ("height", json!(1080)),
+        ];
+        Edit::SourceCreate {
+            source_id: SourceId::new(id),
+            name: id.into(),
+            kind: SourceKind::Builtin {
+                kind: "color".into(),
+            },
+            settings: Settings(
+                settings
+                    .iter()
+                    .map(|(k, v)| ((*k).to_owned(), v.clone()))
+                    .collect(),
+            ),
+            duplicated_from: None,
+        }
+    }
+
+    fn centre(control: &dyn Control) -> Option<[u8; 4]> {
+        let result = match query(control, Query::VideoSnapshot) {
+            Ok(result) => result,
+            Err(error) if error.protocol().is_some_and(is_no_adapter) => {
+                if std::env::var_os("CI").is_some() {
+                    panic!("CI has no wgpu adapter: {error}");
+                }
+                let _ = writeln!(
+                    std::io::stderr(),
+                    "jstream-core: skipping stinger GPU test, no adapter: {error}"
+                );
+                return None;
+            }
+            Err(error) => panic!("video.snapshot failed: {error}"),
+        };
+        let QueryResult::VideoSnapshot { png, .. } = result else {
+            panic!("not a snapshot: {result:?}");
+        };
+        let bytes = decode_base64(&png).expect("png is base64");
+        let (width, height, rgba) = decode_png(&bytes).expect("png decodes");
+        let i = ((height / 2) as usize * width as usize + (width / 2) as usize) * 4;
+        Some([rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]])
+    }
+
+    let clock = FakeClock::new(Timebase::MICROS);
+    let engine = Engine::new();
+    engine.set_source_clock(Arc::new(clock.clone()));
+    let control = connected(&engine);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            create("b"),
+            create("s"),
+            fill("red", "#ff0000ff"),
+            fill("green", "#00ff00ff"),
+            fill("blue", "#0000ffff"),
+            add("a", "a1", "red"),
+            add("b", "b1", "green"),
+            add("s", "s1", "blue"),
+            stinger("sting", Some("s"), 1000, 500),
+        ]),
+    )
+    .expect("built");
+    assert!(engine.settle_sources(), "the sources were built in time");
+    let Some(before) = centre(&control) else {
+        return;
+    };
+    assert_eq!(before, [0xff, 0, 0, 0xff]);
+
+    switch(&control, "b", Some("sting")).expect("switch");
+    clock.advance(250_000);
+    let [red, green, blue, _] = centre(&control).expect("an adapter");
+    assert!(
+        (32..224).contains(&red) && green == 0 && (32..224).contains(&blue),
+        "coming in over the old scene: {red} {green} {blue}"
+    );
+    clock.advance(250_000);
+    assert_eq!(
+        centre(&control),
+        Some([0, 0, 0xff, 0xff]),
+        "covering the cut"
+    );
+    clock.advance(250_000);
+    let [red, green, blue, _] = centre(&control).expect("an adapter");
+    assert!(
+        red == 0 && (32..224).contains(&green) && (32..224).contains(&blue),
+        "going over the new scene: {red} {green} {blue}"
+    );
+    clock.advance(250_000);
+    assert_eq!(centre(&control), Some([0, 0xff, 0, 0xff]), "ended");
+}

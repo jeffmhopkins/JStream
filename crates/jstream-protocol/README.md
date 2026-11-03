@@ -137,7 +137,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `QuotaInfo` and `StatsPolling` (0.38).
 - **Transitions** (`transition.rs`, [ADR-0029](../../docs/adr/0029-transitions.md),
   [ADR-0037](../../docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md)): the
-  built-in transition kinds (`cut`, `fade`, `move`) and their descriptors, `Easing` with
+  built-in transition kinds (`cut`, `fade`, `move`, `stinger`) and their
+  descriptors, `Easing` with
   `Easing::apply`, the one easing function every implementation shares (golden-tested),
   `ItemTransition` (an item's delay, easing, glide and appear and disappear effects) with
   its range check, `TransitionPresetInfo` and `TransitionsInfo` as `state.get` reports
@@ -959,10 +960,13 @@ over that (#1006).
 [ADR-0037](../../docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md) decide
 the model (0.30). A transition preset is collection state:
 `{preset_id, name, kind, duration_ms, easing, settings}`, where `kind` is a transition
-kind `kind.list` reports (category `transition`: `cut`, `fade` and `move` so far) and
-`settings` are checked against its descriptor as a source's are (`unmatched`, the
-effect for items nothing pairs, and `stagger_ms`, an extra delay per incoming item by
+kind `kind.list` reports (category `transition`: `cut`, `fade`, `move` and `stinger` so
+far) and `settings` are checked against its descriptor as a source's are (`unmatched`,
+the effect for items nothing pairs, and `stagger_ms`, an extra delay per incoming item by
 stacking order, for `fade` and `move`; [ADR-0052](../../docs/adr/0052-transition-mechanics-and-studio-preview.md)).
+A `stinger` takes the `scene` it plays over the switch (a scene reference, or `null` to
+cut), `cut_ms`, when the picture under it cuts (default 500, at most the duration), and
+`stagger_ms`, which staggers the stinger scene's items by stacking order.
 
 - `transition.create` adds a preset, `transition.update` changes its fields or patches
   its settings (a new `kind` resets the settings to that kind's defaults, overlaid by

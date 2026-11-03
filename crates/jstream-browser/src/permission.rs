@@ -11,7 +11,10 @@
 //! prompt's requesting origin (#721): granted when the policy lets that origin make local
 //! requests (it is the source's own and the source opted in or is itself local, a file
 //! or blank, or the origin is itself local), refused otherwise, a third-party frame's
-//! included. So an opted-in widget can still reach an app on `127.0.0.1`, and for every
+//! included. The opaque case reaches further: in a file page, or an inline HTML page that
+//! opted in, every opaque frame counts as the page's own, one a third-party frame
+//! creates included, because CEF can't tell opaque origins apart. So an opted-in widget
+//! can still reach an app on `127.0.0.1`, and for every
 //! other origin from the internet Chromium is meant to refuse, at the network layer, what
 //! the request policy can't see: a public name that resolves to a local address, and
 //! requests that never reach the resource handler. That the pinned CEF enforces these

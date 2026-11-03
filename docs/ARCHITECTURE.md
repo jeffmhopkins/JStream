@@ -326,8 +326,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   ([ADR-0037](adr/0037-kind-descriptors-for-transitions-and-plugins.md)).
 - **Transitions** ([ADR-0029](adr/0029-transitions.md),
   [ADR-0037](adr/0037-kind-descriptors-for-transitions-and-plugins.md)): a preset's kind
-  is a transition kind with a descriptor. `cut`, `fade` and `move` are the first, so a
-  new kind (a stinger, a WGSL wipe) needs no protocol change. `duration_ms` and `easing`
+  is a transition kind with a descriptor. `cut`, `fade`, `move` and `stinger` are the
+  built-in ones, so a new kind (a WGSL wipe) needs no protocol change. `duration_ms` and `easing`
   stay preset fields; `unmatched` and `stagger_ms` are settings of `fade` and `move`. A
   switch to a preset whose kind is missing cuts. Exactly one preset is the
   default, and it can't be deleted. Deleting a preset clears the overrides that use it in
@@ -336,7 +336,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   the default. `SceneItem.transition { delay_ms, easing, glide, appear, disappear }`
   belongs to the placement, keyed by item ID. **Move** pairs outgoing and incoming items
   that place the same source (the k-th placement with the k-th, in stacking order) and
-  interpolates each pair; **Fade** pairs nothing; **Cut** switches on the next tick.
+  interpolates each pair; **Fade** pairs nothing; **Stinger** cuts at its `cut_ms`
+  under its `scene`, whose items come in over the switch and go after it; **Cut**
+  switches on the next tick.
   Unpaired items appear or disappear with their effect. The running transition is
   runtime state beside `program_scene`, never collection state.
 - The preview shown in the UI is a protocol stream, not an `Output`.
@@ -445,9 +447,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   shows `Program` at the canvas size and base rate; a mix an output shows can't be
   deleted. Outputs share a session by mix and profile. `Preview` shows `Program`: no
   mix draws studio mode's preview scene yet.
-  Transition presets (`cut`, `fade` and `move`, built-in kinds with descriptors), the
-  default preset, each scene's `transition_in` and `transition_out` and each item's
-  `transition`: a new collection holds one preset, `cut`, as its default, so a switch
+  Transition presets (`cut`, `fade`, `move` and `stinger`, built-in kinds with
+  descriptors), the default preset, each scene's `transition_in` and `transition_out`
+  and each item's `transition`: a new collection holds one preset, `cut`, as its default, so a switch
   cuts until a client adds another.
   Audio (protocol 0.19): an audio source's `audio` (`enabled`, `follow`, fader and
   mute; a nested scene source has no fader or mute), the master bus and up to 15
@@ -1127,8 +1129,8 @@ Windows hardware, which only a hardware run can check.
 during it, the program mix is a synthetic item list whose transforms and opacity come
 from the transition state, drawn over both scenes' source images. The control thread
 pairs the items when the switch starts and publishes the plan in the shot, one
-`jstream_render::transition::Track` per item (a pair, an appearance or a
-disappearance, each with its delay, duration and easing); the render thread only
+`jstream_render::transition::Track` per item (a pair, an appearance, a disappearance,
+or a stinger item's pass through, each with its delay, duration and easing); the render thread only
 samples each track at the frame's media time. A switch mid-transition starts from what
 is on screen: the control thread samples the running plan at the switch time with the
 same function, so both threads agree on it without the render thread keeping any

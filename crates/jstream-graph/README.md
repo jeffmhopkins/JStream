@@ -162,7 +162,8 @@ with no inverse. The engine draws open gestures' source settings through it
   `invalid_argument` lists every blocker in `blockers` (`deps::blockers`, the reverse
   of the cycle check's edges, plus the mixes and outputs): the item (`source_id`), the `scene`
   source (`kind.scene_id`), the mix (`mix.input.scene_id`), the output (`audio_buses`), the setting
-  (`settings.<param>`) or a filter's setting (`filters.<filter_id>.<param>`). The client removes them first, in the same batch if it likes,
+  (`settings.<param>`), a filter's setting (`filters.<filter_id>.<param>`) or a transition
+  preset's setting, such as a stinger's scene (entity `transition`, `settings.<param>`). The client removes them first, in the same batch if it likes,
   or sends the batch `delete.plan` returns. Rejecting rather than cascading keeps each
   edit's effect, and its inverse, limited to the object it names.
 - **Canvas and geometry** ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)):
@@ -407,8 +408,8 @@ unknown kind), and `delete.plan` (`plan.rs`,
 target. `Graph::delete_plan` builds the plan from the same `deps::blockers` the delete
 check uses: a scene's plan also deletes the `scene` sources that show it, the items
 placing any deleted source are removed, settings references to anything deleted are set
-to `null` (one `source.set_settings` per source, and one `filter.set_settings` per
-filter), the video mixes that show a deleted scene are pointed at the program
+to `null` (one `source.set_settings` per source, one `transition.update` per transition
+preset, and one `filter.set_settings` per filter), the video mixes that show a deleted scene are pointed at the program
 (`video_mix.update`), and the target's own delete comes last. The plan also lists the
 hotkey bindings those deletes remove. A bus's plan clears references and moves the
 outputs that carry the bus to the master (`output.set_audio_buses`; its

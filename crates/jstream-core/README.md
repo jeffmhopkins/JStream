@@ -889,7 +889,7 @@ left. A switch never moves it, and nothing draws it until E2's preview mix does.
 preset (`transition::resolve`: the preset it names, else the new scene's
 `transition_in`, else the old scene's `transition_out`, else the default). A `cut`, a
 zero duration, or a kind this engine can't run puts the scene on program for the next
-frame. A `fade` or `move` puts it on program at once too, and keeps a `Running`
+frame. A `fade`, `move` or `stinger` puts it on program at once too, and keeps a `Running`
 transition beside it in the studio: where it starts from, the scene it goes to, its
 start on the media clock, and the resolved preset. `studio.changed` names the preset and
 the transition's length. While it runs, `snapshot::plan_with` plans the transition
@@ -903,6 +903,17 @@ alone. A switch while a transition runs samples it at the switch time
 one from those items, so nothing jumps
 ([ADR-0052](../../docs/adr/0052-transition-mechanics-and-studio-preview.md) §1). A switch to the scene already on program, even
 mid-transition, does nothing. An edit that moves program drops the transition.
+
+A `stinger` pairs nothing: what is on screen shows until its `cut_ms` (at most the
+duration) and the new scene from then on, with no effect (`transition::cut_under`). Its
+`scene`'s items, planned as the scene places them, are drawn over both as
+`Track::Through` (`transition::through`): each comes in by its own appear effect after
+its delay plus `stagger_ms` × its index and is in by the cut, then goes by its disappear
+effect after the cut by the same delay, and is gone at the end. The transition runs for
+its whole duration. A preset with no scene cuts at the cut point; the scene it names
+can't be deleted while it does (the graph lists the preset as a blocker, and
+`delete.plan` sets its `scene` to `null`). The stinger scene's sources are shown when it starts, so a
+`browser` source with `restart_on_show` plays from the beginning each time.
 
 Pairing and its inputs: each visible item that has a frame (or places a nested scene,
 or a `display` or `window` source showing its capture) becomes a `Visual` at its stored opacity, its

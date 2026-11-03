@@ -152,7 +152,8 @@ pub enum Query {
     /// `folder.delete` and `label.delete` alone refuse (their `invalid_argument` lists
     /// those `blockers`). The plan removes the items that place a deleted source, deletes
     /// the `scene` sources that show a deleted scene (and their items), and sets settings
-    /// references to the target to `null`, keeping the sources that hold them. For a
+    /// references to the target to `null`, keeping the sources and transition presets that
+    /// hold them. For a
     /// folder it moves what sits in it up to the folder's parent; for a label it takes
     /// the label off the sources carrying it. It also lists the hotkey bindings the
     /// delete removes with what they name (ADR-0040 §3), which need no edit of their own.

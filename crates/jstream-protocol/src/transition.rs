@@ -27,6 +27,10 @@ pub const FADE: &str = "fade";
 /// The built-in transition kind that pairs items placing the same source and
 /// interpolates each pair.
 pub const MOVE: &str = "move";
+/// The built-in transition kind that plays a scene over the switch: the scene's items
+/// come in over the old picture, the picture cuts to the new scene under them at
+/// `cut_ms`, and they go again.
+pub const STINGER: &str = "stinger";
 
 /// The longest `duration_ms` a preset may have.
 pub const MAX_DURATION_MS: u32 = 60_000;
@@ -270,9 +274,10 @@ pub struct TransitionStarted {
     pub duration_ms: u32,
 }
 
-/// The built-in transition kinds, ordered by ID: `cut`, `fade` and `move`
+/// The built-in transition kinds, ordered by ID: `cut`, `fade`, `move` and `stinger`
 /// ([ADR-0037](../../../docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md)
-/// §1). `fade` and `move` take `unmatched` and `stagger_ms`; `cut` takes nothing.
+/// §1). `fade` and `move` take `unmatched` and `stagger_ms`; `stinger` takes the
+/// `scene` it plays, its `cut_ms` and `stagger_ms`; `cut` takes nothing.
 pub fn builtin_kinds() -> Vec<KindDescriptor> {
     let kind = |id: &str, name: &str, params: Vec<ParamDescriptor>| KindDescriptor {
         kind_id: id.into(),
@@ -336,10 +341,53 @@ pub fn builtin_kinds() -> Vec<KindDescriptor> {
             },
         ]
     };
+    let stinger = {
+        let mut params = vec![
+            ParamDescriptor {
+                id: "scene".into(),
+                ty: ParamType::Scene,
+                default: serde_json::Value::Null,
+                label: "Stinger scene".into(),
+                description: Some(
+                    "The scene played over the switch. Its items come in by their own \
+                     appear effect and delay, cover the cut, and go by their disappear \
+                     effect. Without one, the switch cuts at the cut point."
+                        .into(),
+                ),
+                group: None,
+                advanced: false,
+                visible_if: None,
+                live: true,
+            },
+            ParamDescriptor {
+                id: "cut_ms".into(),
+                ty: ParamType::Int {
+                    min: Some(0),
+                    max: Some(i64::from(MAX_DURATION_MS)),
+                    step: Some(10),
+                    unit: Some("ms".into()),
+                },
+                default: json!(500),
+                label: "Cut point".into(),
+                description: Some(
+                    "When the picture under the stinger cuts to the new scene, from the \
+                     start; at most the preset's duration."
+                        .into(),
+                ),
+                group: None,
+                advanced: false,
+                visible_if: None,
+                live: true,
+            },
+        ];
+        params.extend(per_item().into_iter().filter(|p| p.id == "stagger_ms"));
+        params
+    };
     vec![
         kind(CUT, "Cut", vec![]),
         kind(FADE, "Fade", per_item()),
         kind(MOVE, "Move", per_item()),
+        kind(STINGER, "Stinger", stinger),
     ]
 }
 
@@ -420,7 +468,7 @@ mod tests {
     fn builtin_kinds_are_sorted_and_their_defaults_valid() {
         let kinds = builtin_kinds();
         let ids: Vec<&str> = kinds.iter().map(|k| k.kind_id.as_str()).collect();
-        assert_eq!(ids, ["cut", "fade", "move"]);
+        assert_eq!(ids, ["cut", "fade", "move", "stinger"]);
         for kind in &kinds {
             for param in &kind.params {
                 assert_eq!(param.check(&param.default), Ok(()), "{}", param.id);

@@ -659,6 +659,8 @@ impl jstream_browser::BrowserPage for PaintedPage {
 
     fn set_css(&mut self, _css: &str) {}
 
+    fn reload(&mut self) {}
+
     fn audio(&self) -> &Arc<jstream_browser::PageAudio> {
         &self.audio
     }
