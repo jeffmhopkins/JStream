@@ -311,8 +311,8 @@ pub struct Layout {
 /// outer right.
 const SIZES: [f64; 8] = [260.0, 140.0, 300.0, 140.0, 170.0, 340.0, 190.0, 280.0];
 
-/// The default layout: Scenes over Sources on the left, the inspector over the
-/// Filters and Transform panels (one group, Filters shown) on the right, and the mixer and
+/// The default layout: Scenes over Sources on the left, the inspector with the Filters
+/// and Transform panels as tabs of one full-height group on the right, and the mixer and
 /// the outputs (with Transitions as a second tab) along the bottom.
 pub fn editing() -> Arrangement {
     use PanelId::*;
@@ -322,7 +322,7 @@ pub fn editing() -> Arrangement {
             (Zone::Left, vec![(vec![Scenes], 1.0), (vec![Objects], 1.0)]),
             (
                 Zone::Right,
-                vec![(vec![Inspector], 2.0), (vec![Filters, Transform], 1.0)],
+                vec![(vec![Inspector, Filters, Transform], 1.0)],
             ),
             (
                 Zone::Bottom,
@@ -837,7 +837,7 @@ mod tests {
             shape(&dock),
             vec![
                 (Zone::Left, vec![vec![Scenes], vec![Objects]]),
-                (Zone::Right, vec![vec![Inspector], vec![Filters, Transform]]),
+                (Zone::Right, vec![vec![Inspector, Filters, Transform]]),
                 (Zone::Bottom, vec![vec![Mixer], vec![Outputs, Transitions]]),
             ]
         );
@@ -879,9 +879,8 @@ mod tests {
                     Zone::Right,
                     vec![
                         vec![Scenes],
-                        vec![Inspector],
-                        vec![Mixer],
-                        vec![Filters, Transform]
+                        vec![Inspector, Filters, Transform],
+                        vec![Mixer]
                     ]
                 ),
                 (Zone::Bottom, vec![vec![Outputs, Transitions]]),
