@@ -349,7 +349,8 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   (#362): `null`, the default, is the program mix, the master after its filters as
   the outputs hear it; a `bus` reference is that bus after its fader, before the
   master's filters. The parameter's description says so, and a change of it needs a
-  new source; a value that isn't a bus reference or `null` is a setting error. The
+  new source; a value that isn't a bus reference or `null` is a setting error, whose
+  reason shows the reference's shape as the graph's does (`not_a_reference`, #1081). The
   graph checks that the bus exists and refuses to delete it while a source draws it.
   A second setting, `audio_source` (#459), a source reference restricted to audio
   (`null` by default, so a source from before it draws what it drew, and the kinds'
@@ -362,7 +363,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   source doesn't: it has no channel of its own), and the reference is an ordinary
   source → source edge, so the drawn source's delete is refused, and `delete.plan`
   clears it, as for any source reference. A change of it needs a new source; a value
-  that isn't a source reference or `null` is a setting error. `create`
+  that isn't a source reference or `null` is a setting error, with the same reason. `create`
   paints the first frame; after that their `Painter` draws a new one each 1/30 s tick
   of `at` (`next_change` is the next tick; with no scope, `None`), row by row into a
   pool of up to four frames reused once no one holds them, so a frame handed out

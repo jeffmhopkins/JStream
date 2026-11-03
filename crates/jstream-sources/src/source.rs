@@ -4,7 +4,7 @@ use crate::{AudioScopes, CaptureSpec, MediaAudio, SourceError};
 use jstream_browser::BrowserBackend;
 use jstream_media::{AudioFormat, FrameSize, MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_platform::{AudioInputHandler, AudioStream, GpuFrame, MediaDecoders};
-use jstream_protocol::{AssetRoot, KindDescriptor, Reference, Settings};
+use jstream_protocol::{AssetRoot, KindDescriptor, Reference, Settings, not_a_reference};
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -567,8 +567,33 @@ pub(crate) fn asset(
         Some(Reference::Asset { root, path }) => Ok(Some((root, path))),
         _ => Err(SourceError::Setting {
             param: id.to_owned(),
-            reason: "must be an asset reference or null".into(),
+            reason: not_a_reference("asset"),
         }),
+    }
+}
+
+/// Issue #1081: a value that isn't an asset reference is refused with the reference's
+/// shape, the reason the graph gives for the same value.
+#[cfg(test)]
+mod reference_tests {
+    use super::asset;
+    use crate::SourceError;
+    use jstream_protocol::{Settings, not_a_reference};
+    use serde_json::json;
+
+    #[test]
+    fn a_bare_path_for_an_asset_names_the_shape() {
+        let mut settings = Settings::new();
+        settings.insert("file", json!("/pics/a.png"));
+        let Err(SourceError::Setting { param, reason }) = asset(&settings, "file") else {
+            panic!("a bare path is refused");
+        };
+        assert_eq!(param, "file");
+        assert_eq!(reason, not_a_reference("asset"));
+        assert!(
+            reason.contains(r#"{"type": "asset", "root": "absolute""#),
+            "{reason}"
+        );
     }
 }
 
