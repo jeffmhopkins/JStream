@@ -2,7 +2,7 @@
 //! the system's: Ctrl+C on the canvas or a Sources row, or the item menu's Copy, copies
 //! the selected items, and on a scene row (or its menu's Copy) copies the scene. Ctrl+V,
 //! or Paste in the item menu and the empty canvas's and the Sources panel's menus, places the copied items' sources again in the shown
-//! scene as references, each with the copied item's box, crop, visibility, opacity,
+//! scene as references, each with the copied item's box, crop, visibility, lock, opacity,
 //! blend, transition settings and effects. Into the scene they came from they land 40
 //! pixels right and down, as a duplicate does. Ctrl+V in the Scenes panel, or Paste
 //! scene, duplicates the copied scene, as Duplicate scene does: a scene named
@@ -13,9 +13,10 @@
 //! As in OBS, filters and a transform have clipboards of their own, filled from the
 //! item menus. Copy filters takes the primary item's source's chains; Paste filters adds
 //! them after each selected item's source's own, and Paste filters, replacing, removes
-//! those first (a chain the source doesn't have is left out). Copy transform takes the
-//! primary item's box and crop; Paste transform gives them to each selected item (in a
-//! keyframe, as its override).
+//! those first (a chain the source doesn't have, or the clip has nothing for, is left
+//! as it is). Copy transform takes the primary item's whole placement (box, fit,
+//! rotation, 3D and flips) and crop; Paste transform gives them to each selected item
+//! (in a keyframe, as its override).
 //!
 //! Docs: docs/UI-FEATURES.md#keyboard
 
@@ -218,7 +219,8 @@ pub fn paste_filter_edits(
                 &filters.audio,
             ),
         ] {
-            if !has {
+            // A chain the clip has nothing for keeps its own filters, even when replacing.
+            if !has || copied.is_empty() {
                 continue;
             }
             if replace {
@@ -370,6 +372,12 @@ fn place_edits(
             edits.push(Edit::ItemSetTransition {
                 item_id: item_id.clone(),
                 transition: item.transition,
+            });
+        }
+        if item.locked {
+            edits.push(Edit::ItemSetLocked {
+                item_id: item_id.clone(),
+                locked: true,
             });
         }
         let owner = FilterOwner::Item {
@@ -544,6 +552,7 @@ mod tests {
             opacity: Finite32::ONE,
             blend: Default::default(),
             transition: Default::default(),
+            locked: false,
         }
     }
 
@@ -599,6 +608,7 @@ mod tests {
             ..Crop::NONE
         };
         a.visible = false;
+        a.locked = true;
         a.opacity = Finite32::new(0.5).expect("finite");
         a.effects = vec![blur()];
         let mut kf = scene("kf", Vec::new());
@@ -699,6 +709,13 @@ mod tests {
                 ("add", "logo".into(), "Video:vignette".into()),
             ]
         );
+        // Replacing from a clip with no video filters leaves the source's own.
+        let audio_only = FilterChains {
+            video: Vec::new(),
+            audio: copied.audio.clone(),
+        };
+        let kept = paste_filter_edits(&c, &audio_only, &sources[..1], true, &mut counter());
+        assert!(kept.is_empty(), "{kept:?}");
     }
 
     #[test]
@@ -761,6 +778,10 @@ mod tests {
                     item_id: "item1".into(),
                     scene_id: None,
                     visible: false,
+                },
+                Edit::ItemSetLocked {
+                    item_id: "item1".into(),
+                    locked: true,
                 },
                 Edit::FilterAdd {
                     owner: FilterOwner::Item {
@@ -858,6 +879,7 @@ mod tests {
                 }
                 Edit::ItemSetCrop { .. } => "crop",
                 Edit::ItemSetVisible { .. } => "hidden",
+                Edit::ItemSetLocked { locked: true, .. } => "locked",
                 Edit::FilterAdd { .. } => "effect",
                 other => panic!("{other:?}"),
             })
@@ -875,6 +897,7 @@ mod tests {
                 "item",
                 "crop",
                 "hidden",
+                "locked",
                 "effect",
                 "item"
             ]

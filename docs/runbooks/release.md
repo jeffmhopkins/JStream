@@ -20,7 +20,8 @@ covers = ["Cargo.toml"]
 The release version is `[workspace.package] version` in the root `Cargo.toml`, following
 [SemVer](https://semver.org/spec/v2.0.0.html). The apps the portable zip ships take it
 with `version.workspace = true`: `jstream-desktop`, `jstream-daemon`, `jstream-cli`,
-`jstream-vcam-windows` and `jstream-browser-helper`. So it is what the daemon's and the
+`jstream-vcam-windows`, `jstream-browser-helper` and `jstream-ui`, whose About dialog
+shows it. So it is what the daemon's and the
 CLI's `--version` print and what the logs and crash reports name. Libraries, unpublished,
 stay at `0.0.0`.
 

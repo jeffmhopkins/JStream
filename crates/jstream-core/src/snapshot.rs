@@ -237,6 +237,12 @@ impl Frame {
         ([self.width, self.height], self.extent)
     }
 
+    /// Every pixel, tightly packed, for tests that compare what a source shows.
+    #[cfg(test)]
+    pub(crate) fn pixels(&self) -> Vec<u8> {
+        self.rgba().to_vec()
+    }
+
     /// The first pixel, for tests that check what a source shows.
     #[cfg(test)]
     pub(crate) fn first_pixel(&self) -> Option<[u8; 4]> {
@@ -4179,7 +4185,8 @@ fn scale_down(src_w: u32, src_h: u32, rgba: &[u8], dst_w: u32, dst_h: u32) -> Ve
     out
 }
 
-fn encode_png(width: u32, height: u32, rgba: &[u8]) -> Result<Vec<u8>, String> {
+/// `rgba` as a PNG, for `video.snapshot` and a preview stream's `png` codec.
+pub(crate) fn encode_png(width: u32, height: u32, rgba: &[u8]) -> Result<Vec<u8>, String> {
     let mut buf = Vec::new();
     let mut encoder = png::Encoder::new(&mut buf, width, height);
     encoder.set_color(png::ColorType::Rgba);

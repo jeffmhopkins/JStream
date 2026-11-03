@@ -28,7 +28,7 @@ depends_on = ["docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-004"]
 |---|---|---|
 | Stream keys | Anyone holding one can broadcast as the user's channel | OS credential store only ([R-SEC-001](../RULES.md#R-SEC-001)); Windows Credential Manager, and the macOS Keychain ([ADR-0063](../adr/0063-macos-platform-support.md)), which the daemon uses where it is live on macOS (#639); and on Linux ([ADR-0071](../adr/0071-linux-secret-store.md)) the Secret Service, else a `0600` plaintext file (see [Secrets](#secrets)), which the daemon uses where it is live on 64-bit Linux (#1016) |
 | YouTube OAuth refresh token | Manages the user's channel (the `youtube` scope) | OS credential store; access tokens stay in memory |
-| Control token | Full control of the engine, by design ([ADR-0006](../adr/0006-mcp-full-access.md)), including every stream key's use | The daemon's token file (user-chosen path); the desktop app's is in memory and new on every start |
+| Control token | Full control of the engine, by design ([ADR-0006](../adr/0006-mcp-full-access.md)), including every stream key's use | The daemon's token file (user-chosen path); the desktop app's is in memory and new on every start, or with `--mcp` the user-only `token` file in its data folder, reused across starts |
 | Paired device tokens | Same power as the control token ([ADR-0044](../adr/0044-pairing-remote-browsers.md)) | A digest in the devices file beside the token file; the device's own copy; a browser's in a cookie, once there is a TLS listener |
 | The program and preview video | What the user chose not to broadcast yet (the preview scene) | Engine memory, the virtual camera's shared textures, `video.snapshot` |
 | Local files | Asset paths and recording paths reach the file system | Wherever the user (or a token holder) points them |
@@ -91,6 +91,7 @@ covers = [
   "crates/jstream-server/src/session.rs",
   "apps/jstream-daemon/src/token.rs",
   "apps/jstream-daemon/src/args.rs",
+  "crates/jstream-server/src/token_file.rs",
 ]
 depends_on = ["docs/RULES.md#R-SEC-002", "docs/adr/0006-mcp-full-access.md"]
 -->
@@ -112,6 +113,10 @@ a stolen token, local denial of service.
 - The server keeps only a BLAKE3 digest of the token and compares digests in constant
   time. Tokens are 32 bytes from the OS random source. Header values are never logged.
 - The daemon binds `127.0.0.1` and has no flag to bind elsewhere. There is no TLS yet.
+  The desktop app serves only its window, on an OS-picked port with a token kept in
+  memory, unless it is started with `--mcp`: then it binds `127.0.0.1` on a fixed port
+  (4455 by default), turns MCP on and takes its token from a token file with the
+  daemon's checks, which both hosts share (`jstream_server::token_file`).
 - Limits: 4 MiB messages and MCP bodies (one over that and up to 16 MiB is read and
   refused with `too_large`, echoing at most a 256-byte `id`, one larger closes the
   connection or is `413`; [ADR-0074](../adr/0074-too-large-requests.md)), 128 open TCP connections of any kind
@@ -122,7 +127,7 @@ a stolen token, local denial of service.
 - Failed tokens are logged one by one only up to 10 a minute, then counted, so a flood
   of them can't fill the log (#354).
 - On Unix the token file is created `0600` and refused if group or others can read it.
-  On Windows (#548) the daemon's token, devices and log files, the desktop app's log file
+  On Windows (#548) the daemon's token (and the desktop app's, with `--mcp`), devices and log files, the desktop app's log file
   (#780), the daemon's and the desktop app's crash reports (#656), and the UI settings
   file both write (ADR-0084), are created with a protected DACL for SYSTEM and the user
   in the same `CreateFileW` call (`jstream_platform_windows::create_private_file`), so
@@ -194,7 +199,7 @@ covers = [
   "crates/jstream-browser/src/helper/handlers.rs",
   "crates/jstream-browser/src/permission.rs",
 ]
-depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0048-sandboxed-browser-helper.md", "docs/adr/0095-browser-helper-on-linux.md"]
+depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0048-sandboxed-browser-helper.md", "docs/adr/0095-browser-helper-on-linux.md", "docs/adr/0102-page-api-for-browser-sources.md"]
 -->
 
 **Built** (C8, on Windows), as [ADR-0021](../adr/0021-browser-source.md) and
@@ -250,6 +255,17 @@ handler first, so for an origin the policy refuses they are refused there; that 
 enforces them in the pinned CEF's windowless pages is not yet confirmed on a Windows run
 (#347). ADR-0021's per-source
 "allow page to control JStream" opt-in must not hand the page the control token (#347).
+
+**Decided, not built** ([ADR-0102](../adr/0102-page-api-for-browser-sources.md)): a
+source may opt its page in to a read-only `window.jstream` with the engine animation clock
+and the page's own visibility, and, per further setting, the program and preview scenes,
+named shared values and one bus's levels and bands. The API exists only in the main frame
+while it shows the source's own document. Data flows one way, filtered to the grant in the
+engine, and the helper drops every message a renderer sends. A page has no path to the
+engine, and a compromised renderer holds only what the sources sharing its renderer were
+granted (each such page is to get a renderer of its own). Whatever a page is granted, a web
+page can send off the machine: preview scene names and a microphone bus's bands matter
+most.
 
 <a id="files"></a>
 ## Files and decoders
@@ -346,16 +362,17 @@ with its dialog open, or grants with a list unanswered, acknowledges its latest 
   within 60 s fails the output, and each loss is logged and counted in the output's stats
   ([ARCH › GPU pipeline](../ARCHITECTURE.md#gpu-pipeline)). The static load limits are
   enforced (`jstream-effects`' shader contract, plus #538's 16 KiB value cap). A loss is
-  blamed on the pack effects drawn before it, which are quarantined until a person
-  re-enables them (`effect.enable`, which no MCP tool, plugin or hotkey carries), the
-  whole pack after a second blame in a run, and reported in `gpu.device_lost` (protocol
+  blamed on the pack effects drawn before it, which are quarantined, under any pack or
+  kind ID that draws the same WGSL (the quarantine keeps each blamed module's digest,
+  ADR-0097), until a person re-enables them (`effect.enable`, which no MCP tool, plugin
+  or hotkey carries), the whole pack after a second blame in a run, and reported in `gpu.device_lost` (protocol
   0.61). Not built yet: the GPU-time guard against long loops, which would turn an
   effect off before the OS resets the device.
 
 <a id="mcp"></a>
 ## MCP agents
 <!-- @section
-depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/adr/0036-mcp-events-polling-tool.md", "docs/adr/0059-mcp-annotations-and-remote-text.md", "docs/adr/0085-capture-target-names-marked-as-remote-text.md"]
+depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/adr/0036-mcp-events-polling-tool.md", "docs/adr/0059-mcp-annotations-and-remote-text.md", "docs/adr/0085-capture-target-names-marked-as-remote-text.md", "docs/adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md"]
 -->
 
 **Threats:** an agent following instructions hidden in text it reads (prompt
@@ -363,7 +380,7 @@ injection), and so using its full access against the user.
 
 **Controls on main:** MCP goes through the same gate and token as the WebSocket API
 (over stdio, through `jstream-cli mcp`, it uses the CLI's token). The desktop app keeps
-MCP off. Tool arguments and results are not logged; the audit log records who changed
+MCP off unless started with `--mcp`, which serves it behind the same token and checks. Tool arguments and results are not logged; the audit log records who changed
 what, without arguments. Agents can read the last 100 entries with `activity.list`,
 each with a sentence that names objects and gives values but never settings, targets
 or keys ([ADR-0083](../adr/0083-activity-log-over-the-protocol.md)); WASM plugins can't.
@@ -378,8 +395,11 @@ are data and never instructions. That rejection text has the key replaced, is cu
 too: the `capture` tool's description and the server instructions mark it as data and
 never instructions ([ADR-0085](../adr/0085-capture-target-names-marked-as-remote-text.md)).
 Every tool carries MCP annotations (`readOnlyHint`, `destructiveHint`,
-`openWorldHint`), so a client can ask the user before an agent retargets an output,
-sets its key, goes live or deletes something (#346).
+`openWorldHint`), so a client can ask the user before an agent retargets or deletes an
+output, sets or clears its key, goes live or stops, steps through its undo history,
+revokes a device, starts a pairing or replaces the UI's settings (#346). Other edits,
+deletes of scenes, sources and items included, are undoable and unannounced
+([ADR-0098](../adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md)).
 
 **Accepted:** full access, with no tiers and no confirmation step
 ([ADR-0006](../adr/0006-mcp-full-access.md)). An agent sees the program through
