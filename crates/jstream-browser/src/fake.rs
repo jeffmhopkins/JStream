@@ -5,7 +5,7 @@
 //! ([`FakeBrowser::paint_on_cpu`]), as the CEF backend does on Linux. A test plays a page's requests through its
 //! [`RequestPolicy`] with [`FakePageState::request`].
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use jstream_media::VideoFrame;
@@ -34,6 +34,7 @@ struct State {
 pub struct FakePageState {
     spec: PageSpec,
     css: Mutex<Vec<String>>,
+    reloads: AtomicUsize,
     audio: Arc<PageAudio>,
     policy: RequestPolicy,
     closed: AtomicBool,
@@ -58,6 +59,11 @@ impl FakePageState {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
+    }
+
+    /// How many times it was reloaded.
+    pub fn reloads(&self) -> usize {
+        self.reloads.load(Ordering::Acquire)
     }
 
     /// Its audio, to push packets into as CEF would.
@@ -118,6 +124,7 @@ impl BrowserBackend for FakeBrowser {
         let page = Arc::new(FakePageState {
             spec: spec.clone(),
             css: Mutex::new(Vec::new()),
+            reloads: AtomicUsize::new(0),
             audio: PageAudio::new(),
             policy: RequestPolicy::for_page(spec),
             closed: AtomicBool::new(false),
@@ -159,6 +166,10 @@ impl BrowserPage for FakePage {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .push(css.to_owned());
+    }
+
+    fn reload(&mut self) {
+        self.0.reloads.fetch_add(1, Ordering::AcqRel);
     }
 
     fn audio(&self) -> &Arc<PageAudio> {

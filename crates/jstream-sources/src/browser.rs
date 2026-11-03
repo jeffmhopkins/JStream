@@ -7,7 +7,8 @@ use crate::describe::{asset, kind, param, size};
 use crate::source::{changed_non_live, setting};
 use crate::{Context, Source, SourceAudio, SourceError, SourceKind};
 use jstream_browser::{
-    BrowserPage, DEFAULT_CSS, MAX_CSS_BYTES, MAX_FPS, PageAudio, PageLocation, PageSpec,
+    BrowserPage, DEFAULT_CSS, MAX_CSS_BYTES, MAX_FPS, MAX_HTML_BYTES, PageAudio, PageLocation,
+    PageSpec,
 };
 use jstream_media::{AudioFormat, MediaTime, Timebase, VideoFrame};
 use jstream_platform::{AudioInputHandler, AudioStream, GpuFrame};
@@ -41,7 +42,7 @@ impl BrowserKind {
                 ParamDescriptor {
                     description: Some(
                         "The page's address, http:// or https://. Ignored when a local file \
-                         is set."
+                         or HTML is set."
                             .into(),
                     ),
                     ..param("url", "URL", text(MAX_URL_CHARS, false), json!(""))
@@ -53,6 +54,22 @@ impl BrowserKind {
                             .into(),
                     ),
                     ..param("file", "Local file", asset(&["html", "htm"]), Value::Null)
+                },
+                ParamDescriptor {
+                    description: Some(
+                        "The page itself, as HTML with its CSS and scripts inline: a graphic \
+                         built here instead of loaded from a URL. Ignored when a local file \
+                         is set. It can load fonts and images from the web, but no local \
+                         files, and reaches this computer and the local network only when \
+                         allowed below."
+                            .into(),
+                    ),
+                    ..param(
+                        "html",
+                        "HTML",
+                        text(u32::try_from(MAX_HTML_BYTES).unwrap_or(u32::MAX), true),
+                        json!(""),
+                    )
                 },
                 param("width", "Width", size(), json!(1920)),
                 param("height", "Height", size(), json!(1080)),
@@ -86,6 +103,21 @@ impl BrowserKind {
                         "Custom CSS",
                         text(u32::try_from(MAX_CSS_BYTES).unwrap_or(u32::MAX), true),
                         json!(DEFAULT_CSS),
+                    )
+                },
+                ParamDescriptor {
+                    description: Some(
+                        "Load the page again each time the program shows it again, so its \
+                         animations play from the start: for an HTML graphic or a stinger \
+                         that should play its entrance every time."
+                            .into(),
+                    ),
+                    live: true,
+                    ..param(
+                        "restart_on_show",
+                        "Restart when shown",
+                        ParamType::Bool,
+                        json!(false),
                     )
                 },
                 ParamDescriptor {
@@ -180,10 +212,25 @@ pub(crate) fn open(
     }))
 }
 
-/// Where the page loads from: the `file` asset when it is set, else the `url`.
+/// Where the page loads from: the `file` asset when it is set, else the `html` when it
+/// isn't blank, else the `url`.
 fn location(settings: &Settings, ctx: &Context) -> Result<PageLocation, SourceError> {
     if let Some((root, path)) = crate::source::asset(settings, "file")? {
         return Ok(PageLocation::File(ctx.assets.resolve(root, &path)?));
+    }
+    // A kind built on `browser` without the setting (`youtube_chat`) has no HTML.
+    if let Some(html) = settings.get("html") {
+        let html = html.as_str().ok_or_else(|| SourceError::Setting {
+            param: "html".into(),
+            reason: "must be a string".into(),
+        })?;
+        let page = PageLocation::html(html).map_err(|e| SourceError::Setting {
+            param: "html".into(),
+            reason: e.to_string(),
+        })?;
+        if page != PageLocation::Blank {
+            return Ok(page);
+        }
     }
     let url = setting(settings, "url")?
         .as_str()
@@ -244,6 +291,19 @@ impl Source for BrowserSource {
             ms.saturating_add(self.every_ms),
             Timebase::MILLIS,
         ))
+    }
+
+    /// Reloads the page when `restart_on_show` is set (a kind built on `browser` without
+    /// it never does).
+    fn show(&mut self, _: MediaTime) {
+        if self
+            .settings
+            .get("restart_on_show")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+        {
+            self.page.reload();
+        }
     }
 
     fn update(&mut self, settings: &Settings) -> Result<(), SourceError> {

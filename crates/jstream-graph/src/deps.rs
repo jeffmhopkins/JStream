@@ -265,6 +265,21 @@ pub(crate) fn blockers(state: &State, target: &Node) -> Vec<Blocker> {
             }
         }
     }
+    // Transition presets whose settings refer to it, such as a stinger's scene (ADR-0037
+    // §1), in preset ID order: `settings.<param>`.
+    for preset in state.presets() {
+        out.extend(
+            preset
+                .settings
+                .references()
+                .filter(|(_, r)| reference_node(r).as_ref() == Some(target))
+                .map(|(param, _)| Blocker {
+                    entity: EntityKind::Transition,
+                    id: preset.id.as_str().to_owned(),
+                    field: format!("settings.{param}"),
+                }),
+        );
+    }
     // The outputs that carry a bus (ID order).
     if let Node::Bus(bus_id) = target {
         out.extend(

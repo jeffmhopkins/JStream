@@ -222,8 +222,13 @@ helper with mode 0700, which the engine reads only up to the size of the page it
 **Controls (#549, #721):** a page from a public origin is also refused loopback,
 private, link-local and local-name targets, redirects to them included, unless it is
 the source's own origin and the source sets `local_network`. It is decided per request
-by the origin that makes it, so the opt-in never covers a third-party frame, and a
-file or blank page whose main frame navigates to the web loses its own access.
+by the origin that makes it, so for a web page the opt-in never covers a third-party
+frame, and a file or blank page whose main frame navigates to the web loses its own
+access. A page given as HTML (the `html` setting, loaded as a `data:` URL with an opaque
+origin) loads no local files, and reaches no local targets unless its source sets
+`local_network`, and then only while its main frame stays on a `data:` document. Its
+opt-in is an opaque origin's, like a file page's, not a web page's: it covers every
+opaque frame inside the page (see Gaps).
 
 **Gaps:** permission requests are refused: the helper's permission handler cancels every
 camera, microphone and screen request and denies every permission prompt except
@@ -235,7 +240,11 @@ The local-network refusal reads only the URL's host: a public name that resolves
 local address, whether fixed (`*.nip.io`) or by DNS rebinding, passes it, and so does any
 request the helper's request handler doesn't see, such as a service worker's. CEF
 names opaque origins alike, so a sandboxed or `data:` frame that a third-party frame
-inside a local file page creates counts as the file page's (#721). Chromium's
+inside a local file page creates counts as the file page's (#721). The same holds inside
+a page given as HTML whose source sets `local_network`: such a frame, made by a
+third-party frame the HTML embeds, gets the page's local-network access. It can't be
+narrowed by origin, since the HTML document's own origin is opaque too; serving the
+HTML from a reserved origin would close it (#1035). Chromium's
 Local Network Access checks see both at the network layer and ask that permission
 handler first, so for an origin the policy refuses they are refused there; that Chromium
 enforces them in the pinned CEF's windowless pages is not yet confirmed on a Windows run

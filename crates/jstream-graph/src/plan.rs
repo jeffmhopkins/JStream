@@ -11,8 +11,8 @@ use crate::deps::{self, Node};
 use crate::model::Graph;
 use jstream_protocol::{
     DeleteTarget, Edit, EntityKind, FilterId, FilterOwner, HotkeyBinding, ItemId, MixInput,
-    OutputId, ProtocolError, QueryResult, SceneId, Settings, SourceId, SourceKind, VideoMix,
-    VideoMixId,
+    OutputId, ProtocolError, QueryResult, SceneId, Settings, SourceId, SourceKind,
+    TransitionPresetId, VideoMix, VideoMixId,
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -30,6 +30,9 @@ impl Graph {
     /// - `item.remove` for each item that places a deleted source;
     /// - one `source.set_settings` per remaining source whose settings refer to a deleted
     ///   object, setting each such parameter to `null`;
+    /// - one `transition.update` per transition preset whose settings do, such as a
+    ///   stinger naming a deleted scene, in preset ID order, setting each such
+    ///   parameter to `null`;
     /// - one `filter.set_settings` per remaining source filter whose settings do,
     ///   likewise, then one per remaining scene filter and item effect (ADR-0065 §3), in
     ///   scene order;
@@ -143,8 +146,19 @@ impl Graph {
         // A scene filter's or an item effect's reference (ADR-0065 §3), cleared after the
         // item removes, in blocker order.
         let mut owner_clears: Vec<(FilterOwner, FilterId, String)> = Vec::new();
+        // A transition preset's reference, such as a stinger's scene, set back to `null`.
+        let mut preset_clears: BTreeMap<TransitionPresetId, Settings> = BTreeMap::new();
         for node in &deleted {
             for blocker in deps::blockers(state, node) {
+                if blocker.entity == EntityKind::Transition {
+                    if let Some(param) = blocker.field.strip_prefix("settings.") {
+                        preset_clears
+                            .entry(TransitionPresetId::new(blocker.id))
+                            .or_default()
+                            .insert(param.to_owned(), Value::Null);
+                    }
+                    continue;
+                }
                 let owned = match blocker.entity {
                     EntityKind::Scene => blocker.field.strip_prefix("filters."),
                     EntityKind::Item => blocker.field.strip_prefix("effects."),
@@ -206,6 +220,18 @@ impl Graph {
             clears
                 .into_iter()
                 .map(|(source_id, patch)| Edit::SourceSetSettings { source_id, patch }),
+        );
+        edits.extend(
+            preset_clears
+                .into_iter()
+                .map(|(preset_id, patch)| Edit::TransitionUpdate {
+                    preset_id,
+                    name: None,
+                    kind: None,
+                    duration_ms: None,
+                    easing: None,
+                    patch,
+                }),
         );
         edits.extend(
             filter_clears

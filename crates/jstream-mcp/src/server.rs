@@ -505,7 +505,7 @@ impl Server {
              Tool annotations (`destructiveHint`, `openWorldHint`) mark the tools that \
              can remove things, do what undo can't take back, or reach outside JStream: \
              `output`, which retargets an output, sets its key and goes live; `source`, \
-             whose `browser` kind loads any http or https page it is given; and `batch`, \
+             whose `browser` kind loads any http or https page, or HTML, it is given; and `batch`, \
              which carries their edits.\n\n{DESIGN}",
             groups.join(", ")
         )

@@ -219,7 +219,7 @@ source: crates/jstream-sources/tests/kinds.rs
         "max_len": 8192,
         "default": "",
         "label": "URL",
-        "description": "The page's address, http:// or https://. Ignored when a local file is set.",
+        "description": "The page's address, http:// or https://. Ignored when a local file or HTML is set.",
         "live": false
       },
       {
@@ -232,6 +232,16 @@ source: crates/jstream-sources/tests/kinds.rs
         "default": null,
         "label": "Local file",
         "description": "A local HTML file to show instead of a URL. The page can load files beside it.",
+        "live": false
+      },
+      {
+        "id": "html",
+        "type": "string",
+        "multiline": true,
+        "max_len": 131072,
+        "default": "",
+        "label": "HTML",
+        "description": "The page itself, as HTML with its CSS and scripts inline: a graphic built here instead of loaded from a URL. Ignored when a local file is set. It can load fonts and images from the web, but no local files, and reaches this computer and the local network only when allowed below.",
         "live": false
       },
       {
@@ -276,6 +286,14 @@ source: crates/jstream-sources/tests/kinds.rs
         "default": "body { background-color: rgba(0, 0, 0, 0); margin: 0px auto; overflow: hidden; }",
         "label": "Custom CSS",
         "description": "CSS added to the page after it loads. The default makes the page's background transparent.",
+        "live": true
+      },
+      {
+        "id": "restart_on_show",
+        "type": "bool",
+        "default": false,
+        "label": "Restart when shown",
+        "description": "Load the page again each time the program shows it again, so its animations play from the start: for an HTML graphic or a stinger that should play its entrance every time.",
         "live": true
       },
       {

@@ -70,10 +70,12 @@ fn the_kind_has_video_and_audio_and_only_css_is_live() {
         [
             ("url", false),
             ("file", false),
+            ("html", false),
             ("width", false),
             ("height", false),
             ("fps", false),
             ("css", true),
+            ("restart_on_show", true),
             ("local_network", false)
         ]
     );
@@ -164,6 +166,94 @@ fn a_page_that_paints_on_the_cpu_shows_its_paint_each_frame() {
     let after = source.frame(at).expect("a frame");
     assert_eq!(after.planes()[0].data(), &[255, 0, 0, 255, 0, 0, 255, 128]);
     assert!(source.gpu_frame().is_none());
+}
+
+/// A page given as HTML opens as that HTML, ahead of the URL, behind a local file, and
+/// with no local network unless the source allows it.
+#[test]
+fn html_opens_a_page_built_from_the_text() {
+    let browser = FakeBrowser::new();
+    let ctx = ctx(&browser, None);
+    let html = "<div class=\"bar\">BREAKING NEWS</div>";
+    let _source = create(
+        &ctx,
+        &settings(&[
+            ("url", json!("https://example.com/ignored")),
+            ("html", json!(html)),
+        ]),
+    )
+    .expect("a page");
+    let page = &browser.pages()[0];
+    assert_eq!(page.spec().location, PageLocation::Html(html.into()));
+    assert!(!page.request("http://127.0.0.1:4455/"));
+    assert!(page.request("https://fonts.gstatic.com/s/inter.woff2"));
+
+    // Blank HTML falls back to the URL.
+    let _source = create(
+        &ctx,
+        &settings(&[
+            ("url", json!("https://example.com/alerts")),
+            ("html", json!("  \n")),
+        ]),
+    )
+    .expect("a page");
+    assert_eq!(
+        browser.pages()[1].spec().location,
+        PageLocation::Web("https://example.com/alerts".into())
+    );
+
+    // Too long is refused, naming the setting.
+    let long = "a".repeat(jstream_browser::MAX_HTML_BYTES + 1);
+    match create(&ctx, &settings(&[("html", json!(long))])) {
+        Err(SourceError::Setting { param, .. }) => assert_eq!(param, "html"),
+        Err(other) => panic!("{other}"),
+        Ok(_) => panic!("over-long HTML opened a page"),
+    }
+
+    // Allowed, it may reach a local app.
+    let _source = create(
+        &ctx,
+        &settings(&[("html", json!(html)), ("local_network", json!(true))]),
+    )
+    .expect("a page");
+    assert!(
+        browser
+            .pages()
+            .last()
+            .expect("a page")
+            .request("ws://127.0.0.1:8080/")
+    );
+}
+
+/// With `restart_on_show`, the page loads again each time the program shows it again,
+/// so an HTML graphic's entrance plays every time; without it, it keeps running.
+#[test]
+fn restart_on_show_reloads_the_page_when_shown() {
+    let browser = FakeBrowser::new();
+    let ctx = ctx(&browser, None);
+    let at = MediaTime::zero(Timebase::MILLIS);
+    let mut kept = create(&ctx, &settings(&[("html", json!("<p>a</p>"))])).expect("a page");
+    let mut restarted = create(
+        &ctx,
+        &settings(&[
+            ("html", json!("<p>b</p>")),
+            ("restart_on_show", json!(true)),
+        ]),
+    )
+    .expect("a page");
+    kept.show(at);
+    restarted.show(at);
+    restarted.show(at);
+    let pages = browser.pages();
+    assert_eq!(pages[0].reloads(), 0);
+    assert_eq!(pages[1].reloads(), 2);
+    // Live: turning it off stops the reloads without reopening the page.
+    restarted
+        .update(&settings(&[("html", json!("<p>b</p>"))]))
+        .expect("a live change");
+    restarted.show(at);
+    assert_eq!(browser.pages().len(), 2);
+    assert_eq!(pages[1].reloads(), 2);
 }
 
 /// #347: the source's opt-in lets a page from the internet reach a local app.
