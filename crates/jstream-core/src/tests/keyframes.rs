@@ -1008,3 +1008,68 @@ fn undoing_a_keyframe_effects_step_conflicts_with_a_later_edit_there() {
         .collect();
     assert_eq!(effects, ["own", "more"]);
 }
+
+/// A `scene` source's own video chain runs over the view a keyframe draws its group
+/// through, and over the group itself where its parent draws it: one chain each
+/// (ADR-0065 §4, #1018). A switch that retargets a running transition keeps the view
+/// on the side it leaves.
+#[test]
+fn a_filtered_group_source_runs_over_each_view_and_keeps_it_on_a_retarget() {
+    use crate::snapshot::GpuKey;
+    let engine = family();
+    family_with_group(&engine);
+    let control = connected(&engine);
+    apply(
+        &control,
+        vec![
+            Edit::TransitionCreate {
+                preset_id: TransitionPresetId::new("fade"),
+                name: "Fade".into(),
+                kind: "fade".into(),
+                // Long enough that the second switch below retargets it.
+                duration_ms: 60_000,
+                easing: Easing::Linear,
+                settings: Settings::default(),
+            },
+            sharpen(
+                jstream_protocol::FilterOwner::Source {
+                    source_id: SourceId::new("sg"),
+                },
+                "crisp",
+            ),
+            geometry("g1", Some("k"), 800.0),
+        ],
+    );
+    let (sg, g) = (SourceId::new("sg"), SceneId::new("g"));
+    let view = crate::snapshot::group_view(&g, &SceneId::new("k"));
+    let input = |scene: &SceneId| {
+        engine
+            .render_hub()
+            .load()
+            .shot()
+            .placed_chain(&sg, scene)
+            .map(|chain| chain.input.clone())
+    };
+    switch(&control, "a", None);
+    assert_eq!(input(&g), Some(GpuKey::Layer(g.clone(), 1)));
+    assert_eq!(input(&view), None, "a draws the group itself");
+
+    switch(&control, "k", Some("fade"));
+    assert_eq!(input(&g), Some(GpuKey::Layer(g.clone(), 1)), "a, leaving");
+    assert_eq!(
+        input(&view),
+        Some(GpuKey::Layer(view.clone(), 1)),
+        "k, arriving"
+    );
+
+    // Back to `a` mid-fade: what is on screen, k's view among it, leaves.
+    switch(&control, "a", Some("fade"));
+    let shot = engine.render_hub().load();
+    assert!(shot.shot().transition_tracks().is_some(), "a fade runs");
+    assert_eq!(
+        input(&view),
+        Some(GpuKey::Layer(view.clone(), 1)),
+        "k's view, leaving"
+    );
+    assert_eq!(input(&g), Some(GpuKey::Layer(g, 1)), "a, arriving");
+}
