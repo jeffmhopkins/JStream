@@ -296,6 +296,17 @@ fn vaapi_codecs_list_download_and_delete_openh264() {
     codecs.download("openh264").expect("downloads");
     assert!(listed(&codecs));
     assert!(dir.join(pin().file_name).is_file());
+    // Two downloads at once each write their own temporary file, and leave none behind.
+    std::thread::scope(|scope| {
+        for _ in 0..2 {
+            scope.spawn(|| codecs.download("openh264").expect("downloads"));
+        }
+    });
+    let left: Vec<_> = std::fs::read_dir(&dir)
+        .expect("dir")
+        .map(|e| e.expect("entry").file_name())
+        .collect();
+    assert_eq!(left, [std::ffi::OsString::from(pin().file_name)]);
     // Another ID is refused, and changes nothing.
     assert!(matches!(
         codecs.download("x264"),

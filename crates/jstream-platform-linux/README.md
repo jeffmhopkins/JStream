@@ -364,7 +364,8 @@ It has:
   Cisco's server through a `Fetch`, checks the file's SHA-256, unpacks it with the
   crate's own bzip2 decoder (`openh264/bzip2.rs`; the `bzip2` crate's backend has a
   licence `deny.toml` allows only at build time), checks the library's SHA-256, and
-  writes it through a temporary file and a rename. A download that doesn't match is
+  writes it through a temporary file of its own (process ID and a counter, so two
+  downloads at once never share one) and a rename. A download that doesn't match is
   discarded and reported, never written. `remove` deletes it. `VaapiCodecs` offers it
   through `Codecs::downloads` (ID `OPENH264_DOWNLOAD_ID`, `openh264`, with
   `OpenH264Store::download_info`, with `OPENH264_LICENSE_TEXT`, Cisco's

@@ -1144,7 +1144,10 @@ impl Engine {
         } = &call
         {
             self.effect_enable(kind_id)
-        } else if let Some(result) = crate::codec_downloads::call(self.codecs(), &call) {
+        } else if let Some(result) = crate::codec_downloads::is_codec_call(&call)
+            .then(|| crate::codec_downloads::call(self.codecs(), &call))
+            .flatten()
+        {
             result
         } else if let Some(result) = self.youtube_call(&call) {
             result

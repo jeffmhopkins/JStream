@@ -270,26 +270,43 @@ impl OpenH264Store {
     }
 
     /// Writes `library` to a temporary file only the user can read, then renames it into
-    /// place, so a reader never sees half a file.
+    /// place, so a reader never sees half a file. Each write has a temporary file of its
+    /// own (this process's ID and a counter), so two downloads at once, from two clients'
+    /// `codec.download`, never write into one file; each renames a whole, checked
+    /// library into place.
     fn write(&self, library: &[u8]) -> std::io::Result<()> {
+        static WRITES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         fs::DirBuilder::new()
             .recursive(true)
             .mode(0o700)
             .create(&self.dir)?;
-        let part = self.dir.join(format!("{}.part", self.pin.file_name));
+        let n = WRITES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let part = self.dir.join(format!(
+            "{}.{}.{n}.part",
+            self.pin.file_name,
+            std::process::id()
+        ));
         match fs::remove_file(&part) {
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e),
             _ => {}
         }
+        let result =
+            Self::write_part(&part, library).and_then(|()| fs::rename(&part, self.library_path()));
+        if result.is_err() {
+            let _ = fs::remove_file(&part);
+        }
+        result
+    }
+
+    /// Writes `library` to the new file `part`, `0600`.
+    fn write_part(part: &std::path::Path, library: &[u8]) -> std::io::Result<()> {
         let mut file = fs::OpenOptions::new()
             .write(true)
             .create_new(true)
             .mode(0o600)
-            .open(&part)?;
+            .open(part)?;
         file.write_all(library)?;
-        file.sync_all()?;
-        drop(file);
-        fs::rename(&part, self.library_path())
+        file.sync_all()
     }
 }
 

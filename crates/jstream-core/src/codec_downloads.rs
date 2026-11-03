@@ -12,6 +12,19 @@ use jstream_protocol::{
     Action, Call, CallResult, CodecDownloadInfo, ProtocolError, Query, QueryResult, VideoCodec,
 };
 
+/// Whether `call` is one of the codec calls, so the engine fetches its codec backend
+/// only for them.
+pub(crate) fn is_codec_call(call: &Call) -> bool {
+    matches!(
+        call,
+        Call::Query {
+            query: Query::CodecDownloads
+        } | Call::Action {
+            action: Action::CodecDownload { .. } | Action::CodecDelete { .. }
+        }
+    )
+}
+
 /// The answer to `call` when it is one of the codec calls, with `codecs` the engine's
 /// codec backend (`None` without media backends), or `None` for any other call.
 pub(crate) fn call(
@@ -301,6 +314,10 @@ mod tests {
             panic!("a list");
         };
         assert!(downloads.is_empty());
+        assert!(super::is_codec_call(&call));
+        assert!(!super::is_codec_call(&Call::Query {
+            query: Query::SceneList
+        }));
         assert!(
             super::call(
                 None,
