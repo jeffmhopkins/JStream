@@ -25,9 +25,10 @@ ordinary edit, and the hint stops telling the user anything (#1019). ADR-0059's 
 consequences name the fix for a hint that proves too coarse: a new ADR.
 
 Every edit is undoable by the client that made it, a delete included
-([ADR-0013](0013-command-model.md), [ADR-0032](0032-live-edits-and-undo.md)), and
-`history.undo` and `history.redo` take each other back. So within a session nothing an
-edit does is lost. Three things are lost:
+([ADR-0013](0013-command-model.md), [ADR-0032](0032-live-edits-and-undo.md)), within
+the limits of undo: 100 steps, `undo_conflict` when another client changed the same
+thing, and, for a deleted source, what the engine forgets with it (such as a capture
+portal's grant). Four things are lost outright:
 
 - **Actions with effects outside JStream's state:** `output.start` and `output.stop` (a
   live stream starts or ends), `output.set_key` and `output.clear_key` (a secret is
@@ -35,6 +36,9 @@ edit does is lost. Three things are lost:
   `ui_settings.set` (a person's kept layout, replaced whole).
 - **Two edits that can remove a stream key**, which their inverse can't restore:
   `output.set_target` to a new server and `output.delete`.
+- **History calls.** The engine removes the stream key of an output that a history call
+  deletes or moves to another server, as it does for the edit itself, so an undo past an
+  `output.create` or `output.set_target` removes a key that redo doesn't put back.
 - The other actions change only what JStream shows or measures, and another call puts
   it back: `scene.switch`, `studio.set_preview`, `live.set` and `live.cancel`,
   `audio.reset_loudness`, and `preview.subscribe` and `preview.unsubscribe` (which fail
@@ -47,24 +51,27 @@ ADR-0059 stands.
 
 1. **A tool is `destructiveHint` when it carries an action outside `REVERSIBLE_ACTIONS`**
    (`jstream-mcp`'s `tools.rs`). That list holds the seven actions above that only
-   change what JStream shows or measures. Deletes, removes and history calls no longer
-   make a tool destructive. A new action is destructive until it is added to the list, so
-   the safe answer is the default. Today the destructive tools are `output`, `device`,
-   `pairing` and `ui_settings`.
+   change what JStream shows or measures. **A history call makes a tool destructive
+   too.** Deletes and removes no longer do. A new action is destructive until it is added
+   to the list, so the safe answer is the default. Today the destructive tools are
+   `device`, `history`, `output`, `pairing` and `ui_settings`.
 2. **`batch` refuses `output.delete` and `output.set_target`** with `invalid_argument`
    on the edit, naming the `output` tool, which still takes each as a batch of one. With
    them gone, undo takes back every edit `batch` carries, so `batch` is not
    destructive. It stays `openWorldHint`, since it carries `source` edits that point a
    `browser` source at a page.
-3. **The server instructions say so:** which tools are destructive, that every edit, a
-   delete included, is undone with `history`, and which tools reach outside JStream.
+3. **The server instructions say so:** which tools are destructive, that every other
+   edit, a delete included, is undone with `history`, and which tools reach outside
+   JStream.
 
 <a id="consequences"></a>
 ## Consequences
 - A client that asks before destructive tools asks before an agent goes live, stops a
-  stream, sets or clears a key, retargets or deletes an output, revokes a device, starts
-  a pairing or replaces the UI's settings, and lets a scene build through.
-- A delete is now unannounced. It is taken back by `history.undo` in the same session.
+  stream, sets or clears a key, retargets or deletes an output, undoes or redoes,
+  revokes a device, starts a pairing or replaces the UI's settings, and lets a scene
+  build through.
+- A delete is now unannounced. It is taken back by `history.undo` in the same session,
+  within undo's limits above, and that undo asks.
   An MCP proxy that restarts starts a new session with its own undo history
   ([jstream-mcp › Design](../../crates/jstream-mcp/README.md#design)), so a delete from
   the old session is then recovered only by hand. `delete.plan` still shows what a delete

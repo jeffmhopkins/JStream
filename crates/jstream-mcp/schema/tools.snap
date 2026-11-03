@@ -5615,7 +5615,7 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": false,
+        "destructiveHint": true,
         "idempotentHint": false,
         "openWorldHint": false,
         "readOnlyHint": false

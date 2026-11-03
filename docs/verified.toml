@@ -432,7 +432,7 @@ stamp = { hash = "b3:595a63e6fed816d5", by = "agent:claude-3d-cameras", note = "
 stamp = { hash = "b3:483e5e6198b00fad", by = "agent:claude", note = "render gains only a test-only kind snapshot (insta dev-dependency, tests/kinds.rs, schema/kinds.snap) and its README Testing paragraph; the GPU pipeline steps are unchanged" }
 
 ["ARCH#mcp"."body"]
-stamp = { hash = "b3:a27606abec910a95", by = "agent:claude", note = "Re-read against ADR-0098: tools are destructive only for an action outside REVERSIBLE_ACTIONS (output, device, pairing, ui_settings); batch refuses output.delete and output.set_target and is no longer destructive; instructions and tests match" }
+stamp = { hash = "b3:e1028b860874660f", by = "agent:claude", note = "Annotations bullet: destructiveHint for an action undo cannot take back or a history call (device, history, output, pairing, ui_settings), undoable deletes let through, ADR-0098 linked" }
 
 ["ARCH#mcp"."dep:docs/RULES.md#R-API-002"]
 stamp = { hash = "b3:b1f1a1a0e75365c4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "R-API-002 wording change only; MCP section's youtube and plugin no-tool notes and naming bullet still hold" }
@@ -447,10 +447,10 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/README.md"]
-stamp = { hash = "b3:4293d56705211928", by = "agent:claude", note = "Re-read against ADR-0098: tools are destructive only for an action outside REVERSIBLE_ACTIONS (output, device, pairing, ui_settings); batch refuses output.delete and output.set_target and is no longer destructive; instructions and tests match" }
+stamp = { hash = "b3:9072250026012099", by = "agent:claude", note = "mcp README annotations paragraph agrees with this bullet, history included" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:57fc118dd3478f37", by = "agent:claude", note = "Re-read against ADR-0098: tools are destructive only for an action outside REVERSIBLE_ACTIONS (output, device, pairing, ui_settings); batch refuses output.delete and output.set_target and is no longer destructive; instructions and tests match" }
+stamp = { hash = "b3:76663e3858ba9c93", by = "agent:claude", note = "tools.snap: destructiveHint false on the scene-building tools and batch, true on device, history, output, pairing and ui_settings; the batch description names the output-only edits; size still about 800 KB" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/design.rs"]
 stamp = { hash = "b3:eb4be70c44a5973d", by = "agent:claude-3d-cameras", note = "Design-guidance bullet now lists 3D sets through a scene camera, matching design.rs's new paragraph; the scene tool gets scene.set_camera from the protocol (tools.snap). | merge: Merged main with #1030 (stinger transitions, HTML browser pages, restart on show) and #1037 (backdrop cap, keyframe effects Cancel): mcp README, tools.snap and design.rs gain the stinger and HTML guidance beside the 3D sets bullet; holds. | kept from the merged side: Body: `font` added to the tool list and the tools.snap size updated to about 799 KB (799248 bytes). The mcp README, tests.rs and tools.rs agree. | kept from the merged side: Whole PR: design.rs's guidance gains the depth-and-blending recipe (tilt_deg, turn_deg, depth_px, perspective_px, item.set_blend), the transitions recipe (fade, move, and a stinger preset's scene, cut_ms and stagger_ms, built like any graphic and checked with video.snapshot) and the HTML-graphics recipe (a browser source with inline html, transparent by default, CSS keyframes, https fonts and images). The HTML stinger clause now says the reload takes a page load and the stinger shows its previous run's last frame until the new page paints, so it starts and ends transparent (reviews N2, N4). The section's description of the appended design guidance holds. | kept from the merged side: Whole PR: the Design guidance bullet, new in this PR, names the safe area, backdrops, shapes, type, colour, the lower-third, ticker and grouping recipes, fitting boxes to text, keyframe animation and video.snapshot checks, as design.rs and the mcp README's design paragraph have them. No timer." }
@@ -468,7 +468,7 @@ stamp = { hash = "b3:5c306baedd4f5ddc" }
 stamp = { hash = "b3:d74f3cd92947425e", by = "agent:claude", note = "Whole PR: the Design guidance bullet, new in this PR, names the safe area, backdrops, shapes, type, colour, the lower-third, ticker and grouping recipes, fitting boxes to text, keyframe animation and video.snapshot checks, as design.rs and the mcp README's design paragraph have them. No timer." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/server.rs"]
-stamp = { hash = "b3:6ddd1f35c5528bc1", by = "agent:claude", note = "Re-read against ADR-0098: tools are destructive only for an action outside REVERSIBLE_ACTIONS (output, device, pairing, ui_settings); batch refuses output.delete and output.set_target and is no longer destructive; instructions and tests match" }
+stamp = { hash = "b3:3e15753dd73ca96b", by = "agent:claude", note = "Instructions name the destructive tools, history included, as the bullet says" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/stdio.rs"]
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
@@ -477,7 +477,7 @@ stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 stamp = { hash = "b3:ab830c2047701e47", by = "agent:obs-ui-thread", note = "Body: `font` added to the tool list and the tools.snap size updated to about 799 KB (799248 bytes). The mcp README, tests.rs and tools.rs agree." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tools.rs"]
-stamp = { hash = "b3:c3fea19cd80fd434", by = "agent:claude", note = "Re-read against ADR-0098: tools are destructive only for an action outside REVERSIBLE_ACTIONS (output, device, pairing, ui_settings); batch refuses output.delete and output.set_target and is no longer destructive; instructions and tests match" }
+stamp = { hash = "b3:9f50d4d4e422dd0a", by = "agent:claude", note = "effect() and the batch refusal implement the bullet" }
 
 ["ARCH#packaging"."body"]
 stamp = { hash = "b3:67130f6f84b33399", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "Rewritten for the zip with browser sources: the browser folder (renamed bootstrap + helper DLL + CEF runtime files, locales, CREDITS.html, CEF-VERSION.txt from archive.json), hosts built with their cef features and the helper in a second cargo build so helper isn't unified into the hosts, CEF folder found from cef-dll-sys's link path holding bootstrap.exe in the JSON messages, the no-libcef import check on hosts, --no-browser, CMake+Ninja needed; matches dist.rs and helper_in in jstream-browser's cef/mod.rs; the after-review sentence still holds (dist job now puts Ninja on the path)" }
@@ -2331,10 +2331,10 @@ stamp = { hash = "b3:854eb3a492fd555a", by = "agent:claude-3d-cameras", note = "
 stamp = { hash = "b3:83974a87d69a2b5b", by = "agent:claude", note = "True at this head (#626 review B3). Its dependency ARCH data-model changed here only in the Not-yet line, which no longer names scene_mask (this PR), and in the wave's flips, privacy and output-keyed session passages. This PR changes no jstream-graph file; its body, deps and files are as on the base and hold." }
 
 ["CRATE-jstream-mcp#design"."body"]
-stamp = { hash = "b3:6cae423b704f436f", by = "agent:claude", note = "Re-read against ADR-0098: tools are destructive only for an action outside REVERSIBLE_ACTIONS (output, device, pairing, ui_settings); batch refuses output.delete and output.set_target and is no longer destructive; instructions and tests match" }
+stamp = { hash = "b3:8a5dd57e1fc5b947", by = "agent:claude", note = "Annotations paragraph: destructive only for an action outside REVERSIBLE_ACTIONS or a history call (history keeps it because undo past output.create or set_target removes a key redo does not restore), batch refuses OUTPUT_ONLY_EDITS; ui_settings paragraph; test names" }
 
 ["CRATE-jstream-mcp#design"."dep:docs/ARCHITECTURE.md#mcp"]
-stamp = { hash = "b3:a27606abec910a95", by = "agent:claude", note = "Re-read against ADR-0098: tools are destructive only for an action outside REVERSIBLE_ACTIONS (output, device, pairing, ui_settings); batch refuses output.delete and output.set_target and is no longer destructive; instructions and tests match" }
+stamp = { hash = "b3:e1028b860874660f", by = "agent:claude", note = "ARCH MCP bullet now lists device, history, output, pairing and ui_settings as destructive, matching this section" }
 
 ["CRATE-jstream-mcp#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -2364,7 +2364,7 @@ stamp = { hash = "b3:5c306baedd4f5ddc" }
 stamp = { hash = "b3:d74f3cd92947425e", by = "agent:claude", note = "Whole PR: the design paragraph, new in this PR, matches design.rs: safe area and spacing, a backdrop over a flat colour, shape sources sized to their boxes, faces, sizes, letter spacing and shadow, restrained colour, lower-third and ticker (negative scroll speed, gap_x) recipes, grouping a multi-part graphic as a nested scene whose item effects clip and shadow it, fitting items to source.sizes, keyframe variants with a move preset, crop reveals and delay_ms, and video.snapshot checks; tested by instructions_carry_the_design_guidance; every engine name it cites exists. The timer recipe left with the kind." }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/server.rs"]
-stamp = { hash = "b3:6ddd1f35c5528bc1", by = "agent:claude", note = "Re-read against ADR-0098: tools are destructive only for an action outside REVERSIBLE_ACTIONS (output, device, pairing, ui_settings); batch refuses output.delete and output.set_target and is no longer destructive; instructions and tests match" }
+stamp = { hash = "b3:3e15753dd73ca96b", by = "agent:claude", note = "Instructions text matches the annotations paragraph, history included" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/stdio.rs"]
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
@@ -2373,7 +2373,7 @@ stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 stamp = { hash = "b3:ab830c2047701e47", by = "agent:obs-ui-thread", note = "Added `font` to the per-noun tool list and a sentence that font.list's remote_family and remote_style come from the font file, as tools.rs's description says (ADR-0092). tests.rs's updated tool list and read-only list match. ARCH#mcp changed the same way." }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tools.rs"]
-stamp = { hash = "b3:c3fea19cd80fd434", by = "agent:claude", note = "Re-read against ADR-0098: tools are destructive only for an action outside REVERSIBLE_ACTIONS (output, device, pairing, ui_settings); batch refuses output.delete and output.set_target and is no longer destructive; instructions and tests match" }
+stamp = { hash = "b3:9f50d4d4e422dd0a", by = "agent:claude", note = "effect(), REVERSIBLE_ACTIONS, OUTPUT_ONLY_EDITS, refuse_output_only_edits and the annotation tests match the paragraph" }
 
 ["CRATE-jstream-mcp#purpose"."body"]
 stamp = { hash = "b3:8d504af503b308a3", by = "agent:claude", note = "Re-read against ADR-0098: tools are destructive only for an action outside REVERSIBLE_ACTIONS (output, device, pairing, ui_settings); batch refuses output.delete and output.set_target and is no longer destructive; instructions and tests match" }
@@ -2397,7 +2397,7 @@ stamp = { hash = "b3:5c306baedd4f5ddc" }
 stamp = { hash = "b3:d74f3cd92947425e", by = "agent:claude", note = "Whole PR: the Server bullet says the instructions end with design.rs's guidance, which this PR adds: the safe area, backdrops, shapes sized to their boxes, faces, sizes, spacing and shadow, colour, lower-third and ticker recipes, grouping as a nested scene with item effects, fitting boxes to text, keyframe motion and video.snapshot checks. No tool, op or annotation changes. The timer recipe left with the kind." }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/server.rs"]
-stamp = { hash = "b3:6ddd1f35c5528bc1", by = "agent:claude", note = "Re-read against ADR-0098: tools are destructive only for an action outside REVERSIBLE_ACTIONS (output, device, pairing, ui_settings); batch refuses output.delete and output.set_target and is no longer destructive; instructions and tests match" }
+stamp = { hash = "b3:3e15753dd73ca96b", by = "agent:claude", note = "server.rs: the instructions name output, history, device, pairing and ui_settings as destructive and say other edits are undone with history; the Server bullet still holds" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/stdio.rs"]
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
@@ -2406,7 +2406,7 @@ stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 stamp = { hash = "b3:ab830c2047701e47", by = "agent:obs-ui-thread", note = "tools.rs adds the font tool's description and tests.rs counts 32 tools; purpose describes tools by noun generally, so it holds." }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tools.rs"]
-stamp = { hash = "b3:c3fea19cd80fd434", by = "agent:claude", note = "Re-read against ADR-0098: tools are destructive only for an action outside REVERSIBLE_ACTIONS (output, device, pairing, ui_settings); batch refuses output.delete and output.set_target and is no longer destructive; instructions and tests match" }
+stamp = { hash = "b3:9f50d4d4e422dd0a", by = "agent:claude", note = "tools.rs: effect() marks a tool destructive for an action outside REVERSIBLE_ACTIONS or a history call (ADR-0098 r1 B1); REVERSIBLE_ACTIONS and OUTPUT_ONLY_EDITS, the batch refusal and their tests; the Tools bullet names both lists" }
 
 ["CRATE-jstream-media#purpose"."body"]
 stamp = { hash = "b3:f8fe3ef93a3c141d", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
@@ -5745,7 +5745,7 @@ stamp = { hash = "b3:762e474f8127ac53", by = "agent:claude", note = "Review B4: 
 stamp = { hash = "b3:b37cf40248d9d8ab", by = "agent:claude", note = "Whole PR: request.rs adds Home::Html (no folder, so every file: request is refused), main_frame_to's data case, and local_allowed_from's Home::Html arm (the opt-in, gated by left_home), with tests that an HTML page loads no files, that its opt-in ends once the main frame leaves data:, and that an opaque frame inside an opted-in HTML page is allowed while a https widget's own origin is refused. Its module doc now has a bullet for the HTML case and extends the opaque-origin sentence (review B4). Controls and Gaps say exactly this." }
 
 ["THREAT-MODEL#mcp"."body"]
-stamp = { hash = "b3:73fc25eed0e40467", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the MCP agents section against #955: the remote-text paragraph now also names a window's name in capture.targets (title, or on macOS the application's name) as third-party text that the capture tool's description and the server instructions mark as data, never instructions (checked in crates/jstream-mcp tools.rs and server.rs), cites ADR-0085, drops 'today the only third-party text', and ADR-0085 is added to depends_on; the rest of the section still holds." }
+stamp = { hash = "b3:a367a6f0c9fb8f33", by = "agent:claude", note = "Annotations sentence now lists what a client can ask before (output retarget or delete, keys, going live or stopping, undo history, device revoke, pairing, UI settings) and says other deletes are undoable and unannounced (ADR-0098)" }
 
 ["THREAT-MODEL#mcp"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -5758,6 +5758,9 @@ stamp = { hash = "b3:3d3001bba844d9a7", by = "agent:threat-model-covers", note =
 
 ["THREAT-MODEL#mcp"."dep:docs/adr/0085-capture-target-names-marked-as-remote-text.md"]
 stamp = { hash = "b3:2e3a686f5d15ee5b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the MCP agents section against #955: the remote-text paragraph now also names a window's name in capture.targets (title, or on macOS the application's name) as third-party text that the capture tool's description and the server instructions mark as data, never instructions (checked in crates/jstream-mcp tools.rs and server.rs), cites ADR-0085, drops 'today the only third-party text', and ADR-0085 is added to depends_on; the rest of the section still holds." }
+
+["THREAT-MODEL#mcp"."dep:docs/adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md"]
+stamp = { hash = "b3:6a460bf4efdf9dfa", by = "agent:claude", note = "ADR-0098 added to depends_on; the section matches its decision, history destructive included" }
 
 ["THREAT-MODEL#pairing"."body"]
 stamp = { hash = "b3:933767e326fe4ee3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#769: devices-file gap no longer says it only inherits its folder's ACL; checked devices.rs create_private (tmp file then rename) and read_file's check_private_file on Windows; what remains is the Windows hardware run (#546, #344 open)" }

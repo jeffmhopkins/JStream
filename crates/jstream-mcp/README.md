@@ -106,10 +106,12 @@ Every tool carries MCP `annotations`, derived from its ops' classes
 ([ADR-0059](../../docs/adr/0059-mcp-annotations-and-remote-text.md)), with every hint
 written out because the spec's defaults call a tool destructive and open-world. A tool
 of queries only (and `describe_api`, `events`) is `readOnlyHint`. Any other tool is
-`destructiveHint` only when it carries an action outside `REVERSIBLE_ACTIONS`
+`destructiveHint` only when it carries an action outside `REVERSIBLE_ACTIONS` or a
+history call
 ([ADR-0098](../../docs/adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md)):
-today `output`, `device`, `pairing` and `ui_settings`. Deletes are undoable edits,
-`history` is undo and redo, and `scene.switch`, `studio.set_preview`, `live.set`,
+today `device`, `history`, `output`, `pairing` and `ui_settings`. `history` stays
+destructive because an undo past an `output.create` or `output.set_target` removes a
+stream key that redo doesn't put back. Deletes are undoable edits, and `scene.switch`, `studio.set_preview`, `live.set`,
 `live.cancel`, `audio.reset_loudness` and the `preview` actions only change what JStream
 shows, so the tools a scene build uses ask nothing. `batch` refuses `output.delete` and
 `output.set_target` (`OUTPUT_ONLY_EDITS`), which can remove a stream key undo can't put

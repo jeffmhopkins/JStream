@@ -106,8 +106,9 @@ pub(crate) struct Tools {
 pub(crate) const OPEN_WORLD: [&str; 2] = ["output", "source"];
 
 /// The actions that change only what JStream shows or measures, so another call puts
-/// back what they changed and nothing leaves the machine (ADR-0098): switching the
-/// program or preview scene, a live value and its cancel, the loudness meter's reset, and
+/// back what they changed and they send nothing new off the machine (ADR-0098; a
+/// `scene.switch` does change what a running stream shows): switching the program or
+/// preview scene, a live value and its cancel, the loudness meter's reset, and
 /// a preview stream (which MCP can't receive anyway). A tool whose actions are all here
 /// is not `destructiveHint`. Every other action is: going live or stopping, setting or
 /// clearing a stream key, revoking a device, starting a pairing and replacing the UI's
@@ -645,21 +646,26 @@ fn group_tool(defs: &Map<String, Value>, noun: &str, ops: &[(Op, Value)]) -> Too
 enum Effect {
     /// Only queries: it changes nothing.
     ReadOnly,
-    /// Edits, which undo takes back (a `delete` or `remove` too, ADR-0032), history
-    /// calls, which redo and undo take back, and [`REVERSIBLE_ACTIONS`].
+    /// Edits, which undo takes back (a `delete` or `remove` too, ADR-0032), and
+    /// [`REVERSIBLE_ACTIONS`].
     Additive,
-    /// At least one action outside [`REVERSIBLE_ACTIONS`]: undo can't take it back, and
-    /// it may reach outside the machine or remove a secret (ADR-0098).
+    /// At least one action outside [`REVERSIBLE_ACTIONS`], which undo can't take back
+    /// and may reach outside the machine or remove a secret, or a history call: an undo
+    /// past an `output.create` or `output.set_target` removes a stream key that redo
+    /// doesn't put back (ADR-0098).
     Destructive,
 }
 
 /// A group tool's [`Effect`], from its ops (ADR-0098, amending ADR-0059 §1). Only an
-/// action outside [`REVERSIBLE_ACTIONS`] makes a tool destructive: `output`, `device`,
-/// `pairing` and `ui_settings`. Deletes are undoable edits, and `history.undo` and
-/// `history.redo` take each other back.
+/// action outside [`REVERSIBLE_ACTIONS`], or a history call, makes a tool destructive:
+/// `device`, `history`, `output`, `pairing` and `ui_settings`. Deletes are undoable
+/// edits.
 fn effect(ops: &[(Op, Value)]) -> Effect {
-    let destructive =
-        |op: &Op| op.class == OpClass::Action && !REVERSIBLE_ACTIONS.contains(&op.name.as_str());
+    let destructive = |op: &Op| match op.class {
+        OpClass::Action => !REVERSIBLE_ACTIONS.contains(&op.name.as_str()),
+        OpClass::History => true,
+        OpClass::Edit | OpClass::Query => false,
+    };
     if ops.iter().all(|(op, _)| op.class == OpClass::Query) {
         Effect::ReadOnly
     } else if ops.iter().any(|(op, _)| destructive(op)) {
@@ -1027,23 +1033,26 @@ mod tests {
                 "video"
             ]
         );
-        // ADR-0098: only an action undo can't take back makes a tool destructive.
-        // `output` sets and clears keys and goes live, `device` revokes, `pairing` hands
-        // out a code and `ui_settings.set` replaces a person's settings.
+        // ADR-0098: an action undo can't take back, or a history call, makes a tool
+        // destructive. `output` sets and clears keys and goes live, `device` revokes,
+        // `pairing` hands out a code, `ui_settings.set` replaces a person's settings, and
+        // an undo past an `output.create` removes a stream key redo doesn't restore.
         let destructive: Vec<&str> = all
             .iter()
             .filter(|(_, a)| a["destructiveHint"] == true)
             .map(|(name, _)| name.as_str())
             .collect();
-        assert_eq!(destructive, ["device", "output", "pairing", "ui_settings"]);
-        // The tools a scene build uses ask nothing: their deletes are undoable, `history`
-        // is undo and redo, `scene.switch` and `live.set` are reversible actions, and
-        // `batch` refuses the two output edits undo can't fully take back.
+        assert_eq!(
+            destructive,
+            ["device", "history", "output", "pairing", "ui_settings"]
+        );
+        // The tools a scene build uses ask nothing: their deletes are undoable,
+        // `scene.switch` and `live.set` are reversible actions, and `batch` refuses the
+        // two output edits undo can't fully take back.
         for name in [
             "batch",
             "canvas",
             "filter",
-            "history",
             "item",
             "live",
             "scene",
