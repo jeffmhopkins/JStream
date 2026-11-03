@@ -6,11 +6,11 @@
 //! didn't fit their text, nothing aligned. The tools can't fix taste, so this says what
 //! a broadcast designer would: where things go, which sizes, which faces and colours,
 //! and to look at the result before calling it done. It names the `backdrop` and `text`
-//! settings that make graphics look finished, the `shape` kind, how to group, scroll
-//! and animate, how to use 3D placement and blend modes, how to build a 3D set with a
-//! scene camera (ADR-0094), which transition to use (including a `stinger`), and when
-//! to build a graphic as HTML in a `browser` source. Numbers are for a 1920×1080 canvas
-//! and scale with it.
+//! settings that make graphics look finished, the `shape` and `timer` kinds, how to
+//! group, scroll and animate, how to use 3D placement and blend modes, how to build a 3D
+//! set with a scene camera (ADR-0094), which transition to use (including a `stinger`),
+//! and when to build a graphic as HTML in a `browser` source. Numbers are for a
+//! 1920×1080 canvas and scale with it.
 
 /// The guidance, as one paragraph of the server instructions.
 pub(crate) const DESIGN: &str = "\
@@ -51,6 +51,11 @@ A ticker: a full-width bar shape with a label plate at its left, above the text 
 stack; the text source holds the headlines with a separator such as •, is wider than \
 the bar (repeat the headlines if not), and has a `scroll` filter with `speed_x` -80 to \
 -120 (negative moves left) and `gap_x` about 80 so the end doesn't run into the start. \
+A countdown or clock: a `timer` source (`mode` `countdown` with `duration` in seconds \
+and an `end_text` such as LIVE, `stopwatch`, or `clock` with a `clock_format` and an \
+optional IANA `time_zone`), styled like `text`. Its frame keeps one size whatever it \
+shows, so size its item once from `source.sizes`; editing its look keeps it counting, \
+and changing `mode` or `duration` restarts it. \
 A graphic of several parts that should read as one (a scoreboard, a framed camera \
 with its name bar): build it in its own scene, place that scene with a `scene` source, \
 crop the item to the graphic's bounds, and put `rounded_corners` and `drop_shadow` in \

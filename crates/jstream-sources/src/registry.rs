@@ -12,6 +12,7 @@ use crate::media::MediaKind;
 use crate::scope::{SpectrumKind, WaveformKind};
 use crate::shape::ShapeKind;
 use crate::text::TextKind;
+use crate::timer::TimerKind;
 use crate::youtube_chat::YoutubeChatKind;
 use crate::{Context, Source, SourceError, SourceKind};
 use jstream_protocol::{KindDescriptor, Settings};
@@ -24,7 +25,7 @@ pub struct Registry {
 
 impl Registry {
     /// The built-in kinds (ADR-0061, docs/adr/0061-source-types-and-decoding-scope-v2.md).
-    /// `backdrop`, `browser`, `chat_message`, `color`, `image`, `media`, `shape`, `text`, `waveform`,
+    /// `backdrop`, `browser`, `chat_message`, `color`, `image`, `media`, `shape`, `text`, `timer`, `waveform`,
     /// `spectrum` and `youtube_chat` produce frames (`browser` and its `youtube_chat`
     /// preset through the injected backend, on the GPU). `display` and `window` say what
     /// the platform captures ([`Source::capture`]), and so does `webcam`, a webcam or
@@ -46,6 +47,7 @@ impl Registry {
         add(Box::new(MediaKind::new()));
         add(Box::new(ShapeKind::new()));
         add(Box::new(TextKind::new()));
+        add(Box::new(TimerKind::new()));
         add(Box::new(WaveformKind::new()));
         add(Box::new(SpectrumKind::new()));
         add(Box::new(ChatKind::new()));
@@ -86,6 +88,15 @@ impl Registry {
                 kind_id: kind_id.to_owned(),
             })?
             .create(settings, ctx)
+    }
+
+    /// Whether a `kind_id` source built from `new` in place of one running with `old`
+    /// keeps the old one's time zero ([`SourceKind::keeps_time`]). `false` for an
+    /// unregistered kind.
+    pub fn keeps_time(&self, kind_id: &str, old: &Settings, new: &Settings) -> bool {
+        self.kinds
+            .get(kind_id)
+            .is_some_and(|k| k.keeps_time(old, new))
     }
 }
 
