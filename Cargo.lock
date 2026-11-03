@@ -3184,6 +3184,7 @@ dependencies = [
  "gif",
  "image-webp",
  "insta",
+ "jiff",
  "jstream-browser",
  "jstream-media",
  "jstream-platform",

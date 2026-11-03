@@ -542,7 +542,10 @@ state machine. Contents:
   isn't built showing the capture, a missing file showing nothing, an animated image
   advancing on the clock, on the sources thread by itself and after a clock swap, and
   a `waveform` source painted
-  by the sources thread (`a_waveform_source_is_painted_by_the_sources_thread`). The parity
+  by the sources thread (`a_waveform_source_is_painted_by_the_sources_thread`), and a
+  `timer` that keeps counting through a style change and a new density, showing the
+  count from the first plan after each, and starts again when its mode changes
+  (`a_timer_keeps_counting_through_a_style_change_and_a_density`). The parity
   tests add the fixture's `mic` kind, which no built-in kind matches.
 
 Not here yet: live audio values (faders), the audio and outputs snapshots, and the
@@ -1224,7 +1227,13 @@ thread then installs the source under the lock and re-plans. Each build is numbe
 and only the latest build asked for a source installs, so a slow build can't replace
 a newer one. Until its build installs, a source keeps showing what it showed before,
 or nothing. A changed setting always rebuilds the source, live or not, so an
-animation restarts with it. A build that fails is logged at `warn` with the source ID
+animation restarts with it, unless its kind keeps the old instance's time zero for that
+change (`Registry::keeps_time`, `SourceKind::keeps_time`): a `timer` keeps counting
+through any change but its `mode` or `duration` (#1027). The build then carries that
+time zero (`Entry::anchor`; a build queued while another is in flight keeps what that
+one keeps, so a later style edit can't undo a restart), the thread paints the new
+instance for it as soon as it is created, off the lock, so its first plan already shows
+the count, and `install` gives it that start. A build that fails is logged at `warn` with the source ID
 and an error that never names a host path, and the source draws nothing; a kind that
 is only described (`NotBuilt`) draws nothing silently. Audio-only kinds
 (`audio_input`, `desktop_audio`, `app_audio`, whose descriptors have no video) get no
@@ -1263,7 +1272,7 @@ running source's own audio (`Source::audio`, heard whether or not it is shown) f
 *Audio sources*.
 
 A source the program mix shows enlarged is drawn at a density, when its kind can be
-(`Source::set_density`, the `text` kind,
+(`Source::set_density`, the `text` and `timer` kinds,
 [ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)). After each plan
 `Shot::scales` measures how much each frame its passes draw is enlarged: canvas pixels
 per pixel of the frame's extent, from the placements the collection holds (not a
@@ -1273,7 +1282,9 @@ their layer. A source a video chain runs over counts as 1,
 since its filters' settings are in its pixels. `LiveSources::densities` turns each scale
 into the next quarter step of a doubling at or above it (1, 1.19, 1.41, … up to 32, ADR-0079) and,
 when that differs from the source's density, queues a build at it: the thread creates the
-source and sets its density there, and `install` keeps the extent it returned. The
+source and sets its density there, and `install` keeps the extent it returned. A build at
+a new density keeps the running instance's time zero, so a `timer` keeps counting when its
+item is resized. The
 source's frames then reach the plan as `Frame`s placed at that extent, and `compose`
 gives their upload that extent (`ResourceCache::set_extent`), as the chains give their
 layers their input's. A source with a build in flight is not asked for another; the plan

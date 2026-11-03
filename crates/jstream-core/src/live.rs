@@ -3,7 +3,10 @@
 //! them and wakes the program mix when an animation's frame is due.
 //!
 //! A source is built when it is created and built again when its settings change; a
-//! deleted source's instance goes with it. Building reads and decodes files, so it never
+//! deleted source's instance goes with it. A source built again starts its time again,
+//! unless its kind keeps the old instance's time zero for that change
+//! (`SourceKind::keeps_time`: a `timer` keeps counting through a change of its look)
+//! or it is built again only for a new density. Building reads and decodes files, so it never
 //! runs under the collection lock: the engine records what it wants under the lock
 //! ([`LiveSources::sync`]) and the thread builds it and installs the result
 //! ([`LiveSources::install`]), which re-plans the program mix. Until then the source
@@ -132,7 +135,23 @@ struct Entry {
     density: f32,
     /// The build asked for last. Only its result is installed.
     ticket: u64,
+    /// The time zero that build keeps, on the media clock: the running instance's, for
+    /// a build at another density or for a settings change its kind counts on through
+    /// (`SourceKind::keeps_time`, a `timer`'s style); `None` starts it at its install.
+    anchor: Option<MediaTime>,
     running: Option<Running>,
+}
+
+impl Entry {
+    /// The time zero a build queued now would keep: the one the build in flight keeps,
+    /// if there is one (`None` when it starts again, which a later build mustn't undo),
+    /// else the running instance's.
+    fn time_zero(&self) -> Option<MediaTime> {
+        match &self.running {
+            Some(running) if running.ticket == self.ticket => Some(running.start),
+            _ => self.anchor,
+        }
+    }
 }
 
 /// A built source and the frame it showed last.
@@ -142,7 +161,8 @@ struct Running {
     ticket: u64,
     /// Its sound, if it has any.
     audio: Option<MediaAudio>,
-    /// When it was built, on the media clock: its time zero.
+    /// Its time zero on the media clock: when it was installed, or the time zero of the
+    /// instance before it that its build kept ([`Entry::anchor`]).
     start: MediaTime,
     shown: Option<(Arc<VideoFrame>, Frame)>,
     /// The last plan that reached it, or the plan current when it was built, so the
@@ -168,6 +188,9 @@ pub(crate) struct Job {
     settings: Settings,
     density: f32,
     ticket: u64,
+    /// The time zero it keeps ([`Entry::anchor`]), so the thread paints it for the
+    /// right time before it is installed.
+    anchor: Option<MediaTime>,
     registry: Arc<Registry>,
     ctx: Context,
 }
@@ -243,9 +266,12 @@ impl LiveSources {
     pub(crate) fn set_clock(&mut self, clock: Arc<dyn MediaClock>) {
         let now = clock.now();
         let mut running = false;
-        for source in self.entries.values_mut().filter_map(|e| e.running.as_mut()) {
-            source.start = now;
-            running = true;
+        for entry in self.entries.values_mut() {
+            entry.anchor = entry.anchor.map(|_| now);
+            if let Some(source) = entry.running.as_mut() {
+                source.start = now;
+                running = true;
+            }
         }
         self.audio_changed = true;
         let replan = running || lock(&self.worker.queue).wake.is_some();
@@ -362,11 +388,15 @@ impl LiveSources {
                 settings: Settings::new(),
                 density: 1.0,
                 ticket: 0,
+                anchor: None,
                 running: None,
             });
             if entry.kind == kind && entry.settings == *source.settings() {
                 continue;
             }
+            let keeps =
+                entry.kind == kind && registry.keeps_time(kind, &entry.settings, source.settings());
+            entry.anchor = if keeps { entry.time_zero() } else { None };
             self.tickets += 1;
             entry.kind = kind.to_owned();
             entry.settings = source.settings().clone();
@@ -377,6 +407,7 @@ impl LiveSources {
                 settings: entry.settings.clone(),
                 density: entry.density,
                 ticket: entry.ticket,
+                anchor: entry.anchor,
                 registry: Arc::clone(&self.registry),
                 ctx: self.ctx.clone(),
             });
@@ -520,7 +551,7 @@ impl LiveSources {
                 audio: source.sound(),
                 source,
                 ticket: built.ticket,
-                start: self.worker.now(),
+                start: entry.anchor.unwrap_or_else(|| self.worker.now()),
                 shown: None,
                 planned: plan,
                 shown_gpu: None,
@@ -594,6 +625,8 @@ impl LiveSources {
             if density == entry.density {
                 continue;
             }
+            // Drawing it finer changes nothing it shows, so it keeps its time zero.
+            entry.anchor = Some(running.start);
             self.tickets += 1;
             entry.density = density;
             entry.ticket = self.tickets;
@@ -603,6 +636,7 @@ impl LiveSources {
                 settings: entry.settings.clone(),
                 density,
                 ticket: entry.ticket,
+                anchor: entry.anchor,
                 registry: Arc::clone(&self.registry),
                 ctx: self.ctx.clone(),
             });
@@ -1016,6 +1050,14 @@ fn run(worker: &Worker, host: &Weak<dyn LiveHost>) {
                     .as_mut()
                     .ok()
                     .and_then(|source| source.set_density(job.density));
+                // A source that keeps an earlier time zero is painted for the time it
+                // will show once installed, so its first plan doesn't show its zero's
+                // frame (a `timer` built again for a style change keeps its count).
+                if let (Ok(source), Some(anchor)) = (result.as_ref(), job.anchor)
+                    && let Some(painter) = source.painter()
+                {
+                    painter.paint(since(worker.now(), anchor));
+                }
                 let size = match result.as_mut() {
                     Ok(source) => extent.or_else(|| first_size(source.as_mut())),
                     Err(_) => None,

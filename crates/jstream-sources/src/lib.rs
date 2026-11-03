@@ -13,7 +13,8 @@
 //! [`BrowserBackend`] from [`Context::browser`], its frames on the GPU and its audio a
 //! [`SourceAudio`]), with its `youtube_chat` preset (a live video's public popout chat
 //! page, no sign-in), `chat_message` (the featured live chat message, ADR-0041 §2,
-//! which the host sets through the context's [`ChatFeature`]), and `display`, `window`
+//! which the host sets through the context's [`ChatFeature`]), `timer` (a countdown,
+//! stopwatch or clock, drawn as text in a box of one size), and `display`, `window`
 //! and `webcam` (a webcam or capture card), which say what the platform captures
 //! ([`CaptureSpec`]). The audio-only kinds (`audio_input`, `desktop_audio` and
 //! `app_audio`) make no frames: the engine records the [`AudioTarget`] their settings
@@ -42,6 +43,7 @@ mod scope;
 mod shape;
 mod source;
 mod text;
+mod timer;
 mod youtube_chat;
 
 pub use audio::AudioTarget;
