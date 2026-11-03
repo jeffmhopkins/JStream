@@ -233,7 +233,10 @@ fn boxed(
     let mut corners = [[0.0; 2]; 4];
     let mut uvs = [[0.0; 2]; 4];
     for (i, (x, y)) in local.into_iter().enumerate() {
-        // As with the content above, an overflow draws nothing (#1046).
+        // A defence, not a path any test reaches: the corners are clipped to the box,
+        // whose own corners `check_drawable` placed finitely, and each step of `place`
+        // is monotonic in the corner, so a clipped corner can't overflow where the box's
+        // didn't. Were it to, it would draw nothing, as the content above does (#1046).
         corners[i] = match geometry.place(x, y) {
             Ok(Placed::At(point)) if point.x.is_finite() && point.y.is_finite() => {
                 [point.x, point.y]
@@ -842,7 +845,10 @@ mod tests {
                 }
             }
         }
-        assert!(accepted > 5_000, "{accepted} accepted");
+        assert!(
+            accepted - neutral > 5_000,
+            "{accepted} accepted, {neutral} neutral"
+        );
         assert!(neutral > 5_000, "{neutral} neutral");
     }
 

@@ -912,12 +912,13 @@ tests check:
 
 Accepted means drawable (protocol 0.34's `check_drawable`): over 3D geometries from a
 fixed seed, every input spread from 0.1 to f32's limit, and the same boxes with neutral
-3D, each one `check_drawable` accepts gives a `place::shape` (a neutral box too large
-for `f32` gives none, `a_huge_neutral_box_draws_nothing`, #1046) for 64×36, 8192×1, 1×8192, 16384×1 and 1×16384 sources, with
-and without a crop (`every_drawable_geometry_gives_a_shape`), and a frame of the most
-extreme of them renders on 8192×1, 1×8192 and 64×36 sources
-(`a_frame_of_the_most_extreme_accepted_3d_items_renders`). Both fail with the input
-bound removed.
+3D, each one `check_drawable` accepts gives a `place::shape` or nothing, never an error,
+for 64×36, 8192×1, 1×8192, 16384×1 and 1×16384 sources, with and without a crop
+(`every_drawable_geometry_gives_a_shape`); a neutral box too large for `f32` gives
+nothing (`a_huge_neutral_box_draws_nothing`, #1046). A frame of the most extreme of the
+3D ones renders on 8192×1, 1×8192 and 64×36 sources
+(`a_frame_of_the_most_extreme_accepted_3d_items_renders`); it and the sweep fail with
+the input bound removed.
 
 **What is checked.** Background only; an opaque rect over a background (position and
 stacking); crop; an image placed at an extent of half its pixels (its size and its crop
