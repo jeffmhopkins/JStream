@@ -2517,7 +2517,9 @@ fn a_bus_reference_must_name_a_bus() {
         )),
         (
             "edits.0.settings.audio".into(),
-            "must be a bus reference or null".into()
+            "must be a bus reference or null: an object such as \
+             `{\"type\": \"bus\", \"bus_id\": \"<id>\"}`"
+                .into()
         )
     );
     apply_ok(
