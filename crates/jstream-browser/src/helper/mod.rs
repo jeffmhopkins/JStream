@@ -262,7 +262,8 @@ impl Host {
     /// taken again.
     fn send(self: &Arc<Self>, message: &ToEngine) {
         let sent = wire::send(&mut *lock(&self.to_engine), message);
-        if sent.is_err() {
+        // Before CEF has started there is nothing to stop, and no UI thread to post to.
+        if sent.is_err() && self.started.load(Ordering::Acquire) {
             // Later, on the UI thread: the sender may hold a page's locks, which
             // stopping takes to close the page.
             let host = Arc::clone(self);
@@ -305,7 +306,8 @@ impl Host {
                 }
             }
             ToHelper::Close { page } => {
-                if let Some(page) = self.pages().remove(&page) {
+                let page = self.pages().remove(&page);
+                if let Some(page) = page {
                     page.close();
                 }
             }
