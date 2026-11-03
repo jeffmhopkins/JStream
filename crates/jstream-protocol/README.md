@@ -203,8 +203,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.76 because of the
-  `normal_srgb` and `additive_srgb` blend modes (ADR-0105), with 0.73 to 0.75 left to
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.75 because of the
+  `normal_srgb` and `additive_srgb` blend modes (ADR-0105), with 0.73 and 0.74 left to
   changes that claimed them first; 0.72 because of the
   effect-pack commands `pack.write`, `pack.delete`, `pack.list` and `pack.read`
   (`pack.rs`: `PackFile`, `PackContent`, `PackInfo`, `PackFileInfo` and the write's
@@ -724,13 +724,13 @@ parameters), so a reader of 0.7 messages sees no change for those.
 
 All of this is added in 0.22. A placement has an `opacity`, an alpha multiplier from 0 to 1 (default 1), and a
 `BlendMode` (`normal`, `additive`, `multiply`, `screen`, `overlay`, `darken`, `lighten`,
-`difference`, `exclusion`, and from 0.76 `normal_srgb` and `additive_srgb`; default `normal`). `item.add` takes both, optional;
+`difference`, `exclusion`, and from 0.75 `normal_srgb` and `additive_srgb`; default `normal`). `item.add` takes both, optional;
 `item.set_opacity { item_id, scene_id?, opacity }` and `item.set_blend { item_id, blend }`
 set them. Out of range is `invalid_argument` on `edits.N.opacity`. Before 0.47 every
 mode but `normal` was `invalid_argument` on `edits.N.blend`; from 0.47 the compositor
 draws all nine, in linear light except overlay, difference and exclusion, which blend
 sRGB-encoded values ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md)).
-`normal_srgb` and `additive_srgb` (0.76) are `normal` and `additive` mixed in
+`normal_srgb` and `additive_srgb` (0.75) are `normal` and `additive` mixed in
 sRGB-encoded values, as a browser composites, so an overlay designed in HTML looks the
 same ([ADR-0105](../../docs/adr/0105-browser-matching-srgb-blend-modes.md)).
 `ItemInfo` reports both.
@@ -1745,9 +1745,9 @@ after 1.0:
   break a 0.30 client. 0.31's organisation edits add `folder` and `label` to
   `EntityKind` for theirs. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
-  `Unknown` from the start. 0.76 adds the `BlendMode` values `normal_srgb` and
+  `Unknown` from the start. 0.75 adds the `BlendMode` values `normal_srgb` and
   `additive_srgb` (ADR-0105), which `ItemInfo.blend` reports, so a client older than
-  0.76 can't parse `item.list`, `scene.list` or `state.get` once an item uses one (the
+  0.75 can't parse `item.list`, `scene.list` or `state.get` once an item uses one (the
   whole response fails, and `WsControl` ends the session), as with `OutputKind` in 0.9.
   `BlendMode` still has no `Unknown` fallback; whether it gets one, and whether such a
   break counts as a minor bump, are part of open question 8.

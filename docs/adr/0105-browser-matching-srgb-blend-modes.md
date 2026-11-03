@@ -41,7 +41,7 @@ from a browser design can't look identical with only the linear modes, and chang
 4. **Everything else is ADR-0082's.** Layers stay isolated (§5), so a nested scene
    blends with these modes as one picture, and a transition never flattens it. Tracks
    and flips follow §6.
-5. **The protocol** goes to 0.76 for the two new enum values. The CLI, the MCP tool's
+5. **The protocol** goes to 0.75 for the two new enum values. The CLI, the MCP tool's
    schema and the Inspector's blend picker list them; the picker names them "Normal
    (browser)" and "Additive (browser)".
 
@@ -54,7 +54,7 @@ from a browser design can't look identical with only the linear modes, and chang
 - **Harder:** each `_srgb` item costs a pass break and a copy, where `normal` costs
   neither. A scene of many full-canvas `normal_srgb` items copies the canvas once each.
 - **Older clients:** `BlendMode` has no fallback for an unknown value, so a client
-  older than 0.76, which the server still serves, can't parse a response that reports
+  older than 0.75, which the server still serves, can't parse a response that reports
   an item with an `_srgb` mode. The protocol README's Compatibility paragraph records
   this, as it records 0.9's `OutputKind` and 0.30's `KindCategory`. Whether `BlendMode`
   gains a fallback is left to the protocol's open question 8.

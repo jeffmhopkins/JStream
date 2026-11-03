@@ -756,7 +756,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "BlendMode": {
-            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.76),\nwhich blend sRGB-encoded values.",
+            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),\nwhich blend sRGB-encoded values.",
             "oneOf": [
               {
                 "const": "normal",
@@ -805,12 +805,12 @@ source: crates/jstream-mcp/src/tests.rs
               },
               {
                 "const": "normal_srgb",
-                "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.76,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
+                "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.75,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
                 "type": "string"
               },
               {
                 "const": "additive_srgb",
-                "description": "Additive in sRGB-encoded values (since 0.76, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
+                "description": "Additive in sRGB-encoded values (since 0.75, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
                 "type": "string"
               }
             ]
@@ -6481,7 +6481,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "BlendMode": {
-            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.76),\nwhich blend sRGB-encoded values.",
+            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),\nwhich blend sRGB-encoded values.",
             "oneOf": [
               {
                 "const": "normal",
@@ -6530,12 +6530,12 @@ source: crates/jstream-mcp/src/tests.rs
               },
               {
                 "const": "normal_srgb",
-                "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.76,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
+                "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.75,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
                 "type": "string"
               },
               {
                 "const": "additive_srgb",
-                "description": "Additive in sRGB-encoded values (since 0.76, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
+                "description": "Additive in sRGB-encoded values (since 0.75, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
                 "type": "string"
               }
             ]
@@ -9970,7 +9970,7 @@ source: crates/jstream-mcp/src/tests.rs
       "inputSchema": {
         "$defs": {
           "BlendMode": {
-            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.76),\nwhich blend sRGB-encoded values.",
+            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),\nwhich blend sRGB-encoded values.",
             "oneOf": [
               {
                 "const": "normal",
@@ -10019,12 +10019,12 @@ source: crates/jstream-mcp/src/tests.rs
               },
               {
                 "const": "normal_srgb",
-                "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.76,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
+                "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.75,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
                 "type": "string"
               },
               {
                 "const": "additive_srgb",
-                "description": "Additive in sRGB-encoded values (since 0.76, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
+                "description": "Additive in sRGB-encoded values (since 0.75, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
                 "type": "string"
               }
             ]
@@ -11820,7 +11820,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "BlendMode": {
-            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.76),\nwhich blend sRGB-encoded values.",
+            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),\nwhich blend sRGB-encoded values.",
             "oneOf": [
               {
                 "const": "normal",
@@ -11869,12 +11869,12 @@ source: crates/jstream-mcp/src/tests.rs
               },
               {
                 "const": "normal_srgb",
-                "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.76,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
+                "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.75,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
                 "type": "string"
               },
               {
                 "const": "additive_srgb",
-                "description": "Additive in sRGB-encoded values (since 0.76, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
+                "description": "Additive in sRGB-encoded values (since 0.75, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
                 "type": "string"
               }
             ]
