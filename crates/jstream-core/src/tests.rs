@@ -9,6 +9,7 @@ mod audio_routing;
 #[cfg(feature = "wasm-plugins")]
 mod automation;
 mod collection;
+mod fonts;
 mod gpu_capture;
 mod history;
 mod keyframes;

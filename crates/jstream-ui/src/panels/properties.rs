@@ -13,8 +13,9 @@ use crate::app::SessionContext;
 use crate::icons::Icon;
 use crate::store::{Collection, Studio, apply, query};
 use jstream_control::protocol::{
-    AssetRoot, CaptureTargetInfo, CaptureTargetKind, Edit, KindDescriptor, Media, ParamDescriptor,
-    ParamType, Query, QueryResult, Reference, Settings, SourceId, SourceInfo, SourceKind,
+    AssetRoot, CaptureTargetInfo, CaptureTargetKind, Edit, FontInfo, KindDescriptor, Media,
+    ParamDescriptor, ParamType, Query, QueryResult, Reference, Settings, SourceId, SourceInfo,
+    SourceKind,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -530,6 +531,9 @@ fn input_for(
                     .into_any()
             }
         }
+        ParamType::Asset { accept } if takes_fonts(accept) => {
+            font_input(param, value, send, accept)
+        }
         ParamType::Asset { accept } => asset_input(param, value, send, accept),
         ParamType::CaptureTarget { kind, .. } => capture_target_input(param, value, send, *kind),
         ParamType::Scene => reference_select(value, send, move || {
@@ -761,6 +765,139 @@ fn capture_target_input(
     view! { {body} }.into_any()
 }
 
+/// Whether an `asset` parameter takes font files only, so the form offers the installed
+/// fonts (ADR-0092): its `accept` names `ttf` or `otf`, and nothing but font types.
+pub fn takes_fonts(accept: &[String]) -> bool {
+    let font = |e: &String| {
+        ["ttf", "otf", "ttc"]
+            .iter()
+            .any(|f| e.eq_ignore_ascii_case(f))
+    };
+    accept
+        .iter()
+        .any(|e| ["ttf", "otf"].iter().any(|f| e.eq_ignore_ascii_case(f)))
+        && accept.iter().all(font)
+}
+
+/// The font list's value for the bundled font (no file).
+pub const BUNDLED_FONT: &str = "";
+/// The font list's value for a file it doesn't list, picked by root and path.
+pub const OTHER_FONT: &str = "other";
+
+/// The choices of a font list, as (value, label), and which one `current` is. First the
+/// bundled font, then each font `fonts` lists by family and style (a value `font:` and
+/// its path), then "Other file…". A stored file the list doesn't name selects "Other
+/// file…", so its root and path show.
+pub fn font_choices(fonts: &[FontInfo], current: &Value) -> (Vec<(String, String)>, String) {
+    let mut choices = vec![(BUNDLED_FONT.to_owned(), "Bundled font".to_owned())];
+    for font in fonts {
+        choices.push((
+            format!("font:{}", font.path),
+            format!("{} {}", font.remote_family, font.remote_style),
+        ));
+    }
+    choices.push((OTHER_FONT.to_owned(), "Other file…".to_owned()));
+    let selected = match Reference::from_value(current) {
+        _ if current.is_null() => BUNDLED_FONT.to_owned(),
+        Some(Reference::Asset {
+            root: AssetRoot::Absolute,
+            path,
+        }) if fonts.iter().any(|f| f.path == path) => format!("font:{path}"),
+        _ => OTHER_FONT.to_owned(),
+    };
+    (choices, selected)
+}
+
+/// A font setting: a list of the installed fonts (`font.list`, ADR-0092), with the
+/// bundled font first and "Other file…" last, which shows the root and path of any
+/// other file. Until the list arrives, or if the engine can't list them, only the root
+/// and path show.
+fn font_input(
+    param: &ParamDescriptor,
+    value: impl Fn() -> Value + Clone + Send + Sync + 'static,
+    send: impl Fn(Result<Value, String>) + Clone + Send + Sync + 'static,
+    accept: &[String],
+) -> AnyView {
+    let session = expect_context::<SessionContext>();
+    let listed = RwSignal::new(None::<Result<Vec<FontInfo>, String>>);
+    if let Some(session) = session.get() {
+        spawn_local(async move {
+            let got = match query(&session, Query::FontList).await {
+                Ok(QueryResult::FontList { fonts }) => Ok(fonts),
+                Ok(other) => Err(format!("unexpected {} result", other.name())),
+                Err(e) => Err(e.to_string()),
+            };
+            listed.try_set(Some(got));
+        });
+    }
+    // "Other file…" picked with a listed font or none stored: the root and path show
+    // until another choice is made.
+    let other = RwSignal::new(false);
+    let choices = {
+        let value = value.clone();
+        Memo::new(move |_| {
+            listed.with(|l| match l {
+                Some(Ok(fonts)) => Some(font_choices(fonts, &value())),
+                _ => None,
+            })
+        })
+    };
+    let p = param.clone();
+    let on_pick = {
+        let send = send.clone();
+        move |event: leptos::ev::Event| {
+            let picked = event_target_value(&event);
+            if picked == OTHER_FONT {
+                other.set(true);
+                return;
+            }
+            other.set(false);
+            let value = match picked.strip_prefix("font:") {
+                Some(path) => asset_value(&p, AssetRoot::Absolute, path),
+                None => asset_value(&p, AssetRoot::Absolute, ""),
+            };
+            send(value);
+        }
+    };
+    let file = asset_input(param, value, send, accept);
+    let shows_file = move || {
+        other.get()
+            || choices.with(|c| {
+                c.as_ref()
+                    .is_none_or(|(_, selected)| selected == OTHER_FONT)
+            })
+    };
+    let reason = move || match listed.get() {
+        Some(Err(reason)) => Some(format!("Can't list the installed fonts: {reason}")),
+        _ => None,
+    };
+    view! {
+        <Show when=move || choices.with(Option::is_some)>
+            <select class="font-pick"
+                prop:value=move || {
+                    choices.with(|c| match c {
+                        Some(_) if other.get() => OTHER_FONT.to_owned(),
+                        Some((_, selected)) => selected.clone(),
+                        None => String::new(),
+                    })
+                }
+                on:change=on_pick.clone()>
+                {move || {
+                    choices
+                        .get()
+                        .map(|(list, _)| list)
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|(v, label)| view! { <option value=v>{label}</option> })
+                        .collect_view()
+                }}
+            </select>
+        </Show>
+        <span class="font-file" class:hidden=move || !shows_file() title=reason>{file}</span>
+    }
+    .into_any()
+}
+
 /// An asset reference: which root, and a path under it. An empty path is no file.
 fn asset_input(
     param: &ParamDescriptor,
@@ -824,12 +961,12 @@ fn asset_input(
 #[cfg(test)]
 mod tests {
     use super::{
-        asset_value, display, draft_patch, is_visible, offers, parse, rgb_part, sections,
-        target_choices, value_of, with_rgb,
+        BUNDLED_FONT, OTHER_FONT, asset_value, display, draft_patch, font_choices, is_visible,
+        offers, parse, rgb_part, sections, takes_fonts, target_choices, value_of, with_rgb,
     };
     use jstream_control::protocol::{
-        AssetRoot, CaptureTargetInfo, CaptureTargetKind, EnumOption, KindCategory, KindDescriptor,
-        ParamDescriptor, ParamType, PixelSize, Reference, Settings, VisibleIf,
+        AssetRoot, CaptureTargetInfo, CaptureTargetKind, EnumOption, FontInfo, KindCategory,
+        KindDescriptor, ParamDescriptor, ParamType, PixelSize, Reference, Settings, VisibleIf,
     };
     use serde_json::{Value, json};
 
@@ -930,6 +1067,51 @@ mod tests {
         assert!(is_visible(&mode, &k, &settings));
         assert_eq!(value_of(&mode, &settings), &json!("image"));
         assert_eq!(value_of(&file, &settings), &Value::Null);
+    }
+
+    #[test]
+    fn only_a_font_only_asset_offers_the_installed_fonts() {
+        let accept = |a: &[&str]| a.iter().map(|e| (*e).to_owned()).collect::<Vec<_>>();
+        assert!(takes_fonts(&accept(&["ttf", "otf", "ttc"])));
+        assert!(takes_fonts(&accept(&["OTF"])));
+        assert!(!takes_fonts(&accept(&["ttc"])), "no single-font type");
+        assert!(!takes_fonts(&accept(&["ttf", "png"])));
+        assert!(!takes_fonts(&[]));
+    }
+
+    #[test]
+    fn the_font_list_selects_the_stored_font() {
+        let font = |family: &str, style: &str, path: &str| FontInfo {
+            remote_family: family.into(),
+            remote_style: style.into(),
+            path: path.into(),
+        };
+        let fonts = [
+            font("Inter", "Bold", "/f/Inter-Bold.otf"),
+            font("Inter", "Regular", "/f/Inter.otf"),
+        ];
+        let asset = |root, path: &str| {
+            Reference::Asset {
+                root,
+                path: path.into(),
+            }
+            .to_value()
+        };
+        let (choices, selected) = font_choices(&fonts, &Value::Null);
+        let labels: Vec<_> = choices.iter().map(|(_, l)| l.as_str()).collect();
+        assert_eq!(
+            labels,
+            ["Bundled font", "Inter Bold", "Inter Regular", "Other file…"]
+        );
+        assert_eq!(choices[2].0, "font:/f/Inter.otf");
+        assert_eq!(selected, BUNDLED_FONT);
+        let (_, selected) = font_choices(&fonts, &asset(AssetRoot::Absolute, "/f/Inter.otf"));
+        assert_eq!(selected, "font:/f/Inter.otf");
+        // A file the list doesn't name, or one under another root, shows its root and path.
+        let (_, selected) = font_choices(&fonts, &asset(AssetRoot::Absolute, "/x/Mine.ttf"));
+        assert_eq!(selected, OTHER_FONT);
+        let (_, selected) = font_choices(&fonts, &asset(AssetRoot::Collection, "/f/Inter.otf"));
+        assert_eq!(selected, OTHER_FONT);
     }
 
     #[test]
