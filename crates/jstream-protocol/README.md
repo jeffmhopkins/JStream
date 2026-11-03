@@ -683,7 +683,10 @@ never a type per kind.
   `absolute`, and `CON.png` and `media/nul` under `collection` or `app` (joined to the
   root folder, they still open the device), while `CONSOLE.png` or `COM10.png` is not.
   Earlier components may use these names: Win32 fails to open such a path, and elsewhere
-  they are ordinary folders. An asset that doesn't exist yet is accepted.
+  they are ordinary folders. An asset that doesn't exist yet is accepted. A value that
+  isn't the reference a parameter takes (a bare path or id string, or another kind's
+  reference) is refused with a reason that shows the reference's shape, such as
+  `{"type": "asset", "root": "absolute", "path": "/path/to/file.png"}` (#1021).
 - **References are dependency edges.** Items placing sources, `scene` sources showing
   scenes, and scene, source and bus references in settings (a filter's settings count
   as its source's) form one dependency graph. An edit that would close a cycle
