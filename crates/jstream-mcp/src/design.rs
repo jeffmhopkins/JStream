@@ -86,18 +86,19 @@ lighting agree. Light is `additive` (or `screen`); matter, such as smoke, a hull
 plate, stays `normal`: a fireball reads as solid only when its smoke is drawn normally \
 and just the hot core is added. Masks: `image_mask` cuts an item by an image's alpha \
 or luma (`mode`), and `scene_mask` by a scene's picture, so a mask can be drawn with \
-`shape` sources (a `linear` fill from white to black is a ramp) instead of a file. \
+`shape` sources instead of a file: a `linear` fill from white to black is a ramp with \
+`mode` `luma`, or from white to transparent with the default `alpha`. \
 A file setting, such as an `image` source's `file` or `image_mask`'s `image`, takes an \
 asset reference, `{\"type\": \"asset\", \"root\": \"absolute\", \"path\": \"/path/to/pic.png\"}` \
-(or `root` `collection` with a path relative to the collection file), not a bare \
+(or `root` `collection` with a path relative to the collection file's folder), not a bare \
 path. \
 Reflections: reflect the composite the viewer sees, never each layer on its own. Put \
 what is reflected in one scene or group and place it again with a `scene` source, \
 with `flip_v` on, `fit_mode` `stretch` and a squashed height (about 0.7-0.8 of the \
 original), its top edge on the reflecting surface's top edge, so each surface mirrors \
 from its own edge and shows the right part of the view. Give that item a `blur` \
-(`radius` about 4) in its effects. A mask drawn for the canvas would flip and squash \
-with that item, so put the flipped item in a group of its own, place the group \
+(`radius` about 4) in its effects. A mask drawn for the canvas would be stretched over \
+that item's squashed box, not the canvas, so put the flipped item in a group of its own, place the group \
 full-frame and unflipped, and put the `image_mask` (or `scene_mask`) on that outer \
 placement's effects, with `item.set_blend` `additive` and the opacity there. Mask \
 specific surfaces (a console top, a screen, a canopy frame) with a fresnel ramp, \

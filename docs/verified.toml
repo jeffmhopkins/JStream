@@ -456,7 +456,7 @@ stamp = { hash = "b3:4e77d20f3a69d06a", by = "agent:claude", note = "Design guid
 stamp = { hash = "b3:ebbe2eb89b1e8d48", by = "agent:claude-3d-cameras", note = "Design-guidance bullet now lists 3D sets through a scene camera, matching design.rs's new paragraph; the scene tool gets scene.set_camera from the protocol (tools.snap). | merge: Merged main with #1030 (stinger transitions, HTML browser pages, restart on show) and #1037 (backdrop cap, keyframe effects Cancel): mcp README, tools.snap and design.rs gain the stinger and HTML guidance beside the 3D sets bullet; holds. | kept from the merged side: Body: `font` added to the tool list and the tools.snap size updated to about 799 KB (799248 bytes). The mcp README, tests.rs and tools.rs agree. | kept from the merged side: Whole PR: tools.snap changed only in descriptions: this PR's scene.delete and delete.plan doc comments now name a transition preset's settings (a stinger's scene) among the blockers and as references the plan clears (review B2). merge #1031: the live.set and live-tool descriptions now take a source's live settings (ADR-0091). No tool, schema shape or name changed, so the section holds. | merge: merge #1033: the mcp README adds the font noun and the untrusted font-name note, and tools.snap gains the font tool's schema (ADR-0092). The section's tool and hint description holds, and this PR's html and design-guidance changes are unchanged. | kept from the merged side: The mcp README, tools.rs and tools.snap changed only in the live tool's description (source settings added). The schema-size figure (about 797 KB) moved by a few bytes, so it holds. | kept from the merged side: `font` added to the tool list and the tools.snap size updated to about 799 KB (799248 bytes); the mcp README and tools.rs agree." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:1902ebbb10affb17", by = "agent:claude", note = "Design guidance bullet now names layering light, masks and reflections, as design.rs does" }
+stamp = { hash = "b3:16accfe3f5fc88ed", by = "agent:claude", note = "Design guidance bullet unchanged by wording fixes" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -2382,7 +2382,7 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:1902ebbb10affb17", by = "agent:claude", note = "Design guidance paragraph now lists the cockpit recipes (layering, masks, asset-reference shape, reflection stack masked by an outer group, linear-light opacity) and the wall-clock and restraint notes for HTML, matching design.rs" }
+stamp = { hash = "b3:16accfe3f5fc88ed", by = "agent:claude", note = "Review N2/N3 wording fixes in design.rs (mask mode for ramps, collection folder, why the outer group); the README summary still holds" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -2415,7 +2415,7 @@ stamp = { hash = "b3:a25b353f849b8abf", by = "agent:claude", note = "Whole PR: t
 stamp = { hash = "b3:8a8e9ae67d5d5efb" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:1902ebbb10affb17", by = "agent:claude", note = "Purpose unchanged: design.rs only gains guidance text" }
+stamp = { hash = "b3:16accfe3f5fc88ed", by = "agent:claude", note = "Purpose unchanged by guidance wording fixes" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
