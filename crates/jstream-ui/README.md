@@ -517,7 +517,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   and Nearest on top as fields; OK sends it as `scene.set_camera`, refused first when
   `SceneCamera::validate` would refuse it. On a keyframe scene the check is Own camera,
   an override that starts from the parent's camera, offered only while the parent has
-  one. A note warns when items already have depth or angles (`has_3d_items`).
+  one (`camera_start`). A note warns when items already have depth or angles (`has_3d_items`).
   Duplicate scene copies the scene's options and camera with it. On the right, in the source Properties dialog's shell, are the
   scene's filters: the Filters panel's rows on its video chain, which apply at once (a
   keyframe shows its parent's).
@@ -1036,13 +1036,18 @@ browser, and `mod.rs` is the component.
   the view (`CameraView::depth_of`) when the camera sorts, the later in stacking order
   on a tie or when it doesn't. A move drag takes the pointer to the moved box's depth
   plane (`CameraView::on_plane`) before the gesture sees it, so the box stays under
-  the pointer, and nothing snaps; the boxes have no handles, and a marquee touches
+  the pointer, and nothing snaps; a group moves by the delta on the first selected
+  box's plane, so boxes at other depths move as far in the scene but not under it; the boxes have no handles, and a marquee touches
   each box's on-screen bounds. Alt-drag orbits the camera about its target (0.3° per
-  screen pixel, at most 85° above or below it) and Alt+Shift-drag dollies it
+  screen pixel, at most 85° above or below it, or on the side a typed camera is
+  already past 85°, no further than it is) and Alt+Shift-drag dollies it
   (`exp(0.005 × px)`, no closer than 10 px): the drag shows the camera on the overlay
   and on output through the gesture's `live.set` of `scene.set_camera`, and the drop
   commits one `scene.set_camera` with `ends_gesture`, so the orbit is one undo step.
-  The overlay keeps the dragged camera until the collection has it. In place of the
+  The drag keeps the scene it started on (`Action::Orbit.scene`), and the overlay keeps
+  the dragged camera with it (`camera::Preview`) until the collection has it, showing it
+  in no other scene; a drag that ends with another scene shown is dropped, not
+  committed. In place of the
   selection chrome, a pill reads the camera's position and distance to its target.
 - **Styles** are classes in `style.css`. The hosts' Content Security Policy has no
   `'unsafe-inline'` for styles, so a `style` attribute would be refused, static or set at
