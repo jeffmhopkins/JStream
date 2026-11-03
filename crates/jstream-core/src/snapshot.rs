@@ -1031,7 +1031,9 @@ fn plan_inner(
                 transition::From::Scene(from) => planner.background(from),
                 transition::From::OnScreen(_) => Some(to),
             };
-            let to_camera = planner.camera(&running.to).map(|camera| camera.camera);
+            let to_camera = planner
+                .camera(&running.to)
+                .and_then(|camera| camera.committed());
             shot.transition = Some(Transitioning {
                 start: running.start,
                 tracks,
@@ -1376,18 +1378,20 @@ impl<'a> Planner<'a, '_> {
 
     /// The camera the planned scene `id` draws through, if it is a 3D scene (ADR-0094):
     /// its own, or a keyframe scene's parent's where it has no override.
+    ///
+    /// A keyframe scene always has one, even of a 2D parent, so that a live camera on
+    /// the parent reaches it.
     fn camera(&self, id: &SceneId) -> Option<PassCamera> {
         let (scene, _) = self.drawn(id)?;
-        if let Some(camera) = scene.camera() {
-            return Some(PassCamera {
-                camera: *camera,
-                follows: None,
-            });
-        }
-        self.state.effective_camera(scene).map(|camera| PassCamera {
-            camera,
-            follows: scene.variant_of().cloned(),
-        })
+        let own = scene.camera().copied();
+        let parent = scene.variant_of().map(|parent| {
+            let committed = self
+                .state
+                .scene(parent)
+                .and_then(|parent| parent.camera().copied());
+            (parent.clone(), committed)
+        });
+        (own.is_some() || parent.is_some()).then_some(PassCamera { own, parent })
     }
 
     /// The background the planned scene `id` draws under its items, if it has one: a
@@ -2182,14 +2186,40 @@ struct Pass {
     layers: Vec<Layer>,
 }
 
-/// A 3D scene's camera as a pass draws it (ADR-0094), and the scene it belongs to: the
-/// pass's scene, or for a keyframe scene that doesn't override it, its parent, whose live
-/// value then shows.
+/// The committed cameras a pass resolves its camera from (ADR-0094 §6), so that live
+/// values resolve the same way `State::effective_camera` does.
 #[derive(Clone, Debug, PartialEq)]
 struct PassCamera {
-    camera: SceneCamera,
-    /// The parent whose camera it is, for a keyframe scene that follows it.
-    follows: Option<SceneId>,
+    /// The scene's own camera, or a keyframe scene's override.
+    own: Option<SceneCamera>,
+    /// For a keyframe scene, its parent and the parent's committed camera.
+    parent: Option<(SceneId, Option<SceneCamera>)>,
+}
+
+impl PassCamera {
+    /// The camera it draws through with live cameras applied: `live` gives the live
+    /// value set on a scene, `Some(None)` for a live removal. A keyframe scene is 2D
+    /// when its parent is, and otherwise draws its override, else its parent's camera.
+    fn resolve(
+        &self,
+        scene: &SceneId,
+        live: impl Fn(&SceneId) -> Option<Option<SceneCamera>>,
+    ) -> Option<SceneCamera> {
+        let own = live(scene).unwrap_or(self.own);
+        let Some((parent, committed)) = &self.parent else {
+            return own;
+        };
+        let parent = live(parent).unwrap_or(*committed)?;
+        Some(own.unwrap_or(parent))
+    }
+
+    /// The camera it draws through with no live values.
+    fn committed(&self) -> Option<SceneCamera> {
+        match &self.parent {
+            None => self.own,
+            Some((_, parent)) => parent.map(|parent| self.own.unwrap_or(parent)),
+        }
+    }
 }
 
 /// One item of a [`Pass`].
@@ -2823,20 +2853,15 @@ impl LiveParams {
         Self { items, cameras }
     }
 
-    /// The camera `pass` draws through, with a live camera applied: one set on the
-    /// pass's scene, else on the parent it follows (ADR-0094 §6).
+    /// The camera `pass` draws through, with live cameras applied as
+    /// `State::effective_camera` applies committed ones (ADR-0094 §6): the parent's live
+    /// value, a removal included, decides whether a keyframe scene is 3D, and the
+    /// keyframe's own live value replaces its override.
     fn camera(&self, pass: &Pass) -> Option<SceneCamera> {
-        if let Some(live) = self.cameras.get(&pass.scene) {
-            return *live;
-        }
-        let shot = pass.camera.as_ref()?;
-        match shot
-            .follows
-            .as_ref()
-            .and_then(|parent| self.cameras.get(parent))
-        {
-            Some(live) => *live,
-            None => Some(shot.camera),
+        let live = |scene: &SceneId| self.cameras.get(scene).copied();
+        match &pass.camera {
+            Some(camera) => camera.resolve(&pass.scene, live),
+            None => live(&pass.scene).flatten(),
         }
     }
 
@@ -4479,6 +4504,11 @@ pub(crate) mod tests {
                         variant_of: SceneId::new("main"),
                         name: "Overrides".into(),
                     },
+                    Edit::SceneCreateVariant {
+                        scene_id: SceneId::new("kf"),
+                        variant_of: SceneId::new("flat"),
+                        name: "Flat keyframe".into(),
+                    },
                     set("main", framing),
                     set("k2", moved(200.0)),
                 ],
@@ -4508,6 +4538,29 @@ pub(crate) mod tests {
         let live_k2 = set("k2", moved(700.0));
         let live = LiveParams::from_values([(None, &live_main), (None, &live_k2)]);
         assert_eq!(seen(&live, "k2"), Some(moved(700.0)));
+
+        // A live removal of a keyframe's override falls back to its parent's camera.
+        let unset = |scene: &str| Edit::SceneSetCamera {
+            scene_id: SceneId::new(scene),
+            camera: None,
+        };
+        let drop_k2 = unset("k2");
+        let live = LiveParams::from_values([(None, &drop_k2)]);
+        assert_eq!(seen(&live, "k2"), Some(framing), "back to the parent's");
+        let live = LiveParams::from_values([(None, &live_main), (None, &drop_k2)]);
+        assert_eq!(seen(&live, "k2"), Some(moved(500.0)));
+        // A live removal of the parent's camera makes every keyframe 2D, overrides too.
+        let drop_main = unset("main");
+        let live = LiveParams::from_values([(None, &drop_main)]);
+        assert_eq!(seen(&live, "main"), None);
+        assert_eq!(seen(&live, "k"), None);
+        assert_eq!(seen(&live, "k2"), None, "a 2D parent's keyframes are 2D");
+        // A live camera on a 2D parent reaches its keyframes.
+        assert_eq!(seen(&none, "kf"), None);
+        let live_flat = set("flat", moved(300.0));
+        let live = LiveParams::from_values([(None, &live_flat)]);
+        assert_eq!(seen(&live, "flat"), Some(moved(300.0)));
+        assert_eq!(seen(&live, "kf"), Some(moved(300.0)));
     }
 
     /// A Move between two 3D scenes moves the camera with the preset's timing; a Fade
