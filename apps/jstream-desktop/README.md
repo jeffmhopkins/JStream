@@ -38,7 +38,8 @@ Contents (a first cut; Windows first, because the window needs WebView2):
 - **Browser sources** (`browser.rs`, Windows with the `cef` feature only): the CEF
   backend the engine opens `browser` sources' pages in.
 - **Window** (`shell.rs`, Windows only): the Tauri window, its navigation guard, the
-  projector windows the UI opens, and shutdown.
+  projector windows the UI opens, the project's links it hands to the system browser
+  (`links.rs`, which builds and is tested everywhere), and shutdown.
 - **Log file** (`logs.rs`), in the data folder `jstream-platform`'s `paths` module finds:
   a new user-only file at each start, through `create_private_file` on Windows and
   `jstream-crash`'s `create_new` elsewhere.
@@ -198,8 +199,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   window opens only for one of the UI's projector pages (`?projector=`, the UI's
   `projector.rs`): another window of the app with the same rules and script, starting
   on `about:blank` as a window handed back to `window.open` must, placed and sized as
-  the page asked, and full screen when it asked for that (`&full=1`). Every other new
-  window is refused, and a projector can open none. The page gets no Tauri IPC: the app defines no commands and grants
+  the page asked, and full screen when it asked for that (`&full=1`). A link to one of
+  the project's own pages on GitHub (`links.rs`: the repository's URL from the
+  workspace's `repository`, or a path, query or fragment under it, as the UI's Help menu
+  and About dialog link to) opens in the system browser, through Explorer with the URL
+  as one argument, and never in the window. Every other new window is refused, and a
+  projector can open none. The page gets no Tauri IPC: the app defines no commands and grants
   no capabilities, so the API is the only way in.
 - **Failures are a page, not a crash.** Media Foundation missing (an N edition), no
   data folder, a broken collection file or a missing bundle: the scheme serves a page

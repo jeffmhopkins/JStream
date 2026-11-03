@@ -55,7 +55,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | Area | Rows | ✅ | 🟡 | ⬜ | 🔒 | ⏸ |
 |---|---|---|---|---|---|---|
 | [Theme and shared controls](#theme) | 8 | 8 | 0 | 0 | 0 | 0 |
-| [Header bar](#header) | 9 | 7 | 0 | 0 | 1 | 1 |
+| [Header bar](#header) | 10 | 8 | 0 | 0 | 1 | 1 |
 | [Docking and layouts](#docking) | 10 | 9 | 1 | 0 | 0 | 0 |
 | [Canvas](#canvas) | 18 | 17 | 0 | 0 | 0 | 1 |
 | [Context menus](#menus) | 8 | 8 | 0 | 0 | 0 | 0 |
@@ -70,7 +70,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Transitions](#transitions) | 6 | 6 | 0 | 0 | 0 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 1 | 1 | 0 | 2 | 0 |
 | [Keyboard](#keyboard) | 7 | 6 | 0 | 0 | 0 | 1 |
-| **Total** | **132** | **120** | **3** | **0** | **5** | **4** |
+| **Total** | **133** | **121** | **3** | **0** | **5** | **4** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -98,14 +98,14 @@ Spec: [workspace › theme](../design/ui-prototype/spec-workspace.md#theme-fonts
 <a id="header"></a>
 ## Header bar
 <!-- @section
-covers = ["crates/jstream-ui/src/app.rs", "crates/jstream-ui/src/header.rs", "crates/jstream-ui/src/panels/outputs.rs"]
+covers = ["crates/jstream-ui/src/app.rs", "crates/jstream-ui/src/header.rs", "crates/jstream-ui/src/about.rs", "crates/jstream-ui/src/panels/outputs.rs"]
 -->
 
 Spec: [workspace › header bar](../design/ui-prototype/spec-workspace.md#header-bar).
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| HD-01 | Brand and menu row | Accent square and "JStream", then File, Edit, View and Layout menus; one top menu open at a time, closed by any outside press. | ✅ | The prototype leaves File and Edit empty; the real ones hold the connection details and Disconnect, and Undo and Redo. The menus behave as a desktop menu bar: a click opens or closes one; while one is open, pointing at another menu opens it instead; Escape closes it. From the keyboard, Down, Enter or Space opens the focused menu at its first item (Up at its last), Up, Down, Home and End move through it, Left and Right move along the bar (opening the next menu while one is open), and Tab closes it. Keys with Ctrl, Alt or Meta are left to the hotkeys. |
+| HD-01 | Brand and menu row | Accent square and "JStream", then File, Edit, View and Layout menus; one top menu open at a time, closed by any outside press. | ✅ | The prototype leaves File and Edit empty; the real ones hold the connection details and Disconnect, and Undo and Redo. The accent square is the app icon (the desktop app's `icons/icon.png`, copied into the bundle as `icon.png`, also the favicon), and beyond the prototype a Help menu ends the bar ([HD-10](#header)). The menus behave as a desktop menu bar: a click opens or closes one; while one is open, pointing at another menu opens it instead; Escape closes it. From the keyboard, Down, Enter or Space opens the focused menu at its first item (Up at its last), Up, Down, Home and End move through it, Left and Right move along the bar (opening the next menu while one is open), and Tab closes it. Keys with Ctrl, Alt or Meta are left to the hotkeys. |
 | HD-02 | View menu | Lists all 11 panels with "shown" or "add"; clicking hides a shown panel or adds a hidden one to its home zone. | ✅ | All eleven, in the prototype's order. Live chat waits on YouTube sign-in ([live panels](#live-panels)), so for now it says what it waits on; Stream stats shows an output's own stats without it. Beyond the prototype, a Projectors group under them opens the program or the multiview in a window or full screen ([DL-07](#dialogs)). |
 | HD-03 | Layout menu | "Layout: <name>", saved layouts with "current", "Save current layout as new", "Reset to default". | ✅ | |
 | HD-04 | Stats readout | Mono "60 fps · 0 dropped · CPU 3%". | ✅ | Built from `stats.tick`: the frame rate is the program's over the last tick's interval, and shows only while an output runs, since the program stage draws nothing otherwise; "N dropped" counts video frames dropped since the page connected; CPU is the engine process's share of every logical CPU, as Task Manager counts it, "<1%" below half a percent (protocol 0.48's `load`). The daemon and the desktop app tick about once a second while idle too. CPU shows on Windows and macOS; elsewhere the engine can't read it and the readout leaves it out. |
@@ -114,6 +114,7 @@ Spec: [workspace › header bar](../design/ui-prototype/spec-workspace.md#header
 | HD-07 | Record button | Starts and stops recording. | ✅ | Starts every stopped or failed recording output; "Stop recording" while any runs; disabled with none. |
 | HD-08 | Broadcast picker | Shows the YouTube broadcast Go Live uses; menu lists broadcasts and "+ Create new stream…". | 🔒 | YouTube sign-in needs the OAuth client (A6b, Y4, [ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)). |
 | HD-09 | Go Live / End stream | Red "Go Live", dark red "End stream" while live, at the right end of the header. | ✅ | Starts every stopped or failed stream output whose key is set. |
+| HD-10 | Help menu and About | Beyond the prototype: a Help menu with the project's pages and an About dialog. | ✅ | Help links to the documentation (the README), Getting started, the release notes and a new issue on GitHub, each in a new tab (the desktop app hands them to the system browser), then About JStream. About shows the app icon, the version the UI was built as (the workspace's), the build (the commit CI built it from, or "local build"), the protocol the engine speaks, the licence, and links to the source, the documentation and the issues. `about.rs`. |
 
 <a id="docking"></a>
 ## Docking and layouts

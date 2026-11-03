@@ -12,6 +12,7 @@ pub mod bootstrap;
 #[cfg(all(windows, feature = "cef"))]
 pub mod browser;
 pub mod host;
+pub mod links;
 pub mod logs;
 #[cfg(windows)]
 pub mod shell;

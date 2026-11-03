@@ -88,7 +88,9 @@ scene's **Properties** (double-click its row) also set the colour it is drawn ov
 which shows wherever no item covers it.
 
 Panels can be moved, hidden and brought back from the **View** menu; **Layout** saves
-and resets arrangements.
+and resets arrangements. **Help** links to these docs, the release notes and the issue
+tracker, and **About JStream** there shows the version you run, which an issue report
+should name.
 
 To watch a scene, a source, the program or a multiview on another screen, choose
 **Pop out** on a scene's or a source's right-click menu, or a projector under **View**: each opens in a window of its

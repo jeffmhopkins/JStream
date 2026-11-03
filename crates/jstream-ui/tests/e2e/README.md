@@ -198,9 +198,14 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   each in its place, a click on the open menu's button closes it, after which pointing
   opens nothing, and a press outside closes one; from the keyboard Down opens a menu at
   its first item and Up on a button at its last, Up and Down wrap through it, Right and
-  Left move along the bar (wrapping), Escape closes it back to its button, and
-  Ctrl+Right on a button is left alone; with animation frames delayed, a second Left
-  pressed before the next menu is drawn still moves along the bar.
+  Left move along the bar (wrapping from File to Help), Escape closes it back to its
+  button, and Ctrl+Right on a button is left alone; with animation frames delayed, a
+  second Left pressed before the next menu is drawn still moves along the bar. The
+  header's mark is the bundle's `icon.png`, loaded; the Help menu lists Documentation,
+  Getting started, Release notes and Report an issue, each a link to the repository's
+  page in a new tab with `noopener noreferrer`, then About JStream, whose dialog shows
+  the icon, the version, the build, the engine's protocol and the licence with its
+  links, and closes on Escape and on Close.
 - **Copy and paste** (`clipboard.spec.js`): Ctrl+C and Ctrl+V on the canvas paste the
   seed's Backdrop again as one batch, on top and selected; the empty canvas's Paste puts
   it in Intro, and a row's Ctrl+C and Ctrl+V do the same; Paste scene is disabled until
