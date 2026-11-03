@@ -28,14 +28,15 @@
 //! recovers and a still scene costs almost nothing.
 //!
 //! **Codecs.** `preview.subscribe` picks the first codec the client accepts that the
-//! engine has: H.264 when the platform lists an H.264 encoder, JPEG always. H.264 runs
-//! on a `jstream-encode` [`VideoSession`] of the platform's software encoder (so a
-//! preview never takes a hardware session from an output), opened on the hub thread,
-//! and reopened when the picture size changes; if it can't be opened, the stream falls
-//! back to JPEG when the client accepts it, and ends otherwise. Every frame names its
-//! codec. JPEG is this module's own baseline encoder ([`jpeg`]). The encoders and
-//! pacing live on the hub thread alone ([`Work`]), so a stream shared with its session
-//! holds only flags and its settings.
+//! engine has: H.264 when the platform lists an H.264 encoder, JPEG and PNG always.
+//! H.264 runs on a `jstream-encode` [`VideoSession`] of the platform's software encoder
+//! (so a preview never takes a hardware session from an output), opened on the hub
+//! thread, and reopened when the picture size changes; if it can't be opened, the
+//! stream falls back to JPEG when the client accepts it, and ends otherwise. Every frame
+//! names its codec. JPEG is this module's own baseline encoder ([`jpeg`]). PNG, which is
+//! lossless, is for a client taking a screenshot (ADR-0096), with `video.snapshot`'s
+//! encoder. The encoders and pacing live on the hub thread alone ([`Work`]), so a
+//! stream shared with its session holds only flags and its settings.
 //!
 //! **Captures.** The hub captures the displays, windows, webcams and capture cards the
 //! program mix and each streamed scene show itself, on the CPU path, through the
@@ -326,7 +327,7 @@ impl SessionPreviews {
         });
         let Some(codec) = settings.codecs.iter().copied().find(|&codec| match codec {
             PreviewCodec::H264 => has_h264,
-            PreviewCodec::Jpeg => true,
+            PreviewCodec::Jpeg | PreviewCodec::Png => true,
             _ => false,
         }) else {
             return Err(ProtocolError::ActionFailed {
@@ -1073,6 +1074,17 @@ fn serve(
                 Err("encoding the JPEG failed".to_owned())
             }
         }
+        PreviewCodec::Png => snapshot::encode_png(width, height, rgba).map(|png| {
+            stream.send(picture(
+                stream,
+                PreviewCodec::Png,
+                true,
+                size,
+                pts_us,
+                rev,
+                &png,
+            ));
+        }),
         _ => push_h264(stream, work, size, pts_us, rev, keyframe, rgba),
     };
     if let Err(reason) = sent {
