@@ -7,10 +7,11 @@
 //! a broadcast designer would: where things go, which sizes, which faces and colours,
 //! and to look at the result before calling it done. It names the `backdrop` and `text`
 //! settings that make graphics look finished, the `shape` kind, how to group, scroll
-//! and animate, how to use 3D placement and blend modes, how to build a 3D set with a
-//! scene camera (ADR-0094), which transition to use (including a `stinger`), and when
-//! to build a graphic as HTML in a `browser` source. Numbers are for a 1920×1080 canvas
-//! and scale with it.
+//! and animate, how to use 3D placement and blend modes, how to layer light, mask and
+//! build reflections (the recipes the cockpit build found, #1062), how to build a 3D
+//! set with a scene camera (ADR-0094), which transition to use (including a
+//! `stinger`), and when to build a graphic as HTML in a `browser` source, animated on
+//! one clock. Numbers are for a 1920×1080 canvas and scale with it.
 
 /// The guidance, as one paragraph of the server instructions.
 pub(crate) const DESIGN: &str = "\
@@ -67,7 +68,10 @@ between them with it. Reveal text with a crop that opens with its plate rather t
 fade over it, and stagger the parts with `item.set_transition` `delay_ms` (0, 120, \
 200). Items with no partner in the other scene appear and disappear by their \
 transition's `appear` and `disappear` (`slide`, `scale` or `fade`). Keep moves under a \
-second and ease them; a cut beats a slow move. \
+second and ease them; a cut beats a slow move. A variant that overrides an item's \
+geometry stores the whole geometry, so nudging x there also fixes its size and angles \
+against later edits to the item in the parent scene; finish an item's size and angles \
+in the parent first, and override geometry only on the items that move. \
 Depth and blending: a keyframe variant can override an item's 3D placement, so a `move` \
 interpolates it: `tilt_deg` (top edge away), `turn_deg` (right edge away), `depth_px` \
 and `perspective_px` (about 1200-2000 for a natural look). A plate that flips down \
@@ -76,6 +80,32 @@ designed move; keep angles under 90 and pair them with opacity. `item.set_blend`
 how an item composites: `screen` or `additive` for light leaks, glints and glows over \
 the picture, `multiply` for shadows and textures, `overlay` for a tinted wash; most \
 items stay `normal`. \
+Layering light: keep what is outside a window, what glows and the light thrown into \
+the room as separate layers, each with its own mask and blend, so reflections and \
+lighting agree. Light is `additive` (or `screen`); matter, such as smoke, a hull or a \
+plate, stays `normal`: a fireball reads as solid only when its smoke is drawn normally \
+and just the hot core is added. Masks: `image_mask` cuts an item by an image's alpha \
+or luma (`mode`), and `scene_mask` by a scene's picture, so a mask can be drawn with \
+`shape` sources (a `linear` fill from white to black is a ramp) instead of a file. \
+A file setting, such as an `image` source's `file` or `image_mask`'s `image`, takes an \
+asset reference, `{\"type\": \"asset\", \"root\": \"absolute\", \"path\": \"/path/to/pic.png\"}` \
+(or `root` `collection` with a path relative to the collection file), not a bare \
+path. \
+Reflections: reflect the composite the viewer sees, never each layer on its own. Put \
+what is reflected in one scene or group and place it again with a `scene` source, \
+with `flip_v` on, `fit_mode` `stretch` and a squashed height (about 0.7-0.8 of the \
+original), its top edge on the reflecting surface's top edge, so each surface mirrors \
+from its own edge and shows the right part of the view. Give that item a `blur` \
+(`radius` about 4) in its effects. A mask drawn for the canvas would flip and squash \
+with that item, so put the flipped item in a group of its own, place the group \
+full-frame and unflipped, and put the `image_mask` (or `scene_mask`) on that outer \
+placement's effects, with `item.set_blend` `additive` and the opacity there. Mask \
+specific surfaces (a console top, a screen, a canopy frame) with a fresnel ramp, \
+brighter toward the grazing edge, never one broad sheen over everything. A rim light \
+is the same composite again, unflipped, with a wide `blur` (about 12), an edge mask \
+and `additive`. Blending is in linear light, so a glass ghost needs far less than a \
+browser would (about 8% opacity where CSS needed 18%): tune it in JStream, and check \
+it over the brightest and the darkest background it will sit on. \
 3D sets: `scene.set_camera` gives a scene a camera (`position`, `target`, `fov_deg`, \
 `roll_deg`), and then every item sits in one 3D space: `geometry.center` is its x and \
 y, `depth_px` its z (toward the viewer), and its rotation, `tilt_deg` and `turn_deg` \
@@ -113,7 +143,13 @@ its `width` and `height` to the canvas and place its item full-frame, or to the 
 graphic's bounds; the default `css` makes the page transparent, so draw only the \
 graphic and leave `body` without a background. Fonts and images can come from https \
 URLs (such as Google Fonts), not from local files. Animate the entrance with CSS \
-`@keyframes` that run once on load, with `animation-fill-mode: both`. Changing `html` \
+`@keyframes` that run once on load, with `animation-fill-mode: both`. Pages that move \
+together (a sky drift seen through several windows, lights that pulse in step) must \
+animate from the wall clock (`Date.now()`), not from when each page loaded, so \
+separate pages agree; use load time only for an effect that should replay when it is \
+shown. Keep continuous motion restrained: a cockpit sway of about 3 px and 0.1° feels \
+real and more feels seasick, and a streak must move less per frame than its own \
+length or it flickers. Changing `html` \
 reloads the page, which replays the entrance and blanks it for a moment, so put text \
 that changes during a show in a `text` source over it. If creating the source fails \
 because no browser is available on this system, build the graphic from the built-in \
