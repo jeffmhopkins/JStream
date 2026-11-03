@@ -196,15 +196,19 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   a geometry ([Item geometry](#design)). `geometry/camera.rs` holds the scene camera
   ([ADR-0094](../../docs/adr/0094-scene-cameras.md)): `Vec3`, `SceneCamera` with
   `framing(canvas)`, the camera that puts every flat item on its 2D box, and `validate`,
-  and `CameraView`, the camera seen on one canvas. `drawn_polygon_seen`, `unplace_seen`,
+  and `CameraView`, the camera seen on one canvas, whose `blur_at` is the camera's
+  depth-of-field blur at a distance along its view
+  ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)). `drawn_polygon_seen`, `unplace_seen`,
   `drawn_vertex_seen` and `project_seen` take an optional view, and with one place the
   item by its geometry in the scene's space through the camera (`w = D / f`, the same
   near plane); with none they are the functions above.
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.72 because of the
-  effect-pack commands `pack.write`, `pack.delete`, `pack.list` and `pack.read`
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.77 because of
+  `SceneCamera`'s `focus_px` and `blur_px`, a camera's depth of field
+  ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)), with 0.73 to 0.76 left to
+  changes that claimed them first; 0.72 because of the effect-pack commands `pack.write`, `pack.delete`, `pack.list` and `pack.read`
   (`pack.rs`: `PackFile`, `PackContent`, `PackInfo`, `PackFileInfo` and the write's
   limits, [ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)), which agents
   may call and no plugin is granted but `pack.list` and `pack.read`, and no hotkey

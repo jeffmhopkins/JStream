@@ -223,8 +223,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   canvas pixels, a fit mode for the source inside the box, a rotation about the centre,
   horizontal and vertical flips that mirror the content inside the box, and 3D tilt,
   turn, depth and per-item perspective, drawn in stacking order with no depth buffer.
-  A scene with a `camera` (`SceneCamera`: position, target, field of view, roll and
-  `depth_sort`) is a **3D scene** ([ADR-0094](adr/0094-scene-cameras.md)): the
+  A scene with a `camera` (`SceneCamera`: position, target, field of view, roll,
+  `depth_sort`, and a depth of field's `focus_px` and `blur_px`,
+  [ADR-0108](adr/0108-camera-depth-of-field.md)) is a **3D scene** ([ADR-0094](adr/0094-scene-cameras.md)): the
   canvas extended toward the viewer is one space, each item's geometry is its pose
   there (`depth_px` its `z`), the camera sees them all, and its own perspective is
   ignored. Its items draw far to near by the depth of their centre, with stacking
@@ -695,7 +696,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   ([ADR-0089](adr/0089-scene-options-and-nested-audio.md), protocol 0.65).
   `scene.set_camera` gives a scene a camera, making it a 3D scene, or removes it; it is
   a live value and a keyframe override ([ADR-0094](adr/0094-scene-cameras.md),
-  protocol 0.70).
+  protocol 0.70). Its camera's `focus_px` and `blur_px` give it a depth of field
+  ([ADR-0108](adr/0108-camera-depth-of-field.md), protocol 0.77).
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
@@ -1065,7 +1067,10 @@ keeps a stinger's items over the scenes under them), far to near by the depth of
 centre, stacking order breaking ties; there is still no depth buffer. In a Fade between
 two scenes each side's items keep their own camera, a Move between two 3D scenes
 interpolates the camera, and what a switch takes from the screen mid-Fade or
-mid-stinger leaves through the camera each item had.
+mid-stinger leaves through the camera each item had. A camera with a depth of field
+([ADR-0108](adr/0108-camera-depth-of-field.md)) blurs each fragment by its distance from
+the focus plane in the same draw: a disc of taps from the item's mips, its edge
+softened to match, with no extra pass or target.
 Opacity is a straight multiplier in `[0, 1]`. The blend is the item's mode
 ([ADR-0082](adr/0082-blend-modes-drawn.md)): fixed-function for `normal` (premultiplied
 src-over), `additive`, `screen` and `multiply`; the other five read a copy of the

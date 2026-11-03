@@ -15,7 +15,8 @@ mod camera;
 mod drawn;
 
 pub use camera::{
-    CameraView, DEFAULT_FOV_DEG, MAX_FOV_DEG, MIN_CAMERA_DISTANCE, MIN_FOV_DEG, SceneCamera, Vec3,
+    CameraView, DEFAULT_FOV_DEG, Focus, MAX_BLUR_PX, MAX_FOV_DEG, MIN_CAMERA_DISTANCE, MIN_FOV_DEG,
+    SceneCamera, Vec3,
 };
 pub use drawn::{DrawnPolygon, DrawnVertex, LocalPoint, MAX_DRAWN_PX, NEAR_W};
 
@@ -191,6 +192,13 @@ pub enum GeometryError {
     /// A scene camera's `position` is closer than 0.001 px to its `target` (ADR-0094).
     #[error("the camera's position must differ from its target")]
     CameraAtTarget,
+    /// A scene camera's `focus_px` is not above 0, or is past
+    /// [`MAX_DRAWN_PX`](drawn::MAX_DRAWN_PX) (ADR-0108).
+    #[error("focus_px must be above 0 and at most the drawable distance")]
+    FocusDistance,
+    /// A scene camera's `blur_px` is outside 0 to 64 (ADR-0108).
+    #[error("blur_px must be from 0 to 64")]
+    Blur,
 }
 
 /// A point in canvas pixels, x right and y down.

@@ -3869,11 +3869,26 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "SceneCamera": {
-            "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, and omitted\n`depth_sort` `true`, which is not written.",
+            "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, omitted\n`depth_sort` `true` and omitted `blur_px` 0, neither of which is written, and omitted\n`focus_px` no depth of field.",
             "properties": {
+              "blur_px": {
+                "$ref": "#/$defs/Finite32",
+                "description": "How soft focus gets: the blur radius, in canvas pixels, of a point infinitely far\nbehind the focus plane, from 0 to 64. With `focus_px`, the camera has a depth of\nfield when this is above 0. Default 0 (ADR-0108)."
+              },
               "depth_sort": {
                 "description": "Whether items draw far to near, by the depth of their box centre along the\nviewing axis, with stacking order breaking ties. `false` keeps stacking order.\nDefault `true`.",
                 "type": "boolean"
+              },
+              "focus_px": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Finite32"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The distance along the viewing axis, from the camera, of the plane in focus, in\nscene pixels: above 0 and at most the drawable distance. Absent, everything is in\nfocus (ADR-0108)."
               },
               "fov_deg": {
                 "$ref": "#/$defs/Finite32",
@@ -9584,11 +9599,26 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "SceneCamera": {
-            "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, and omitted\n`depth_sort` `true`, which is not written.",
+            "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, omitted\n`depth_sort` `true` and omitted `blur_px` 0, neither of which is written, and omitted\n`focus_px` no depth of field.",
             "properties": {
+              "blur_px": {
+                "$ref": "#/$defs/Finite32",
+                "description": "How soft focus gets: the blur radius, in canvas pixels, of a point infinitely far\nbehind the focus plane, from 0 to 64. With `focus_px`, the camera has a depth of\nfield when this is above 0. Default 0 (ADR-0108)."
+              },
               "depth_sort": {
                 "description": "Whether items draw far to near, by the depth of their box centre along the\nviewing axis, with stacking order breaking ties. `false` keeps stacking order.\nDefault `true`.",
                 "type": "boolean"
+              },
+              "focus_px": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Finite32"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The distance along the viewing axis, from the camera, of the plane in focus, in\nscene pixels: above 0 and at most the drawable distance. Absent, everything is in\nfocus (ADR-0108)."
               },
               "fov_deg": {
                 "$ref": "#/$defs/Finite32",
@@ -14893,11 +14923,26 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "SceneCamera": {
-            "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, and omitted\n`depth_sort` `true`, which is not written.",
+            "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, omitted\n`depth_sort` `true` and omitted `blur_px` 0, neither of which is written, and omitted\n`focus_px` no depth of field.",
             "properties": {
+              "blur_px": {
+                "$ref": "#/$defs/Finite32",
+                "description": "How soft focus gets: the blur radius, in canvas pixels, of a point infinitely far\nbehind the focus plane, from 0 to 64. With `focus_px`, the camera has a depth of\nfield when this is above 0. Default 0 (ADR-0108)."
+              },
               "depth_sort": {
                 "description": "Whether items draw far to near, by the depth of their box centre along the\nviewing axis, with stacking order breaking ties. `false` keeps stacking order.\nDefault `true`.",
                 "type": "boolean"
+              },
+              "focus_px": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Finite32"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The distance along the viewing axis, from the camera, of the plane in focus, in\nscene pixels: above 0 and at most the drawable distance. Absent, everything is in\nfocus (ADR-0108)."
               },
               "fov_deg": {
                 "$ref": "#/$defs/Finite32",
@@ -16090,11 +16135,26 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "integer"
           },
           "SceneCamera": {
-            "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, and omitted\n`depth_sort` `true`, which is not written.",
+            "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, omitted\n`depth_sort` `true` and omitted `blur_px` 0, neither of which is written, and omitted\n`focus_px` no depth of field.",
             "properties": {
+              "blur_px": {
+                "$ref": "#/$defs/Finite32",
+                "description": "How soft focus gets: the blur radius, in canvas pixels, of a point infinitely far\nbehind the focus plane, from 0 to 64. With `focus_px`, the camera has a depth of\nfield when this is above 0. Default 0 (ADR-0108)."
+              },
               "depth_sort": {
                 "description": "Whether items draw far to near, by the depth of their box centre along the\nviewing axis, with stacking order breaking ties. `false` keeps stacking order.\nDefault `true`.",
                 "type": "boolean"
+              },
+              "focus_px": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Finite32"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The distance along the viewing axis, from the camera, of the plane in focus, in\nscene pixels: above 0 and at most the drawable distance. Absent, everything is in\nfocus (ADR-0108)."
               },
               "fov_deg": {
                 "$ref": "#/$defs/Finite32",

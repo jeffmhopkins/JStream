@@ -64,9 +64,9 @@ pub use filter::{FilterChain, FilterChains, FilterInfo, FilterOwner, MAX_CHAIN_F
 pub use finite::Finite32;
 pub use geometry::{
     CameraView, Canvas, CanvasPoint, ContentRect, DEFAULT_FOV_DEG, DrawnPolygon, DrawnVertex,
-    FitMode, GeometryError, ItemGeometry, LegacyBox, LegacyQuad, LocalPoint, MAX_DRAWN_PX,
-    MAX_FOV_DEG, MIN_CAMERA_DISTANCE, MIN_FOV_DEG, NEAR_W, Placed, PlacementForm, ProjectedQuad,
-    SceneCamera, Size, Vec3, legacy_quad,
+    FitMode, Focus, GeometryError, ItemGeometry, LegacyBox, LegacyQuad, LocalPoint, MAX_BLUR_PX,
+    MAX_DRAWN_PX, MAX_FOV_DEG, MIN_CAMERA_DISTANCE, MIN_FOV_DEG, NEAR_W, Placed, PlacementForm,
+    ProjectedQuad, SceneCamera, Size, Vec3, legacy_quad,
 };
 pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use hotkey::{Chord, HotkeyBinding};

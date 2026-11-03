@@ -313,6 +313,16 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
             (None, _, false) => "Starts from a camera that shows the scene as it is now.".to_owned(),
         }
     };
+    // The distance that puts the selected item in focus, through the draft's camera.
+    let selection = studio.selection;
+    let focus_scene = StoredValue::new(scene_id.clone());
+    let focus_target = move || {
+        let camera = draft.with(|d| d.camera)?;
+        studio.collection.with(|c| {
+            selection
+                .with(|s| focus_scene.with_value(|scene| focus_on(c.as_ref()?, scene, s, camera)))
+        })
+    };
     let toggle_camera = move |on: bool| {
         draft.update(|d| {
             d.camera = on.then(|| parent_camera.unwrap_or_else(|| SceneCamera::framing(canvas)));
@@ -379,6 +389,45 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                         />
                         <span>"Nearest on top (off: stacking order)"</span>
                     </label>
+                    <label class="camera-row">
+                        <input
+                            type="checkbox"
+                            aria-label="Depth of field"
+                            prop:checked=move || draft.with(|d| d.camera.is_some_and(|c| c.focus_px.is_some()))
+                            on:change=move |event| {
+                                let on = event_target_checked(&event);
+                                draft.update(|d| {
+                                    if let Some(camera) = d.camera.as_mut() {
+                                        depth_of_field(camera, on);
+                                    }
+                                });
+                            }
+                        />
+                        <span>"Depth of field"</span>
+                    </label>
+                    {move || draft.with(|d| d.camera.is_some_and(|c| c.focus_px.is_some())).then(|| view! {
+                        <div class="camera-row">
+                            {number("Focus distance", CameraField::Focus, "1")}
+                            {number("Blur (px)", CameraField::Blur, "0.5")}
+                            <button
+                                type="button"
+                                class="btn"
+                                title="Focus on the selected item"
+                                prop:disabled=move || focus_target().is_none()
+                                on:click=move |_| {
+                                    if let Some(distance) = focus_target() {
+                                        draft.update(|d| {
+                                            if let Some(camera) = d.camera.as_mut() {
+                                                CameraField::Focus.set(camera, distance);
+                                            }
+                                        });
+                                    }
+                                }
+                            >
+                                "Focus on selection"
+                            </button>
+                        </div>
+                    })}
                 </div>
             }
         })
@@ -648,6 +697,41 @@ fn has_3d_items(collection: &Collection, scene_id: &SceneId) -> bool {
     })
 }
 
+/// Turns `camera`'s depth of field on, focused on its target with a blur of
+/// [`DEFAULT_BLUR_PX`] unless it has one, or off (ADR-0108 decision 7).
+fn depth_of_field(camera: &mut SceneCamera, on: bool) {
+    if on {
+        camera.focus_px = Finite32::new(camera.target_distance());
+        if camera.blur_px.get() == 0.0 {
+            camera.blur_px = Finite32::new(DEFAULT_BLUR_PX).unwrap_or(Finite32::ZERO);
+        }
+    } else {
+        camera.focus_px = None;
+        camera.blur_px = Finite32::ZERO;
+    }
+}
+
+/// The blur Depth of field starts with, in canvas pixels.
+const DEFAULT_BLUR_PX: f32 = 6.0;
+
+/// The focus distance that puts the selected item of `scene_id` in focus through
+/// `camera`: its box centre's distance along the view, or `None` when no item of the
+/// scene is selected, it has no geometry, or it isn't in front of the camera.
+fn focus_on(
+    collection: &Collection,
+    scene_id: &SceneId,
+    selection: &crate::store::Selection,
+    camera: SceneCamera,
+) -> Option<f32> {
+    if selection.scene.as_ref() != Some(scene_id) {
+        return None;
+    }
+    let (_, item) = collection.item_in(Some(scene_id), selection.item.as_ref()?)?;
+    let view = camera.view(collection.canvas).ok()?;
+    let distance = view.depth_of(item.geometry?) as f32;
+    (distance > 0.0 && distance.is_finite()).then_some(distance)
+}
+
 /// One number of a camera, to show and to set.
 #[derive(Clone, Copy)]
 enum CameraField {
@@ -655,6 +739,8 @@ enum CameraField {
     Target(usize),
     Fov,
     Roll,
+    Focus,
+    Blur,
 }
 
 impl CameraField {
@@ -669,6 +755,8 @@ impl CameraField {
             CameraField::Target(i) => axis(&camera.target, i),
             CameraField::Fov => camera.fov_deg.get(),
             CameraField::Roll => camera.roll_deg.get(),
+            CameraField::Focus => camera.focus_px.map_or(0.0, Finite32::get),
+            CameraField::Blur => camera.blur_px.get(),
         }
     }
 
@@ -687,6 +775,8 @@ impl CameraField {
             CameraField::Target(i) => axis(&mut camera.target, i),
             CameraField::Fov => camera.fov_deg = value,
             CameraField::Roll => camera.roll_deg = value,
+            CameraField::Focus => camera.focus_px = Some(value),
+            CameraField::Blur => camera.blur_px = value,
         }
     }
 }
@@ -985,6 +1075,83 @@ mod tests {
             960.0,
             "a non-finite number is ignored"
         );
+    }
+
+    /// ADR-0108 decision 7: Depth of field starts focused on the camera's target with a
+    /// blur of 6 px, turns off cleanly, and Focus on selection measures the selected
+    /// item's distance along the view.
+    #[test]
+    fn depth_of_field_starts_on_the_target_and_focuses_on_the_selection() {
+        use crate::store::Selection;
+        use jstream_control::protocol::{
+            Crop, ItemGeometry, ItemInfo, ItemTransform, PlacementForm, Size, Vec2,
+        };
+        let mut geometry = ItemGeometry::try_new(
+            Vec2::new(960.0, 540.0).expect("finite"),
+            Size::try_new(100.0, 100.0).expect("positive"),
+        )
+        .expect("geometry");
+        geometry.depth_px = Finite32::new(-300.0).expect("finite");
+        let mut scene: SceneInfo = serde_json::from_value(serde_json::json!({
+            "scene_id": "a",
+            "name": "A",
+            "items": [],
+        }))
+        .expect("a scene");
+        scene.items.push(ItemInfo {
+            item_id: "i".into(),
+            source_id: "s".into(),
+            placement: PlacementForm::Geometry,
+            transform: ItemTransform::IDENTITY,
+            geometry: Some(geometry),
+            crop: Crop::NONE,
+            visible: true,
+            effects: Vec::new(),
+            opacity: Finite32::ONE,
+            blend: Default::default(),
+            transition: jstream_control::protocol::ItemTransition::default(),
+            locked: false,
+        });
+        let c = Collection {
+            scenes: vec![scene],
+            ..Collection::default()
+        };
+        let a = SceneId::new("a");
+        let mut camera = SceneCamera::framing(c.canvas);
+        depth_of_field(&mut camera, true);
+        let target = camera.target_distance();
+        assert_eq!(camera.focus_px.map(Finite32::get), Some(target));
+        assert_eq!(camera.blur_px.get(), DEFAULT_BLUR_PX);
+        assert!(camera.validate().is_ok());
+        let mut softer = camera;
+        CameraField::Blur.set(&mut softer, 12.0);
+        depth_of_field(&mut softer, true);
+        assert_eq!(
+            softer.blur_px.get(),
+            12.0,
+            "turning it on again keeps the blur"
+        );
+        let picked = Selection {
+            scene: Some(a.clone()),
+            item: Some(jstream_control::protocol::ItemId::new("i")),
+            also: Vec::new(),
+        };
+        let focus = focus_on(&c, &a, &picked, camera).expect("in front");
+        assert!((focus - (target + 300.0)).abs() < 0.01, "{focus}");
+        assert_eq!(focus_on(&c, &a, &Selection::default(), camera), None);
+        let mut too_soft = camera;
+        CameraField::Blur.set(&mut too_soft, 80.0);
+        let before = SceneDraft::of(&c, &a).expect("the scene");
+        let draft = SceneDraft {
+            camera: Some(too_soft),
+            ..before.clone()
+        };
+        assert!(
+            scene_edits(&c, &a, &before, &draft).is_err(),
+            "a blur past 64 is refused"
+        );
+        depth_of_field(&mut camera, false);
+        assert_eq!((camera.focus_px, camera.blur_px.get()), (None, 0.0));
     }
 
     /// A scene whose items already have depth or angles warns that a camera changes them.

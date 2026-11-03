@@ -53,6 +53,10 @@ pub(crate) struct Shape {
     /// from. Carried as integers from the item's crop, never recovered from its texture
     /// coordinates, which don't round-trip through `f32`. `None` for a 2D item.
     pub crop: Option<Region>,
+    /// The camera's depth of field in the shader's terms (ADR-0108): the focus distance
+    /// as a `w` (`focus / f`) and the far blur in canvas pixels. `[0, 0]`, no blur,
+    /// without one.
+    pub dof: [f32; 2],
 }
 
 impl Shape {
@@ -98,6 +102,7 @@ impl Shape {
             edges: [NO_EDGE; MAX_VERTICES],
             uv_bounds: NO_UV_BOUNDS,
             crop: None,
+            dof: [0.0, 0.0],
         }
     }
 }
@@ -253,8 +258,10 @@ fn crop_region(source_width: u32, source_height: u32, crop: ProtocolCrop) -> Reg
 
 /// A 3D item (ADR-0050 decisions 1, 2 and 6): the drawn polygon, clipped to the box and
 /// the near plane, with its edge lines, and each vertex pushed out by [`PUSH_OUT`] along
-/// both its edges. The pushed point is mapped back into the plane, so its `w` and texture
-/// coordinate stay exact; where it can't be (past the near plane), the vertex stays.
+/// both its edges, or by its blur radius where the camera's depth of field blurs it more
+/// (ADR-0108 decision 4). The pushed point is mapped back into the plane, so its `w` and
+/// texture coordinate stay exact; where it can't be (past the near plane), the vertex
+/// stays.
 fn drawn(
     geometry: ItemGeometry,
     view: Option<&CameraView>,
@@ -287,9 +294,18 @@ fn drawn(
         uv_bounds[2] = uv_bounds[2].max(corner.uv[0]);
         uv_bounds[3] = uv_bounds[3].max(corner.uv[1]);
     }
+    let focus = view.and_then(CameraView::focus);
+    let dof = match (focus, view) {
+        (Some(focus), Some(view)) => [focus.distance / view.focal_px(), focus.blur],
+        _ => [0.0, 0.0],
+    };
     let mut vertices = [UNUSED; MAX_VERTICES];
     for (i, corner) in corners.iter().enumerate() {
-        let target = push_out(edges[(i + len - 1) % len], edges[i], corner);
+        let by = view.map_or(PUSH_OUT, |view| {
+            let distance = f64::from(corner.w) * f64::from(view.focal_px());
+            view.blur_at(distance).max(PUSH_OUT)
+        });
+        let target = push_out(edges[(i + len - 1) % len], edges[i], corner, by);
         // A pushed point that can't be mapped back through a camera keeps the vertex,
         // as one past the near plane does.
         let pushed = match geometry.unplace_seen(view, target) {
@@ -310,6 +326,7 @@ fn drawn(
         edges,
         uv_bounds,
         crop: Some(crop),
+        dof,
     }))
 }
 
@@ -341,13 +358,12 @@ fn edge_lines(corners: &[DrawnVertex]) -> [[f32; 3]; MAX_VERTICES] {
     edges
 }
 
-/// Where the corner between edges `before` and `after` goes when both move out by
-/// [`PUSH_OUT`]: the two moved lines' crossing, at most `4 · PUSH_OUT` from the corner
-/// (a very sharp corner's miter is long), or the corner itself when the edges are
-/// parallel.
-fn push_out(before: [f32; 3], after: [f32; 3], corner: &DrawnVertex) -> CanvasPoint {
+/// Where the corner between edges `before` and `after` goes when both move out by `by`
+/// pixels: the two moved lines' crossing, at most `4 · by` from the corner (a very sharp
+/// corner's miter is long), or the corner itself when the edges are parallel.
+fn push_out(before: [f32; 3], after: [f32; 3], corner: &DrawnVertex, by: f32) -> CanvasPoint {
     let at = corner.canvas;
-    let (c0, c1) = (before[2] + PUSH_OUT, after[2] + PUSH_OUT);
+    let (c0, c1) = (before[2] + by, after[2] + by);
     let det = before[0] * after[1] - before[1] * after[0];
     if det.abs() < 1e-6 {
         return at;
@@ -356,7 +372,7 @@ fn push_out(before: [f32; 3], after: [f32; 3], corner: &DrawnVertex) -> CanvasPo
     let y = (-before[0] * c1 + after[0] * c0) / det;
     let (dx, dy) = (x - at.x, y - at.y);
     let len = (dx * dx + dy * dy).sqrt();
-    let cap = 4.0 * PUSH_OUT;
+    let cap = 4.0 * by;
     if len > cap {
         let s = cap / len;
         return CanvasPoint {

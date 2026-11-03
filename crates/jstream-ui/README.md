@@ -517,6 +517,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `SceneCamera::validate` would refuse it. On a keyframe scene the check is Own camera,
   an override that starts from the parent's camera, offered only while the parent has
   one. A note warns when items already have depth or angles (`has_3d_items`).
+  Under the camera, a Depth of field check (`depth_of_field`) focuses on the camera's
+  target with a 6 px blur and shows Focus distance and Blur, and Focus on selection
+  (`focus_on`) sets the focus to the selected item's distance along the view
+  ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)).
   Duplicate scene copies the scene's options and camera with it. On the right, in the source Properties dialog's shell, are the
   scene's filters: the Filters panel's rows on its video chain, which apply at once (a
   keyframe shows its parent's).
