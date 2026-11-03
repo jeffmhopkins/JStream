@@ -39,7 +39,8 @@ and calls this crate.
   [ADR-0094](../../docs/adr/0094-scene-cameras.md)): it then sits in its scene's 3D
   space by its geometry and is seen through that camera, always by the 3D path, its own
   `perspective_px` ignored. A legacy placement under a camera is drawn as before and
-  sorts at the canvas centre's depth.
+  sorts at the canvas centre's depth. Items sort together only within one
+  `Item.depth_run` (`0` but for a stinger's items).
 - Each item places one image with one of
   [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)'s two placement forms:
   - a **geometry** (decisions 2 and 3): a box on the canvas. The image is cropped in
