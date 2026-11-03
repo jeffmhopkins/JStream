@@ -554,6 +554,11 @@ fn instructions_mark_remote_text_and_tools_carry_annotations() {
             "{}",
             tool["name"]
         );
+        // ADR-0098 §3: the instructions name every tool that is `destructiveHint`.
+        if tool["annotations"]["destructiveHint"] == true {
+            let name = format!("`{}`", tool["name"].as_str().expect("named"));
+            assert!(legacy.contains(&name), "{name} is destructive: {legacy}");
+        }
     }
 }
 
