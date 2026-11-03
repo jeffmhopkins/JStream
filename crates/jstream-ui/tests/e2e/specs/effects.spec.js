@@ -6,7 +6,7 @@
 // (`describeKinds`). In a keyframe scene the panel shows the item's effects as the keyframe
 // shows them: they follow the item's own until a change gives the keyframe its own, and
 // Follow the item clears that override (ADR-0088).
-import { test, expect, connect, describeKinds, rev } from '../fixtures.js';
+import { test, expect, connect, describeKinds, rev, showPanel } from '../fixtures.js';
 
 /** The centre of `locator`, or a point `dy` from its top. */
 async function point(locator, dy) {
@@ -49,6 +49,7 @@ const KINDS = [
 test('an item\'s effects are its own: added, reordered, turned off and removed under its source\'s chains', async ({ page, daemon }) => {
   await describeKinds(page, KINDS);
   await connect(page, daemon);
+  await showPanel(page, 'Filters');
   // With no item selected, only the scene's chain.
   await expect(effects(page)).toHaveCount(0);
 
@@ -128,6 +129,7 @@ test('an item\'s effects are its own: added, reordered, turned off and removed u
 test('a keyframe gives an item its own effects, and follows the item\'s again', async ({ page, daemon }) => {
   await describeKinds(page, KINDS);
   await connect(page, daemon);
+  await showPanel(page, 'Filters');
   const sceneRow = (name) => page.locator('.scenes-panel li.row').filter({ hasText: name }).locator('.row-main');
   const backdrop = page.locator('.sources-panel li.row').filter({ hasText: 'Backdrop' }).locator('.row-main');
   await sceneRow('Main').click({ button: 'right' });

@@ -33,6 +33,7 @@ async function point(locator, dy) {
 
 test('the panel lists the chains, and rows turn filters on, reorder and remove them', async ({ page, daemon }) => {
   await connect(page, daemon);
+  await showPanel(page, 'Filters');
   // With no item selected the panel shows the scene's chain (scene-filters.spec.js).
   await expect(panel(page).locator('.filters-title')).toHaveText('Main');
 
@@ -83,6 +84,7 @@ test('Edit filters… selects the item and shows the Filters panel', async ({ pa
 
 test('Add filter… opens the dialog over the panel and the Properties dialog', async ({ page, daemon }) => {
   await connect(page, daemon);
+  await showPanel(page, 'Filters');
   await selectBackdrop(page);
   await panel(page).getByRole('button', { name: '+ Add filter…' }).click();
   const add = page.getByRole('dialog', { name: 'Add filter' });
@@ -108,6 +110,7 @@ test('Add filter… opens the dialog over the panel and the Properties dialog', 
 
 test('the Filters window applies at once, Cancel puts the filter back, and its chain picks the filter it shows', async ({ page, daemon }) => {
   await connect(page, daemon);
+  await showPanel(page, 'Filters');
   await selectBackdrop(page);
   const start = await rev(page);
   await videoRows(panel(page)).nth(1).locator('.filter-row').dblclick();
@@ -163,6 +166,7 @@ test('the Filters window applies at once, Cancel puts the filter back, and its c
 test('Cancel in the Filters window puts back what its rows did too, and adding a filter there keeps the earlier changes', async ({ page, daemon }) => {
   await describeKinds(page, KINDS);
   await connect(page, daemon);
+  await showPanel(page, 'Filters');
   await selectBackdrop(page);
   await panel(page).getByRole('button', { name: 'Open the Filters window' }).click();
   const dialog = page.getByRole('dialog', { name: 'Filters', exact: true });
@@ -241,6 +245,7 @@ const KINDS = [
 test('with described kinds, rows summarise, Cancel restores an unconfirmed change, Add filter adds one that opens in place, and its settings apply', async ({ page, daemon }) => {
   await describeKinds(page, KINDS);
   await connect(page, daemon);
+  await showPanel(page, 'Filters');
   await selectBackdrop(page);
   const rows = videoRows(panel(page));
   await expect(rows.locator('.filter-summary')).toHaveText(['0.20', 'defaults']);
@@ -303,6 +308,7 @@ test('a setting the engine refuses after its row or dialog has closed shows in t
     },
   });
   await connect(page, daemon);
+  await showPanel(page, 'Filters');
   await selectBackdrop(page);
   const rows = videoRows(panel(page));
   await rows.nth(0).locator('.filter-name').click();
