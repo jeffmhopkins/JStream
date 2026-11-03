@@ -138,7 +138,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   mix and light in linear light. The same settings always draw the same picture
   (integer hashes, no platform randomness), and `seed` picks another. Every setting but
   the size is live; an update draws the frame again on the sources thread, about a
-  third of a second for 1080p in a release build.
+  third of a second for 1080p in a release build. So the size is capped below other
+  kinds': at most 7680 a side and 7680 × 4320 pixels in all, either way round, which
+  `create` checks before drawing, naming the side to shrink. A backdrop is soft and
+  scales up with no visible loss.
 - `color`: one frame of the `color` setting (`#rrggbb` or `#rrggbbaa`, straight
   alpha), `width` by `height` pixels. The colour is live; a size change needs a new
   source. The frame must also fit the decoded-memory cap: 16384x16384 RGBA is exactly
@@ -488,7 +491,7 @@ alignment, padding, outline, live updates, font assets and limits, drawing at a
 density (twice the pixels for the same extent, kept across an update, clamped to
 `MAX_DENSITY`, lowered to a 4K canvas's pixels, halved to fit the limits, and a short
 line filling the canvas drawn at the 13x it is shown at, a bundled face picked live, letter spacing widening a line, and a shadow growing the frame but not the background), plus golden PNGs in `tests/data/text`, one of
-them the styled text at a density of 2^0.75 (`JSTREAM_BLESS=1` rewrites them). `tests/backdrop.rs` checks the backdrop's descriptor (all but the size live), that a backdrop is opaque and the same for the same settings, that the light and vignette brighten its pool and darken its edges, that the style and texture set how much it mottles, and that a look changes live while a new size restarts it. `tests/shape.rs` draws a
+them the styled text at a density of 2^0.75 (`JSTREAM_BLESS=1` rewrites them). `tests/backdrop.rs` checks the backdrop's descriptor (all but the size live), that a backdrop is opaque and the same for the same settings, that the light and vignette brighten its pool and darken its edges, that the style and texture set how much it mottles, that a look changes live while a new size restarts it, and that the size is capped at 7680 a side and 7680 × 4320 pixels, a larger one refused naming the side to shrink (#1025). `tests/shape.rs` draws a
 rectangle at its exact size, a pill whose corners are clear and whose edge is
 antialiased, a circle that is symmetric, linear gradients that run their angle without
 banding and mix in linear light, a radial one, and a border inside the edge, and
