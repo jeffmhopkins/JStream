@@ -270,9 +270,10 @@ fn crop_region(source_width: u32, source_height: u32, crop: ProtocolCrop) -> Reg
 }
 
 /// A 3D item (ADR-0050 decisions 1, 2 and 6): the drawn polygon, clipped to the box and
-/// the near plane, with its edge lines, and each vertex pushed out by [`PUSH_OUT`] along
-/// both its edges, or by its blur radius where the camera's depth of field blurs it more
-/// (ADR-0108 decision 4). The pushed point is mapped back into the plane, so its `w` and
+/// the near plane, with its edge lines, and every vertex pushed out along both its edges
+/// by [`PUSH_OUT`], or by the largest blur radius of the polygon's corners where the
+/// camera's depth of field blurs it more (ADR-0108 decision 4); `Shape.dof` carries that
+/// radius so the shader caps each fragment's blur at it. The pushed point is mapped back into the plane, so its `w` and
 /// texture coordinate stay exact; where it can't be (past the near plane), the vertex
 /// stays.
 fn drawn(
