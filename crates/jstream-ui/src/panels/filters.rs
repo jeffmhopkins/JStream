@@ -28,8 +28,9 @@ use crate::store::{Collection, Studio, apply, query};
 use crate::workspace::DockState;
 use jstream_control::protocol::{
     Edit, FilterChain, FilterChains, FilterId, FilterInfo, FilterOwner, ItemId, KindCategory,
-    KindDescriptor, KindSummary, MAX_CHAIN_FILTERS, OutputKind, OutputState, ParamType, Query,
-    QueryResult, Reference, Rev, SceneId, Settings, SourceId, SourceInfo, SourceKind,
+    KindDescriptor, KindSummary, MAX_CHAIN_FILTERS, OutputKind, OutputState, OverrideField,
+    ParamType, Query, QueryResult, Reference, Rev, SceneId, Settings, SourceId, SourceInfo,
+    SourceKind,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -1152,7 +1153,7 @@ pub fn Filters() -> impl IntoView {
                                     vec![Edit::ItemClearOverride {
                                         scene_id,
                                         item_id,
-                                        field: jstream_control::protocol::OverrideField::Effects,
+                                        field: OverrideField::Effects,
                                     }],
                                 );
                             }
@@ -1825,9 +1826,15 @@ fn is_filter_edit(edit: &Edit) -> bool {
 /// added again where it was, with its settings and switch then; a chain it reordered is
 /// put back in its first order; then each setting it sent goes back
 /// ([`restore_patch`]), and each switch it pressed.
+///
+/// `following` lists the keyframe owners whose keyframe followed the item's own effects
+/// as the window opened (ADR-0088). The window's first edit there gave the keyframe its
+/// own effects, so for such an owner it sent edits to, Cancel sends one
+/// `item.clear_override` of `effects` instead, which follows the item again (#1028).
 pub fn window_restore(
     opened: &[(FilterOwner, FilterChains)],
     log: &[Edit],
+    following: &[FilterOwner],
     now: impl Fn(&FilterOwner, &FilterId) -> Option<FilterInfo>,
 ) -> Vec<Edit> {
     let mut edits = Vec::new();
@@ -1842,6 +1849,16 @@ pub fn window_restore(
         };
         let log: Vec<&Edit> = log.iter().filter(mine).collect();
         if log.is_empty() {
+            continue;
+        }
+        if let FilterOwner::Keyframe { scene_id, item_id } = owner
+            && following.contains(owner)
+        {
+            edits.push(Edit::ItemClearOverride {
+                scene_id: scene_id.clone(),
+                item_id: item_id.clone(),
+                field: OverrideField::Effects,
+            });
             continue;
         }
         let first = |id: &FilterId| {
@@ -1989,6 +2006,30 @@ fn WindowBody(
             })
             .collect()
     });
+    // The keyframes among them that follow the item's own effects (ADR-0088): Cancel
+    // makes them follow it again if the window gave them their own.
+    let following: Vec<FilterOwner> = studio.collection.with_untracked(|c| {
+        let Some(c) = c.as_ref() else {
+            return Vec::new();
+        };
+        opened
+            .iter()
+            .map(|(o, _)| o)
+            .filter(|o| match o {
+                FilterOwner::Keyframe { scene_id, item_id } => {
+                    c.scene(scene_id).is_some_and(|scene| {
+                        !scene
+                            .overrides
+                            .iter()
+                            .any(|o| &o.item_id == item_id && o.effects.is_some())
+                    })
+                }
+                _ => false,
+            })
+            .cloned()
+            .collect()
+    });
+    let following = StoredValue::new(following);
     let window = WINDOWS.fetch_add(1, Ordering::Relaxed);
     dialogs.log.set_value(Some((window, Vec::new())));
     on_cleanup(move || {
@@ -2069,17 +2110,19 @@ fn WindowBody(
             .log
             .with_value(|log| log.as_ref().map(|(_, l)| l.clone()).unwrap_or_default());
         let edits = opened.with_value(|opened| {
-            window_restore(opened, &log, |owner, filter_id| {
-                untrack(|| {
-                    filter_of(
-                        studio,
-                        &Target {
-                            owner: owner.clone(),
-                            filter_id: filter_id.clone(),
-                        },
-                    )
+            following.with_value(|following| {
+                window_restore(opened, &log, following, |owner, filter_id| {
+                    untrack(|| {
+                        filter_of(
+                            studio,
+                            &Target {
+                                owner: owner.clone(),
+                                filter_id: filter_id.clone(),
+                            },
+                        )
+                    })
+                    .map(|(_, f)| f)
                 })
-                .map(|(_, f)| f)
             })
         });
         if let (false, Some(s)) = (edits.is_empty(), session.get()) {
@@ -3671,6 +3714,57 @@ mod tests {
         assert!(!camera.contains("in use now"));
     }
 
+    /// Cancel in the Filters window on an item's effects in a keyframe that followed the
+    /// item's own as it opened (#1028, ADR-0088): the window's first edit gave the
+    /// keyframe its own effects, so Cancel clears that override rather than putting its
+    /// filters back. A keyframe that had its own effects already is put back as any
+    /// chain is, and a following one the window didn't edit is left alone.
+    #[test]
+    fn window_restore_makes_a_keyframe_follow_the_item_again() {
+        let keyframe = |scene: &str| FilterOwner::Keyframe {
+            scene_id: SceneId::new(scene),
+            item_id: ItemId::new("itm_cam"),
+        };
+        let filter = FilterInfo {
+            filter_id: FilterId::new("a"),
+            kind: "sharpen".into(),
+            enabled: true,
+            settings: Settings::new(),
+        };
+        let chains = FilterChains {
+            video: vec![filter.clone()],
+            ..FilterChains::default()
+        };
+        let opened = vec![
+            (keyframe("scn_follows"), chains.clone()),
+            (keyframe("scn_own"), chains.clone()),
+            (keyframe("scn_untouched"), chains),
+        ];
+        let following = [keyframe("scn_follows"), keyframe("scn_untouched")];
+        let switch = |owner: FilterOwner| Edit::FilterSetEnabled {
+            owner,
+            filter_id: FilterId::new("a"),
+            enabled: false,
+        };
+        let log = vec![switch(keyframe("scn_follows")), switch(keyframe("scn_own"))];
+        let edits = window_restore(&opened, &log, &following, |_, _| Some(filter.clone()));
+        assert_eq!(
+            edits,
+            vec![
+                Edit::ItemClearOverride {
+                    scene_id: SceneId::new("scn_follows"),
+                    item_id: ItemId::new("itm_cam"),
+                    field: OverrideField::Effects,
+                },
+                Edit::FilterSetEnabled {
+                    owner: keyframe("scn_own"),
+                    filter_id: FilterId::new("a"),
+                    enabled: true,
+                },
+            ]
+        );
+    }
+
     /// Cancel in the Filters window puts back what the window sent, from its rows as from
     /// its pane: an eye on a filter it never showed, a removal (back where it was), a
     /// reorder, a filter it added, and a setting still on its way back. An owner it left
@@ -3744,7 +3838,7 @@ mod tests {
         ];
         // The store hasn't caught up with the setting yet; another client turned `a` off.
         let now = |_: &FilterOwner, f: &FilterId| (*f == id("a")).then(|| filter("a", false, 0.1));
-        let edits = window_restore(&opened, &log, now);
+        let edits = window_restore(&opened, &log, &[], now);
         let mut back = Settings::new();
         back.insert("amount", json!(0.1));
         let reorder = |f: &str, index| Edit::FilterReorder {
@@ -3799,7 +3893,7 @@ mod tests {
                 filter_id: id("tmp"),
             },
         ];
-        assert!(window_restore(&opened, &log, |_, _| None).is_empty());
+        assert!(window_restore(&opened, &log, &[], |_, _| None).is_empty());
     }
 
     /// A filter added just before the window opened joins what it opened with, where the
@@ -3853,7 +3947,7 @@ mod tests {
                 enabled: false,
             },
         ];
-        let edits = window_restore(&opened, &log, |_, _| Some(filter("new")));
+        let edits = window_restore(&opened, &log, &[], |_, _| Some(filter("new")));
         let mut back = Settings::new();
         back.insert("radius", Value::Null);
         assert_eq!(
