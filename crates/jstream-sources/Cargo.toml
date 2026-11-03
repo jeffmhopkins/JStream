@@ -21,6 +21,8 @@ ab_glyph_rasterizer.workspace = true
 # Image decoders (ADR-0061: pure-Rust image crates, the same on every platform).
 gif.workspace = true
 image-webp.workspace = true
+# The `timer` source's time of day in the machine's time zone, or a named one.
+jiff.workspace = true
 # The browser backend seam (`BrowserBackend`, ADR-0021): the `browser` kind's pages are
 # opened by an injected backend. Without its `cef` feature it is pure Rust.
 jstream-browser.workspace = true
