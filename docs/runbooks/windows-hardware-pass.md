@@ -73,7 +73,8 @@ scripts\windows-pass.bat -Unattended     # only the checks that need no one
   the last lines say what and how to undo it.
 - **Not checked by the script:** what isn't visible outside the engine, such as
   `OutputStats::readbacks` and `gpu_fallbacks` (it checks the log lines that report the
-  same events), and the items the report lists under "Not in this pass".
+  same events), item 19's log search (its step 3, by hand), item 20 (all by hand), and the items the report
+  lists under "Not in this pass".
 
 | Check | Item | Source |
 |---|---|---|
@@ -94,6 +95,7 @@ scripts\windows-pass.bat -Unattended     # only the checks that need no one
 | `webcam` | [15](#prs) | PR #726 |
 | `cursor` | [16](#prs) | PR #685 |
 | `clap` | [17](#prs) | PR #573 |
+| `help-links` | [19](#prs) | PR #1083 |
 
 <a id="setup"></a>
 ## Setup
@@ -405,7 +407,20 @@ exits 0 and names it, and on `kernel32.dll` exits 1; the daemon logs
 `kind.describe` lists its parameters; no `jstream-plugin-host.exe` is left after the scan
 or after Ctrl-C.
 
-### 19. Effect-pack writes on NTFS (closes #1088, PR #1085)
+### 19. Help and About links open the default browser (closes #1084, PR #1083)
+
+On #1083's branch, with the UI built (`trunk build --release` in `crates/jstream-ui`) and
+`jstream.exe --ui-dir crates\jstream-ui\dist`:
+
+1. Choose Help › Report an issue. **Pass:** the default browser opens
+   `https://github.com/jeffmhopkins/JStream/issues/new`; the JStream window stays on the
+   app, and no second JStream window opens.
+2. Choose Help › About JStream, then click Source code on GitHub and MIT. **Pass:** each
+   opens in the browser the same way, and the dialog shows the icon and the version.
+3. **Pass:** the log has no `a new window refused`, `navigation away from the UI
+   refused` or `could not open a link in the browser` line for these clicks.
+
+### 20. Effect-pack writes on NTFS (closes #1088, PR #1085)
 
 By hand: the script doesn't run this one yet. On #1085's branch, start the daemon with
 `--effects-dir` set to an empty folder and connect a client, for example
