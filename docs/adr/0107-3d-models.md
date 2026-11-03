@@ -99,12 +99,14 @@ from texture coordinates. Images are PNG or JPEG, decoded by the image source's 
   *requires* an extension the loader doesn't have (Draco, meshopt, KTX2) is an error that
   names it.
 - **Bounded.** The file and each buffer and image file count against the asset size cap
-  the image source uses. A model may have at most 2,000,000 triangles and 64 textures; a
-  texture larger than 4096 px on a side is scaled down on load. A model over a cap is an
-  error naming the cap, so a source can't take unbounded GPU memory.
+  the image source uses. A model may have at most 2,000,000 triangles and 64 textures,
+  and take at most 512 MiB in all: its vertex and index data and its textures with their
+  mips. A texture larger than 4096 px on a side is scaled down on load. A model over a cap
+  is an error naming the cap, so a source can't take unbounded GPU memory.
 - **Off the render thread.** Parsing, decoding and building the mesh happen when the
-  source is created or updated, on the thread that does that for every source. The
-  render thread uploads a model once per version and then only draws it
+  source is created or updated, on the thread that does that for every source, and so
+  does building each texture's mips. The render thread uploads a model once per version
+  and then only draws it
   ([R-RT-002](../RULES.md#R-RT-002)).
 
 **3. Placing a model.** An item places a model as it places any source; its geometry is
