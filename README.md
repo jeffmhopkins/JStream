@@ -344,6 +344,8 @@ depends_on = ["docs/adr/0008-windows-support-policy.md", "docs/adr/0063-macos-pl
 - [docs/runbooks/go-live.md](docs/runbooks/go-live.md): taking the daemon live on Windows,
   and the smoke script that checks it
 - [docs/runbooks/release.md](docs/runbooks/release.md): versioning and publishing a release
+- [docs/runbooks/linux-testing.md](docs/runbooks/linux-testing.md): one command that
+  installs what the build needs, builds JStream and installs it on a tester's Linux machine
 - [docs/runbooks/mac-testing.md](docs/runbooks/mac-testing.md): one command that builds
   and installs JStream on a tester's Mac, signed locally
 - [docs/runbooks/waves.md](docs/runbooks/waves.md): which wave branch a PR targets, and

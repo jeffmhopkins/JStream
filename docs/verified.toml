@@ -5703,7 +5703,7 @@ stamp = { hash = "b3:97b1d6f51853aa49", by = "agent:mac-install", note = "new se
 stamp = { hash = "b3:72bd78878686d319", by = "agent:mac-install", note = "new section: re-read each step against scripts/mac/install.sh, start-daemon.sh, JStream.applescript, install-tools.txt and mac-install.yml; ADR-0063 floor 14.0 and taps 14.2, §11 usage strings from the daemon's Info.plist" }
 
 ["RUNBOOK-MAC-TESTING#script"."file:scripts/install-tools.txt"]
-stamp = { hash = "b3:7f9e4cc7877b9719", by = "agent:mac-install", note = "new section: re-read each step against scripts/mac/install.sh, start-daemon.sh, JStream.applescript, install-tools.txt and mac-install.yml; ADR-0063 floor 14.0 and taps 14.2, §11 usage strings from the daemon's Info.plist" }
+stamp = { hash = "b3:9f7028b088c0a0f7", by = "agent:linux-install", note = "install-tools.txt gained Linux lines and names both installers; the section's account of the Mac script, its macOS pins and the pins job (which checks every line by tool) still holds" }
 
 ["RUNBOOK-MAC-TESTING#script"."file:scripts/mac/JStream.applescript"]
 stamp = { hash = "b3:9436267943d019f0", by = "agent:mac-install", note = "new section: re-read each step against scripts/mac/install.sh, start-daemon.sh, JStream.applescript, install-tools.txt and mac-install.yml; ADR-0063 floor 14.0 and taps 14.2, §11 usage strings from the daemon's Info.plist" }
