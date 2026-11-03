@@ -60,7 +60,8 @@ and calls this crate.
   ([ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)). Crops, a
   legacy scale and a fit mode's aspect ratio all count in the extent, and the texture
   is sampled across it.
-- `visible == false`, a crop that leaves no pixels, or a scale of zero draws nothing.
+- `visible == false`, a crop that leaves no pixels, a scale of zero, or a box with neutral
+  3D so large its content overflows `f32` draws nothing.
 - Opacity is a straight-alpha multiplier in `[0, 1]`, default 1: `jstream-core` passes
   an item's stored opacity, or during a transition its track's sampled one
   ([ARCH › Data model](../../docs/ARCHITECTURE.md#data-model)).
@@ -910,8 +911,9 @@ tests check:
   and texels swapped, or the UV remap divided by the extent).
 
 Accepted means drawable (protocol 0.34's `check_drawable`): over 3D geometries from a
-fixed seed, every input spread from 0.1 to f32's limit, each one `check_drawable` accepts
-gives a `place::shape` for 64×36, 8192×1, 1×8192, 16384×1 and 1×16384 sources, with
+fixed seed, every input spread from 0.1 to f32's limit, and the same boxes with neutral
+3D, each one `check_drawable` accepts gives a `place::shape` (a neutral box too large
+for `f32` gives none, `a_huge_neutral_box_draws_nothing`, #1046) for 64×36, 8192×1, 1×8192, 16384×1 and 1×16384 sources, with
 and without a crop (`every_drawable_geometry_gives_a_shape`), and a frame of the most
 extreme of them renders on 8192×1, 1×8192 and 64×36 sources
 (`a_frame_of_the_most_extreme_accepted_3d_items_renders`). Both fail with the input
