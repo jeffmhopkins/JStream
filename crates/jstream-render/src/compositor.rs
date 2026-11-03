@@ -687,7 +687,10 @@ impl Compositor {
                 for slot in &mut self.order[start..end] {
                     slot.0 = place::depth(&view, scene.items[slot.1].placement);
                 }
-                self.order[start..end].sort_by(|a, b| b.0.total_cmp(&a.0));
+                // Unstable, so it allocates nothing; the index breaks ties, which keeps
+                // stacking order among items at one depth.
+                self.order[start..end]
+                    .sort_unstable_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
             }
             start = end;
         }
@@ -1169,8 +1172,6 @@ impl std::fmt::Debug for Compositor {
     }
 }
 
-/// The texels of a `width` by `height` target that `shape` can touch, a texel of margin
-/// around its drawn polygon, or `None` when it is wholly off the target.
 /// `camera` seen on `scene`'s canvas, or [`RenderError::Invalid`] for a camera the
 /// collection would refuse.
 fn view_of(
@@ -1188,6 +1189,8 @@ fn view_of(
         })
 }
 
+/// The texels of a `width` by `height` target that `shape` can touch, a texel of margin
+/// around its drawn polygon, or `None` when it is wholly off the target.
 fn covered(shape: &Shape, width: u32, height: u32) -> Option<Rect> {
     let mut min = [f32::INFINITY; 2];
     let mut max = [f32::NEG_INFINITY; 2];

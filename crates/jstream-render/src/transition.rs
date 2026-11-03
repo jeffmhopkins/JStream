@@ -423,7 +423,6 @@ mod tests {
         assert!(after.geometry.flip_h && after.geometry.flip_v);
     }
 
-    /// A blend mode can't be interpolated, so a pair switches it halfway, as it does
     /// A camera moves linearly, rolls the shortest way, and keeps its field of view in
     /// range past the end of a spring (ADR-0094 decision 7).
     #[test]
@@ -457,6 +456,7 @@ mod tests {
         assert_eq!(super::lerp_camera(&to, &reversed, 0.5), reversed);
     }
 
+    /// A blend mode can't be interpolated, so a pair switches it halfway, as it does
     /// flips, and an item alone keeps its own.
     #[test]
     fn blend_switches_halfway() {
