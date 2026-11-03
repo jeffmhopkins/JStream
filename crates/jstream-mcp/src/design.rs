@@ -6,8 +6,8 @@
 //! didn't fit their text, nothing aligned. The tools can't fix taste, so this says what
 //! a broadcast designer would: where things go, which sizes, which faces and colours,
 //! and to look at the result before calling it done. It names the `backdrop` and `text`
-//! settings that make graphics look finished, the `shape` kind, and how to group,
-//! scroll and animate. Numbers are for a 1920×1080 canvas and scale with it.
+//! settings that make graphics look finished, the `shape` kind, how to group, scroll
+//! and animate, and when to build a graphic as HTML in a `browser` source. Numbers are for a 1920×1080 canvas and scale with it.
 
 /// The guidance, as one paragraph of the server instructions.
 pub(crate) const DESIGN: &str = "\
@@ -65,6 +65,18 @@ fade over it, and stagger the parts with `item.set_transition` `delay_ms` (0, 12
 200). Items with no partner in the other scene appear and disappear by their \
 transition's `appear` and `disappear` (`slide`, `scale` or `fade`). Keep moves under a \
 second and ease them; a cut beats a slow move. \
+HTML graphics: for a layout the built-in kinds can't draw (rich type, icons, tables, \
+SVG, CSS gradients, blend modes or 3D transforms, choreographed CSS animation), make a \
+`browser` source and give it the whole page in `html`, its CSS and scripts inline. Set \
+its `width` and `height` to the canvas and place its item full-frame, or to the \
+graphic's bounds; the default `css` makes the page transparent, so draw only the \
+graphic and leave `body` without a background. Fonts and images can come from https \
+URLs (such as Google Fonts), not from local files. Animate the entrance with CSS \
+`@keyframes` that run once on load, with `animation-fill-mode: both`. Changing `html` \
+reloads the page, which replays the entrance and blanks it for a moment, so put text \
+that changes during a show in a `text` source over it. If creating the source fails \
+because no browser is available on this system, build the graphic from the built-in \
+kinds instead. \
 Check your work: after each step take a `video.snapshot` and look at it critically \
 (alignment, overlap, legibility, crowding, anything off the safe area) and fix what's \
 wrong before reporting. When a scene is on program, build changes on another scene or \

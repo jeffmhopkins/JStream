@@ -43,7 +43,9 @@ page closes it.
 - `PageLocation` and `PageSpec` (`page.rs`). A web address must be `http://` or
   `https://` with a host, at most 8 KiB, without whitespace or control characters; an
   empty one is a blank page. A local file becomes a percent-encoded `file:///` URL,
-  including UNC and `\\?\` paths. The custom CSS (at most 64 KiB) goes into the page as
+  including UNC and `\\?\` paths. A page can also be given as its HTML
+  (`PageLocation::html`, at most 128 KiB, `MAX_HTML_BYTES`; blank text is a blank
+  page), which loads as a base64 `data:text/html` URL. The custom CSS (at most 64 KiB) goes into the page as
   one `<style id="jstream-custom-css">` that every change replaces, through a script
   that quotes it as a JavaScript string (`css_script`). The default CSS makes the page's
   background transparent, as OBS does.
@@ -75,7 +77,10 @@ page closes it.
   documents have an opaque origin, which may only while the main frame is still on a
   file or blank page: a main-frame navigation the policy allows tells it where the
   frame now is (`main_frame_to`), before the new document exists, so a file or blank
-  page that navigates to the web loses the access. CEF can't tell opaque origins apart,
+  page that navigates to the web loses the access. A page given as HTML is judged as a
+  page from the internet: its opaque `data:` documents may only when its spec sets
+  `local_network`, and only while the main frame is still on a `data:` document; it
+  loads no files. CEF can't tell opaque origins apart,
   so a sandboxed or `data:` frame made by a third-party frame inside a file page counts
   as the file page's. A request with no initiator is one the browser started (the
   source's own load, a reload) and is judged as the source's own. The check reads the
@@ -116,7 +121,8 @@ never in the engine's. This side builds no CEF; `dox` compile-checks it with the
   and the next `open` starts a new one. Dropping the backend asks the helper to close its
   pages and exit, and kills it after 15 s.
 - **The pipe** (`wire.rs`, `link.rs`, built everywhere and tested over in-memory pipes):
-  length-prefixed messages; a malformed or oversized one ends the link. The engine
+  length-prefixed messages of at most 256 KiB (room for a page opened with 128 KiB of
+  HTML and 64 KiB of CSS); a malformed or oversized one ends the link. The engine
   opens a page and waits up to 10 s for the helper to confirm it, sets its CSS, closes
   it, tells the helper which adapter to paint on, and shuts it down. The helper sends
   frames, audio, audio failures, refused-request counts (never URLs) and warnings for

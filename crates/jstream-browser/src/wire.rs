@@ -26,9 +26,9 @@ use jstream_media::FrameSize;
 
 use crate::{PageLocation, PageSpec};
 
-/// The longest message either side sends: a CSS update at most 64 KiB, an audio packet
-/// of at most 4096 stereo frames, or a URL at most 8 KiB.
-pub(crate) const MAX_MESSAGE_BYTES: usize = 128 * 1024;
+/// The longest message either side sends: a page opened with at most 128 KiB of HTML and
+/// 64 KiB of CSS, with room to spare.
+pub(crate) const MAX_MESSAGE_BYTES: usize = 256 * 1024;
 
 /// The most samples one audio message carries: 4096 stereo frames.
 pub(crate) const MAX_AUDIO_SAMPLES: usize = 4096 * 2;
@@ -214,6 +214,10 @@ impl ToHelper {
                             .ok_or(WireError::Malformed("the page's file path isn't UTF-8"))?;
                         out.str(path)?;
                     }
+                    PageLocation::Html(html) => {
+                        out.u8(3);
+                        out.str(html)?;
+                    }
                 }
                 out.u32(spec.size.width());
                 out.u32(spec.size.height());
@@ -255,6 +259,7 @@ impl ToHelper {
                     0 => PageLocation::Blank,
                     1 => PageLocation::Web(body.string()?),
                     2 => PageLocation::File(PathBuf::from(body.string()?)),
+                    3 => PageLocation::Html(body.string()?),
                     _ => return Err(WireError::Malformed("an unknown page location")),
                 };
                 let (width, height) = (body.u32()?, body.u32()?);
@@ -545,6 +550,13 @@ mod tests {
             ToHelper::Open {
                 page: 3,
                 spec: spec(PageLocation::File(PathBuf::from("/srv/overlay/index.html"))),
+            },
+            ToHelper::Open {
+                page: 4,
+                spec: PageSpec {
+                    css: "x".repeat(crate::MAX_CSS_BYTES),
+                    ..spec(PageLocation::Html("é".repeat(crate::MAX_HTML_BYTES / 2)))
+                },
             },
             ToHelper::SetCss {
                 page: 3,

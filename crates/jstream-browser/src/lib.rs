@@ -39,7 +39,9 @@ pub use audio::{MAX_CHUNK_FRAMES, PageAudio, PageAudioStream};
 pub use cef::{CefBackend, CefConfig};
 #[cfg(all(windows, feature = "helper"))]
 pub use helper::run_helper;
-pub use page::{DEFAULT_CSS, MAX_CSS_BYTES, MAX_FPS, PageLocation, PageSpec, css_script};
+pub use page::{
+    DEFAULT_CSS, MAX_CSS_BYTES, MAX_FPS, MAX_HTML_BYTES, PageLocation, PageSpec, css_script,
+};
 pub use request::{RequestPolicy, Verdict};
 
 use jstream_platform::{GpuContext, GpuFrame};

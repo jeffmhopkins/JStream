@@ -217,7 +217,11 @@ foreign or `null`.
 private, link-local and local-name targets, redirects to them included, unless it is
 the source's own origin and the source sets `local_network`. It is decided per request
 by the origin that makes it, so the opt-in never covers a third-party frame, and a
-file or blank page whose main frame navigates to the web loses its own access.
+file or blank page whose main frame navigates to the web loses its own access. A page
+given as HTML (the `html` setting, loaded as a `data:` URL with an opaque origin) is
+treated like a page from the internet: no local files, and no local targets unless its
+source sets `local_network`, and then only while its main frame stays on a `data:`
+document.
 
 **Gaps:** permission requests are refused: the helper's permission handler cancels every
 camera, microphone and screen request and denies every permission prompt except

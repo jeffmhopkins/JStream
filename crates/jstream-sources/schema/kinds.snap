@@ -217,7 +217,7 @@ source: crates/jstream-sources/tests/kinds.rs
         "max_len": 8192,
         "default": "",
         "label": "URL",
-        "description": "The page's address, http:// or https://. Ignored when a local file is set.",
+        "description": "The page's address, http:// or https://. Ignored when a local file or HTML is set.",
         "live": false
       },
       {
@@ -230,6 +230,16 @@ source: crates/jstream-sources/tests/kinds.rs
         "default": null,
         "label": "Local file",
         "description": "A local HTML file to show instead of a URL. The page can load files beside it.",
+        "live": false
+      },
+      {
+        "id": "html",
+        "type": "string",
+        "multiline": true,
+        "max_len": 131072,
+        "default": "",
+        "label": "HTML",
+        "description": "The page itself, as HTML with its CSS and scripts inline: a graphic built here instead of loaded from a URL. Ignored when a local file is set. It can load fonts and images from the web, but no local files, and reaches this computer and the local network only when allowed below.",
         "live": false
       },
       {

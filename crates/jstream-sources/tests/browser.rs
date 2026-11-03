@@ -68,6 +68,7 @@ fn the_kind_has_video_and_audio_and_only_css_is_live() {
         [
             ("url", false),
             ("file", false),
+            ("html", false),
             ("width", false),
             ("height", false),
             ("fps", false),
@@ -119,6 +120,63 @@ fn a_url_opens_a_web_page_of_the_set_size_and_rate() {
     assert!(!pages[0].is_closed());
     drop(source);
     assert!(pages[0].is_closed());
+}
+
+/// A page given as HTML opens as that HTML, ahead of the URL, behind a local file, and
+/// with no local network unless the source allows it.
+#[test]
+fn html_opens_a_page_built_from_the_text() {
+    let browser = FakeBrowser::new();
+    let ctx = ctx(&browser, None);
+    let html = "<div class=\"bar\">BREAKING NEWS</div>";
+    let _source = create(
+        &ctx,
+        &settings(&[
+            ("url", json!("https://example.com/ignored")),
+            ("html", json!(html)),
+        ]),
+    )
+    .expect("a page");
+    let page = &browser.pages()[0];
+    assert_eq!(page.spec().location, PageLocation::Html(html.into()));
+    assert!(!page.request("http://127.0.0.1:4455/"));
+    assert!(page.request("https://fonts.gstatic.com/s/inter.woff2"));
+
+    // Blank HTML falls back to the URL.
+    let _source = create(
+        &ctx,
+        &settings(&[
+            ("url", json!("https://example.com/alerts")),
+            ("html", json!("  \n")),
+        ]),
+    )
+    .expect("a page");
+    assert_eq!(
+        browser.pages()[1].spec().location,
+        PageLocation::Web("https://example.com/alerts".into())
+    );
+
+    // Too long is refused, naming the setting.
+    let long = "a".repeat(jstream_browser::MAX_HTML_BYTES + 1);
+    match create(&ctx, &settings(&[("html", json!(long))])) {
+        Err(SourceError::Setting { param, .. }) => assert_eq!(param, "html"),
+        Err(other) => panic!("{other}"),
+        Ok(_) => panic!("over-long HTML opened a page"),
+    }
+
+    // Allowed, it may reach a local app.
+    let _source = create(
+        &ctx,
+        &settings(&[("html", json!(html)), ("local_network", json!(true))]),
+    )
+    .expect("a page");
+    assert!(
+        browser
+            .pages()
+            .last()
+            .expect("a page")
+            .request("ws://127.0.0.1:8080/")
+    );
 }
 
 /// #347: the source's opt-in lets a page from the internet reach a local app.
