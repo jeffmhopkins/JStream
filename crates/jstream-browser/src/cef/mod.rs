@@ -1,13 +1,22 @@
-//! The CEF backend (Windows, feature `cef`): pages run in the sandboxed browser helper
-//! process, which this backend starts and drives over a pair of named pipes (ADR-0048,
-//! ARCH › Browser source). No CEF code runs in the engine's process.
+//! The CEF backend (Windows and Linux, feature `cef`): pages run in the sandboxed browser
+//! helper process, which this backend starts and drives over a private byte stream each
+//! way (ADR-0048, ADR-0095, ARCH › Browser source). No CEF code runs in the engine's
+//! process.
 //!
-//! **The helper.** It starts on the first [`BrowserBackend::open`]:
+//! **The helper on Windows.** It starts on the first [`BrowserBackend::open`]:
 //! `jstream-browser-helper.exe --jstream-pipe=<name>`, CEF's bootstrap exe, which loads
 //! the helper's DLL, runs CEF's browser process with the sandbox on, and connects to the
 //! two pipes this backend created. The backend checks that the process on the other end
-//! is the one it started, sends the cache and log settings, and waits for CEF to start.
-//! Pages are then opened, restyled and closed by message ([`Link`]).
+//! is the one it started. Pages' frames cross as shared textures ([`gpu`]).
+//!
+//! **The helper on Linux.** `jstream-browser-helper --jstream-frames=<folder>`, a plain
+//! executable that runs CEF's browser process with the sandbox on, its standard input one
+//! end of a socket pair whose other end this backend holds, so nothing else can be on the
+//! line. It paints in software and writes each paint into a slot file in `<folder>`, a
+//! private folder this backend makes for it and removes when it stops ([`cpu`]).
+//!
+//! Either way the backend then sends the cache and log settings, and waits for CEF to
+//! start. Pages are then opened, restyled and closed by message ([`Link`]).
 //!
 //! **A helper that stops** fails its pages (their audio ends; their frames stop), and
 //! the next `open` starts a new one. A helper that can't start fails that `open` and
@@ -17,12 +26,15 @@
 //! waits for it (the helper allows its pages [`EXIT_GRACE`] less a margin to close), and
 //! kills it if it hasn't exited by then.
 
+#[cfg(target_os = "linux")]
+mod cpu;
+#[cfg(windows)]
 mod gpu;
+#[cfg(windows)]
 mod pipe;
 
-use std::os::windows::io::AsHandle;
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
+use std::process::Child;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -31,16 +43,22 @@ use jstream_platform::{GpuContext, MediaClock};
 
 use crate::link::Link;
 use crate::{BrowserBackend, BrowserError, BrowserPage, PageSpec};
-use gpu::{DeviceSlot, HelperFrames};
+#[cfg(windows)]
+use gpu::DeviceSlot;
 
 /// The helper exe, in [`HELPER_DIR`] beside the host's exe, or beside the exe itself.
+#[cfg(windows)]
 const HELPER_EXE: &str = "jstream-browser-helper.exe";
+/// The helper executable, in [`HELPER_DIR`] beside the host's, or beside it.
+#[cfg(target_os = "linux")]
+const HELPER_EXE: &str = "jstream-browser-helper";
 
 /// The folder beside the host's exe that holds the helper and CEF's runtime in the
 /// portable zip (ARCH › Packaging).
 const HELPER_DIR: &str = "browser";
 
 /// How long the helper may take to connect to its pipes.
+#[cfg(windows)]
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// How long CEF may take to start in the helper; a first start creates its cache.
@@ -52,14 +70,15 @@ const EXIT_GRACE: Duration = Duration::from_secs(15);
 /// Where the helper is and where CEF writes.
 #[derive(Clone, Debug)]
 pub struct CefConfig {
-    /// The helper exe (`jstream-browser-helper.exe`): CEF's bootstrap exe, with
-    /// `jstream-browser-helper.dll` and CEF's runtime files beside it.
+    /// The helper exe: on Windows `jstream-browser-helper.exe`, CEF's bootstrap exe, with
+    /// `jstream-browser-helper.dll` and CEF's runtime files beside it; on Linux
+    /// `jstream-browser-helper`, with `libcef.so` and CEF's runtime files beside it.
     pub helper: PathBuf,
     /// CEF's root cache folder. Pages keep no cookies or storage on disk: each runs in
     /// CEF's in-memory profile, and this folder holds only CEF's own state.
     pub cache_root: PathBuf,
     /// CEF's log file, warnings and errors only; `None` leaves CEF's default
-    /// (`debug.log` next to the helper exe).
+    /// (`debug.log` next to the helper exe on Windows, the working folder on Linux).
     pub log_file: Option<PathBuf>,
 }
 
@@ -99,6 +118,9 @@ fn helper_in(dir: &std::path::Path) -> PathBuf {
 pub struct CefBackend {
     config: CefConfig,
     clock: Arc<dyn MediaClock>,
+    /// The device pages' shared textures are opened on (Windows). On Linux frames are in
+    /// CPU memory and need none.
+    #[cfg(windows)]
     device: Arc<DeviceSlot>,
     helper: Mutex<State>,
 }
@@ -116,6 +138,10 @@ struct Helper {
     link: Arc<Link>,
     child: Child,
     reader: Option<JoinHandle<()>>,
+    /// The folder the helper writes its paints into (Linux), removed once it has
+    /// stopped: declared after the fields `stop` uses, so it drops after.
+    #[cfg(target_os = "linux")]
+    _frames: cpu::FramesDir,
 }
 
 impl Helper {
@@ -158,6 +184,7 @@ impl CefBackend {
         Self {
             config,
             clock,
+            #[cfg(windows)]
             device: Arc::new(DeviceSlot::default()),
             helper: Mutex::new(State::Idle),
         }
@@ -199,6 +226,48 @@ impl CefBackend {
                 exe.display()
             )));
         }
+        let launched = self.launch(exe)?;
+        let mut child = launched.child;
+        let (link, reader) = match Link::connect(
+            launched.from_helper,
+            launched.to_helper,
+            launched.frames,
+            Arc::clone(&self.clock),
+        ) {
+            Ok(link) => link,
+            Err(e) => {
+                kill(&mut child);
+                return Err(e);
+            }
+        };
+        let mut helper = Helper {
+            link,
+            child,
+            reader: Some(reader),
+            #[cfg(target_os = "linux")]
+            _frames: launched.dir,
+        };
+        let path = |p: &PathBuf| p.display().to_string();
+        if let Err(e) = helper.link.start(
+            path(&self.config.cache_root),
+            self.config.log_file.as_ref().map(path),
+            START_TIMEOUT,
+        ) {
+            kill(&mut helper.child);
+            return Err(e);
+        }
+        #[cfg(windows)]
+        helper.link.use_adapter(self.device.luid());
+        tracing::info!(pid = helper.child.id(), "the browser helper started");
+        Ok(helper)
+    }
+
+    /// Starts the helper process and connects to it (Windows): its two named pipes,
+    /// checked to be the helper's, and its shared textures imported onto the device.
+    #[cfg(windows)]
+    fn launch(&self, exe: &std::path::Path) -> Result<Launched, BrowserError> {
+        use std::os::windows::io::AsHandle;
+        use std::process::{Command, Stdio};
         let pipes = pipe::Pending::create()?;
         let mut child = Command::new(exe)
             .arg(format!("--jstream-pipe={}", pipes.name()))
@@ -221,36 +290,28 @@ impl CefBackend {
                 return Err(start(format!("the browser helper's process handle: {e}")));
             }
         };
-        let frames = HelperFrames::new(Arc::clone(&self.device), process);
-        let (link, reader) = match Link::connect(
-            from_helper,
-            to_helper,
-            Arc::new(frames),
-            Arc::clone(&self.clock),
-        ) {
-            Ok(link) => link,
-            Err(e) => {
-                kill(&mut child);
-                return Err(e);
-            }
-        };
-        let mut helper = Helper {
-            link,
+        Ok(Launched {
             child,
-            reader: Some(reader),
-        };
-        let path = |p: &PathBuf| p.display().to_string();
-        if let Err(e) = helper.link.start(
-            path(&self.config.cache_root),
-            self.config.log_file.as_ref().map(path),
-            START_TIMEOUT,
-        ) {
-            kill(&mut helper.child);
-            return Err(e);
-        }
-        helper.link.use_adapter(self.device.luid());
-        tracing::info!(pid = helper.child.id(), "the browser helper started");
-        Ok(helper)
+            from_helper: Box::new(from_helper),
+            to_helper: Box::new(to_helper),
+            frames: Arc::new(gpu::HelperFrames::new(Arc::clone(&self.device), process)),
+        })
+    }
+
+    /// Starts the helper process (Linux) on one end of a socket pair, with a fresh
+    /// private folder for its paints.
+    #[cfg(target_os = "linux")]
+    #[expect(clippy::unused_self, reason = "the same shape as the Windows launch")]
+    fn launch(&self, exe: &std::path::Path) -> Result<Launched, BrowserError> {
+        let dir = cpu::FramesDir::create()?;
+        let (child, from_helper, to_helper) = cpu::spawn(exe, &dir)?;
+        Ok(Launched {
+            child,
+            from_helper: Box::new(from_helper),
+            to_helper: Box::new(to_helper),
+            frames: Arc::new(cpu::CpuFrames::new(dir.path())),
+            dir,
+        })
     }
 
     fn state(&self) -> MutexGuard<'_, State> {
@@ -278,12 +339,17 @@ impl BrowserBackend for CefBackend {
         Ok(Box::new(link.open(spec)?))
     }
 
+    #[cfg(windows)]
     fn use_device(&self, gpu: Option<&GpuContext>) {
         let luid = self.device.set(gpu);
         if let State::Running(helper) = &*self.state() {
             helper.link.use_adapter(luid);
         }
     }
+
+    /// Pages' frames on Linux are CPU frames, which need no device.
+    #[cfg(target_os = "linux")]
+    fn use_device(&self, _gpu: Option<&GpuContext>) {}
 }
 
 impl Drop for CefBackend {
@@ -291,6 +357,16 @@ impl Drop for CefBackend {
         // Dropping the helper asks it to exit and waits.
         *self.state() = State::Idle;
     }
+}
+
+/// A started helper, and the engine's ends of its streams.
+struct Launched {
+    child: Child,
+    from_helper: Box<dyn std::io::Read + Send>,
+    to_helper: Box<dyn std::io::Write + Send>,
+    frames: Arc<dyn crate::link::Frames>,
+    #[cfg(target_os = "linux")]
+    dir: cpu::FramesDir,
 }
 
 fn kill(child: &mut Child) {
