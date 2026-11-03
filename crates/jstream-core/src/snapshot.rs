@@ -1994,7 +1994,8 @@ impl<'a> Planner<'a, '_> {
     /// Whether a filter of `source`'s video chain runs, so a `scene` source shows its
     /// scene as one filtered picture.
     fn filters_scene(&self, source: &Source) -> bool {
-        Chain::of(source, GpuKey::Program, self.assets).is_some()
+        // A scene source has no program, so the shown version is never read.
+        Chain::of(source, GpuKey::Program, 0, self.assets).is_some()
     }
 
     /// What `source`, which is not a scene, shows: [`Self::look`]'s frame or capture,
@@ -2007,7 +2008,9 @@ impl<'a> Planner<'a, '_> {
         if out.chains.contains_key(&owner) {
             return Some(SourceRef::Filtered(id.clone()));
         }
-        match Chain::of(source, key(&image, out), self.assets) {
+        // A shader source's program restarts when its stand-in shows a new frame.
+        let shown = out.frames.get(id).map_or(0, |frame| frame.version);
+        match Chain::of(source, key(&image, out), shown, self.assets) {
             Some(chain) => {
                 // What a `scene_mask` reads is planned like a nested scene.
                 self.add_chain(owner, chain, out);

@@ -66,7 +66,18 @@ pub enum ProgramInput {
     Image(usize),
     /// Slot `n`, which the chain runtime fills; transparent while empty.
     Slot(usize),
+    /// The audio data image: [`AUDIO_BANDS`] by 2 texels, row 0 the spectrum's bands
+    /// and row 1 the waveform as `0.5 + 0.5 * sample`, each in every channel with alpha
+    /// 1, from [`super::VideoFilter::set_audio`]; silence until the first.
+    Audio,
 }
+
+/// The bands of a program's spectrum, and the samples of its waveform, in the audio data
+/// image.
+pub const AUDIO_BANDS: usize = 64;
+
+/// The audio data image's bytes: 2 rows of [`AUDIO_BANDS`] `f16` RGBA texels.
+const AUDIO_BYTES: usize = AUDIO_BANDS * 2 * 8;
 
 /// One pass of a program. Two are equal when they draw the same: the same WGSL, scale
 /// and inputs.
@@ -94,15 +105,33 @@ pub struct ProgramImage {
     pub rgba: Arc<[u8]>,
 }
 
-/// An audio source's levels for a frame, each 0 to 1.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+/// What a program hears for a frame: levels for `sys`, and the spectrum and waveform for
+/// [`ProgramInput::Audio`].
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ProgramAudio {
-    /// RMS level.
+    /// RMS level, 0 to 1.
     pub level: f32,
-    /// Peak level.
+    /// Peak level, 0 to 1.
     pub peak: f32,
-    /// 1 on a sudden rise of the spectrum, decaying to 0.
+    /// 1 on a sudden rise of the level, decaying to 0.
     pub onset: f32,
+    /// Each band's level, 0 to 1, lowest frequency first.
+    pub bands: [f32; AUDIO_BANDS],
+    /// The latest waveform, [`AUDIO_BANDS`] samples from -1 to 1, oldest first.
+    pub wave: [f32; AUDIO_BANDS],
+}
+
+impl Default for ProgramAudio {
+    /// Silence.
+    fn default() -> Self {
+        Self {
+            level: 0.0,
+            peak: 0.0,
+            onset: 0.0,
+            bands: [0.0; AUDIO_BANDS],
+            wave: [0.0; AUDIO_BANDS],
+        }
+    }
 }
 
 /// A shader-source program defined outside this crate (a pack, ADR-0093).
@@ -151,7 +180,14 @@ pub(crate) struct Program {
     /// The media-clock time of the first frame since the program was last restarted.
     start: Option<f64>,
     frame: u32,
+    /// Whether the feedback layers are clear since the last restart: new ones are, and
+    /// a restart clears the kept ones on the next draw.
+    cleared: bool,
     audio: ProgramAudio,
+    /// The audio data image, when a pass reads [`ProgramInput::Audio`], and whether
+    /// `audio` changed since it was written.
+    audio_image: Option<Image>,
+    audio_written: bool,
     /// Each pass's picture this frame, and one pass's inputs: kept, so a steady frame
     /// allocates no list.
     drawn: Vec<Option<Image>>,
@@ -196,7 +232,10 @@ impl Program {
             blank: None,
             start: None,
             frame: 0,
+            cleared: true,
             audio: ProgramAudio::default(),
+            audio_image: None,
+            audio_written: false,
             drawn: Vec::with_capacity(passes.len()),
             inputs: Vec::with_capacity(MAX_INPUTS),
             program,
@@ -238,6 +277,27 @@ impl Program {
                 .iter()
                 .map(|i| image::upload(&ctx.maker, i.width, i.height, &i.rgba))
                 .collect::<Result<_, _>>()?;
+        }
+        let hears = self
+            .program
+            .passes()
+            .iter()
+            .any(|p| p.inputs.contains(&ProgramInput::Audio));
+        if hears && self.audio_image.as_ref().is_none_or(stale) {
+            let silence = [[0.0, 0.0, 0.0, 1.0]; AUDIO_BANDS * 2];
+            self.audio_image = Some(image::upload_unit_f16(
+                &ctx.maker,
+                AUDIO_BANDS as u32,
+                2,
+                &silence,
+            )?);
+            self.audio_written = false;
+        }
+        if let Some(audio) = &self.audio_image
+            && !self.audio_written
+        {
+            image::rewrite_unit_f16(ctx.gpu, audio, &audio_bytes(&self.audio));
+            self.audio_written = true;
         }
         Ok(())
     }
@@ -319,16 +379,17 @@ impl super::pass::Pass for Program {
     }
 
     fn set_audio(&mut self, audio: ProgramAudio) {
-        self.audio = audio;
+        if audio != self.audio {
+            self.audio = audio;
+            self.audio_written = false;
+        }
     }
 
     fn restart(&mut self) {
         self.start = None;
         self.frame = 0;
-        // Dropped on the drawing thread: a show, not every frame.
-        for history in &mut self.history {
-            *history = None;
-        }
+        // Cleared on the next draw, not dropped: the layers stay for reuse.
+        self.cleared = false;
     }
 
     fn encode(
@@ -363,6 +424,12 @@ impl super::pass::Pass for Program {
         }
         self.upload(ctx)?;
         self.keep_history(ctx)?;
+        if !self.cleared {
+            for layer in self.history.iter().flatten().flat_map(|h| &h.layers) {
+                ctx.clear(layer)?;
+            }
+            self.cleared = true;
+        }
         self.start.get_or_insert(ctx.clock().seconds);
         let current = self.parity;
         let previous = 1 - current;
@@ -423,6 +490,7 @@ impl Program {
                         .get(k)
                         .and_then(Option::as_ref)
                         .map(|i| Image::clone(i)),
+                    ProgramInput::Audio => self.audio_image.clone(),
                 };
                 let image = match image {
                     Some(image) => image,
@@ -453,6 +521,22 @@ impl Program {
         }
         Ok(())
     }
+}
+
+/// `audio`'s data image bytes ([`ProgramInput::Audio`]), in a fixed array.
+fn audio_bytes(audio: &ProgramAudio) -> [u8; AUDIO_BYTES] {
+    let mut bytes = [0u8; AUDIO_BYTES];
+    let rows = audio
+        .bands
+        .iter()
+        .copied()
+        .chain(audio.wave.iter().map(|s| 0.5 + 0.5 * s));
+    for (texel, value) in bytes.chunks_exact_mut(8).zip(rows) {
+        for (channel, out) in texel.chunks_exact_mut(2).enumerate() {
+            image::unit_f16_bytes(if channel == 3 { 1.0 } else { value }, out);
+        }
+    }
+    bytes
 }
 
 /// The most pixels a program's side may be: what `jstream-effects` allows a shader

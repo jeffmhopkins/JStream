@@ -3879,7 +3879,7 @@ impl Shared {
                 .without_kinds(update.removed.iter().map(String::as_str))
                 .with_kinds(update.described);
             state.quarantined = update.quarantined;
-            state.live.set_effects(update.effects);
+            state.live.set_effects(update.effects, update.sources);
             state.publish_render();
             state.sync_sizes(&mut wake);
         }

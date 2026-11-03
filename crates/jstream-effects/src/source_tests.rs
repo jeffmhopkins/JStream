@@ -128,7 +128,7 @@ fn a_source_becomes_a_source_kind_with_its_settings() {
             .all(|p| !p.live)
     );
     assert_eq!(source.scene_params(), ["sky"]);
-    assert_eq!(source.audio_slot(), Some(1));
+    assert!(source.hears());
     // Only `speed` has a uniform form.
     assert_eq!(source.layout().fields().len(), 1);
     assert_eq!(source.size(&Settings::default()), (64, 32));
@@ -146,7 +146,7 @@ fn a_source_becomes_a_source_kind_with_its_settings() {
         [
             ProgramInput::Pass(0),
             ProgramInput::Slot(0),
-            ProgramInput::Slot(1)
+            ProgramInput::Audio
         ]
     );
     assert!((passes[0].scale - 0.5).abs() < f32::EPSILON);

@@ -24,9 +24,9 @@ pub use external::ExternalFilter;
 pub use pass::PRELUDE;
 pub(crate) use pass::{Blend, Ctx, Draw, Pass, Runtime, Scratch, Shader};
 pub use program::{
-    ExternalProgram, FIRST_INPUT_BINDING, MAX_INPUTS as PROGRAM_MAX_INPUTS,
-    MAX_PASSES as PROGRAM_MAX_PASSES, MAX_PROGRAM_BYTES, PROGRAM_PARAMS_BINDING, PROGRAM_PRELUDE,
-    ProgramAudio, ProgramImage, ProgramInput, ProgramPass,
+    AUDIO_BANDS as PROGRAM_AUDIO_BANDS, ExternalProgram, FIRST_INPUT_BINDING,
+    MAX_INPUTS as PROGRAM_MAX_INPUTS, MAX_PASSES as PROGRAM_MAX_PASSES, MAX_PROGRAM_BYTES,
+    PROGRAM_PARAMS_BINDING, PROGRAM_PRELUDE, ProgramAudio, ProgramImage, ProgramInput, ProgramPass,
 };
 
 use jstream_protocol::{KindDescriptor, Settings};

@@ -11,8 +11,11 @@
 //! ([R-RT-003](../../../../docs/RULES.md#R-RT-003)). `Source::frame` only hands out the
 //! frame painted last.
 
+mod meter;
 mod spectrum;
 mod waveform;
+
+pub use meter::{AudioMeter, METER_BANDS, Metered};
 
 pub(crate) use spectrum::SpectrumKind;
 pub(crate) use waveform::WaveformKind;
@@ -335,6 +338,21 @@ pub fn drawn_source(kind: &str, settings: &Settings) -> Option<SourceId> {
     if !matches!(kind, "waveform" | "spectrum") {
         return None;
     }
+    audio_source(settings).ok().flatten()
+}
+
+/// The scope a source with `audio` and `audio_source` settings (a scope source's, or a
+/// shader source's that hears audio, ADR-0093) hears in `scopes`: the source's, else
+/// the bus's, else the program mix's. `None` when a setting is missing or not a
+/// reference of its type.
+pub fn heard_scope(scopes: &AudioScopes, settings: &Settings) -> Option<Arc<AudioScope>> {
+    drawn(settings).ok().map(|drawn| scopes.drawn(&drawn))
+}
+
+/// The source that `settings`' `audio_source` names, whatever the kind: what
+/// [`drawn_source`] reads for a scope kind, for a kind outside this crate that has the
+/// setting (a shader source).
+pub fn heard_source(settings: &Settings) -> Option<SourceId> {
     audio_source(settings).ok().flatten()
 }
 

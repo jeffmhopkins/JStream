@@ -37,7 +37,7 @@ state machine. Contents:
   and `start_stats_heartbeat` (`stats.tick`'s load, below); `open_plugin_dir`
   (where installed WASM plugins are saved, ADR-0076), called once the engine is built;
   `scan_clap_plugins` adds the CLAP filter kinds; `watch_effect_packs` loads and
-  hot-reloads the WGSL effect packs (video filter kinds, below), and
+  hot-reloads the WGSL effect packs (video filter kinds and shader source kinds, below), and
   `HANDLED_PANIC_THREADS` names the pack load thread, whose panics the engine catches,
   for the apps' crash hook to leave out (#999);
   `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
@@ -1096,6 +1096,28 @@ it, and a file that can't be read quarantines nothing. Only `effect.enable` lift
 for the kind and its pack, run before the collection lock is taken. The engine then
 sends `gpu.device_lost` with the cause, the blamed and quarantined kinds, and whether
 it is recovering. The GPU-time guard of #349 is not built.
+**Shader sources** (`pack_source.rs`, `chain.rs`,
+[ADR-0093](../../docs/adr/0093-shader-sources-from-effect-packs.md), X2). A pack's
+`[[source]]` table is a `source` kind, `<pack>/<source>`, loaded, described, quarantined
+and forgotten with its pack like its effects (`PackSource`, `Update::sources`), so
+`kind.list` reports it and `source.create` takes it. A source of such a kind runs a
+`StandIn` among the live sources: a transparent texel placed at its `width` by
+`height`, which is the size `source.size_changed` reports. Only those two settings
+build a new stand-in, and it is never drawn at a density. Its picture is the kind's
+program, which `Chain::of` puts first in the source's chain, made with the source's
+settings, so the others are live. The scenes its `scene` parameters name fill the
+program's input slots: they are scheduled before the chain like a `scene_mask`'s, and
+each layer is handed in once it is remade, the old one retired into the cache
+(`ResourceCache::retire_image`), so the program keeps its feedback. When the program
+mix shows the source again its stand-in makes a new frame, and a new frame restarts the
+program (`time` and frame count from 0, feedback cleared). While its pack isn't loaded,
+or the kind is quarantined, no program runs and the source draws nothing at its size.
+A shader source that hears audio (`audio = true`) hears the scope its `audio` and
+`audio_source` settings name, as a `spectrum` does: the live sources find it on each
+sync (`FilterAssets::heard`), the source it names is fed like a scope source's
+(`audio::retain_scopes`), and each frame the chain runs, the program's `AudioMeter`
+(made on its first frame) measures it and hands the levels, bands and waveform to the
+program (`VideoFilter::set_audio`).
 Each filter's layer key is made when the chain's shape changes, so a steady frame
 builds none. A shot with a chain counts as
 changing with time (`Shot::changes_with_time`), so the preview redraws it like a
