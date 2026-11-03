@@ -1038,3 +1038,12 @@ title = "A too_large error for oversized plugin state"
 status = "done"
 prs = [794, 981]
 note = "ROADMAP M3 and #102: ADR-0074 (#794, accepted by the maintainer, maintainer tier, landed with wave/m3-5 (#854)) amends ADR-0037's state clause with a stable too_large error; built in #981 (protocol 0.62): a message over the 4 MiB request limit, read below a 16 MiB frame limit, is refused with too_large and the connection stays open, so a batch carrying two 2 MiB CLAP states fails cleanly"
+
+[[item]]
+id = "X2"
+milestone = "M3"
+title = "Shader sources: multipass WGSL packs with feedback, inputs and audio, written over MCP"
+status = "planned"
+needs = ["build", "maintainer"]
+prs = [1034]
+note = "ADR-0093 (agent tier) and the program in jstream-effects and jstream-render (#1034); writing packs over the protocol and MCP waits on a maintainer-tier ADR of its own; for the cockpit scenes (warp, reflections, audio glow) that browser sources draw on the CPU today"

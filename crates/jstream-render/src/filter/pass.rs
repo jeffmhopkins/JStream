@@ -21,7 +21,11 @@ use crate::image::{self, Image, LAYER_FORMAT, Maker, Owner};
 
 /// The WGSL every filter shader starts with: the vertex stage, the bindings and the colour
 /// helpers. Effect packs validate against it.
-pub const PRELUDE: &str = include_str!("prelude.wgsl");
+pub const PRELUDE: &str = concat!(
+    include_str!("prelude.wgsl"),
+    "\n",
+    include_str!("colour.wgsl")
+);
 
 /// Bytes of the `Frame` uniform in `prelude.wgsl`.
 const FRAME_BYTES: u64 = 48;
@@ -47,6 +51,21 @@ pub(crate) trait Pass: Send {
     fn set_reference(&mut self, image: Option<Arc<Image>>) {
         let _ = image;
     }
+
+    /// Fills a shader source's input slot `slot` (a scene's composite, the audio data
+    /// image), or empties it with `None`. Other kinds ignore it.
+    fn set_input(&mut self, slot: usize, image: Option<Arc<Image>>) {
+        let _ = (slot, image);
+    }
+
+    /// Hands a shader source its audio levels for the next frame. Other kinds ignore it.
+    fn set_audio(&mut self, audio: super::ProgramAudio) {
+        let _ = audio;
+    }
+
+    /// Starts a shader source over: its time and frame count from 0 and its feedback
+    /// transparent, as when it is shown again. Other kinds ignore it.
+    fn restart(&mut self) {}
 
     /// Records the filter into `ctx`: read `input`, fill all of `output`, a layer of
     /// [`Self::output_size`]. Multi-pass filters draw into [`Ctx::scratch`] images first,
@@ -129,6 +148,17 @@ pub(crate) struct Runtime {
     pipeline_layout: wgpu::PipelineLayout,
     sampler: wgpu::Sampler,
     pipelines: HashMap<String, Vec<Cached>>,
+    /// Shader-source passes' bindings and pipelines (ADR-0093).
+    programs: Programs,
+}
+
+/// What shader-source passes draw with: a bind group layout per number of inputs, made
+/// on first use, a repeating sampler, and their pipelines.
+struct Programs {
+    /// Index `n`: the layout of a pass with `n` inputs.
+    layouts: Vec<Option<(wgpu::BindGroupLayout, wgpu::PipelineLayout)>>,
+    repeat: wgpu::Sampler,
+    pipelines: HashMap<String, Vec<Cached>>,
 }
 
 /// A built pipeline and the source it was built from.
@@ -194,12 +224,85 @@ impl Runtime {
             mipmap_filter: wgpu::MipmapFilterMode::Nearest,
             ..Default::default()
         });
+        let repeat = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("jstream-render-program-repeat"),
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::Repeat,
+            address_mode_w: wgpu::AddressMode::Repeat,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+            ..Default::default()
+        });
         Self {
             layout,
             pipeline_layout,
             sampler,
             pipelines: HashMap::new(),
+            programs: Programs {
+                layouts: Vec::new(),
+                repeat,
+                pipelines: HashMap::new(),
+            },
         }
+    }
+
+    /// The bind group and pipeline layouts of a shader-source pass with `inputs`
+    /// textures, made on first use.
+    fn program_layouts(
+        &mut self,
+        device: &wgpu::Device,
+        inputs: usize,
+    ) -> &(wgpu::BindGroupLayout, wgpu::PipelineLayout) {
+        if self.programs.layouts.len() <= inputs {
+            self.programs.layouts.resize_with(inputs + 1, || None);
+        }
+        self.programs.layouts[inputs].get_or_insert_with(|| {
+            let uniform = |binding| wgpu::BindGroupLayoutEntry {
+                binding,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            };
+            let sampler = |binding| wgpu::BindGroupLayoutEntry {
+                binding,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            };
+            let mut entries = vec![
+                uniform(0),
+                sampler(1),
+                sampler(2),
+                uniform(super::program::PROGRAM_PARAMS_BINDING),
+            ];
+            for n in 0..inputs {
+                entries.push(wgpu::BindGroupLayoutEntry {
+                    binding: super::program::FIRST_INPUT_BINDING + n as u32,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                });
+            }
+            let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("jstream-render-program"),
+                entries: &entries,
+            });
+            let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("jstream-render-program"),
+                bind_group_layouts: &[Some(&layout)],
+                immediate_size: 0,
+            });
+            (layout, pipeline_layout)
+        })
     }
 
     /// The pipeline for `shader`, built on first use of its label and source. A shader
@@ -210,47 +313,90 @@ impl Runtime {
         device: &wgpu::Device,
         shader: ShaderRef<'_>,
     ) -> Result<&wgpu::RenderPipeline, RenderError> {
-        // A known label is looked up without allocating its key (`entry` would allocate
-        // one on every draw, and `get_mut` then `entry` does not borrow-check).
-        if !self.pipelines.contains_key(shader.label) {
-            self.pipelines.insert(shader.label.to_owned(), Vec::new());
-        }
-        let Some(entries) = self.pipelines.get_mut(shader.label) else {
+        cached(
+            &mut self.pipelines,
+            device,
+            shader,
+            &self.pipeline_layout,
+            PRELUDE,
+        )
+    }
+
+    /// [`Self::pipeline`] for a shader-source pass reading `inputs` textures.
+    fn program_pipeline(
+        &mut self,
+        device: &wgpu::Device,
+        shader: ShaderRef<'_>,
+        inputs: usize,
+    ) -> Result<&wgpu::RenderPipeline, RenderError> {
+        self.program_layouts(device, inputs);
+        let Some(Some((_, layout))) = self.programs.layouts.get(inputs) else {
             return Err(RenderError::Invalid {
-                what: "filter shader",
-                detail: format!("{}: pipeline cache entry missing", shader.label),
+                what: "shader source",
+                detail: format!("{}: no layout for {inputs} inputs", shader.label),
             });
         };
-        let index = match entries.iter().position(|c| c.source == shader.source) {
-            Some(index) => index,
-            None => {
-                // Validation errors (wgpu's own checks) and internal ones (a backend
-                // compiler refusing naga's output) both go to wgpu's panicking default
-                // handler unless a scope catches them.
-                let internal = device.push_error_scope(wgpu::ErrorFilter::Internal);
-                let validation = device.push_error_scope(wgpu::ErrorFilter::Validation);
-                let pipeline = build(&self.pipeline_layout, device, shader);
-                let error = ready(validation.pop()).or_else(|| ready(internal.pop()));
-                if entries.len() >= SOURCES_PER_LABEL {
-                    entries.remove(0);
-                }
-                entries.push(Cached {
-                    source: shader.source.to_owned(),
-                    built: match error {
-                        None => Ok(pipeline),
-                        Some(error) => Err(error.to_string()),
-                    },
-                });
-                entries.len() - 1
+        cached(
+            &mut self.programs.pipelines,
+            device,
+            shader,
+            layout,
+            super::program::PROGRAM_PRELUDE,
+        )
+    }
+}
+
+/// The pipeline for `shader` in `pipelines`, built with `layout` after `prelude` on first
+/// use of its label and source. A shader wgpu refuses is an error, not a panic: a pack's
+/// WGSL arrives at run time. The refusal is kept too, so the shader is not recompiled
+/// every frame.
+fn cached<'a>(
+    pipelines: &'a mut HashMap<String, Vec<Cached>>,
+    device: &wgpu::Device,
+    shader: ShaderRef<'_>,
+    layout: &wgpu::PipelineLayout,
+    prelude: &str,
+) -> Result<&'a wgpu::RenderPipeline, RenderError> {
+    // A known label is looked up without allocating its key (`entry` would allocate
+    // one on every draw, and `get_mut` then `entry` does not borrow-check).
+    if !pipelines.contains_key(shader.label) {
+        pipelines.insert(shader.label.to_owned(), Vec::new());
+    }
+    let Some(entries) = pipelines.get_mut(shader.label) else {
+        return Err(RenderError::Invalid {
+            what: "filter shader",
+            detail: format!("{}: pipeline cache entry missing", shader.label),
+        });
+    };
+    let index = match entries.iter().position(|c| c.source == shader.source) {
+        Some(index) => index,
+        None => {
+            // Validation errors (wgpu's own checks) and internal ones (a backend
+            // compiler refusing naga's output) both go to wgpu's panicking default
+            // handler unless a scope catches them.
+            let internal = device.push_error_scope(wgpu::ErrorFilter::Internal);
+            let validation = device.push_error_scope(wgpu::ErrorFilter::Validation);
+            let pipeline = build(layout, device, shader, prelude);
+            let error = ready(validation.pop()).or_else(|| ready(internal.pop()));
+            if entries.len() >= SOURCES_PER_LABEL {
+                entries.remove(0);
             }
-        };
-        match &entries[index].built {
-            Ok(pipeline) => Ok(pipeline),
-            Err(error) => Err(RenderError::Invalid {
-                what: "filter shader",
-                detail: format!("{}: {error}", shader.label),
-            }),
+            entries.push(Cached {
+                source: shader.source.to_owned(),
+                built: match error {
+                    None => Ok(pipeline),
+                    Some(error) => Err(error.to_string()),
+                },
+            });
+            entries.len() - 1
         }
+    };
+    match &entries[index].built {
+        Ok(pipeline) => Ok(pipeline),
+        Err(error) => Err(RenderError::Invalid {
+            what: "filter shader",
+            detail: format!("{}: {error}", shader.label),
+        }),
     }
 }
 
@@ -258,10 +404,11 @@ fn build(
     pipeline_layout: &wgpu::PipelineLayout,
     device: &wgpu::Device,
     shader: ShaderRef<'_>,
+    prelude: &str,
 ) -> wgpu::RenderPipeline {
     let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some(shader.label),
-        source: wgpu::ShaderSource::Wgsl(format!("{PRELUDE}\n{}", shader.source).into()),
+        source: wgpu::ShaderSource::Wgsl(format!("{prelude}\n{}", shader.source).into()),
     });
     let blend = match shader.blend {
         Blend::Replace => None,
@@ -368,10 +515,11 @@ impl Scratch {
     ) -> (&wgpu::Buffer, &wgpu::Buffer) {
         let index = self.drawn;
         self.drawn += 1;
-        let fits = self
-            .draws
-            .get(index)
-            .is_some_and(|slot| slot.owner.is(owner) && slot.params.size() == params.len() as u64);
+        let fits = self.draws.get(index).is_some_and(|slot| {
+            slot.owner.is(owner)
+                && slot.frame.size() == frame.len() as u64
+                && slot.params.size() == params.len() as u64
+        });
         if !fits {
             let slot = DrawSlot {
                 owner: owner.clone(),
@@ -546,6 +694,123 @@ impl Ctx<'_> {
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        pass.set_pipeline(pipeline);
+        pass.set_bind_group(0, &bind_group, &[]);
+        pass.draw(0..3, 0..1);
+        Ok(())
+    }
+}
+
+impl Ctx<'_> {
+    /// Records one fullscreen draw of a shader-source pass (ADR-0093) into `target`:
+    /// `system` is its `sys` uniform, `params` its `Params`, and `inputs` its textures in
+    /// binding order.
+    pub(crate) fn draw_program(
+        &mut self,
+        shader: ShaderRef<'_>,
+        inputs: &[Image],
+        system: &[u8],
+        params: &[u8],
+        target: &Image,
+    ) -> Result<(), RenderError> {
+        let Some(view) = target.target() else {
+            return Err(RenderError::Invalid {
+                what: "shader source target",
+                detail: "the target is not a layer".into(),
+            });
+        };
+        if inputs.iter().any(|i| i.texture() == target.texture()) {
+            return Err(RenderError::Invalid {
+                what: "shader source target",
+                detail: format!(
+                    "{}: a pass cannot sample the image it draws into",
+                    shader.label
+                ),
+            });
+        }
+        for input in inputs {
+            self.hold(input);
+        }
+        let (system_buffer, params_buffer) =
+            self.scratch
+                .slot(self.gpu, self.maker.owner, system, params);
+        let (system_buffer, params_buffer) = (system_buffer.clone(), params_buffer.clone());
+        self.runtime.program_layouts(&self.gpu.device, inputs.len());
+        let max = super::program::MAX_INPUTS;
+        if inputs.len() > max {
+            return Err(RenderError::Invalid {
+                what: "shader source",
+                detail: format!("{}: {} inputs, over {max}", shader.label, inputs.len()),
+            });
+        }
+        // Fixed arrays, so a steady frame allocates no list for the bind group.
+        let views: [Option<wgpu::TextureView>; super::program::MAX_INPUTS] =
+            std::array::from_fn(|n| {
+                inputs.get(n).map(|i| {
+                    i.texture()
+                        .create_view(&wgpu::TextureViewDescriptor::default())
+                })
+            });
+        let Some(Some((layout, _))) = self.runtime.programs.layouts.get(inputs.len()) else {
+            return Err(RenderError::Invalid {
+                what: "shader source",
+                detail: format!("{}: no layout for {} inputs", shader.label, inputs.len()),
+            });
+        };
+        let first = super::program::FIRST_INPUT_BINDING as usize;
+        let entries: [wgpu::BindGroupEntry<'_>;
+            super::program::FIRST_INPUT_BINDING as usize + super::program::MAX_INPUTS] =
+            std::array::from_fn(|n| {
+                let (binding, resource) = match n {
+                    0 => (0, system_buffer.as_entire_binding()),
+                    1 => (1, wgpu::BindingResource::Sampler(&self.runtime.sampler)),
+                    2 => (
+                        2,
+                        wgpu::BindingResource::Sampler(&self.runtime.programs.repeat),
+                    ),
+                    3 => (
+                        super::program::PROGRAM_PARAMS_BINDING,
+                        params_buffer.as_entire_binding(),
+                    ),
+                    _ => match &views[n - first] {
+                        Some(view) => (n as u32, wgpu::BindingResource::TextureView(view)),
+                        // Past the inputs: never handed to wgpu.
+                        None => (
+                            n as u32,
+                            wgpu::BindingResource::Sampler(&self.runtime.sampler),
+                        ),
+                    },
+                };
+                wgpu::BindGroupEntry { binding, resource }
+            });
+        let entries = &entries[..first + inputs.len()];
+        let bind_group = self
+            .gpu
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some(shader.label),
+                layout,
+                entries,
+            });
+        let pipeline = self
+            .runtime
+            .program_pipeline(&self.gpu.device, shader, inputs.len())?;
+        let mut pass = self.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some(shader.label),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
                     store: wgpu::StoreOp::Store,
                 },
             })],
