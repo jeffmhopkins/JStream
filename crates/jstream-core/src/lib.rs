@@ -113,6 +113,7 @@ pub fn no_adapter_warning() -> Option<String> {
         }
     })
 }
+
 // The tests below sit at the crate root because RULES.md names them by path:
 // `jstream_core::stale_expected_rev_is_rejected` (R-API-004) and
 // `jstream_core::secrets_are_redacted` (R-SEC-001).

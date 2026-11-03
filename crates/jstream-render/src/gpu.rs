@@ -160,10 +160,12 @@ impl Gpu {
             return opened;
         }
         // A hardware adapter can be returned and still refuse its device (limits below
-        // the defaults, a removed or hung GPU), so that falls back to software too.
+        // the defaults, a removed or hung GPU), so that falls back to software too. There
+        // is an adapter then, so a missing software one is a device failure, not
+        // `NoAdapter`, and carries no driver hint.
         or_software(opened, || {
-            let adapter = request(&instance, true).map_err(|detail| RenderError::NoAdapter {
-                detail: format!("software adapter: {detail}"),
+            let adapter = request(&instance, true).map_err(|detail| RenderError::Device {
+                detail: format!("no software adapter: {detail}"),
             })?;
             Self::from_adapter(adapter)
         })
