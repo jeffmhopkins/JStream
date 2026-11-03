@@ -9,18 +9,20 @@
 pub const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 
 /// Whether `url` is one of the project's pages, which the window opens in the system
-/// browser: [`REPOSITORY`] itself, or a path, query or fragment under it. Nothing else
-/// leaves the app: not another repository whose name starts the same, not another host,
-/// and nothing with whitespace or control characters a command line could misread.
+/// browser: [`REPOSITORY`] itself, or a path, query or fragment under it, written only
+/// with the characters the UI's links use (ASCII letters and digits, and `/ # ? . _ = & -`).
+/// Nothing else leaves the app: not another repository whose name starts the same, not
+/// another host, and nothing Explorer's command line could read as more than one URL
+/// (no spaces, quotes, commas, backslashes or percent escapes).
 pub fn is_project_page(url: &str) -> bool {
     let Some(rest) = url.strip_prefix(REPOSITORY) else {
         return false;
     };
     let under = rest.is_empty() || rest.starts_with(['/', '?', '#']);
     under
-        && !url
+        && rest
             .chars()
-            .any(|c| c.is_whitespace() || c.is_control() || c == '"')
+            .all(|c| c.is_ascii_alphanumeric() || "/#?._=&-".contains(c))
 }
 
 #[cfg(test)]
@@ -36,6 +38,8 @@ mod tests {
             "https://github.com/jeffmhopkins/JStream/releases",
             "https://github.com/jeffmhopkins/JStream#readme",
             "https://github.com/jeffmhopkins/JStream/blob/main/LICENSE-MIT",
+            "https://github.com/jeffmhopkins/JStream/blob/main/docs/GETTING-STARTED.md",
+            "https://github.com/jeffmhopkins/JStream/commit/0123456789abcdef0123456789abcdef01234567",
         ] {
             assert!(is_project_page(page), "{page}");
         }
@@ -47,6 +51,9 @@ mod tests {
             "https://example.com/?https://github.com/jeffmhopkins/JStream",
             "https://github.com/jeffmhopkins/JStream/ x",
             "https://github.com/jeffmhopkins/JStream/\"x",
+            "https://github.com/jeffmhopkins/JStream?x,\\\\host\\share\\y.exe",
+            "https://github.com/jeffmhopkins/JStream/%2e%2e/other",
+            "https://github.com/jeffmhopkins/JStream/a,b",
             "file:///C:/Windows",
             "",
         ] {

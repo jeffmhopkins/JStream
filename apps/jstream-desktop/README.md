@@ -201,9 +201,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   on `about:blank` as a window handed back to `window.open` must, placed and sized as
   the page asked, and full screen when it asked for that (`&full=1`). A link to one of
   the project's own pages on GitHub (`links.rs`: the repository's URL from the
-  workspace's `repository`, or a path, query or fragment under it, as the UI's Help menu
-  and About dialog link to) opens in the system browser, through Explorer with the URL
-  as one argument, and never in the window. Every other new window is refused, and a
+  workspace's `repository`, or a path, query or fragment under it written only with
+  ASCII letters, digits and `/ # ? . _ = & -`, as the UI's Help menu and About dialog
+  link to) opens in the system browser, through Explorer with the URL as one argument,
+  and never in the window. So a page can make the app start one OS process, Explorer,
+  for those URLs only; no comma, backslash, quote, space or percent escape can reach
+  Explorer's command line. Every other new window is refused, and a
   projector can open none. The page gets no Tauri IPC: the app defines no commands and grants
   no capabilities, so the API is the only way in.
 - **Failures are a page, not a crash.** Media Foundation missing (an N edition), no

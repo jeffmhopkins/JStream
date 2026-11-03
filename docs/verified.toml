@@ -2040,7 +2040,7 @@ stamp = { hash = "b3:2ab5528eec0ba929", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:0a5af57f1ce8c0be", by = "agent:claude", note = "token.rs: a test-only change. The cfg(windows) test a_file_other_users_can_read_is_refused_on_windows now passes &Secrets::new() to load_or_create, the signature #567 gave it, which the merge had missed. load_or_create's user-only creation and the check_private_file refusal are unchanged, so the token-file bullet's user-only and refusal text holds" }
 
 ["CRATE-jstream-desktop#design"."body"]
-stamp = { hash = "b3:99c5ce45c5b19be8", by = "agent:help-about", note = "Re-read: the window-stays-on-the-app bullet now says a new window for one of the project's GitHub pages (links::is_project_page, under the workspace repository URL) opens in the system browser via Explorer with the URL as one argument, never in the window; navigation guard, projector rules and no-IPC still hold" }
+stamp = { hash = "b3:1ff9934532dd5f1d", by = "agent:help-about", note = "Re-read after the review round: the window bullet now states the narrowed character set links.rs allows and that a page can make the app start Explorer for those URLs only, with no comma, backslash, quote, space or percent escape reaching its command line; matches links.rs and shell.rs; lib.rs only adds pub mod links" }
 
 ["CRATE-jstream-desktop#design"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:a71c0833188b98b6", by = "agent:acc756d9", note = "Re-read design against the R-SEC-001 exception: the desktop keeps keys in Credential Manager on Windows and has no backends elsewhere; the Linux-only exception does not touch it." }
@@ -2076,7 +2076,7 @@ stamp = { hash = "b3:f7876d2ce1832d90", by = "agent:effect-packs", note = "Part 
 stamp = { hash = "b3:1623266b66cf75be", by = "agent:help-about", note = "Re-read: the window-stays-on-the-app bullet now says a new window for one of the project's GitHub pages (links::is_project_page, under the workspace repository URL) opens in the system browser via Explorer with the URL as one argument, never in the window; navigation guard, projector rules and no-IPC still hold" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/links.rs"]
-stamp = { hash = "b3:2e7c40acea6fad72", by = "agent:help-about", note = "Re-read: the window-stays-on-the-app bullet now says a new window for one of the project's GitHub pages (links::is_project_page, under the workspace repository URL) opens in the system browser via Explorer with the URL as one argument, never in the window; navigation guard, projector rules and no-IPC still hold" }
+stamp = { hash = "b3:b1a5cefcd687e90b", by = "agent:help-about", note = "Re-read after the review round: the window bullet now states the narrowed character set links.rs allows and that a page can make the app start Explorer for those URLs only, with no comma, backslash, quote, space or percent escape reaching its command line; matches links.rs and shell.rs; lib.rs only adds pub mod links" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/logs.rs"]
 stamp = { hash = "b3:cc576af06e07c96f", by = "agent:a2656", note = "#780: re-read against logs.rs creating the log file user-only; the design's token and crash-report bullets don't describe the log file's access, and the crash reports still leave the log file alone; holds" }
@@ -2118,7 +2118,7 @@ stamp = { hash = "b3:f7876d2ce1832d90", by = "agent:effect-packs", note = "Part 
 stamp = { hash = "b3:1623266b66cf75be", by = "agent:help-about", note = "Re-read: added links.rs to the Window bullet (project links handed to the system browser, tested everywhere); the rest of the contents still match lib.rs and shell.rs" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/links.rs"]
-stamp = { hash = "b3:2e7c40acea6fad72", by = "agent:help-about", note = "Re-read: added links.rs to the Window bullet (project links handed to the system browser, tested everywhere); the rest of the contents still match lib.rs and shell.rs" }
+stamp = { hash = "b3:b1a5cefcd687e90b", by = "agent:help-about", note = "Re-read after the review round: is_project_page now allows only ASCII letters, digits and / # ? . _ = & - after the repository URL (N1); the Window bullet naming links.rs and the lib.rs module list still hold" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/logs.rs"]
 stamp = { hash = "b3:cc576af06e07c96f", by = "agent:a2656", note = "Earlier note on body, kept: re-read (#565 B1): host.rs vcam_status now reports outdated as well; purpose says registered and current, and names the optional registration and unregistration modes the daemon provides for now | merge: re-read after merging wave/m1-3 (e993e0e): #567 replaced the desktop's crash.rs with jstream-crash (Crash reports and tests bullets, host.rs taking Secrets); this branch's vcam_status (registered and current) and the not-yet registration modes are untouched and hold | #780 (body and logs.rs): logs.rs deletes the old log file and creates a new user-only one at each start (create_private_file on Windows, jstream-crash's create_new, mode 0600, elsewhere) in a folder created 0700 on Unix; the Log file bullet says so, and the Tests bullet names the capped log file as user-only, checked on Unix (the_file_and_a_new_folder_are_user_only is cfg(unix), review N1)" }
@@ -5742,13 +5742,13 @@ stamp = { hash = "b3:1a6aeaec37c5f24f", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:edc32ebec97fa507", by = "agent:claude", note = "Moving a PR now says to push, since a base change doesn't re-run ci.yml (types lacks edited); targets still match ADR-0055." }
 
 ["RUNBOOK-WINDOWS-HW-PASS#script"."body"]
-stamp = { hash = "b3:81218485b17e73ce", by = "agent:claude", note = "added the audio check (item 18, #778, C5's WASAPI device tests on main) to the checks table, matching the new Test-Audio and its Tasks row; vcam-owner now also checks G2's pacing (#777) from the vcam_smoke report it already runs; the rest of the section still describes the script" }
+stamp = { hash = "b3:60448d9cdedbfd6f", by = "agent:help-about", note = "Re-read: windows-pass.ps1 gains the pr1083 source and the help-links check (builds the PR's UI and desktop app, asks whether Help and About links open the default browser); the table lists help-links for item 19 and the not-checked list names item 19's log search, done by hand" }
 
 ["RUNBOOK-WINDOWS-HW-PASS#script"."file:scripts/windows-pass.bat"]
 stamp = { hash = "b3:9e3a9ddf79167120", by = "agent:windows-pass", note = "Written with scripts/windows-pass.ps1 and .bat: checked the sources and worktree paths, the ask-first list, -Unattended, the daemon and Ctrl-C stop, the report and zip contents, and the check-to-item table against the script's task list" }
 
 ["RUNBOOK-WINDOWS-HW-PASS#script"."file:scripts/windows-pass.ps1"]
-stamp = { hash = "b3:00c487e6255e2829", by = "agent:claude", note = "the checks table gains audio (item 18, #778, C5's WASAPI device tests on main), matching the new Test-Audio and its Tasks row; vcam-owner also checks G2's pacing (#777) from the vcam_smoke report it already runs; the render and media Tasks rows now cite #336 as passed and #445 instead of the closed #382, and the table's item numbers for them still hold; the rest of the section still describes the script" }
+stamp = { hash = "b3:95a3edd6b61832aa", by = "agent:help-about", note = "Re-read: windows-pass.ps1 gains the pr1083 source and the help-links check (builds the PR's UI and desktop app, asks whether Help and About links open the default browser); the table lists help-links for item 19 and the not-checked list names item 19's log search, done by hand" }
 
 ["SECURITY#scope"."body"]
 stamp = { hash = "b3:a7d08d8dbb13095d", by = "agent:acc756d9", note = "Re-read the scope list: the secrets promise now names the ADR-0071 Linux file fallback, matching the amended R-SEC-001; the other promises are unchanged." }
