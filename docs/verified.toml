@@ -5691,7 +5691,7 @@ stamp = { hash = "b3:3310840b33c3c51e", by = "agent:shader-source", note = "Re-r
 stamp = { hash = "b3:26b12e32717aed1a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: the CLI usage table only adds too_large to exit 20, and the server README's Message size bullet (4 MiB request limit refused with too_large, at most a 256-byte id echoed, 16 MiB frame limit closing with 1009) and MCP rows (-32000 too_large, 413 over 16 MiB) don't touch the go-live steps, which send small requests." }
 
 ["RUNBOOK-MAC-TESTING#script"."body"]
-stamp = { hash = "b3:5a18675f60c6bc96", by = "agent:mac-install", note = "new section: re-read each step against scripts/mac/install.sh, start-daemon.sh, JStream.applescript, install-tools.txt and mac-install.yml; ADR-0063 floor 14.0 and taps 14.2, §11 usage strings from the daemon's Info.plist" }
+stamp = { hash = "b3:6755c92500c2c634", by = "agent:mac-install", note = "rewritten for review round 1: no app bundle or local signing root (ADR-0063 §11 Terminal attribution, §13 packaging later); steps 1-7, jstream.sh, clipboard.js and the mac-install jobs re-read against the scripts and workflow; usage strings come from the daemon's embedded Info.plist per apps/jstream-daemon README#purpose; the clipboard paragraph matches threat-model#server's Accepted text" }
 
 ["RUNBOOK-MAC-TESTING#script"."dep:apps/jstream-daemon/README.md#purpose"]
 stamp = { hash = "b3:04b5de3b6db9a3da", by = "agent:mac-install", note = "new section: re-read each step against scripts/mac/install.sh, start-daemon.sh, JStream.applescript, install-tools.txt and mac-install.yml; ADR-0063 floor 14.0 and taps 14.2, §11 usage strings from the daemon's Info.plist" }
@@ -5699,26 +5699,29 @@ stamp = { hash = "b3:04b5de3b6db9a3da", by = "agent:mac-install", note = "new se
 ["RUNBOOK-MAC-TESTING#script"."dep:docs/adr/0063-macos-platform-support.md"]
 stamp = { hash = "b3:97b1d6f51853aa49", by = "agent:mac-install", note = "new section: re-read each step against scripts/mac/install.sh, start-daemon.sh, JStream.applescript, install-tools.txt and mac-install.yml; ADR-0063 floor 14.0 and taps 14.2, §11 usage strings from the daemon's Info.plist" }
 
+["RUNBOOK-MAC-TESTING#script"."dep:docs/security/threat-model.md#server"]
+stamp = { hash = "b3:ec0e6465c4cdc71b", by = "agent:mac-install", note = "rewritten for review round 1: no app bundle or local signing root (ADR-0063 §11 Terminal attribution, §13 packaging later); steps 1-7, jstream.sh, clipboard.js and the mac-install jobs re-read against the scripts and workflow; usage strings come from the daemon's embedded Info.plist per apps/jstream-daemon README#purpose; the clipboard paragraph matches threat-model#server's Accepted text" }
+
 ["RUNBOOK-MAC-TESTING#script"."file:.github/workflows/mac-install.yml"]
-stamp = { hash = "b3:72bd78878686d319", by = "agent:mac-install", note = "new section: re-read each step against scripts/mac/install.sh, start-daemon.sh, JStream.applescript, install-tools.txt and mac-install.yml; ADR-0063 floor 14.0 and taps 14.2, §11 usage strings from the daemon's Info.plist" }
+stamp = { hash = "b3:f12b6e857370892e", by = "agent:mac-install", note = "rewritten for review round 1: no app bundle or local signing root (ADR-0063 §11 Terminal attribution, §13 packaging later); steps 1-7, jstream.sh, clipboard.js and the mac-install jobs re-read against the scripts and workflow; usage strings come from the daemon's embedded Info.plist per apps/jstream-daemon README#purpose; the clipboard paragraph matches threat-model#server's Accepted text" }
 
 ["RUNBOOK-MAC-TESTING#script"."file:scripts/install-tools.txt"]
 stamp = { hash = "b3:7f9e4cc7877b9719", by = "agent:mac-install", note = "new section: re-read each step against scripts/mac/install.sh, start-daemon.sh, JStream.applescript, install-tools.txt and mac-install.yml; ADR-0063 floor 14.0 and taps 14.2, §11 usage strings from the daemon's Info.plist" }
 
-["RUNBOOK-MAC-TESTING#script"."file:scripts/mac/JStream.applescript"]
-stamp = { hash = "b3:9436267943d019f0", by = "agent:mac-install", note = "new section: re-read each step against scripts/mac/install.sh, start-daemon.sh, JStream.applescript, install-tools.txt and mac-install.yml; ADR-0063 floor 14.0 and taps 14.2, §11 usage strings from the daemon's Info.plist" }
+["RUNBOOK-MAC-TESTING#script"."file:scripts/mac/clipboard.js"]
+stamp = { hash = "b3:fa30d7ba5476cba2", by = "agent:mac-install", note = "rewritten for review round 1: no app bundle or local signing root (ADR-0063 §11 Terminal attribution, §13 packaging later); steps 1-7, jstream.sh, clipboard.js and the mac-install jobs re-read against the scripts and workflow; usage strings come from the daemon's embedded Info.plist per apps/jstream-daemon README#purpose; the clipboard paragraph matches threat-model#server's Accepted text" }
 
 ["RUNBOOK-MAC-TESTING#script"."file:scripts/mac/install.sh"]
-stamp = { hash = "b3:66824c4b6d12e460", by = "agent:mac-install", note = "new section: re-read each step against scripts/mac/install.sh, start-daemon.sh, JStream.applescript, install-tools.txt and mac-install.yml; ADR-0063 floor 14.0 and taps 14.2, §11 usage strings from the daemon's Info.plist" }
+stamp = { hash = "b3:e3d9cdd3f34c5de1", by = "agent:mac-install", note = "rewritten for review round 1: no app bundle or local signing root (ADR-0063 §11 Terminal attribution, §13 packaging later); steps 1-7, jstream.sh, clipboard.js and the mac-install jobs re-read against the scripts and workflow; usage strings come from the daemon's embedded Info.plist per apps/jstream-daemon README#purpose; the clipboard paragraph matches threat-model#server's Accepted text" }
 
-["RUNBOOK-MAC-TESTING#script"."file:scripts/mac/start-daemon.sh"]
-stamp = { hash = "b3:d2239e64db974fdc", by = "agent:mac-install", note = "new section: re-read each step against scripts/mac/install.sh, start-daemon.sh, JStream.applescript, install-tools.txt and mac-install.yml; ADR-0063 floor 14.0 and taps 14.2, §11 usage strings from the daemon's Info.plist" }
+["RUNBOOK-MAC-TESTING#script"."file:scripts/mac/jstream.sh"]
+stamp = { hash = "b3:407e79d968fa88bc", by = "agent:mac-install", note = "rewritten for review round 1: no app bundle or local signing root (ADR-0063 §11 Terminal attribution, §13 packaging later); steps 1-7, jstream.sh, clipboard.js and the mac-install jobs re-read against the scripts and workflow; usage strings come from the daemon's embedded Info.plist per apps/jstream-daemon README#purpose; the clipboard paragraph matches threat-model#server's Accepted text" }
 
 ["RUNBOOK-MAC-TESTING#tester"."body"]
-stamp = { hash = "b3:2b626ff33e64e036", by = "agent:mac-install", note = "new section: the command, prompts (CLT, trust password, codesign Always Allow), Basic sign-in with the token as password per jstream-server gate.rs and the UI README, update/ref/uninstall flags and data folder match the script" }
+stamp = { hash = "b3:2aa0cc61595c6afa", by = "agent:mac-install", note = "rewritten for review round 1: JStream.command in Terminal, Ctrl-C to stop, token on the clipboard two minutes then the token file, Basic sign-in with an empty Token field, prompts naming Terminal and surviving updates, keychain re-prompt per ADR-0063 §9; flags match install.sh" }
 
 ["RUNBOOK-MAC-TESTING#tester"."dep:docs/runbooks/mac-testing.md#script"]
-stamp = { hash = "b3:5a18675f60c6bc96", by = "agent:mac-install", note = "new section: the command, prompts (CLT, trust password, codesign Always Allow), Basic sign-in with the token as password per jstream-server gate.rs and the UI README, update/ref/uninstall flags and data folder match the script" }
+stamp = { hash = "b3:6755c92500c2c634", by = "agent:mac-install", note = "rewritten for review round 1: JStream.command in Terminal, Ctrl-C to stop, token on the clipboard two minutes then the token file, Basic sign-in with an empty Token field, prompts naming Terminal and surviving updates, keychain re-prompt per ADR-0063 §9; flags match install.sh" }
 
 ["RUNBOOK-RELEASE#cut"."body"]
 stamp = { hash = "b3:29c05a3a4731dace", by = "agent:release-thread", note = "B1 fix: ui fails unless ls-remote reports the tag absent (exit 2), publish on a dispatched run creates the tag ref via the API (422 if it exists) and then uses --verify-tag like a pushed tag; step 3 and 4 say so, steps 1-2 apply to main's head on a dispatched run; rest of the section still matches the jobs" }
@@ -5796,7 +5799,7 @@ stamp = { hash = "b3:e62d5f1a75c6baa0" }
 stamp = { hash = "b3:f3e3a293b719fe8d" }
 
 ["THREAT-MODEL#assets"."body"]
-stamp = { hash = "b3:1b375400bc84b532", by = "agent:claude-linux-daemon", note = "Re-read the stream-key row: now says Linux keeps keys in the Secret Service else the 0600 file, which the daemon uses where live on 64-bit Linux (#1016); other rows unchanged (B1)" }
+stamp = { hash = "b3:da00743a702983c5", by = "agent:mac-install", note = "control token row adds the macOS tester launcher's two-minute clipboard copy (#1093, scripts/mac/clipboard.js); other rows unchanged" }
 
 ["THREAT-MODEL#assets"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:a71c0833188b98b6", by = "agent:wave-owner", note = "Re-read after main's wave/m1-3 landing (#754) merged into wave/m3-3. This branch: the stream-keys row names the macOS Keychain, used by the daemon where it is live on macOS (#639; corrected in the merge, since the wave's row said no app used it), and ADR-0071's accepted, unbuilt Linux fallback, which R-SEC-001 now names as its one exception. Main's change: the paired-device row's browser cookie, 'once there is a TLS listener'. Holds." }
@@ -5898,7 +5901,7 @@ stamp = { hash = "b3:f3e3a293b719fe8d" }
 stamp = { hash = "b3:18c6a50ca7ccdbf6", by = "agent:acc756d9", note = "Re-read secrets: controls on main now say set_key fails where an app has no store (macOS Keychain built but unwired, Linux none); the ADR-0071 paragraph moved from proposed to accepted, nothing built, with the same risk and mitigations as the accepted ADR." }
 
 ["THREAT-MODEL#server"."body"]
-stamp = { hash = "b3:aeda0baa588bd9a8", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2 (B1): the Limits bullet says a message or body over 4 MiB up to 16 MiB is refused with too_large echoing at most a 256-byte id, so the 1024-reply backlog holds only small answers and one connection holds at most one oversized message being read, ADR-0074's accepted bound; envelope.rs builds nothing else of it." }
+stamp = { hash = "b3:ec0e6465c4cdc71b", by = "agent:mac-install", note = "Accepted adds the macOS tester launcher's clipboard copy: current-host only, concealed and transient markers, cleared after two minutes unless replaced, readable by the user's processes like the token file (#1093 scripts/mac/clipboard.js, jstream.sh); controls and gaps unchanged" }
 
 ["THREAT-MODEL#server"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (#265): the gate bullet adds that the token may be a paired device's, accepted only on loopback until TLS, and that POST /api/v1/pair is the one request answered without a token, only while a code is open; matches gate.rs (devices_allowed) and pair.rs, and R-SEC-002's added loopback-or-TLS sentence; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
