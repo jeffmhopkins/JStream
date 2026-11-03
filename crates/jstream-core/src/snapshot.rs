@@ -495,6 +495,9 @@ struct Transitioning {
     /// The cameras it moves between (ADR-0094 decision 7), from the scene it leaves (or
     /// what was on screen) to the one it shows, `None` for a 2D side.
     cameras: (Option<SceneCamera>, Option<SceneCamera>),
+    /// The camera a stinger's scene is seen through, over both sides: its own, `None`
+    /// for a 2D stinger scene or another kind.
+    overlay_camera: Option<SceneCamera>,
     /// The preset's own timing, which a moving camera follows.
     timing: Timing,
     /// Whether it is a Move, whose tracks share one moving camera; a Fade's leaving
@@ -506,8 +509,12 @@ struct Transitioning {
 impl Transitioning {
     /// The camera `track` is seen through `elapsed_ms` into the transition: a Move's
     /// tracks share the camera moving between the two ends; a Fade's leaving tracks keep
-    /// the one they leave from, and the rest take the one it shows.
+    /// the one they leave from, and the rest take the one it shows. A stinger's items
+    /// take their own scene's.
     fn camera(&self, track: &Track, elapsed_ms: f32) -> Option<SceneCamera> {
+        if matches!(track, Track::Through { .. }) {
+            return self.overlay_camera;
+        }
         let (from, to) = self.cameras;
         if !self.pairs {
             return match track {
@@ -1034,11 +1041,19 @@ fn plan_inner(
             let to_camera = planner
                 .camera(&running.to)
                 .and_then(|camera| camera.committed());
+            let overlay_camera = running
+                .run
+                .stinger
+                .as_ref()
+                .and_then(|stinger| stinger.scene.as_ref())
+                .and_then(|scene| planner.camera(scene))
+                .and_then(|camera| camera.committed());
             shot.transition = Some(Transitioning {
                 start: running.start,
                 tracks,
                 backgrounds: (from.unwrap_or(Color::TRANSPARENT), to),
                 cameras: (running.from_camera, to_camera),
+                overlay_camera,
                 timing: Timing {
                     delay_ms: 0.0,
                     duration_ms: running.run.duration_ms as f32,
@@ -4618,6 +4633,7 @@ pub(crate) mod tests {
             tracks: Vec::new(),
             backgrounds: (Color::BLACK, Color::BLACK),
             cameras: (Some(from), Some(to)),
+            overlay_camera: None,
             timing,
             pairs: true,
             end_ms: 1000.0,
@@ -4630,6 +4646,22 @@ pub(crate) mod tests {
         assert_eq!(transition.camera(&coming, 500.0), Some(to));
         transition.cameras = (Some(from), None);
         assert_eq!(transition.camera(&coming, 500.0), None);
+        // A stinger's items are seen through their own scene's camera, or none.
+        let through = Track::Through {
+            at: at(0.0),
+            appear: Effect::Fade,
+            enter: timing,
+            disappear: Effect::Fade,
+            leave: timing,
+        };
+        transition.cameras = (Some(from), Some(to));
+        assert_eq!(
+            transition.camera(&through, 500.0),
+            None,
+            "a 2D stinger scene"
+        );
+        transition.overlay_camera = Some(from);
+        assert_eq!(transition.camera(&through, 500.0), Some(from));
     }
 
     /// A scene's background is planned with it, a keyframe scene draws its parent's and
@@ -4710,6 +4742,7 @@ pub(crate) mod tests {
             tracks: Vec::new(),
             backgrounds: (Color::BLACK, Color::rgb(1.0, 0.0, 0.0)),
             cameras: (None, None),
+            overlay_camera: None,
             timing: jstream_render::transition::Timing {
                 delay_ms: 0.0,
                 duration_ms: 1000.0,

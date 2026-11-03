@@ -934,14 +934,17 @@ the incoming items (§3). Audio does not follow a transition
 yet (D29).
 
 Cameras ([ADR-0094](../../docs/adr/0094-scene-cameras.md) decision 7): each pass of a
-scene carries the scene's effective camera (a keyframe variant's override, else its
-parent's) as `Pass.camera`, and a live `scene.set_camera` value wins over it
-(`LiveParams::camera`). The switch records the camera on screen when it starts
+scene carries the cameras its effective camera comes from (its own or a keyframe
+variant's override, and a variant's parent's) as `Pass.camera`, and live
+`scene.set_camera` values resolve through them as committed ones do
+(`LiveParams::camera`): a live removal of a variant's override falls back to its
+parent's camera, and a live removal of the parent's makes its variants 2D. The switch records the camera on screen when it starts
 (`Running.from_camera`, which a switch mid-Move takes from the running Move). A Move
 between two 3D scenes interpolates the camera with the Move's own timing
 (`lerp_camera`) and draws both sides' tracks through it. A Move between a 3D scene and
 a 2D one has nothing to pair, so it runs as a Fade of the same duration, and a Fade
-keeps each side's own camera on its items.
+keeps each side's own camera on its items. A stinger's items are seen through their
+own scene's camera (`Transitioning.overlay_camera`), none for a 2D stinger scene.
 
 ### No privacy screen
 
