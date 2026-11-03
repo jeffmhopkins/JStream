@@ -248,7 +248,10 @@ with no inverse. The engine draws open gestures' source settings through it
   in place of a file; whether it is absolute on the engine's own machine, and
   whether the file can be written, is the engine's check at `output.start`. `output.set_target` on a recording or a virtual camera fails with
   `invalid_argument` (neither has an RTMP target). `output.delete` is undone by `output.create` with its kind, and
-  `output.set_target` by the previous target. `Graph::apply_with_running` is `apply`
+  `output.set_target` by the previous target. `output.set_path` (#1072) replaces a
+  recording's path, checked as in `output.create`, and fails with `invalid_argument` on
+  any other output; it is undone by the previous path, and touches the output's target
+  like `output.set_target`. `Graph::apply_with_running` is `apply`
   for an engine whose outputs in the given set are running: deleting one of them, or
   moving one to another bus, fails with `invalid_argument`, in edit order. The
   `OutputDelete` inverse also restores the output's encoder profile, video mix and bus,

@@ -5243,6 +5243,50 @@ mod cpu_pipeline {
         );
     }
 
+    /// #1072: `output.set_path` points a recording at a new file. A running recording
+    /// keeps its file; the next start writes the new one, so takes need no delete and
+    /// create.
+    #[test]
+    fn a_recording_takes_a_new_path_from_its_next_start() {
+        let dir = TempDir::new("set-path");
+        let (take1, take2) = (dir.join("take1.mp4"), dir.join("take2.mp4"));
+        let fakes = fakes();
+        let (engine, control, mut events) = recording_engine(&fakes, cpu_draw(), &take1);
+        drain(&mut events);
+        let record = |on| block_on(control.call(output_call("rec", on)));
+        let media = || {
+            pump_until(&fakes.clock, &fakes.audio, || {
+                engine
+                    .output_stats()
+                    .is_some_and(|stats| stats.video_subscriber.delivered >= 10)
+            })
+        };
+
+        record(true).expect("first start");
+        assert!(media(), "media never reached the first take");
+        batch(
+            &control,
+            edits(vec![Edit::OutputSetPath {
+                output_id: OutputId::new("rec"),
+                path: take2.to_str().expect("a UTF-8 temp path").into(),
+            }]),
+        )
+        .expect("output.set_path while recording");
+        assert!(
+            dir.join("take1.mp4.part").exists() && !dir.join("take2.mp4.part").exists(),
+            "the running recording keeps its file"
+        );
+        record(false).expect("first stop");
+        assert!(take1.exists() && !take2.exists());
+
+        record(true).expect("second start, with the first take still there");
+        assert!(dir.join("take2.mp4.part").exists());
+        assert!(media(), "media never reached the second take");
+        record(false).expect("second stop");
+        assert!(take1.exists() && take2.exists());
+        assert_eq!(boxes(&std::fs::read(&take2).expect("take 2"))[0], "ftyp");
+    }
+
     /// A recording never overwrites: a start whose path is taken fails with
     /// `action_failed`, settles `failed`, and leaves the existing file as it was.
     #[test]
