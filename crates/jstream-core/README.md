@@ -635,7 +635,8 @@ settings, and the CLAP kinds' parameter defaults), `png`
 [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), `thiserror`
 (`SourceFrameError`), `futures-core` (the `Stream` trait of event streams),
 `arc-swap` (the published render snapshot and the mixer thread's list of bus and
-source scopes), `tracing` (see *Logging*) and, on Windows only,
+source scopes), `blake3` (the digests a quarantine keeps of each blamed
+shader, ADR-0097; already in the tree through `jstream-server`), `tracing` (see *Logging*) and, on Windows only,
 `jstream-platform-windows` (`create_private_file` and `check_private_file` for the audit
 log and the collection file, `src/private_file.rs`; the GPU capture hardware test,
 `src/tests/windows_gpu.rs`, compiled only with this crate's `hw-tests` feature, uses it
@@ -1117,8 +1118,16 @@ kind stays in `kind.list`, marked `quarantined`, and is left out of the effects 
 read, so its filters are bypassed. The quarantine is kept in `quarantine.json` in the
 packs folder (`QUARANTINE_FILE`; the watcher reads only sub-folders), not in the
 collection, so it isn't undoable and survives restarts; editing the pack doesn't lift
-it, and a file that can't be read quarantines nothing. Only `effect.enable` lifts it,
-for the kind and its pack, run before the collection lock is taken. The engine then
+it, and a file that can't be read quarantines nothing. It follows the shader too
+([ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md) decision 6): a blamed
+kind's entry keeps the BLAKE3 digest of each WGSL module it drew (the prelude, header
+and shader of an effect; each pass of a shader source), and any loaded kind that draws
+one of them is quarantined, under whatever pack or kind ID. A kind quarantined in a file
+from before that gains its digests when its pack loads. Only blamed kinds keep digests: the other
+kinds of a pack quarantined whole after a second blame are held by its pack ID alone,
+so a copy of that pack under another ID draws them (only the blamed one stays off). Only `effect.enable` lifts it,
+for the kind and its pack and for every entry whose digests the kind draws, run before
+the collection lock is taken. The engine then
 sends `gpu.device_lost` with the cause, the blamed and quarantined kinds, and whether
 it is recovering. The GPU-time guard of #349 is not built.
 **Shader sources** (`pack_source.rs`, `chain.rs`,
