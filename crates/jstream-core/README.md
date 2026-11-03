@@ -336,7 +336,7 @@ state machine. Contents:
   below).
 - **Tests** (`tests.rs`, `src/tests/history.rs`, `src/tests/live_values.rs`,
   `src/tests/audio.rs`, `src/tests/audio_routing.rs`, `src/tests/sources.rs`,
-  `src/tests/transitions.rs`, `tests/mcp.rs`,
+  `src/tests/transitions.rs`, `src/tests/fonts.rs`, `tests/mcp.rs`,
   `tests/scenarios.rs`):
   the protocol rules through `InProcessControl`, undo and redo across two clients
   (conflicts, `expected_rev`, idempotency, the limit, a running output, a session's
@@ -704,6 +704,10 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
 - **`capture.targets`** lists the platform capture backend's displays, then its
   windows, with no engine lock held, since listing windows calls the OS. With no
   backends it answers `action_failed`, and so it does when the OS refuses the list.
+- **`font.list`** ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)) reads the OS's font folders
+  (`jstream_sources::installed_fonts`) on the first call, with no engine lock held, and
+  keeps the list in `Shared` for the engine's life (`tests/fonts.rs`, with a folder of
+  its own through the test-only `with_font_dirs`).
 - **YouTube** actions and queries (`youtube.*`) run with no engine lock held, since
   most call the Live API (see *YouTube* under *Outputs*). Without `with_youtube`,
   YouTube's API features are off: `youtube.status` answers `unavailable` and the others
@@ -717,8 +721,8 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
 The engine's answers are the mock's for the differential script: `tests.rs` runs one
 script of calls against both and compares results, error codes and fields, and events.
 That script does not call `video.snapshot`. The mock has no compositor and answers it
-with `internal`, so the two are not compared. Nor does it call `capture.targets`,
-which the mock answers with a made-up display and window. It does send the folder, label and
+with `internal`, so the two are not compared. Nor does it call `capture.targets` or `font.list`,
+which the mock answers with a made-up display and window, and made-up fonts. It does send the folder, label and
 metadata edits ([ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4): each
 refusal (a scene's missing label too), the in-use deletes, the reads, undo and redo,
 and a filed, labelled scene's and a labelled source's delete, which the test checks applies, undone with their metadata;

@@ -84,6 +84,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("bus.list", Class(R)),
     ("delete.plan", Class(R)),
     ("capture.targets", Class(R)),
+    ("font.list", Class(R)),
     ("privacy.get", Class(R)),
     // The pixels of a user's capture could leak through any granted host; with no
     // filesystem grant there is nowhere safe for them.
