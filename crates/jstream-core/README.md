@@ -236,6 +236,10 @@ state machine. Contents:
   that shows one of those scenes plans it again in full, chain and boxes, since the
   mixes are planned after the transition (#961). A switch mid-Move
   holds the children where they are on screen and moves them on from there.
+  A scene with a camera ([ADR-0094](../../docs/adr/0094-scene-cameras.md)) is planned
+  with it on its pass (`Pass.camera`, the variant's override or its parent's, a live
+  value winning), and every item it draws carries it to the compositor; a Move between
+  two 3D scenes moves the camera too (*Transitions* in [Design](#design)).
   `Shot::chain_cost` is what its
   scene chains, item effects and, for the running outputs, output stage add to each
   frame, for `stats.tick`'s `chains`.
@@ -917,6 +921,16 @@ two sides planned for it, with their chains and boxes, are dropped when no track
 them; a switch mid-Move holds them where `on_screen` finds them. Stagger delays only
 the incoming items (§3). Audio does not follow a transition
 yet (D29).
+
+Cameras ([ADR-0094](../../docs/adr/0094-scene-cameras.md) decision 7): each pass of a
+scene carries the scene's effective camera (a keyframe variant's override, else its
+parent's) as `Pass.camera`, and a live `scene.set_camera` value wins over it
+(`LiveParams::camera`). The switch records the camera on screen when it starts
+(`Running.from_camera`, which a switch mid-Move takes from the running Move). A Move
+between two 3D scenes interpolates the camera with the Move's own timing
+(`lerp_camera`) and draws both sides' tracks through it. A Move between a 3D scene and
+a 2D one has nothing to pair, so it runs as a Fade of the same duration, and a Fade
+keeps each side's own camera on its items.
 
 ### No privacy screen
 

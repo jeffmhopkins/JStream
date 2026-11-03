@@ -116,6 +116,7 @@ fn blended(images: &[Image], blend: BlendMode) -> Vec<Item<'_>> {
                 opacity: 0.8,
                 blend,
                 visible: true,
+                camera: None,
             }
         })
         .collect()

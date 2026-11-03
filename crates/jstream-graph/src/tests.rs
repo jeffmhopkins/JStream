@@ -1328,7 +1328,7 @@ mod property {
         let owner = |source: String| jstream_protocol::FilterOwner::Source {
             source_id: SourceId::new(source),
         };
-        match rng.below(69) {
+        match rng.below(70) {
             0 => scene_create(&pool(rng, "s")),
             1 => Edit::SceneRename {
                 scene_id: SceneId::new(scene(rng)),
@@ -1792,6 +1792,23 @@ mod property {
                     .map(|_| bus(rng))
                     .collect(),
             },
+            // Sometimes none, and sometimes at its own target, which is refused.
+            68 => Edit::SceneSetCamera {
+                scene_id: SceneId::new(scene(rng)),
+                camera: match rng.below(3) {
+                    0 => None,
+                    1 => Some(jstream_protocol::SceneCamera::framing(
+                        jstream_protocol::Canvas::DEFAULT,
+                    )),
+                    _ => {
+                        let mut at = jstream_protocol::SceneCamera::framing(
+                            jstream_protocol::Canvas::DEFAULT,
+                        );
+                        at.target = at.position;
+                        Some(at)
+                    }
+                },
+            },
             _ => Edit::CanvasSetSize {
                 width: u32::try_from(rng.below(3000)).expect("fits"),
                 height: 720,
@@ -1920,6 +1937,7 @@ mod property {
             "scene.set_folder",
             "scene.set_meta",
             "scene.set_options",
+            "scene.set_camera",
             "label.create",
             "label.update",
             "label.reorder",
@@ -4058,6 +4076,7 @@ fn item_add_takes_opacity_and_blend_and_remove_restores_them() {
     assert_eq!(g.state(), &before);
 }
 
+mod cameras;
 mod filters;
 mod keyframes;
 

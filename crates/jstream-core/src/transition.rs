@@ -24,8 +24,8 @@ use std::sync::Arc;
 use jstream_graph::Graph;
 use jstream_media::MediaTime;
 use jstream_protocol::{
-    Easing, EntityKind, FADE, Glide, ItemId, ItemTransition, MOVE, ProtocolError, SceneId,
-    Settings, SourceId, TransitionEffect, TransitionPresetId, TransitionStarted,
+    Easing, EntityKind, FADE, Glide, ItemId, ItemTransition, MOVE, ProtocolError, SceneCamera,
+    SceneId, Settings, SourceId, TransitionEffect, TransitionPresetId, TransitionStarted,
 };
 use jstream_render::transition::{Effect, Endpoint, Timing, Track};
 
@@ -72,7 +72,10 @@ pub(crate) fn resolve(
     };
     // `cut`, and any kind this engine can't run (a pack that isn't installed), cut.
     let pairs = match preset.kind() {
-        MOVE => true,
+        // A Move between a 3D scene and a 2D one has no one space to move in, so it
+        // fades (ADR-0094 decision 7).
+        MOVE => from
+            .is_none_or(|from| camera_of(graph, from).is_some() == camera_of(graph, to).is_some()),
         FADE => false,
         _ => return Ok((id, None)),
     };
@@ -150,6 +153,9 @@ pub(crate) struct Running {
     /// Whether it switches between members of one family, so `move` pairs by item
     /// (ADR-0049 §3).
     pub(crate) by_item: bool,
+    /// The camera it moves from (ADR-0094 decision 7): the scene it leaves's, or the one
+    /// on screen when it cut a transition short. `None` from a 2D scene.
+    pub(crate) from_camera: Option<SceneCamera>,
 }
 
 impl Running {
@@ -157,6 +163,36 @@ impl Running {
     pub(crate) fn elapsed_ms(&self, at: MediaTime) -> f32 {
         elapsed_ms(self.start, at)
     }
+
+    /// The camera on screen at `at` (ADR-0094 decision 7), for a switch that cuts this
+    /// one short: a Move's moving camera, else the camera of the scene it shows.
+    pub(crate) fn camera_at(&self, graph: &Graph, at: MediaTime) -> Option<SceneCamera> {
+        let to = camera_of(graph, &self.to)?;
+        match self.from_camera {
+            Some(from) if self.run.pairs => {
+                let timing = Timing {
+                    delay_ms: 0.0,
+                    duration_ms: self.run.duration_ms as f32,
+                    easing: self.run.easing,
+                };
+                Some(jstream_render::transition::lerp_camera(
+                    &from,
+                    &to,
+                    timing.progress(self.elapsed_ms(at)),
+                ))
+            }
+            _ => Some(to),
+        }
+    }
+}
+
+/// The camera scene `id` draws through (ADR-0094): its own, or a keyframe scene's
+/// parent's. `None` for a 2D scene or a scene that doesn't exist.
+pub(crate) fn camera_of(graph: &Graph, id: &SceneId) -> Option<SceneCamera> {
+    let state = graph.state();
+    state
+        .scene(id)
+        .and_then(|scene| state.effective_camera(scene))
 }
 
 /// Milliseconds from `start` to `at`, on the same clock.
@@ -352,6 +388,63 @@ mod tests {
     };
     use jstream_render::Crop;
     use jstream_render::transition::{Effect, Endpoint, Track};
+
+    /// A Move between a 3D scene and a 2D one runs as a Fade; between two 3D scenes, or
+    /// two 2D ones, it moves (ADR-0094 decision 7).
+    #[test]
+    fn a_move_between_3d_and_2d_fades() {
+        use jstream_graph::Graph;
+        use jstream_protocol::{Canvas, Edit, SceneCamera, SceneId, Settings};
+
+        let scene = |id: &str| Edit::SceneCreate {
+            scene_id: SceneId::new(id),
+            name: id.into(),
+            role: None,
+        };
+        let camera = |id: &str| Edit::SceneSetCamera {
+            scene_id: SceneId::new(id),
+            camera: Some(SceneCamera::framing(Canvas::DEFAULT)),
+        };
+        let mut graph = Graph::default();
+        graph
+            .apply(
+                &[
+                    scene("flat"),
+                    scene("flat2"),
+                    scene("set"),
+                    scene("set2"),
+                    camera("set"),
+                    camera("set2"),
+                    Edit::TransitionCreate {
+                        preset_id: TransitionPresetId::new("glide"),
+                        name: "Glide".into(),
+                        kind: "move".into(),
+                        duration_ms: 600,
+                        easing: Easing::EaseOut,
+                        settings: Settings::new(),
+                    },
+                ],
+                None,
+            )
+            .expect("edits");
+        let pairs = |from: &str, to: &str| {
+            let named = TransitionPresetId::new("glide");
+            super::resolve(
+                &graph,
+                Some(&SceneId::new(from)),
+                &SceneId::new(to),
+                Some(&named),
+            )
+            .expect("resolves")
+            .1
+            .expect("runs")
+            .pairs
+        };
+        assert!(pairs("set", "set2"));
+        assert!(pairs("flat", "flat2"));
+        assert!(!pairs("set", "flat"));
+        assert!(!pairs("flat", "set"));
+    }
 
     fn plan(from: &[Visual], to: &[Visual], run: &Run, by_item: bool) -> Planned {
         super::plan(from, to, run, by_item).0

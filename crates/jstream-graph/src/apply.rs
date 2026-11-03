@@ -403,6 +403,9 @@ fn apply_edit(
     if let Some(applied) = crate::organise::apply(state, edit, at) {
         return applied;
     }
+    if let Some(applied) = crate::camera::apply(state, edit, at) {
+        return applied;
+    }
     match edit {
         Edit::SceneCreate {
             scene_id,
@@ -423,6 +426,7 @@ fn apply_edit(
                 folder: None,
                 meta: SceneMeta::default(),
                 options: SceneOptions::default(),
+                camera: None,
                 items: Vec::new(),
                 variant_of: None,
                 overrides: crate::model::Overrides::new(),
@@ -510,6 +514,12 @@ fn apply_edit(
                 inverse.push(Edit::SceneSetOptions {
                     scene_id: scene.id.clone(),
                     options: scene.options.clone(),
+                });
+            }
+            if scene.camera.is_some() {
+                inverse.push(Edit::SceneSetCamera {
+                    scene_id: scene.id.clone(),
+                    camera: scene.camera,
                 });
             }
             inverse.extend(crate::filter::restore_scene(&scene));

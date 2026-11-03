@@ -3174,6 +3174,7 @@ impl State {
                 state.item(item_id).is_some() && keyframe.is_none_or(|id| is_keyframe(state, id))
             },
             |source_id| state.source(source_id).is_some(),
+            |scene_id| state.scene(scene_id).is_some(),
         ) {
             self.publish_live();
             if self.refresh_shown() {
@@ -3366,6 +3367,10 @@ impl State {
             (Some(run), Some(from_scene)) => {
                 let state = self.graph.state();
                 let by_item = state.family_of(&from_scene) == state.family_of(&scene_id);
+                let from_camera = match self.studio.running() {
+                    Some(running) => running.camera_at(&self.graph, now),
+                    None => transition::camera_of(&self.graph, &from_scene),
+                };
                 let from = match self.studio.running() {
                     Some(running) => {
                         let Self {
@@ -3396,6 +3401,7 @@ impl State {
                     start: now,
                     run,
                     by_item,
+                    from_camera,
                 })
             }
             // Nothing on program yet: there is nothing to transition from.

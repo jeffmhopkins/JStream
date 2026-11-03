@@ -12,8 +12,8 @@ use std::io::Write;
 
 use jstream_media::FrameSize;
 use jstream_protocol::{
-    CanvasPoint, ContentRect, Crop as ProtocolCrop, Finite32, FitMode, ItemGeometry, NEAR_W,
-    Placed, Size, Vec2,
+    CameraView, CanvasPoint, ContentRect, Crop as ProtocolCrop, Finite32, FitMode, ItemGeometry,
+    NEAR_W, Placed, SceneCamera, Size, Vec2, Vec3,
 };
 
 use super::{item, open};
@@ -134,15 +134,17 @@ fn content(geometry: ItemGeometry, size: u32, crop: Crop) -> ContentRect {
         .expect("pixels")
 }
 
-/// What `geometry` shows at a canvas point, in linear light, or `None` outside it.
+/// What `geometry` shows at a canvas point, seen through `view` in a 3D scene, in
+/// linear light, or `None` outside it.
 fn sample(
     geometry: ItemGeometry,
+    view: Option<&CameraView>,
     content: &ContentRect,
     at: CanvasPoint,
     texels: &Texels,
     crop: Crop,
 ) -> Option<[f32; 3]> {
-    let local = geometry.unplace(at).expect("valid")?;
+    let local = geometry.unplace_seen(view, at).expect("valid")?;
     let (half_w, half_h) = (
         geometry.size.width.get() * 0.5,
         geometry.size.height.get() * 0.5,
@@ -155,12 +157,38 @@ fn sample(
     if !inside_box || !inside_content {
         return None;
     }
-    let vertex = geometry.drawn_vertex(content, local).expect("valid")?;
+    let vertex = geometry
+        .drawn_vertex_seen(view, content, local)
+        .expect("valid")?;
     debug_assert!(vertex.w >= NEAR_W);
     Some(texels.bilinear(vertex.uv[0], vertex.uv[1], crop))
 }
 
 fn reference(items: &[ItemGeometry], texels: &Texels, n: u32, crop: Crop) -> Reference {
+    reference_seen(items, None, texels, n, crop)
+}
+
+/// [`reference`] for a 3D scene with `camera` (ADR-0094): every item seen through it,
+/// far to near when it sorts.
+fn reference_seen(
+    items: &[ItemGeometry],
+    camera: Option<SceneCamera>,
+    texels: &Texels,
+    n: u32,
+    crop: Crop,
+) -> Reference {
+    let view = camera.map(|camera| {
+        camera
+            .view(jstream_protocol::Canvas {
+                width: WIDTH,
+                height: HEIGHT,
+            })
+            .expect("a valid camera")
+    });
+    let mut items = items.to_vec();
+    if let Some(view) = view.as_ref().filter(|view| view.depth_sort()) {
+        items.sort_by(|a, b| view.depth_of(*b).total_cmp(&view.depth_of(*a)));
+    }
     let contents: Vec<ContentRect> = items
         .iter()
         .map(|g| content(*g, texels.size, crop))
@@ -184,7 +212,8 @@ fn reference(items: &[ItemGeometry], texels: &Texels, n: u32, crop: Crop) -> Ref
                     let mut hit = false;
                     // Stacking order: the last item that shows a sample is the one seen.
                     for (geometry, content) in items.iter().zip(&contents) {
-                        if let Some(c) = sample(*geometry, content, at, texels, crop) {
+                        if let Some(c) = sample(*geometry, view.as_ref(), content, at, texels, crop)
+                        {
                             color = c;
                             hit = true;
                         }
@@ -233,9 +262,23 @@ fn draw(
     image: &Image,
     crop: Crop,
 ) -> Snapshot {
+    draw_seen(compositor, items, None, image, crop)
+}
+
+/// [`draw`] in a 3D scene with `camera` (ADR-0094).
+fn draw_seen(
+    compositor: &mut crate::Compositor,
+    items: &[ItemGeometry],
+    camera: Option<SceneCamera>,
+    image: &Image,
+    crop: Crop,
+) -> Snapshot {
     let scene_items: Vec<_> = items
         .iter()
-        .map(|g| item(image, Placement::Geometry(*g), crop, 1.0))
+        .map(|g| crate::Item {
+            camera,
+            ..item(image, Placement::Geometry(*g), crop, 1.0)
+        })
         .collect();
     let [r, g, b] = BACKGROUND.map(|c| f32::from(c) / 255.0);
     let scene = Scene {
@@ -948,4 +991,159 @@ fn a_frame_of_the_most_extreme_accepted_3d_items_renders() {
                 .unwrap_or_else(|err| panic!("{width}x{height} {chunk:?}: {err}"));
         }
     }
+}
+
+/// A camera on the 240×136 test canvas: from `position`, looking at `target`.
+fn camera(position: (f32, f32, f32), target: (f32, f32, f32), fov: f32) -> SceneCamera {
+    SceneCamera {
+        position: Vec3::new(position.0, position.1, position.2).expect("finite"),
+        target: Vec3::new(target.0, target.1, target.2).expect("finite"),
+        fov_deg: Finite32::new(fov).expect("finite"),
+        roll_deg: Finite32::ZERO,
+        depth_sort: true,
+    }
+}
+
+/// ADR-0094: flat items seen through the framing camera draw where they draw in a 2D
+/// scene, so switching a scene to 3D moves nothing.
+#[test]
+fn golden_camera_framing_draws_flat_items_on_their_2d_boxes() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let rgba = pattern(SOURCE);
+    let image = opened
+        .compositor
+        .upload_rgba8(SOURCE, SOURCE, &rgba)
+        .expect("the pattern uploads");
+    let items = [
+        geometry((70.0, 50.0), (80.0, 60.0), 0.0, 0.0, 0.0, 0.0, None),
+        geometry((160.0, 80.0), (90.0, 70.0), 20.0, 0.0, 0.0, 0.0, None),
+    ];
+    let framing = SceneCamera::framing(jstream_protocol::Canvas {
+        width: WIDTH,
+        height: HEIGHT,
+    });
+    let flat = draw(&mut opened.compositor, &items, &image, Crop::NONE);
+    let seen = draw_seen(
+        &mut opened.compositor,
+        &items,
+        Some(framing),
+        &image,
+        Crop::NONE,
+    );
+    let want = reference(&items, &Texels::new(&rgba, SOURCE), 8, Crop::NONE);
+    check("framing interior", error(&seen, &want, interior), 3.0, 40.0);
+    // The same pixels as the 2D scene inside the items, up to sampling.
+    let mut differ = 0;
+    for (i, coverage) in want.coverage.iter().enumerate() {
+        let (x, y) = (i as u32 % WIDTH, i as u32 / WIDTH);
+        let (a, b) = (flat.pixel(x, y).expect("in"), seen.pixel(x, y).expect("in"));
+        let far = (0..3).any(|c| a[c].abs_diff(b[c]) > 48);
+        if *coverage >= 0.999 && far {
+            differ += 1;
+        }
+    }
+    assert!(differ < 40, "{differ} interior pixels moved");
+}
+
+/// ADR-0094: a set seen from off its axis, a back wall and a floor, perspective-correct
+/// against the CPU reference through the same camera.
+#[test]
+fn golden_camera_an_off_axis_set_is_perspective_correct() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let rgba = pattern(SOURCE);
+    let items = [
+        // The back wall, pushed away.
+        geometry((120.0, 60.0), (150.0, 90.0), 0.0, 0.0, 0.0, -120.0, None),
+        // The floor, flat, reaching toward the camera.
+        geometry((120.0, 105.0), (150.0, 220.0), 0.0, 90.0, 0.0, -10.0, None),
+    ];
+    let seen = camera((40.0, 20.0, 260.0), (120.0, 80.0, -60.0), 50.0);
+    let image = opened
+        .compositor
+        .upload_rgba8(SOURCE, SOURCE, &rgba)
+        .expect("the pattern uploads");
+    let got = draw_seen(
+        &mut opened.compositor,
+        &items,
+        Some(seen),
+        &image,
+        Crop::NONE,
+    );
+    let want = reference_seen(
+        &items,
+        Some(seen),
+        &Texels::new(&rgba, SOURCE),
+        16,
+        Crop::NONE,
+    );
+    // The floor is minified toward the horizon, as in scenario C, so the bound is C's
+    // kind rather than A's; a wrong projection misses by tens of steps.
+    check("set interior", error(&got, &want, interior), 6.0, 40.0);
+    check("set all", error(&got, &want, all), 6.0, 60.0);
+}
+
+/// ADR-0094 decision 4: a 3D scene draws far to near whatever the stacking order, and
+/// with `depth_sort` off in stacking order.
+#[test]
+fn golden_camera_items_draw_far_to_near() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let near_rgba = pattern(SOURCE);
+    let far_rgba: Vec<u8> = near_rgba
+        .chunks_exact(4)
+        .flat_map(|_| [30, 200, 60, 255])
+        .collect();
+    let compositor = &mut opened.compositor;
+    let near_image = compositor
+        .upload_rgba8(SOURCE, SOURCE, &near_rgba)
+        .expect("uploads");
+    let far_image = compositor
+        .upload_rgba8(SOURCE, SOURCE, &far_rgba)
+        .expect("uploads");
+    let near = geometry((120.0, 68.0), (60.0, 60.0), 0.0, 0.0, 0.0, 40.0, None);
+    let far = geometry((120.0, 68.0), (160.0, 110.0), 0.0, 0.0, 0.0, -80.0, None);
+    let mut seen = camera((120.0, 68.0, 300.0), (120.0, 68.0, 0.0), 45.0);
+    let centre = |seen: SceneCamera, compositor: &mut crate::Compositor| {
+        // The near item is first in stacking order, so the far one is on top of it.
+        let items = [
+            crate::Item {
+                camera: Some(seen),
+                ..item(&near_image, Placement::Geometry(near), Crop::NONE, 1.0)
+            },
+            crate::Item {
+                camera: Some(seen),
+                ..item(&far_image, Placement::Geometry(far), Crop::NONE, 1.0)
+            },
+        ];
+        let scene = Scene {
+            canvas: FrameSize::new(WIDTH, HEIGHT).expect("non-zero"),
+            background: Color::rgb(0.0, 0.0, 0.0),
+            items: &items,
+        };
+        compositor
+            .render(&scene, true)
+            .expect("renders")
+            .pixels()
+            .expect("readback")
+            .pixel(WIDTH / 2 + 3, HEIGHT / 2 + 3)
+            .expect("inside")
+    };
+    let sorted = centre(seen, compositor);
+    assert_ne!(
+        sorted[..3],
+        [30, 200, 60],
+        "the near item is drawn over the far one"
+    );
+    seen.depth_sort = false;
+    let stacked = centre(seen, compositor);
+    assert_eq!(
+        stacked[..3],
+        [30, 200, 60],
+        "stacking order puts the far item on top"
+    );
 }

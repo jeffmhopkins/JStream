@@ -178,6 +178,12 @@ pub struct Item<'a> {
     pub blend: BlendMode,
     /// When false, the item is not drawn and its frame sync is not staged.
     pub visible: bool,
+    /// The camera of the 3D scene the item is in (ADR-0094), or `None` in a 2D scene.
+    /// Through one, a geometry item is placed in the scene's 3D space and seen through
+    /// it, its own `perspective_px` ignored; a legacy placement is drawn as in a 2D scene
+    /// and sorts as if at the canvas centre. The items of one scene carry the same
+    /// camera, so a transition can draw two scenes' items, each through its own.
+    pub camera: Option<jstream_protocol::SceneCamera>,
 }
 
 /// One scene: a canvas, its clear colour, and items bottom-first.
@@ -187,7 +193,9 @@ pub struct Scene<'a> {
     pub canvas: FrameSize,
     /// Clear colour, straight sRGB, drawn under every item.
     pub background: Color,
-    /// Stacking order. The first item is at the bottom.
+    /// Stacking order. The first item is at the bottom. Each run of consecutive items
+    /// seen through the same camera that sorts ([`Item::camera`]) draws far to near
+    /// instead, equal depths keeping stacking order (ADR-0094 decision 4).
     pub items: &'a [Item<'a>],
 }
 

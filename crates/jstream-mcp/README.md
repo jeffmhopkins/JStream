@@ -143,8 +143,11 @@ recipes for a lower third and a ticker (`scroll` with a negative speed and a `ga
 grouping a multi-part graphic as a nested scene whose item's
 effects clip and shadow it as one, fitting an item to its text's `source.sizes`,
 animating with keyframe scenes, a `move` preset, crop reveals and staggered
-`delay_ms`, and checking each step with `video.snapshot` (building on preview when a
-scene is on air).
+`delay_ms`, 3D sets through `scene.set_camera` (starting from the framing camera,
+floors and walls by tilt, turn and `depth_px`, camera moves animated by keyframe
+scenes, and flat overlays in a 2D scene above the set,
+[ADR-0094](../../docs/adr/0094-scene-cameras.md)), and checking each step with
+`video.snapshot` (building on preview when a scene is on air).
 It names engine kinds and settings, which this crate doesn't link, so a renamed setting
 must be renamed here too. Tested by `instructions_carry_the_design_guidance`.
 

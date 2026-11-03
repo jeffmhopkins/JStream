@@ -472,6 +472,7 @@ mod tests {
             overrides: Vec::new(),
             items,
             filters: Default::default(),
+            camera: None,
         }
     }
 

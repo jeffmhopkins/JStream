@@ -37,7 +37,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `LiveOutcome` (`committed`, `cancelled`, `expired`), `GestureInfo` (one open gesture
   in a `live.list` result), the limits `MAX_GESTURES_PER_CLIENT` (16) and
   `MAX_LIVE_VALUES` (256), and `is_live_adjustable`, which says which setters `live.set`
-  takes (`item.set_transform`, `item.set_geometry`, `item.set_crop`, `source.set_settings`), so every
+  takes (`item.set_transform`, `item.set_geometry`, `item.set_crop`, `source.set_settings`,
+  `scene.set_camera`), so every
   implementation agrees.
 - **Commands** (`command.rs`): `Edit` (`scene.create`, `scene.create_variant`,
   `scene.rename`, `scene.delete`,
@@ -56,7 +57,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `hotkey.clear`, `transition.create`, `transition.update`, `transition.delete`,
   `transition.set_default`, `scene.set_transitions`, `item.set_transition`,
   `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
-  `folder.delete`, `scene.set_folder`, `scene.set_meta`, `scene.set_options`, `label.create`,
+  `folder.delete`, `scene.set_folder`, `scene.set_meta`, `scene.set_options`,
+  `scene.set_camera`, `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `source.set_meta`), with
   `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole` and `BlendMode`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
@@ -120,7 +122,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `MAX_ACTIVITY_SUMMARY_CHARS`). `state.get` carries the `Canvas`, and
   `ItemInfo`
   the item's `placement` form and its `geometry`, `SceneInfo` a scene's transition
-  overrides, `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
+  overrides and its `camera` (since 0.70; on a keyframe scene its own override), `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
   returns the program mix as a PNG. `youtube.status`, `youtube.list_broadcasts` and
   `youtube.list_streams` read the YouTube account, and `youtube.stats` the running
   `youtube` outputs' audience and the day's quota estimate.
@@ -189,11 +191,19 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   neutral. `content` maps a cropped source with `stretch`, `fit` or `fill`, and
   `flip_h` and `flip_v` mirror it in the box. `drawn_polygon` and `unplace` are
   ADR-0050's 3D polygon and inverse map, and `check_drawable` whether an edit may store
-  a geometry ([Item geometry](#design)).
+  a geometry ([Item geometry](#design)). `geometry/camera.rs` holds the scene camera
+  ([ADR-0094](../../docs/adr/0094-scene-cameras.md)): `Vec3`, `SceneCamera` with
+  `framing(canvas)`, the camera that puts every flat item on its 2D box, and `validate`,
+  and `CameraView`, the camera seen on one canvas. `drawn_polygon_seen`, `unplace_seen`,
+  `drawn_vertex_seen` and `project_seen` take an optional view, and with one place the
+  item by its geometry in the scene's space through the camera (`w = D / f`, the same
+  near plane); with none they are the functions above.
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.68 because of the
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.70 because of
+  `scene.set_camera` and `SceneInfo.camera`, a live value too
+  ([ADR-0094](../../docs/adr/0094-scene-cameras.md)); 0.68 because of the
   `font.list` query ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)); 0.67 because `live.set`
   takes a source's settings whose kind marks them `live` (`source.set_settings`,
   [ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)); 0.66 because
@@ -901,7 +911,19 @@ none, which is transparent), `#rrggbb` or `#rrggbbaa` with straight alpha, drawn
 scene's items wherever it is drawn, though never for a group (`parse_rgba` reads it). `scene.set_options` replaces them all the
 same way, a keyframe scene has its own except a background, which it shows from its
 parent and is refused, and `state.get` reports them flattened beside the scene's other
-fields, each omitted while it has its default. Other colours are sRGB `#rrggbb`;
+fields, each omitted while it has its default. A scene's **camera**
+(`scene.set_camera {scene_id, camera?}`, since 0.70,
+[ADR-0094](../../docs/adr/0094-scene-cameras.md)) makes it a 3D scene: `SceneCamera`'s
+`position` and `target` (`Vec3`, scene pixels, x right, y down, z toward the viewer),
+`fov_deg` (vertical, 1 to 170, default 45), `roll_deg` (default 0) and `depth_sort`
+(default `true`, not written while true). A camera omitted removes it. The edit refuses a
+field of view out of range (`edits.N.camera.fov_deg`), a coordinate past the drawable
+limit (`edits.N.camera`) and a position closer than 0.001 px to the target
+(`edits.N.camera.target`). On a keyframe scene it sets the variant's override, refused
+while its parent has no camera; removing the parent's camera drops its variants'
+overrides, and its inverse restores them. `SceneInfo.camera` reports the scene's own
+camera, on a keyframe scene its override (it shows its parent's where it has none), and
+is omitted when there is none. It is live-adjustable. Other colours are sRGB `#rrggbb`;
 an icon is an opaque name from the UI's icon set, checked only for its length (1 to 64
 bytes). A folder that holds a scene or folder, and a label a source or scene carries, can't
 be deleted: the `invalid_argument` lists the `blockers` (`folder`, `parent` or `labels`;
@@ -1277,7 +1299,10 @@ named by a `gesture_id` it chooses, and sends its values as it goes:
   the parameters its kind marks `live` (anything else is `values.<n>.patch.<param>`):
   the engine draws the collection with those values applied, rebuilding the render
   snapshot, and each parameter of each source is a parameter of its own
-  ([ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)). Audio faders
+  ([ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)). Since 0.70
+  `scene.set_camera` is one too, one parameter per scene, so an orbit drag moves a 3D
+  scene's camera every frame and commits once
+  ([ADR-0094](../../docs/adr/0094-scene-cameras.md)). Audio faders
   follow as their real-time path exists. Values are checked as a batch's edits are, named
   `values.<n>.<field>`. Any other edit (`values.<n>.type`), an empty list, more than 256
   values, or a 17th open gesture of the client is `invalid_argument`, and nothing in the
@@ -1699,6 +1724,14 @@ function in this crate so the compositor and the UI share one implementation.
   behind the viewer. With the 3D fields neutral this is rotation about the box centre
   in the canvas plane. Depth alone, with no perspective, does not move the orthographic
   projection.
+- In a scene with a camera (ADR-0094) the same box is a pose in the scene's space:
+  `(center.x, center.y, depth_px)` its position, the three angles its orientation, and
+  `perspective_px` ignored. `project_seen`, `drawn_polygon_seen` and `unplace_seen`
+  take the camera's `CameraView` and build ADR-0050's homogeneous map with `w = D / f`
+  (`D` the distance along the viewing axis, `f = (H / 2) / tan(fov / 2)`), so the near
+  plane and the polygon clipping are the same. The picture's up is −y, or −z within
+  0.01° of looking straight up or down. Through `SceneCamera::framing` an item with
+  neutral 3D lands exactly on its 2D box.
 - `content` maps a cropped source into that local frame, before the placement above.
   `stretch` fills the box. `fit` is the largest rectangle of the source's aspect ratio
   inside the box, centred, and the rest stays transparent. `fill` is the smallest such

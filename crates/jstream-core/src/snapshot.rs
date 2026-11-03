@@ -31,10 +31,10 @@ use jstream_media::{FrameSize, MediaTime, PixelFormat, Rounding, VideoFrame};
 use jstream_platform::{ContextKey, GpuFrame};
 use jstream_protocol::{
     BlendMode, Canvas, ChainCost, Crop as ProtocolCrop, Edit, FilterChain, Glide, ItemGeometry,
-    ItemId, ItemTransition, OutputId, OutputKind, ProtocolError, QueryResult, Rev, SceneId,
-    SceneRole, SourceId, SourceKind, VideoMixId,
+    ItemId, ItemTransition, OutputId, OutputKind, ProtocolError, QueryResult, Rev, SceneCamera,
+    SceneId, SceneRole, SourceId, SourceKind, VideoMixId,
 };
-use jstream_render::transition::{Endpoint, Track};
+use jstream_render::transition::{Endpoint, Timing, Track, lerp_camera};
 use jstream_render::{
     Color, Compositor, Crop, Item, LegacyTransform, OpenOptions, Output, Placement, RenderError,
     ResourceCache, Scene,
@@ -445,6 +445,9 @@ pub(crate) struct Shot {
     /// keyframe scene's is its parent's, and a group, or a group's view, has none. A
     /// scene without one isn't here, and is transparent.
     backgrounds: BTreeMap<SceneId, Color>,
+    /// The camera each copied 3D scene draws through (ADR-0094), by scene. A scene
+    /// without one isn't here, and is 2D.
+    cameras: BTreeMap<SceneId, PassCamera>,
     /// The frames the copied scenes place, by source.
     frames: BTreeMap<SourceId, Frame>,
     /// The video chains of the sources they place that have one (ADR-0026), and of the
@@ -489,10 +492,38 @@ struct Transitioning {
     /// The backgrounds it fades between, from the scene it leaves to the one it shows,
     /// over `end_ms`.
     backgrounds: (Color, Color),
+    /// The cameras it moves between (ADR-0094 decision 7), from the scene it leaves (or
+    /// what was on screen) to the one it shows, `None` for a 2D side.
+    cameras: (Option<SceneCamera>, Option<SceneCamera>),
+    /// The preset's own timing, which a moving camera follows.
+    timing: Timing,
+    /// Whether it is a Move, whose tracks share one moving camera; a Fade's leaving
+    /// tracks keep the camera they leave from.
+    pairs: bool,
     end_ms: f32,
 }
 
 impl Transitioning {
+    /// The camera `track` is seen through `elapsed_ms` into the transition: a Move's
+    /// tracks share the camera moving between the two ends; a Fade's leaving tracks keep
+    /// the one they leave from, and the rest take the one it shows.
+    fn camera(&self, track: &Track, elapsed_ms: f32) -> Option<SceneCamera> {
+        let (from, to) = self.cameras;
+        if !self.pairs {
+            return match track {
+                Track::Disappear { .. } => from,
+                _ => to,
+            };
+        }
+        match (from, to) {
+            (Some(from), Some(to)) if from != to => {
+                let k = self.timing.progress(elapsed_ms);
+                Some(lerp_camera(&from, &to, k))
+            }
+            _ => to,
+        }
+    }
+
     /// The background shown under its tracks at `at`: the scene it leaves's, mixed
     /// toward the shown scene's as the transition runs.
     fn background(&self, at: MediaTime) -> Color {
@@ -516,6 +547,7 @@ impl Default for Shot {
             program: None,
             scenes: BTreeMap::new(),
             backgrounds: BTreeMap::new(),
+            cameras: BTreeMap::new(),
             frames: BTreeMap::new(),
             chains: BTreeMap::new(),
             passes: Vec::new(),
@@ -751,6 +783,7 @@ impl PartialEq for Shot {
             && self.mixes == other.mixes
             && self.scenes == other.scenes
             && self.backgrounds == other.backgrounds
+            && self.cameras == other.cameras
             && self.frames == other.frames
             && self.chains == other.chains
             && self.captures == other.captures
@@ -998,10 +1031,18 @@ fn plan_inner(
                 transition::From::Scene(from) => planner.background(from),
                 transition::From::OnScreen(_) => Some(to),
             };
+            let to_camera = planner.camera(&running.to).map(|camera| camera.camera);
             shot.transition = Some(Transitioning {
                 start: running.start,
                 tracks,
                 backgrounds: (from.unwrap_or(Color::TRANSPARENT), to),
+                cameras: (running.from_camera, to_camera),
+                timing: Timing {
+                    delay_ms: 0.0,
+                    duration_ms: running.run.duration_ms as f32,
+                    easing: running.run.easing,
+                },
+                pairs: running.run.pairs,
                 end_ms: planned.end_ms,
             });
             shot.passes = schedule_tracks(&shot);
@@ -1331,6 +1372,22 @@ impl<'a> Planner<'a, '_> {
         } else {
             scene_id.clone()
         }
+    }
+
+    /// The camera the planned scene `id` draws through, if it is a 3D scene (ADR-0094):
+    /// its own, or a keyframe scene's parent's where it has no override.
+    fn camera(&self, id: &SceneId) -> Option<PassCamera> {
+        let (scene, _) = self.drawn(id)?;
+        if let Some(camera) = scene.camera() {
+            return Some(PassCamera {
+                camera: *camera,
+                follows: None,
+            });
+        }
+        self.state.effective_camera(scene).map(|camera| PassCamera {
+            camera,
+            follows: scene.variant_of().cloned(),
+        })
     }
 
     /// The background the planned scene `id` draws under its items, if it has one: a
@@ -1928,6 +1985,9 @@ impl<'a> Planner<'a, '_> {
         if let Some(background) = self.background(id) {
             out.backgrounds.insert(id.clone(), background);
         }
+        if let Some(camera) = self.camera(id) {
+            out.cameras.insert(id.clone(), camera);
+        }
         if let Some(chain) = self.scene_chain(id) {
             self.add_chain(ChainOwner::Scene(id.clone()), chain, out);
         }
@@ -2117,7 +2177,19 @@ struct Pass {
     /// What the pass clears to, under its layers: the scene's background, or
     /// transparent.
     background: Color,
+    /// The camera its scene draws through (ADR-0094), `None` for a 2D scene.
+    camera: Option<PassCamera>,
     layers: Vec<Layer>,
+}
+
+/// A 3D scene's camera as a pass draws it (ADR-0094), and the scene it belongs to: the
+/// pass's scene, or for a keyframe scene that doesn't override it, its parent, whose live
+/// value then shows.
+#[derive(Clone, Debug, PartialEq)]
+struct PassCamera {
+    camera: SceneCamera,
+    /// The parent whose camera it is, for a keyframe scene that follows it.
+    follows: Option<SceneId>,
 }
 
 /// One item of a [`Pass`].
@@ -2291,8 +2363,9 @@ fn schedule(shot: &Shot, program: &SceneId) -> Vec<Pass> {
             scene: program.clone(),
             depth: 0,
             key: GpuKey::Layer(program.clone(), 0),
-            // The chain's output has the background in it already.
+            // The chain's output has the background in it already, and is flat.
             background: Color::TRANSPARENT,
+            camera: None,
             layers,
         }];
     }
@@ -2530,6 +2603,7 @@ fn visit_into(
         depth,
         key,
         background: shot.background(id),
+        camera: shot.cameras.get(id).cloned(),
         layers,
     });
 }
@@ -2620,6 +2694,9 @@ fn placement(placement: &GraphPlacement) -> Placement {
 #[derive(Debug, Default, PartialEq)]
 pub(crate) struct LiveParams {
     items: BTreeMap<ItemId, LiveItem>,
+    /// Live cameras (ADR-0094), by the scene whose `scene.set_camera` set them: `None`
+    /// is a live removal.
+    cameras: BTreeMap<SceneId, Option<SceneCamera>>,
 }
 
 /// One item's live values: its own, and those addressed to each keyframe scene.
@@ -2705,8 +2782,13 @@ impl LiveParams {
         values: impl IntoIterator<Item = (Option<&'a SceneId>, &'a Edit)>,
     ) -> Self {
         let mut items: BTreeMap<ItemId, LiveItem> = BTreeMap::new();
+        let mut cameras = BTreeMap::new();
         for (keyframe, value) in values {
             let (item_id, placement, cut) = match value {
+                Edit::SceneSetCamera { scene_id, camera } => {
+                    cameras.insert(scene_id.clone(), *camera);
+                    continue;
+                }
                 Edit::ItemSetTransform {
                     item_id, transform, ..
                 } => (
@@ -2738,7 +2820,24 @@ impl LiveParams {
                 fields.crop = cut;
             }
         }
-        Self { items }
+        Self { items, cameras }
+    }
+
+    /// The camera `pass` draws through, with a live camera applied: one set on the
+    /// pass's scene, else on the parent it follows (ADR-0094 §6).
+    fn camera(&self, pass: &Pass) -> Option<SceneCamera> {
+        if let Some(live) = self.cameras.get(&pass.scene) {
+            return *live;
+        }
+        let shot = pass.camera.as_ref()?;
+        match shot
+            .follows
+            .as_ref()
+            .and_then(|parent| self.cameras.get(parent))
+        {
+            Some(live) => *live,
+            None => Some(shot.camera),
+        }
     }
 
     /// The own live placement and crop of `item_id`, those not addressed to a keyframe
@@ -3451,6 +3550,7 @@ pub(crate) fn compose(
                             opacity: OPAQUE,
                             blend: BlendMode::Normal,
                             visible: true,
+                            camera: None,
                         }
                     })
                     .collect();
@@ -3684,6 +3784,7 @@ fn draw_box(
         chains.fail(owner);
         return Ok(());
     };
+    // Flat in its box: the box itself is placed in 3D where its item is.
     let items = [Item {
         image,
         placement: Placement::Geometry(inside),
@@ -3691,6 +3792,7 @@ fn draw_box(
         opacity: OPAQUE,
         blend: BlendMode::Normal,
         visible: true,
+        camera: None,
     }];
     let size = FrameSize::new(width, height).map_err(|_| RenderError::Invalid {
         what: "item box",
@@ -3784,6 +3886,7 @@ fn fill_items<'a>(
     live: &LiveParams,
 ) {
     let size = [canvas.width() as f32, canvas.height() as f32];
+    let camera = live.camera(pass);
     items.clear();
     items.extend(pass.layers.iter().filter_map(|layer| {
         if chains.failed(&layer.image) {
@@ -3798,6 +3901,7 @@ fn fill_items<'a>(
                 opacity: sampled.opacity,
                 blend: sampled.blend,
                 visible: true,
+                camera,
             });
         }
         let (placement, crop) = live.apply(layer);
@@ -3815,6 +3919,7 @@ fn fill_items<'a>(
             opacity: layer.opacity,
             blend: layer.blend,
             visible: true,
+            camera,
         })
     }));
 }
@@ -3843,6 +3948,7 @@ fn fill_tracks<'a>(
             opacity: sampled.opacity,
             blend: sampled.blend,
             visible: true,
+            camera: transition.camera(track, elapsed),
         })
     }));
 }
@@ -3862,6 +3968,7 @@ fn fitted(image: &jstream_render::Image, from: FrameSize, into: FrameSize) -> It
         opacity: OPAQUE,
         blend: BlendMode::Normal,
         visible: true,
+        camera: None,
     }
 }
 
@@ -4330,6 +4437,137 @@ pub(crate) mod tests {
         }
     }
 
+    /// A 3D scene's pass carries its camera, and a keyframe scene follows its parent's
+    /// unless it overrides it; a live camera wins, on the keyframe's own scene or on the
+    /// parent it follows (ADR-0094 §6).
+    #[test]
+    fn a_pass_draws_through_its_scenes_camera_and_live_cameras_win() {
+        use super::{FilterAssets, LiveParams, plan_scene};
+        use jstream_graph::Graph;
+        use jstream_protocol::{Canvas, Edit, SceneCamera, Vec3};
+
+        let framing = SceneCamera::framing(Canvas::DEFAULT);
+        let moved = |x: f32| SceneCamera {
+            position: Vec3::new(x, 100.0, 1400.0).expect("finite"),
+            ..framing
+        };
+        let set = |scene: &str, camera: SceneCamera| Edit::SceneSetCamera {
+            scene_id: SceneId::new(scene),
+            camera: Some(camera),
+        };
+        let mut graph = Graph::default();
+        graph
+            .apply(
+                &[
+                    Edit::SceneCreate {
+                        scene_id: SceneId::new("main"),
+                        name: "Main".into(),
+                        role: None,
+                    },
+                    Edit::SceneCreate {
+                        scene_id: SceneId::new("flat"),
+                        name: "Flat".into(),
+                        role: None,
+                    },
+                    Edit::SceneCreateVariant {
+                        scene_id: SceneId::new("k"),
+                        variant_of: SceneId::new("main"),
+                        name: "Follows".into(),
+                    },
+                    Edit::SceneCreateVariant {
+                        scene_id: SceneId::new("k2"),
+                        variant_of: SceneId::new("main"),
+                        name: "Overrides".into(),
+                    },
+                    set("main", framing),
+                    set("k2", moved(200.0)),
+                ],
+                None,
+            )
+            .expect("edits");
+        let seen = |live: &LiveParams, program: &str| {
+            let planned = plan_scene(
+                &graph,
+                &SceneId::new(program),
+                &mut |_| None,
+                &FilterAssets::default(),
+            );
+            live.camera(planned.shot.passes.last().expect("a pass"))
+        };
+        let none = LiveParams::default();
+        assert_eq!(seen(&none, "main"), Some(framing));
+        assert_eq!(seen(&none, "k"), Some(framing));
+        assert_eq!(seen(&none, "k2"), Some(moved(200.0)));
+        assert_eq!(seen(&none, "flat"), None);
+
+        let live_main = set("main", moved(500.0));
+        let live = LiveParams::from_values([(None, &live_main)]);
+        assert_eq!(seen(&live, "main"), Some(moved(500.0)));
+        assert_eq!(seen(&live, "k"), Some(moved(500.0)), "it follows");
+        assert_eq!(seen(&live, "k2"), Some(moved(200.0)), "it overrides");
+        let live_k2 = set("k2", moved(700.0));
+        let live = LiveParams::from_values([(None, &live_main), (None, &live_k2)]);
+        assert_eq!(seen(&live, "k2"), Some(moved(700.0)));
+    }
+
+    /// A Move between two 3D scenes moves the camera with the preset's timing; a Fade
+    /// keeps each side's camera on its own tracks (ADR-0094 decision 7).
+    #[test]
+    fn a_move_moves_the_camera_and_a_fade_keeps_each_sides() {
+        use super::Transitioning;
+        use jstream_protocol::{Canvas, Easing, SceneCamera, Vec3};
+        use jstream_render::Color;
+        use jstream_render::transition::{Effect, Timing, Track};
+
+        let from = SceneCamera::framing(Canvas::DEFAULT);
+        let to = SceneCamera {
+            position: Vec3::new(1960.0, 540.0, 1304.0).expect("finite"),
+            ..from
+        };
+        let at = |x: f32| super::Endpoint {
+            geometry: jstream_protocol::ItemGeometry::try_new(
+                jstream_protocol::Vec2::new(x, 100.0).expect("finite"),
+                jstream_protocol::Size::try_new(100.0, 100.0).expect("size"),
+            )
+            .expect("geometry"),
+            crop: Crop::NONE,
+            opacity: 1.0,
+            blend: BlendMode::Normal,
+        };
+        let timing = Timing {
+            delay_ms: 0.0,
+            duration_ms: 1000.0,
+            easing: Easing::Linear,
+        };
+        let leaving = Track::Disappear {
+            from: at(0.0),
+            effect: Effect::Fade,
+            timing,
+        };
+        let coming = Track::Appear {
+            to: at(0.0),
+            effect: Effect::Fade,
+            timing,
+        };
+        let mut transition = Transitioning {
+            start: zero(),
+            tracks: Vec::new(),
+            backgrounds: (Color::BLACK, Color::BLACK),
+            cameras: (Some(from), Some(to)),
+            timing,
+            pairs: true,
+            end_ms: 1000.0,
+        };
+        let halfway = transition.camera(&leaving, 500.0).expect("3D");
+        assert_eq!(halfway.position.x.get(), 1460.0);
+        assert_eq!(transition.camera(&coming, 1000.0), Some(to));
+        transition.pairs = false;
+        assert_eq!(transition.camera(&leaving, 500.0), Some(from));
+        assert_eq!(transition.camera(&coming, 500.0), Some(to));
+        transition.cameras = (Some(from), None);
+        assert_eq!(transition.camera(&coming, 500.0), None);
+    }
+
     /// A scene's background is planned with it, a keyframe scene draws its parent's and
     /// a group none (ADR-0089 §4); a transition fades from one background to the other.
     #[test]
@@ -4407,6 +4645,13 @@ pub(crate) mod tests {
             start: zero(),
             tracks: Vec::new(),
             backgrounds: (Color::BLACK, Color::rgb(1.0, 0.0, 0.0)),
+            cameras: (None, None),
+            timing: jstream_render::transition::Timing {
+                delay_ms: 0.0,
+                duration_ms: 1000.0,
+                easing: jstream_protocol::Easing::Linear,
+            },
+            pairs: false,
             end_ms: 1000.0,
         };
         let at = |ms: i64| MediaTime::new(ms, Timebase::new(1, 1000).expect("valid"));

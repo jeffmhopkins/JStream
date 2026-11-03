@@ -224,6 +224,7 @@ fn compositor_output_converts_like_its_readback() {
         opacity: 0.75,
         blend: crate::BlendMode::Normal,
         visible: true,
+        camera: None,
     }];
     let scene = Scene {
         canvas: size(w, h),

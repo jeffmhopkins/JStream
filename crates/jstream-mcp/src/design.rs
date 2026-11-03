@@ -7,7 +7,8 @@
 //! a broadcast designer would: where things go, which sizes, which faces and colours,
 //! and to look at the result before calling it done. It names the `backdrop` and `text`
 //! settings that make graphics look finished, the `shape` kind, and how to group,
-//! scroll and animate. Numbers are for a 1920×1080 canvas and scale with it.
+//! scroll and animate, and how to build a 3D set with a scene camera (ADR-0094).
+//! Numbers are for a 1920×1080 canvas and scale with it.
 
 /// The guidance, as one paragraph of the server instructions.
 pub(crate) const DESIGN: &str = "\
@@ -65,6 +66,19 @@ fade over it, and stagger the parts with `item.set_transition` `delay_ms` (0, 12
 200). Items with no partner in the other scene appear and disappear by their \
 transition's `appear` and `disappear` (`slide`, `scale` or `fade`). Keep moves under a \
 second and ease them; a cut beats a slow move. \
+3D sets: `scene.set_camera` gives a scene a camera (`position`, `target`, `fov_deg`, \
+`roll_deg`), and then every item sits in one 3D space: `geometry.center` is its x and \
+y, `depth_px` its z (toward the viewer), and its rotation, `tilt_deg` and `turn_deg` \
+turn it about its centre; its own `perspective_px` is ignored. The canvas is the plane \
+z = 0 seen from straight in front: the framing camera looks at the canvas centre \
+(`target` x 960, y 540, z 0 at 1080p) from `position` z = (height / 2) / tan(fov / 2), \
+about 1304 at the default 45°, and through it a flat item lands exactly on its 2D \
+box, so start there and move the camera. A floor is an item with `tilt_deg` 90 placed \
+low, a wall one pushed back with negative `depth_px`; items draw far to near. Move \
+the camera with a keyframe scene that overrides it (`scene.set_camera` on the \
+variant) and a `move` transition, which glides the camera with the items. Put \
+graphics that must stay flat (a lower third, a ticker) in a 2D scene above a `scene` \
+source of the 3D set. \
 Check your work: after each step take a `video.snapshot` and look at it critically \
 (alignment, overlap, legibility, crowding, anything off the safe area) and fix what's \
 wrong before reporting. When a scene is on program, build changes on another scene or \

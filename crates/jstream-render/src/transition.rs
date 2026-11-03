@@ -20,7 +20,10 @@
 //! Docs: docs/adr/0029-transitions.md
 
 use crate::scene::Crop;
-use jstream_protocol::{BlendMode, Easing, Finite32, ItemGeometry, Size, Vec2};
+use jstream_protocol::{
+    BlendMode, Easing, Finite32, ItemGeometry, MAX_FOV_DEG, MIN_FOV_DEG, SceneCamera, Size, Vec2,
+    Vec3,
+};
 
 /// How much of its size a `scale` effect leaves at its end: 65%.
 const SCALE_TO: f32 = 0.65;
@@ -207,6 +210,33 @@ impl Track {
     }
 }
 
+/// A scene camera `k` of the way from `from` to `to` (ADR-0094 decision 7): position,
+/// target and field of view linearly, roll the shortest way, and `depth_sort` from `to`.
+/// `k` may pass 1 under a spring; the field of view is then clamped to what a camera may
+/// have. Where the way passes a camera the collection would refuse (its position on its
+/// target), it is `to`.
+pub fn lerp_camera(from: &SceneCamera, to: &SceneCamera, k: f32) -> SceneCamera {
+    let point = |a: Vec3, b: Vec3| Vec3 {
+        x: finite(lerp(a.x.get(), b.x.get(), k)),
+        y: finite(lerp(a.y.get(), b.y.get(), k)),
+        z: finite(lerp(a.z.get(), b.z.get(), k)),
+    };
+    let camera = SceneCamera {
+        position: point(from.position, to.position),
+        target: point(from.target, to.target),
+        fov_deg: finite(
+            lerp(from.fov_deg.get(), to.fov_deg.get(), k).clamp(MIN_FOV_DEG, MAX_FOV_DEG),
+        ),
+        roll_deg: finite(lerp_angle(from.roll_deg.get(), to.roll_deg.get(), k)),
+        depth_sort: to.depth_sort,
+    };
+    if camera.validate().is_ok() {
+        camera
+    } else {
+        *to
+    }
+}
+
 fn lerp(a: f32, b: f32, k: f32) -> f32 {
     a + (b - a) * k
 }
@@ -318,7 +348,9 @@ fn away(geometry: &ItemGeometry, k: f32, effect: Effect, [cw, ch]: [f32; 2]) -> 
 mod tests {
     use super::{Effect, Endpoint, Timing, Track, lerp_angle};
     use crate::scene::Crop;
-    use jstream_protocol::{BlendMode, Easing, Finite32, ItemGeometry, Size, Vec2};
+    use jstream_protocol::{
+        BlendMode, Easing, Finite32, ItemGeometry, SceneCamera, Size, Vec2, Vec3,
+    };
 
     const CANVAS: [f32; 2] = [1920.0, 1080.0];
 
@@ -392,6 +424,39 @@ mod tests {
     }
 
     /// A blend mode can't be interpolated, so a pair switches it halfway, as it does
+    /// A camera moves linearly, rolls the shortest way, and keeps its field of view in
+    /// range past the end of a spring (ADR-0094 decision 7).
+    #[test]
+    fn a_camera_moves_between_its_ends() {
+        let point = |x: f32, y: f32, z: f32| Vec3::new(x, y, z).expect("finite");
+        let camera = |x: f32, fov: f32, roll: f32| SceneCamera {
+            position: point(x, 0.0, 1000.0),
+            target: point(x, 0.0, 0.0),
+            fov_deg: Finite32::new(fov).expect("finite"),
+            roll_deg: Finite32::new(roll).expect("finite"),
+            depth_sort: true,
+        };
+        let from = camera(0.0, 40.0, 350.0);
+        let to = camera(100.0, 60.0, 10.0);
+        let half = super::lerp_camera(&from, &to, 0.5);
+        assert_eq!(half.position.x.get(), 50.0);
+        assert_eq!(half.fov_deg.get(), 50.0);
+        assert!(
+            (half.roll_deg.get() - 360.0).abs() < 1e-3,
+            "{}",
+            half.roll_deg.get()
+        );
+        let wide = super::lerp_camera(&camera(0.0, 160.0, 0.0), &camera(0.0, 170.0, 0.0), 1.4);
+        assert_eq!(wide.fov_deg.get(), 170.0);
+        // Halfway between a camera and its reverse, position meets target: it is `to`.
+        let reversed = SceneCamera {
+            position: to.target,
+            target: to.position,
+            ..to
+        };
+        assert_eq!(super::lerp_camera(&to, &reversed, 0.5), reversed);
+    }
+
     /// flips, and an item alone keeps its own.
     #[test]
     fn blend_switches_halfway() {

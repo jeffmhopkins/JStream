@@ -30,6 +30,7 @@ use crate::{
     AudioFollow, BusId, BusInfo, BusMeter, BusMonitor, Loudness, MonitorTap, SendInfo, SourceAudio,
     SourceMeter,
 };
+use crate::{Canvas as CameraCanvas, SceneCamera};
 use crate::{CaptureTargetInfo, CaptureTargetKind, FontInfo, PixelSize, SourceSize};
 use crate::{Chord, DeviceId, DeviceInfo, HotkeyBinding};
 use crate::{DroppedOverride, ItemOverride, OverrideField};
@@ -423,6 +424,10 @@ pub(crate) fn edits() -> Vec<Edit> {
                 include_audio: false,
                 background: Some("#0f1115".into()),
             },
+        },
+        Edit::SceneSetCamera {
+            scene_id: SceneId::new("scn_1"),
+            camera: Some(SceneCamera::framing(CameraCanvas::DEFAULT)),
         },
         Edit::LabelCreate {
             label_id: LabelId::new("lbl_sponsor"),
@@ -1615,6 +1620,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                         include_audio: false,
                         background: Some("#0f1115".into()),
                     },
+                    camera: None,
                 },
                 SceneInfo {
                     overrides: item_overrides(),
@@ -1629,6 +1635,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     folder: None,
                     meta: Default::default(),
                     options: Default::default(),
+                    camera: None,
                 },
                 SceneInfo {
                     overrides: Vec::new(),
@@ -1643,6 +1650,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     folder: None,
                     meta: Default::default(),
                     options: Default::default(),
+                    camera: None,
                 },
             ],
             outputs: output_infos(),

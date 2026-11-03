@@ -58,7 +58,9 @@ protocol's types (`Overrides`).
   labels and a favourite flag (ADR-0024 §4).
 - `Scene`: a name, a `role` (`scene` or `group`, ADR-0024 §1; it changes no behaviour
   here), its `transition_in` and `transition_out` overrides, the folder it is filed in,
-  if any, its `SceneMeta` and its items in stacking order, bottom first. A keyframe
+  if any, its `SceneMeta`, its `camera` if it is a 3D scene (ADR-0094; a keyframe
+  scene's is an override of its parent's), and its items in stacking order, bottom
+  first. A keyframe
   scene has `variant_of`, naming its parent, its `Overrides` and no items;
   `State::shown_items` gives the items any scene draws, a keyframe scene's being its
   parent's at their effective values. A scene's `filters` (ADR-0065) are `Chains` whose
@@ -356,6 +358,12 @@ with no inverse. The engine draws open gestures' source settings through it
   which the engine reads when it follows nesting for audio, and `background`, checked as
   a colour (`SceneOptions::problem`) and refused on a keyframe scene, which shows its
   parent's. A deleted scene's inverse restores them.
+  `scene.set_camera` (`camera.rs`) sets or removes a scene's camera
+  ([ADR-0094](../../docs/adr/0094-scene-cameras.md)), checked by `SceneCamera::validate`
+  (field `camera.fov_deg`, `camera.target` when it is on the position, else `camera`). On a keyframe scene it writes
+  the variant's override, refused while the parent has no camera, and `State::effective_camera`
+  reads the override or the parent's. Removing a parent's camera drops its variants'
+  overrides, and the inverse restores them; a deleted scene's inverse restores its camera.
   `folder.delete` is refused while a scene (`folder`) or folder (`parent`) sits in the
   folder, and `label.delete` while a source, then a scene (`labels`), carries the label,
   listing them as `blockers`; their `delete.plan` moves what the folder holds up to its
@@ -447,7 +455,7 @@ when set, and an item its `transition` when not the default. A source's `audio` 
 only where it differs from its kind's defaults, except a `webcam`'s, which is always
 saved, so a webcam without it can only come from before webcams had audio (#716). `folders` and `labels` are in their
 orders, each omitted when empty. A scene's `folder`, `labels`, `icon`, `color`,
-`favourite`, `show_in_multiview`, `include_audio` and `background`, and a source's `labels` and `favourite`, are each omitted while
+`favourite`, `show_in_multiview`, `include_audio`, `background` and `camera`, and a source's `labels` and `favourite`, are each omitted while
 they have their default, so a collection without them saves as it did before they
 existed and needs no schema bump. A keyframe scene writes `variant_of` and its
 `overrides` in item ID order, each omitted for any other scene, so it needed no schema

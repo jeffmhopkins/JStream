@@ -3,8 +3,8 @@
 //! and with 3D through ADR-0050's [`ItemGeometry::drawn_polygon`].
 
 use jstream_protocol::{
-    CanvasPoint, ContentRect, Crop as ProtocolCrop, DrawnVertex, Finite32, GeometryError,
-    ItemGeometry, ItemTransform, Placed, Vec2, legacy_quad,
+    CameraView, CanvasPoint, ContentRect, Crop as ProtocolCrop, DrawnVertex, Finite32,
+    GeometryError, ItemGeometry, ItemTransform, Placed, Vec2, legacy_quad,
 };
 
 use crate::error::RenderError;
@@ -108,19 +108,32 @@ const UNUSED: Vertex = Vertex {
     w: 1.0,
 };
 
+/// [`shape_seen`] in a 2D scene.
+#[cfg(test)]
+pub(crate) fn shape(
+    source_width: u32,
+    source_height: u32,
+    placement: Placement,
+    crop: Crop,
+) -> Result<Option<Shape>, RenderError> {
+    shape_seen(source_width, source_height, placement, crop, None)
+}
+
 /// The shape for one item, or `Ok(None)` when the crop, the scale or the 3D leaves
-/// nothing to draw.
+/// nothing to draw. `view` is the scene's camera (ADR-0094), through which a geometry
+/// item is placed in the scene's space; `None` in a 2D scene.
 ///
 /// A non-finite component, including a product that overflows, is
 /// [`RenderError::Invalid`].
 ///
 /// # Errors
 /// [`RenderError::Invalid`] when a placement component is not finite or not drawable.
-pub(crate) fn shape(
+pub(crate) fn shape_seen(
     source_width: u32,
     source_height: u32,
     placement: Placement,
     crop: Crop,
+    view: Option<&CameraView>,
 ) -> Result<Option<Shape>, RenderError> {
     let crop = ProtocolCrop {
         left: crop.left,
@@ -130,7 +143,17 @@ pub(crate) fn shape(
     };
     match placement {
         Placement::Legacy(transform) => legacy(source_width, source_height, transform, crop),
-        Placement::Geometry(geometry) => boxed(source_width, source_height, geometry, crop),
+        Placement::Geometry(geometry) => boxed(source_width, source_height, geometry, crop, view),
+    }
+}
+
+/// How far in front of a scene camera an item is, along its axis: what a 3D scene sorts
+/// by (ADR-0094 decision 4). A legacy placement isn't in the scene's space and sorts as
+/// if at the canvas centre.
+pub(crate) fn depth(view: &CameraView, placement: Placement) -> f64 {
+    match placement {
+        Placement::Geometry(geometry) => view.depth_of(geometry),
+        Placement::Legacy(_) => view.canvas_depth(),
     }
 }
 
@@ -164,6 +187,7 @@ fn boxed(
     source_height: u32,
     geometry: ItemGeometry,
     crop: ProtocolCrop,
+    view: Option<&CameraView>,
 ) -> Result<Option<Shape>, RenderError> {
     let Some(content) = geometry
         .content(source_width, source_height, crop)
@@ -171,9 +195,11 @@ fn boxed(
     else {
         return Ok(None);
     };
-    if !geometry.is_neutral_3d() {
+    // Every item of a 3D scene is drawn in 3D (ADR-0094 decision 3).
+    if view.is_some() || !geometry.is_neutral_3d() {
         return drawn(
             geometry,
+            view,
             &content,
             crop_region(source_width, source_height, crop),
         );
@@ -228,10 +254,14 @@ fn crop_region(source_width: u32, source_height: u32, crop: ProtocolCrop) -> Reg
 /// coordinate stay exact; where it can't be (past the near plane), the vertex stays.
 fn drawn(
     geometry: ItemGeometry,
+    view: Option<&CameraView>,
     content: &ContentRect,
     crop: Region,
 ) -> Result<Option<Shape>, RenderError> {
-    let Some(polygon) = geometry.drawn_polygon(content).map_err(placement_error)? else {
+    let Some(polygon) = geometry
+        .drawn_polygon_seen(view, content)
+        .map_err(placement_error)?
+    else {
         return Ok(None);
     };
     let corners = polygon.vertices();
@@ -252,9 +282,12 @@ fn drawn(
     let mut vertices = [UNUSED; MAX_VERTICES];
     for (i, corner) in corners.iter().enumerate() {
         let target = push_out(edges[(i + len - 1) % len], edges[i], corner);
-        let pushed = match geometry.unplace(target).map_err(placement_error)? {
+        let pushed = match geometry
+            .unplace_seen(view, target)
+            .map_err(placement_error)?
+        {
             Some(local) => geometry
-                .drawn_vertex(content, local)
+                .drawn_vertex_seen(view, content, local)
                 .map_err(placement_error)?,
             None => None,
         };
