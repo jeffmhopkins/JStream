@@ -397,8 +397,7 @@ impl LiveSources {
             if entry.kind == kind && entry.settings == settings {
                 continue;
             }
-            let keeps =
-                entry.kind == kind && registry.keeps_time(kind, &entry.settings, source.settings());
+            let keeps = entry.kind == kind && registry.keeps_time(kind, &entry.settings, &settings);
             entry.anchor = if keeps { entry.time_zero() } else { None };
             self.tickets += 1;
             entry.kind = kind.to_owned();
