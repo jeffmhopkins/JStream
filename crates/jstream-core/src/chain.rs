@@ -446,9 +446,16 @@ pub(crate) struct Chains {
     /// [`GpuKey::Mixed`] once its master chain ran, and each output's chain output, so
     /// a mix two outputs draw at different sizes is composited and filtered once.
     staged: BTreeSet<GpuKey>,
+    /// The scene layers the chains' passes drew in the frame `ran` names, which a mix
+    /// that nests the same scene at the same depth reads instead of drawing it again
+    /// (#1070).
+    drawn: BTreeSet<GpuKey>,
     /// How many frames the chains ran in, for tests.
     #[cfg(test)]
     runs: usize,
+    /// How many mix passes read a layer [`Self::drawn`] holds, for tests.
+    #[cfg(test)]
+    pub(crate) reused: std::sync::atomic::AtomicUsize,
 }
 
 impl Chains {
@@ -478,6 +485,7 @@ impl Chains {
         }
         self.failed.clear();
         self.staged.clear();
+        self.drawn.clear();
         let retired = &mut self.retired;
         self.running.retain(|source, running| {
             let keep = chains.contains_key(source) || stages.contains_key(source);
@@ -663,6 +671,23 @@ impl Chains {
     }
 
     /// Records that `owner`'s effects layer drew, so a later failure logs again.
+    /// Records that the chains' passes drew scene layer `key` this frame.
+    pub(crate) fn drew_layer(&mut self, key: &GpuKey) {
+        self.drawn.insert(key.clone());
+    }
+
+    /// Whether the chains' passes drew scene layer `key` this frame, so a mix's pass
+    /// for it reads that layer as it is instead of drawing it again.
+    pub(crate) fn reuse(&self, key: &GpuKey) -> bool {
+        let drawn = self.drawn.contains(key);
+        #[cfg(test)]
+        if drawn {
+            self.reused
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        drawn
+    }
+
     pub(crate) fn drew_box(&mut self, owner: &ChainOwner) {
         self.box_warned.remove(owner);
     }

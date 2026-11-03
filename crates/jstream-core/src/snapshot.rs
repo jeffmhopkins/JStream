@@ -3794,6 +3794,12 @@ pub(crate) fn compose_metered(
         };
         let mut items: Vec<Item<'_>> = Vec::new();
         for pass in nested {
+            // The chains drew this scene at this depth already this frame, for a
+            // chain that reads it: the same pass, so its layer holds what this one
+            // would draw (#1070).
+            if chains.reuse(&pass.key) {
+                continue;
+            }
             let started = Instant::now();
             fill_items(&mut items, (cache, chains), pass, (at, canvas), live);
             compositor.render_into(&scene(canvas, pass.background, &items), image(&pass.key)?)?;
@@ -3980,6 +3986,7 @@ fn run_chains(
                     continue;
                 };
                 compositor.render_into(&scene(canvas, pass.background, &items), layer)?;
+                chains.drew_layer(&pass.key);
                 meter.pass(&pass.scene, started.elapsed());
             }
         }
@@ -5254,6 +5261,92 @@ pub(crate) mod tests {
         for (x, y) in [(10, 10), (310, 190), (330, 170), (650, 350), (900, 600)] {
             assert_eq!(at(&rgba, x, y), RED, "({x}, {y})");
         }
+    }
+
+    /// A group a mix nests that a `scene` source's chain also reads, at the same depth,
+    /// is drawn once a frame (#1070): the mix reads the layer the chain phase drew, and
+    /// shows it both as itself and through the chain.
+    #[test]
+    fn a_nested_scene_a_chain_also_reads_is_drawn_once() {
+        use jstream_graph::Graph;
+        use serde_json::json;
+
+        let geometry = |cx: f32, cy: f32, w: f32, h: f32| json!({"center": [cx, cy], "size": [w, h], "fit_mode": "stretch"});
+        let edits = [
+            json!({"type": "scene.create", "scene_id": "main", "name": "Main"}),
+            json!({"type": "scene.create", "scene_id": "g", "name": "G", "role": "group"}),
+            json!({"type": "source.create", "source_id": "green", "name": "Green",
+                   "kind": {"type": "builtin", "kind": "image"}}),
+            json!({"type": "item.add", "scene_id": "g", "item_id": "green", "source_id": "green",
+                   "geometry": geometry(480.0, 270.0, 960.0, 540.0)}),
+            json!({"type": "source.create", "source_id": "as-is", "name": "As is",
+                   "kind": {"type": "scene", "scene_id": "g"}}),
+            json!({"type": "source.create", "source_id": "blurred", "name": "Blurred",
+                   "kind": {"type": "scene", "scene_id": "g"}}),
+            json!({"type": "filter.add", "owner": {"type": "source", "source_id": "blurred"},
+                   "chain": "video", "filter_id": "b", "kind": "blur",
+                   "settings": {"radius": 2.0}}),
+            json!({"type": "item.add", "scene_id": "main", "item_id": "as-is",
+                   "source_id": "as-is", "geometry": geometry(960.0, 540.0, 1920.0, 1080.0)}),
+            json!({"type": "item.add", "scene_id": "main", "item_id": "blurred",
+                   "source_id": "blurred",
+                   "geometry": geometry(1440.0, 810.0, 960.0, 540.0)}),
+        ]
+        .into_iter()
+        .map(|edit| serde_json::from_value::<Edit>(edit).expect("an edit"))
+        .collect::<Vec<_>>();
+        let mut graph = Graph::new().with_kinds(crate::kinds::builtin());
+        graph.apply(&edits, None).expect("edits");
+        let green = Frame::new(1, 1, &GREEN, 1).expect("a pixel");
+        let frames = BTreeMap::from([(SourceId::new("green"), green)]);
+        let shot = super::plan(&graph, &frames);
+        let layer = GpuKey::Layer(SceneId::new("g"), 1);
+        assert!(
+            shot.passes.iter().any(|pass| pass.key == layer),
+            "the mix nests g at depth 1"
+        );
+
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Ok(mut compositor) = Compositor::open(OpenOptions::hardware()) else {
+            assert!(std::env::var_os("CI").is_none(), "CI has no wgpu adapter");
+            return;
+        };
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let canvas = shot.canvas().expect("a canvas");
+        cache.begin_frame();
+        let output = compose(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            (
+                &shot,
+                MediaTime::new(0, Timebase::new(1, 1000).expect("valid")),
+            ),
+            View::default(),
+            &LiveParams::default(),
+            &super::NoCaptures,
+            super::DrawAt::read(canvas),
+        )
+        .expect("compose");
+        drop(cache.end_frame(&compositor));
+        assert_eq!(
+            chains.reused.load(std::sync::atomic::Ordering::Relaxed),
+            1,
+            "the mix read g's layer instead of drawing it again"
+        );
+        let frame = output.pixels().expect("read back");
+        let at = |x: usize, y: usize| {
+            let i = (y * frame.width() as usize + x) * 4;
+            let rgba = frame.rgba();
+            [rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]]
+        };
+        // g as itself: green over its top-left quarter, black beside it.
+        assert_eq!(at(480, 270), GREEN);
+        assert_eq!(at(1440, 270), [0, 0, 0, 255]);
+        // Through the blur, scaled into the bottom-right quarter: green in the middle
+        // of its own top-left quarter.
+        assert_eq!(at(1200, 675), GREEN);
+        assert_eq!(at(1700, 950), [0, 0, 0, 255]);
     }
 
     /// A scene's background fills its canvas under its items wherever it is drawn
