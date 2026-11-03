@@ -150,7 +150,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `ParamDescriptor` and `ParamType`, the shapes that describe a source, filter or
   transition kind's parameters, and `Settings`, a map from parameter ID to a JSON value, whose `scene`,
   `source`, `bus` and `asset` references are tagged objects (`Reference`). The per-value checks
-  (`ParamDescriptor::check`, `check_asset_path`) and the settings schema
+  (`ParamDescriptor::check`, `check_asset_path`, and `not_a_reference`, the reason a value
+  isn't a reference, which sources reuse for their own checks) and the settings schema
   (`KindDescriptor::settings_schema`) are pure functions here, so every implementation
   shares them. No source or filter kind is defined here; the transition kinds are
   (Transitions above).

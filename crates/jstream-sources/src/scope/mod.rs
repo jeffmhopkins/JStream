@@ -24,7 +24,7 @@ use crate::color::{parse_color, rgba_frame};
 use crate::source::{at_millis, changed_non_live, millis, setting};
 use crate::{Context, Limits, Painter, Source, SourceError};
 use jstream_media::{FrameSize, MediaTime, Timebase, VideoFrame};
-use jstream_protocol::{BusId, KindDescriptor, Reference, Settings, SourceId};
+use jstream_protocol::{BusId, KindDescriptor, Reference, Settings, SourceId, not_a_reference};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering, fence};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -314,7 +314,7 @@ fn drawn(settings: &Settings) -> Result<Drawn, SourceError> {
     }
     match Reference::from_value(value) {
         Some(Reference::Bus { bus_id }) => Ok(Drawn::Bus(bus_id)),
-        _ => Err(bad("audio", "must be a bus reference or null")),
+        _ => Err(bad("audio", &not_a_reference("bus"))),
     }
 }
 
@@ -326,7 +326,7 @@ fn audio_source(settings: &Settings) -> Result<Option<SourceId>, SourceError> {
     }
     match Reference::from_value(value) {
         Some(Reference::Source { source_id }) => Ok(Some(source_id)),
-        _ => Err(bad("audio_source", "must be a source reference or null")),
+        _ => Err(bad("audio_source", &not_a_reference("source"))),
     }
 }
 
