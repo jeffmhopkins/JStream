@@ -293,11 +293,35 @@ struct State {
     holders: BTreeMap<Param, (ClientId, GestureId)>,
 }
 
-/// A parameter a live value overrides: an item's placement (`false`) or its crop
-/// (`true`), as the item has it (`None`) or as a keyframe scene overrides it (#846).
-/// Ordered as the engine orders them, placements first, so `live.changed` and
-/// `live.list` list values in the same order.
-type Param = (bool, Option<SceneId>, ItemId);
+/// A parameter a live value overrides: an item's placement or its crop, as the item has
+/// it (`None`) or as a keyframe scene overrides it (#846), or one setting of a source
+/// (ADR-0091). Ordered as the engine orders them, placements first, so `live.changed`
+/// and `live.list` list values in the same order.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum Param {
+    Placement(Option<SceneId>, ItemId),
+    Crop(Option<SceneId>, ItemId),
+    Setting(SourceId, String),
+}
+
+/// `value` as one value per parameter: a source's settings patch split into one setting
+/// each, any other value as it is.
+fn split_value(value: Edit) -> Vec<Edit> {
+    match value {
+        Edit::SourceSetSettings { source_id, patch } => patch
+            .iter()
+            .map(|(id, v)| {
+                let mut one = Settings::new();
+                one.insert(id, v.clone());
+                Edit::SourceSetSettings {
+                    source_id: source_id.clone(),
+                    patch: one,
+                }
+            })
+            .collect(),
+        other => vec![other],
+    }
+}
 
 /// The parameter `value` sets, if it is live-adjustable. `is_keyframe` says whether the
 /// scene it names is a keyframe scene, whose values are parameters of their own.
@@ -305,9 +329,13 @@ fn param_of(value: &Edit, is_keyframe: impl Fn(&SceneId) -> bool) -> Option<Para
     let keyframe = live_scene(value).filter(|id| is_keyframe(id)).cloned();
     match value {
         Edit::ItemSetTransform { item_id, .. } | Edit::ItemSetGeometry { item_id, .. } => {
-            Some((false, keyframe, item_id.clone()))
+            Some(Param::Placement(keyframe, item_id.clone()))
         }
-        Edit::ItemSetCrop { item_id, .. } => Some((true, keyframe, item_id.clone())),
+        Edit::ItemSetCrop { item_id, .. } => Some(Param::Crop(keyframe, item_id.clone())),
+        Edit::SourceSetSettings { source_id, patch } => patch
+            .iter()
+            .next()
+            .map(|(id, _)| Param::Setting(source_id.clone(), id.to_owned())),
         _ => None,
     }
 }
@@ -795,9 +823,12 @@ impl State {
     ) {
         self.sync_outputs();
         let collection = &self.collection;
-        let exists = |(_, keyframe, item_id): &Param| {
-            collection.items.contains_key(item_id)
-                && keyframe.as_ref().is_none_or(|id| collection.is_variant(id))
+        let exists = |param: &Param| match param {
+            Param::Placement(keyframe, item_id) | Param::Crop(keyframe, item_id) => {
+                collection.items.contains_key(item_id)
+                    && keyframe.as_ref().is_none_or(|id| collection.is_variant(id))
+            }
+            Param::Setting(source_id, _) => collection.sources.contains_key(source_id),
         };
         self.holders.retain(|param, _| exists(param));
         for values in self.gestures.values_mut() {
@@ -1218,7 +1249,7 @@ impl State {
                 })?;
         }
         let mut changed = BTreeMap::new();
-        for value in values {
+        for value in values.into_iter().flat_map(split_value) {
             let Some(param) = param_of(&value, |id| self.collection.is_variant(id)) else {
                 continue;
             };

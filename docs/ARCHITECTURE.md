@@ -760,7 +760,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `live.ended`; protocol 0.26): actions that override live-adjustable parameters during
   a drag or a live dialog, with no `rev` bump or undo step; one batch carrying `ends_gesture`
   commits the gesture ([ADR-0032](adr/0032-live-edits-and-undo.md)). Built for item
-  placements and crops; audio faders follow with the mixer's parameter channel.
+  placements and crops, and since 0.67 a source's settings that its kind marks `live`,
+  so a Properties dialog applies as you edit
+  ([ADR-0091](adr/0091-source-settings-as-live-values.md)); audio faders follow with
+  the mixer's parameter channel.
 - **History** (`history.undo`, `history.redo`): per-client undo and redo, a fourth kind
   of call that applies a step's inverse (or the step again) as one `rev` bump
   ([ADR-0032](adr/0032-live-edits-and-undo.md)). It refuses with `undo_conflict`

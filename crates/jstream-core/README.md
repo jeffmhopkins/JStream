@@ -341,7 +341,8 @@ state machine. Contents:
   end, folders and labels), live values (no `rev` or collection change, a commit as one `rev` and one undo
   step with its events in order, values held until a render reader adopts the
   commit, a failed commit, cancel and expiry with their audit entries, validation and
-  limits, takeover, a deleted item, coalesced `live.changed`) and a live value drawn
+  limits, takeover, a deleted item, coalesced `live.changed`, a source's live setting
+  drawn until committed or cancelled, and dropped with its source) and a live value drawn
   over the shot in `snapshot.rs`, the shared parity fixture, a differential run against
   `jstream-control`'s mock, many sessions on many threads, a headless
   `video.snapshot` on whatever adapter opens (the software one in CI), nested-scene scheduling (order, depth
@@ -800,6 +801,17 @@ the render parameter channel, never through the collection:
   #846), so a
   gesture on the parent's item and one on the keyframe's can both be open. A batch
   that deletes an item, or a keyframe scene, drops the live values addressed to it.
+- **Source settings** (`source.set_settings`, protocol 0.67,
+  [ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)) are live values
+  too, for the parameters the source's kind marks `live`; a patch naming any other is
+  refused at `values.<n>.patch.<param>` (`check_live_settings`). Each key of each
+  source is a parameter of its own. They don't go on the channel: while any gesture
+  holds one, the engine keeps `shown`, the collection with those values applied
+  (`Graph::with_values`, which keeps `rev`), and uses it instead of the collection for
+  the live sources, the audio mix and the render snapshot, rebuilding it (and
+  publishing a snapshot) when the setting values change, when a gesture ends and after
+  every applied batch, undo and redo. No collection read shows it. A batch that
+  deletes a source drops the live settings addressed to it.
 - **The channel.** The render thread reads it after it adopts the snapshot on every
   tick, with a pointer compare, and hands a replaced one to the collector
   (`RenderReader::adopt`, R-RT-003). `compose` applies an item's live placement and
@@ -837,7 +849,8 @@ the render parameter channel, never through the collection:
 - **Deletes.** After every applied batch, undo and redo, live values on an item that is
   gone are dropped from every gesture and from the releasing list.
 - **Not yet:** audio faders and sends, which need the mixer's own parameter channel and
-  its adopted generation in the same handover, and kind parameters marked `live`.
+  its adopted generation in the same handover, and the `live` parameters of filter and
+  effect kinds.
 
 ### Program scene
 

@@ -507,7 +507,8 @@ fn group_tool(defs: &Map<String, Value>, noun: &str, ops: &[(Op, Value)]) -> Too
         description.push_str(
             " Live values preview a change on output without changing the state: \
              `live.set` overrides item placements and crops (as `item.set_transform`, \
-             `item.set_geometry` and `item.set_crop` edits) for a gesture you name, with no \
+             `item.set_geometry` and `item.set_crop` edits), and a source's settings its \
+             kind marks `live` (as `source.set_settings` edits), for a gesture you name, with no \
              `rev` change and no undo step. End it with `batch` and `ends_gesture` to commit \
              the final values as one undo step, or with `live.cancel` to put everything back. \
              Gestures this session leaves open expire when it ends.",

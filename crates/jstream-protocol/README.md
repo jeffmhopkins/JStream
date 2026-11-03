@@ -37,7 +37,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `LiveOutcome` (`committed`, `cancelled`, `expired`), `GestureInfo` (one open gesture
   in a `live.list` result), the limits `MAX_GESTURES_PER_CLIENT` (16) and
   `MAX_LIVE_VALUES` (256), and `is_live_adjustable`, which says which setters `live.set`
-  takes (`item.set_transform`, `item.set_geometry`, `item.set_crop`), so every
+  takes (`item.set_transform`, `item.set_geometry`, `item.set_crop`, `source.set_settings`), so every
   implementation agrees.
 - **Commands** (`command.rs`): `Edit` (`scene.create`, `scene.create_variant`,
   `scene.rename`, `scene.delete`,
@@ -194,7 +194,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.66 because
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.67 because `live.set`
+  takes a source's settings whose kind marks them `live` (`source.set_settings`,
+  [ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)); 0.66 because
   `stats.tick`'s `chains` counts the output stage's video chains too (`ChainCost`'s
   `stage_chains`, `stage_layers` and `stage_passes`, #980,
   [ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)); 0.65 added
@@ -1267,8 +1269,12 @@ named by a `gesture_id` it chooses, and sends its values as it goes:
   value is runtime state: it never changes `rev`, is never an undo step, is never saved,
   and `state.get` and `item.list` never show it. The live-adjustable setters are
   `item.set_transform`, `item.set_geometry` (one parameter, the placement) and
-  `item.set_crop`; audio faders and kind parameters marked `live` follow as their
-  real-time paths exist. Values are checked as a batch's edits are, named
+  `item.set_crop`, and since 0.67 `source.set_settings`, whose patch may name only
+  the parameters its kind marks `live` (anything else is `values.<n>.patch.<param>`):
+  the engine draws the collection with those values applied, rebuilding the render
+  snapshot, and each parameter of each source is a parameter of its own
+  ([ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)). Audio faders
+  follow as their real-time path exists. Values are checked as a batch's edits are, named
   `values.<n>.<field>`. Any other edit (`values.<n>.type`), an empty list, more than 256
   values, or a 17th open gesture of the client is `invalid_argument`, and nothing in the
   message is applied. A value whose `scene_id` names a keyframe scene (refused with
@@ -1901,7 +1907,8 @@ described above.
    carries no command (it applies a batch of edits the engine already holds), so
    R-ARCH-006 needs no change. The same ADR adds live values for continuous gestures
    (`live.set`, `live.cancel`, `live.changed`), committed by one batch; those are built
-   for item placements and crops ([Live values](#design)), not yet for audio faders.
+   for item placements and crops and, since 0.67, a source's live settings
+   ([Live values](#design)), not yet for audio faders.
 5. **Actions that change collection state.** Settled by
    [ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md): the program
    scene is runtime state, not collection state, so `scene.switch` is an action that

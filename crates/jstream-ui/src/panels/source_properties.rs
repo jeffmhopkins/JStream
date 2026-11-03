@@ -1,8 +1,11 @@
 //! The Properties dialog (spec-workspace.md 6.2): a source's name and settings on the
 //! left, its filters on the right. The settings form is the Inspector's (`properties.rs`),
-//! here editing a draft: OK sends what the user changed since it opened as one batch,
-//! Cancel, Escape and the backdrop drop it, and Defaults empties it, so OK resets each
-//! value the dialog opened with. Filter changes apply at once, as in the prototype; the
+//! here editing a draft: each setting the kind marks `live` shows on output as it is
+//! edited, as a live value of the dialog's gesture (ADR-0091). OK sends what the user
+//! changed since it opened as one batch, ending the gesture, so one undo step; Cancel,
+//! Escape and the backdrop drop the draft and cancel the gesture, leaving nothing. Defaults
+//! empties the draft, so OK resets each value the dialog opened with. Filter changes
+//! apply at once, as in the prototype; the
 //! filter rows and dialogs are the Filters panel's (`filters.rs`). A display, window
 //! or webcam source shows a live picture of what its edited settings capture above the
 //! form (`device_preview.rs`).
@@ -17,11 +20,37 @@ use crate::panels::device_preview::{self, DevicePreview};
 use crate::panels::filters::{Chains, FilterDialogs, chains_of};
 use crate::panels::properties::{Form, draft_patch};
 use crate::store::{Studio, apply};
-use jstream_control::protocol::{Edit, FilterOwner, Settings, SourceId, SourceKind};
+use jstream_control::protocol::{
+    Action, Batch, Call, CallResult, Edit, FilterOwner, GestureId, KindDescriptor, Settings,
+    SourceId, SourceKind,
+};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+
+/// The live values the dialog shows for `draft` (ADR-0091): each setting `kind` marks
+/// `live` that the user changed from `base`, and each one already `sent`, which may be
+/// back at its base value and must show that. A setting that isn't live waits for OK.
+pub fn live_patch(
+    kind: &KindDescriptor,
+    base: &Settings,
+    draft: &Settings,
+    sent: &HashSet<String>,
+) -> Settings {
+    let live = |id: &str| kind.param(id).is_some_and(|p| p.live);
+    let mut patch: Settings = draft_patch(base, draft)
+        .iter()
+        .filter(|(id, _)| live(id))
+        .map(|(id, v)| (id, v.clone()))
+        .collect();
+    for id in sent {
+        if patch.get(id).is_none() && live(id) {
+            patch.insert(id.clone(), draft.get(id).cloned().unwrap_or(Value::Null));
+        }
+    }
+    patch
+}
 
 /// The dialog's state as context: the source it shows while open.
 #[derive(Clone, Copy)]
@@ -119,6 +148,22 @@ fn PropertiesBody(
     let name = RwSignal::new(source.name.clone());
     let errors = RwSignal::new(HashMap::<String, String>::new());
     let problem = RwSignal::new(None::<String>);
+    // The dialog's gesture once a live setting changed, and the settings it has shown;
+    // OK ends it with its batch, anything else cancels it (ADR-0091).
+    let gesture = StoredValue::new(None::<GestureId>);
+    let sent = StoredValue::new(HashSet::<String>::new());
+    let committed = StoredValue::new(false);
+    on_cleanup(move || {
+        if committed.get_value() {
+            return;
+        }
+        if let (Some(gesture_id), Some(s)) = (gesture.get_value(), session.get()) {
+            spawn_local(async move {
+                let action = Action::LiveCancel { gesture_id };
+                let _cancelled = s.control.call(Call::Action { action }).await;
+            });
+        }
+    });
 
     if let Some(s) = session.get() {
         let kind_id = kind_id.clone();
@@ -132,6 +177,43 @@ fn PropertiesBody(
         let kind_id = kind_id.clone();
         move || studio.descriptors.with(|d| d.get(&kind_id).cloned())
     };
+    // Shows the draft's live settings on output: the first opens the gesture.
+    let show_live = StoredValue::new({
+        let source_id = source_id.clone();
+        let descriptor = descriptor.clone();
+        move || {
+            let (Some(kind), Some(s)) = (descriptor(), session.get()) else {
+                return;
+            };
+            let base = opened.with_value(|(base, _)| base.clone());
+            let patch =
+                sent.with_value(|sent| draft.with_untracked(|d| live_patch(&kind, &base, d, sent)));
+            if patch.is_empty() {
+                return;
+            }
+            sent.update_value(|sent| sent.extend(patch.iter().map(|(id, _)| id.to_owned())));
+            let gesture_id = match gesture.get_value() {
+                Some(id) => id,
+                None => {
+                    let id = GestureId::new(studio.fresh_id(&s, "props"));
+                    gesture.set_value(Some(id.clone()));
+                    id
+                }
+            };
+            let action = Action::LiveSet {
+                gesture_id,
+                values: vec![Edit::SourceSetSettings {
+                    source_id: source_id.clone(),
+                    patch,
+                }],
+            };
+            spawn_local(async move {
+                if let Err(error) = s.control.call(Call::Action { action }).await {
+                    problem.try_set(Some(error.to_string()));
+                }
+            });
+        }
+    });
 
     // A field's change goes to the draft; `null` is the default, so no value at all.
     let commit = move |_: SourceId, param: String, value: Value| {
@@ -143,10 +225,12 @@ fn PropertiesBody(
                 d.insert(param, value);
             }
         });
+        show_live.with_value(|show| show());
     };
     let defaults = move |_| {
         errors.set(HashMap::new());
         draft.set(Settings::new());
+        show_live.with_value(|show| show());
     };
     let ok = {
         let source_id = source_id.clone();
@@ -175,13 +259,38 @@ fn PropertiesBody(
                     patch,
                 });
             }
+            let ending = gesture.get_value();
             if edits.is_empty() {
+                // Changed and changed back: the gesture shows the opened values, and its
+                // cancel (on close) drops it.
                 close();
                 return;
             }
+            let Some(gesture_id) = ending else {
+                spawn_local(async move {
+                    match apply(&s, edits, None).await {
+                        Ok(_) => close(),
+                        Err(error) => _ = problem.try_set(Some(error.to_string())),
+                    }
+                });
+                return;
+            };
+            // One batch ending the gesture: one undo step for the whole dialog.
+            let batch = Batch {
+                edits,
+                expected_rev: None,
+                idempotency_key: None,
+                ends_gesture: Some(gesture_id),
+            };
             spawn_local(async move {
-                match apply(&s, edits, None).await {
-                    Ok(_) => close(),
+                match s.control.call(Call::Batch(batch)).await {
+                    Ok(answer) if matches!(answer.result, CallResult::Batch { .. }) => {
+                        committed.set_value(true);
+                        close();
+                    }
+                    Ok(_) => {
+                        _ = problem.try_set(Some("The engine gave an unexpected answer.".into()))
+                    }
                     Err(error) => _ = problem.try_set(Some(error.to_string())),
                 }
             });
@@ -278,5 +387,74 @@ fn FilterSide(source_id: SourceId, video: bool, audio: bool) -> impl IntoView {
             <p class="props-side-foot">"Changes apply right away. Fine-tune settings in the Filters panel."</p>
             <button type="button" class="primary props-add-filter" on:click=add>"+ Add filter…"</button>
         </div>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use jstream_control::protocol::{KindCategory, ParamDescriptor, ParamType};
+    use serde_json::json;
+
+    fn param(id: &str, live: bool) -> ParamDescriptor {
+        ParamDescriptor {
+            id: id.into(),
+            ty: ParamType::Color { alpha: false },
+            default: json!("#000000"),
+            label: id.into(),
+            description: None,
+            group: None,
+            advanced: false,
+            visible_if: None,
+            live,
+        }
+    }
+
+    fn kind() -> KindDescriptor {
+        KindDescriptor {
+            kind_id: "test".into(),
+            category: KindCategory::Source,
+            name: "Test".into(),
+            version: 1,
+            video: true,
+            audio: false,
+            max_outset_px: None,
+            params: vec![
+                param("fill", true),
+                param("edge", true),
+                param("device", false),
+            ],
+        }
+    }
+
+    fn settings(pairs: &[(&str, Value)]) -> Settings {
+        pairs.iter().map(|(k, v)| (*k, v.clone())).collect()
+    }
+
+    #[test]
+    fn live_patch_holds_the_changed_live_settings_only() {
+        let base = settings(&[("fill", json!("#ff0000")), ("device", json!("a"))]);
+        let draft = settings(&[("fill", json!("#00ff00")), ("device", json!("b"))]);
+        let patch = live_patch(&kind(), &base, &draft, &HashSet::new());
+        assert_eq!(patch, settings(&[("fill", json!("#00ff00"))]));
+    }
+
+    #[test]
+    fn a_live_setting_already_sent_stays_in_the_patch_when_put_back() {
+        let base = settings(&[("fill", json!("#ff0000"))]);
+        let sent: HashSet<String> = ["fill".into(), "edge".into()].into();
+        // Fill is back at its base value and edge was never stored: both must show that.
+        let patch = live_patch(&kind(), &base, &base.clone(), &sent);
+        assert_eq!(
+            patch,
+            settings(&[("fill", json!("#ff0000")), ("edge", Value::Null)])
+        );
+    }
+
+    #[test]
+    fn defaults_send_null_for_each_live_setting_the_source_stored() {
+        let base = settings(&[("fill", json!("#ff0000")), ("device", json!("a"))]);
+        let patch = live_patch(&kind(), &base, &Settings::default(), &HashSet::new());
+        assert_eq!(patch, settings(&[("fill", Value::Null)]));
     }
 }

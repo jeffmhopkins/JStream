@@ -88,7 +88,8 @@ schemas under `oneOf`. The two batch options apply to edits and history ops only
 ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): an action or query that
 carries them is rejected. The `history` tool undoes and redoes the session's own steps,
 never another client's. The `live` tool (`live.set`, `live.cancel`, `live.list`) previews
-placements and crops without a `rev` change; the agent commits a gesture with `batch`
+placements, crops and a source's `live` settings
+([ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)) without a `rev` change; the agent commits a gesture with `batch`
 and `ends_gesture` ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), and the
 gestures it leaves open expire when its session ends. Unknown argument keys are rejected too, so a misspelt
 `expected_rev` can't silently drop the concurrency check. Each tool's `inputSchema`

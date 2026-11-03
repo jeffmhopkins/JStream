@@ -139,8 +139,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   hovering the chart's right edge reads the newest sample "now" and further left the
   one before "1 s ago", gone when the pointer leaves; a stop puts it back to READY and
   Waiting.
-- **Docking** (`docking.spec.js`): the Editing layout's zones (Filters and Transform as
-  tabs under the Inspector, Transitions as a tab beside Outputs), with empty zones hidden; the View
+- **Docking** (`docking.spec.js`): the Editing layout's zones (the Inspector, Filters and
+  Transform as tabs of one group on the right, Transitions as a tab beside Outputs), with empty zones hidden; the View
   menu hiding and adding a panel at the end of its home zone, and the layout marked
   "(modified)"; dragging a tab onto a tab strip groups it, and onto an empty zone,
   which shows while dragging, docks it there; a lone panel collapses by its title,
@@ -222,7 +222,12 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   of the draft source on a channel from 2³¹ up, another on a new channel once the
   Device field changes, closing the first with nothing saved, and an unsubscribe when
   Cancel closes the dialog; a colour source shows no picture. The mock streams no
-  pictures, so what the picture draws is checked by hand.
+  pictures, so what the picture draws is checked by hand. With the `color` kind
+  described (its `color` live, ADR-0091), a changed colour goes out as a `live.set`
+  of `source.set_settings` with `rev` unchanged; Cancel sends `live.cancel` and saves
+  nothing; OK's batch carries `ends_gesture` with the final colour as one edit, and the
+  dialog opened again shows it. That the output draws the value is the engine's
+  test.
 - **Capture targets** (`capture-targets.spec.js`): with the `window` kind described, a
   new Window capture's Properties dialog lists the mock's one window by name and size
   after None, and not its display; picking it and pressing OK is one edit, and the

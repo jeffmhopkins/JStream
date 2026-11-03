@@ -1,5 +1,6 @@
 // The Properties dialog: opened from an item's menu, it edits a draft of the source's
-// name and settings that only OK sends, and lists the source's filters (seeded: Sharpen,
+// name and settings that OK sends as one edit, showing each setting the kind marks live
+// as a live value meanwhile (ADR-0091), and lists the source's filters (seeded: Sharpen,
 // then Blur turned off). The mock engine
 // describes no kinds, so the settings form itself is covered natively; the webcam's
 // live picture gets its descriptor from the page's socket (`describeKinds`).
@@ -108,4 +109,53 @@ test('a source that captures nothing shows no picture', async ({ page, daemon })
   const dialog = await openProperties(page);
   await expect(dialog.locator('.modal-title')).toHaveText('Color properties');
   await expect(dialog.getByLabel('Preview')).toHaveCount(0);
+});
+
+const COLOR = {
+  kind_id: 'color', category: 'source', name: 'Color', version: 1, video: true, audio: false,
+  params: [
+    { id: 'color', type: 'color', alpha: true, default: '#000000ff', label: 'Color', live: true },
+    { id: 'width', type: 'int', min: 1, max: 16384, step: 1, unit: 'px', default: 1920, label: 'Width', live: false },
+  ],
+};
+
+test('a live setting shows as a live value, OK commits it in one edit, and Cancel leaves nothing', async ({ page, daemon }) => {
+  // Every request the page sends, as text.
+  const requests = [];
+  await describeKinds(page, [COLOR], { refuse: (request) => { requests.push(JSON.stringify(request)); return null; } });
+  const sent = (marker) => requests.filter((r) => r.includes(marker));
+  await connect(page, daemon);
+  const startRev = await rev(page);
+
+  // A changed color goes out as a live value of the dialog's gesture, not as an edit.
+  let dialog = await openProperties(page);
+  await dialog.locator('input.color-text').fill('#00ff00ff');
+  await dialog.locator('input.color-text').press('Tab');
+  await expect.poll(() => sent('"live.set"').length).toBe(1);
+  expect(sent('"live.set"')[0]).toContain('"source.set_settings"');
+  expect(sent('"live.set"')[0]).toContain('#00ff00ff');
+  expect(await rev(page)).toBe(startRev);
+
+  // Cancel drops it: the gesture is cancelled and nothing is saved.
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toBeHidden();
+  await expect.poll(() => sent('"live.cancel"').length).toBe(1);
+  expect(sent('"ends_gesture"')).toHaveLength(0);
+  expect(await rev(page)).toBe(startRev);
+
+  // OK commits the final value in one batch that ends the gesture: one edit.
+  dialog = await openProperties(page);
+  await dialog.locator('input.color-text').fill('#0000ffff');
+  await dialog.locator('input.color-text').press('Tab');
+  await expect.poll(() => sent('"live.set"').length).toBe(2);
+  await dialog.getByRole('button', { name: 'OK' }).click();
+  await expect(dialog).toBeHidden();
+  await expect.poll(() => rev(page)).toBe(startRev + 1);
+  const [commit] = sent('"ends_gesture"');
+  expect(commit).toContain('#0000ffff');
+  expect(sent('"live.cancel"')).toHaveLength(1);
+
+  // The dialog opens again on the committed value.
+  dialog = await openProperties(page);
+  await expect(dialog.locator('input.color-text')).toHaveValue('#0000ffff');
 });

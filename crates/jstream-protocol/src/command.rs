@@ -1163,8 +1163,10 @@ pub enum Action {
     /// the same parameter, and takes the parameter over from any other gesture that held
     /// it. Values are validated as a batch's edits are (`not_found`, `invalid_argument`
     /// with the field `values.<n>.<field>`); a value that is not a live-adjustable
-    /// setter (`item.set_transform`, `item.set_geometry`, `item.set_crop`), an empty or
-    /// over-256 list, and a 17th open gesture are `invalid_argument`. Nothing in a
+    /// setter (`item.set_transform`, `item.set_geometry`, `item.set_crop`, and since
+    /// 0.67 `source.set_settings` naming only parameters its kind marks `live`, each a
+    /// parameter of its own, ADR-0091), an empty or over-256 list, and a 17th open
+    /// gesture are `invalid_argument`. Nothing in a
     /// rejected message is applied. A value whose `scene_id` names a keyframe scene is,
     /// since 0.53 (refused before), that keyframe's parameter, apart from the item's
     /// own: it shows only where the keyframe draws the item, and the item's own value

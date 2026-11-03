@@ -100,7 +100,8 @@ Contents ([Design](#design) explains the choices):
   properties form inside it (`properties.rs`), the Add source dialog (`add_source.rs`:
   `AddSource` and the `AddSourceDialog` context that opens it, with its type list and
   the edits it sends, tested natively), the Properties dialog (`source_properties.rs`:
-  `SourceProperties` and the `PropertiesDialog` context that opens it, with its live
+  `SourceProperties` and the `PropertiesDialog` context that opens it, its live values
+  (`live_patch`), and its live
   picture of a capture source in `device_preview.rs`, whose request and what it follows
   are tested natively), the scene
   Properties dialog (`scene_properties.rs`: `SceneProperties` and the `SceneDialog`
@@ -446,8 +447,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   opened, so another client's edit meanwhile stays: a rename (unless the name is blank
   or as it opened) and one `source.set_settings` with each changed value and `null` for
   each one the draft dropped (`draft_patch`), as one batch, and closes once the engine
-  accepts it;
-  Cancel, Escape and the backdrop drop the draft; Defaults empties it. Enter in a
+  accepts it. Meanwhile each setting the kind marks `live` shows on output as it is
+  edited ([ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)): the
+  dialog's first change to one opens a gesture, and each change sends `live.set` with a
+  `source.set_settings` of every live setting changed since it opened, plus any it sent
+  before, which may be back at its first value (`live_patch`, tested natively). With a
+  gesture open, OK's batch carries `ends_gesture`, so it is one undo step.
+  Cancel, Escape and the backdrop drop the draft and send `live.cancel` (as does closing
+  the dialog any way but OK), so the output shows the stored values again and nothing
+  is saved; Defaults empties it, and shows that live too. Enter in a
   field blurs it before pressing OK, so the field's `change` reaches the draft first.
   The filter chains are the Filters panel's rows (below), which apply at once. A double click on
   an item and Properties… in the item menus open it for the item's source; a nested
