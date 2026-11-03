@@ -1825,6 +1825,15 @@ pub fn following_keyframes<'a>(
         .collect()
 }
 
+/// The Filters window adopted a filter added to `owner` just before it opened
+/// ([`adopt`]): if `now` shows that keyframe with its own effects, that add gave them,
+/// not the window, so `owner` no longer counts as following and Cancel keeps the add.
+pub fn adopt_following(following: &mut Vec<FilterOwner>, now: &Collection, owner: &FilterOwner) {
+    if following_keyframes(now, [owner]).is_empty() {
+        following.retain(|o| o != owner);
+    }
+}
+
 /// Numbers each Filters window, so one closing never forgets a later one's log.
 static WINDOWS: AtomicU64 = AtomicU64::new(0);
 
@@ -2076,18 +2085,15 @@ fn WindowBody(
                 return;
             };
             opened.update_value(|opened| adopt(opened, &target, &chains));
-            // That add went to a keyframe that followed the item when the window
-            // opened: the add, made before the window, gave it its own effects, which
-            // Cancel keeps, as it keeps the filter.
-            let owns = untrack(|| {
+            // An add to a keyframe that followed the item gave it its own effects
+            // before the window did, which Cancel keeps, as it keeps the filter.
+            untrack(|| {
                 studio.collection.with(|c| {
-                    c.as_ref()
-                        .is_some_and(|c| following_keyframes(c, [&target.owner]).is_empty())
+                    if let Some(c) = c.as_ref() {
+                        following.update_value(|f| adopt_following(f, c, &target.owner));
+                    }
                 })
             });
-            if owns {
-                following.update_value(|f| f.retain(|o| *o != target.owner));
-            }
         });
     }
     // A filter the Add filter dialog over the window just added: the window shows it.
@@ -3552,7 +3558,7 @@ mod tests {
         let chains = collection
             .chains(&keyframe("follows"))
             .expect("its effects");
-        assert_eq!(chains.video, [vignette]);
+        assert_eq!(chains.video, std::slice::from_ref(&vignette));
         // What the Filters window's Cancel counts as following (#1028): only a keyframe
         // with no effects override. Once an add made before the window gives the
         // keyframe its own (here `bare`), the window adopting it stops counting it.
@@ -3568,6 +3574,47 @@ mod tests {
             [keyframe("follows")]
         );
         assert!(following_keyframes(&collection, [&keyframe("bare")]).is_empty());
+        // The window opened on an add to `follows` the store didn't hold yet, so listed
+        // it as following. Adopting the add on a state that still follows keeps it
+        // listed; on one where the add gave the keyframe its own effects, it drops it,
+        // and Cancel then puts the chain back filter by filter, keeping the add.
+        let mut following = vec![keyframe("follows")];
+        adopt_following(&mut following, &collection, &keyframe("follows"));
+        assert_eq!(following, [keyframe("follows")]);
+        let fresh = FilterInfo {
+            filter_id: FilterId::new("new"),
+            ..vignette.clone()
+        };
+        let mut added = collection.clone();
+        added.scenes[1] = scene(
+            "follows",
+            Some("main"),
+            vec![own(Some(vec![vignette.clone(), fresh.clone()]))],
+        );
+        adopt_following(&mut following, &added, &keyframe("follows"));
+        assert!(following.is_empty());
+        let mut amount = Settings::new();
+        amount.insert("amount", json!(0.9));
+        let log = [Edit::FilterSetSettings {
+            owner: keyframe("follows"),
+            filter_id: FilterId::new("new"),
+            patch: amount,
+        }];
+        let opened = [(
+            keyframe("follows"),
+            FilterChains {
+                video: vec![vignette.clone(), fresh.clone()],
+                ..FilterChains::default()
+            },
+        )];
+        let edits = window_restore(&opened, &log, &following, |_, _| Some(fresh.clone()));
+        assert!(
+            !edits.iter().any(|e| matches!(
+                e,
+                Edit::ItemClearOverride { .. } | Edit::FilterRemove { .. }
+            )),
+            "{edits:?}"
+        );
         // One that overrides them with none reads none.
         assert_eq!(
             effects_owner(&collection, Some(&SceneId::new("bare")), &cam),
