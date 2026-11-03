@@ -44,8 +44,9 @@ What exists to build on:
   its schema.
 
 The forces:
-- Turning 3D on must not move anything. A scene laid out flat should look the same the
-  moment it gets a camera, so a user can switch it on and then start moving the camera.
+- Turning 3D on must not move anything that is laid out flat. A scene of items with
+  neutral 3D should look the same the moment it gets a camera, so a user can switch it on
+  and then start moving the camera.
 - Items are mostly transparent (graphics, keyed video, text). A depth buffer can't
   blend them; drawing far to near can.
 - Nested scenes and groups are 2D layers today (ADR-0050 decision 4), and the
@@ -53,7 +54,10 @@ The forces:
 - Anything new on the wire is a minor addition; an older client must keep working.
 
 This ADR adds a scene-level camera. It changes nothing for a scene without one, so it
-extends ADR-0050 rather than contradicting it. It is agent tier
+extends ADR-0050 rather than contradicting it. In a 3D scene only, decision 4 replaces
+ADR-0022's painter's order (items in stacking order whatever their `z`) and decision 2
+makes `depth_px` a position in the scene's space rather than only a change of projected
+size; ADR-0022 still holds as written for every scene without a camera. It is agent tier
 ([R-GOV-005](../RULES.md#R-GOV-005)): the maintainer asked for the feature, and it changes
 no licence, security or privacy posture, compatibility promise or spending; the protocol
 gains an optional field and an edit.
@@ -157,6 +161,10 @@ space, the framing camera and how to animate a camera with keyframe scenes.
     item can sort in front of it at grazing angles); `depth_sort: false` or splitting the
     item are the workarounds, and a per-pixel depth test would need a new ADR;
   - every item in a 3D scene pays for 3D sampling and edge coverage;
+  - an item that already has 3D (`depth_px`, angles, or its own `perspective_px`) looks
+    different once its scene gets a camera: `depth_px` moves it toward the camera, its
+    angles gain the camera's perspective, and its own perspective is ignored. The UI
+    says so when it turns a scene's camera on;
   - the UI's canvas handles in a 3D scene work in the item's plane through `unplace`, so
     dragging an item moves it in its own plane, not along screen axes.
 - **Not decided here:**
