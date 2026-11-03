@@ -109,4 +109,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0093](0093-shader-sources-from-effect-packs.md) | Shader sources from effect packs | accepted | agent |  |
 | [ADR-0094](0094-scene-cameras.md) | Scene cameras: items in one 3D space | accepted | agent |  |
 | [ADR-0095](0095-browser-helper-on-linux.md) | Browser sources on Linux: the helper paints in software and hands the engine CPU frames | accepted | maintainer |  |
+| [ADR-0097](0097-agents-write-effect-packs.md) | Agents write effect packs over the protocol and MCP | accepted | maintainer |  |
 <!-- @generated end adr-index -->
