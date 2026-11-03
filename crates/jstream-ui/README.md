@@ -689,7 +689,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   each output's `output.status`, and re-reads them on `state.changed` and
   `events.dropped`; `output.state_changed` updates one output's state in place. It
   creates RTMP(S), recording and virtual camera outputs (IDs `output-N`, the first free one), changes
-  an RTMP server URL (`output.set_target`) and the encoder profile, deletes a stopped
+  an RTMP server URL (`output.set_target`) or a recording's file path (`output.set_path`,
+  #1072) with the card's Edit, and the encoder profile, deletes a stopped
   output, and starts and stops each. A card's Audio select picks the bus the output
   carries (`output.set_audio_buses`, one bus); while the output runs it is disabled and
   titled "Stop the output to change its bus", as the engine refuses the move. A virtual

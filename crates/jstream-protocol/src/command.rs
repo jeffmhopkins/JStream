@@ -529,6 +529,21 @@ pub enum Edit {
         /// The new target, validated as in `output.create`.
         target: RtmpTarget,
     },
+    /// Changes where a recording output writes its file (since 0.74, #1072), keeping its
+    /// container, encoder profile, mix, bus and filters. A running output keeps writing
+    /// where it started; the new path applies from its next `output.start`, which still
+    /// never overwrites. The path is checked as in `output.create`'s
+    /// [`OutputKind::Record`](crate::OutputKind::Record). An output that isn't a
+    /// recording is `invalid_argument`. Inverse: `output.set_path` with the previous
+    /// path.
+    #[serde(rename = "output.set_path")]
+    OutputSetPath {
+        /// The recording output to change.
+        output_id: OutputId,
+        /// Where the finished recording goes: an absolute path on the engine's machine,
+        /// ending in a file name.
+        path: String,
+    },
     /// Changes the canvas: every scene's coordinate space, in whole pixels (ADR-0022).
     /// Items keep their canvas-pixel placements; nothing moves or resizes. Zero, or a
     /// side over the engine's maximum (at least 7680, both ways), is `invalid_argument`.
@@ -1094,6 +1109,7 @@ impl Edit {
             Edit::FilterReorder { .. } => "filter.reorder",
             Edit::OutputCreate { .. } => "output.create",
             Edit::OutputSetTarget { .. } => "output.set_target",
+            Edit::OutputSetPath { .. } => "output.set_path",
             Edit::OutputDelete { .. } => "output.delete",
             Edit::OutputSetEncoder { .. } => "output.set_encoder",
             Edit::EncoderCreate { .. } => "encoder.create",
