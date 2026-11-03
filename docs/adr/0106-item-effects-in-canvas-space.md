@@ -66,5 +66,6 @@ reflection needs one more nested scene, with the mask on the nested scene's item
   the canvas). That needs two layers per item. The nested-scene workaround still covers
   it.
 - **Amends** ADR-0065 §5, which gives only the box-space render order.
-- **Docs to change:** ARCHITECTURE's data model, protocol and GPU pipeline, the
-  protocol, graph, core, control, CLI and UI READMEs, and UI-FEATURES' filters rows.
+- **Docs to change:** ARCHITECTURE's data model, protocol, GPU pipeline and
+  persistence, the protocol, graph, core, CLI and UI READMEs, and UI-FEATURES' filters
+  rows.

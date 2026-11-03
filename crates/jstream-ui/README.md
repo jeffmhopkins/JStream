@@ -593,7 +593,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   whose picture holds the keyframe. Under an item's effects, an "Over the canvas" check
   (`EffectsSpaceCheck`) sends `item.set_effects_space`
   ([ADR-0106](../../docs/adr/0106-item-effects-in-canvas-space.md)), so the effects run
-  after the item is placed. The Add filter dialog lists the vignette under Style.
+  after the item is placed. It isn't shown under a keyframe's effects, since the space
+  belongs to the item in every scene. The Add filter dialog lists the vignette under Style.
 - **The shell** is the header bar over the workspace. A failed call shows in a
   dismissable bar. A confirmation, such as "Added a reference…" after a placement of
   an existing source or a duplicate, shows in the toast (`Studio::notify`, or

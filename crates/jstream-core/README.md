@@ -1230,12 +1230,12 @@ down uniformly. The item is drawn cropped and fitted, centred, flat and unrotate
 with its fit and flips, and its live values applied. Then the chain runs into
 `GpuKey::Filtered`. The item's layer in its scene shows that output, stretched over the
 item's box grown by the outset in proportion, and turned and projected as the box is,
-before its opacity and blend. An item whose `effects_space` is `canvas`
+before its opacity and blend. So a live resize draws the same layer, scaled, until
+the plan is made again. An item whose `effects_space` is `canvas`
 ([ADR-0106](../../docs/adr/0106-item-effects-in-canvas-space.md)) has a canvas-sized
 layer instead, with no outset, scaled down the same way: the item is drawn into it
-where it is placed, turned, flipped and tilted as it is, and the layer covers the
-canvas flat. Its transition visual never glides. So a live resize draws the same layer, scaled, until
-the plan is made again. A layer that can't be made or drawn (too large for the
+where it is placed, turned, flipped and tilted as it is (a live resize redraws it
+there), and the layer covers the canvas flat. Its transition visual never glides. A layer that can't be made or drawn (too large for the
 adapter) blanks only its item that frame, logged once until a frame draws it, as a
 failed chain blanks only its owner. What the item shows is read as the chain phase draws it: a
 source's frame or chain output, a capture, or a nested scene through its own chain or

@@ -1334,7 +1334,9 @@ pub fn Chains(
         }
     };
     let space = match &owner_of_space {
-        FilterOwner::Item { item_id } | FilterOwner::Keyframe { item_id, .. } if video => {
+        // Not under a keyframe's effects: the space belongs to the item in every scene
+        // (ADR-0106), where the panel says a keyframe's effects are its own.
+        FilterOwner::Item { item_id } if video => {
             Some(view! { <EffectsSpaceCheck item_id=item_id.clone() /> })
         }
         _ => None,
