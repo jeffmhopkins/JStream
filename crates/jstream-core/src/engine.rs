@@ -957,6 +957,20 @@ impl Engine {
         lock(&self.shared.state).graph.rev()
     }
 
+    /// A source's setting as the engine draws it, with open gestures' live values
+    /// applied (ADR-0091).
+    #[cfg(test)]
+    pub(crate) fn drawn_setting(&self, source_id: &str, param: &str) -> Option<serde_json::Value> {
+        let state = lock(&self.shared.state);
+        let graph = state.shown.as_ref().unwrap_or(&state.graph);
+        graph
+            .state()
+            .source(&jstream_protocol::SourceId::new(source_id))?
+            .settings()
+            .get(param)
+            .cloned()
+    }
+
     /// Sets how many undo steps each client keeps (100 by default). The oldest steps
     /// are dropped first, and 0 keeps none.
     #[must_use]
@@ -2790,6 +2804,10 @@ struct State {
     /// Every client's open live-value gestures (ADR-0032), and the committed values the
     /// render thread has not caught up with yet.
     gestures: Gestures,
+    /// The collection with the open gestures' source settings applied (ADR-0091), which
+    /// the live sources, the audio mix and the render plan follow instead of `graph`
+    /// while any is open.
+    shown: Option<Graph>,
     /// The last entries of the audit log, with their sentences (ADR-0083), for
     /// `activity.list`.
     activity: Activity,
@@ -3074,8 +3092,12 @@ impl State {
         wake: &mut Vec<Waker>,
     ) {
         self.outputs.sync(self.graph.state());
-        self.live.sync(self.graph.state());
-        self.audio.sync(self.graph.state(), self.live.audio());
+        self.refresh_shown();
+        {
+            let drawn = self.shown.as_ref().unwrap_or(&self.graph);
+            self.live.sync(drawn.state());
+            self.audio.sync(drawn.state(), self.live.audio());
+        }
         for edit in edits {
             if let Edit::SourceDelete { source_id } = edit
                 && self.graph.state().source(source_id).is_none()
@@ -3096,10 +3118,16 @@ impl State {
         self.route_audio();
         self.publish_render();
         let state = self.graph.state();
-        if self.gestures.drop_missing(|item_id, keyframe| {
-            state.item(item_id).is_some() && keyframe.is_none_or(|id| is_keyframe(state, id))
-        }) {
+        if self.gestures.drop_missing(
+            |item_id, keyframe| {
+                state.item(item_id).is_some() && keyframe.is_none_or(|id| is_keyframe(state, id))
+            },
+            |source_id| state.source(source_id).is_some(),
+        ) {
             self.publish_live();
+            if self.refresh_shown() {
+                self.redraw();
+            }
         }
         self.subscribers.emit(
             &Event::StateChanged {
@@ -3420,6 +3448,7 @@ impl State {
     fn publish_render(&mut self) -> Option<f32> {
         let Self {
             graph,
+            shown,
             frames,
             frame_versions,
             live,
@@ -3432,6 +3461,9 @@ impl State {
             shared,
             ..
         } = self;
+        // Drawn with the open gestures' source settings (ADR-0091); its revision is the
+        // collection's.
+        let graph: &Graph = shown.as_ref().unwrap_or(graph);
         let now = live.now();
         live.begin_plan();
         let assets = live.filter_assets();
@@ -3547,16 +3579,23 @@ impl State {
         wake: &mut Vec<Waker>,
     ) -> Result<CallResult, ProtocolError> {
         self.gestures.check_set(client_id, gesture_id, &values)?;
+        check_live_settings(&self.graph, &values)?;
         self.graph
             .clone()
             .apply(&values, None)
             .map_err(values_error)?;
+        let settings = values
+            .iter()
+            .any(|v| matches!(v, Edit::SourceSetSettings { .. }));
         // A value addressed to a keyframe scene is a parameter of that keyframe's: it
         // shows only where the keyframe draws the item (#846).
         let state = self.graph.state();
         self.gestures
             .set(client_id, gesture_id, values, |id| is_keyframe(state, id));
         self.publish_live();
+        if settings && self.refresh_shown() {
+            self.redraw();
+        }
         self.live_tick(Instant::now(), wake);
         Ok(CallResult::action())
     }
@@ -3579,6 +3618,9 @@ impl State {
             return;
         };
         self.publish_live();
+        if self.refresh_shown() {
+            self.redraw();
+        }
         self.subscribers.emit(
             &Event::LiveEnded {
                 gesture_id: gesture_id.clone(),
@@ -3604,6 +3646,10 @@ impl State {
     ) {
         let generation = self.render.generation();
         self.gestures.commit(client_id, gesture_id, generation);
+        // The committed settings are in the collection now: drawn from it again.
+        if self.refresh_shown() {
+            self.redraw();
+        }
         self.subscribers.emit(
             &Event::LiveEnded {
                 gesture_id: gesture_id.clone(),
@@ -3614,6 +3660,32 @@ impl State {
             wake,
         );
         self.live_tick(Instant::now(), wake);
+    }
+
+    /// Rebuilds [`shown`](Self::shown) from the open gestures' source settings. Returns
+    /// whether what is drawn may have changed: it had or has settings applied.
+    fn refresh_shown(&mut self) -> bool {
+        let settings = self.gestures.settings();
+        let had = self.shown.is_some();
+        self.shown = (!settings.is_empty()).then(|| self.graph.with_values(&settings));
+        had || self.shown.is_some()
+    }
+
+    /// Has the live sources, the audio mix and the render plan follow the collection as
+    /// drawn again, after its live settings changed.
+    fn redraw(&mut self) {
+        let Self {
+            graph,
+            shown,
+            live,
+            audio,
+            ..
+        } = self;
+        let drawn = shown.as_ref().unwrap_or(graph);
+        live.sync(drawn.state());
+        audio.sync(drawn.state(), live.audio());
+        self.route_audio();
+        self.publish_render();
     }
 
     /// Publishes the gestures' live values on the render parameter channel.
@@ -3897,6 +3969,35 @@ fn live_ticker(shared: &Weak<Shared>) {
 
 /// A `live.set` value's error, named as the value: the graph names a batch's edits
 /// `edits.<n>`, and `live.set` carries them as `values.<n>`.
+/// Refuses a `source.set_settings` value that names a setting its kind doesn't mark
+/// `live` (ADR-0091), as `values.<n>.patch.<param>`. A source or setting that doesn't
+/// exist is left to the collection's own check.
+fn check_live_settings(graph: &Graph, values: &[Edit]) -> Result<(), ProtocolError> {
+    for (at, value) in values.iter().enumerate() {
+        let Edit::SourceSetSettings { source_id, patch } = value else {
+            continue;
+        };
+        let Some(source) = graph.state().source(source_id) else {
+            continue;
+        };
+        let jstream_protocol::SourceKind::Builtin { kind } = source.kind() else {
+            continue;
+        };
+        let Some(descriptor) = graph.kind(kind) else {
+            continue;
+        };
+        for (id, _) in patch.iter() {
+            if descriptor.param(id).is_some_and(|p| !p.live) {
+                return Err(ProtocolError::invalid_argument(
+                    format!("values.{at}.patch.{id}"),
+                    "is not a live setting of its kind; send it in a batch",
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn values_error(error: ProtocolError) -> ProtocolError {
     match error {
         ProtocolError::InvalidArgument {
