@@ -58,9 +58,9 @@ impl SolidBounds {
 /// A model placed by an item: the map from the model's space to the viewing frame, and
 /// how that frame lands on the canvas. Built by [`ItemGeometry::solid`].
 ///
-/// The viewing frame is [`super::drawn`]'s: x right and y down off the point that lands
-/// on `center`, z toward the viewer, with the viewer at `z = p` and `w = (p − z) / p`;
-/// without perspective, `w = 1`.
+/// The viewing frame is the one ADR-0050's drawn polygon uses: x right and y down off the
+/// point that lands on `center`, z toward the viewer, with the viewer at `z = p` and
+/// `w = (p − z) / p`; without perspective, `w = 1`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Solid {
     /// Rows of a 3x4 affine map from a model point to the viewing frame.
