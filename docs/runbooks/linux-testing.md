@@ -35,7 +35,8 @@ password (through `sudo`) at most twice:
 2. **To make Chromium's sandbox helper setuid root**, for browser sources, on systems that
    restrict user namespaces, such as Ubuntu 24.04 and later.
 
-When it finishes, JStream starts. It copies your access token to the clipboard and opens
+When it finishes, JStream starts. It copies your access token to the clipboard (for two
+minutes) and opens
 JStream in your browser. When the browser asks you to sign in, paste the token as the
 password (any user name will do), then click Connect with the Token field left empty.
 Later, open JStream from your app menu, or run `jstream`. JStream has no window of its
@@ -113,7 +114,8 @@ does each step only when it is needed, so running it again updates what changed:
 The launcher, `scripts/linux/jstream`, starts the daemon in its own session with the data
 folder's token file and `collection.json`, and the installed UI, waits for its
 `listening on` line, and keeps its process ID and the UI's URL in the data folder. It
-copies the token to the clipboard, says so in a notification, and opens the URL with
+copies the token to the clipboard, and clears it two minutes later if it is still there, as
+on Mac; says so in a notification, and opens the URL with
 `xdg-open`; run again while the daemon runs, it only does those last steps. `--stop`
 stops the daemon (SIGTERM), which the menu entry's "Stop JStream" action runs. `--print`
 starts it and prints the process ID, the URL and the token instead, for CI.

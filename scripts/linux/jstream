@@ -41,18 +41,26 @@ notify() {
     printf '%s: %s\n' "$1" "$2" >&2
 }
 
+# Puts the token on the clipboard, and takes it off again after two minutes if it is still
+# there, as the Mac launcher does.
 copy_token() {
-    local token=$1
+    local token=$1 copy paste clear
     if [ -n "${WAYLAND_DISPLAY:-}" ] && command -v wl-copy >/dev/null 2>&1; then
-        printf '%s' "$token" | wl-copy 2>/dev/null && return 0
+        copy=(wl-copy) paste=(wl-paste --no-newline) clear=(wl-copy --clear)
+    elif [ -n "${DISPLAY:-}" ] && command -v xclip >/dev/null 2>&1; then
+        copy=(xclip -selection clipboard) paste=(xclip -selection clipboard -o)
+        clear=(xclip -selection clipboard /dev/null)
+    elif [ -n "${DISPLAY:-}" ] && command -v xsel >/dev/null 2>&1; then
+        copy=(xsel --clipboard --input) paste=(xsel --clipboard --output) clear=(xsel --clipboard --clear)
+    else
+        return 1
     fi
-    if [ -n "${DISPLAY:-}" ] && command -v xclip >/dev/null 2>&1; then
-        printf '%s' "$token" | xclip -selection clipboard 2>/dev/null && return 0
-    fi
-    if [ -n "${DISPLAY:-}" ] && command -v xsel >/dev/null 2>&1; then
-        printf '%s' "$token" | xsel --clipboard --input 2>/dev/null && return 0
-    fi
-    return 1
+    printf '%s' "$token" | "${copy[@]}" >/dev/null 2>&1 || return 1
+    (
+        sleep 120
+        if [ "$("${paste[@]}" 2>/dev/null)" = "$token" ]; then "${clear[@]}" </dev/null >/dev/null 2>&1; fi
+    ) </dev/null >/dev/null 2>&1 &
+    disown 2>/dev/null || true
 }
 
 # Starts the daemon detached and waits for its `listening on` line; the `ui: <url>` line
@@ -123,7 +131,7 @@ main() {
         return
     fi
     if copy_token "$token"; then
-        notify "JStream is running" "Your access token is on the clipboard. When your browser asks you to sign in, paste it as the password (any user name)."
+        notify "JStream is running" "Your access token is on the clipboard for two minutes. When your browser asks you to sign in, paste it as the password (any user name)."
     else
         notify "JStream is running" "When your browser asks you to sign in, use the token in $data/token as the password (any user name)."
     fi
