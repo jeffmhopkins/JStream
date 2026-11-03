@@ -496,3 +496,137 @@ fn live_changed_is_coalesced_and_the_newest_values_follow() {
         "the newest value always goes out"
     );
 }
+
+/// A color source `fill`, black, placed in `main` as item `f`.
+fn color_source(control: &dyn Control) {
+    batch(
+        control,
+        edits(vec![
+            create("main"),
+            Edit::SourceCreate {
+                source_id: jstream_protocol::SourceId::new("fill"),
+                name: "Fill".into(),
+                kind: jstream_protocol::SourceKind::Builtin {
+                    kind: "color".into(),
+                },
+                settings: jstream_protocol::Settings::new(),
+                duplicated_from: None,
+            },
+            add("main", "f", "fill"),
+        ]),
+    )
+    .expect("scene");
+}
+
+fn fill(pairs: &[(&str, serde_json::Value)]) -> Edit {
+    let mut patch = jstream_protocol::Settings::new();
+    for (id, value) in pairs {
+        patch.insert(*id, value.clone());
+    }
+    Edit::SourceSetSettings {
+        source_id: jstream_protocol::SourceId::new("fill"),
+        patch,
+    }
+}
+
+/// The source's `color` as `source.list` reads it, the collection's.
+fn stored_color(control: &dyn Control) -> Option<serde_json::Value> {
+    match query(control, Query::SourceList).expect("source.list") {
+        QueryResult::SourceList { sources, .. } => sources
+            .iter()
+            .find(|s| s.source_id.as_str() == "fill")
+            .and_then(|s| s.settings.get("color").cloned()),
+        other => panic!("not a source list: {other:?}"),
+    }
+}
+
+/// ADR-0091: a source's `live` settings are live values. The engine draws them at once,
+/// the collection doesn't change, the commit is one rev and one undo step, and a cancel
+/// leaves nothing.
+#[test]
+fn a_sources_live_setting_is_drawn_until_committed_or_cancelled() {
+    let engine = Engine::new();
+    let control = connected(&engine);
+    color_source(&control);
+    let red = serde_json::json!("#ff0000ff");
+    let blue = serde_json::json!("#0000ffff");
+    let before = engine.rev();
+    let stored = stored_color(&control);
+
+    live_set(&control, "props", vec![fill(&[("color", red.clone())])]).expect("live.set");
+    assert_eq!(engine.rev(), before, "a live value is not collection state");
+    assert_eq!(
+        stored_color(&control),
+        stored,
+        "collection reads never show it"
+    );
+    assert_eq!(engine.drawn_setting("fill", "color"), Some(red.clone()));
+    live_set(&control, "props", vec![fill(&[("color", blue.clone())])]).expect("again");
+    assert_eq!(engine.drawn_setting("fill", "color"), Some(blue.clone()));
+    assert_eq!(
+        live_list(&control)[0].values,
+        [fill(&[("color", blue.clone())])]
+    );
+
+    // A setting the kind doesn't mark live is refused, and nothing in the message applies.
+    let error = live_set(
+        &control,
+        "props",
+        vec![fill(&[
+            ("color", red.clone()),
+            ("width", serde_json::json!(640)),
+        ])],
+    )
+    .expect_err("width is not live");
+    assert_eq!(invalid_field(&error), "values.0.patch.width");
+    assert_eq!(engine.drawn_setting("fill", "color"), Some(blue.clone()));
+
+    // Cancel: drawn from the collection again, nothing stored.
+    live_cancel(&control, "props").expect("cancel");
+    assert_eq!(engine.drawn_setting("fill", "color"), stored);
+    assert_eq!(engine.rev(), before);
+
+    // Commit: one rev, one undo step that restores the color from before.
+    live_set(&control, "props", vec![fill(&[("color", red.clone())])]).expect("live.set");
+    live_set(&control, "props", vec![fill(&[("color", blue.clone())])]).expect("again");
+    let rev = batch(
+        &control,
+        Batch::single(fill(&[("color", blue.clone())])).ending_gesture(gesture("props")),
+    )
+    .expect("commit");
+    assert_eq!(rev.0, before.0 + 1, "the dialog is one rev");
+    assert_eq!(stored_color(&control), Some(blue.clone()));
+    assert_eq!(engine.drawn_setting("fill", "color"), Some(blue));
+    assert!(live_list(&control).is_empty());
+    block_on(control.call(Call::History(HistoryCall::new(HistoryOp::Undo)))).expect("undo");
+    assert_eq!(stored_color(&control), stored, "one undo step puts it back");
+    assert_eq!(engine.drawn_setting("fill", "color"), stored);
+}
+
+/// Deleting a source drops the live values of its settings.
+#[test]
+fn deleting_a_source_drops_its_live_settings() {
+    let engine = Engine::new();
+    let control = connected(&engine);
+    color_source(&control);
+    live_set(
+        &control,
+        "props",
+        vec![fill(&[("color", serde_json::json!("#ff0000ff"))])],
+    )
+    .expect("live.set");
+    batch(
+        &control,
+        edits(vec![
+            Edit::ItemRemove {
+                item_id: ItemId::new("f"),
+            },
+            Edit::SourceDelete {
+                source_id: jstream_protocol::SourceId::new("fill"),
+            },
+        ]),
+    )
+    .expect("delete");
+    assert!(live_list(&control)[0].values.is_empty());
+    assert_eq!(engine.drawn_setting("fill", "color"), None);
+}

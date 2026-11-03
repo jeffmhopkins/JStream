@@ -222,7 +222,12 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   of the draft source on a channel from 2³¹ up, another on a new channel once the
   Device field changes, closing the first with nothing saved, and an unsubscribe when
   Cancel closes the dialog; a colour source shows no picture. The mock streams no
-  pictures, so what the picture draws is checked by hand.
+  pictures, so what the picture draws is checked by hand. With the `color` kind
+  described (its `color` live, ADR-0091), a changed colour goes out as a `live.set`
+  of `source.set_settings` with `rev` unchanged; Cancel sends `live.cancel` and saves
+  nothing; OK's batch carries `ends_gesture` with the final colour as one edit, and the
+  dialog opened again shows it. That the output draws the value is the engine's
+  test.
 - **Capture targets** (`capture-targets.spec.js`): with the `window` kind described, a
   new Window capture's Properties dialog lists the mock's one window by name and size
   after None, and not its display; picking it and pressing OK is one edit, and the

@@ -105,7 +105,10 @@ applies the edits in order to a working copy of the state. The first edit that f
 aborts the batch with `not_found`, `already_exists` or `invalid_argument` (field
 `edits.<n>.<field>`), and nothing changes. On success the copy replaces the state, `rev`
 goes up by exactly one, and the result (`Applied`) carries the **inverse batch** and what
-the batch **touched**.
+the batch **touched**. `Graph::with_values(edits)` is the other way in: a copy of the
+graph with each edit that applies applied, skipping any that fails, at the same `rev`,
+with no inverse. The engine draws open gestures' source settings through it
+([ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)).
 
 - **Inverses** are computed from the state before each edit, and the batch's inverse is
   its edits' inverses in reverse order. They are plain protocol edits, as the protocol's

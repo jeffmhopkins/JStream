@@ -51,13 +51,17 @@ pub struct GestureInfo {
     pub values: Vec<Edit>,
 }
 
-/// Whether `live.set` accepts `edit` as a value: a setter of a parameter the real-time
-/// threads take from a parameter channel, with no snapshot rebuild. Today that is an
-/// item's placement (`item.set_transform`, `item.set_geometry`) and its crop
-/// (`item.set_crop`).
+/// Whether `live.set` accepts `edit` as a value: an item's placement
+/// (`item.set_transform`, `item.set_geometry`) and its crop (`item.set_crop`), which the
+/// real-time threads take from a parameter channel, and since 0.67 a source's settings
+/// (`source.set_settings`, ADR-0091), of which the engine accepts only the parameters
+/// its kind marks `live`.
 pub fn is_live_adjustable(edit: &Edit) -> bool {
     matches!(
         edit,
-        Edit::ItemSetTransform { .. } | Edit::ItemSetGeometry { .. } | Edit::ItemSetCrop { .. }
+        Edit::ItemSetTransform { .. }
+            | Edit::ItemSetGeometry { .. }
+            | Edit::ItemSetCrop { .. }
+            | Edit::SourceSetSettings { .. }
     )
 }

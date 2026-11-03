@@ -12,7 +12,7 @@
 use crate::snapshot::LiveParams;
 use jstream_protocol::{
     ClientId, Edit, Event, GestureId, GestureInfo, ItemId, LiveOutcome, MAX_GESTURES_PER_CLIENT,
-    MAX_LIVE_VALUES, ProtocolError, SceneId, is_live_adjustable,
+    MAX_LIVE_VALUES, ProtocolError, SceneId, Settings, SourceId, is_live_adjustable,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::{Duration, Instant};
@@ -30,6 +30,8 @@ enum Param {
     Placement(Option<SceneId>, ItemId),
     /// An item's crop.
     Crop(Option<SceneId>, ItemId),
+    /// One setting of a source, which its kind marks `live` (ADR-0091).
+    Setting(SourceId, String),
 }
 
 impl Param {
@@ -52,9 +54,11 @@ impl Param {
         }
     }
 
-    fn item(&self) -> &ItemId {
+    /// The item it belongs to, if it is an item's.
+    fn item(&self) -> Option<&ItemId> {
         match self {
-            Param::Placement(_, item_id) | Param::Crop(_, item_id) => item_id,
+            Param::Placement(_, item_id) | Param::Crop(_, item_id) => Some(item_id),
+            Param::Setting(..) => None,
         }
     }
 
@@ -62,7 +66,38 @@ impl Param {
     fn keyframe(&self) -> Option<&SceneId> {
         match self {
             Param::Placement(keyframe, _) | Param::Crop(keyframe, _) => keyframe.as_ref(),
+            Param::Setting(..) => None,
         }
+    }
+}
+
+/// `value` as one value per parameter: a source's settings patch split into one setting
+/// each (ADR-0091), any other value as it is.
+fn split(value: Edit) -> Vec<Edit> {
+    match value {
+        Edit::SourceSetSettings { source_id, patch } => patch
+            .iter()
+            .map(|(id, v)| {
+                let mut one = Settings::new();
+                one.insert(id, v.clone());
+                Edit::SourceSetSettings {
+                    source_id: source_id.clone(),
+                    patch: one,
+                }
+            })
+            .collect(),
+        other => vec![other],
+    }
+}
+
+/// The parameter a value from [`split`] sets, if it is live-adjustable.
+fn param_of(value: &Edit, is_keyframe: impl Fn(&SceneId) -> bool) -> Option<Param> {
+    match value {
+        Edit::SourceSetSettings { source_id, patch } => patch
+            .iter()
+            .next()
+            .map(|(id, _)| Param::Setting(source_id.clone(), id.to_owned())),
+        other => Param::of(other, is_keyframe),
     }
 }
 
@@ -151,8 +186,8 @@ impl Gestures {
     ) {
         let key = (client_id.clone(), gesture_id.clone());
         self.open.entry(key.clone()).or_default();
-        for value in values {
-            let Some(param) = Param::of(&value, &is_keyframe) else {
+        for value in values.into_iter().flat_map(split) {
+            let Some(param) = param_of(&value, &is_keyframe) else {
                 continue;
             };
             if let Some(holder) = self.holders.insert(param.clone(), key.clone())
@@ -228,10 +263,15 @@ impl Gestures {
     /// the snapshot that carries the commit.
     pub(crate) fn commit(&mut self, client_id: &ClientId, gesture_id: &GestureId, generation: u64) {
         let key = (client_id.clone(), gesture_id.clone());
-        if let Some(gesture) = self.remove(&key)
-            && !gesture.values.is_empty()
-        {
-            self.releasing.push((generation, gesture.values));
+        if let Some(mut gesture) = self.remove(&key) {
+            // A setting's committed value is in the collection the snapshot is built
+            // from, so only item values wait for the render thread.
+            gesture
+                .values
+                .retain(|param, _| !matches!(param, Param::Setting(..)));
+            if !gesture.values.is_empty() {
+                self.releasing.push((generation, gesture.values));
+            }
         }
     }
 
@@ -264,11 +304,18 @@ impl Gestures {
     pub(crate) fn drop_missing(
         &mut self,
         exists: impl Fn(&ItemId, Option<&SceneId>) -> bool,
+        source_exists: impl Fn(&SourceId) -> bool,
     ) -> bool {
+        let here = |param: &Param| match param {
+            Param::Setting(source_id, _) => source_exists(source_id),
+            _ => param
+                .item()
+                .is_some_and(|item| exists(item, param.keyframe())),
+        };
         let gone: Vec<Param> = self
             .holders
             .keys()
-            .filter(|param| !exists(param.item(), param.keyframe()))
+            .filter(|param| !here(param))
             .cloned()
             .collect();
         for param in &gone {
@@ -282,7 +329,7 @@ impl Gestures {
         let mut released = false;
         for (_, values) in &mut self.releasing {
             let before = values.len();
-            values.retain(|param, _| exists(param.item(), param.keyframe()));
+            values.retain(|param, _| here(param));
             released |= values.len() != before;
         }
         self.releasing.retain(|(_, values)| !values.is_empty());
@@ -303,6 +350,17 @@ impl Gestures {
                 .chain(open)
                 .map(|(param, value)| (param.keyframe(), value)),
         )
+    }
+
+    /// The open gestures' values of sources' settings (ADR-0091), one setting each: the
+    /// engine draws the collection with them applied. Committed gestures' settings are
+    /// in the collection already, so none wait for the render thread.
+    pub(crate) fn settings(&self) -> Vec<Edit> {
+        self.holders
+            .iter()
+            .filter(|(param, _)| matches!(param, Param::Setting(..)))
+            .filter_map(|(param, key)| self.open.get(key)?.values.get(param).cloned())
+            .collect()
     }
 
     /// The open gestures, for `live.list`, ordered by client and gesture ID.

@@ -69,6 +69,22 @@ impl Graph {
         self.apply_with_running(edits, expected_rev, &BTreeSet::new())
     }
 
+    /// A copy of the graph with `values` applied to its state and its revision kept: the
+    /// collection as the engine draws it while live values of sources' settings are open
+    /// (ADR-0091). Nothing about it is a revision: no undo step, no inverse. A value
+    /// that doesn't apply (its source was deleted meanwhile) is skipped.
+    #[must_use]
+    pub fn with_values(&self, values: &[Edit]) -> Graph {
+        let mut copy = self.clone();
+        for (at, edit) in values.iter().enumerate() {
+            let mut work = copy.state.clone();
+            if apply_edit(&mut work, &copy.kinds, edit, at, &BTreeSet::new()).is_ok() {
+                copy.state = work;
+            }
+        }
+        copy
+    }
+
     /// [`apply`](Self::apply), for an engine whose outputs in `running` are running: an
     /// `output.delete` of one of them, or an `output.set_audio_buses` moving one to
     /// another bus, fails with `invalid_argument` (field `edits.<n>.output_id`), in edit
