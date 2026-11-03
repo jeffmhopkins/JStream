@@ -626,7 +626,7 @@ struct Item {
     blend: BlendMode,
     /// Its effects (ADR-0065), settings as given: only the video chain holds any.
     effects: jstream_protocol::FilterChains,
-    /// Whether its canvas box is locked (ADR-0093).
+    /// Whether its canvas box is locked (ADR-0096).
     locked: bool,
 }
 

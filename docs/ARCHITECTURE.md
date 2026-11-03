@@ -752,7 +752,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   [ADR-0037](adr/0037-kind-descriptors-for-transitions-and-plugins.md)),
   `transition.set_default` sets the default, `scene.set_transitions` sets a scene's
   `transition_in` and `transition_out`, and `item.set_transition` an item's transition
-  settings. `item.set_locked` (0.69, [ADR-0093](adr/0093-item-lock-and-png-preview-frames.md))
+  settings. `item.set_locked` (0.71, [ADR-0096](adr/0096-item-lock-and-png-preview-frames.md))
   locks an item's canvas box, an editing aid clients honour and the engine never
   enforces. `scene.switch` takes an optional `preset_id`, and the `studio.changed` it
   causes names the preset it ran and how long the transition lasts (0 for a cut).
@@ -860,8 +860,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   scaled down, at most `fps` pictures a second and only when the mix changes (as it
   does throughout a running transition), in H.264
   when the platform has an encoder and JPEG otherwise, or in PNG for a client that asks
-  for it alone to take a screenshot (0.69,
-  [ADR-0093](adr/0093-item-lock-and-png-preview-frames.md)); `preview.unsubscribe` or the
+  for it alone to take a screenshot (0.71,
+  [ADR-0096](adr/0096-item-lock-and-png-preview-frames.md)); `preview.unsubscribe` or the
   session's end closes it. Each frame is a fixed 32-byte header (channel, codec,
   keyframe, size, presentation time, `rev`) and the picture, and every hop that queues
   frames drops up to the next keyframe when full, so a slow client still decodes what

@@ -249,7 +249,7 @@ state machine. Contents:
   (`Control::binary`), in H.264 on a software `jstream-encode` session when the
   platform has an encoder and in JPEG otherwise (`preview/jpeg.rs`, a baseline
   encoder of its own), or in PNG for a client that asks for it to take a screenshot
-  (`video.snapshot`'s encoder, [ADR-0093](../../docs/adr/0093-item-lock-and-png-preview-frames.md)), drawn on the engine's `jstream-preview` thread with its own
+  (`video.snapshot`'s encoder, [ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md)), drawn on the engine's `jstream-preview` thread with its own
   compositor and its own captures of what the mix shows, a webcam's one open shared
   with the program stage (`runtime/devices.rs`; see
   *Preview streams* in [Design](#design)).

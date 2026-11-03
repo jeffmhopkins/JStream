@@ -84,7 +84,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("bus.list", Class(R)),
     ("delete.plan", Class(R)),
     ("capture.targets", Class(R)),
-    // Font paths, so a `read` plugin learns the user's home folder (ADR-0093 §4).
+    // Font paths, so a `read` plugin learns the user's home folder (ADR-0096 §4).
     ("font.list", Class(R)),
     ("privacy.get", Class(R)),
     // The pixels of a user's capture could leak through any granted host; with no

@@ -30,7 +30,7 @@ pub enum PreviewCodec {
     /// One baseline JPEG per frame, every one a keyframe. The fallback when the engine
     /// has no H.264 encoder or the client can't decode H.264.
     Jpeg,
-    /// One PNG per frame, every one a keyframe (ADR-0093, since 0.69): lossless, for a
+    /// One PNG per frame, every one a keyframe (ADR-0096, since 0.71): lossless, for a
     /// screenshot rather than a moving picture. An older server refuses the name.
     Png,
 }
@@ -218,7 +218,7 @@ const FLAG_END: u8 = 2;
 /// |---|---|---|
 /// | 0 | 1 | version, [`BINARY_VERSION`] |
 /// | 1 | 1 | kind: 1 = preview |
-/// | 2 | 1 | codec: 0 = none (an end frame), 1 = H.264, 2 = JPEG, 3 = PNG (0.69) |
+/// | 2 | 1 | codec: 0 = none (an end frame), 1 = H.264, 2 = JPEG, 3 = PNG (0.71) |
 /// | 3 | 1 | flags: bit 0 keyframe, bit 1 end of stream; the rest are 0 |
 /// | 4 | 4 | channel, as the client named it in `preview.subscribe` |
 /// | 8 | 2 | picture width, in pixels |

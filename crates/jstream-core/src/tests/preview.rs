@@ -181,7 +181,7 @@ fn without_an_encoder_the_preview_is_jpeg_and_follows_the_mix() {
     assert_eq!(decode(&resized.payload), (360, 360));
 }
 
-/// A client taking a screenshot asks for PNG (ADR-0093): every frame a lossless
+/// A client taking a screenshot asks for PNG (ADR-0096): every frame a lossless
 /// keyframe, at the size asked for.
 #[test]
 fn a_client_that_asks_for_png_gets_lossless_pictures() {

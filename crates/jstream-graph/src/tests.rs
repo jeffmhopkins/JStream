@@ -4058,7 +4058,7 @@ fn item_add_takes_opacity_and_blend_and_remove_restores_them() {
     assert_eq!(g.state(), &before);
 }
 
-/// `item.set_locked` (ADR-0093) locks the item, its inverse unlocks it, and removing a
+/// `item.set_locked` (ADR-0096) locks the item, its inverse unlocks it, and removing a
 /// locked item is undone locked.
 #[test]
 fn a_lock_is_undone_and_survives_a_removal() {

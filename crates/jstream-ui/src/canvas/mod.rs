@@ -550,7 +550,7 @@ pub fn Canvas() -> impl IntoView {
         event.prevent_default();
         let selection = selected_boxes(&current);
         let shift = event.shift_key();
-        // A locked item in the selection gives it no handles (ADR-0093).
+        // A locked item in the selection gives it no handles (ADR-0096).
         let held = selection.iter().any(|(id, _)| current.is_locked(id));
         // A handle of the selection: the group's when several items are selected, else
         // the one item's.

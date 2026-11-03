@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0093"
+id = "ADR-0096"
 title = "Items can be locked, and a preview stream can send PNG for a screenshot"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0093: Items can be locked, and a preview stream can send PNG for a screenshot
+# ADR-0096: Items can be locked, and a preview stream can send PNG for a screenshot
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted
@@ -31,7 +31,7 @@ keep.
 
 <a id="decision"></a>
 ## Decision
-1. **A lock is item state: `item.set_locked` (protocol 0.69).** It takes an `item_id`
+1. **A lock is item state: `item.set_locked` (protocol 0.71).** It takes an `item_id`
    and `locked`, and its inverse sets the old value. `ItemInfo.locked` reports it,
    omitted while false. It belongs to the item, like its transition settings, so it
    takes no `scene_id` and a keyframe scene doesn't override it. `item.remove`'s
@@ -46,11 +46,11 @@ keep.
    locked item. The JStream UI shows a lock on each row and a Lock check in the item
    menu.
 3. **A preview stream can send PNG (`png` in `preview.subscribe`'s `codecs`, protocol
-   0.69).** Every PNG frame is a keyframe, encoded with `video.snapshot`'s encoder. The
+   0.71).** Every PNG frame is a keyframe, encoded with `video.snapshot`'s encoder. The
    UI takes a screenshot by opening a one-frame PNG stream of the program, a scene or a
    source at the canvas's size (at most 1920 × 1080), saving its first picture as a
    file, and closing the stream. Captures show in it, as in any preview. An engine
-   older than 0.69 refuses the codec's name, and the UI says it can't take a
+   older than 0.71 refuses the codec's name, and the UI says it can't take a
    screenshot.
 4. **`font.list`'s exposure, stated plainly** (ADR-0092 left it implicit). Any client
    that may read, and any plugin granted the `read` class, sees each installed font's

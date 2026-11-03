@@ -194,9 +194,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.69 because of
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.71 because of
   `item.set_locked`, `ItemInfo.locked` and the `png` preview codec
-  ([ADR-0093](../../docs/adr/0093-item-lock-and-png-preview-frames.md)); 0.68 because of the
+  ([ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md)); 0.68 because of the
   `font.list` query ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)); 0.67 because `live.set`
   takes a source's settings whose kind marks them `live` (`source.set_settings`,
   [ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)); 0.66 because
@@ -961,7 +961,7 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
   transition}` an item's `ItemTransition {delay_ms, easing, glide, appear,
   disappear}`, omitted from `ItemInfo` while it is the default.
 - `item.set_locked {item_id, locked}` locks or unlocks an item's canvas box
-  ([ADR-0093](../../docs/adr/0093-item-lock-and-png-preview-frames.md), 0.69), reported
+  ([ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md), 0.71), reported
   as `ItemInfo.locked`, omitted while false. It is an editing aid a client honours by
   not dragging the box; the engine still applies every edit to a locked item. It
   belongs to the item, so it takes no `scene_id` and a keyframe doesn't override it.
@@ -1831,7 +1831,7 @@ the JSON text messages of the same connection (0.20,
   2 s as a keyframe. `codecs` lists what the client can decode, most preferred first
   (default `["h264", "jpeg"]`); the engine uses the first it can encode, and may fall
   back to a later one if an encoder fails to open, so each frame names its codec.
-  `png` (0.69, [ADR-0093](../../docs/adr/0093-item-lock-and-png-preview-frames.md)) is
+  `png` (0.71, [ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md)) is
   lossless and never a default: a client taking a screenshot asks for it alone and
   keeps the first picture. A
   session has at most 16 streams (4 before 0.46), enough for a multiview.
@@ -1874,7 +1874,7 @@ the JSON text messages of the same connection (0.20,
   |---|---|---|
   | 0 | 1 | version, 1 |
   | 1 | 1 | kind: 1 = preview |
-  | 2 | 1 | codec: 0 = none (an end frame), 1 = H.264, 2 = JPEG, 3 = PNG (0.69) |
+  | 2 | 1 | codec: 0 = none (an end frame), 1 = H.264, 2 = JPEG, 3 = PNG (0.71) |
   | 3 | 1 | flags: bit 0 keyframe, bit 1 end of stream |
   | 4 | 4 | channel |
   | 8 | 2 | width |

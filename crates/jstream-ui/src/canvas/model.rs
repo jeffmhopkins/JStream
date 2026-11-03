@@ -63,7 +63,7 @@ pub struct CanvasItem {
     pub crop: Crop,
     /// Its source's own size in pixels, while the engine knows it.
     pub source_size: Option<(u32, u32)>,
-    /// Whether its box is locked (ADR-0093): the canvas selects it but never drags it.
+    /// Whether its box is locked (ADR-0096): the canvas selects it but never drags it.
     pub locked: bool,
 }
 
@@ -109,7 +109,7 @@ impl Layout {
         self.items.iter().find(|item| &item.item_id == item_id)
     }
 
-    /// Whether the item is locked (ADR-0093), so no drag, handle or arrow key moves it.
+    /// Whether the item is locked (ADR-0096), so no drag, handle or arrow key moves it.
     pub fn is_locked(&self, item_id: &ItemId) -> bool {
         self.item(item_id).is_some_and(|item| item.locked)
     }

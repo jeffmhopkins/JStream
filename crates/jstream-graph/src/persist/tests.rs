@@ -359,7 +359,7 @@ fn a_virtual_camera_round_trips() {
     assert_eq!(load(&json), Ok(graph));
 }
 
-/// A locked item saves `locked` (ADR-0093) and loads locked; an unlocked one saves
+/// A locked item saves `locked` (ADR-0096) and loads locked; an unlocked one saves
 /// nothing, so the fixture needs no new version.
 #[test]
 fn a_locked_item_round_trips() {

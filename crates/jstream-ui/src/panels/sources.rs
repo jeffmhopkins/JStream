@@ -57,7 +57,7 @@ struct Row {
     /// The source's type icon.
     icon: &'static str,
     visible: bool,
-    /// Whether the item's canvas box is locked (ADR-0093).
+    /// Whether the item's canvas box is locked (ADR-0096).
     locked: bool,
     /// Whether the source is placed in other scenes too.
     shared: bool,

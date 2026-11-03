@@ -1,11 +1,11 @@
-//! Screenshots, as OBS takes them (ADR-0093): the item menu's Screenshot (source) and
+//! Screenshots, as OBS takes them (ADR-0096): the item menu's Screenshot (source) and
 //! the scene menus' Screenshot (scene) save one lossless picture as a PNG file.
 //!
 //! A screenshot opens a preview stream asking for `png` only, at the canvas's size
 //! within the largest a preview may be, on a channel from the canvas's taps
 //! ([`Taps`](crate::canvas::taps::Taps)). Its first picture is saved through a
 //! download link, and the stream is closed. Captures show in it, as in any preview. An
-//! engine older than protocol 0.69 refuses the codec, and a toast says why. Native
+//! engine older than protocol 0.71 refuses the codec, and a toast says why. Native
 //! builds (tests, clippy) get a stand-in that only says so.
 //!
 //! Docs: crates/jstream-ui/README.md#design
@@ -124,11 +124,11 @@ fn name_of(studio: Studio, shot: &Shot) -> String {
         .unwrap_or_default()
 }
 
-/// The toast when the engine refuses the stream: an engine before 0.69 doesn't know
+/// The toast when the engine refuses the stream: an engine before 0.71 doesn't know
 /// the `png` codec.
 pub fn refused(error: &str) -> String {
     format!(
-        "Couldn't take the screenshot: {error}. It needs an engine with protocol 0.69 or later."
+        "Couldn't take the screenshot: {error}. It needs an engine with protocol 0.71 or later."
     )
 }
 

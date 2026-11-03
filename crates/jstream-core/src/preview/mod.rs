@@ -34,7 +34,7 @@
 //! thread, and reopened when the picture size changes; if it can't be opened, the
 //! stream falls back to JPEG when the client accepts it, and ends otherwise. Every frame
 //! names its codec. JPEG is this module's own baseline encoder ([`jpeg`]). PNG, which is
-//! lossless, is for a client taking a screenshot (ADR-0093), with `video.snapshot`'s
+//! lossless, is for a client taking a screenshot (ADR-0096), with `video.snapshot`'s
 //! encoder. The encoders and pacing live on the hub thread alone ([`Work`]), so a
 //! stream shared with its session holds only flags and its settings.
 //!

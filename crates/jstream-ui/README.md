@@ -87,7 +87,7 @@ Contents ([Design](#design) explains the choices):
   page's own clipboard of items or a scene, and the batches Paste, Paste scene and
   Duplicate scene send; also the item menu's clipboards of one source's filters and one
   item's box and crop, and the edits their pastes send, tested natively),
-  `screenshot.rs` (Screenshot (scene) and Screenshot (source), ADR-0093: a one-picture
+  `screenshot.rs` (Screenshot (scene) and Screenshot (source), ADR-0096: a one-picture
   PNG preview stream on a tap of the canvas's channel, saved through a download link;
   the request, the frame's outcome and the file's name are tested natively), `dialog.rs` (`Modal`,
   the modal dialog frame) and `icons.rs` (`Icon`, the prototype's stroke icons, plus
@@ -317,7 +317,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   chain by chain (a chain the clip has nothing for keeps its own), and copies the
   primary item's whole placement (box, fit, rotation, 3D and flips) and crop
   (`TransformClip`) onto each selected item, each paste one batch. Lock, a check after Visible, locks or unlocks
-  each selected item (`item.set_locked`, ADR-0093), as each row's lock button does; a
+  each selected item (`item.set_locked`, ADR-0096), as each row's lock button does; a
   locked item's box takes no canvas drag (see [Canvas](#canvas)). Screenshot (source)
   saves the item's source alone as a PNG, and a nested scene's item, the scene's
   Screenshot (scene), as the scene rows' and the canvas margin's menus do. For one item of a source placed more than once, or a
@@ -910,7 +910,7 @@ browser, and `mod.rs` is the component.
   placement and visibility can change", and its edits are addressed to it, so they
   write its overrides (ADR-0049). Its drags send the keyframe's live values, addressed
   to it as the commit is, which the engine takes from protocol 0.53 (#846).
-- **Locked items** (`Layout::is_locked`, ADR-0093). A click selects a locked item as
+- **Locked items** (`Layout::is_locked`, ADR-0096). A click selects a locked item as
   any other, but no drag, handle or arrow key moves it: a selection holding one shows
   its outline and readout, which ends “· locked”, with no handles or knob, and a drag
   of several moves only the unlocked ones. The Inspector, the menus and the Transform

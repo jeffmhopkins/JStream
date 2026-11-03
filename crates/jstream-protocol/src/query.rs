@@ -948,7 +948,7 @@ pub struct ItemInfo {
     /// empty, so missing (also from an older server) parses as none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub effects: Vec<FilterInfo>,
-    /// Whether its canvas box is locked (ADR-0093, since 0.69): see
+    /// Whether its canvas box is locked (ADR-0096, since 0.71): see
     /// [`Edit::ItemSetLocked`](crate::Edit::ItemSetLocked). Omitted while unlocked, so
     /// missing (also from an older server) parses as unlocked.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]

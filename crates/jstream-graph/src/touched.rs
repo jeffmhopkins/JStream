@@ -92,7 +92,7 @@ enum Prop {
     Options,
     /// A label's colour and icon.
     Look,
-    /// Whether an item's canvas box is locked (ADR-0093).
+    /// Whether an item's canvas box is locked (ADR-0096).
     Locked,
 }
 

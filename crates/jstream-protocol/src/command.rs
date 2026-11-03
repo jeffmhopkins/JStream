@@ -198,7 +198,7 @@ pub enum Edit {
     /// the defaults, then `item.reorder` to its old stacking position (unless it was on
     /// top), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,
     /// `item.set_transition` if its transition settings were not the default,
-    /// `item.set_locked` if it was locked (since 0.69), and the placement edits that
+    /// `item.set_locked` if it was locked (since 0.71), and the placement edits that
     /// write each dropped override back.
     #[serde(rename = "item.remove")]
     ItemRemove {
@@ -923,7 +923,7 @@ pub enum Edit {
         /// Its new settings.
         transition: ItemTransition,
     },
-    /// Locks or unlocks an item (ADR-0093, since 0.69). A lock is an editing aid kept
+    /// Locks or unlocks an item (ADR-0096, since 0.71). A lock is an editing aid kept
     /// with the collection, as OBS's is: a client doesn't let a locked item be dragged,
     /// resized or turned on its canvas, but the engine still applies every edit to it,
     /// so the Inspector, the menus and a script can change it. It belongs to the item,

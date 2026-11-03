@@ -363,7 +363,7 @@ struct FileItem {
     /// Its transition settings (ADR-0029 §6); omitted while they are the defaults.
     #[serde(default, skip_serializing_if = "ItemTransition::is_default")]
     transition: ItemTransition,
-    /// Whether its canvas box is locked (ADR-0093); omitted while unlocked, so a
+    /// Whether its canvas box is locked (ADR-0096); omitted while unlocked, so a
     /// collection with no locked item saves as it did before, with no schema bump.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     locked: bool,

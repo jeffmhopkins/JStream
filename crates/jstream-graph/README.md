@@ -446,7 +446,7 @@ when there are none, and `transitions` (each preset with its `kind_version`, and
 default), omitted while it is the initial `cut` alone (so no `schema_version` bump: an
 older file has none of these). A scene writes `transition_in` and `transition_out`
 when set, and an item its `transition` when not the default and `locked` when locked
-(ADR-0093). A source's `audio` is saved
+(ADR-0096). A source's `audio` is saved
 only where it differs from its kind's defaults, except a `webcam`'s, which is always
 saved, so a webcam without it can only come from before webcams had audio (#716). `folders` and `labels` are in their
 orders, each omitted when empty. A scene's `folder`, `labels`, `icon`, `color`,

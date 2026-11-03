@@ -674,7 +674,7 @@ struct Facts {
     cropped: bool,
     /// Whether the primary item is shown, and how it blends.
     visible: bool,
-    /// Whether the primary item's box is locked (ADR-0093).
+    /// Whether the primary item's box is locked (ADR-0096).
     locked: bool,
     blend: BlendMode,
     /// The primary item's source, its name and kind, and whether it has a picture.
@@ -1247,7 +1247,7 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
         })
         .checked(on)
     };
-    // OBS's Lock: the item's box takes no canvas drag (ADR-0093). It belongs to the
+    // OBS's Lock: the item's box takes no canvas drag (ADR-0096). It belongs to the
     // item, so a keyframe sets it on the parent's item; the primary item's state names
     // the check, and each selected item takes the other.
     let lock = {
