@@ -63,7 +63,8 @@ Contents ([Design](#design) explains the choices):
   the master stage's chains, and `chains` to read any owner's; a keyframe scene's items
   are its parent's with its overrides applied (effects included), `shown_items`, and the children of the
   groups in its tree likewise, `keyframe_children`, which `item_in` and the selection
-  count as its own), the program and preview
+  count as its own, and `camera_of`, the camera a 3D scene is seen through, a
+  keyframe's override or else its parent's), the program and preview
   scenes, whether studio mode is on (and `scene_click`, what a click on a scene sends
   in either mode), the `Selection`,
   each source's size (`Sizes`, from `source.sizes` and `source.size_changed`;
@@ -482,7 +483,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **The scene Properties dialog** (`scene_properties.rs`) opens from a double click on a
   scene row, the row menu's Properties…, the canvas margin's Scene properties… and a
   nested scene's item. It edits a draft of the name, Transition in and out, the
-  hotkey, the Background color, Show in multiview and Include its audio when nested: the hotkey field takes the next key press as a chord (the modifiers in the
+  hotkey, the Background color, Show in multiview, Include its audio when nested and the
+  camera: the hotkey field takes the next key press as a chord (the modifiers in the
   protocol's order, then the key's `code`; Backspace or Delete clears it, Tab,
   Escape and Enter keep their dialog meaning). OK sends what changed as one batch:
   `scene.rename`, `scene.set_transitions`, `scene.set_meta` (the scene's labels, icon,
@@ -495,7 +497,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   The background is a colour swatch, which keeps an alpha the text gives, beside the
   text, blank for none; a keyframe scene's shows its parent's and is disabled. The scene's hotkey is the first binding
   whose action switches to it. Defaults clears the overrides, the hotkey and the
-  background and checks both switches. Duplicate scene copies the scene's options with it. On the right, in the source Properties dialog's shell, are the
+  background and checks both switches, keeping the camera. Below the audio switch, a 3D
+  camera check gives the scene a camera ([ADR-0094](../../docs/adr/0094-scene-cameras.md)),
+  starting from `SceneCamera::framing`, with its position, target, field of view, roll
+  and Nearest on top as fields; OK sends it as `scene.set_camera`, refused first when
+  `SceneCamera::validate` would refuse it. On a keyframe scene the check is Own camera,
+  an override that starts from the parent's camera, offered only while the parent has
+  one. A note warns when items already have depth or angles (`has_3d_items`).
+  Duplicate scene copies the scene's options and camera with it. On the right, in the source Properties dialog's shell, are the
   scene's filters: the Filters panel's rows on its video chain, which apply at once (a
   keyframe shows its parent's).
 - **Filters** ([UI features › filters](../../docs/UI-FEATURES.md#filters)). The
@@ -995,6 +1004,21 @@ browser, and `mod.rs` is the component.
   ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). Undo and redo (Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y while the canvas has focus, and
   the Edit menu) are `history.undo` and `history.redo`; nothing left to undo is
   silent, and an `undo_conflict` is explained in the problem bar.
+- **3D scenes** (`camera.rs`, [ADR-0094](../../docs/adr/0094-scene-cameras.md)). A
+  scene with a camera (`Layout.camera`: its own, or a keyframe's override or else its
+  parent's, from `Collection::camera_of`) draws each outline through the camera with
+  `project_seen`, and a press hits the box the engine draws on top: the nearest along
+  the view (`CameraView::depth_of`) when the camera sorts, the later in stacking order
+  on a tie or when it doesn't. A move drag takes the pointer to the moved box's depth
+  plane (`CameraView::on_plane`) before the gesture sees it, so the box stays under
+  the pointer, and nothing snaps; the boxes have no handles, and a marquee touches
+  each box's on-screen bounds. Alt-drag orbits the camera about its target (0.3° per
+  screen pixel, at most 85° above or below it) and Alt+Shift-drag dollies it
+  (`exp(0.005 × px)`, no closer than 10 px): the drag shows the camera on the overlay
+  and on output through the gesture's `live.set` of `scene.set_camera`, and the drop
+  commits one `scene.set_camera` with `ends_gesture`, so the orbit is one undo step.
+  The overlay keeps the dragged camera until the collection has it. In place of the
+  selection chrome, a pill reads the camera's position and distance to its target.
 - **Styles** are classes in `style.css`. The hosts' Content Security Policy has no
   `'unsafe-inline'` for styles, so a `style` attribute would be refused, static or set at
   run time (`style=move || …`, `attr:style`); a style computed at run time uses a Leptos

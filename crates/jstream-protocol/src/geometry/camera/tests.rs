@@ -363,3 +363,38 @@ fn the_wire_form_has_defaults() {
         false
     );
 }
+
+#[test]
+fn on_plane_inverts_place() {
+    let seen = view(camera(
+        vec3(300.0, 200.0, 1400.0),
+        vec3(1000.0, 600.0, -200.0),
+        50.0,
+        8.0,
+    ));
+    for (x, y, z) in [
+        (960.0, 540.0, 0.0),
+        (200.0, 900.0, -350.0),
+        (1500.0, 120.0, 220.0),
+    ] {
+        let Placed::At(at) = seen.place(vec3(x, y, z)) else {
+            panic!("({x}, {y}, {z}) is in front of the camera");
+        };
+        let (px, py) = seen.on_plane(at, z).expect("meets the plane");
+        assert!(
+            (px - x).abs() < 0.05 && (py - y).abs() < 0.05,
+            "({px}, {py}) for ({x}, {y})"
+        );
+    }
+    // Looking along a plane, or at one behind the camera, meets nothing.
+    let level = view(camera(
+        vec3(960.0, 540.0, 0.0),
+        vec3(1960.0, 540.0, 0.0),
+        45.0,
+        0.0,
+    ));
+    let ahead = CanvasPoint { x: 960.0, y: 540.0 };
+    assert_eq!(level.on_plane(ahead, 0.0), None);
+    let framing = view(SceneCamera::framing(CANVAS));
+    assert_eq!(framing.on_plane(ahead, 5000.0), None);
+}

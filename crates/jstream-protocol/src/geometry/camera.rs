@@ -216,6 +216,27 @@ impl CameraView {
         dot(sub([x, y, 0.0], self.position), self.forward)
     }
 
+    /// Where the ray from the camera through the canvas point `at` meets the plane
+    /// `z = z` of the scene's space, as that plane's `(x, y)`: what an editor drags an
+    /// item at depth `z` to. `None` when the ray runs along the plane or meets it behind
+    /// the camera.
+    pub fn on_plane(&self, at: CanvasPoint, z: f32) -> Option<(f32, f32)> {
+        let dx = f64::from(at.x) - f64::from(self.principal[0]);
+        let dy = f64::from(at.y) - f64::from(self.principal[1]);
+        let ray = [0, 1, 2]
+            .map(|i| self.forward[i] * self.focal + self.right[i] * dx + self.down[i] * dy);
+        if ray[2].abs() < 1e-9 {
+            return None;
+        }
+        let t = (f64::from(z) - self.position[2]) / ray[2];
+        if t.is_nan() || t <= 0.0 {
+            return None;
+        }
+        let x = self.position[0] + ray[0] * t;
+        let y = self.position[1] + ray[1] * t;
+        (x.is_finite() && y.is_finite()).then_some((x as f32, y as f32))
+    }
+
     /// Where a point of the scene's space lands on the canvas, or
     /// [`Placed::BehindViewer`] when it is not in front of the near plane.
     pub fn place(&self, point: Vec3) -> Placed {
