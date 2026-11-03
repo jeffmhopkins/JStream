@@ -365,8 +365,10 @@ It has:
   crate's own bzip2 decoder (`openh264/bzip2.rs`; the `bzip2` crate's backend has a
   licence `deny.toml` allows only at build time), checks the library's SHA-256, and
   writes it through a temporary file of its own (process ID and a counter, so two
-  downloads at once never share one) and a rename. A temporary file another process
-  left, from a run that stopped mid-write, is deleted by the next write or `remove`. A
+  downloads at once never share one) and a rename. Another process sharing the data
+  folder may be writing its own, so the next write or `remove` deletes another
+  process's temporary file only once it is stale: untouched for ten minutes and either
+  its process is gone or it is a day old. A
   download that doesn't match is discarded and reported, never written. `remove` deletes
   it. `VaapiCodecs` offers it
   through `Codecs::downloads` (ID `OPENH264_DOWNLOAD_ID`, `openh264`, with
