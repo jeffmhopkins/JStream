@@ -2973,6 +2973,10 @@ fn render_loop(job: RenderJob) {
                 captures.tick(shot.captures(), now);
                 frames.draw(&mut draw, shot, live, &captures, due, &mut meter)
             }));
+            if !matches!(tick, Ok(Ok(_))) {
+                // A tick that failed part-way leaves its units' time uncounted.
+                meter.discard_frame();
+            }
             match tick {
                 Ok(Ok(freed)) => {
                     // The totals it replaces go to the collector (R-RT-003).

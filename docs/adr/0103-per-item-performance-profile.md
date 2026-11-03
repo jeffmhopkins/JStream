@@ -64,7 +64,9 @@ Where the time can go:
    real-time thread takes a lock for it. The control side keeps the snapshots it reads
    (on each `stats.tick` and each `profile.get`) for a minute, and a window is the
    difference between the newest totals and the ones from `seconds` ago, or the oldest
-   it has. The result says how many seconds it covers.
+   it has. The result says how many seconds it covers. The always-on part includes the
+   thread CPU (4), read with each sample on the stats thread, never a real-time one:
+   on Linux three small `/proc` reads per thread, on Windows one Tool Help snapshot.
 3. **Times are what the drawing thread spent,** recording and submitting GPU work and
    uploading, not what the GPU spent running it, which wgpu can only measure with
    timestamp queries. A frame that is read back waits for the GPU in its finish phase,

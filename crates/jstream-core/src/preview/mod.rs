@@ -1050,6 +1050,8 @@ fn serve(
     let drawn = drawing(shot, live, captures, size, at, rgba, meter);
     if drawn.is_ok() {
         meter.end_frame(started.elapsed(), Instant::now(), drop);
+    } else {
+        meter.discard_frame();
     }
     if let Err(reason) = drawn {
         work.draw_errors += 1;

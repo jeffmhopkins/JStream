@@ -1800,7 +1800,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         "frame_max_ms": {
           "$ref": "#/$defs/Finite32",
           "default": 0.0,
-          "description": "The longest frame, in milliseconds."
+          "description": "The longest frame, in milliseconds: exact for the window, as the drawer keeps the\nlongest frame of each second it publishes."
         },
         "frame_ms": {
           "$ref": "#/$defs/Finite32",

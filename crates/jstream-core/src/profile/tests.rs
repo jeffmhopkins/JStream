@@ -126,6 +126,41 @@ fn windows_subtract_the_earlier_reading() {
     assert_eq!(info.drawers[0].frames, 2, "{info:?}");
 }
 
+/// The longest frame is the frame itself, not its histogram bucket's top, and a frame
+/// that failed part-way leaves nothing in the next one.
+#[test]
+fn the_longest_frame_is_exact_and_a_failed_frame_is_forgotten() {
+    let profiler = Profiler::new(ms(33), Arc::new(SourceMeters::default()));
+    let mut meter = profiler.program_meter();
+    let scene = SceneId::new("a");
+    let start = Instant::now();
+    // A failed frame: its pass and phase time are dropped.
+    meter.pass(&scene, ms(50));
+    meter.phase(Phase::Passes, ms(50));
+    meter.discard_frame();
+    meter.pass(&scene, ms(4));
+    meter.phase(Phase::Passes, ms(4));
+    meter.end_frame(ms(2000), start, drop);
+    meter.pass(&scene, ms(4));
+    meter.phase(Phase::Passes, ms(4));
+    meter.end_frame(ms(5), start + ms(1000), drop);
+    let info = profiler.profile(Some(5), None, None);
+    let program = &info.drawers[0];
+    assert!(
+        (program.frame_max_ms.get() - 2000.0).abs() < 0.01,
+        "a 2 s stall reads as 2 s: {info:?}"
+    );
+    assert!(
+        (program.phases.passes_ms.get() - 4.0).abs() < 0.01,
+        "{info:?}"
+    );
+    assert!((info.units[0].ms.get() - 4.0).abs() < 0.01, "{info:?}");
+    assert!(
+        (info.units[0].recent_max_ms.get() - 4.0).abs() < 0.01,
+        "{info:?}"
+    );
+}
+
 /// Threads of one name are added together; JStream's own are `name`, others
 /// `remote_name`, and the CPU is a percentage of one core over the window.
 #[test]

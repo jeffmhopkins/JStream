@@ -89,7 +89,8 @@ pub struct DrawerProfile {
     /// (a quarter millisecond below 16 ms, wider above).
     #[serde(default)]
     pub frame_p95_ms: Finite32,
-    /// The longest frame, in milliseconds.
+    /// The longest frame, in milliseconds: exact for the window, as the drawer keeps the
+    /// longest frame of each second it publishes.
     #[serde(default)]
     pub frame_max_ms: Finite32,
     /// The frames that took longer than `frame_budget_ms`.

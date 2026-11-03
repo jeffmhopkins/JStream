@@ -240,6 +240,15 @@ The last test plays a quiet 440 Hz tone. **Pass:** all five pass: devices with o
 each, the input format, this process's loopback, the default input on the media clock, and
 the default output's loopback.
 
+### 19. Thread CPU in `profile.get` (closes #1089, PR #1087)
+
+Run the daemon with a scene on the program for a few minutes, then
+`jstream-cli profile get 10`. **Pass:** `threads` lists JStream's threads
+(`jstream-render`, `jstream-preview`, `jstream-sources`, …) under `name`, their
+`cpu_pct` adding up to about Task Manager's figure for the process; the render thread's
+share grows with a heavier scene; and over ten minutes the daemon's handle count (Task
+Manager › Details › Handles) stays flat.
+
 <a id="m3-2"></a>
 ## From wave/m3-2, now on main
 <!-- @section

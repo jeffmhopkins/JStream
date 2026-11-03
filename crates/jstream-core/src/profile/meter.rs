@@ -37,6 +37,33 @@ pub(crate) enum Phase {
 /// How many [`Phase`]s there are.
 pub(crate) const PHASES: usize = 5;
 
+/// Published seconds whose longest frame a meter remembers: more than the longest window
+/// (`MAX_PROFILE_SECONDS`) and the sample before it.
+pub(crate) const SECONDS_KEPT: usize = 64;
+
+/// The longest frame of each of the last [`SECONDS_KEPT`] published seconds, published
+/// second `n` (from 1) at `(n - 1) % SECONDS_KEPT`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct SecondMaxes(pub(crate) [u64; SECONDS_KEPT]);
+
+impl Default for SecondMaxes {
+    fn default() -> Self {
+        Self([0; SECONDS_KEPT])
+    }
+}
+
+impl SecondMaxes {
+    /// The longest frame of the published seconds after `after` up to `upto`, as far
+    /// back as the meter remembers.
+    pub(crate) fn longest(&self, after: u64, upto: u64) -> u64 {
+        let from = after.max(upto.saturating_sub(SECONDS_KEPT as u64));
+        (from..upto)
+            .map(|second| self.0[(second % SECONDS_KEPT as u64) as usize])
+            .max()
+            .unwrap_or(0)
+    }
+}
+
 /// A unit of drawing work, by its owner, as the meter keeps it.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum UnitKey {
@@ -71,6 +98,10 @@ pub(crate) struct DrawerTotals {
     pub(crate) histogram: Vec<u32>,
     /// The frames longer than the budget.
     pub(crate) over_budget: u64,
+    /// The seconds published so far, this one included.
+    pub(crate) seconds: u64,
+    /// The longest frame of each recent published second.
+    pub(crate) maxes: SecondMaxes,
     /// The ticks skipped (the program only).
     pub(crate) skipped: u64,
     pub(crate) phases: [u64; PHASES],
@@ -214,8 +245,14 @@ pub(crate) struct DrawMeter {
     nanos: u64,
     histogram: Histogram,
     over_budget: u64,
+    /// The longest frame of the second being counted.
+    second_max: u64,
+    seconds: u64,
+    maxes: SecondMaxes,
     skipped: u64,
     phases: [u64; PHASES],
+    /// The phases' time in the frame being drawn, folded into `phases` when it ends.
+    frame_phases: [u64; PHASES],
     /// When the meter last published, or `None` before its first frame.
     published: Option<Instant>,
 }
@@ -235,8 +272,12 @@ impl Default for DrawMeter {
             nanos: 0,
             histogram: [0; BUCKETS],
             over_budget: 0,
+            second_max: 0,
+            seconds: 0,
+            maxes: SecondMaxes::default(),
             skipped: 0,
             phases: [0; PHASES],
+            frame_phases: [0; PHASES],
             published: None,
         }
     }
@@ -245,7 +286,7 @@ impl Default for DrawMeter {
 impl DrawMeter {
     /// Adds `took` to `phase` in the frame being drawn.
     pub(crate) fn phase(&mut self, phase: Phase, took: Duration) {
-        let slot = &mut self.phases[phase as usize];
+        let slot = &mut self.frame_phases[phase as usize];
         *slot = slot.saturating_add(nanos(took));
     }
 
@@ -287,6 +328,21 @@ impl DrawMeter {
         self.skipped = self.skipped.saturating_add(skipped);
     }
 
+    /// Forgets the time counted in a frame that failed part-way, so it isn't folded
+    /// into the next frame that draws.
+    pub(crate) fn discard_frame(&mut self) {
+        fn discard(acc: &mut Acc) {
+            acc.frame = 0;
+            acc.ran = false;
+        }
+        self.uploads.values_mut().for_each(discard);
+        self.captures.values_mut().for_each(discard);
+        self.chains.values_mut().for_each(discard);
+        self.passes.values_mut().for_each(discard);
+        discard(&mut self.composite);
+        self.frame_phases = [0; PHASES];
+    }
+
     /// Ends a frame that took `took` from start to finish: folds each unit's time into
     /// its totals and, once [`PUBLISH_EVERY`] has passed since the last publish,
     /// publishes the totals and hands the ones they replace to `retire`.
@@ -303,6 +359,10 @@ impl DrawMeter {
         *bucket = bucket.saturating_add(1);
         if !self.budget.is_zero() && took > nanos(self.budget) {
             self.over_budget = self.over_budget.saturating_add(1);
+        }
+        self.second_max = self.second_max.max(took);
+        for (total, frame) in self.phases.iter_mut().zip(&mut self.frame_phases) {
+            *total = total.saturating_add(std::mem::take(frame));
         }
         self.uploads.values_mut().for_each(Acc::end_frame);
         self.captures.values_mut().for_each(Acc::end_frame);
@@ -323,6 +383,9 @@ impl DrawMeter {
         self.chains.retain(|_, acc| acc.end_second());
         self.passes.retain(|_, acc| acc.end_second());
         self.composite.end_second();
+        let at = (self.seconds % SECONDS_KEPT as u64) as usize;
+        self.maxes.0[at] = std::mem::take(&mut self.second_max);
+        self.seconds = self.seconds.saturating_add(1);
         let Some(slot) = &self.slot else {
             return;
         };
@@ -355,6 +418,8 @@ impl DrawMeter {
             nanos: self.nanos,
             histogram: self.histogram.to_vec(),
             over_budget: self.over_budget,
+            seconds: self.seconds,
+            maxes: self.maxes,
             skipped: self.skipped,
             phases: self.phases,
             units,

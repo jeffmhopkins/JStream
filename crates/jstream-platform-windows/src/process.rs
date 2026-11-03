@@ -134,6 +134,76 @@ mod os {
         let _ = unsafe { LocalFree(Some(HLOCAL(text.0.cast()))) };
         name.filter(|name| !name.is_empty())
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::WindowsThreadCpu;
+        use jstream_platform::ThreadCpu;
+        use std::time::Instant;
+        use windows::Win32::System::Threading::{GetCurrentProcess, GetProcessHandleCount};
+
+        fn handles() -> u32 {
+            let mut count = 0;
+            // SAFETY: the pseudo-handle needs no closing, and `count` outlives the call.
+            unsafe { GetProcessHandleCount(GetCurrentProcess(), &mut count) }
+                .expect("counts handles");
+            count
+        }
+
+        fn spin(millis: u128) {
+            let start = Instant::now();
+            let mut x = 0u64;
+            while start.elapsed().as_millis() < millis {
+                x = std::hint::black_box(x.wrapping_add(1));
+            }
+        }
+
+        /// A named thread is listed by the name `thread::Builder::name` gave it, with
+        /// the time it spun, and listing many times leaves no handles open.
+        #[test]
+        fn a_named_thread_is_listed_with_its_time() {
+            let (tx, rx) = std::sync::mpsc::channel::<()>();
+            let (ready_tx, ready_rx) = std::sync::mpsc::channel::<()>();
+            let handle = std::thread::Builder::new()
+                .name("jstream-spinner".into())
+                .spawn(move || {
+                    spin(40);
+                    let _ = ready_tx.send(());
+                    let _ = rx.recv();
+                })
+                .expect("spawns");
+            ready_rx.recv().expect("it spun");
+            let threads = WindowsThreadCpu.threads().expect("lists");
+            let spinner = threads
+                .iter()
+                .find(|t| t.name == "jstream-spinner")
+                .expect("listed by name");
+            assert!(
+                spinner.cpu.as_millis() >= 20,
+                "it spun for 40 ms: {spinner:?}"
+            );
+            assert!(threads.len() >= 2, "this test's thread too");
+            let spun = spinner.cpu;
+            let before = handles();
+            for _ in 0..200 {
+                let again = WindowsThreadCpu.threads().expect("lists again");
+                let spinner = again
+                    .iter()
+                    .find(|t| t.name == "jstream-spinner")
+                    .expect("still listed");
+                assert!(spinner.cpu >= spun, "its time never goes back");
+            }
+            // Other threads of the test binary may open a few handles meanwhile, but not
+            // one per listing.
+            let after = handles();
+            assert!(
+                after < before.saturating_add(50),
+                "{before} handles, then {after} after 200 listings"
+            );
+            drop(tx);
+            handle.join().expect("joins");
+        }
+    }
 }
 
 #[cfg(test)]

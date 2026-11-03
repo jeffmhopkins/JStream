@@ -2587,7 +2587,11 @@ registry lock, an entry's grant lock is a leaf, which a plugin's session also ta
 alone. The plugin file's lock comes before the registry lock: a save holds it while it
 reads the plugins and writes `plugins.json`, and nothing takes it under the registry
 lock. A plugin's thread holds no engine lock while the plugin runs, so the plugin's
-calls take the collection lock as any session's do. A stream's poll takes only its queue's lock. No lock
+calls take the collection lock as any session's do. The live sources' `SourceMeters`
+(a source's paints, looks and builds, and the plans) are two leaf mutexes the planner
+takes under the collection lock and `jstream-sources` and the profiler take alone; the
+`Profiler`'s history and thread-reader locks are never taken with the collection lock
+(*Profile*). A stream's poll takes only its queue's lock. No lock
 is held across an `await`, and a snapshot's reply slot is not held across a wake.
 `output.start`
 drops the collection lock before `Compositor::open`. The pipeline gate is not held
@@ -2972,8 +2976,10 @@ the render thread sends to the engine (the lost-device paragraph above). The ren
 (`encode_frames`), and a tick that falls a
 whole period behind the clock skips to the current tick and counts the skipped ones in
 `render_ticks`. Each frame it draws is timed into its `DrawMeter` (the skipped ticks
-too), which publishes its totals about once a second without allocating and hands the
-totals it replaces to the collector (*Profile* in [Design](#design)). None of those threads lock the collection: the render thread reads the
+too; a tick that fails part-way is discarded), which allocates nothing in a steady
+frame and publishes one snapshot of its totals about once a second, the meter's only
+allocation, handing the totals it replaces to the collector (*Profile* in
+[Design](#design)). None of those threads lock the collection: the render thread reads the
 render snapshot and then the live values on the parameter channel, which it draws over
 it, and what the render and mixer threads let go of (replaced snapshots and live
 values, GPU images, replaced profile totals, finished sessions' inputs, the frame buffers and encode targets of a

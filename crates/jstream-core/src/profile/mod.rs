@@ -356,7 +356,7 @@ fn drawer_profile(
     let at = total.saturating_mul(95).div_ceil(100).max(1);
     let mut seen = 0u64;
     let mut p95 = 0;
-    let mut max = 0;
+    let mut top = 0;
     for (bucket, count) in histogram.iter().enumerate() {
         if *count == 0 {
             continue;
@@ -365,8 +365,14 @@ fn drawer_profile(
         if seen >= at && p95 == 0 {
             p95 = bucket_top(bucket);
         }
-        max = bucket_top(bucket);
+        top = bucket_top(bucket);
     }
+    // The longest frame itself, from the seconds published since the base; the top of
+    // its histogram bucket if the meter no longer remembers them.
+    let longest = now
+        .maxes
+        .longest(before.map_or(0, |b| b.seconds), now.seconds);
+    let max = if longest > 0 { longest } else { top };
     let phase = |at: usize| {
         let spent = now.phases[at].saturating_sub(before.map_or(0, |b| b.phases[at]));
         ms(spent / frames)
