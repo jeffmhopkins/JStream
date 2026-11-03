@@ -17,10 +17,10 @@ tier = "agent"
 A hotkey runs a protocol action, never an edit, so that it never adds to anyone's undo
 history ([ADR-0024 §5](0024-scene-structure.md)). Until now the only action that changed
 what program shows was `scene.switch`. Showing or hiding one item is an edit,
-`item.set_visible`, so no hotkey could do it. The starship cockpit (#1056, #1057) needed
-every effect (warp, weapons, taking fire, transmission, hologram) as a whole scene
-variant: three locations times six effects times the monitor modes made dozens of
-variants, when each switch only had to show or hide one item.
+`item.set_visible`, so no hotkey could do it (#1057). A scene with several independent
+states, each shown by one item, needed a whole scene variant for every combination of
+them: three states of two options each make eight variants, when each press only had to
+show or hide one item.
 
 An item already says how it appears and disappears without a partner
 ([ADR-0029 §6](0029-transitions.md): `appear`, `disappear`, `delay_ms`, `easing`), but
@@ -79,7 +79,7 @@ disagree with the picture.
 
 <a id="consequences"></a>
 ## Consequences
-- **Easier:** one scene per location, with effects bound to item toggles. A timeline cue
+- **Easier:** one scene holds independent states, each bound to an item toggle. A timeline cue
   (#1059) can show or hide an item through the same action.
 - **Easier:** the Sources list, the saved file and agents always agree with the picture,
   since there is one visibility.
