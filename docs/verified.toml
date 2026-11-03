@@ -4677,7 +4677,7 @@ stamp = { hash = "b3:4aed4ce2c9c85cd5", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:1091316418ee6580", by = "agent:ui-parity", note = "The projectors paragraph now says any single object's Pop out opens its source alone with its own filters, the query takes source:<id>, and a picture subscribes with source_id (0.56), as projector.rs's Target::Source, Request, subscribe and Picture do; item_menu.rs's pop_out match is what calls it." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/screenshot.rs"]
-stamp = { hash = "b3:bc5a3b99a9d0c68a", by = "agent:obs-ui-thread", note = "Design covers the lock (canvas, Sources lock button, item menu check) and screenshot.rs (one-frame png preview, Blob download, toasts, the engine-too-old toast naming 0.71). Renumbered from ADR-0093 and 0.69 after merging main: #1034 took ADR-0093, and open PRs claim 0.69 (#1041) and 0.70 (#1044). The merge brought #1034 (shader sources), which this section's lock and screenshot text doesn't touch." }
+stamp = { hash = "b3:330db6559871bcb0", by = "agent:obs-ui-thread", note = "screenshot.rs changed only in a doc comment: the file name pattern is in backticks so rustdoc doesn't read <name> as an HTML tag (CI doc job). This branch's lock and screenshot text, ADR-0096 and 0.71, still holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/session.rs"]
 stamp = { hash = "b3:076299ee126c849d" }
@@ -4839,7 +4839,7 @@ stamp = { hash = "b3:4aed4ce2c9c85cd5", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:1091316418ee6580", by = "agent:ui-parity", note = "Projectors bullet now names one source alone and pop_out_source (an object's Pop out) beside pop_out, as projector.rs and item_menu.rs have them; canvas/preview.rs and device_preview.rs only add source_id: None." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/screenshot.rs"]
-stamp = { hash = "b3:bc5a3b99a9d0c68a", by = "agent:obs-ui-thread", note = "Purpose holds with lock and screenshots. Renumbered from ADR-0093 and 0.69 after merging main: #1034 took ADR-0093, and open PRs claim 0.69 (#1041) and 0.70 (#1044). The merge brought #1034 (shader sources), which this section's lock and screenshot text doesn't touch." }
+stamp = { hash = "b3:330db6559871bcb0", by = "agent:obs-ui-thread", note = "screenshot.rs changed only in a doc comment: the file name pattern is in backticks so rustdoc doesn't read <name> as an HTML tag (CI doc job). This branch's lock and screenshot text, ADR-0096 and 0.71, still holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/session.rs"]
 stamp = { hash = "b3:076299ee126c849d" }

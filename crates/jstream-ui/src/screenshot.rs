@@ -70,7 +70,7 @@ pub fn outcome(frame: &BinaryFrame) -> Result<Vec<u8>, String> {
 }
 
 /// The name a screenshot of `name` taken at `stamp` (year, month, day, hour, minute,
-/// second) is saved under: “<name> YYYY-MM-DD HH-MM-SS.png”, as OBS names its own, with
+/// second) is saved under: `<name> YYYY-MM-DD HH-MM-SS.png`, as OBS names its own, with
 /// each character a file name can't hold replaced by `_`.
 pub fn file_name(name: &str, stamp: [u32; 6]) -> String {
     let safe: String = name
