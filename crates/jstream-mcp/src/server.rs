@@ -6,6 +6,7 @@
 //! handshake-based revision it negotiated (2025-11-25 or 2025-06-18) for the rest of the
 //! connection.
 
+use crate::design::DESIGN;
 use crate::events::{BUFFER_CAPACITY, CursorAhead, Feed};
 use crate::jsonrpc::{self, Incoming, RpcError};
 use crate::tools::{Invocation, REMOTE_PREFIX, Tools};
@@ -505,7 +506,7 @@ impl Server {
              can remove things, do what undo can't take back, or reach outside JStream: \
              `output`, which retargets an output, sets its key and goes live; `source`, \
              whose `browser` kind loads any http or https page it is given; and `batch`, \
-             which carries their edits.",
+             which carries their edits.\n\n{DESIGN}",
             groups.join(", ")
         )
     }

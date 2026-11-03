@@ -175,6 +175,20 @@ fn known(kind: &str) -> Option<Known> {
             Generated,
             Some((1920.0, 1080.0)),
         ),
+        "backdrop" => (
+            "Backdrop",
+            "A painted studio backdrop, mottled and lit like a photo.",
+            "palette",
+            Generated,
+            Some((1920.0, 1080.0)),
+        ),
+        "shape" => (
+            "Shape",
+            "A plate, pill, circle or bar, solid or with a gradient.",
+            "layers",
+            Generated,
+            Some((400.0, 120.0)),
+        ),
         "waveform" => (
             "Audio waveform",
             "Draws an audio source as a moving wave.",
@@ -194,7 +208,7 @@ fn known(kind: &str) -> Option<Known> {
 }
 
 /// The prototype's order of the kinds it knows.
-const ORDER: [&str; 13] = [
+const ORDER: [&str; 15] = [
     "display",
     "window",
     "webcam",
@@ -206,6 +220,8 @@ const ORDER: [&str; 13] = [
     "browser",
     "text",
     "color",
+    "backdrop",
+    "shape",
     "waveform",
     "spectrum",
 ];
@@ -423,7 +439,7 @@ pub fn add_edits(
                 source_id: ids.source.clone(),
                 name,
                 kind: SourceKind::Builtin { kind: kind.clone() },
-                settings: Settings::new(),
+                settings: starting_settings(kind),
                 duplicated_from: None,
             });
             edits.push(item(ids.source, placement(source_type, collection.canvas)));
@@ -460,6 +476,23 @@ pub fn add_edits(
         }
     }
     edits
+}
+
+/// The settings a new source of `kind` starts with, over its kind's defaults. A new text
+/// starts bold with a soft shadow, which reads on any picture (#1020); the kind's own
+/// defaults stay plain, so texts saved before keep their look.
+fn starting_settings(kind: &str) -> Settings {
+    match kind {
+        "text" => [
+            ("face", serde_json::json!("bold")),
+            ("shadow_color", serde_json::json!("#000000a0")),
+            ("shadow_y", serde_json::json!(3.0)),
+            ("shadow_blur", serde_json::json!(10.0)),
+        ]
+        .into_iter()
+        .collect(),
+        _ => Settings::new(),
+    }
 }
 
 /// Opens the Add source dialog, provided as context by the shell.
@@ -1320,5 +1353,15 @@ mod tests {
             )
             .is_empty()
         );
+    }
+
+    /// #1020: a new text starts bold with a soft shadow; other kinds start from their
+    /// kind's defaults.
+    #[test]
+    fn a_new_text_starts_bold_with_a_shadow() {
+        let text = super::starting_settings("text");
+        assert_eq!(text.get("face"), Some(&serde_json::json!("bold")));
+        assert!(text.get("shadow_color").is_some());
+        assert!(super::starting_settings("color").is_empty());
     }
 }

@@ -2,6 +2,7 @@
 //! creating sources.
 
 use crate::audio;
+use crate::backdrop::BackdropKind;
 use crate::browser::BrowserKind;
 use crate::capture::CaptureKind;
 use crate::chat::ChatKind;
@@ -9,6 +10,7 @@ use crate::color::ColorKind;
 use crate::image::ImageKind;
 use crate::media::MediaKind;
 use crate::scope::{SpectrumKind, WaveformKind};
+use crate::shape::ShapeKind;
 use crate::text::TextKind;
 use crate::youtube_chat::YoutubeChatKind;
 use crate::{Context, Source, SourceError, SourceKind};
@@ -22,7 +24,7 @@ pub struct Registry {
 
 impl Registry {
     /// The built-in kinds (ADR-0061, docs/adr/0061-source-types-and-decoding-scope-v2.md).
-    /// `browser`, `chat_message`, `color`, `image`, `media`, `text`, `waveform`,
+    /// `backdrop`, `browser`, `chat_message`, `color`, `image`, `media`, `shape`, `text`, `waveform`,
     /// `spectrum` and `youtube_chat` produce frames (`browser` and its `youtube_chat`
     /// preset through the injected backend, on the GPU). `display` and `window` say what
     /// the platform captures ([`Source::capture`]), and so does `webcam`, a webcam or
@@ -33,6 +35,7 @@ impl Registry {
         let mut add = |kind: Box<dyn SourceKind>| {
             kinds.insert(kind.descriptor().kind_id.clone(), kind);
         };
+        add(Box::new(BackdropKind::new()));
         add(Box::new(BrowserKind::new()));
         add(Box::new(YoutubeChatKind::new()));
         add(Box::new(ColorKind::new()));
@@ -41,6 +44,7 @@ impl Registry {
         add(Box::new(CaptureKind::webcam()));
         add(Box::new(ImageKind::new()));
         add(Box::new(MediaKind::new()));
+        add(Box::new(ShapeKind::new()));
         add(Box::new(TextKind::new()));
         add(Box::new(WaveformKind::new()));
         add(Box::new(SpectrumKind::new()));
