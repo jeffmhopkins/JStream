@@ -385,7 +385,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | `render_image` texture | The returned `Image`, allocated per call |
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
 | Model pipelines (opaque and blended), sampler, frame uniform, 1x1 stand-in textures | Compositor |
-| Model depth target (`Depth32Float`) | Grown to the largest layer a model was drawn into, never shrunk |
+| Model depth target (`Depth32Float`) | The size of the last layer a model was drawn into; a layer of another size makes a new one, since a pass's attachments must match |
 | `GpuModel` vertex and index buffers, textures with their mips, material uniforms and bind groups | The returned `GpuModel`, shared by its clones; made once per `Model` version |
 | `Nv12Converter` pipelines and layout | The converter |
 | `Nv12Pass` bind group, source view, uniform and plane views | The pass; made again by `bind` when the source or target is replaced |
@@ -480,7 +480,11 @@ with perspective, clip `z` is `NEAR_W`, so `z / w = NEAR_W / w` and the GPU's ow
 is linear in the model's depth. Opaque and masked primitives draw first with depth
 writes, then blended ones far to near by their centres, testing without writing. There
 is no cull: a mirrored map (`Solid::mirrored`) swaps which face is the front, so the
-shader discards back faces itself unless the material is double-sided. `model.wgsl`
+shader discards back faces itself unless the material is double-sided. A normal map's
+bitangent takes its sign from the raw `front_facing`, which flips with a mirrored map
+and with a back face alike, as the cross product of the normal and tangent does.
+`upload_model` refuses a primitive whose vertex or index buffer would pass the
+adapter's `max_buffer_size` (wgpu panics there rather than failing). `model.wgsl`
 shades glTF's metallic-roughness model (GGX, Smith, Schlick; Karis's environment fit)
 under the studio rig, fixed to the viewing frame, or unlit.
 
@@ -876,8 +880,11 @@ seen from above through a camera its front and top hide its back and bottom, the
 centre where `Solid::place` puts it; mirrored it still shows its front; a plane's texture
 reads upright; the studio key light makes a sphere brighter at its upper left; a blended
 material is half see-through; a floor running under the camera is clipped by the near
-plane; and a model's layer sorts with a card by the model's depth, whatever the stacking
-order.
+plane; a model's layer sorts with a card by the model's depth, whatever the stacking
+order; a normal map tilted up its texture lights the same, toward the key light, when
+the placement mirrors the model; a model draws into layers of three sizes in a row (the
+depth target follows the layer); and a primitive past the adapter's buffer limit is
+refused with `RenderError::Invalid`.
 
 **3D goldens** (`tests/three_d.rs`). Spike S5's scenarios at a quarter of its size, on a
 240×136 canvas from a 64² checkerboard with a texel grid (512² for C), against a CPU
@@ -1028,7 +1035,7 @@ the same items as cards in a 3D scene, turned, at their own depths and seen
 through an off-axis camera, their mips rebuilt each frame as a live source's are
 (`composite_1080p_camera`), one sphere and one cube drawn into a 1080p layer and placed
 (`model_1080p`), and
-refilling a 1080p upload in place (`rewrite_rgba8_1080p`). On lavapipe (llvmpipe, LLVM
+refilling a 1080p upload in place (`rewrite_rgba8_1080p`). On lavapipe on Linux (llvmpipe, LLVM
 20.1.2, 4 cores of a 2.3 GHz Xeon) the 3D scene took 16, 44 and 143 ms for 1, 4 and 16
 items against 9.6, 17 and 58 ms for the 2D submit, and either model 22 ms. Run them with
 `cargo bench -p jstream-render --bench composite`, which takes the GPU when there is

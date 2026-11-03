@@ -192,7 +192,7 @@ stamp = { hash = "b3:8f6c25a84d2e8a73" }
 stamp = { hash = "b3:aa614e3467e533fe", by = "agent:claude", note = "render gains only a test-only kind snapshot (insta dev-dependency, tests/kinds.rs, schema/kinds.snap) and its README Testing paragraph; the GPU pipeline steps are unchanged" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:7a38fb89d8a695ee", by = "agent:claude", note = "compositor.rs adds a readback-wait timer only; pipeline order, devices and fallbacks unchanged | merge: main's #1087 (ADR-0103 profile) added readback_wait to compositor.rs; the model pipeline paragraph still holds" }
+stamp = { hash = "b3:c4e40193d8564637", by = "agent:claude", note = "Re-read against the B1-B3 fixes: depth target per layer size, mirrored normal maps, buffer-limit refusal; the model pipeline paragraph still holds | kept from the merged side: compositor.rs adds a readback-wait timer only; pipeline order, devices and fallbacks unchanged" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:71b1120341fac73b", by = "agent:3d-models", note = "Added the model draw (layer per placement, reversed depth, studio rig, f64 camera-relative map, Placement::Layer sorting) after the 3D scene paragraph; benches added for a 3D scene and a model." }
@@ -213,7 +213,7 @@ stamp = { hash = "b3:1416a7b4551f29be", by = "agent:ui-parity", note = "One-scen
 stamp = { hash = "b3:90996e1f0ca79344", by = "agent:blend-modes", note = "Rewrote the blend sentence: fixed-function normal/additive/screen/multiply, a copy of the target for darken/lighten/overlay/difference/exclusion, sRGB mixing for the last three (ADR-0082). Layer and working textures gaining COPY_SRC, Item.blend and the composite_1080p_blend bench don't contradict anything else here." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/compositor.rs"]
-stamp = { hash = "b3:8c9752715f33036e", by = "agent:claude", note = "compositor.rs adds a readback-wait timer only; pipeline order, devices and fallbacks unchanged | merge: main's #1087 (ADR-0103 profile) added readback_wait to compositor.rs; the model pipeline paragraph still holds" }
+stamp = { hash = "b3:e333c46ac1f5ef08", by = "agent:claude", note = "Re-read against the B1-B3 fixes: depth target per layer size, mirrored normal maps, buffer-limit refusal; the model pipeline paragraph still holds | kept from the merged side: compositor.rs adds a readback-wait timer only; pipeline order, devices and fallbacks unchanged" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/convert/mod.rs"]
 stamp = { hash = "b3:d687fbbd6a293bb2", by = "agent:claude", note = "Merged wave/m1-4 at 89ea322e by taking its tree and re-applying this PR's own change (e993e0ee..80613b6b, the ledger took the wave's side). The merge brought the wave's GPU pipeline text (NV12 step 4 from #663, among others). This PR's sentence (render holds the context's SubmitLock from staging through its submit; the browser source's copies take it too) matches compositor.rs and cef/gpu.rs, and after f95f936d the NV12 encode submit, which is jstream-render's, holds it too; holds." }
@@ -411,13 +411,13 @@ stamp = { hash = "b3:923686b398d0595c", by = "agent:wave-owner", note = "Re-read
 stamp = { hash = "b3:3701d0ac19411e18", by = "agent:wave-owner", note = "Merged main at 5693733 (wave/m3-3 landed, #786) into wave/m1-4. This branch: #781 extents (ADR-0073), #672 submit lock, #712/#718 pooled scratch and uniforms. Main: X1's 3D drawn polygon, mips and chains (#622/#624/#643/#687/#629). The merge keeps both sentences; placement uses the image's extent and the chain region maps onto texels (Region::in_texels, tested). Holds." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/mod.rs"]
-stamp = { hash = "b3:83f6ac8747ce9773", by = "agent:3d-models", note = "Added the model draw (layer per placement, reversed depth, studio rig, f64 camera-relative map, Placement::Layer sorting) after the 3D scene paragraph; benches added for a 3D scene and a model." }
+stamp = { hash = "b3:2290997e3a099617", by = "agent:claude", note = "Re-read against the B1-B3 fixes: depth target per layer size, mirrored normal maps, buffer-limit refusal; the model pipeline paragraph still holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/model.wgsl"]
-stamp = { hash = "b3:eebefa3a0720c46b", by = "agent:3d-models", note = "Added the model draw (layer per placement, reversed depth, studio rig, f64 camera-relative map, Placement::Layer sorting) after the 3D scene paragraph; benches added for a 3D scene and a model." }
+stamp = { hash = "b3:763d495b6fd66bea", by = "agent:claude", note = "Re-read against the B1-B3 fixes: depth target per layer size, mirrored normal maps, buffer-limit refusal; the model pipeline paragraph still holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/tests.rs"]
-stamp = { hash = "b3:50ba663028610d46", by = "agent:3d-models", note = "Added the model draw (layer per placement, reversed depth, studio rig, f64 camera-relative map, Placement::Layer sorting) after the 3D scene paragraph; benches added for a 3D scene and a model." }
+stamp = { hash = "b3:18262bdbd5babfb1", by = "agent:claude", note = "Re-read against the B1-B3 fixes: depth target per layer size, mirrored normal maps, buffer-limit refusal; the model pipeline paragraph still holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/place.rs"]
 stamp = { hash = "b3:0bb6a603e8dff8af", by = "agent:3d-models", note = "Added the model draw (layer per placement, reversed depth, studio rig, f64 camera-relative map, Placement::Layer sorting) after the 3D scene paragraph; benches added for a 3D scene and a model." }
@@ -2523,7 +2523,7 @@ stamp = { hash = "b3:1d2c5fbae960d299" }
 stamp = { hash = "b3:c30b25d50e02e624", by = "agent:3d-models", note = "Added the 3D model types (Model, Primitive, Material, ModelTexture with mips, caps, shapes, compute_tangents) to Contents; still plain data, no I/O or GPU, thiserror the only dependency." }
 
 ["CRATE-jstream-media#purpose"."file:crates/jstream-media/src/model.rs"]
-stamp = { hash = "b3:24a8a2c3ea6db678", by = "agent:3d-models", note = "Added the 3D model types (Model, Primitive, Material, ModelTexture with mips, caps, shapes, compute_tangents) to Contents; still plain data, no I/O or GPU, thiserror the only dependency." }
+stamp = { hash = "b3:f12a81e3991f3710", by = "agent:claude", note = "Only the ModelTexture doc changed (the 2x2 box leaves out an odd side's last row or column); the Contents bullet still matches model.rs" }
 
 ["CRATE-jstream-media#purpose"."file:crates/jstream-media/src/model/shapes.rs"]
 stamp = { hash = "b3:f91cc25ab5f94fad", by = "agent:3d-models", note = "Added the 3D model types (Model, Primitive, Material, ModelTexture with mips, caps, shapes, compute_tangents) to Contents; still plain data, no I/O or GPU, thiserror the only dependency." }
@@ -3654,7 +3654,7 @@ stamp = { hash = "b3:46687d4a4d0e469b", by = "agent:profile-builder", note = "Qu
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = "whole PR: contents list youtube.stats among the queries and events and AudienceStatsInfo, QuotaInfo and StatsPolling in youtube.rs; the version paragraph says 0.38 for YouTube audience stats and, after review B1, that 0.34 to 0.37 are assigned to other open bumps (#629, #642, #682, #653), which the PR API confirms are open, with only #653 on wave/m1-3; matches event.rs, query.rs, youtube.rs, lib.rs, version.rs and the fixtures; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) brought #726's Contents text on the parity fixture (a display capture screen never placed for no-audio cases, a webcam with its paired input); event.rs, fixtures.rs, lib.rs, query.rs, version.rs and youtube.rs came in unchanged, so the youtube contents and 0.38 version text hold" }
 
 ["CRATE-jstream-render#design"."body"]
-stamp = { hash = "b3:55e680f20396734e", by = "agent:claude", note = "Readback step now notes Compositor::readback_wait (time the last render waited on the map), reset per render; matches compositor.rs | merge: main's #1087 (ADR-0103 profile) documented readback_wait in step 5; the model draw and Layer placement sections unaffected" }
+stamp = { hash = "b3:dd973cfe7f0a334e", by = "agent:claude", note = "Models paragraph gains the bitangent sign and the buffer-limit refusal; the lifetime row now says the model depth target is the last layer's size and remade for another size, matching depth_view | kept from the merged side: Readback step now notes Compositor::readback_wait (time the last render waited on the map), reset per render; matches compositor.rs" }
 
 ["CRATE-jstream-render#design"."dep:docs/RULES.md#R-RT-002"]
 stamp = { hash = "b3:24c0e2f735f7e770" }
@@ -3675,7 +3675,7 @@ stamp = { hash = "b3:1416a7b4551f29be", by = "agent:ui-parity", note = "Backgrou
 stamp = { hash = "b3:90996e1f0ca79344", by = "agent:blend-modes", note = "The composite step describes per-mode pipelines, multiply's two draws and the backdrop copy with its pass break (blend.rs, compositor.rs record_composite, fs_<mode> in composite.wgsl); layer and working textures gain COPY_SRC; the resolve is unchanged; the opacity/blend ownership note points at ADR-0082." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/compositor.rs"]
-stamp = { hash = "b3:8c9752715f33036e", by = "agent:claude", note = "Readback step now notes Compositor::readback_wait (time the last render waited on the map), reset per render; matches compositor.rs | merge: main's #1087 (ADR-0103 profile) documented readback_wait in step 5; the model draw and Layer placement sections unaffected" }
+stamp = { hash = "b3:e333c46ac1f5ef08", by = "agent:claude", note = "Models paragraph gains the bitangent sign and the buffer-limit refusal; the lifetime row now says the model depth target is the last layer's size and remade for another size, matching depth_view | kept from the merged side: Readback step now notes Compositor::readback_wait (time the last render waited on the map), reset per render; matches compositor.rs" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/convert/mod.rs"]
 stamp = { hash = "b3:d687fbbd6a293bb2", by = "agent:claude", note = "Merged wave/m1-4 at 89ea322e by taking its tree and re-applying this PR's own change (e993e0ee..80613b6b, the ledger took the wave's side). The merge brought the wave's passes, take_error check after the submit, apply_filter's staged.clear on a stage error, check_filter_input and the NV12 converter. The SubmitLock is still taken just before stage_sources (render, render_into) or the stage loop (apply_filter) and dropped right after queue.submit, before take_error and the readback wait; f95f936d makes Nv12Converter::submit hold it from stage through submit, as the edited NV12 paragraph now says. Holds." }
@@ -3873,13 +3873,13 @@ stamp = { hash = "b3:923686b398d0595c", by = "agent:wave-owner", note = "Re-read
 stamp = { hash = "b3:3701d0ac19411e18", by = "agent:wave-owner", note = "Merged main at 5693733 (wave/m3-3 landed, #786) into wave/m1-4. This branch: #781 extents, #672 submit lock, #712/#718. Main: X1's 3D draw, mips and chains. The Mips step now says the crop counts in the extent and is scaled and widened to whole texels (Region::in_texels), which this merge adds. Holds." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/mod.rs"]
-stamp = { hash = "b3:83f6ac8747ce9773", by = "agent:3d-models", note = "Added the Models paragraph to Placement math (f64 Solid, reversed Depth32Float, NEAR_W clip, opaque then blended, shader-side back faces, shading) and the model resources to the lifetime table; benches and model goldens described with lavapipe numbers." }
+stamp = { hash = "b3:2290997e3a099617", by = "agent:claude", note = "Models paragraph gains the bitangent sign and the buffer-limit refusal; the lifetime row now says the model depth target is the last layer's size and remade for another size, matching depth_view" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/model.wgsl"]
-stamp = { hash = "b3:eebefa3a0720c46b", by = "agent:3d-models", note = "Added the Models paragraph to Placement math (f64 Solid, reversed Depth32Float, NEAR_W clip, opaque then blended, shader-side back faces, shading) and the model resources to the lifetime table; benches and model goldens described with lavapipe numbers." }
+stamp = { hash = "b3:763d495b6fd66bea", by = "agent:claude", note = "Models paragraph gains the bitangent sign and the buffer-limit refusal; the lifetime row now says the model depth target is the last layer's size and remade for another size, matching depth_view" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/tests.rs"]
-stamp = { hash = "b3:50ba663028610d46", by = "agent:3d-models", note = "Added the Models paragraph to Placement math (f64 Solid, reversed Depth32Float, NEAR_W clip, opaque then blended, shader-side back faces, shading) and the model resources to the lifetime table; benches and model goldens described with lavapipe numbers." }
+stamp = { hash = "b3:18262bdbd5babfb1", by = "agent:claude", note = "Models paragraph gains the bitangent sign and the buffer-limit refusal; the lifetime row now says the model depth target is the last layer's size and remade for another size, matching depth_view" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/place.rs"]
 stamp = { hash = "b3:0bb6a603e8dff8af", by = "agent:3d-models", note = "Added the Models paragraph to Placement math (f64 Solid, reversed Depth32Float, NEAR_W clip, opaque then blended, shader-side back faces, shading) and the model resources to the lifetime table; benches and model goldens described with lavapipe numbers." }
@@ -4113,7 +4113,7 @@ stamp = { hash = "b3:1416a7b4551f29be", by = "agent:ui-parity", note = "scene.rs
 stamp = { hash = "b3:90996e1f0ca79344", by = "agent:blend-modes", note = "Added Item.blend and how each mode is drawn (ADR-0082); the transition note on halfway switches matches transition.rs's Endpoint.blend; the rest is unchanged." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/compositor.rs"]
-stamp = { hash = "b3:8c9752715f33036e", by = "agent:claude", note = "compositor.rs adds readback_wait accessor only; purpose unchanged | merge: main's #1087 (ADR-0103 profile) added Compositor::readback_wait next to this branch's models field; the model text still holds" }
+stamp = { hash = "b3:e333c46ac1f5ef08", by = "agent:claude", note = "upload_model now also refuses a primitive past max_buffer_size (Invalid), the depth target follows the layer's size, and the bitangent sign uses front_facing; the 3D model bullet still holds | kept from the merged side: compositor.rs adds readback_wait accessor only; purpose unchanged" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/convert/mod.rs"]
 stamp = { hash = "b3:d687fbbd6a293bb2", by = "agent:claude", note = "Merged wave/m1-4 at 89ea322e by taking its tree and re-applying this PR's own change (e993e0ee..80613b6b, the ledger took the wave's side). The merge brought the wave's device-fault watch (#349 via wave/m1-3: gpu.rs Faults and watch, Compositor::take_error) and the NV12 converter (#663). gpu.rs keeps both faults and this PR's submit field, from_context takes ctx.submit_lock(); render, render_into and apply_filter lock as before, and f95f936d makes Nv12Converter::submit hold it too: the GPU frames bullet's lock sentence and the NV12 bullet ('in a submit of its own on a compositor's queue') say so. Platform gpu-frames and ARCH agree." }
@@ -4311,13 +4311,13 @@ stamp = { hash = "b3:923686b398d0595c", by = "agent:wave-owner", note = "Re-read
 stamp = { hash = "b3:3701d0ac19411e18", by = "agent:wave-owner", note = "Merged main at 5693733 (wave/m3-3 landed, #786) into wave/m1-4. This branch: #781's extent, #672's submit lock, #712/#718. Main: X1's 3D draw, mips and chains (#622/#624/#643/#687/#629). The merge places the shape at the extent and builds a 3D chain from the crop mapped to texels (Region::in_texels, with a test). Holds." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/mod.rs"]
-stamp = { hash = "b3:83f6ac8747ce9773", by = "agent:3d-models", note = "Added upload_model/draw_model (ADR-0107) and Placement::Layer to what one scene means; models draw into a layer and sort at their centre." }
+stamp = { hash = "b3:2290997e3a099617", by = "agent:claude", note = "upload_model now also refuses a primitive past max_buffer_size (Invalid), the depth target follows the layer's size, and the bitangent sign uses front_facing; the 3D model bullet still holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/model.wgsl"]
-stamp = { hash = "b3:eebefa3a0720c46b", by = "agent:3d-models", note = "Added upload_model/draw_model (ADR-0107) and Placement::Layer to what one scene means; models draw into a layer and sort at their centre." }
+stamp = { hash = "b3:763d495b6fd66bea", by = "agent:claude", note = "upload_model now also refuses a primitive past max_buffer_size (Invalid), the depth target follows the layer's size, and the bitangent sign uses front_facing; the 3D model bullet still holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/tests.rs"]
-stamp = { hash = "b3:50ba663028610d46", by = "agent:3d-models", note = "Added upload_model/draw_model (ADR-0107) and Placement::Layer to what one scene means; models draw into a layer and sort at their centre." }
+stamp = { hash = "b3:18262bdbd5babfb1", by = "agent:claude", note = "upload_model now also refuses a primitive past max_buffer_size (Invalid), the depth target follows the layer's size, and the bitangent sign uses front_facing; the 3D model bullet still holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/place.rs"]
 stamp = { hash = "b3:0bb6a603e8dff8af", by = "agent:3d-models", note = "Added upload_model/draw_model (ADR-0107) and Placement::Layer to what one scene means; models draw into a layer and sort at their centre." }
@@ -4341,7 +4341,7 @@ stamp = { hash = "b3:5c4f84e1609ed5f5", by = "agent:claude-3d-cameras", note = "
 stamp = { hash = "b3:595a63e6fed816d5", by = "agent:claude-3d-cameras", note = "This PR (ADR-0094): the scene description gains Item.camera, an item seen through a camera always takes the 3D path with its own perspective_px ignored, a legacy placement under a camera drawn as before and sorted at the canvas centre's depth (place.rs depth, canvas_depth), and Item.depth_run, items sorting together only within one run (0 but for a stinger's items). Checked against scene.rs, compositor.rs prepare and place.rs. The test files (tests.rs, convert/tests.rs, filter/testing.rs) add camera: None and depth_run: 0 to their Item literals; three_d.rs adds the camera goldens. Also holds against main's merged Through track and shader-source program text. | kept from the merged side: transition.rs gains Track::Through, sampled as its Appear half until its leave timing starts and its Disappear half after, with end_ms at the leave's end (or its start for None); the Transitions bullet says so. Checked with a_through_track_comes_in_stays_and_goes." }
 
 ["CRATE-jstream-render#testing"."body"]
-stamp = { hash = "b3:ba9db3df6cc90ea9", by = "agent:3d-models", note = "tests.rs only made item() pub(crate) for the model goldens, which are now listed; the 2D and 3D goldens are unchanged." }
+stamp = { hash = "b3:616a66371c9f9d37", by = "agent:claude", note = "Model goldens list the three new tests (mirrored normal map, layers of three sizes, buffer limit); the bench paragraph (composite_1080p_camera, model_1080p and their lavapipe numbers) now says Linux" }
 
 ["CRATE-jstream-render#testing"."dep:docs/RULES.md#R-TEST-003"]
 stamp = { hash = "b3:56dea7b43ab3b19d" }

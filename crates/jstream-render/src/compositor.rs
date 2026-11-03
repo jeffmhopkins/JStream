@@ -399,7 +399,8 @@ impl Compositor {
     ///
     /// # Errors
     /// [`RenderError::TooLarge`] for a texture past the adapter's limit, and
-    /// [`RenderError::Invalid`] for a primitive too large for one draw.
+    /// [`RenderError::Invalid`] for a primitive too large for one draw or for one of the
+    /// adapter's buffers.
     pub fn upload_model(
         &self,
         model: &jstream_media::model::Model,

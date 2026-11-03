@@ -308,6 +308,24 @@ impl ModelRuntime {
         model: &Model,
     ) -> Result<GpuModel, RenderError> {
         let device = &gpu.device;
+        // Every primitive is one vertex and one index buffer, which wgpu panics on, rather
+        // than refuses, past the device's limit: check before uploading anything.
+        for p in model.primitives() {
+            let vertex_bytes = p.vertices.len() as u64 * VERTEX_STRIDE;
+            let index_bytes = p.indices.len() as u64 * 4;
+            if vertex_bytes.max(index_bytes) > gpu.max_buffer_size {
+                return Err(RenderError::Invalid {
+                    what: "model",
+                    detail: format!(
+                        "a primitive of {} vertices and {} indices needs a {} byte buffer; this GPU takes {}",
+                        p.vertices.len(),
+                        p.indices.len(),
+                        vertex_bytes.max(index_bytes),
+                        gpu.max_buffer_size
+                    ),
+                });
+            }
+        }
         let mut textures = Vec::with_capacity(model.textures().len());
         for texture in model.textures() {
             textures.push(upload_texture(gpu, texture)?);
@@ -563,15 +581,13 @@ impl ModelRuntime {
 
     fn depth_view(&mut self, gpu: &Gpu, width: u32, height: u32) -> wgpu::TextureView {
         if let Some((w, h, view)) = &self.depth
-            && *w >= width
-            && *h >= height
+            && (*w, *h) == (width, height)
         {
             return view.clone();
         }
-        // Grows to the largest target seen, so layers of different sizes share it.
-        let (w, h) = self.depth.as_ref().map_or((width, height), |(w, h, _)| {
-            ((*w).max(width), (*h).max(height))
-        });
+        // A pass's attachments must all be one size, so a layer of another size makes a
+        // new one (a canvas resize, or a second canvas through the same compositor).
+        let (w, h) = (width, height);
         let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("jstream-render-model-depth"),
             size: wgpu::Extent3d {
