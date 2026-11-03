@@ -111,4 +111,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0095](0095-browser-helper-on-linux.md) | Browser sources on Linux: the helper paints in software and hands the engine CPU frames | accepted | maintainer |  |
 | [ADR-0097](0097-agents-write-effect-packs.md) | Agents write effect packs over the protocol and MCP | accepted | maintainer |  |
 | [ADR-0102](0102-page-api-for-browser-sources.md) | Browser source pages can opt in to reading the engine through window.jstream | accepted | maintainer |  |
+| [ADR-0103](0103-per-item-performance-profile.md) | A performance profile per item, source and thread, readable over the protocol and MCP | accepted | agent |  |
 <!-- @generated end adr-index -->
