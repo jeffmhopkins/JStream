@@ -85,7 +85,8 @@ Contents ([Design](#design) explains the choices):
   layer moves, canvas arrangements, reference ↔ clone switches, grouping and
   ungrouping they send, tested natively), `clipboard.rs` (copy and paste, KB-05: the
   page's own clipboard of items or a scene, and the batches Paste, Paste scene and
-  Duplicate scene send, tested natively), `dialog.rs` (`Modal`,
+  Duplicate scene send; also the item menu's clipboards of one source's filters and one
+  item's box and crop, and the edits their pastes send, tested natively), `dialog.rs` (`Modal`,
   the modal dialog frame) and `icons.rs` (`Icon`, the prototype's stroke icons, plus
   the tool bars' own).
 - **Panels** (`panels/`): the scene list (`scenes.rs`, with its folders: the rows each
@@ -94,7 +95,7 @@ Contents ([Design](#design) explains the choices):
   favourites and labels filter, the star, the tool bar and drag reordering, with the matching and the drop's index
   tested natively), labels (`labels.rs`: the chips, the tag button and its popover, the label manager
   and the `LabelManager` context that opens it in the Scenes or Sources panel,
-  with the edits they send to a scene or a source tested natively), the Inspector (`inspector.rs`: the selected item's box, 3D, crop,
+  with the edits they send to a scene or a source tested natively), the Inspector (`inspector.rs`: the selected item's box, fit, 3D, crop,
   blending, scene switches and settings, or the selected scene's objects, uses and transitions, in
   sections whose folds `Folds` remembers by title), the
   properties form inside it (`properties.rs`), the Add source dialog (`add_source.rs`:
@@ -307,7 +308,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   toast, and Remove from scene, each one batch. Ctrl+C copies the selection (on a scene
   row, the scene) into the page's own clipboard (`Clipboard` context), and Ctrl+V,
   Paste or Paste scene sends one batch that places the copied items' sources again,
-  with their placement settings and effects, or duplicates the copied scene. For one item of a source placed more than once, or a
+  with their placement settings and effects, or duplicates the copied scene. As OBS's
+  does, the item menu also copies the primary item's source's filters (`FilterClip`)
+  and pastes them onto each selected item's source, after its own or replacing them,
+  chain by chain, and copies the primary item's box and crop (`TransformClip`) onto each
+  selected item, each paste one batch. For one item of a source placed more than once, or a
   copy whose original exists, it switches between a reference and an independent clone
   (decision register D3): `source.duplicate` and `item.set_source` to the copy, or
   `item.set_source` back to the original and `source.delete` of a copy nothing else

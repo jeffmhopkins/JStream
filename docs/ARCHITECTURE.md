@@ -1097,7 +1097,10 @@ import, a browser page's included) into a premultiplied `Rgba16Float` layer, of 
 chain runtime runs a source's video chain before placement, and a scene's over its
 composite once per frame wherever the scene shows, and an item's effects over its box
 ([ADR-0065](adr/0065-scene-chains-and-item-effects.md)), without allocating per
-frame. Still outside this crate: the render
+frame. A shader source's program ([ADR-0093](adr/0093-shader-sources-from-effect-packs.md))
+draws through the same harness: a filter of several passes that ignores its input,
+reads its own earlier frames, the pack's images and the scenes the chain runtime hands
+it, and reports the source's size. Still outside this crate: the render
 thread (in `jstream-core`), P010, loading effect packs (`jstream-effects`; this
 crate draws them through the filter harness), and the output path below.
 

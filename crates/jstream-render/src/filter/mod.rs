@@ -15,6 +15,7 @@ mod multipass;
 mod pack;
 mod params;
 mod pass;
+mod program;
 #[cfg(test)]
 pub(crate) mod testing;
 
@@ -22,6 +23,11 @@ pub use assets::{Lut, LutError, lut_image};
 pub use external::ExternalFilter;
 pub use pass::PRELUDE;
 pub(crate) use pass::{Blend, Ctx, Draw, Pass, Runtime, Scratch, Shader};
+pub use program::{
+    ExternalProgram, FIRST_INPUT_BINDING, MAX_INPUTS as PROGRAM_MAX_INPUTS,
+    MAX_PASSES as PROGRAM_MAX_PASSES, MAX_PROGRAM_BYTES, PROGRAM_PARAMS_BINDING, PROGRAM_PRELUDE,
+    ProgramAudio, ProgramImage, ProgramInput, ProgramPass,
+};
 
 use jstream_protocol::{KindDescriptor, Settings};
 
@@ -85,6 +91,35 @@ impl VideoFilter {
         settings: &Settings,
     ) -> Self {
         Self::of(kind_id, Box::new(external::External::new(filter, settings)))
+    }
+
+    /// A shader source's program (ADR-0093), a kind defined outside this crate, with
+    /// `settings` complete as the graph stores them. It ignores its input and draws the
+    /// program's picture at [`ExternalProgram::size`].
+    pub fn program(
+        kind_id: &str,
+        program: std::sync::Arc<dyn ExternalProgram>,
+        settings: &Settings,
+    ) -> Self {
+        Self::of(kind_id, Box::new(program::Program::new(program, settings)))
+    }
+
+    /// Fills a shader source's input slot `slot` with `image` (a scene's composite, the
+    /// audio data image), or empties it with `None`, from the next frame. The image must
+    /// come from the compositor that draws the filter. Other kinds ignore it.
+    pub fn set_input(&mut self, slot: usize, image: Option<std::sync::Arc<crate::Image>>) {
+        self.pass.set_input(slot, image);
+    }
+
+    /// Hands a shader source its audio levels for the next frame. Other kinds ignore it.
+    pub fn set_audio(&mut self, audio: ProgramAudio) {
+        self.pass.set_audio(audio);
+    }
+
+    /// Starts a shader source over, as when it is shown again: its `time` and frame
+    /// count from 0 and its feedback transparent. Other kinds ignore it.
+    pub fn restart(&mut self) {
+        self.pass.restart();
     }
 
     /// The filter's kind ID.

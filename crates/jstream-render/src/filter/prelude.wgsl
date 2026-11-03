@@ -1,6 +1,7 @@
 // Shared by every built-in video filter: a fullscreen triangle, the bindings, and colour
-// helpers. A filter's own WGSL is appended after this and defines `fn fs(in: VsOut)`
-// with its parameters at group 0, binding 4 (`var<uniform> p: Params;`).
+// helpers (`colour.wgsl`, which the host appends to this file). A filter's own WGSL is
+// appended after both and defines `fn fs(in: VsOut)` with its parameters at group 0,
+// binding 4 (`var<uniform> p: Params;`).
 //
 // Images are premultiplied linear light (`Rgba16Float`). An imported input is straight
 // sRGB-decoded, or (a browser page) sRGB code values already multiplied by alpha; `src`,
@@ -51,19 +52,6 @@ fn vs(@builtin(vertex_index) index: u32) -> VsOut {
     return out;
 }
 
-// `c` as premultiplied linear, given its `alpha` mode (see `Frame`).
-fn to_premul_linear(c: vec4<f32>, alpha: f32) -> vec4<f32> {
-    if (alpha > 2.5) {
-        return vec4<f32>(c.rgb, 1.0);
-    }
-    if (alpha > 1.5) {
-        // Premultiplied code values: a filtered texel keeps rgb <= a, up to rounding.
-        let straight = select(vec3<f32>(0.0), min(c.rgb / c.a, vec3<f32>(1.0)), c.a > 0.0);
-        return vec4<f32>(srgb_to_linear(straight) * c.a, c.a);
-    }
-    return select(c, vec4<f32>(c.rgb * c.a, c.a), alpha > 0.5);
-}
-
 // The input, bilinear, premultiplied linear. Outside 0..1 clamps to the edge.
 fn src(uv: vec2<f32>) -> vec4<f32> {
     return to_premul_linear(textureSampleLevel(input_tex, lin, uv, 0.0), frame.alpha);
@@ -78,32 +66,4 @@ fn texel(px: vec2<i32>) -> vec4<f32> {
 // The auxiliary image (a mask, a second pass's input), bilinear, premultiplied linear.
 fn aux(uv: vec2<f32>) -> vec4<f32> {
     return to_premul_linear(textureSampleLevel(aux_tex, lin, uv, 0.0), frame.aux_alpha);
-}
-
-fn unpremul(c: vec4<f32>) -> vec4<f32> {
-    if (c.a <= 0.0) {
-        return vec4<f32>(0.0);
-    }
-    return vec4<f32>(c.rgb / c.a, c.a);
-}
-
-fn premul(c: vec4<f32>) -> vec4<f32> {
-    return vec4<f32>(c.rgb * c.a, c.a);
-}
-
-fn linear_to_srgb(c: vec3<f32>) -> vec3<f32> {
-    let lo = c * 12.92;
-    let hi = 1.055 * pow(max(c, vec3<f32>(0.0)), vec3<f32>(1.0 / 2.4)) - 0.055;
-    return select(hi, lo, c <= vec3<f32>(0.0031308));
-}
-
-fn srgb_to_linear(c: vec3<f32>) -> vec3<f32> {
-    let lo = c / 12.92;
-    let hi = pow(max((c + 0.055) / 1.055, vec3<f32>(0.0)), vec3<f32>(2.4));
-    return select(hi, lo, c <= vec3<f32>(0.04045));
-}
-
-// BT.709 luma of linear RGB.
-fn luma(c: vec3<f32>) -> f32 {
-    return dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));
 }
