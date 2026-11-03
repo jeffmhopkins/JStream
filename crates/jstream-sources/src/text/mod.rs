@@ -226,23 +226,7 @@ impl SourceKind for TextKind {
 
     /// Reads and checks the font file, so this blocks on I/O, then draws the text.
     fn create(&self, settings: &Settings, ctx: &Context) -> Result<Box<dyn Source>, SourceError> {
-        let (font, path) = match source::asset(settings, "font")? {
-            Some((root, path)) => {
-                let bytes = ctx.assets.read(root, &path, ctx.limits.max_file_bytes)?;
-                (Cow::Owned(bytes), path)
-            }
-            None => (
-                Cow::Borrowed(bundled(settings)?),
-                "(bundled font)".to_owned(),
-            ),
-        };
-        // Parsed once here to report a bad file; each draw parses it again, which only
-        // reads the table directory.
-        parse(&font).map_err(|reason| SourceError::Decode {
-            path,
-            format: "a TrueType or OpenType font",
-            reason,
-        })?;
+        let font = load_font(settings, ctx)?;
         let (frame, extent) = draw(&font, settings, 1.0, &ctx.limits)?;
         Ok(Box::new(TextSource {
             descriptor: self.0.clone(),
@@ -254,6 +238,52 @@ impl SourceKind for TextKind {
             extent,
         }))
     }
+}
+
+/// The font `settings` name: the `font` file, read and checked, which blocks on I/O,
+/// or the bundled `face` while `font` is `null`. Shared with the `timer` kind.
+pub(crate) fn load_font(
+    settings: &Settings,
+    ctx: &Context,
+) -> Result<Cow<'static, [u8]>, SourceError> {
+    let (font, path) = match source::asset(settings, "font")? {
+        Some((root, path)) => {
+            let bytes = ctx.assets.read(root, &path, ctx.limits.max_file_bytes)?;
+            (Cow::Owned(bytes), path)
+        }
+        None => (
+            Cow::Borrowed(bundled(settings)?),
+            "(bundled font)".to_owned(),
+        ),
+    };
+    // Parsed once here to report a bad file; each draw parses it again, which only
+    // reads the table directory.
+    parse(&font).map_err(|reason| SourceError::Decode {
+        path,
+        format: "a TrueType or OpenType font",
+        reason,
+    })?;
+    Ok(font)
+}
+
+/// The bundled face an update of `settings` swaps to live while `font` is `null`, or
+/// `None` while a font file is set, which keeps the file already read.
+pub(crate) fn bundled_face(settings: &Settings) -> Result<Option<&'static [u8]>, SourceError> {
+    Ok(match source::asset(settings, "font")? {
+        None => Some(bundled(settings)?),
+        Some(_) => None,
+    })
+}
+
+/// The `text` kind's parameters but `text` and `wrap_width`: how a line is drawn, which
+/// the `timer` kind shares.
+pub(crate) fn style_params() -> Vec<ParamDescriptor> {
+    TextKind::new()
+        .0
+        .params
+        .into_iter()
+        .filter(|p| p.id != "text" && p.id != "wrap_width")
+        .collect()
 }
 
 /// The first font in `bytes`, a font file or a collection.
@@ -278,9 +308,9 @@ struct TextSource {
 
 /// The highest density a source draws at ([`Source::set_density`]): 32 times as many
 /// pixels each way, so a default 64 px line stretched across a 4K canvas is drawn at
-/// the size it is shown. The `text` kind is the one that draws at a density, and
-/// it draws at a lower one when the frame would be larger than a 4K canvas
-/// (`raster::render`, ADR-0079).
+/// the size it is shown. The `text` and `timer` kinds are the ones that draw at a
+/// density, and they draw at a lower one when the frame would be larger than a 4K
+/// canvas (`raster::render`, ADR-0079).
 pub const MAX_DENSITY: f32 = 32.0;
 
 impl Source for TextSource {
@@ -299,9 +329,9 @@ impl Source for TextSource {
             });
         }
         // A bundled face is swapped live; a font file ignores `face`.
-        let font = match source::asset(settings, "font")? {
-            None => Cow::Borrowed(bundled(settings)?),
-            Some(_) => self.font.clone(),
+        let font = match bundled_face(settings)? {
+            Some(face) => Cow::Borrowed(face),
+            None => self.font.clone(),
         };
         (self.frame, self.extent) = draw(&font, settings, self.density, &self.limits)?;
         self.font = font;
@@ -405,6 +435,15 @@ pub(crate) enum Align {
 }
 
 fn style(settings: &Settings) -> Result<Style, SourceError> {
+    let wrap_width = pixels(settings, "wrap_width", MAX_WRAP)?;
+    text_style(settings, (wrap_width > 0).then_some(wrap_width))
+}
+
+/// The style [`style_params`] describe, wrapping at `wrap_width`.
+pub(crate) fn text_style(
+    settings: &Settings,
+    wrap_width: Option<u32>,
+) -> Result<Style, SourceError> {
     let align = match string(settings, "align")? {
         "left" => Align::Left,
         "center" => Align::Center,
@@ -415,14 +454,13 @@ fn style(settings: &Settings) -> Result<Style, SourceError> {
         .as_f64()
         .filter(|s| (1.0..=MAX_SIZE).contains(s))
         .ok_or_else(|| bad("size", &format!("must be a number from 1 to {MAX_SIZE}")))?;
-    let wrap_width = pixels(settings, "wrap_width", MAX_WRAP)?;
     // From 1 to 1024, which an f32 holds closely enough.
     let size = size as f32;
     Ok(Style {
         size,
         color: color(settings, "color")?,
         align,
-        wrap_width: (wrap_width > 0).then_some(wrap_width),
+        wrap_width,
         outline_width: pixels(settings, "outline_width", MAX_OUTLINE)?,
         outline_color: color(settings, "outline_color")?,
         background: color(settings, "background")?,
