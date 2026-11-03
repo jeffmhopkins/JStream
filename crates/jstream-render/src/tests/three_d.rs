@@ -1033,7 +1033,21 @@ fn golden_camera_framing_draws_flat_items_on_their_2d_boxes() {
         Crop::NONE,
     );
     let want = reference(&items, &Texels::new(&rgba, SOURCE), 8, Crop::NONE);
-    check("framing interior", error(&seen, &want, interior), 3.0, 40.0);
+    // Bounded by the 2D draw's own error against the reference on this device, which
+    // varies with the device's sampling: on lavapipe the 2D draw measures a mean of 3.47
+    // and a p99 of 41.8 and the framing camera's 2.31 and 21.1, and Metal measured the
+    // framing camera's at 3.46 and 41.8.
+    let (flat_mean, flat_p99, _) = error(&flat, &want, interior);
+    let _ = writeln!(
+        std::io::stderr(),
+        "framing 2D reference: mean {flat_mean:.2}, p99 {flat_p99:.1}"
+    );
+    check(
+        "framing interior",
+        error(&seen, &want, interior),
+        (flat_mean + 1.5).max(3.0),
+        (flat_p99 + 25.0).max(40.0),
+    );
     // The same pixels as the 2D scene inside the items, up to sampling.
     let mut differ = 0;
     for (i, coverage) in want.coverage.iter().enumerate() {

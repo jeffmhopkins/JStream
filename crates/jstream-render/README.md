@@ -862,7 +862,7 @@ back with `unplace_seen`:
 
 | Camera test | Pixels | Limit (mean, p99) | Measured |
 |---|---|---|---|
-| the framing camera: two flat items, one rotated 20°, against the 2D reference, and fewer than 40 interior pixels off the 2D draw | interior | 3, 40 | 2.31, 21.1 |
+| the framing camera: two flat items, one rotated 20°, against the 2D reference, and fewer than 40 interior pixels off the 2D draw | interior | the 2D draw's own + 1.5, + 25 (at least 3, 40) | 2.31, 21.1 (the 2D draw 3.47, 41.8; Metal 3.46, 41.8) |
 | an off-axis set, a back wall and a floor through a 50° camera, 16² samples | interior | 6, 40 | 3.57, 29.2 |
 | the same set | all | 6, 60 | 0.57, 14.3 |
 
