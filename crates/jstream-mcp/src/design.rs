@@ -143,9 +143,9 @@ an HTML stinger. Make sure the bars cover the whole canvas at `cut_ms`, check \
 with `video.snapshot` mid-switch, and make it the scenes' `transition_in` \
 (`scene.set_transitions`) or name it in the switch. An HTML stinger is a `browser` \
 source with `restart_on_show` on, so it plays from the start each time; the reload \
-takes a page load, and until the new page paints the stinger shows the last frame \
-of its previous run, so start and end its animation transparent, keep it light \
-(inline, no remote assets) and leave a few hundred ms before `cut_ms`. \
+takes a page load, during which the stinger is transparent (never the end of its \
+previous run), so keep it light (inline, no remote assets) and leave a few hundred \
+ms before `cut_ms`. \
 HTML graphics: for a layout the built-in kinds can't draw (rich type, icons, tables, \
 SVG, CSS gradients, blend modes or 3D transforms, choreographed CSS animation), make a \
 `browser` source and give it the whole page in `html`, its CSS and scripts inline. Set \

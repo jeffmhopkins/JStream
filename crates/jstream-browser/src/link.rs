@@ -96,6 +96,35 @@ struct PageLink {
     denied: AtomicU64,
     /// Answered when the helper confirms or refuses the open.
     opened: Mutex<Option<SyncSender<Result<(), String>>>>,
+    /// Reloads asked for that the helper hasn't taken yet ([`ToEngine::Reloading`]).
+    /// Paints that arrive meanwhile are the old document's, and are dropped.
+    reloads: AtomicU32,
+    /// Whether the latest frame is shown: false from a reload until the reloaded
+    /// document's first paint, so the page is transparent rather than showing the end
+    /// of its previous run (`restart_on_show`).
+    showing: AtomicBool,
+}
+
+impl PageLink {
+    /// Takes one paint, unless it is the old document's while a reload is pending.
+    fn paint(&self, paint: &Paint, pts: MediaTime) {
+        if self.reloads.load(Ordering::Acquire) > 0 {
+            return;
+        }
+        self.frames.paint(paint, pts);
+        self.showing.store(true, Ordering::Release);
+    }
+
+    /// The helper took one reload.
+    fn reloading(&self) {
+        let _ = self
+            .reloads
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| n.checked_sub(1));
+    }
+
+    fn shown<T>(&self, frame: Option<T>) -> Option<T> {
+        frame.filter(|_| self.showing.load(Ordering::Acquire))
+    }
 }
 
 impl Link {
@@ -189,6 +218,8 @@ impl Link {
             frames: self.frames.page(spec.size),
             denied: AtomicU64::new(0),
             opened: Mutex::new(Some(tx)),
+            reloads: AtomicU32::new(0),
+            showing: AtomicBool::new(true),
         });
         {
             let mut pages = lock(&self.pages);
@@ -296,7 +327,7 @@ impl Link {
                         width,
                         height,
                     };
-                    state.frames.paint(&paint, pts);
+                    state.paint(&paint, pts);
                 }
                 // Even for a page closed meanwhile: the helper waits for every slot.
                 self.send(&ToHelper::Released { page, slot });
@@ -328,6 +359,11 @@ impl Link {
             }
             ToEngine::Closed { page } => {
                 tracing::debug!(page, "a browser page closed in the helper");
+            }
+            ToEngine::Reloading { page } => {
+                if let Some(state) = self.page(page) {
+                    state.reloading();
+                }
             }
             ToEngine::Ready | ToEngine::StartFailed { .. } => {
                 tracing::debug!("the browser helper repeated its start answer");
@@ -377,7 +413,7 @@ pub(crate) struct LinkPage {
 
 impl BrowserPage for LinkPage {
     fn frame(&self) -> Option<GpuFrame> {
-        self.page.frames.latest()
+        self.page.shown(self.page.frames.latest())
     }
 
     fn paints_on_cpu(&self) -> bool {
@@ -385,7 +421,7 @@ impl BrowserPage for LinkPage {
     }
 
     fn cpu_frame(&self) -> Option<Arc<VideoFrame>> {
-        self.page.frames.latest_cpu()
+        self.page.shown(self.page.frames.latest_cpu())
     }
 
     fn set_css(&mut self, css: &str) {
@@ -395,7 +431,11 @@ impl BrowserPage for LinkPage {
         });
     }
 
+    /// Hides the page until the reloaded document paints, so it never shows the end of
+    /// its previous run, then asks the helper to reload it.
     fn reload(&mut self) {
+        self.page.reloads.fetch_add(1, Ordering::AcqRel);
+        self.page.showing.store(false, Ordering::Release);
         self.link.send(&ToHelper::Reload { page: self.id });
     }
 
@@ -674,6 +714,47 @@ mod tests {
         drop(helper);
         thread.join().expect("reader");
         assert!(!link.is_alive());
+    }
+
+    #[test]
+    fn a_reloaded_page_hides_until_the_new_document_paints() {
+        let (link, thread, helper, paints) = connect();
+        let helper = start(&link, helper);
+        let (mut page, mut helper) = open(&link, helper);
+        let frame = |slot| ToEngine::Frame {
+            page: 1,
+            slot,
+            handle: 0x44,
+            width: 640,
+            height: 360,
+        };
+        helper.say(&frame(0));
+        assert_eq!(helper.expect(), ToHelper::Released { page: 1, slot: 0 });
+        assert!(page.page.showing.load(Ordering::Acquire));
+
+        // From the reload the old frame isn't shown, and a paint that left the helper
+        // before it took the reload is dropped, its slot still released.
+        page.reload();
+        assert_eq!(helper.expect(), ToHelper::Reload { page: 1 });
+        assert!(!page.page.showing.load(Ordering::Acquire));
+        helper.say(&frame(1));
+        assert_eq!(helper.expect(), ToHelper::Released { page: 1, slot: 1 });
+        assert_eq!(lock(&paints).len(), 1);
+        assert!(!page.page.showing.load(Ordering::Acquire));
+
+        // Once the helper has taken it, the next paint is the new document's.
+        helper.say(&ToEngine::Reloading { page: 1 });
+        helper.say(&frame(2));
+        assert_eq!(helper.expect(), ToHelper::Released { page: 1, slot: 2 });
+        assert_eq!(lock(&paints).len(), 2);
+        assert!(page.page.showing.load(Ordering::Acquire));
+
+        drop(page);
+        assert_eq!(helper.expect(), ToHelper::Close { page: 1 });
+        link.shutdown();
+        assert_eq!(helper.expect(), ToHelper::Shutdown);
+        drop(helper);
+        thread.join().expect("reader");
     }
 
     #[test]

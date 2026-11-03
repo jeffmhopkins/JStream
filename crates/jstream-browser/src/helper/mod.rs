@@ -344,6 +344,7 @@ impl Host {
             closing: AtomicBool::new(false),
             textures: PageTextures::default(),
             paint_warned: AtomicBool::new(false),
+            reloading: AtomicBool::new(false),
             channels: AtomicUsize::new(0),
             host: Arc::clone(self),
             policy: RequestPolicy::for_page(spec),
@@ -440,6 +441,9 @@ pub(crate) struct PageShared {
     textures: PageTextures,
     /// Whether a failed paint was reported since the last good one.
     paint_warned: AtomicBool,
+    /// Set from a reload until the reloaded document starts loading: the old document's
+    /// paints meanwhile are skipped, so the engine never shows them after the reload.
+    reloading: AtomicBool,
     /// Channels in the page's current audio stream (`OnAudioStreamStarted`).
     pub(crate) channels: AtomicUsize,
     pub(crate) host: Arc<Host>,
@@ -483,8 +487,15 @@ impl PageShared {
         self.host.browser_closed();
     }
 
+    /// The main frame started loading a document (`OnLoadStart`), or ended or failed
+    /// loading one: paints from here are the new document's, so a reload's hold ends.
+    pub(crate) fn load_started(&self) {
+        self.reloading.store(false, Ordering::Release);
+    }
+
     /// The main frame finished loading: applies the custom CSS to the new document.
     pub(crate) fn loaded(&self, frame: &::cef::Frame) {
+        self.load_started();
         let css = lock(&self.css).clone();
         run_script(frame, &css_script(&css));
     }
@@ -500,6 +511,9 @@ impl PageShared {
     /// succeeds.
     #[cfg(windows)]
     pub(crate) fn paint(&self, handle: *mut c_void) {
+        if self.reloading.load(Ordering::Acquire) {
+            return;
+        }
         let painted = {
             let gpu = lock(&self.host.gpu);
             let Some(gpu) = gpu.as_ref() else {
@@ -516,6 +530,9 @@ impl PageShared {
     /// paint succeeds.
     #[cfg(target_os = "linux")]
     pub(crate) fn paint(&self, bgra: &[u8], width: u32, height: u32) {
+        if self.reloading.load(Ordering::Acquire) {
+            return;
+        }
         let painted = self
             .textures
             .paint(&self.host.frames, self.id, bgra, (width, height));
@@ -597,9 +614,17 @@ impl PageShared {
     }
 
     /// Loads the page again; its custom CSS goes in again on load, as on the first.
+    /// The old document's paints stop first, and the engine is told so
+    /// ([`ToEngine::Reloading`]) before any paint of the new one.
     fn reload(&self) {
-        if let Some(browser) = lock(&self.browser).as_ref() {
+        let browser = lock(&self.browser);
+        if let Some(browser) = browser.as_ref() {
+            self.reloading.store(true, Ordering::Release);
+            self.host.send(&ToEngine::Reloading { page: self.id });
             browser.0.reload();
+        } else {
+            // No browser yet: its first load is the start the engine waits for.
+            self.host.send(&ToEngine::Reloading { page: self.id });
         }
     }
 
