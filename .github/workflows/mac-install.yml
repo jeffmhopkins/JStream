@@ -1,0 +1,123 @@
+# mac-install: the one-command macOS install (scripts/mac/, docs/runbooks/mac-testing.md).
+# `pins` checks the script on Linux; `install` runs it end to end on macos-latest from this
+# checkout, signed ad hoc, then starts the installed app's daemon and loads its UI.
+# Not a required check: it runs only when the installer or what it pins could change.
+# Editing this file is a governance change (R-GOV-001).
+
+# Third-party actions are pinned to full commit SHAs, with the release in a trailing comment.
+# Dependabot proposes updates (ADR-0056).
+
+name: mac-install
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - "scripts/mac/**"
+      - "scripts/install-tools.txt"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "crates/jstream-ui/Trunk.toml"
+      - "crates/jstream-ui/index.html"
+      - "apps/jstream-daemon/Info.plist"
+      - ".github/workflows/mac-install.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/mac/**"
+      - "scripts/install-tools.txt"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "crates/jstream-ui/Trunk.toml"
+      - "crates/jstream-ui/index.html"
+      - "apps/jstream-daemon/Info.plist"
+      - ".github/workflows/mac-install.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mac-install-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pins:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Syntax and shellcheck
+        run: |
+          bash -n scripts/mac/install.sh
+          bash -n scripts/mac/start-daemon.sh
+          shellcheck --severity=warning scripts/mac/install.sh scripts/mac/start-daemon.sh
+      # scripts/install-tools.txt pins the same trunk, wasm-bindgen and binaryen releases as
+      # the UI builds in ci.yml and after-review.yml, and its wasm-bindgen matches Cargo.lock.
+      - name: Pins match CI and Cargo.lock
+        run: |
+          set -euo pipefail
+          pins=scripts/install-tools.txt
+          fail=0
+          check() { # <tool in pins> <variable in the workflows>
+            local tool=$1 name=$2 file want got
+            for want in $(awk -v t="$tool" '$1 == t { print $2 }' "$pins" | sort -u); do
+              for file in .github/workflows/ci.yml .github/workflows/after-review.yml; do
+                for got in $(sed -n "s/^ *$name: //p" "$file" | sort -u); do
+                  if [ "$got" != "$want" ]; then
+                    echo "::error file=$pins::$tool is $want here but $name is $got in $file"
+                    fail=1
+                  fi
+                done
+              done
+            done
+          }
+          check trunk TRUNK_VERSION
+          check wasm-bindgen WASM_BINDGEN_VERSION
+          check binaryen BINARYEN_VERSION
+          locked=$(awk '/^name = "wasm-bindgen"$/ { getline; gsub(/"/, "", $3); print $3; exit }' Cargo.lock)
+          for want in $(awk '$1 == "wasm-bindgen" { print $2 }' "$pins" | sort -u); do
+            if [ "$locked" != "$want" ]; then
+              echo "::error file=$pins::Cargo.lock has wasm-bindgen $locked but the pins say $want"
+              fail=1
+            fi
+          done
+          exit "$fail"
+
+  install:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      JSTREAM_BUILD_DIR: ${{ runner.temp }}/jstream-build
+      JSTREAM_APP_DIR: ${{ runner.temp }}/Applications
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Install from this checkout
+        run: bash scripts/mac/install.sh --source . --adhoc --no-open
+      - name: The app is signed and its Info.plist is complete
+        run: |
+          set -euo pipefail
+          app="$JSTREAM_APP_DIR/JStream.app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          for key in CFBundleIdentifier NSCameraUsageDescription NSMicrophoneUsageDescription NSAudioCaptureUsageDescription; do
+            /usr/libexec/PlistBuddy -c "Print :$key" "$app/Contents/Info.plist"
+          done
+          "$app/Contents/MacOS/jstream-daemon" --version
+      # The launcher the applet runs: it must print the daemon's PID, the UI URL and the
+      # token, and the URL must serve the UI.
+      - name: The launcher starts the daemon and its UI loads
+        run: |
+          set -euo pipefail
+          out=$("$JSTREAM_APP_DIR/JStream.app/Contents/Resources/start-daemon.sh")
+          pid=$(sed -n 1p <<<"$out")
+          url=$(sed -n 2p <<<"$out")
+          token=$(sed -n 3p <<<"$out")
+          [ -n "$token" ] || { echo "::error::the launcher printed no token"; exit 1; }
+          echo "daemon $pid serving $url"
+          # The UI is behind HTTP Basic, the token as the password (any user name).
+          status=$(curl -s -o page.html -w '%{http_code}' -u "tester:$token" "$url")
+          kill "$pid"
+          [ "$status" = 200 ] || { echo "::error::the UI answered $status"; exit 1; }
+          grep -q '<html' page.html || { echo "::error::the UI page isn't HTML"; exit 1; }
