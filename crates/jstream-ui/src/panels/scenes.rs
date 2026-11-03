@@ -852,6 +852,12 @@ pub fn Scenes() -> impl IntoView {
                             );
                         }),
                         crate::projector::pop_out(studio, Some(id.clone())),
+                        crate::screenshot::entry(
+                            "Screenshot (scene)",
+                            studio,
+                            Some(session),
+                            Some(crate::screenshot::Shot::Scene(id.clone())),
+                        ),
                         multiview,
                         Entry::Sep,
                         Entry::item("New scene", move || new_scene(scene_folder.clone())),

@@ -628,6 +628,8 @@ struct Item {
     blend: BlendMode,
     /// Its effects (ADR-0065), settings as given: only the video chain holds any.
     effects: jstream_protocol::FilterChains,
+    /// Whether its canvas box is locked (ADR-0096).
+    locked: bool,
 }
 
 impl State {
@@ -1605,6 +1607,7 @@ impl Collection {
                         opacity,
                         blend,
                         effects: Default::default(),
+                        locked: false,
                     },
                 );
                 vec![Edit::ItemRemove { item_id }]
@@ -1730,6 +1733,14 @@ impl Collection {
                 vec![Edit::ItemSetBlend {
                     item_id,
                     blend: old,
+                }]
+            }
+            Edit::ItemSetLocked { item_id, locked } => {
+                let item = self.existing_item(&item_id)?;
+                let old = std::mem::replace(&mut item.locked, locked);
+                vec![Edit::ItemSetLocked {
+                    item_id,
+                    locked: old,
                 }]
             }
             Edit::SourceCreate {
@@ -2407,6 +2418,7 @@ impl Collection {
                     opacity: item.opacity,
                     blend: item.blend,
                     transition: ItemTransition::default(),
+                    locked: item.locked,
                 })
             })
             .collect()
@@ -2662,6 +2674,12 @@ fn restore_item(
             item_id: item_id.clone(),
             scene_id: None,
             visible: false,
+        });
+    }
+    if item.locked {
+        edits.push(Edit::ItemSetLocked {
+            item_id: item_id.clone(),
+            locked: true,
         });
     }
     let owner = jstream_protocol::FilterOwner::Item {

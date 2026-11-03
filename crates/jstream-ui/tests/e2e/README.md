@@ -160,7 +160,10 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   placed, Ctrl+A selects both, one nudge moves both as one edit, Shift-click on the
   canvas takes one out and Shift-click on its row in the sources list adds it back; a
   double click opens the item's Properties dialog with it selected, and a double click
-  on the canvas tools over an item leaves the selection alone.
+  on the canvas tools over an item leaves the selection alone; a row's lock button
+  locks the Backdrop, after which a drag selects it but leaves it in place, the readout
+  reads “640 × 360 · locked”, an arrow key sends nothing, and the item menu's checked
+  Lock unlocks it.
 - **Crop** (`crop.spec.js`): the Crop tool, C, V, Escape, the item menu's Crop and a
   switch of scene enter and leave crop mode, whose readout says there is no source size
   while the engine reports none, and then a handle drag resizes as usual; with `sourceSizes` giving the Backdrop's source a size,
@@ -181,7 +184,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   Add disabled when none match, and an empty search lists them all again. An item row's menu lists the item menu's lines and Delete source everywhere…, Send to back
   restacks in one edit and Stretch to canvas, from the Transform submenu, fills the
   canvas; the item menu's Rename opens the row's name, Visible hides and shows the item
-  with its check following, Blending's Multiply replaces the checked Normal, and Paste
+  with its check following, Screenshot (source) shows a toast (the mock engine streams
+  no pictures, so it can't take one), Blending's Multiply replaces the checked Normal, and Paste
   stays off until Copy, then places the source again; a scene row's Show in multiview
   toggles its check, and Copy then Paste scene adds a copy of the scene; Copy filters
   from the Backdrop pastes its two video filters onto a nested Intro, a second paste
