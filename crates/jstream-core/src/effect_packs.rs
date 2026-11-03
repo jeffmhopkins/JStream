@@ -139,7 +139,9 @@ pub(crate) struct Blame {
 /// was blamed on, and a pack one of whose effects was blamed twice in one run. Kept in
 /// [`QUARANTINE_FILE`], not in the collection, so it isn't undoable and survives a
 /// collection change. A pack's files changing doesn't lift it: a pack author's loop bug
-/// survives most edits.
+/// survives most edits. It follows the shader too (ADR-0097): the digests of what a
+/// blamed kind drew quarantine any kind that draws one of them, under whatever pack or
+/// kind ID.
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 struct Quarantine {
     /// Quarantined kinds, `<pack>/<effect>`.
@@ -148,13 +150,47 @@ struct Quarantine {
     /// Quarantined packs, every effect of each.
     #[serde(default)]
     packs: BTreeSet<String>,
+    /// The digests ([`digests`]) of the WGSL modules each quarantined kind drew, by kind.
+    /// A file from before ADR-0097 has none; a kind gains them when its pack loads.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    digests: BTreeMap<String, BTreeSet<String>>,
 }
 
 impl Quarantine {
-    /// Whether `kind_id` may not draw.
-    fn holds(&self, kind_id: &str) -> bool {
-        self.kinds.contains(kind_id) || self.packs.contains(pack_of(kind_id))
+    /// Whether `kind_id`, drawing the modules `drawn` digests, may not draw.
+    fn holds(&self, kind_id: &str, drawn: &[String]) -> bool {
+        self.kinds.contains(kind_id)
+            || self.packs.contains(pack_of(kind_id))
+            || self
+                .digests
+                .values()
+                .any(|held| drawn.iter().any(|d| held.contains(d)))
     }
+}
+
+/// The hex BLAKE3 digest of each WGSL module `kind_id` draws, as validated: for an
+/// effect, the filter prelude and its header and shader; for a shader source, each pass's
+/// program prelude, header, `common` and pass text (ADR-0097 decision 6).
+fn digests(effect: Option<&Effect>, source: Option<&ShaderSource>) -> Vec<String> {
+    let module = |prelude: &str, wgsl: &str| {
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(prelude.as_bytes());
+        hasher.update(wgsl.as_bytes());
+        hasher.finalize().to_hex().to_string()
+    };
+    let mut out: Vec<String> = effect
+        .map(|e| module(jstream_render::FILTER_PRELUDE, e.wgsl()))
+        .into_iter()
+        .collect();
+    if let Some(source) = source {
+        out.extend(
+            source
+                .passes()
+                .iter()
+                .map(|pass| module(jstream_render::PROGRAM_PRELUDE, &pass.wgsl)),
+        );
+    }
+    out
 }
 
 /// The pack of `kind_id`, `<pack>/<effect>`.
@@ -171,6 +207,8 @@ pub(crate) struct Packs {
     /// Every loaded shader source, quarantined or not.
     sources: BTreeMap<String, PackSource>,
     quarantine: Quarantine,
+    /// The digests of the modules each loaded kind draws ([`digests`]).
+    drawn: BTreeMap<String, Vec<String>>,
     /// How many losses each kind was blamed for in this run.
     blamed: BTreeMap<String, u32>,
     /// The last [`Update::seq`] made.
@@ -187,6 +225,7 @@ impl Packs {
             loaded: BTreeMap::new(),
             sources: BTreeMap::new(),
             quarantine,
+            drawn: BTreeMap::new(),
             blamed: BTreeMap::new(),
             seq: 0,
         }
@@ -267,6 +306,31 @@ impl Packs {
             .collect();
         self.loaded = loaded;
         self.sources = sources;
+        self.drawn = self
+            .kinds()
+            .map(|id| {
+                let effect = self.loaded.get(id).map(|e| &*e.0);
+                let source = self.sources.get(id).map(|s| &*s.0);
+                (id.clone(), digests(effect, source))
+            })
+            .collect();
+        // A kind quarantined before ADR-0097 has no digests: it gains them the first
+        // time its pack loads, so renaming it can't put it back on air.
+        let unrecorded: Vec<String> = self
+            .quarantine
+            .kinds
+            .iter()
+            .filter(|id| !self.quarantine.digests.contains_key(*id))
+            .filter(|id| self.drawn.contains_key(*id))
+            .cloned()
+            .collect();
+        if !unrecorded.is_empty() {
+            for id in unrecorded {
+                let drawn = self.drawn[&id].iter().cloned().collect();
+                self.quarantine.digests.insert(id, drawn);
+            }
+            self.save();
+        }
         for change in &changes.kinds {
             tracing::info!(?change, "effect pack kind");
         }
@@ -291,7 +355,7 @@ impl Packs {
                 let pack = pack_of(kind_id).to_owned();
                 quarantined.extend(
                     self.kinds()
-                        .filter(|id| pack_of(id) == pack && !self.quarantine.holds(id))
+                        .filter(|id| pack_of(id) == pack && !self.holds(id))
                         .cloned(),
                 );
                 quarantined.insert(kind_id.clone());
@@ -300,6 +364,8 @@ impl Packs {
                 quarantined.insert(kind_id.clone());
             }
             self.quarantine.kinds.insert(kind_id.clone());
+            let drawn = self.drawn_by(kind_id).iter().cloned().collect();
+            self.quarantine.digests.insert(kind_id.clone(), drawn);
         }
         let update = (!blamed.is_empty()).then(|| {
             self.save();
@@ -317,11 +383,12 @@ impl Packs {
         }
     }
 
-    /// Lifts the quarantine of `kind_id`, and of its pack. `Ok(None)` when it wasn't
+    /// Lifts the quarantine of `kind_id`, and of its pack, and every quarantine whose
+    /// digests it draws (one blamed under another ID). `Ok(None)` when it wasn't
     /// quarantined. Fails with `invalid_argument` for a kind no loaded pack has and no
     /// quarantine names.
     pub(crate) fn enable(&mut self, kind_id: &str) -> Result<Option<Update>, ProtocolError> {
-        if !self.quarantine.holds(kind_id) {
+        if !self.holds(kind_id) {
             if self.is_loaded(kind_id) {
                 return Ok(None);
             }
@@ -332,9 +399,33 @@ impl Packs {
         }
         self.quarantine.kinds.remove(kind_id);
         self.quarantine.packs.remove(pack_of(kind_id));
+        self.quarantine.digests.remove(kind_id);
+        let drawn = self.drawn_by(kind_id).to_vec();
+        let shared: Vec<String> = self
+            .quarantine
+            .digests
+            .iter()
+            .filter(|(_, held)| drawn.iter().any(|d| held.contains(d)))
+            .map(|(id, _)| id.clone())
+            .collect();
+        for id in shared {
+            self.quarantine.digests.remove(&id);
+            self.quarantine.kinds.remove(&id);
+        }
         self.save();
         tracing::info!(kind_id, "quarantined effect re-enabled");
         Ok(Some(self.update(Vec::new(), Vec::new())))
+    }
+
+    /// Whether `kind_id` may not draw: quarantined by ID, by its pack, or by a digest of
+    /// a module it draws.
+    fn holds(&self, kind_id: &str) -> bool {
+        self.quarantine.holds(kind_id, self.drawn_by(kind_id))
+    }
+
+    /// The digests of the modules loaded `kind_id` draws: none when it isn't loaded.
+    fn drawn_by(&self, kind_id: &str) -> &[String] {
+        self.drawn.get(kind_id).map_or(&[], Vec::as_slice)
     }
 
     /// Every loaded kind, effect or shader source, quarantined or not.
@@ -353,13 +444,13 @@ impl Packs {
         let effects = self
             .loaded
             .iter()
-            .filter(|(id, _)| !self.quarantine.holds(id))
+            .filter(|(id, _)| !self.holds(id))
             .map(|(id, effect)| (id.clone(), effect.clone()))
             .collect();
         let sources = self
             .sources
             .iter()
-            .filter(|(id, _)| !self.quarantine.holds(id))
+            .filter(|(id, _)| !self.holds(id))
             .map(|(id, source)| (id.clone(), source.clone()))
             .collect();
         let quarantined = self
@@ -367,11 +458,7 @@ impl Packs {
             .kinds
             .iter()
             .cloned()
-            .chain(
-                self.kinds()
-                    .filter(|id| self.quarantine.packs.contains(pack_of(id)))
-                    .cloned(),
-            )
+            .chain(self.kinds().filter(|id| self.holds(id)).cloned())
             .collect();
         Update {
             removed,
@@ -577,8 +664,9 @@ inputs = ["audio"]
 
 #[cfg(test)]
 mod tests {
-    use super::Packs;
     use super::test_pack::{self, KIND, Temp};
+    use super::{Packs, QUARANTINE_FILE};
+    use std::collections::BTreeSet;
 
     /// A poll reports the kinds a pack adds, changes and removes, and keeps an effect
     /// that didn't change, so the filters drawing it keep running.
@@ -675,6 +763,78 @@ mod tests {
     /// A pack's shader source is a kind like its effects: described on load, drawn
     /// until a device loss is blamed on it, then quarantined, and forgotten with its
     /// pack.
+    /// The `tint` pack's manifest and shader under another pack ID, `copy`.
+    fn write_copy(temp: &Temp, shader: &str) {
+        let dir = temp.0.join("copy");
+        test_pack::write(&dir, shader);
+        let manifest = std::fs::read_to_string(dir.join("effect.toml")).expect("manifest");
+        std::fs::write(
+            dir.join("effect.toml"),
+            manifest.replacen("id = \"tint\"", "id = \"copy\"", 1),
+        )
+        .expect("rename the pack");
+    }
+
+    /// A quarantine follows the shader (ADR-0097): the same WGSL under another pack ID
+    /// loads quarantined, another shader there doesn't, and re-enabling the copy lifts
+    /// the original.
+    #[test]
+    fn a_blamed_shader_is_quarantined_under_another_id() {
+        let temp = Temp::new("digest");
+        test_pack::write(&temp.pack(), test_pack::MUL);
+        let mut packs = Packs::new(temp.0.clone());
+        packs.poll().expect("the pack loads");
+        let drawn: BTreeSet<String> = [KIND.to_owned()].into_iter().collect();
+        assert!(packs.blame(&drawn).update.is_some());
+        assert_eq!(
+            packs.quarantine.digests[KIND].len(),
+            1,
+            "one module, digested"
+        );
+
+        write_copy(&temp, test_pack::MUL);
+        let copied = packs.poll().expect("the copy loads");
+        assert!(copied.quarantined.contains("copy/mul"), "{copied:?}");
+        assert!(!copied.effects.contains_key("copy/mul"));
+
+        write_copy(&temp, test_pack::BLUE);
+        let other = packs.poll().expect("the copy reloads");
+        assert!(
+            other.effects.contains_key("copy/mul"),
+            "another shader draws"
+        );
+        write_copy(&temp, test_pack::MUL);
+        packs.poll().expect("the copy reloads");
+
+        let lifted = packs.enable("copy/mul").expect("enable").expect("lifted");
+        assert!(lifted.effects.contains_key("copy/mul") && lifted.effects.contains_key(KIND));
+        assert!(lifted.quarantined.is_empty() && packs.quarantine.digests.is_empty());
+    }
+
+    /// A quarantine file from before ADR-0097, which names kinds only, gains the digests
+    /// of what they draw when their pack loads, and keeps them in the file.
+    #[test]
+    fn an_old_quarantine_gains_digests_when_its_pack_loads() {
+        let temp = Temp::new("digest-old");
+        test_pack::write(&temp.pack(), test_pack::MUL);
+        std::fs::write(
+            temp.0.join(QUARANTINE_FILE),
+            format!(r#"{{"kinds":["{KIND}"],"packs":[]}}"#),
+        )
+        .expect("an old quarantine");
+        let mut packs = Packs::new(temp.0.clone());
+        let loaded = packs.poll().expect("the pack loads");
+        assert!(loaded.quarantined.contains(KIND));
+        assert_eq!(
+            Packs::new(temp.0.clone()).quarantine.digests.len(),
+            1,
+            "saved"
+        );
+        write_copy(&temp, test_pack::MUL);
+        let copied = packs.poll().expect("the copy loads");
+        assert!(copied.quarantined.contains("copy/mul"));
+    }
+
     #[test]
     fn a_shader_source_is_described_quarantined_and_forgotten() {
         use test_pack::SOURCE_KIND;
@@ -698,6 +858,11 @@ mod tests {
         let update = blame.update.expect("the plans change");
         assert!(!update.sources.contains_key(SOURCE_KIND));
         assert!(update.quarantined.contains(SOURCE_KIND));
+        assert_eq!(
+            packs.quarantine.digests[SOURCE_KIND].len(),
+            1,
+            "one digest per pass"
+        );
         let lifted = packs.enable(SOURCE_KIND).expect("enable").expect("lifted");
         assert!(lifted.sources.contains_key(SOURCE_KIND));
 

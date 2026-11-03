@@ -957,7 +957,7 @@ title = "YouTube chat, metadata, health and audience stats"
 status = "planned"
 prs = [363, 375, 594, 696]
 note = "chat reading and the featured message (#363, landed with wave/m1-2, #545); chat preset of the browser source (#375, landed with wave/m1); audience stats in jstream-youtube (#594, landed with wave/m3-2, #663); the engine's stats polling, the youtube.stats event and query, and the quota estimate (#696, protocol 0.38, landed with wave/m1-4, #810); the chat rate waits on the engine polling chat; signed-in features need the OAuth client (ADR-0058)"
-needs = ["build", "maintainer"]
+needs = ["build"]
 
 [[item]]
 id = "CL1"
@@ -1044,6 +1044,6 @@ id = "X2"
 milestone = "M3"
 title = "Shader sources: multipass WGSL packs with feedback, inputs and audio, written over MCP"
 status = "planned"
-needs = ["build", "maintainer"]
+needs = ["build"]
 prs = [1034, 1048, 1050, 1052]
 note = "ADR-0093 (agent tier) and the program in jstream-effects and jstream-render (#1034), and the engine wiring: kinds, stand-ins, scene slots, restart on show and audio (#1048); writing packs over the protocol and MCP is decided by ADR-0097 (maintainer tier, accepted) and not built yet; for the cockpit scenes (warp, reflections, audio glow) that browser sources draw on the CPU today"
