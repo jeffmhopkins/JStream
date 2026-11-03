@@ -801,7 +801,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
 - **Queries** (`state.get` → state + `rev`, the canvas included, `scene.list`, `source.list`, `item.list`,
   `output.list`, `output.status`, `encoder.list` (protocol 0.13), `video_mix.list`
   (protocol 0.28), `video.snapshot` → the program mix (not a video mix) as a PNG in the
-  JSON result, longest side at most 1280, with the layout `rev`; `kind.list` and
+  JSON result, longest side at most 1280, with the layout `rev`; `video.frames` (protocol
+  0.71) → a frame sheet, several such pictures taken at an interval and tiled into one
+  PNG, which the action `scene.switch_and_watch` also answers with, from a switch on; `kind.list` and
   `kind.describe` (protocol 0.8) → the kinds the engine describes, each with a generated settings
   schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); `delete.plan` (protocol 0.15) → the
   batch that deletes a scene or source (or, from protocol 0.24, a bus, or a folder or
@@ -971,7 +973,10 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   the state `rev` they show. The `video` tool's `video.snapshot` result leads with an
   image content block (`image/png`, the protocol result's base64), the only copy of the
   PNG: the protocol `Response` it also carries as text and as `structuredContent` has a
-  short placeholder in `png`, so the image doesn't flood the agent's context.
+  short placeholder in `png`, so the image doesn't flood the agent's context. Motion
+  has its own image: a frame sheet, several pictures taken at an interval and tiled in
+  time order into one PNG, from `video.frames` or, starting with a switch, from the
+  `scene` tool's `scene.switch_and_watch` (#1061), sent the same way.
 - **Access:** full access ([ADR-0006](adr/0006-mcp-full-access.md)), always authenticated.
   The stdio proxy (`jstream-cli mcp`) reads the token from the user-only token file. The
   streamable-HTTP transport is served by `jstream-server` at `/mcp` on the control port,

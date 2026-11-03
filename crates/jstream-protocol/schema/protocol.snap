@@ -390,6 +390,55 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "`scene.switch`, then a frame sheet of the program mix from the switch on (since\n0.71, #1061), as `video.frames` takes one: so an agent sees a transition, a\nstinger's cover or a keyframe move as it plays, from one call. The switch is made\nas `scene.switch` makes it, and emits what it emits; the answer comes once the\nlast picture is drawn, as a `scene.switch_and_watch` result. Switching to the\nscene already on program still takes the sheet. Fails as `scene.switch` does,\nbefore switching with `invalid_argument` past the [`FrameStrip`] limits.",
+          "properties": {
+            "count": {
+              "description": "How many pictures, 2 to 16.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "delay_ms": {
+              "description": "How long to wait before the first picture, in milliseconds. Default 0.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "interval_ms": {
+              "description": "The time between two pictures, in milliseconds, at least 10.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "preset_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TransitionPresetId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The preset to use, overriding the scenes' and the default."
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene to put on program."
+            },
+            "type": {
+              "const": "scene.switch_and_watch",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id",
+            "count",
+            "interval_ms"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Puts a scene on preview, the scene studio mode prepares before it goes on program\nwith `scene.switch`. Preview is runtime state like program: it changes no `rev`,\nis never undone, and emits `studio.changed`. It never affects what an output\nshows unless the output's mix is the preview mix. Setting the scene already on\npreview succeeds and emits nothing. Fails with `not_found` for a scene not in\nthe collection.",
           "properties": {
             "scene_id": {
@@ -663,6 +712,74 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "broadcast"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The answer to `scene.switch_and_watch`: the frame sheet of the program mix from\nthe switch on (since 0.71).",
+          "properties": {
+            "columns": {
+              "description": "Tiles per row.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "frames": {
+              "description": "Each picture, in the order the tiles show them.",
+              "items": {
+                "$ref": "#/$defs/SheetFrame"
+              },
+              "type": "array"
+            },
+            "height": {
+              "description": "The PNG's height in pixels.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "png": {
+              "description": "The PNG file, standard base64 with padding and no line breaks.",
+              "type": "string"
+            },
+            "rows": {
+              "description": "Rows of tiles.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "tile_height": {
+              "description": "One tile's height in pixels.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "tile_width": {
+              "description": "One tile's width in pixels: the canvas scaled down to fit 480 × 270.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "scene.switch_and_watch",
+              "type": "string"
+            },
+            "width": {
+              "description": "The PNG's width in pixels.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "type",
+            "width",
+            "height",
+            "columns",
+            "rows",
+            "tile_width",
+            "tile_height",
+            "frames",
+            "png"
           ],
           "type": "object"
         }
@@ -6886,6 +7003,50 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "A frame sheet (since 0.71, #1061): `count` pictures of the program mix, or of\n`scene_id`'s scene alone, `interval_ms` apart, tiled into one PNG so motion can be\nchecked in one call. The first is taken `delay_ms` after the call. The answer\ncomes once the last picture is drawn, so the call takes at least `delay_ms +\n(count - 1) × interval_ms`. Each picture is what that mix or scene shows at that\nmoment, as `video.snapshot` draws it: a running transition where it is then,\neach source's latest frame, and nothing for a display, window or camera capture.\nA scene off program shows what its preview stream would. Fails with\n`invalid_argument` past the [`FrameStrip`] limits, and `not_found` for a scene not\nin the collection, at the call or when a picture is due. To watch a switch from\nits start, use `scene.switch_and_watch`.",
+          "properties": {
+            "count": {
+              "description": "How many pictures, 2 to 16.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "delay_ms": {
+              "description": "How long to wait before the first picture, in milliseconds. Default 0.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "interval_ms": {
+              "description": "The time between two pictures, in milliseconds, at least 10.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "scene_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The scene to show alone. Omitted for the program mix."
+            },
+            "type": {
+              "const": "video.frames",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "count",
+            "interval_ms"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Lists every kind the engine can create, ordered by ID. Kinds are not collection\nstate, so the result carries no `rev`.",
           "properties": {
             "type": {
@@ -7505,6 +7666,74 @@ source: crates/jstream-protocol/src/fixtures.rs
             "rev",
             "width",
             "height",
+            "png"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `video.frames`: the frame sheet.",
+          "properties": {
+            "columns": {
+              "description": "Tiles per row.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "frames": {
+              "description": "Each picture, in the order the tiles show them.",
+              "items": {
+                "$ref": "#/$defs/SheetFrame"
+              },
+              "type": "array"
+            },
+            "height": {
+              "description": "The PNG's height in pixels.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "png": {
+              "description": "The PNG file, standard base64 with padding and no line breaks.",
+              "type": "string"
+            },
+            "rows": {
+              "description": "Rows of tiles.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "tile_height": {
+              "description": "One tile's height in pixels.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "tile_width": {
+              "description": "One tile's width in pixels: the canvas scaled down to fit 480 × 270.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "video.frames",
+              "type": "string"
+            },
+            "width": {
+              "description": "The PNG's width in pixels.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "type",
+            "width",
+            "height",
+            "columns",
+            "rows",
+            "tile_width",
+            "tile_height",
+            "frames",
             "png"
           ],
           "type": "object"
@@ -8556,6 +8785,26 @@ source: crates/jstream-protocol/src/fixtures.rs
       "description": "A source's (or later a filter's) settings: parameter ID to value.\n\nThe values follow the kind's descriptor (`kind.describe`). The engine validates every\nedit against it and stores the complete map, so a reported map holds every parameter\nof the kind.",
       "type": "object"
     },
+    "SheetFrame": {
+      "description": "One picture of a [`FrameSheet`].",
+      "properties": {
+        "at_ms": {
+          "description": "When it was taken, in milliseconds after the call (after the switch, for\n`scene.switch_and_watch`), on the clock transitions run on. It is the time the\npicture shows, which can lag the time asked for by a few milliseconds.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rev": {
+          "$ref": "#/$defs/Rev",
+          "description": "The collection revision of the layout it shows."
+        }
+      },
+      "required": [
+        "at_ms",
+        "rev"
+      ],
+      "type": "object"
+    },
     "Size": {
       "description": "A width and height, in canvas pixels.\n\nBoth components are [`Finite32`]. A non-positive component is rejected by\n[`ItemGeometry::validate`], not stored as a flip.",
       "properties": {
@@ -9590,5 +9839,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.70"
+  "title": "JStream protocol 0.71"
 }

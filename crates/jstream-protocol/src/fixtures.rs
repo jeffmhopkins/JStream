@@ -43,6 +43,7 @@ use crate::{
     VisibleIf,
 };
 use crate::{FolderId, FolderInfo, LabelId, LabelInfo, SceneMeta, SourceMeta};
+use crate::{FrameSheet, FrameStrip, SheetFrame};
 use crate::{GestureId, GestureInfo, LiveOutcome};
 use crate::{HistoryCall, HistoryDirection, HistoryOp, PreviewCodec, PreviewDraft};
 use crate::{MixInput, MixResolution, VideoMix, VideoMixId, VideoMixInfo};
@@ -808,6 +809,31 @@ fn scene_meta() -> SceneMeta {
     }
 }
 
+/// A two-picture frame sheet of 1×1 tiles. The PNG is the 1×1 black one
+/// `video.snapshot`'s example carries, so the wire example stays small; a real sheet's
+/// size follows from its tiles.
+fn frame_sheet() -> FrameSheet {
+    FrameSheet {
+        width: 1,
+        height: 1,
+        columns: 2,
+        rows: 1,
+        tile_width: 1,
+        tile_height: 1,
+        frames: vec![
+            SheetFrame {
+                at_ms: 0,
+                rev: Rev(12),
+            },
+            SheetFrame {
+                at_ms: 101,
+                rev: Rev(12),
+            },
+        ],
+        png: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=".into(),
+    }
+}
+
 /// The bindings the fixtures report: a scene switch and an output start.
 fn hotkey_bindings() -> Vec<HotkeyBinding> {
     vec![
@@ -1072,6 +1098,11 @@ pub(crate) fn actions() -> Vec<Action> {
             source: None,
             source_id: Some(SourceId::new("src_cam")),
         },
+        Action::SceneSwitchAndWatch {
+            scene_id: SceneId::new("scn_1"),
+            preset_id: None,
+            strip: FrameStrip::new(7, 100),
+        },
     ]
 }
 
@@ -1185,6 +1216,14 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::PluginList,
         Query::YoutubeStats,
         Query::SourceSizes,
+        Query::VideoFrames {
+            strip: FrameStrip {
+                count: 4,
+                interval_ms: 150,
+                delay_ms: 300,
+            },
+            scene_id: Some(SceneId::new("scn_1")),
+        },
     ]
 }
 
@@ -1697,6 +1736,9 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             width: 1,
             height: 1,
             png: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=".into(),
+        },
+        QueryResult::VideoFrames {
+            sheet: frame_sheet(),
         },
         QueryResult::KindList {
             kinds: vec![
@@ -2415,6 +2457,14 @@ pub(crate) fn server_messages() -> Vec<ServerMessage> {
                 result: Some(ActionResult::PairingStart {
                     code: SecretString::new("7K3M-9QXA"),
                     expires_in_secs: 120,
+                }),
+            },
+        }),
+        ServerMessage::Response(Response {
+            id: RequestId::new("r16"),
+            result: CallResult::Action {
+                result: Some(ActionResult::SceneSwitchAndWatch {
+                    sheet: frame_sheet(),
                 }),
             },
         }),

@@ -34,6 +34,7 @@ mod events;
 mod filter_assets;
 mod filters;
 mod forget;
+mod frames;
 mod gesture;
 mod history;
 mod kinds;

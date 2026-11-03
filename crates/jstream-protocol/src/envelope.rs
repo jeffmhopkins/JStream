@@ -10,6 +10,7 @@
 use crate::command::{Action, Batch};
 use crate::error::{ProtocolError, WireError};
 use crate::event::Event;
+use crate::frames::FrameSheet;
 use crate::history::HistoryCall;
 use crate::hotkey::HotkeyBinding;
 use crate::id::{ClientId, RequestId, Rev};
@@ -242,6 +243,14 @@ pub enum ActionResult {
         /// The broadcast after the transition. Its lifecycle may still be moving
         /// (`test_starting`, `live_starting`).
         broadcast: BroadcastInfo,
+    },
+    /// The answer to `scene.switch_and_watch`: the frame sheet of the program mix from
+    /// the switch on (since 0.71).
+    #[serde(rename = "scene.switch_and_watch")]
+    SceneSwitchAndWatch {
+        /// The sheet.
+        #[serde(flatten)]
+        sheet: FrameSheet,
     },
     /// An action result this version of the protocol doesn't know. Never sent; produced
     /// only when parsing an answer from a newer server.

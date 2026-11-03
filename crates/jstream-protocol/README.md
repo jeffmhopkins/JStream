@@ -62,7 +62,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `label.update`, `label.reorder`, `label.delete`, `source.set_meta`), with
   `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole` and `BlendMode`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
-  `scene.switch` with its optional `preset_id`, `studio.set_preview`, `privacy.set` (deprecated),
+  `scene.switch` with its optional `preset_id`, `scene.switch_and_watch`, `studio.set_preview`, `privacy.set` (deprecated),
   `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`,
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
@@ -111,7 +111,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   implementation shares (`check_color`, `check_icon`, `SceneMeta::problem`).
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
   `output.list`, `output.status`, `encoder.list`, `video_mix.list`, `bus.list`,
-  `video.snapshot`, `kind.list`,
+  `video.snapshot`, `video.frames`, `kind.list`,
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `live.list`, `capture.targets`,
@@ -123,9 +123,15 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `ItemInfo`
   the item's `placement` form and its `geometry`, `SceneInfo` a scene's transition
   overrides and its `camera` (since 0.70; on a keyframe scene its own override), `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
-  returns the program mix as a PNG. `youtube.status`, `youtube.list_broadcasts` and
+  returns the program mix as a PNG, and `video.frames` a frame sheet ([Frame
+  sheets](#design)). `youtube.status`, `youtube.list_broadcasts` and
   `youtube.list_streams` read the YouTube account, and `youtube.stats` the running
   `youtube` outputs' audience and the day's quota estimate.
+- **Frame sheets** (`frames.rs`, #1061): `FrameStrip` (a sheet's `count`, `interval_ms`
+  and `delay_ms`, its limits `MAX_SHEET_FRAMES`, `MIN_SHEET_INTERVAL_MS` and
+  `MAX_SHEET_SPAN_MS`, and the `check` every implementation shares), and `FrameSheet`
+  and `SheetFrame`, which `video.frames` and `scene.switch_and_watch` answer with
+  ([Frame sheets](#design)).
 - **Keyframe scenes** (`keyframe.rs`, [ADR-0024](../../docs/adr/0024-scene-structure.md)
   §2, [ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)):
   `ItemOverride`, what a keyframe scene overrides for one item as `SceneInfo.overrides`
@@ -202,7 +208,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.70 because of
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.71 because of the frame
+  sheets, `video.frames` and `scene.switch_and_watch` (#1061); 0.70 because of
   `scene.set_camera` and `SceneInfo.camera`, a live value too
   ([ADR-0094](../../docs/adr/0094-scene-cameras.md)); 0.68 because of the
   `font.list` query ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)); 0.67 because `live.set`
@@ -1148,6 +1155,24 @@ Queries read and never change `rev`. Those that read the collection state carry 
   the longest side is at most 1280. `rev` is the collection revision of the layout.
   Source pixels are runtime state and can change without a new `rev`. The query takes
   no arguments and changes nothing.
+- **Frame sheets** (since 0.71, #1061). One picture can't show motion, so `video.frames
+  {count, interval_ms, delay_ms?, scene_id?}` takes `count` pictures (2 to 16)
+  `interval_ms` apart (at least 10), the first `delay_ms` after the call, of the
+  program mix or of `scene_id`'s scene alone, and answers with one PNG: each picture
+  scaled to fit 480 × 270 and tiled left to right, top to bottom, in time order, in a
+  grid as square as it can be (`columns`, `rows`, `tile_width`, `tile_height`).
+  `frames[i]` says when tile `i` was taken (`at_ms`, from the call, on the clock
+  transitions run on) and its `rev`. The pictures are taken in real time, so the call
+  takes at least `delay_ms + (count - 1) × interval_ms`, at most 10 s; each is what that
+  mix or scene shows then, as `video.snapshot` draws it (a capture draws nothing). A
+  scene off program shows what its preview stream would.
+  `scene.switch_and_watch {scene_id, preset_id?, count, interval_ms, delay_ms?}` is
+  `scene.switch` followed by a sheet of the program mix counted from the switch, in one
+  call, so an agent sees a transition play: a stinger's cover at its `cut_ms`, or a
+  600 ms move. It is an action (it switches), answering with an `ActionResult`
+  ([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)), so the
+  read-only `video` MCP tool stays read-only; it can't be bound to a hotkey, since its
+  answer is for the session that sent it. Limits are checked before the switch.
   **Size.** The PNG is RGBA8 and nothing caps its byte size, so a noise-like frame,
   which PNG can't compress, can be as large as its raw pixels: the image is the
   canvas, scaled down so its longest side is at most 1280. The default 1920×1080
@@ -1542,8 +1567,8 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   `live.set` and `live.cancel`, and `undo`/`redo` on the plugin's own session), `live`
   (`scene.switch`) and `outputs` (`output.start`, `output.stop`). Everything else is
   never granted: creating, deleting and retargeting outputs, their encoders and stream
-  keys, video mixes, `video.snapshot` and previews (a capture's pixels could leave
-  through a granted host), `audio.reset_loudness`, folders and labels themselves
+  keys, video mixes, `video.snapshot`, `video.frames`, `scene.switch_and_watch` and
+  previews (a capture's pixels could leave through a granted host), `audio.reset_loudness`, folders and labels themselves
   (`folder.*`, `label.*`), which ADR-0069 names in no class, the deprecated
   `privacy.set`, `youtube.*`, pairing and devices, and `plugin.*` itself.
   `PLUGIN_SCOPES` places every command; a command it doesn't name is "never".
@@ -1922,7 +1947,7 @@ the JSON text messages of the same connection (0.20,
   A new kind, codec or flag is a minor change, and a frame a client can't read is
   skipped.
 
-`video.snapshot` is not one of those frames. M1a uses it so an agent can check a scene
+`video.snapshot` is not one of those frames, nor is a frame sheet. M1a uses it so an agent can check a scene
 over the JSON API and over MCP ([ROADMAP › M1](../../ROADMAP.md#m1),
 [ARCH › MCP](../../docs/ARCHITECTURE.md#mcp)), so the PNG is a field of the query
 result. A binary snapshot frame would need a second channel those clients do not have.

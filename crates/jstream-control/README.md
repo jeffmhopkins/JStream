@@ -230,8 +230,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   each item's scene after an `item.move`, each output's kind, target, encoder profile
   and video mix, each profile, each mix, each source's audio, the buses and sends, and
   the hotkey bindings (in `state.get`, ordered by chord).
-  `video.snapshot` is not one of those reads: the mock has no compositor and answers
-  it with `internal`, as it does for any protocol variant it does not implement;
+  `video.snapshot` is not one of those reads, nor are the frame sheets (`video.frames`,
+  `scene.switch_and_watch`): the mock has no compositor and answers them with
+  `internal`, as it does for any protocol variant it does not implement;
 - outputs as the engine (`jstream-core`) keeps them: a configured output starts
   `stopped` and is forgotten once deleted. `MockEngine::with_output` declares an output
   the way `Engine::with_output` does: it can be started, stopped and read with
