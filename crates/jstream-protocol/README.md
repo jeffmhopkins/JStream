@@ -2033,11 +2033,12 @@ described above.
    `live.changed`, meters) will need opt-in subscriptions. Until then every client
    receives a tick about once a second while the pipeline runs, and up to 30
    `live.changed` a second per gesture while someone drags.
-8. **Unknown values in string enums.** `OutputState` and `EntityKind` have no `Unknown`
-   fallback, so adding a value breaks older clients that parse it. Add fallbacks, or treat
+8. **Unknown values in string enums.** `OutputState`, `EntityKind` and `BlendMode` have no
+   `Unknown` fallback, so adding a value breaks older clients that parse it. Add fallbacks, or treat
    a new value as a major change? `OutputKind`, `RtmpTarget` and `RecordContainer` have
    fallbacks from 0.9 and `KindCategory` from 0.30, but 0.9's `record` kind already breaks 0.7 and 0.8 clients reading
-   outputs (see Compatibility); kept as a minor bump until this is decided.
+   outputs, and 0.75's `_srgb` blend modes break older clients reading items (see
+   Compatibility); kept as a minor bump until this is decided.
 9. **Schema delivery.** The schema lives in an `insta` snapshot. Should `xtask gen-schema`
    also publish a plain `.json` file for non-Rust clients?
 10. **ADR.** Should the envelope, tagging and compatibility policy above be recorded as an
