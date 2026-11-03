@@ -107,5 +107,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0091](0091-source-settings-as-live-values.md) | A source's live settings are live values, so a Properties dialog applies as you edit | accepted | agent |  |
 | [ADR-0092](0092-installed-fonts-query.md) | The engine lists the installed fonts, so a font is picked by name | accepted | agent |  |
 | [ADR-0094](0094-scene-cameras.md) | Scene cameras: items in one 3D space | accepted | agent |  |
-| [ADR-0095](0095-browser-helper-on-linux.md) | Browser sources on Linux: the helper paints in software and hands the engine CPU frames | proposed | maintainer |  |
+| [ADR-0095](0095-browser-helper-on-linux.md) | Browser sources on Linux: the helper paints in software and hands the engine CPU frames | accepted | maintainer |  |
 <!-- @generated end adr-index -->

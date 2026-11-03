@@ -2,14 +2,14 @@
 id = "ADR-0095"
 title = "Browser sources on Linux: the helper paints in software and hands the engine CPU frames"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0095: Browser sources on Linux: the helper paints in software and hands the engine CPU frames
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 <a id="context"></a>
