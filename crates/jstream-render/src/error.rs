@@ -9,8 +9,9 @@ use jstream_platform::PlatformError;
 #[non_exhaustive]
 pub enum RenderError {
     /// The process has no wgpu adapter. Tests skip on this; CI treats it as a failure
-    /// because the workflow installs a software rasterizer.
-    #[error("no wgpu adapter: {detail}")]
+    /// because the workflow installs a software rasterizer. On Linux the message ends
+    /// with [`NO_ADAPTER_HINT`] (#1073).
+    #[error("no wgpu adapter: {detail}{}", no_adapter_hint())]
     NoAdapter {
         /// What the backends reported.
         detail: String,
@@ -89,6 +90,21 @@ pub enum RenderError {
         /// The map or copy error.
         detail: String,
     },
+}
+
+/// What a Linux machine with no GPU needs to composite (#1073): the engine's software
+/// device is a Vulkan software driver, Mesa's lavapipe, which a fresh install may lack.
+pub const NO_ADAPTER_HINT: &str = "no Vulkan driver could be loaded; on a machine without a \
+     GPU, install Mesa's software Vulkan driver (lavapipe): `mesa-vulkan-drivers` on Debian, \
+     Ubuntu and Fedora";
+
+/// [`NO_ADAPTER_HINT`], set off from the backends' report, on Linux; nothing elsewhere.
+fn no_adapter_hint() -> String {
+    if cfg!(target_os = "linux") {
+        format!(". {NO_ADAPTER_HINT}")
+    } else {
+        String::new()
+    }
 }
 
 impl RenderError {

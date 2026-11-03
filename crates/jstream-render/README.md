@@ -109,6 +109,10 @@ and calls this crate.
   a hardware adapter first by default (`OpenOptions::hardware`), with the software
   adapter as the fallback, so ARCH principle 7's "runs with a software adapter" still
   holds on a machine with no GPU. `OpenOptions::headless` asks for software first.
+  On Linux that software adapter is Mesa's lavapipe Vulkan driver: without it there is
+  no adapter at all, and `RenderError::NoAdapter` ends with `NO_ADAPTER_HINT`, which
+  names the package to install. `adapter_available` checks for any adapter without
+  opening a device, for a host's startup warning (#1073).
 - A source image is either straight-alpha sRGB RGBA8 bytes the compositor uploads, or
   a `GpuFrame` / `wgpu::Texture` already on this device. An upload is premultiplied in
   linear light and stored as `Rgba16Float`, so filtering cannot darken transparent

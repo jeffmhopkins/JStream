@@ -427,7 +427,11 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
     used, since desktop and application audio need it;
   - `LinuxGpu` as the GPU interop. On a machine without a Vulkan hardware adapter its
     `open_device` fails, and the engine composites on its own software device with CPU
-    frames, as core logs;
+    frames, as core logs. That software device is a Vulkan driver, Mesa's lavapipe
+    (`mesa-vulkan-drivers` on Debian, Ubuntu and Fedora), so a machine without a GPU
+    needs it installed. Without any adapter the daemon logs a warning at startup naming
+    that package (`jstream_core::no_adapter_warning`), and `video.snapshot` and
+    `output.start` fail with `action_failed`, naming it too (#1073);
   - the stand-in `NoMediaDecoders`, so a media-file source fails with its reason until
     [ADR-0072](../../docs/adr/0072-linux-media-file-decoding.md)'s decoders exist, no
     virtual camera (ADR-0060 §9), no CLAP scan and no YouTube sign-in;

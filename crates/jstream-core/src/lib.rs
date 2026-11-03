@@ -80,6 +80,23 @@ pub use runtime::{
     connect_rtmp,
 };
 pub use session::InProcessControl;
+
+/// Why scenes can't be drawn on this machine, when no graphics adapter, hardware or
+/// software, is offered: a host logs it at startup, before the first frame is asked for
+/// (#1073). On Linux it names the software Vulkan driver to install. `None` when an
+/// adapter is offered; it checks without opening a device.
+pub fn no_adapter_warning() -> Option<String> {
+    (!jstream_render::adapter_available()).then(|| {
+        if cfg!(target_os = "linux") {
+            format!(
+                "no graphics adapter, so scenes can't be drawn: {}",
+                jstream_render::NO_ADAPTER_HINT
+            )
+        } else {
+            "no graphics adapter, so scenes can't be drawn".to_owned()
+        }
+    })
+}
 pub use snapshot::SourceFrameError;
 pub use youtube::{
     DAILY_QUOTA, HEALTH_INTERVAL, SIGN_IN_TIMEOUT, STATS_INTERVAL, STATS_SLOWDOWN, TOKEN_ACCOUNT,
