@@ -1350,3 +1350,123 @@ fn golden_dof_only_the_item_off_focus_blurs() {
         "the near item stays sharp"
     );
 }
+
+/// The pixels just outside a blurred item in `rows`, as a share of the item's light over
+/// the background: the largest such share among pixels with a background neighbour,
+/// which is small where the blur falls off softly and large where its edge is cut.
+fn hardest_edge(snapshot: &Snapshot, rows: std::ops::Range<u32>) -> f32 {
+    let linear = |c: u8| srgb_channel_to_linear(f32::from(c) / 255.0);
+    let background = linear(BACKGROUND[0]);
+    let lift = |x: u32, y: u32| {
+        let p = snapshot.pixel(x, y).expect("inside");
+        ((linear(p[0]) + linear(p[1]) + linear(p[2])) / 3.0 - background) / (1.0 - background)
+    };
+    let mut hardest: f32 = 0.0;
+    for y in rows.start.max(1)..rows.end.min(HEIGHT - 1) {
+        for x in 1..WIDTH - 1 {
+            let here = lift(x, y);
+            let beside = [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)];
+            if beside.iter().any(|&(bx, by)| lift(bx, by) < 0.002) {
+                hardest = hardest.max(here);
+            }
+        }
+    }
+    hardest
+}
+
+/// ADR-0108 decision 4 (#1122 review N1): every vertex of a tilted plane is pushed out by
+/// its largest blur and no fragment blurs more, so the far edge falls off to the
+/// background with no hard cut. Fails with each vertex pushed by its own blur, or with the
+/// blur past the edge uncapped (both cut at about 0.18).
+#[test]
+fn golden_dof_a_tilted_plane_falls_off_softly() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let white = vec![255; (SOURCE * SOURCE * 4) as usize];
+    let image = opened
+        .compositor
+        .upload_rgba8(SOURCE, SOURCE, &white)
+        .expect("the source uploads");
+    let items = [geometry(
+        (120.0, 68.0),
+        (100.0, 160.0),
+        0.0,
+        60.0,
+        0.0,
+        0.0,
+        None,
+    )];
+    let base = camera((120.0, 68.0, 300.0), (120.0, 68.0, 0.0), 45.0);
+    let compositor = &mut opened.compositor;
+    let sharp = draw_seen(compositor, &items, Some(base), &image, Crop::NONE);
+    let dof = SceneCamera {
+        focus_px: Finite32::new(232.0),
+        blur_px: Finite32::new(64.0).expect("finite"),
+        ..base
+    };
+    let got = draw_seen(compositor, &items, Some(dof), &image, Crop::NONE);
+    // The plane's far half, above the canvas's middle, blurs by up to
+    // 64 · (369 - 232) / 369 ≈ 24 px; the near edge, at the focus, stays sharp.
+    let far = 0..HEIGHT / 2;
+    let (sharp_edge, got_edge) = (hardest_edge(&sharp, far.clone()), hardest_edge(&got, far));
+    let _ = writeln!(
+        std::io::stderr(),
+        "dof tilted edge: sharp {sharp_edge:.3}, blurred {got_edge:.3}"
+    );
+    assert!(
+        sharp_edge > 0.5,
+        "the sharp plane has a hard edge: {sharp_edge}"
+    );
+    assert!(
+        got_edge < 0.1,
+        "the blurred plane falls off softly: {got_edge}"
+    );
+}
+
+/// ADR-0108 decision 2 (#1122 review N2): the blur follows each fragment's own distance,
+/// so a tilted plane focused at its near end stays sharp there and blurs along itself:
+/// the far band loses its pattern's contrast, the near band keeps it.
+#[test]
+fn golden_dof_a_tilted_plane_blurs_along_itself() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let rgba = pattern(SOURCE);
+    let image = opened
+        .compositor
+        .upload_rgba8(SOURCE, SOURCE, &rgba)
+        .expect("the pattern uploads");
+    let items = [geometry(
+        (120.0, 68.0),
+        (100.0, 160.0),
+        0.0,
+        60.0,
+        0.0,
+        0.0,
+        None,
+    )];
+    let base = camera((120.0, 68.0, 300.0), (120.0, 68.0, 0.0), 45.0);
+    let compositor = &mut opened.compositor;
+    let sharp = draw_seen(compositor, &items, Some(base), &image, Crop::NONE);
+    let dof = SceneCamera {
+        focus_px: Finite32::new(232.0),
+        blur_px: Finite32::new(24.0).expect("finite"),
+        ..base
+    };
+    let got = draw_seen(compositor, &items, Some(dof), &image, Crop::NONE);
+    // The near end, at the focus, is at the bottom of the canvas; the far end, about
+    // 370 px away, blurs by about 24 · 138 / 370 ≈ 9 px. Each band stays inside the plane.
+    let near = |x: u32, y: u32| (100..=140).contains(&x) && (89..=94).contains(&y);
+    let far = |x: u32, y: u32| (105..=135).contains(&x) && (52..=58).contains(&y);
+    let (_, near_sharp) = luminance_stats(&sharp, near);
+    let (_, near_got) = luminance_stats(&got, near);
+    let (_, far_sharp) = luminance_stats(&sharp, far);
+    let (_, far_got) = luminance_stats(&got, far);
+    let _ = writeln!(
+        std::io::stderr(),
+        "dof tilted: near {near_sharp:.1} -> {near_got:.1}, far {far_sharp:.1} -> {far_got:.1}"
+    );
+    assert!(far_got < 0.5 * far_sharp, "the far band blurs");
+    assert!(near_got > 0.8 * near_sharp, "the near band stays sharp");
+}

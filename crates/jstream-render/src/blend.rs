@@ -155,7 +155,7 @@ fn pipeline(
         8 => Float32x3,
         9 => Float32x3,
         10 => Float32x4,
-        11 => Float32x2,
+        11 => Float32x3,
     ];
     let buffers = [Some(wgpu::VertexBufferLayout {
         array_stride: crate::compositor::VERTEX_STRIDE,

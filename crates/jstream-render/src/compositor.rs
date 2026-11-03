@@ -16,11 +16,11 @@ use crate::place::{self, MAX_VERTICES, Shape};
 use crate::scene::{Output, Scene, Snapshot};
 use jstream_protocol::BlendMode;
 
-/// Bytes from one vertex to the next: 28 `f32`s (position, UV, opacity, alpha mode, `w`,
+/// Bytes from one vertex to the next: 29 `f32`s (position, UV, opacity, alpha mode, `w`,
 /// the item's five edge lines of three each, its UV bounds, and its camera's depth of
-/// field), tightly packed. wgpu only needs the stride and attribute offsets to be
+/// field with the shape's largest blur), tightly packed. wgpu only needs the stride and attribute offsets to be
 /// multiples of 4.
-pub(crate) const VERTEX_STRIDE: u64 = 112;
+pub(crate) const VERTEX_STRIDE: u64 = 116;
 /// The most vertices one item draws: a five-vertex polygon as a fan of three triangles.
 const MAX_VERTICES_PER_ITEM: u32 = 3 * (MAX_VERTICES as u32 - 2);
 

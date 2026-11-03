@@ -31,12 +31,14 @@
 // 3: an opaque import (a captured frame), decoded by the sampler, its alpha read as 1.
 //
 // `dof` is the scene camera's depth of field (ADR-0108): x the focus distance as a `w`,
-// y the far blur in pixels, 0 without one. A fragment at `w` is blurred over a disc of
-// radius blur * |w - focus| / w, at most MAX_BLUR: under half a pixel it takes the one
+// y the far blur in pixels, 0 without one, and z the shape's largest blur, which its
+// corners take. A fragment at `w` is blurred over a disc of radius
+// blur * |w - focus| / w, at most z and MAX_BLUR: under half a pixel it takes the one
 // sample above; otherwise it averages a spiral of taps over the disc, each read at the
 // mip level of the taps' spacing (through explicit gradients, which a branch allows),
 // and its edge coverage widens to clamp(d / (2r) + 0.5, 0, 1), the vertices having been
-// pushed out by r so the soft edge rasterizes.
+// pushed out by z so the soft edge rasterizes. Past the polygon's edge `w` runs on
+// beyond its corners', so without the cap at z the blur there would outgrow the push.
 
 struct VsOut {
     @builtin(position) clip: vec4<f32>,
@@ -50,7 +52,7 @@ struct VsOut {
     @location(7) @interpolate(flat) e4: vec3<f32>,
     @location(8) @interpolate(flat) uv_bounds: vec4<f32>,
     @location(9) depth_w: f32,
-    @location(10) @interpolate(flat) dof: vec2<f32>,
+    @location(10) @interpolate(flat) dof: vec3<f32>,
 }
 
 @vertex
@@ -66,7 +68,7 @@ fn vs(
     @location(8) e3: vec3<f32>,
     @location(9) e4: vec3<f32>,
     @location(10) uv_bounds: vec4<f32>,
-    @location(11) dof: vec2<f32>,
+    @location(11) dof: vec3<f32>,
 ) -> VsOut {
     var out: VsOut;
     out.clip = vec4<f32>(pos * w, 0.0, w);
@@ -113,7 +115,7 @@ fn source(in: VsOut) -> vec4<f32> {
     var colour = decode(textureSample(tex, samp, uv), in.mode);
     var r = 0.0;
     if in.dof.y > 0.0 && in.depth_w > 0.0 {
-        r = min(in.dof.y * abs(in.depth_w - in.dof.x) / in.depth_w, MAX_BLUR);
+        r = min(in.dof.y * abs(in.depth_w - in.dof.x) / in.depth_w, min(in.dof.z, MAX_BLUR));
     }
     if r >= 0.5 {
         // A spiral of taps, turned per pixel so the pattern doesn't show as structure.

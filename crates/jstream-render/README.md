@@ -461,14 +461,17 @@ engine only passes cameras the graph accepted.
 
 **Depth of field.** A camera with `focus_px` and a `blur_px` above 0
 ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)) blurs each fragment by its own
-distance along the view: `Shape.dof` carries the focus as a `w` (`focus / f`) and the far
-blur to every vertex, and `composite.wgsl`'s `source` works out `r = blur · |w − focus| /
-w`, at most 64 px, from the fragment's interpolated `w`. Under half a pixel it takes the
+distance along the view: `Shape.dof` carries the focus as a `w` (`focus / f`), the far
+blur and the shape's largest blur to every vertex, and `composite.wgsl`'s `source` works
+out `r = blur · |w − focus| / w`, at most that largest blur and 64 px, from the
+fragment's interpolated `w`. Under half a pixel it takes the
 one sample as before. Otherwise it averages 16 taps on a golden-angle spiral over the
 disc, turned per pixel, each read through `textureSampleGrad` at the mip level of the
 taps' spacing (explicit gradients are allowed in the branch), and widens the edge
-coverage to `clamp(d / 2r + 0.5)`. `place` pushes each vertex out by the larger of a
-pixel and its own blur radius (`CameraView::blur_at`), so the soft edge rasterizes.
+coverage to `clamp(d / 2r + 0.5)`. `place` pushes every vertex out by the larger of a
+pixel and the largest blur radius of the shape's corners (`CameraView::blur_at`), the
+largest on a plane; past the edge `w` runs on beyond the corners', so the cap keeps the
+soft edge inside the push and it falls off whole.
 Colour is averaged in linear light, so a blur keeps the item's mean light.
 
 **Legacy.** `place` asks [`legacy_quad`](../jstream-protocol/src/geometry.rs) for the
@@ -883,13 +886,19 @@ back with `unplace_seen`:
 
 The set's floor is minified toward the horizon as in C, so its limit is C's kind. A
 third checks the draw order: a far item stacked above a near one is drawn under it
-with `depth_sort` on, and over it with it off. Two check depth of field
+with `depth_sort` on, and over it with it off. Four check depth of field
 ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)) against the same draw without
 it, measured in linear light: an item on the focus plane is within 2 code values of
 it everywhere, and one blurred by 8 px keeps its mean (77.5 both, on lavapipe) while its
 pattern's spread falls from 23.8 to 1.1 (limit: half) and its edge widens from 1 px to
 12 (limit: 7 to 20); and of two items, the one 600 px away blurs (spread 15.9 to 4.4,
-limit 0.6 times) while the one on the focus plane keeps its spread within 1.
+limit 0.6 times) while the one on the focus plane keeps its spread within 1. A plane
+tilted 60° and focused at its near end blurs along itself: its far band's spread falls
+from 25.3 to 9.1 (limit: half) and its near band's from 23.3 to 20.0 (limit: 0.8 times).
+Blurred hard by 64 px, a white plane's far edge falls off with no hard cut: beside the
+background its brightest pixel is 0.025 of the plane's light (limit 0.1, 0.912 sharp),
+where with each vertex pushed by its own blur, or the blur past the edge uncapped, it is
+cut at about 0.18.
 
 The p99 limit is 40 throughout the S5 table. C's pattern is much finer than the spike's (one-texel
 rings every 16 texels), which is why its mean is higher than the spike's 1.16. Further

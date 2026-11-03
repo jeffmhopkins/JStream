@@ -76,8 +76,10 @@ Where `r` is under half a pixel, the shader takes today's single sample.
 
 **4. The silhouette softens.** The edge coverage of ADR-0050 decision 6 widens from one
 pixel to the disc: `clamp(d / (2r) + 0.5, 0, 1)` where `r ≥ 0.5`. The drawn polygon is
-pushed out by the larger of one pixel and the vertex's own `r`, so the soft edge
-rasterises. Coverage and colour are blurred separately, which is the usual
+pushed out by the larger of one pixel and the largest `r` of its corners, which is the
+largest anywhere on the polygon, and no fragment blurs by more, so the soft edge
+rasterises whole: past the edge a fragment's distance runs on beyond the corners', and
+uncapped its `r` would outgrow the push. Coverage and colour are blurred separately, which is the usual
 approximation: an item doesn't blur into what is behind it beyond its own soft edge.
 
 **5. Layers, sort and blend.** A nested scene or group in a 3D scene is a card like any
@@ -112,7 +114,9 @@ store them, omitted when absent, with the schema version unchanged.
 - **Harder:**
   - **Quality.** A mip-based disc is an approximation. Large radii look smoother but
     blockier than a true Gaussian. A thin bright line can shimmer as the blur animates.
-    Golden tests bound it against a reference blur.
+    Golden tests bound it by its effect: an item at the focus draws as it would without
+    depth of field, one off it keeps its mean light while its pattern's contrast falls,
+    a tilted plane blurs along itself, and a blurred edge falls off with no hard cut.
   - **Edges.** An item never bleeds colour past its own softened edge. A sharp item in
     front of a blurred one keeps a sharp edge, which is right. A blurred item in front
     of a sharp one doesn't show the sharp one through its blur, beyond its coverage ramp.
@@ -125,6 +129,6 @@ store them, omitted when absent, with the schema version unchanged.
   - **`jstream-protocol`:** the fields, their validation, and the shared
     circle-of-confusion function, with unit tests. Also `jstream-graph`, the mock engine
     and collection files (a minor protocol version).
-  - **`jstream-render`:** the per-fragment blur and the soft edge, with golden tests of a
-    tilted plane against a reference blur. Also `lerp_camera`'s rule.
+  - **`jstream-render`:** the per-fragment blur and the soft edge, with golden tests of
+    items facing the camera and of a tilted plane. Also `lerp_camera`'s rule.
   - **`jstream-ui`:** the dialog's fields and Focus on selection. Also the MCP design notes.

@@ -54,9 +54,10 @@ pub(crate) struct Shape {
     /// coordinates, which don't round-trip through `f32`. `None` for a 2D item.
     pub crop: Option<Region>,
     /// The camera's depth of field in the shader's terms (ADR-0108): the focus distance
-    /// as a `w` (`focus / f`) and the far blur in canvas pixels. `[0, 0]`, no blur,
-    /// without one.
-    pub dof: [f32; 2],
+    /// as a `w` (`focus / f`), the far blur in canvas pixels, and the largest blur any
+    /// fragment of the shape takes, the radius its vertices were pushed out by. `[0, 0,
+    /// 0]`, no blur, without one.
+    pub dof: [f32; 3],
 }
 
 impl Shape {
@@ -102,7 +103,7 @@ impl Shape {
             edges: [NO_EDGE; MAX_VERTICES],
             uv_bounds: NO_UV_BOUNDS,
             crop: None,
-            dof: [0.0, 0.0],
+            dof: [0.0, 0.0, 0.0],
         }
     }
 }
@@ -306,17 +307,25 @@ fn drawn(
         uv_bounds[2] = uv_bounds[2].max(corner.uv[0]);
         uv_bounds[3] = uv_bounds[3].max(corner.uv[1]);
     }
+    // Every vertex is pushed out by the shape's largest blur, and the shader caps each
+    // fragment's blur there. A plane's blur is largest at a corner, since
+    // `|D - focus| / D` is monotonic in `D` on each side of the focus and `D` across the
+    // polygon lies between its corners'. Past the polygon's edge, though, a fragment's
+    // `w` runs on beyond the corners', so uncapped its blur would outgrow the push and
+    // its soft edge would be cut where the pushed polygon ends.
+    let by = view.map_or(PUSH_OUT, |view| {
+        corners
+            .iter()
+            .map(|corner| view.blur_at(f64::from(corner.w) * f64::from(view.focal_px())))
+            .fold(PUSH_OUT, f32::max)
+    });
     let focus = view.and_then(CameraView::focus);
     let dof = match (focus, view) {
-        (Some(focus), Some(view)) => [focus.distance / view.focal_px(), focus.blur],
-        _ => [0.0, 0.0],
+        (Some(focus), Some(view)) => [focus.distance / view.focal_px(), focus.blur, by],
+        _ => [0.0, 0.0, 0.0],
     };
     let mut vertices = [UNUSED; MAX_VERTICES];
     for (i, corner) in corners.iter().enumerate() {
-        let by = view.map_or(PUSH_OUT, |view| {
-            let distance = f64::from(corner.w) * f64::from(view.focal_px());
-            view.blur_at(distance).max(PUSH_OUT)
-        });
         let target = push_out(edges[(i + len - 1) % len], edges[i], corner, by);
         // A pushed point that can't be mapped back through a camera keeps the vertex,
         // as one past the near plane does.
