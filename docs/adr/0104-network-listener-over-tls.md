@@ -2,14 +2,14 @@
 id = "ADR-0104"
 title = "Devices on the network reach JStream over TLS, with a self-signed certificate they pin"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0104: Devices on the network reach JStream over TLS, with a self-signed certificate they pin
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 <a id="context"></a>

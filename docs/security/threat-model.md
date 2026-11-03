@@ -112,6 +112,10 @@ a stolen token, local denial of service.
 - The server keeps only a BLAKE3 digest of the token and compares digests in constant
   time. Tokens are 32 bytes from the OS random source. Header values are never logged.
 - The daemon binds `127.0.0.1` and has no flag to bind elsewhere. There is no TLS yet.
+  [ADR-0104](../adr/0104-network-listener-over-tls.md) decides how that changes, and
+  it is not built: an opt-in second listener for the network, TLS only with a
+  self-signed certificate clients pin by fingerprint, admitting device tokens and never
+  the control token.
 - Limits: 4 MiB messages and MCP bodies (one over that and up to 16 MiB is read and
   refused with `too_large`, echoing at most a 256-byte `id`, one larger closes the
   connection or is `413`; [ADR-0074](../adr/0074-too-large-requests.md)), 128 open TCP connections of any kind
