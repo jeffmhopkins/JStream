@@ -517,7 +517,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   added removed, one it removed added back where it was, a chain it reordered put back
   in order, each setting it sent and each switch it pressed put back, including those
   whose change the engine hasn't reported yet; what another client changed stays, but
-  for the settings of a filter the window also edited. An
+  for the settings of a filter the window also edited. An item's effects in a keyframe
+  that followed the item's own as the window opened (`following_keyframes`, ADR-0088)
+  are not put back filter by filter: the window's first edit there gave the keyframe its
+  own effects, so the batch clears that override (`item.clear_override` of `effects`),
+  which drops every edit made there meanwhile, and the keyframe follows the item again
+  (#1028). A keyframe whose override came from an add made just before the window
+  opened, which the window adopts, keeps it. An
   edit that fails after the window, or the row edited in place, has closed shows in the
   problem bar. Defaults resets each setting but a scene input's scene. The Add filter
   dialog offers `kind.list`'s filter kinds for the source's chains under the prototype's
