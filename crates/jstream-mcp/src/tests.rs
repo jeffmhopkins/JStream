@@ -547,6 +547,15 @@ fn instructions_mark_remote_text_and_tools_carry_annotations() {
     ] {
         assert!(legacy.contains(needle), "{needle}: {legacy}");
     }
+    // The sentence that names the destructive tools: the opening list names every tool.
+    let start = legacy
+        .find("`destructiveHint` is on")
+        .expect("destructive sentence");
+    let end = start
+        + legacy[start..]
+            .find("`openWorldHint`")
+            .expect("open-world sentence");
+    let destructive = &legacy[start..end];
     let list = f.legacy(2, "tools/list", json!({}));
     for tool in list["tools"].as_array().expect("tools") {
         assert!(
@@ -557,7 +566,10 @@ fn instructions_mark_remote_text_and_tools_carry_annotations() {
         // ADR-0098 §3: the instructions name every tool that is `destructiveHint`.
         if tool["annotations"]["destructiveHint"] == true {
             let name = format!("`{}`", tool["name"].as_str().expect("named"));
-            assert!(legacy.contains(&name), "{name} is destructive: {legacy}");
+            assert!(
+                destructive.contains(&name),
+                "{name} is destructive: {destructive}"
+            );
         }
     }
 }
