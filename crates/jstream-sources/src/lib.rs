@@ -28,6 +28,7 @@
 #![forbid(unsafe_code)]
 
 mod audio;
+mod backdrop;
 mod browser;
 mod capture;
 mod chat;
@@ -38,6 +39,7 @@ mod image;
 mod media;
 mod registry;
 mod scope;
+mod shape;
 mod source;
 mod text;
 mod youtube_chat;

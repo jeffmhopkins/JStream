@@ -593,11 +593,14 @@ premultiplied linear light on the way out.
   (px) and `border_color` (with alpha). A signed distance antialiases over one pixel;
   outside is transparent; the border sits inside the frame, drawn over the picture.
 - `scroll`: `speed_x`, `speed_y` (px/s; positive moves right and down), `loop_x`,
-  `loop_y`. The offset is clock seconds times speed, worked out in `f64` on the CPU and
+  `loop_y`, `gap_x`, `gap_y`. The offset is clock seconds times speed, worked out in `f64` on the CPU and
   wrapped to the image, so it stays exact however long the clock runs (the shader's
   `f32` `frame.time` would drift). Sampling is bilinear by hand: a looping axis wraps
-  across its seam; off, the area the picture leaves is transparent. A new speed jumps
-  to where that speed puts the picture at the current time.
+  across its seam; off, the area the picture leaves is transparent. `gap_x` and
+  `gap_y` (whole px, default 0) put that many transparent pixels between repeats on a
+  looping axis, so a ticker's last item doesn't run into its first: the offset wraps
+  to the image plus the gap, and the shader reads transparent in the gap. A new speed
+  jumps to where that speed puts the picture at the current time.
 - `vignette`: `strength` (0..1, default 0.5), `radius` (0..1, default 0.5), `softness`
   (0..1, default 0.5) and `color` (with alpha, default opaque black). The distance from
   the centre is measured in the frame's own UV, so the shape is an ellipse that follows

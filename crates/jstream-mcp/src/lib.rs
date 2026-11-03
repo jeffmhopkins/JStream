@@ -8,6 +8,7 @@
 
 #![forbid(unsafe_code)]
 
+mod design;
 mod error;
 mod events;
 mod jsonrpc;

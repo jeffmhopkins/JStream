@@ -24,6 +24,9 @@ const SHADER: Shader = Shader {
 /// The fastest scroll, in pixels per second.
 const MAX_SPEED: f64 = 2000.0;
 
+/// The largest gap between repeats, in pixels.
+const MAX_GAP: f64 = 4096.0;
+
 pub(super) fn descriptor() -> KindDescriptor {
     let speed = |id: &str, label: &str, text: &str| ParamDescriptor {
         description: Some(text.into()),
@@ -50,17 +53,31 @@ pub(super) fn descriptor() -> KindDescriptor {
                 ..boolean("loop_x", "Loop horizontally", true)
             },
             boolean("loop_y", "Loop vertically", true),
+            ParamDescriptor {
+                description: Some(
+                    "Transparent pixels between repeats when looping horizontally, so a \
+                     ticker's last item doesn't run into its first."
+                        .into(),
+                ),
+                ..float("gap_x", "Horizontal gap", 0.0, MAX_GAP, 0.0, "px")
+            },
+            ParamDescriptor {
+                description: Some(
+                    "Transparent pixels between repeats when looping vertically.".into(),
+                ),
+                ..float("gap_y", "Vertical gap", 0.0, MAX_GAP, 0.0, "px")
+            },
         ],
     )
 }
 
 /// One axis's offset in pixels at `seconds`: wrapped into `0..size` when it loops,
 /// otherwise held just past the image, where everything reads transparent anyway.
-fn offset(seconds: f64, speed: f64, size: u32, looped: bool) -> f32 {
+fn offset(seconds: f64, speed: f64, size: u32, gap: f64, looped: bool) -> f32 {
     let size = f64::from(size);
     let moved = seconds * speed;
     if looped {
-        moved.rem_euclid(size) as f32
+        moved.rem_euclid(size + gap) as f32
     } else {
         moved.clamp(-size - 1.0, size + 1.0) as f32
     }
@@ -69,6 +86,8 @@ fn offset(seconds: f64, speed: f64, size: u32, looped: bool) -> f32 {
 pub(super) struct Scroll {
     speed: [f64; 2],
     looped: [bool; 2],
+    /// Whole pixels between repeats, per axis.
+    gap: [f64; 2],
 }
 
 impl Scroll {
@@ -76,6 +95,7 @@ impl Scroll {
         let mut scroll = Self {
             speed: [0.0; 2],
             looped: [true; 2],
+            gap: [0.0; 2],
         };
         scroll.update(settings);
         scroll
@@ -85,11 +105,13 @@ impl Scroll {
         let flag = |on: bool| if on { 1.0 } else { 0.0 };
         Uniforms::new()
             .vec2([
-                offset(seconds, self.speed[0], width, self.looped[0]),
-                offset(seconds, self.speed[1], height, self.looped[1]),
+                offset(seconds, self.speed[0], width, self.gap[0], self.looped[0]),
+                offset(seconds, self.speed[1], height, self.gap[1], self.looped[1]),
             ])
             .f32(flag(self.looped[0]))
             .f32(flag(self.looped[1]))
+            // Within 0..=4096, which an f32 holds exactly.
+            .vec2([self.gap[0] as f32, self.gap[1] as f32])
             .finish()
     }
 }
@@ -100,6 +122,9 @@ impl Pass for Scroll {
         let speed = |id| f64::from(read.f32(id, 0.0)).clamp(-MAX_SPEED, MAX_SPEED);
         self.speed = [speed("speed_x"), speed("speed_y")];
         self.looped = [read.bool("loop_x", true), read.bool("loop_y", true)];
+        // Whole pixels, so the shader's integer period matches the offset's.
+        let gap = |id| f64::from(read.f32(id, 0.0)).clamp(0.0, MAX_GAP).round();
+        self.gap = [gap("gap_x"), gap("gap_y")];
     }
 
     fn encode(
@@ -128,13 +153,16 @@ mod tests {
 
     #[test]
     fn the_offset_wraps_exactly_however_late() {
-        assert_eq!(offset(1.0, 2.0, 8, true), 2.0);
-        assert_eq!(offset(1.0, -2.0, 8, true), 6.0);
-        assert_eq!(offset(1_000_000.0 + 1.0, 2.0, 8, true), 2.0);
-        assert_eq!(offset(0.25, 2.0, 8, true), 0.5);
-        assert_eq!(offset(1.0, 2.0, 8, false), 2.0);
-        assert_eq!(offset(1e9, 2.0, 8, false), 9.0);
-        assert_eq!(offset(1e9, -2.0, 8, false), -9.0);
+        assert_eq!(offset(1.0, 2.0, 8, 0.0, true), 2.0);
+        assert_eq!(offset(1.0, -2.0, 8, 0.0, true), 6.0);
+        assert_eq!(offset(1_000_000.0 + 1.0, 2.0, 8, 0.0, true), 2.0);
+        assert_eq!(offset(0.25, 2.0, 8, 0.0, true), 0.5);
+        assert_eq!(offset(1.0, 2.0, 8, 0.0, false), 2.0);
+        assert_eq!(offset(1e9, 2.0, 8, 0.0, false), 9.0);
+        assert_eq!(offset(1e9, -2.0, 8, 0.0, false), -9.0);
+        // A gap lengthens the period: 8 pixels and 4 of gap repeat every 12.
+        assert_eq!(offset(5.0, 2.0, 8, 4.0, true), 10.0);
+        assert_eq!(offset(6.0, 2.0, 8, 4.0, true), 0.0);
     }
 
     #[test]
@@ -145,7 +173,8 @@ mod tests {
         ));
         assert_eq!(s.speed, [30.0, 0.0]);
         assert_eq!(s.looped, [true, false]);
-        assert_eq!(s.uniforms(0.5, 100, 10).len(), 16);
+        assert_eq!(s.gap, [0.0, 0.0]);
+        assert_eq!(s.uniforms(0.5, 100, 10).len(), 32);
     }
 
     const R: [u8; 4] = [255, 0, 0, 255];
@@ -202,6 +231,19 @@ mod tests {
         same(&half[..1], &[[255, 188, 188, 255]]);
         let left = bands_at(json!({"speed_x": -2.0}), 1.0).unwrap_or_default();
         same(&left, &[G, B, W, R]);
+    }
+
+    #[test]
+    fn a_gap_is_transparent_between_repeats() {
+        // 8 pixels and a 4-pixel gap: after 2 s at 2 px/s the picture has moved 4, so
+        // the gap fills the first 4 pixels and the picture's first half the rest.
+        let Some(got) = bands_at(json!({"speed_x": 2.0, "gap_x": 4.0}), 2.0) else {
+            return;
+        };
+        same(&got, &[GONE, GONE, R, G]);
+        // After 6 s it has moved one whole period and is back where it started.
+        let back = bands_at(json!({"speed_x": 2.0, "gap_x": 4.0}), 6.0).unwrap_or_default();
+        same(&back, &[R, G, B, W]);
     }
 
     #[test]
