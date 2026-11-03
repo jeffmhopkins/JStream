@@ -144,13 +144,21 @@ a countdown or clock (`timer`, one size whatever it shows), grouping a multi-par
 effects clip and shadow it as one, fitting an item to its text's `source.sizes`,
 animating with keyframe scenes, a `move` preset, crop reveals and staggered
 `delay_ms`, 3D placement (`tilt_deg`, `turn_deg`, `depth_px`, `perspective_px`) in
-keyframe variants and blend modes (`item.set_blend`), 3D sets through
+keyframe variants and blend modes (`item.set_blend`), layering by role
+(#1062): background, light sources, the light they throw and the foreground as separate
+layers, additive for light and normal for matter, masks drawn as `image_mask` or
+`scene_mask`, the asset-reference shape a file setting takes, and reflections on glossy
+surfaces as a flipped, squashed, blurred `scene` item of the composite, masked in
+canvas space by an unflipped group around it and added at a low opacity because
+blending is linear, 3D sets through
 `scene.set_camera` (starting from the framing camera, floors and walls by tilt, turn and
 `depth_px`, camera moves animated by keyframe scenes, and flat overlays in a 2D scene
 above the set, [ADR-0094](../../docs/adr/0094-scene-cameras.md)), choosing between
 `fade`, `move` and a `stinger` preset (its `scene`, `cut_ms` and items' appear and
 disappear effects), building what the built-in kinds can't draw as HTML in a `browser`
-source's `html` (and falling back to them where no browser is available), and checking
+source's `html` (time-based animation on the wall clock so separate pages agree, with
+subtle ambient motion and streaks that move less per frame than their length, and falling back to the built-in kinds where no browser is
+available), and checking
 each step with `video.snapshot` (building on preview when a scene is on air).
 It names engine kinds and settings, which this crate doesn't link, so a renamed setting
 must be renamed here too. Tested by `instructions_carry_the_design_guidance`.
