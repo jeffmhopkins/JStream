@@ -361,7 +361,8 @@ covers = ["crates/jstream-ui/src/panels/outputs.rs"]
 
 Spec: [panels › outputs](../design/ui-prototype/spec-panels.md#outputs-panel). The real
 panel manages outputs (create, keys, start and stop, encoders and video mixes), which the
-prototype doesn't show; that stays ([Beyond](#beyond)).
+prototype doesn't show; that stays ([Beyond](#beyond)). A stopped card's Edit changes an
+RTMP output's server URL or a recording's file path (`output.set_path`, #1072).
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
@@ -456,7 +457,8 @@ not remove them; they move into the prototype's look.
   top, else stacking order). Dragging a box moves it in its own depth plane, under the
   pointer, with no snapping; a 3D scene's boxes have no resize or rotate handles, which
   the Transform panel's fields replace, and a marquee touches each box's on-screen
-  bounds. Alt-drag orbits the camera about its target (up to 85° above or below it),
+  bounds. Alt-drag orbits the camera about its target (up to 85° above or below it, or
+  on the side a camera typed in Properties is already past that, no further than it is),
   Alt+Shift-drag dollies it, live on output (`live.set` of `scene.set_camera`) and
   committed as one undo step; on a keyframe scene that writes its camera override. The
   pill under the frame reads the camera's position and distance to its target.

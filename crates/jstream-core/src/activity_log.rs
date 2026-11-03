@@ -388,6 +388,9 @@ fn describe_edit(edit: &Edit, state: &State) -> String {
         Edit::OutputSetTarget { output_id, .. } => {
             format!("Changed where output {} sends", quote(output_id.as_str()))
         }
+        Edit::OutputSetPath { output_id, .. } => {
+            format!("Changed where output {} records", quote(output_id.as_str()))
+        }
         Edit::OutputDelete { output_id } => format!("Deleted output {}", quote(output_id.as_str())),
         Edit::OutputSetEncoder { output_id, .. } => {
             format!(
