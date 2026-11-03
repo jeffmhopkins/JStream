@@ -1045,5 +1045,5 @@ milestone = "M3"
 title = "Shader sources: multipass WGSL packs with feedback, inputs and audio, written over MCP"
 status = "planned"
 needs = ["build"]
-prs = [1034, 1048, 1050, 1052, 1064]
-note = "ADR-0093 (agent tier) and the program in jstream-effects and jstream-render (#1034), and the engine wiring: kinds, stand-ins, scene slots, restart on show and audio (#1048); writing packs over the protocol and MCP is decided by ADR-0097 (maintainer tier, accepted) and not built yet; for the cockpit scenes (warp, reflections, audio glow) that browser sources draw on the CPU today"
+prs = [1034, 1048, 1050, 1052, 1064, 1085]
+note = "ADR-0093 (agent tier) and the program in jstream-effects and jstream-render (#1034), and the engine wiring: kinds, stand-ins, scene slots, restart on show and audio (#1048); writing packs over the protocol and MCP is decided by ADR-0097 (maintainer tier, accepted): the quarantine follows the shader digest (#1064), and pack.write, pack.delete, pack.list and pack.read (protocol 0.71, #1085); for the cockpit scenes (warp, reflections, audio glow) that browser sources draw on the CPU today"
