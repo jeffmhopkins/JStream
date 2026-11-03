@@ -251,15 +251,16 @@ enforces them in the pinned CEF's windowless pages is not yet confirmed on a Win
 (#347). ADR-0021's per-source
 "allow page to control JStream" opt-in must not hand the page the control token (#347).
 
-**Decided, not built** ([ADR-0102](../adr/0102-page-api-for-browser-sources.md)): a
-source may opt its page in to a read-only `window.jstream` that gives the engine
-animation clock and the page's own visibility, and, per further setting, the program and
-preview scenes, named shared values and one bus's levels and bands. The API exists only
-in the main frame while it shows the source's own document. Data flows one way, filtered
-to the grant in the engine, and the helper drops every message a renderer sends, so a
-page, or a compromised renderer, holds only what its source was granted and has no path
-to the engine. Whatever a page is granted, a web page can send off the machine: preview
-scene names and a microphone bus's bands are the grants that matter most.
+**Proposed, not decided or built** ([ADR-0102](../adr/0102-page-api-for-browser-sources.md),
+awaiting the maintainer): a source would opt its page in to a read-only `window.jstream`
+with the engine animation clock and the page's own visibility, and, per further setting,
+the program and preview scenes, named shared values and one bus's levels and bands. The
+API would exist only in the main frame while it shows the source's own document. Data
+would flow one way, filtered to the grant in the engine, and the helper would drop every
+message a renderer sends. A page would have no path to the engine, and a compromised
+renderer would hold only what the sources sharing its renderer were granted (each such
+page is meant to get a renderer of its own). Whatever a page is granted, a web page can
+send off the machine: preview scene names and a microphone bus's bands matter most.
 
 <a id="files"></a>
 ## Files and decoders

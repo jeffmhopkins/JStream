@@ -2,14 +2,14 @@
 id = "ADR-0102"
 title = "Browser source pages can opt in to reading the engine through window.jstream"
 kind = "adr"
-status = "accepted"
-tier = "agent"
+status = "proposed"
+tier = "maintainer"
 -->
 
 # ADR-0102: Browser source pages can opt in to reading the engine through window.jstream
 
 <!-- @generated begin adr-status -->
-> **Status:** accepted
+> **Status:** proposed
 <!-- @generated end adr-status -->
 
 <a id="context"></a>
@@ -29,18 +29,19 @@ pipe. Today nothing on that pipe reaches a page's JavaScript. A page served from
 send anything it reads to its own server, so whatever the engine gives a page may leave the
 machine.
 
-**Tier.** ADR-0021, a maintainer decision, already set the posture here: pages get "no
-access to the JStream control API unless the user grants it to that source", through a
-per-source opt-in that is off by default. Control-API access is the most a page could be
-given. A page holding it could read every scene, value and meter, and could start a stream
-of the program to a server it names. This ADR builds a narrower grant than that one: the
-page can only read, and only the data its source's settings list. It gets no token and
-sends nothing back. Nothing it gives a page goes beyond what ADR-0021 already lets the user
-grant. So it carries out a decided posture and doesn't set a new one, and it is agent tier
-under [ADR-0043](0043-narrow-maintainer-tier.md), like
-[ADR-0048](0048-sandboxed-browser-helper.md) was for ADR-0021's sandbox. ADR-0021's full
-control opt-in stays unbuilt. Building it later would still need its own decision, and it
-must never hand a page the control token (#347).
+**Tier.** This ADR is maintainer tier under [ADR-0043](0043-narrow-maintainer-tier.md),
+on two grounds:
+- **Security and privacy posture.** It decides which engine data an untrusted page that can
+  reach the network may receive, and so what may leave the machine. That includes a bus's
+  spectrum, which no control client gets today (`meters.tick` carries only levels), and
+  preview scene names. [ADR-0021](0021-browser-source.md) set a limit ("no access to the
+  JStream control API unless the user grants it to that source"). It did not decide what a
+  grant exposes, how finely it is split, or what the user is warned about.
+- **A public compatibility promise.** Decision 9 promises page authors that
+  `window.jstream` keeps its members across versions.
+
+ADR-0021's own control opt-in stays unbuilt. Building it would need its own decision, and
+it must never hand a page the control token (#347).
 
 <a id="decision"></a>
 ## Decision
@@ -53,8 +54,8 @@ must never hand a page the control token (#347).
    - `page_api_scenes` (`bool`). Adds the program and preview scenes (decision 6).
    - `page_api_values` (`string`, at most 1 KiB). The shared values the page may read
      (decision 7), as comma-separated names or prefixes ending in `.*`.
-   - `page_api_bus` (a new `bus` reference parameter type, tagged
-     `{"type":"bus","bus_id":…}` like ADR-0025's other references, `null` for none).
+   - `page_api_bus` (the existing `bus` reference parameter type, `ParamType::Bus` since
+     protocol 0.24, as the `waveform` and `spectrum` kinds use; `null` for none).
      The one bus whose levels the page may read (decision 8).
 
    The last three apply only while `page_api` is on, and the UI shows them under it.
@@ -66,13 +67,17 @@ must never hand a page the control token (#347).
 2. **Only the source's own document gets it.** The API is defined in the page's main
    frame, before any page script runs, and only while that frame shows the source's own
    document:
-   - a web page: a document of the same origin as the source's URL;
+   - a web page: a document of the same origin as the source's URL. Same origin means
+     every path on that host and port, so a source whose URL is on a shared host grants
+     every page on that host;
    - a local file: a `file:` document the request policy lets the page load, in the
      page's folder or below it;
-   - a page given as HTML: its `data:` document.
+   - a page given as HTML: a `data:` document, as the request policy's main-frame rule
+     treats every `data:` document alike;
+   - a blank page (no URL and no file): never.
 
-   It is never defined in a subframe, in a popup, or after the main frame navigates to
-   any other document. The helper's render-process handler decides this when each
+   It is never defined in a subframe or a popup, or after the main frame navigates to a
+   document outside that rule. The helper's render-process handler decides this when each
    JavaScript context is created. It checks the main frame's URL against the source's
    location, which the engine sends when it opens the page. This is the same rule
    `local_network` uses for web pages (#721), applied to the main frame only.
@@ -82,10 +87,18 @@ must never hand a page the control token (#347).
    `window.jstream`. No message from a page reaches the engine. The helper's
    browser-process handler drops every process message a renderer sends. The API has no
    method that sends anything, and the page never sees the control token or any command.
-   The engine filters each update to the page's grant before sending it, so even a
-   compromised renderer holds only what its source was granted. Updates are coalesced to
-   at most one per page frame (the source's frame-rate cap, at most 60 a second), and each
-   update fits in the pipe's message limit.
+   The engine filters each update to the page's grant before sending it.
+   - **Renderer isolation.** Each page with `page_api` on gets a request context of its
+     own. Chromium never shares a renderer process across request contexts, so a
+     compromised renderer holds only what its own source was granted. The implementation
+     PR checks this on a run. Until that check passes, the threat model says "only what
+     the sources sharing its renderer were granted".
+   - **Rate.** Updates are coalesced to at most one per page frame (the source's
+     frame-rate cap, at most 60 a second).
+   - **Size.** An update that would exceed the pipe's message limit (`MAX_MESSAGE_BYTES`)
+     is split across consecutive messages, each value whole in one of them. This covers
+     the on-load catch-up and a burst of value changes in one frame. A value is at most
+     16 KiB (decision 7), so it always fits.
 4. **The clock.** `jstream.clock.now()` returns the engine animation clock in seconds:
    the same time that native motion and timelines read (#1058). The engine sends an
    anchor (a clock time) when the page opens, every 250 ms after that, and whenever the
@@ -125,7 +138,9 @@ must never hand a page the control token (#347).
      reach the page as JSON text that the API parses, and are never evaluated as code.
    - **The name.** These are not [ADR-0032](0032-live-edits-and-undo.md)'s live values,
      which are a gesture's uncommitted edits. The protocol and the docs call them shared
-     values to keep the two apart.
+     values to keep the two apart. The native-motion ADR (ADR-0099, #1074) has a closed
+     cue set whose "set a live value" cue means `values.set` on this store, as the motion
+     work agreed. This ADR adds no cue.
 8. **Audio levels.** With `page_api_bus` set, `jstream.levels()` returns that bus's
    latest reading, and a `levels` event fires for each one. A reading has its post-fader
    `peak` and `rms` per channel, as `meters.tick` reports them, and `bands`, the bus's
@@ -138,7 +153,7 @@ must never hand a page the control token (#347).
    members and keep these ones (`version` goes up), and a page written for `1` keeps
    working.
 10. **Where the code lives.** The value store and per-page feeds are in `jstream-core`.
-    `values.*` and the `bus` parameter type are in `jstream-protocol`, with the MCP tools
+    `values.*` is in `jstream-protocol`, with the MCP tools
     in `jstream-mcp`. The four settings go in `jstream-sources`' browser kind. The pipe
     message, the render-process handler and the JavaScript shim go in `jstream-browser`.
     The build follows the motion work, in three PRs: the value store and its tools
@@ -165,8 +180,7 @@ must never hand a page the control token (#347).
   decision.
 - Each granted page costs one small pipe message per frame at most, and none when nothing
   changed except the 250 ms clock anchor.
-- The protocol grows: `values.*` and the `bus` parameter type. Both are additive under
-  [R-API-001](../RULES.md#R-API-001), so the protocol changes go through the protocol
-  merge queue.
-- Timelines (#1059) gain a "set a shared value" cue that uses this store, rather than a
-  store of their own.
+- The protocol grows by `values.*` only. That is additive under
+  [R-API-001](../RULES.md#R-API-001) and goes through the protocol merge queue.
+- Timelines (#1059) set shared values through ADR-0099's "set a live value" cue, which
+  uses this store rather than a store of their own.
