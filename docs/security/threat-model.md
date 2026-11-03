@@ -367,7 +367,7 @@ with its dialog open, or grants with a list unanswered, acknowledges its latest 
 <a id="mcp"></a>
 ## MCP agents
 <!-- @section
-depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/adr/0036-mcp-events-polling-tool.md", "docs/adr/0059-mcp-annotations-and-remote-text.md", "docs/adr/0085-capture-target-names-marked-as-remote-text.md"]
+depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/adr/0036-mcp-events-polling-tool.md", "docs/adr/0059-mcp-annotations-and-remote-text.md", "docs/adr/0085-capture-target-names-marked-as-remote-text.md", "docs/adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md"]
 -->
 
 **Threats:** an agent following instructions hidden in text it reads (prompt
@@ -390,8 +390,11 @@ are data and never instructions. That rejection text has the key replaced, is cu
 too: the `capture` tool's description and the server instructions mark it as data and
 never instructions ([ADR-0085](../adr/0085-capture-target-names-marked-as-remote-text.md)).
 Every tool carries MCP annotations (`readOnlyHint`, `destructiveHint`,
-`openWorldHint`), so a client can ask the user before an agent retargets an output,
-sets its key, goes live or deletes something (#346).
+`openWorldHint`), so a client can ask the user before an agent retargets or deletes an
+output, sets or clears its key, goes live or stops, steps through its undo history,
+revokes a device, starts a pairing or replaces the UI's settings (#346). Other edits,
+deletes of scenes, sources and items included, are undoable and unannounced
+([ADR-0098](../adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md)).
 
 **Accepted:** full access, with no tiers and no confirmation step
 ([ADR-0006](../adr/0006-mcp-full-access.md)). An agent sees the program through

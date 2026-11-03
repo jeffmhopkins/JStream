@@ -1,6 +1,6 @@
 [package]
 name = "jstream-ui"
-version = "0.0.0"
+version.workspace = true
 description = "The JStream web UI: a Leptos app compiled to WASM that drives the engine over its WebSocket API."
 edition.workspace = true
 license.workspace = true

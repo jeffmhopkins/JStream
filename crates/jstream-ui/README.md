@@ -31,10 +31,15 @@ Contents ([Design](#design) explains the choices):
   session.
 - **Header** (`header.rs`): `Header`, the bar along the top: the brand, the File menu
   (the connection's details and Disconnect), the Edit menu (Undo, Redo), the View menu
-  (show or hide each panel, and open the program or multiview projector) and the Layout menu (saved layouts), the stats
+  (show or hide each panel, and open the program or multiview projector), the Layout menu (saved layouts) and the
+  Help menu (the project's pages, and About), the stats
   readout (the program's frame rate, the frames dropped since the page connected and the
   engine's CPU use), Studio mode (kept in the browser's storage), Record, and Go
   Live / End stream. `RecordButton`, `Dropped` and `Load` are its logic, tested natively.
+- **About** (`about.rs`): `About`, the About dialog (the app icon, the version and build
+  the UI was built as, the engine's protocol, the licence and links), and `Link`, the
+  project's pages on GitHub the Help menu and the dialog link to, all under the
+  workspace's `repository`. Tested natively.
 - **Dock** (`dock.rs`): `Dock`, the model of which panel sits where: eight `Zone`s
   around the canvas, each holding `Group`s of tabbed `PanelId`s, the zones' sizes, and
   the saved layouts (`Layout`, with Editing and Live built in). Every change goes
@@ -672,7 +677,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   logical CPUs, "<1%" below half a percent, left out when the engine reads none. Undo and
   Redo in the Edit menu call `history.undo` and `history.redo`, like the canvas's
   buttons. A failed call shows in the shell's problem bar. The menus close on Escape
-  or on a press anywhere outside them.
+  or on a press anywhere outside them. The Help menu's entries are links to the
+  project's pages on GitHub, opened in a new tab (the desktop app hands them to the
+  system browser), then About JStream. The About dialog's version is the workspace's
+  (`jstream-ui` takes `version.workspace`, as the apps do), its build the `GITHUB_SHA`
+  CI built it with (`option_env!`, so a local build says "local build"), and its
+  protocol the session's `welcome`. The brand mark, the favicon and the dialog show the
+  bundle's `icon.png` (see [Build](#build)).
 - **Outputs.** The panel reads the outputs, encoder profiles, video mixes, buses and scenes with `state.get`, then
   each output's `output.status`, and re-reads them on `state.changed` and
   `events.dropped`; `output.state_changed` updates one output's state in place. It
@@ -1058,8 +1069,11 @@ trunk serve            # rebuilds on change and serves dist/ locally
 trunk needs the `wasm-bindgen` CLI at the version `Cargo.lock` resolves for
 `wasm-bindgen`. It uses one found on `PATH`, and otherwise downloads it; a release build
 also downloads `wasm-opt`. `dist/` holds `index.html`, the JavaScript glue, the `.wasm`
-and the stylesheet, with content hashes in their names, and `fonts/`, copied as it is
-(`copy-dir` in `index.html`, so the fonts and `OFL.txt` keep their names). It is not
+and the stylesheet, with content hashes in their names, `fonts/`, copied as it is
+(`copy-dir` in `index.html`, so the fonts and `OFL.txt` keep their names), and
+`icon.png`, the desktop app's `apps/jstream-desktop/icons/icon.png` (`copy-file`), so
+the app has one icon: replacing that file changes the UI's mark, favicon and About
+dialog too. It is not
 committed. trunk's
 inline loader script carries a `{{__TRUNK NONCE__}}` placeholder (`create_nonce` in
 `Trunk.toml`), which the serving engine replaces with each response's
