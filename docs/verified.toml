@@ -453,7 +453,7 @@ stamp = { hash = "b3:a772352ba69e809b" }
 stamp = { hash = "b3:67aa36b060d4b132", by = "agent:claude", note = "mcp README annotations paragraph agrees with this bullet, history included | merge: #1039 added countdown to the design-guidance bullet's recipes; the annotations bullet still lists device, history, output, pairing, ui_settings | merge: #1079 added layering light, masks and reflections to the design-guidance bullet; the annotations bullet is unchanged | kept from the merged side: #1027: the Design guidance bullet names the countdown recipe again among the title-safe area, backdrops, shapes, type, colour, lower-third, ticker and grouping recipes, as design.rs and the mcp README have it. | merge: The merge brought in #1033 (font.list and the Properties font picker by name): the MCP bullet gains font.list; the Design guidance bullet with the countdown recipe is unchanged. | merge: The merge brought in #1025/#1028 (backdrop cap), #1030 (HTML transitions, stingers), #1034/#1048/#1050 (shader sources), #1038/#1044/#1053 (3D scene cameras) and #1042: the Design guidance bullet now names 3D sets through a scene camera; resolved the conflict keeping both that and this PR's countdown recipe. | kept from the merged side: `font` added to the tool list and the tools.snap size updated to about 799 KB (799248 bytes); the mcp README and tools.rs agree. | kept from the merged side: The mcp README, tools.rs and tools.snap changed only in the live tool's description (source settings added). The schema-size figure (about 797 KB) moved by a few bytes, so it holds. | kept from the merged side: Design-guidance bullet now lists 3D sets through a scene camera, matching design.rs's new paragraph; the scene tool gets scene.set_camera from the protocol (tools.snap). | merge: Merged main with #1030 (stinger transitions, HTML browser pages, restart on show) and #1037 (backdrop cap, keyframe effects Cancel): mcp README, tools.snap and design.rs gain the stinger and HTML guidance beside the 3D sets bullet; holds. | kept from the merged side: Body: `font` added to the tool list and the tools.snap size updated to about 799 KB (799248 bytes). The mcp README, tests.rs and tools.rs agree. | kept from the merged side: Whole PR: the mcp README's OPEN_WORLD paragraph adds that the browser kind's html (which can load from the web) makes source open-world, and the Design paragraph's design-guidance summary adds 3D placement in keyframe variants, blend modes, choosing fade, move or a stinger preset (scene, cut_ms, items' appear and disappear effects), and HTML in a browser source's html with a fallback to built-in kinds. The ARCH#mcp section's description of the tools, hints and server instructions still holds. merge #1031: the live tool sentence now says live.set previews a source's live settings (ADR-0091); the section names the live tool without listing what it previews, so it holds. | merge: merge #1033: the mcp README adds the font noun and the untrusted font-name note, and tools.snap gains the font tool's schema (ADR-0092). The section's tool and hint description holds, and this PR's html and design-guidance changes are unchanged. | kept from the merged side: Design guidance bullet names layering light, masks and reflections as design.rs now does, merged with main's countdown recipe from #1039" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:20451a20b1bea81a", by = "agent:claude", note = "#1072 output.set_path: tools.snap changes only through the protocol schema (new edit, version); no tool change; still holds with the version at 0.74" }
+stamp = { hash = "b3:20451a20b1bea81a", by = "agent:claude", note = "#1072 output.set_path: tools.snap changes only through the generated protocol schema: the output tool description gains output.set_path (edit); no hand-written tool change" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/design.rs"]
 stamp = { hash = "b3:c621d8460fb0a4f4", by = "agent:claude", note = "Design guidance bullet names layering light, masks and reflections as design.rs now does, merged with main's countdown recipe from #1039 | kept from the merged side: #1027: the Design guidance bullet names the countdown recipe again among the title-safe area, backdrops, shapes, type, colour, lower-third, ticker and grouping recipes, as design.rs and the mcp README have it. | merge: The merge brought in #1025/#1028 (backdrop cap), #1030 (HTML transitions, stingers), #1034/#1048/#1050 (shader sources), #1038/#1044/#1053 (3D scene cameras) and #1042: the Design guidance bullet now names 3D sets through a scene camera; resolved the conflict keeping both that and this PR's countdown recipe. | kept from the merged side: Design-guidance bullet now lists 3D sets through a scene camera, matching design.rs's new paragraph; the scene tool gets scene.set_camera from the protocol (tools.snap). | merge: Merged main with #1030 (stinger transitions, HTML browser pages, restart on show) and #1037 (backdrop cap, keyframe effects Cancel): mcp README, tools.snap and design.rs gain the stinger and HTML guidance beside the 3D sets bullet; holds. | kept from the merged side: Body: `font` added to the tool list and the tools.snap size updated to about 799 KB (799248 bytes). The mcp README, tests.rs and tools.rs agree. | kept from the merged side: Whole PR: design.rs's guidance gains the depth-and-blending recipe (tilt_deg, turn_deg, depth_px, perspective_px, item.set_blend), the transitions recipe (fade, move, and a stinger preset's scene, cut_ms and stagger_ms, built like any graphic and checked with video.snapshot) and the HTML-graphics recipe (a browser source with inline html, transparent by default, CSS keyframes, https fonts and images). The HTML stinger clause now says the reload takes a page load and the stinger shows its previous run's last frame until the new page paints, so it starts and ends transparent (reviews N2, N4). The section's description of the appended design guidance holds. | kept from the merged side: Whole PR: the Design guidance bullet, new in this PR, names the safe area, backdrops, shapes, type, colour, the lower-third, ticker and grouping recipes, fitting boxes to text, keyframe animation and video.snapshot checks, as design.rs and the mcp README's design paragraph have them. No timer." }
@@ -540,7 +540,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:f97168e0c9e8bc47", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["ARCH#protocol"."body"]
-stamp = { hash = "b3:097f340e2f1277d0", by = "agent:claude", note = "#1072 output.set_path: data-model bullet says record outputs change file with output.set_path from 0.74; mock and graph handle it; process unchanged; renumbered to 0.74 by the release queue" }
+stamp = { hash = "b3:097f340e2f1277d0", by = "agent:claude", note = "#1072 output.set_path: data-model bullet says record outputs change file with output.set_path from 0.74; mock and graph handle it; process unchanged; 0.74 as the release queue assigned" }
 
 ["ARCH#protocol"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -552,7 +552,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:a4460043fb366c98", by = "agent:wave-owner", note = "Merge of main (wave/m1-2 landed as #545) into wave/m1-3, which carries T1 (#260) and #552. From wave/m1-2 the section now lists video mixes (video_mix.* edits, output.set_video_mix, video_mix.list, 0.28), the master and output filter owners with state.get's master (0.29), and capture.targets (0.27); from T1 it carries Studio mode (studio.set_preview) and Transitions (transition.* edits, scene.set_transitions, item.set_transition, scene.switch's preset_id, 0.30). Re-read the bullets against query.rs, command.rs, mix.rs, filter.rs, transition.rs and control's mock (mock.rs, mock/filter.rs) at the head; control's Cargo.toml adds serde_json as a dev-dependency only. PROTOCOL_VERSION is 0.30 and the protocol README's hello/welcome example now says minor 30 too; snapshots regenerated at 0.30." }
 
 ["ARCH#protocol"."file:crates/jstream-control/README.md"]
-stamp = { hash = "b3:5c7f7aa2ab48afe7", by = "agent:claude", note = "#1072 output.set_path: data-model bullet says record outputs change file with output.set_path from 0.75; mock and graph handle it; process unchanged" }
+stamp = { hash = "b3:5c7f7aa2ab48afe7", by = "agent:claude", note = "#1072 output.set_path: data-model bullet says record outputs change file with output.set_path from 0.74; mock and graph handle it; process unchanged; 0.74 as the release queue assigned" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/control.rs"]
 stamp = { hash = "b3:a421c4283dce201f", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
@@ -564,7 +564,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:706c7f685e00c3b2", by = "agent:obs-ui-thread", note = "Body adds font.list (0.68, ADR-0092) to the queries; checked against query.rs, plugin.rs, fixtures.rs, version.rs, the snapshots, the protocol README and the mock (lib.rs, mock.rs)." }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:0e8016ad7d9b9797", by = "agent:claude", note = "#1072 output.set_path: data-model bullet says record outputs change file with output.set_path from 0.75; mock and graph handle it; process unchanged" }
+stamp = { hash = "b3:0e8016ad7d9b9797", by = "agent:claude", note = "#1072 output.set_path: data-model bullet says record outputs change file with output.set_path from 0.74; mock and graph handle it; process unchanged; 0.74 as the release queue assigned" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:672d54388c96b2bc", by = "agent:bus-outputs", note = "output.set_audio_buses (protocol 0.59): one bus per track, one track so far, blocks its bus's delete, delete.plan moves the output to master, refused while it runs; checked against command.rs, output.rs, version.rs, fixtures and plugin.rs, the graph and mock (mock.rs, mock/audio.rs, control README), and the snapshots" }
@@ -591,13 +591,13 @@ stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:fe1a2f1369dbc18d", by = "agent:claude", note = "#1072 output.set_path: data-model bullet says record outputs change file with output.set_path from 0.74; mock and graph handle it; process unchanged; renumbered to 0.74 by the release queue" }
+stamp = { hash = "b3:fe1a2f1369dbc18d", by = "agent:claude", note = "#1072 output.set_path: data-model bullet says record outputs change file with output.set_path from 0.74; mock and graph handle it; process unchanged; 0.74 as the release queue assigned" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:57ebbb5659cf64e7", by = "agent:claude", note = "#1072 output.set_path: data-model bullet says record outputs change file with output.set_path from 0.74; mock and graph handle it; process unchanged; renumbered to 0.74 by the release queue" }
+stamp = { hash = "b3:57ebbb5659cf64e7", by = "agent:claude", note = "#1072 output.set_path: data-model bullet says record outputs change file with output.set_path from 0.74; mock and graph handle it; process unchanged; 0.74 as the release queue assigned" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:08ccac092edb1eef", by = "agent:claude", note = "#1072 output.set_path: data-model bullet says record outputs change file with output.set_path from 0.74; mock and graph handle it; process unchanged; renumbered to 0.74 by the release queue" }
+stamp = { hash = "b3:08ccac092edb1eef", by = "agent:claude", note = "#1072 output.set_path: data-model bullet says record outputs change file with output.set_path from 0.74; mock and graph handle it; process unchanged; 0.74 as the release queue assigned" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/activity.rs"]
 stamp = { hash = "b3:7db55527ae06155a", by = "agent:claude", note = "Re-read Control protocol against the PR's whole change: the queries list gained activity.list (0.51, ADR-0083), backed by the new activity.rs (ActivityEntry, MAX_ACTIVITY_ENTRIES 100, MAX_ACTIVITY_SUMMARY_CHARS 256), query.rs's variants, the snapshots and the mock's empty answer with its test; no event is added, so the events line holds. | merge: Merged main's #930 (stats.tick load, 0.48), #933 (preview.subscribe of a draft source, 0.49) and #932 (the capture_target parameter type, 0.50): the events line gains stats.tick's load (#930) and the queries line keeps this PR's activity.list (0.51); the protocol versions now run 0.48, 0.49, 0.50 from main, then 0.51 for activity.list, with version.rs, the README history and both snapshots regenerated at 0.51." }
@@ -606,7 +606,7 @@ stamp = { hash = "b3:7db55527ae06155a", by = "agent:claude", note = "Re-read Con
 stamp = { hash = "b3:d61ec77f35ffdcfa", by = "agent:builder-b8rnvf", note = "D9 0.42: edit list adds bus.set_monitor (a bus's monitor, protocol 0.42); re-read the rest against the mock's set_monitor and the snapshots." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:320285ab88505e2a", by = "agent:claude", note = "#1072 output.set_path: data-model bullet says record outputs change file with output.set_path from 0.74; mock and graph handle it; process unchanged; renumbered to 0.74 by the release queue" }
+stamp = { hash = "b3:320285ab88505e2a", by = "agent:claude", note = "#1072 output.set_path: data-model bullet says record outputs change file with output.set_path from 0.74; mock and graph handle it; process unchanged; 0.74 as the release queue assigned" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:b449d4b836765cf9", by = "agent:claude@session_01FGswf8bzTLhyPknQqo7a9J", note = "#973, whole PR: encoder.rs's dedicated doc says it is omitted when false, for an output whose video chain was empty when it started; a stream or recording with a video filter is dedicated, a virtual camera never (it opens no session). Protocol minor 0.60 (renumbered from 0.61 in the queue), no wire change." }
@@ -627,7 +627,7 @@ stamp = { hash = "b3:8f4e13671067e36d", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:bd74c870eba61001", by = "agent:claude", note = "#1072 output.set_path: data-model bullet says record outputs change file with output.set_path from 0.75; mock and graph handle it; process unchanged" }
+stamp = { hash = "b3:bd74c870eba61001", by = "agent:claude", note = "#1072 output.set_path: data-model bullet says record outputs change file with output.set_path from 0.74; mock and graph handle it; process unchanged; 0.74 as the release queue assigned" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:1cddbdc6aa79a137", by = "agent:claude-3d-cameras", note = "Added scene.set_camera (0.70, live value and keyframe override) to the organisation bullet and the camera to the live-values bullet; checked against command.rs, live.rs is_live_adjustable and the 0.70 bump in version.rs. | kept from the merged side: Body adds font.list (0.68, ADR-0092) to the queries; checked against version.rs, the snapshots, the protocol README and the mock (mock.rs, control README). | kept from the merged side: Body: the Live values bullet now says that since 0.67 a source's live settings are live values (ADR-0091). Checked the protocol README, live.rs, version.rs, command.rs, the snapshots and the control README/mock.rs against it; they agree." }
@@ -672,13 +672,13 @@ stamp = { hash = "b3:fdca532445796c54", by = "agent:claude@session_01KvbMUfF6qWH
 stamp = { hash = "b3:dd66fae21fe8a668", by = "agent:ui-parity", note = "Organisation bullet: scene.set_options (0.65, ADR-0089) sets whether a scene's audio reaches the Mixer when nested and its background colour; the mock makes the graph's checks and keeps options through a delete's inverse; protocol.snap and examples.snap regenerated on the merged code; the merged #974 (plugin.list, 0.58) is described by main's text." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/output.rs"]
-stamp = { hash = "b3:058a20509ea722cf", by = "agent:claude", note = "#1072 output.set_path: data-model bullet says record outputs change file with output.set_path from 0.74; mock and graph handle it; process unchanged; renumbered to 0.74 by the release queue" }
+stamp = { hash = "b3:058a20509ea722cf", by = "agent:claude", note = "#1072 output.set_path: data-model bullet says record outputs change file with output.set_path from 0.74; mock and graph handle it; process unchanged; 0.74 as the release queue assigned" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/parity.rs"]
-stamp = { hash = "b3:3ed6758696e9e584", by = "agent:claude", note = "#1072 output.set_path: data-model bullet says record outputs change file with output.set_path from 0.75; mock and graph handle it; process unchanged" }
+stamp = { hash = "b3:3ed6758696e9e584", by = "agent:claude", note = "#1072 output.set_path: data-model bullet says record outputs change file with output.set_path from 0.74; mock and graph handle it; process unchanged; 0.74 as the release queue assigned" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/plugin.rs"]
-stamp = { hash = "b3:e2bb91762ea7f617", by = "agent:claude", note = "#1072 output.set_path: data-model bullet says record outputs change file with output.set_path from 0.75; mock and graph handle it; process unchanged" }
+stamp = { hash = "b3:e2bb91762ea7f617", by = "agent:claude", note = "#1072 output.set_path: data-model bullet says record outputs change file with output.set_path from 0.74; mock and graph handle it; process unchanged; 0.74 as the release queue assigned" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/preview.rs"]
 stamp = { hash = "b3:1488376f7ff331d1", by = "agent:obs-ui-thread", note = "Protocol section names item.set_locked and the png preview codec at 0.71 (ADR-0096); the mock implements both. Renumbered from ADR-0093 and 0.69 after merging main: #1034 took ADR-0093, and open PRs claim 0.69 (#1041) and 0.70 (#1044). The merge brought #1034 (shader sources), which this section's lock and screenshot text doesn't touch." }
@@ -696,7 +696,7 @@ stamp = { hash = "b3:12085313843efe02", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:985b1fcce3e92b97", by = "agent:claude", note = "Re-read against protocol transition.rs and lib.rs: a new built-in transition kind is descriptor data (ADR-0037), no op, wire type or version change; the section's lists of presets now name stinger." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:9ee2280d7179081f", by = "agent:claude", note = "#1072 output.set_path: data-model bullet says record outputs change file with output.set_path from 0.74; mock and graph handle it; process unchanged; renumbered to 0.74 by the release queue" }
+stamp = { hash = "b3:9ee2280d7179081f", by = "agent:claude", note = "#1072 output.set_path: data-model bullet says record outputs change file with output.set_path from 0.74; mock and graph handle it; process unchanged; 0.74 as the release queue assigned" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/youtube.rs"]
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = "whole PR: the YouTube bullet says that since 0.38 a running output's audience comes in the youtube.stats event and the query lists it with the day's quota estimate, by which audience reads slow and stop first (ADR-0041 §3, §5), the chat rate following with chat polling; its protocol README input changed by B1's version-paragraph wording only; matches the README, the schema snapshots and the examples; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) brought #726's parity fixture text into the protocol README's Contents (display capture screen, a webcam with its paired input), which this section doesn't describe; the body, snapshots and sources came in unchanged, so the YouTube bullet holds" }
@@ -1323,10 +1323,10 @@ stamp = { hash = "b3:59e8fa2b8094423d", by = "agent:obs-ui-thread", note = "args
 stamp = { hash = "b3:ef8658878d974e15", by = "agent:obs-ui-thread", note = "args.rs, run.rs and run/tests.rs add `font list` (query font.list, ADR-0092) printed as family, style and path, tested against the mock. Purpose describes the CLI generally, so it holds." }
 
 ["CRATE-jstream-cli#usage"."body"]
-stamp = { hash = "b3:dc8c51142e95ab85", by = "agent:claude", note = "#1072 output.set_path: usage lists output.set_path <output-id> <file-path> (protocol 0.74); renumbered to 0.74 by the release queue" }
+stamp = { hash = "b3:c1388b3d8544c814", by = "agent:claude", note = "#1072 output.set_path: usage lists output.set_path <output-id> <file-path> (protocol 0.74), and the scheme rule now names only the two URL commands, output.create and output.set_target" }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:7c5f07dcd813d250", by = "agent:claude", note = "#1072 output.set_path: usage lists output.set_path <output-id> <file-path> (protocol 0.75)" }
+stamp = { hash = "b3:7c5f07dcd813d250", by = "agent:claude", note = "#1072 output.set_path: args.rs parses output.set_path <output-id> <file-path> (protocol 0.74), with no scheme check on the path; test output_set_path_takes_a_file_path" }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/exit.rs"]
 stamp = { hash = "b3:16e79b530b6f8e0a" }
@@ -3348,7 +3348,7 @@ stamp = { hash = "b3:5fb43febc7970009", by = "agent:ab9c156e", note = """#486 ro
 stamp = { hash = "b3:fc19c48180f9c975", by = "agent:builder-core", note = "#843: limits.rs's Caps limiter makes a growth past the memory or table cap a trap (CapReached, Error::MemoryLimit in error.rs), a memory starting above the cap fails the load the same way, and a growth past the module's own maximum still answers -1; the limits paragraph, the tests list and Not here (core now saves plugins and holds grants to the manifest; the data folder and file imports aren't anywhere) say so" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:52560d1b467cf419", by = "agent:claude", note = "#1072 output.set_path: record output paragraph documents output.set_path; version note 0.74 with 0.72 and 0.73 left to earlier claims; snapshots and examples regenerated; renumbered to 0.74 by the release queue" }
+stamp = { hash = "b3:52560d1b467cf419", by = "agent:claude", note = "#1072 output.set_path: record output paragraph documents output.set_path; record paragraph says since 0.74; snapshots and examples regenerated; 0.74 as the release queue assigned" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -3366,10 +3366,10 @@ stamp = { hash = "b3:24e470838185e418" }
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:57ebbb5659cf64e7", by = "agent:claude", note = "#1072 output.set_path: record output paragraph documents output.set_path; version note 0.74 with 0.72 and 0.73 left to earlier claims; snapshots and examples regenerated; renumbered to 0.74 by the release queue" }
+stamp = { hash = "b3:57ebbb5659cf64e7", by = "agent:claude", note = "#1072 output.set_path: record output paragraph documents output.set_path; record paragraph says since 0.74; snapshots and examples regenerated; 0.74 as the release queue assigned" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:08ccac092edb1eef", by = "agent:claude", note = "#1072 output.set_path: record output paragraph documents output.set_path; version note 0.74 with 0.72 and 0.73 left to earlier claims; snapshots and examples regenerated; renumbered to 0.74 by the release queue" }
+stamp = { hash = "b3:08ccac092edb1eef", by = "agent:claude", note = "#1072 output.set_path: record output paragraph documents output.set_path; record paragraph says since 0.74; snapshots and examples regenerated; 0.74 as the release queue assigned" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/activity.rs"]
 stamp = { hash = "b3:7db55527ae06155a", by = "agent:claude", note = "Re-read Design against the PR's whole change: Queries documents activity.list {after_seq?, limit?} with ActivityEntry's fields, now_ms, the 100-entry limit, the 256-character summary cap, no event yet and plugins' Never scope; protocol.snap and examples.snap gain the query, its result, ActivityEntry, the fixtures and 0.51, and the schema text states 100 and 256. | merge: Merged main's #930 (stats.tick load, 0.48), #933 (preview.subscribe of a draft source, 0.49) and #932 (the capture_target parameter type, 0.50): Design gains EngineLoad, PreviewDraft and capture_target; this PR's activity.list bullet (with the 256-character cut) is unchanged, version.rs says 0.51, and protocol.snap and examples.snap were regenerated from main's with this PR's query, result and 0.51." }
@@ -3378,7 +3378,7 @@ stamp = { hash = "b3:7db55527ae06155a", by = "agent:claude", note = "Re-read Des
 stamp = { hash = "b3:d61ec77f35ffdcfa", by = "agent:builder-b8rnvf", note = "D9 0.42: new Monitors paragraph (bus.set_monitor, BusMonitor fields, taps, device never looked up, unknown tap refused on monitor.tap, the engine not playing them yet); bus.delete's undo and the touched-property and 0.19 EntityKind paragraphs name bus.set_monitor; snapshots carry the edit, the field and the types." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:320285ab88505e2a", by = "agent:claude", note = "#1072 output.set_path: record output paragraph documents output.set_path; version note 0.74 with 0.72 and 0.73 left to earlier claims; snapshots and examples regenerated; renumbered to 0.74 by the release queue" }
+stamp = { hash = "b3:320285ab88505e2a", by = "agent:claude", note = "#1072 output.set_path: record output paragraph documents output.set_path; record paragraph says since 0.74; snapshots and examples regenerated; 0.74 as the release queue assigned" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:b449d4b836765cf9", by = "agent:claude@session_01FGswf8bzTLhyPknQqo7a9J", note = "#973, whole PR: encoder.rs's dedicated doc says it is omitted when false, for an output whose video chain was empty when it started; a stream or recording with a video filter is dedicated, a virtual camera never (it opens no session). Protocol minor 0.60 (renumbered from 0.61 in the queue), no wire change." }
@@ -3399,7 +3399,7 @@ stamp = { hash = "b3:8f4e13671067e36d", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:bd74c870eba61001", by = "agent:claude", note = "#1072 output.set_path: record output paragraph documents output.set_path; version note 0.75 with 0.72-0.74 left to earlier claims; snapshots and examples regenerated" }
+stamp = { hash = "b3:bd74c870eba61001", by = "agent:claude", note = "#1072 output.set_path: record output paragraph documents output.set_path; record paragraph says since 0.74; snapshots and examples regenerated; 0.74 as the release queue assigned" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:1cddbdc6aa79a137", by = "agent:claude-3d-cameras", note = "New scene camera paragraph beside SceneOptions: fields, defaults, errors and their fields (camera.fov_deg, camera.target, camera) as camera_problem maps them, keyframe override rules, SceneInfo.camera; geometry list gains the camera form (w = D/f, up fallback, framing); live.set setters list gains scene.set_camera since 0.70. | kept from the merged side: Added the font.list entry to the queries list (remote_family, remote_style, absolute path, read once by the engine, added in 0.68). The snapshots changed by the version, the new query and result, and their examples. | kept from the merged side: Body: Live values now lists source.set_settings since 0.67 with the live-flag check and per-key parameters, and open question 4 says so too. live.rs, version.rs (0.67) and command.rs's doc match; examples.snap and protocol.snap changed only by the version number and live.set's description." }
@@ -3444,13 +3444,13 @@ stamp = { hash = "b3:fdca532445796c54", by = "agent:claude@session_01KvbMUfF6qWH
 stamp = { hash = "b3:dd66fae21fe8a668", by = "agent:ui-parity", note = "Version history: 0.65 for scene.set_options and SceneOptions' include_audio and background, then the merged 0.58 plugin.list line and 0.57; organisation paragraph: SceneOptions' two fields, their defaults, background's format and where it's drawn, never for a group, the keyframe refusal, include_audio on a group; scene.set_options takes the edit scope; protocol.snap and examples.snap regenerated on the merged code." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/output.rs"]
-stamp = { hash = "b3:058a20509ea722cf", by = "agent:claude", note = "#1072 output.set_path: record output paragraph documents output.set_path; version note 0.74 with 0.72 and 0.73 left to earlier claims; snapshots and examples regenerated; renumbered to 0.74 by the release queue" }
+stamp = { hash = "b3:058a20509ea722cf", by = "agent:claude", note = "#1072 output.set_path: record output paragraph documents output.set_path; record paragraph says since 0.74; snapshots and examples regenerated; 0.74 as the release queue assigned" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/parity.rs"]
-stamp = { hash = "b3:3ed6758696e9e584", by = "agent:claude", note = "#1072 output.set_path: record output paragraph documents output.set_path; version note 0.75 with 0.72-0.74 left to earlier claims; snapshots and examples regenerated" }
+stamp = { hash = "b3:3ed6758696e9e584", by = "agent:claude", note = "#1072 output.set_path: record output paragraph documents output.set_path; record paragraph says since 0.74; snapshots and examples regenerated; 0.74 as the release queue assigned" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/plugin.rs"]
-stamp = { hash = "b3:e2bb91762ea7f617", by = "agent:claude", note = "#1072 output.set_path: record output paragraph documents output.set_path; version note 0.75 with 0.72-0.74 left to earlier claims; snapshots and examples regenerated" }
+stamp = { hash = "b3:e2bb91762ea7f617", by = "agent:claude", note = "#1072 output.set_path: record output paragraph documents output.set_path; record paragraph says since 0.74; snapshots and examples regenerated; 0.74 as the release queue assigned" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/preview.rs"]
 stamp = { hash = "b3:1488376f7ff331d1", by = "agent:obs-ui-thread", note = "Design names Edit::ItemSetLocked, ItemInfo.locked, PreviewCodec::Png (byte 3) and PROTOCOL_VERSION 0.71 (ADR-0096); snapshots regenerated; plugin.rs classes item.set_locked and notes font.list's exposure (ADR-0096 §4). Renumbered from ADR-0093 and 0.69 after merging main: #1034 took ADR-0093, and open PRs claim 0.69 (#1041) and 0.70 (#1044). The merge brought #1034 (shader sources), which this section's lock and screenshot text doesn't touch." }
@@ -3468,13 +3468,13 @@ stamp = { hash = "b3:12085313843efe02", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:985b1fcce3e92b97", by = "agent:claude", note = "The presets paragraph now lists stinger among kind.list's transition kinds and gives its settings: scene (a scene reference or null to cut), cut_ms (default 500, at most the duration) and stagger_ms. Checked against transition.rs's descriptor; no op, wire type or version change." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:9ee2280d7179081f", by = "agent:claude", note = "#1072 output.set_path: record output paragraph documents output.set_path; version note 0.74 with 0.72 and 0.73 left to earlier claims; snapshots and examples regenerated; renumbered to 0.74 by the release queue" }
+stamp = { hash = "b3:9ee2280d7179081f", by = "agent:claude", note = "#1072 output.set_path: record output paragraph documents output.set_path; record paragraph says since 0.74; snapshots and examples regenerated; 0.74 as the release queue assigned" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/youtube.rs"]
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = """whole PR: the Events list adds youtube.stats {output_id, broadcast_id, concurrent_viewers?, likes?, views?} (0.38) and the YouTube section describes the event, the query's outputs and quota {used, daily, exhausted?, stats} with normal/slowed/stopped, and drops audience stats from "come later"; both schema snapshots changed only by the new types and 0.38; the B1 fix touched only the purpose's version paragraph; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) changed none of this section's inputs (the body, both snapshots and the source files came in as this branch had them); the youtube.stats and quota text holds""" }
 
 ["CRATE-jstream-protocol#purpose"."body"]
-stamp = { hash = "b3:aa0c0a5ba6f23c22", by = "agent:claude", note = "#1072 output.set_path: Edit::OutputSetPath, plugin class never, examples and parity cases; PROTOCOL_VERSION 0.74; renumbered to 0.74 by the release queue" }
+stamp = { hash = "b3:aa0c0a5ba6f23c22", by = "agent:claude", note = "#1072 output.set_path: Edit::OutputSetPath, plugin class never, examples and parity cases; PROTOCOL_VERSION 0.74; 0.74 as the release queue assigned" }
 
 ["CRATE-jstream-protocol#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
 stamp = { hash = "b3:55468c98f61fc0f9" }
@@ -3486,7 +3486,7 @@ stamp = { hash = "b3:7db55527ae06155a", by = "agent:claude", note = "Re-read Pur
 stamp = { hash = "b3:d61ec77f35ffdcfa", by = "agent:builder-b8rnvf", note = "D9 0.42: audio.rs gains BusMonitor {device, tap}, MonitorTap (pre_filters, post_filters, unknown skipped in the schema), BusMonitor::problem and MAX_MONITOR_DEVICE_LEN; BusInfo.monitor; Edit::BusSetMonitor named and classified (plugin.rs); edit list and Audio bullet updated; version paragraph says 0.42 for bus monitors; fixtures and parity cover set, change, removal, a deleted bus's monitor and three refusals." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:320285ab88505e2a", by = "agent:claude", note = "#1072 output.set_path: Edit::OutputSetPath, plugin class never, examples and parity cases; PROTOCOL_VERSION 0.74; renumbered to 0.74 by the release queue" }
+stamp = { hash = "b3:320285ab88505e2a", by = "agent:claude", note = "#1072 output.set_path: Edit::OutputSetPath, plugin class never, examples and parity cases; PROTOCOL_VERSION 0.74; 0.74 as the release queue assigned" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:b449d4b836765cf9", by = "agent:claude@session_01FGswf8bzTLhyPknQqo7a9J", note = "#973, whole PR: encoder.rs's dedicated doc says it is omitted when false, for an output whose video chain was empty when it started; a stream or recording with a video filter is dedicated, a virtual camera never (it opens no session). Protocol minor 0.60 (renumbered from 0.61 in the queue), no wire change." }
@@ -3507,7 +3507,7 @@ stamp = { hash = "b3:8f4e13671067e36d", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:bd74c870eba61001", by = "agent:claude", note = "#1072 output.set_path: Edit::OutputSetPath, plugin class never, examples and parity cases; PROTOCOL_VERSION 0.75" }
+stamp = { hash = "b3:bd74c870eba61001", by = "agent:claude", note = "#1072 output.set_path: Edit::OutputSetPath, plugin class never, examples and parity cases; PROTOCOL_VERSION 0.74; 0.74 as the release queue assigned" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:1cddbdc6aa79a137", by = "agent:claude-3d-cameras", note = "Live values list gains scene.set_camera; Edit list gains it; SceneInfo.camera noted (own override on a keyframe scene, per read.rs); geometry paragraph describes camera.rs (Vec3, SceneCamera::framing/validate, CameraView, the _seen functions); version note says 0.70. | kept from the merged side: Added font.list and FontInfo to the contents (query.rs, lib.rs, plugin.rs read class, fixtures.rs) and the 0.68 reason to the version paragraph for version.rs. | kept from the merged side: Edited the Live values contents bullet: is_live_adjustable (live.rs) now includes source.set_settings. version.rs is 0.67, stated in the version paragraph with the reason; command.rs's live.set doc names the new setter." }
@@ -3552,13 +3552,13 @@ stamp = { hash = "b3:fdca532445796c54", by = "agent:claude@session_01KvbMUfF6qWH
 stamp = { hash = "b3:dd66fae21fe8a668", by = "agent:ui-parity", note = "This PR adds SceneOptions (include_audio default true, background #rrggbb/#rrggbbaa default none) flattened into SceneInfo, Edit::SceneSetOptions (scene.set_options, edit scope in plugin.rs, named in command.rs), parse_rgba in organise.rs exported from lib.rs, fixtures with both options and parity filling them, and PROTOCOL_VERSION 0.65 (ADR-0089). Merged main's #974, whose plugin.list (0.58) the body lists; 0.65 stays above it." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/output.rs"]
-stamp = { hash = "b3:058a20509ea722cf", by = "agent:claude", note = "#1072 output.set_path: Edit::OutputSetPath, plugin class never, examples and parity cases; PROTOCOL_VERSION 0.74; renumbered to 0.74 by the release queue" }
+stamp = { hash = "b3:058a20509ea722cf", by = "agent:claude", note = "#1072 output.set_path: Edit::OutputSetPath, plugin class never, examples and parity cases; PROTOCOL_VERSION 0.74; 0.74 as the release queue assigned" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/parity.rs"]
-stamp = { hash = "b3:3ed6758696e9e584", by = "agent:claude", note = "#1072 output.set_path: Edit::OutputSetPath, plugin class never, examples and parity cases; PROTOCOL_VERSION 0.75" }
+stamp = { hash = "b3:3ed6758696e9e584", by = "agent:claude", note = "#1072 output.set_path: Edit::OutputSetPath, plugin class never, examples and parity cases; PROTOCOL_VERSION 0.74; 0.74 as the release queue assigned" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/plugin.rs"]
-stamp = { hash = "b3:e2bb91762ea7f617", by = "agent:claude", note = "#1072 output.set_path: Edit::OutputSetPath, plugin class never, examples and parity cases; PROTOCOL_VERSION 0.75" }
+stamp = { hash = "b3:e2bb91762ea7f617", by = "agent:claude", note = "#1072 output.set_path: Edit::OutputSetPath, plugin class never, examples and parity cases; PROTOCOL_VERSION 0.74; 0.74 as the release queue assigned" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/preview.rs"]
 stamp = { hash = "b3:1488376f7ff331d1", by = "agent:obs-ui-thread", note = "This PR adds Edit::ItemSetLocked, ItemInfo.locked, PreviewCodec::Png, a fixture edit and parity entry, plugin.rs's edit class for item.set_locked and a font.list exposure comment (ADR-0096 §4), and PROTOCOL_VERSION 0.71; all within the crate's purpose. The version paragraph now notes 0.69 and 0.70 are left to other changes." }
@@ -3576,7 +3576,7 @@ stamp = { hash = "b3:12085313843efe02", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:985b1fcce3e92b97", by = "agent:claude", note = "transition.rs gains the stinger kind (STINGER, exported from lib.rs) with scene, cut_ms and stagger_ms; the Transitions bullet now lists it. Re-read against builtin_kinds and the kinds test." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:9ee2280d7179081f", by = "agent:claude", note = "#1072 output.set_path: Edit::OutputSetPath, plugin class never, examples and parity cases; PROTOCOL_VERSION 0.74; renumbered to 0.74 by the release queue" }
+stamp = { hash = "b3:9ee2280d7179081f", by = "agent:claude", note = "#1072 output.set_path: Edit::OutputSetPath, plugin class never, examples and parity cases; PROTOCOL_VERSION 0.74; 0.74 as the release queue assigned" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/youtube.rs"]
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = "whole PR: contents list youtube.stats among the queries and events and AudienceStatsInfo, QuotaInfo and StatsPolling in youtube.rs; the version paragraph says 0.38 for YouTube audience stats and, after review B1, that 0.34 to 0.37 are assigned to other open bumps (#629, #642, #682, #653), which the PR API confirms are open, with only #653 on wave/m1-3; matches event.rs, query.rs, youtube.rs, lib.rs, version.rs and the fixtures; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) brought #726's Contents text on the parity fixture (a display capture screen never placed for no-audio cases, a webcam with its paired input); event.rs, fixtures.rs, lib.rs, query.rs, version.rs and youtube.rs came in unchanged, so the youtube contents and 0.38 version text hold" }
@@ -5520,7 +5520,7 @@ stamp = { hash = "b3:cbc148f78a6a98ff" }
 stamp = { hash = "b3:80e97f061fb2d527", by = "agent:claude", note = "Shortcut with --mcp, 127.0.0.1:4455, data-folder token, Claude Desktop config and the claude mcp add line (Command Prompt, with the PowerShell $env:APPDATA form) through jstream-cli mcp, per-client undo; matches desktop and CLI usage" }
 
 ["GETTING-STARTED#agents"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:dc8c51142e95ab85", by = "agent:claude", note = "#1072 output.set_path: CLI usage gained output.set_path; agent setup steps unchanged; still holds with the version at 0.74" }
+stamp = { hash = "b3:c1388b3d8544c814", by = "agent:claude", note = "#1072 output.set_path: CLI usage gained output.set_path and scoped its scheme rule to the URL commands; these steps use neither, so unchanged" }
 
 ["GETTING-STARTED#agents"."dep:apps/jstream-desktop/README.md#usage"]
 stamp = { hash = "b3:0c2a09f6ea00437b", by = "agent:claude", note = "Shortcut with --mcp, 127.0.0.1:4455, data-folder token, Claude Desktop config and the claude mcp add line (Command Prompt, with the PowerShell $env:APPDATA form) through jstream-cli mcp, per-client undo; matches desktop and CLI usage" }
@@ -5694,7 +5694,7 @@ stamp = { hash = "b3:3310840b33c3c51e", by = "agent:shader-source", note = "Re-r
 stamp = { hash = "b3:ff104372d728d024", by = "agent:claude-linux-daemon", note = "Re-read for the whole PR: Linux now runs the same steps as Windows (sink, set-key into the Secret Service else ~/.config/jstream/secrets, start, stats.tick, sink check, clear-key); without an H.264 encoder the start, live, events (states starting > failed) and stats.tick are SKIP with the daemon's reason, the sink too, and the snapshot and graceful stop still run; -RtmpUrl is no longer Windows only. Matches smoke.ps1; the script has not been run (no PowerShell here)" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:dc8c51142e95ab85", by = "agent:claude", note = "#1072 output.set_path: CLI usage gained output.set_path; smoke steps unchanged; still holds with the version at 0.74" }
+stamp = { hash = "b3:c1388b3d8544c814", by = "agent:claude", note = "#1072 output.set_path: CLI usage gained output.set_path and scoped its scheme rule to the URL commands; these steps use neither, so unchanged" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-daemon/README.md#usage"]
 stamp = { hash = "b3:3310840b33c3c51e", by = "agent:shader-source", note = "Re-read: daemon usage only gained a clause naming shader source kinds under --effects-dir (ADR-0093 part 2); nothing this runbook relies on changed." }
@@ -5706,7 +5706,7 @@ stamp = { hash = "b3:f8133a4bc39c3167", by = "agent:claude-linux-daemon", note =
 stamp = { hash = "b3:13c57061e7eadb1e", by = "agent:ui-parity", note = "Step 4 now says stats.tick lines come about once a second before and while live, and end with the load (program_frames about 30 a second while live, cpu_ms), matching the CLI's line and the 1/30 s base tick." }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:dc8c51142e95ab85", by = "agent:claude", note = "#1072 output.set_path: CLI usage gained output.set_path; go-live steps unchanged; still holds with the version at 0.74" }
+stamp = { hash = "b3:c1388b3d8544c814", by = "agent:claude", note = "#1072 output.set_path: CLI usage gained output.set_path and scoped its scheme rule to the URL commands; these steps use neither, so unchanged" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-daemon/README.md#usage"]
 stamp = { hash = "b3:3310840b33c3c51e", by = "agent:shader-source", note = "Re-read: daemon usage only gained a clause naming shader source kinds under --effects-dir (ADR-0093 part 2); nothing this runbook relies on changed." }

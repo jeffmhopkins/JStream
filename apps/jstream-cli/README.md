@@ -158,8 +158,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   which is the whole target of a generic RTMP output. `output.set_path <output-id>
   <file-path>` points a recording output at another file (protocol 0.74). The CLI has
   no form for creating a recording output or a YouTube-bound one yet, and none of protocol 0.23's YouTube
-  actions and queries. An argument without an `rtmp` or `rtmps` scheme is a usage
-  error, which leaves other spellings free for later output kinds; the engine checks
+  actions and queries. A URL argument of `output.create` or `output.set_target` without
+  an `rtmp` or `rtmps` scheme is a usage error, which leaves other spellings free for later output kinds; the engine checks
   the rest. Neither message repeats
   the URL.
 - **No undo or redo command.** Undo history belongs to a client and ends with its
