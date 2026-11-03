@@ -650,7 +650,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   ([ADR-0088](adr/0088-keyframe-scenes-override-item-effects.md)).
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
-  0.9, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
+  0.9, with `output.set_path` to change its file from 0.74, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
   `canvas.set_size` and `item.set_geometry` set the canvas and an item's box
   ([ADR-0022](adr/0022-item-transform-and-canvas.md), protocol 0.11), which deprecates
   `item.set_transform`; a geometry's `flip_h` and `flip_v` mirror its content (protocol
@@ -735,7 +735,16 @@ The wire format, versioning, error codes and compatibility policy are designed i
   a plugin enabled or disabled, with why the engine disabled it. Likewise
   `effect.enable` (0.61, #349) is for a person: it re-enables an effect-pack kind the
   engine quarantined because a GPU device loss was blamed on it, which the event
-  `gpu.device_lost` reports and `kind.list` marks (`quarantined`). A plugin calls the API
+  `gpu.device_lost` reports and `kind.list` marks (`quarantined`). The effect packs
+  themselves are not for a person only: the actions `pack.write` and `pack.delete` and
+  the queries `pack.list` and `pack.read` (0.72,
+  [ADR-0097](adr/0097-agents-write-effect-packs.md)) write, remove, list and read a pack
+  in the engine's packs folder, so an agent can author a shader over MCP. A write is
+  checked, staged in `.staging/<pack>`, loaded there, and swapped in with two renames
+  while the pack watcher is held, so it loads at once and a failed one keeps the old
+  version; `pack.list` names who last wrote each pack, and every write and delete is in
+  the activity log. Plugins get `pack.list` and `pack.read` (class `read`), never the
+  writes. A plugin calls the API
   through a scoped `Control` that checks each call against its grant, using
   `jstream-protocol`'s table of every command's class (`read`, `edit`, `live`, `outputs`
   or never), and the hosts and files a call's settings name against the grant's hosts
@@ -816,6 +825,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   size, runtime state ([ADR-0022](adr/0022-item-transform-and-canvas.md) §4);
   `activity.list` (protocol 0.51) → the engine's last 100 audit entries, each with a
   sentence saying what it did ([ADR-0083](adr/0083-activity-log-over-the-protocol.md));
+  `profile.get` (protocol 0.73, [ADR-0103](adr/0103-per-item-performance-profile.md)) →
+  where the frame time went over the last few seconds: each drawing thread's frame time
+  against the budget, the costliest units (a source's upload, a capture, a chain, a
+  scene pass, the composite), each source's paints, looks and builds, the planner, and
+  each named thread's CPU;
   audio levels are the `meters.tick` event, not a query).
 - **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops, load, chains, outputs}`, `meters.tick`,
   `source.size_changed` (protocol 0.40), …).
@@ -924,7 +938,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`activity`, `audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `ui_settings`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  (`activity`, `audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `ui_settings`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
@@ -933,7 +947,10 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   (ADR-0069 G1). And for the `effect.*` ops: only a person re-enables an effect pack
   quarantined after a GPU device loss
   ([ADR-0087](adr/0087-effect-quarantine-after-gpu-device-loss.md) §4), though the
-  `gpu.device_lost` event that reports it reaches agents.
+  `gpu.device_lost` event that reports it reaches agents. The `pack.*` ops are not
+  held back: an agent may write, read and delete an effect pack's WGSL
+  ([ADR-0097](adr/0097-agents-write-effect-packs.md)), and `pack.list` shows a person
+  which client last wrote each.
 - **Events** reach agents through the `events` tool, which returns the engine's events
   after a cursor from a bounded buffer and reports any it dropped
   ([ADR-0036](adr/0036-mcp-events-polling-tool.md)). The high-rate `stats.tick` is kept
@@ -954,13 +971,17 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
   MCP revisions and transports are in
   [jstream-mcp › Design](../crates/jstream-mcp/README.md#design).
+- **Profiling:** the `profile` tool's `profile.get` tells an agent where a frame's time
+  goes, by thread, scene, item, chain and source, so it can find what makes a scene slow,
+  change it, and measure again
+  ([ADR-0103](adr/0103-per-item-performance-profile.md)).
 - **Preview streams** need a binary channel, which MCP doesn't have, so the `preview`
   tool's `preview.subscribe` fails with `action_failed`; an agent looks with
   `video.snapshot`.
 - **Annotations and third-party text:** every tool carries MCP tool annotations derived
   from its ops (`readOnlyHint` for queries only; `destructiveHint` for a tool with an
   action undo can't take back or a history call, today `device`, `history`, `output`,
-  `pairing` and `ui_settings`;
+  `pack`, `pairing` and `ui_settings`;
   `openWorldHint` for `output`, `source`, whose `browser` kind loads any web page, and
   `batch`), so a client can ask the user before an agent retargets an output, sets its
   key, goes live, steps through undo or points a browser source at a page, and lets

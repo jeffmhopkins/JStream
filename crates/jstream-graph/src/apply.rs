@@ -954,6 +954,27 @@ fn apply_edit(
                 target: old,
             }])
         }
+        Edit::OutputSetPath { output_id, path } => {
+            let output = state
+                .outputs
+                .get_mut(output_id)
+                .ok_or_else(|| not_found(EntityKind::Output, output_id.as_str()))?;
+            if let Some(problem) = record_path_problem(path) {
+                return Err(invalid(at, "path", problem));
+            }
+            let OutputKind::Record { path: current, .. } = &mut output.kind else {
+                return Err(invalid(
+                    at,
+                    "output_id",
+                    "the output is not a recording output",
+                ));
+            };
+            let old = std::mem::replace(current, path.clone());
+            Ok(vec![Edit::OutputSetPath {
+                output_id: output_id.clone(),
+                path: old,
+            }])
+        }
         Edit::OutputDelete { output_id } => {
             if running.contains(output_id) {
                 return Err(invalid(

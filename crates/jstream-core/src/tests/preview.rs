@@ -503,7 +503,7 @@ fn recording_captures(
     let draw: OpenPreviewDraw = Arc::new(move || {
         let seen = seen_tx.clone();
         let draw: PreviewDraw = Box::new(
-            move |shot: &Shot, _: &LiveParams, captures: &dyn Captures, size, _, out| {
+            move |shot: &Shot, _: &LiveParams, captures: &dyn Captures, size, _, out, _| {
                 let drawn: Vec<CaptureSpec> = shot
                     .captures()
                     .iter()

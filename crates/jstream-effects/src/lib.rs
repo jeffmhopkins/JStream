@@ -27,10 +27,10 @@ mod watch;
 
 pub use error::PackError;
 pub use manifest::{MAX_EFFECTS, MAX_ID_LEN, MAX_IMAGES, MAX_PARAMS, SOURCE_SIDE};
-pub use pack::{Effect, MANIFEST, MAX_MANIFEST_BYTES, MAX_SHADER_BYTES, Pack};
+pub use pack::{Effect, MANIFEST, MAX_MANIFEST_BYTES, MAX_SHADER_BYTES, Pack, manifest_pack_id};
 pub use shader::{FieldType, Layout, MAX_VALUE_BYTES};
 pub use source::{AUDIO_BANDS, MAX_IMAGE_BYTES, MAX_IMAGE_SIDE, ShaderSource};
-pub use watch::{Changes, DEFAULT_POLL_INTERVAL, KindChange, LOAD_THREAD, PackWatcher};
+pub use watch::{Changes, DEFAULT_POLL_INTERVAL, KindChange, LOAD_THREAD, PackWatcher, load_pack};
 
 #[cfg(test)]
 mod source_tests;
