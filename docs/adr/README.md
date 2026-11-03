@@ -106,5 +106,4 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0090](0090-a-grant-acknowledges-the-request-its-client-saw.md) | A plugin grant acknowledges the request its client was shown | accepted | agent |  |
 | [ADR-0091](0091-source-settings-as-live-values.md) | A source's live settings are live values, so a Properties dialog applies as you edit | accepted | agent |  |
 | [ADR-0093](0093-shader-sources-from-effect-packs.md) | Shader sources from effect packs | accepted | agent |  |
-| [ADR-0095](0095-agents-write-effect-packs.md) | Agents write effect packs over the protocol and MCP | proposed | maintainer |  |
 <!-- @generated end adr-index -->

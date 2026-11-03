@@ -28,8 +28,9 @@ needs a full-resolution copy and a blur per layer. A shader computes the same st
 analytically from time, on the engine's GPU, in the same frame as the compositor.
 
 Agents can't write a pack either: no command reaches the packs folder. Whether they may
-is a security-posture question, so it is decided apart, in
-[ADR-0095](0095-agents-write-effect-packs.md); this ADR doesn't depend on its answer.
+is a security-posture question for the maintainer
+([ADR-0043](0043-narrow-maintainer-tier.md)), so it is left to an ADR of its own, and
+nothing here depends on its answer.
 
 <a id="decision"></a>
 ## Decision

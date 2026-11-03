@@ -2112,7 +2112,7 @@ stamp = { hash = "b3:56b6301e2e6a132b" }
 stamp = { hash = "b3:b5397b5d6407b040" }
 
 ["CRATE-jstream-effects#purpose"."dep:docs/adr/0093-shader-sources-from-effect-packs.md"]
-stamp = { hash = "b3:273f23eb7558afdb", by = "agent:shader-source", note = "ADR-0093 now leaves pack writing to ADR-0095 and adds the layer cap, which is render's; this section's manifest, header, slots, watcher and tests text still matches source.rs, manifest.rs, shader.rs and watch.rs" }
+stamp = { hash = "b3:ff11f88bdaa6047b", by = "agent:shader-source", note = "ADR-0093 now leaves pack writing to a separate maintainer-tier ADR and adds the layer cap (render's); this section's manifest, header, slots, watcher and tests text still matches source.rs, manifest.rs, shader.rs and watch.rs" }
 
 ["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/error.rs"]
 stamp = { hash = "b3:85654e65cbac5964", by = "agent:shader-source", note = "added the Shader sources paragraphs ([[source]] fields, scene params, images and limits, the generated per-pass header and its helpers, slots, errors naming common or pass file, watcher stamps and diff, tests); manifest limits now count effects and sources together; deps add png/zune for images; checked against manifest.rs, source.rs, shader.rs validate_parts, pack.rs, watch.rs" }
