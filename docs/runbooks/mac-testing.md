@@ -76,8 +76,9 @@ updates what changed:
 2. **Apple's Command Line Tools**, through `xcode-select --install`, for the linker and
    git.
 3. **Rust:** rustup, if missing, installed without touching the shell profile. The
-   build then runs `rustup toolchain install` in the checkout, which installs the
-   toolchain the repository's `rust-toolchain.toml` pins.
+   build then installs the toolchain the repository's `rust-toolchain.toml` pins, by
+   its channel name, which every rustup accepts, and the `wasm32-unknown-unknown` target
+   the UI needs.
 4. **Source:** a clone in `~/Library/Application Support/JStream-build/src`, checked
    out at `--ref`, else the newest release tag that has the installer, else `main`.
    `--source <dir>` builds a checkout as it is instead.
@@ -103,7 +104,8 @@ allows. `jstream.sh` pipes it to `clipboard.js` (JavaScript for Automation) on s
 never on a command line. `clipboard.js` writes it for this Mac only
 (`NSPasteboardContentsCurrentHostOnly`, so not to Universal Clipboard), marks it
 concealed and transient (the nspasteboard.org `org.nspasteboard.*` types clipboard managers honour), and
-clears it after two minutes unless something else was copied since. The threat model
+clears it after two minutes unless something else was copied since. It ignores the
+SIGHUP a closed Terminal window sends, so it still clears after JStream stops. The threat model
 records this ([Server › Accepted](../security/threat-model.md#server)).
 
 `--uninstall` removes the launcher and the build folder; `--purge` also removes the

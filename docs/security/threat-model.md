@@ -147,8 +147,9 @@ ambient credential until it is closed. The macOS tester launcher
 ([mac-testing](../runbooks/mac-testing.md#script)) puts the token on the clipboard so the
 user can paste it into that prompt: for this Mac only (not Universal Clipboard), marked
 concealed and transient so clipboard managers skip it, and cleared after two minutes
-unless something else was copied. Until then any process of the user's can read it, as
-it can read the token file. Failed tokens are not delayed or locked out:
+unless something else was copied, even when the window is closed first. Until then any
+app the user runs can read it, sandboxed ones too (which can't read the token file),
+and anything the user pastes into gets it. Failed tokens are not delayed or locked out:
 256 bits can't be guessed, and a lockout would let any local process shut out the real
 clients.
 

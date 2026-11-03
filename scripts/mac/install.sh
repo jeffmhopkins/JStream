@@ -233,9 +233,14 @@ ui_tools() {
 build() {
     step "Building (the first build takes a while; updates are much faster)"
     local started=$SECONDS
-    # The pinned toolchain from rust-toolchain.toml, explicitly: rustup 1.28.0 stopped
-    # installing it on the first cargo call.
-    (cd "$SRC" && rustup toolchain install)
+    # The pinned toolchain, by name: rustup 1.28.0 stopped installing it on the first
+    # cargo call, and rustup before 1.28 needs the name. Its components and targets then
+    # come from rust-toolchain.toml on the first cargo call.
+    local channel
+    channel=$(sed -n 's/^channel = "\(.*\)"/\1/p' "$SRC/rust-toolchain.toml")
+    [ -n "$channel" ] || die "no channel in $SRC/rust-toolchain.toml"
+    rustup toolchain install --profile minimal "$channel"
+    rustup target add --toolchain "$channel" wasm32-unknown-unknown
     (cd "$SRC" && cargo fetch --locked)
     UI_DIST="$BUILD_DIR/ui-dist"
     rm -rf "$UI_DIST"

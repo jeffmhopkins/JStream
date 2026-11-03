@@ -55,8 +55,12 @@ if [ -n "${JSTREAM_NO_BROWSER:-}" ]; then
     echo "$url"
 else
     # The token goes to clipboard.js on stdin, never on a command line. It keeps the
-    # copy to this Mac and clears it after two minutes; it runs in the background.
-    tr -d '[:space:]' <"$data/token" | osascript -l JavaScript "$here/clipboard.js" >/dev/null 2>&1 &
+    # copy to this Mac and clears it after two minutes; it runs in the background,
+    # ignoring the SIGHUP a closed window sends, so it still clears after JStream stops.
+    (
+        trap '' HUP
+        tr -d '[:space:]' <"$data/token" | osascript -l JavaScript "$here/clipboard.js" >/dev/null 2>&1
+    ) &
     open "$url"
     cat <<EOF
 
