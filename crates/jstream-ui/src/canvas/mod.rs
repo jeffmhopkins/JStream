@@ -17,6 +17,7 @@
 //!
 //! Docs: crates/jstream-ui/README.md#canvas
 
+pub mod camera;
 pub mod crop;
 pub mod group;
 pub mod live;
@@ -39,7 +40,7 @@ use crop::{CropGesture, Picture};
 use futures_util::StreamExt;
 use group::{GROUP_ROTATE_OFFSET, GroupGesture, GroupKind};
 use jstream_control::protocol::{
-    Crop, GestureId, HistoryOp, ItemGeometry, ItemId, Placed, Rev, SceneId,
+    CameraView, Crop, GestureId, HistoryOp, ItemGeometry, ItemId, Placed, Rev, SceneCamera, SceneId,
 };
 use leptos::ev;
 use leptos::prelude::*;
@@ -92,6 +93,16 @@ enum Action {
     },
     /// Moves, scales or rotates every selected item.
     Group(GroupGesture),
+    /// Turns a 3D scene's camera about its target, or with `dolly` moves it along its
+    /// line of sight (ADR-0094): Alt-drag, with Shift for the dolly.
+    Orbit {
+        /// The camera when the drag started.
+        start: SceneCamera,
+        /// Where the press was.
+        origin: Point,
+        /// Whether the drag dollies rather than orbits.
+        dolly: bool,
+    },
     /// Draws a marquee from `from`: the items it touches are selected, with `base`.
     Marquee {
         /// Where the press was.
@@ -114,6 +125,9 @@ struct Drag {
     pointer: Pointer,
     /// The lines it snaps to, fixed when the drag starts.
     targets: SnapTargets,
+    /// In a 3D scene, the camera and the box whose depth plane a move follows: the
+    /// pointer is taken to that plane before the gesture sees it, and nothing snaps.
+    plane: Option<(CameraView, ItemGeometry)>,
 }
 
 /// The commits the preview waits for: how many are in flight, and the latest revision
@@ -184,6 +198,8 @@ pub fn Canvas() -> impl IntoView {
     // What the drag in progress does, for the readout.
     let active = RwSignal::new(None::<Active>);
     let marquee = RwSignal::new(None::<(Point, Point)>);
+    // The camera an orbit or dolly shows, until the collection has it.
+    let camera_preview = RwSignal::new(None::<SceneCamera>);
     let hovered = RwSignal::new(None::<ItemId>);
     let cursor = RwSignal::new("default");
     let stage = NodeRef::<leptos::html::Div>::new();
@@ -393,6 +409,50 @@ pub fn Canvas() -> impl IntoView {
         });
     };
 
+    // Sends an orbit's camera as one undoable `scene.set_camera`, ending its gesture,
+    // and shows it until the collection has it; a failure drops it.
+    let commit_camera =
+        move |camera: SceneCamera, scene_id: SceneId, gesture: Option<GestureId>| {
+            let Some(open) = session.and_then(|s| s.get()) else {
+                camera_preview.set(None);
+                return;
+            };
+            spawn_local(async move {
+                let result =
+                    model::commit_camera(&*open.control, scene_id, camera, gesture.clone()).await;
+                if let Err(error) = result {
+                    problem(&error);
+                    if let Some(gesture) = gesture {
+                        let _cancelled = model::live_cancel(&*open.control, gesture).await;
+                    }
+                    if camera_preview.try_get_untracked() == Some(Some(camera)) {
+                        camera_preview.try_set(None);
+                    }
+                }
+                drop(open);
+            });
+        };
+    // The collection has the orbit's camera, or another scene is shown: stop showing it.
+    Effect::new(move |_| {
+        let shown = layout.with(|l| l.as_ref().map(|l| l.camera));
+        if drag.with_value(|d| {
+            matches!(
+                d,
+                Some(Drag {
+                    action: Action::Orbit { .. },
+                    ..
+                })
+            )
+        }) {
+            return;
+        }
+        if let Some(preview) = camera_preview.get_untracked()
+            && shown.is_none_or(|camera| camera == Some(preview) || camera.is_none())
+        {
+            camera_preview.set(None);
+        }
+    });
+
     // Undo and redo. With nothing to undo or redo, nothing happens; the Edit menu has
     // the same commands.
     let step = move |op: HistoryOp| {
@@ -429,6 +489,22 @@ pub fn Canvas() -> impl IntoView {
         let size = current.item(id)?.source_size?;
         Picture::of(geometry, size, latest_crop(current, id))
     };
+    // The camera a 3D scene is seen through as the canvas shows it, the dragged one
+    // first (ADR-0094); `None` in a 2D scene.
+    let seen_in = move |current: &Layout| -> Option<CameraView> {
+        camera::view(
+            camera_preview.get_untracked().or(current.camera),
+            current.canvas,
+        )
+    };
+    // The item under `point`: the topmost box, or in a 3D scene the one the engine
+    // draws on top through the camera.
+    let hit = move |current: &Layout, point: Point| -> Option<ItemId> {
+        match seen_in(current) {
+            Some(view) => camera::topmost_at(current.boxes(), &view, point).cloned(),
+            None => transform::topmost_at(current.boxes(), point).cloned(),
+        }
+    };
     // The handle of the one selected item under `point`: in crop mode the resize
     // handles sit on its picture and crop, with Alt the box's do; the picture is given
     // when the handle crops. With no picture known there is nothing to crop, so the
@@ -440,6 +516,11 @@ pub fn Canvas() -> impl IntoView {
                               point: Point,
                               alt: bool|
           -> Option<(Handle, Option<Picture>)> {
+        // A 3D scene's boxes have no handles: their size, angles and depth are edited in
+        // the Transform panel.
+        if current.camera.is_some() {
+            return None;
+        }
         let picture = picture_of(current, id, geometry);
         if crop_mode.get_untracked()
             && let Some(picture) = picture
@@ -487,11 +568,35 @@ pub fn Canvas() -> impl IntoView {
     let pointer_at = move |event: &ev::PointerEvent| canvas_at(event.client_x(), event.client_y());
 
     // Starts a drag: captures the pointer and remembers what it does.
-    let start = move |event: &ev::PointerEvent, point: Point, action: Action, current: &Layout| {
+    let start = move |event: &ev::PointerEvent,
+                      point: Point,
+                      mut action: Action,
+                      current: &Layout| {
         let moving: Vec<ItemId> = match &action {
             Action::One { item_id, .. } | Action::Crop { item_id, .. } => vec![item_id.clone()],
             Action::Group(gesture) => gesture.starts.iter().map(|(id, _)| id.clone()).collect(),
-            Action::Marquee { .. } => Vec::new(),
+            Action::Marquee { .. } | Action::Orbit { .. } => Vec::new(),
+        };
+        // In a 3D scene a move follows the pointer on the moved box's depth plane, so
+        // the gesture starts from the plane point under the press.
+        let seen = seen_in(current);
+        let plane = match (&mut action, seen) {
+            (Action::One { gesture, .. }, Some(view)) if gesture.kind == GestureKind::Move => {
+                let start = gesture.start;
+                camera::on_plane(&start, &view, point).map(|origin| {
+                    gesture.origin = origin;
+                    (view, start)
+                })
+            }
+            (Action::Group(gesture), Some(view)) if gesture.kind == GroupKind::Move => {
+                gesture.starts.first().map(|(_, g)| *g).and_then(|start| {
+                    camera::on_plane(&start, &view, point).map(|origin| {
+                        gesture.origin = origin;
+                        (view, start)
+                    })
+                })
+            }
+            _ => None,
         };
         let targets = SnapTargets::new(
             current.canvas,
@@ -507,14 +612,14 @@ pub fn Canvas() -> impl IntoView {
             Action::One { gesture, .. } => Some(Active::One(gesture.kind)),
             Action::Crop { .. } => Some(Active::Crop),
             Action::Group(gesture) => Some(Active::Group(gesture.kind)),
-            Action::Marquee { .. } => None,
+            Action::Marquee { .. } | Action::Orbit { .. } => None,
         });
         // A box drag opens a gesture, so the output follows it before the drop. On a
         // keyframe scene its values are the keyframe's (protocol 0.53, #846): they name
         // the keyframe, as its commit does.
         let gesture = match (&action, session, current.scene.as_ref()) {
             (
-                Action::One { .. } | Action::Crop { .. } | Action::Group(_),
+                Action::One { .. } | Action::Crop { .. } | Action::Group(_) | Action::Orbit { .. },
                 Some(session),
                 Some((scene_id, _)),
             ) => {
@@ -531,6 +636,7 @@ pub fn Canvas() -> impl IntoView {
             action,
             pointer: Pointer::new(point),
             targets,
+            plane,
         }));
     };
 
@@ -550,9 +656,24 @@ pub fn Canvas() -> impl IntoView {
         event.prevent_default();
         let selection = selected_boxes(&current);
         let shift = event.shift_key();
+        // A locked item in the selection gives it no handles (ADR-0096).
+        let held = selection.iter().any(|(id, _)| current.is_locked(id));
+        // Alt-drag in a 3D scene orbits its camera, with Shift dollies it.
+        if event.alt_key()
+            && let Some(camera) = camera_preview.get_untracked().or(current.camera)
+        {
+            let orbit = Action::Orbit {
+                start: camera,
+                origin: point,
+                dolly: shift,
+            };
+            start(&event, point, orbit, &current);
+            return;
+        }
         // A handle of the selection: the group's when several items are selected, else
-        // the one item's.
-        if selection.len() > 1 {
+        // the one item's. A 3D scene's boxes have none.
+        let flat = current.camera.is_none() && !held;
+        if flat && selection.len() > 1 {
             let bounds = Bounds::around(selection.iter().map(|(_, g)| g));
             if let Some(handle) = bounds.and_then(|b| group::handle_at(b, point, fit))
                 && let Some(gesture) = GroupGesture::new(handle.into(), selection.clone(), point)
@@ -560,7 +681,8 @@ pub fn Canvas() -> impl IntoView {
                 start(&event, point, Action::Group(gesture), &current);
                 return;
             }
-        } else if let Some((item_id, geometry)) = selection.first()
+        } else if flat
+            && let Some((item_id, geometry)) = selection.first()
             && let Some((handle, picture)) =
                 single_handle(&current, item_id, geometry, fit, point, event.alt_key())
         {
@@ -588,7 +710,7 @@ pub fn Canvas() -> impl IntoView {
             start(&event, point, action, &current);
             return;
         }
-        let Some(hit) = transform::topmost_at(current.boxes(), point).cloned() else {
+        let Some(hit) = hit(&current, point) else {
             let base = if shift {
                 chosen.get_untracked()
             } else {
@@ -612,7 +734,7 @@ pub fn Canvas() -> impl IntoView {
             studio.toggle_item(&hit);
             return;
         }
-        let moving: Vec<(ItemId, ItemGeometry)> = if was_selected {
+        let mut moving: Vec<(ItemId, ItemGeometry)> = if was_selected {
             selection
         } else if shift {
             studio.toggle_item(&hit);
@@ -626,7 +748,10 @@ pub fn Canvas() -> impl IntoView {
                 .into_iter()
                 .collect()
         };
+        // The click selects a locked item, but a drag moves only the unlocked ones.
+        moving.retain(|(id, _)| !current.is_locked(id));
         let action = match moving.as_slice() {
+            [] => return,
             [(item_id, geometry)] => Action::One {
                 item_id: item_id.clone(),
                 gesture: Gesture {
@@ -650,7 +775,10 @@ pub fn Canvas() -> impl IntoView {
             return;
         };
         let selection = selected_boxes(&current);
-        let handle = if selection.len() > 1 {
+        let held = selection.iter().any(|(id, _)| current.is_locked(id));
+        let handle = if held || current.camera.is_some() {
+            None
+        } else if selection.len() > 1 {
             Bounds::around(selection.iter().map(|(_, g)| g))
                 .and_then(|b| group::handle_at(b, point, fit))
                 .map(|h| (h, false))
@@ -659,11 +787,12 @@ pub fn Canvas() -> impl IntoView {
                 single_handle(&current, id, g, fit, point, alt).map(|(h, p)| (h, p.is_some()))
             })
         };
-        let under = transform::topmost_at(current.boxes(), point).cloned();
+        let under = hit(&current, point);
         let on_selected = under
             .as_ref()
-            .is_some_and(|id| selection.iter().any(|(s, _)| s == id));
+            .is_some_and(|id| selection.iter().any(|(s, _)| s == id) && !current.is_locked(id));
         let next = match handle {
+            None if alt && current.camera.is_some() => "grab",
             Some((_, true)) => "crosshair",
             Some((handle, false)) => handle_cursor(handle),
             None if on_selected => "move",
@@ -689,22 +818,58 @@ pub fn Canvas() -> impl IntoView {
         let modifiers = Modifiers {
             ctrl: event.ctrl_key() || event.meta_key(),
         };
-        let targets = snapping.get_untracked().then_some(&current.targets);
+        let plane = current.plane;
+        let targets = (snapping.get_untracked() && plane.is_none()).then_some(&current.targets);
         let tolerance = fit.canvas_len(SNAP_DISTANCE);
+        // The pointer as a move follows it: on the moved box's depth plane in a 3D scene.
+        let follow = |at: Point| match &plane {
+            Some((view, start)) => camera::on_plane(start, view, at),
+            None => Some(at),
+        };
         match &mut current.action {
+            Action::Orbit {
+                start,
+                origin,
+                dolly,
+            } => {
+                let dx = (point.x - origin.x) * fit.scale;
+                let dy = (point.y - origin.y) * fit.scale;
+                let moved = if *dolly {
+                    camera::dolly(*start, dy)
+                } else {
+                    camera::orbit(*start, dx, dy)
+                };
+                camera_preview.set(Some(moved));
+                live.with_value(|l| l.iter().for_each(|l| l.show_camera(moved)));
+            }
             Action::Marquee { from, to, base } => {
                 *to = point;
                 marquee.set(Some((*from, *to)));
                 let hits = layout.with_untracked(|l| {
-                    l.as_ref()
-                        .map(|l| group::marquee(l.boxes(), *from, *to))
-                        .unwrap_or_default()
+                    let Some(l) = l.as_ref() else {
+                        return Vec::new();
+                    };
+                    // A 3D scene's boxes are touched where the camera shows them.
+                    match seen_in(l) {
+                        Some(view) => {
+                            let shown: Vec<(ItemId, ItemGeometry)> = l
+                                .boxes()
+                                .filter_map(|(id, g)| {
+                                    Some((id.clone(), camera::screen_box(g, &view)?))
+                                })
+                                .collect();
+                            group::marquee(shown.iter().map(|(id, g)| (id, g)), *from, *to)
+                        }
+                        None => group::marquee(l.boxes(), *from, *to),
+                    }
                 });
                 studio.select_items(base.iter().cloned().chain(hits));
             }
             Action::One { item_id, gesture } => {
                 let at = current.pointer.follow(point, event.shift_key());
-                if let Some(update) = gesture.update(at, modifiers, targets, tolerance) {
+                if let Some(at) = follow(at)
+                    && let Some(update) = gesture.update(at, modifiers, targets, tolerance)
+                {
                     let placed = vec![(item_id.clone(), update.geometry)];
                     live.with_value(|l| l.iter().for_each(|l| l.show(placed.clone(), Vec::new())));
                     show(placed);
@@ -728,7 +893,9 @@ pub fn Canvas() -> impl IntoView {
             }
             Action::Group(gesture) => {
                 let at = current.pointer.follow(point, event.shift_key());
-                if let Some(update) = gesture.update(at, modifiers, targets, tolerance) {
+                if let Some(at) = follow(at)
+                    && let Some(update) = gesture.update(at, modifiers, targets, tolerance)
+                {
                     live.with_value(|l| {
                         l.iter()
                             .for_each(|l| l.show(update.geometries.clone(), Vec::new()));
@@ -750,6 +917,32 @@ pub fn Canvas() -> impl IntoView {
         guides.set(Vec::new());
         marquee.set(None);
         let (starts, crop_starts): live::Values = match finished.action {
+            Action::Orbit { start, .. } => {
+                let gesture = live.with_value(Clone::clone);
+                live.set_value(None);
+                let moved = camera_preview
+                    .get_untracked()
+                    .filter(|c| keep && *c != start);
+                match (moved, gesture) {
+                    (Some(camera), Some(gesture)) => {
+                        gesture.commit(move |scene, ending| commit_camera(camera, scene, ending));
+                    }
+                    (Some(camera), None) => {
+                        if let Some(scene) = layout.with_untracked(|l| {
+                            l.as_ref().and_then(|l| l.scene.clone()).map(|(id, _)| id)
+                        }) {
+                            commit_camera(camera, scene, None);
+                        }
+                    }
+                    (None, gesture) => {
+                        if let Some(gesture) = gesture {
+                            gesture.cancel();
+                        }
+                        camera_preview.set(None);
+                    }
+                }
+                return;
+            }
             Action::Marquee { from, to, base } => {
                 if !keep {
                     studio.select_items(base);
@@ -899,6 +1092,7 @@ pub fn Canvas() -> impl IntoView {
                 };
                 let moved: Vec<(ItemId, ItemGeometry)> = selected_boxes(&current)
                     .into_iter()
+                    .filter(|(id, _)| !current.is_locked(id))
                     .filter_map(|(id, start)| Some((id, transform::nudge(&start, dx, dy)?)))
                     .collect();
                 if moved.is_empty() {
@@ -916,10 +1110,7 @@ pub fn Canvas() -> impl IntoView {
         let Some((_, point)) = canvas_at(event.client_x(), event.client_y()) else {
             return;
         };
-        let hit = layout.with_untracked(|l| {
-            l.as_ref()
-                .and_then(|l| transform::topmost_at(l.boxes(), point).cloned())
-        });
+        let hit = layout.with_untracked(|l| l.as_ref().and_then(|l| hit(l, point)));
         match (hit, item_cx) {
             (Some(hit), Some(cx)) => cx.properties(hit),
             (Some(hit), None) => {
@@ -947,7 +1138,7 @@ pub fn Canvas() -> impl IntoView {
         let hit = at.and_then(|(_, point)| {
             layout.with_untracked(|l| {
                 let l = l.as_ref()?;
-                let hit = transform::topmost_at(l.boxes(), point)?.clone();
+                let hit = hit(l, point)?;
                 Some((l.scene.as_ref()?.0.clone(), hit))
             })
         });
@@ -1018,6 +1209,12 @@ pub fn Canvas() -> impl IntoView {
             let props_scene = scene.clone();
             vec![
                 crate::projector::pop_out(studio, scene.clone()),
+                crate::screenshot::entry(
+                    "Screenshot (scene)",
+                    studio,
+                    session,
+                    scene.clone().map(crate::screenshot::Shot::Scene),
+                ),
                 Entry::Sep,
                 select,
                 snap,
@@ -1127,6 +1324,14 @@ pub fn Canvas() -> impl IntoView {
             height as f32 * fit.scale,
         ))
     };
+    // The camera the boxes are drawn through, in a 3D scene: the dragged one first.
+    let seen_now = move || -> Option<CameraView> {
+        let dragged = camera_preview.get();
+        layout.with(|l| {
+            let l = l.as_ref()?;
+            camera::view(dragged.or(l.camera), l.canvas)
+        })
+    };
     // Screen pixels in canvas units, for handle sizes and label text.
     let px = move |screen: f32| viewport.get().map_or(screen, |v| v.canvas_len(screen));
 
@@ -1136,6 +1341,7 @@ pub fn Canvas() -> impl IntoView {
         let picked = chosen.get();
         let under = hovered.get();
         let pictured = pictured();
+        let seen = seen_now();
         shown()
             .into_iter()
             .filter_map(|(id, name, geometry, visible)| {
@@ -1148,10 +1354,16 @@ pub fn Canvas() -> impl IntoView {
                         "1",
                     )
                 };
-                let points = outline(&geometry);
+                // Through the camera in a 3D scene, so the box lies on its picture.
+                let (points, bounds) = match &seen {
+                    Some(view) => (
+                        camera::outline(&geometry, view),
+                        camera::screen_box(&geometry, view).map(|b| Bounds::of(&b))?,
+                    ),
+                    None => (outline(&geometry), Bounds::of(&geometry)),
+                };
                 let dash = if visible { "none" } else { "6 4" };
                 // The label sits in the top-left of the box's bounds, whatever its rotation.
-                let bounds = Bounds::of(&geometry);
                 Some(view! {
                     <g>
                         <polygon
@@ -1283,7 +1495,38 @@ pub fn Canvas() -> impl IntoView {
     // handles and readout.
     let selection_chrome = move || {
         let fit = viewport.get()?;
+        // A 3D scene's selection has no handles; its readout is the camera's.
+        if let Some(camera) = camera_preview
+            .get()
+            .or_else(|| layout.with(|l| l.as_ref()?.camera))
+        {
+            let (width, height) = canvas_size();
+            let text = camera::readout(camera);
+            return Some(
+                pill(
+                    fit,
+                    text,
+                    width as f32 / 2.0,
+                    height as f32 - fit.canvas_len(40.0),
+                    0.0,
+                    ACCENT,
+                )
+                .into_any(),
+            );
+        }
         let picked = shown_selection();
+        // A locked item in the selection shows its outline and readout, but no handles.
+        let locked = layout.with(|l| {
+            l.as_ref()
+                .is_some_and(|l| chosen.with(|c| c.iter().any(|id| l.is_locked(id))))
+        });
+        let lock_note = |text: String| {
+            if locked {
+                format!("{text}  · locked")
+            } else {
+                text
+            }
+        };
         match picked.as_slice() {
             [] => None,
             [geometry] => {
@@ -1339,8 +1582,8 @@ pub fn Canvas() -> impl IntoView {
                 Some(
                     view! {
                         {ghost}
-                        {chrome(fit, squares, top, knob, STEM_LENGTH, ROTATE_OFFSET, colour, cropping)}
-                        {pill(fit, text, middle, bounds.bottom, 10.0, colour)}
+                        {(!locked).then(|| chrome(fit, squares, top, knob, STEM_LENGTH, ROTATE_OFFSET, colour, cropping))}
+                        {pill(fit, lock_note(text), middle, bounds.bottom, 10.0, colour)}
                     }
                     .into_any(),
                 )
@@ -1382,8 +1625,8 @@ pub fn Canvas() -> impl IntoView {
                             stroke-dasharray="4 3"
                             vector-effect="non-scaling-stroke"
                         />
-                        {chrome(fit, squares, top, knob, STEM_LENGTH, GROUP_ROTATE_OFFSET, ACCENT, false)}
-                        {pill(fit, text, (o.left + o.right) / 2.0, o.bottom, 12.0, ACCENT)}
+                        {(!locked).then(|| chrome(fit, squares, top, knob, STEM_LENGTH, GROUP_ROTATE_OFFSET, ACCENT, false))}
+                        {pill(fit, lock_note(text), (o.left + o.right) / 2.0, o.bottom, 12.0, ACCENT)}
                     }
                     .into_any(),
                 )

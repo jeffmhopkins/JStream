@@ -87,6 +87,7 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `studio set-preview <scene-id>` | action `studio.set_preview` |
 | `capture targets` | query `capture.targets` (the displays and windows a `display` or `window` source's `target` can name) |
 | `font list` | query `font.list` (the installed fonts, each printed as family, style and path, [ADR-0092](../../docs/adr/0092-installed-fonts-query.md)) |
+| `profile get [<seconds>]` | query `profile.get` (where the engine's time went over the last 5, or up to 60, seconds: per drawing thread, unit of drawing work, source and thread, printed as JSON, [ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)) |
 | `source list` | query `source.list` |
 | `item list <scene-id>` | query `item.list` |
 | `output list` | query `output.list` |
@@ -140,6 +141,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   edits (`folder.*`, `label.*`, `scene.set_folder`, `scene.set_meta`,
   `scene.set_options`, `source.set_meta`).
   `item.set_source <item-id> <source-id>` switches an item to another source.
+  `item.set_locked <item-id> true|false` locks or unlocks an item's canvas box
+  (protocol 0.71).
   `item.set_opacity <item-id> <0..1>` and `item.set_blend <item-id> <mode>` set an
   item's opacity and blend mode; the engine draws every mode (protocol 0.47).
   `hotkey.set <chord> <action> <id>` binds a chord (`Ctrl+Shift+KeyS`, `F1`) to

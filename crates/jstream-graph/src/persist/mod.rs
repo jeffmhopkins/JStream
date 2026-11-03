@@ -19,8 +19,9 @@ use jstream_protocol::{
     Action, BlendMode, BusId, BusMonitor, Canvas, Chord, Crop, Easing, Edit, EncoderProfile,
     EncoderProfileId, FilterChain, FilterId, FilterInfo, FilterOwner, Finite32, FolderId,
     INITIAL_PRESET, ItemGeometry, ItemId, ItemTransform, ItemTransition, LabelId, OutputId,
-    OutputKind, ProtocolError, Rev, SceneId, SceneMeta, SceneOptions, SceneRole, Settings,
-    SourceAudio, SourceId, SourceKind, SourceMeta, TransitionPresetId, VideoMix, VideoMixId,
+    OutputKind, ProtocolError, Rev, SceneCamera, SceneId, SceneMeta, SceneOptions, SceneRole,
+    Settings, SourceAudio, SourceId, SourceKind, SourceMeta, TransitionPresetId, VideoMix,
+    VideoMixId,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -268,6 +269,10 @@ struct FileScene {
     /// Its background colour (ADR-0089 §4); omitted for none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     background: Option<String>,
+    /// Its camera (ADR-0094), or a keyframe scene's override of its parent's; omitted
+    /// for none, so a file without cameras is unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    camera: Option<SceneCamera>,
     /// The scene it is a keyframe scene of (ADR-0024 §2); omitted for any other scene.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     variant_of: Option<SceneId>,
@@ -363,6 +368,10 @@ struct FileItem {
     /// Its transition settings (ADR-0029 §6); omitted while they are the defaults.
     #[serde(default, skip_serializing_if = "ItemTransition::is_default")]
     transition: ItemTransition,
+    /// Whether its canvas box is locked (ADR-0096); omitted while unlocked, so a
+    /// collection with no locked item saves as it did before, with no schema bump.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    locked: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -551,6 +560,7 @@ impl Graph {
                     show_in_multiview: scene.meta.show_in_multiview,
                     include_audio: scene.options.include_audio,
                     background: scene.options.background.clone(),
+                    camera: scene.camera,
                     variant_of: scene.variant_of.clone(),
                     overrides: scene
                         .overrides
@@ -588,6 +598,7 @@ impl Graph {
                                 blend: (!item.blend.is_normal()).then_some(item.blend),
                                 effects: self.file_filters(&item.effects.video),
                                 transition: item.transition,
+                                locked: item.locked,
                             }
                         })
                         .collect(),
@@ -986,10 +997,21 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
         };
         if !options.is_default() {
             edits.push((
-                object,
+                object.clone(),
                 Edit::SceneSetOptions {
                     scene_id: scene.id.clone(),
                     options,
+                },
+            ));
+        }
+        // Parents come before their keyframes here, so a keyframe's override finds its
+        // parent's camera set.
+        if scene.camera.is_some() {
+            edits.push((
+                object,
+                Edit::SceneSetCamera {
+                    scene_id: scene.id.clone(),
+                    camera: scene.camera,
                 },
             ));
         }
@@ -1063,10 +1085,19 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
             }
             if !item.transition.is_default() {
                 edits.push((
-                    object,
+                    object.clone(),
                     Edit::ItemSetTransition {
                         item_id: item.id.clone(),
                         transition: item.transition,
+                    },
+                ));
+            }
+            if item.locked {
+                edits.push((
+                    object,
+                    Edit::ItemSetLocked {
+                        item_id: item.id.clone(),
+                        locked: true,
                     },
                 ));
             }

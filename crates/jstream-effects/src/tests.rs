@@ -86,10 +86,10 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
 "#;
 
 /// A fresh, empty folder under the system temp folder, removed on drop.
-struct Temp(PathBuf);
+pub(crate) struct Temp(pub(crate) PathBuf);
 
 impl Temp {
-    fn new(name: &str) -> Self {
+    pub(crate) fn new(name: &str) -> Self {
         let dir =
             std::env::temp_dir().join(format!("jstream-effects-{}-{name}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -104,7 +104,7 @@ impl Drop for Temp {
     }
 }
 
-fn write(path: &Path, text: &str) {
+pub(crate) fn write(path: &Path, text: &str) {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).expect("create dir");
     }
@@ -137,7 +137,7 @@ fn load(name: &str, manifest: &str, scanlines: &str) -> Result<Pack, PackError> 
     Pack::load(&temp.0, PRELUDE)
 }
 
-fn settings(pairs: &[(&str, Value)]) -> Settings {
+pub(crate) fn settings(pairs: &[(&str, Value)]) -> Settings {
     Settings(
         pairs
             .iter()
@@ -716,7 +716,7 @@ fn a_panic_without_a_message_is_named() {
 }
 
 /// The test compositor, or `None` (a skip) where no adapter exists outside CI.
-fn compositor() -> Option<jstream_render::Compositor> {
+pub(crate) fn compositor() -> Option<jstream_render::Compositor> {
     match jstream_render::Compositor::open(jstream_render::OpenOptions::headless()) {
         Ok(compositor) => Some(compositor),
         Err(err) if err.is_no_adapter() && std::env::var_os("CI").is_none() => None,
@@ -725,7 +725,10 @@ fn compositor() -> Option<jstream_render::Compositor> {
 }
 
 /// `image` placed 1:1 on a transparent canvas of its size, read back as sRGB RGBA8.
-fn read(compositor: &mut jstream_render::Compositor, image: &jstream_render::Image) -> Vec<u8> {
+pub(crate) fn read(
+    compositor: &mut jstream_render::Compositor,
+    image: &jstream_render::Image,
+) -> Vec<u8> {
     use jstream_render::{Color, Crop, Item, Placement, Scene};
     let items = [Item {
         image,
@@ -734,6 +737,8 @@ fn read(compositor: &mut jstream_render::Compositor, image: &jstream_render::Ima
         opacity: 1.0,
         blend: jstream_render::BlendMode::Normal,
         visible: true,
+        camera: None,
+        depth_run: 0,
     }];
     let scene = Scene {
         canvas: jstream_media::FrameSize::new(image.width(), image.height()).expect("non-zero"),
@@ -748,7 +753,7 @@ fn read(compositor: &mut jstream_render::Compositor, image: &jstream_render::Ima
         .collect()
 }
 
-fn near(got: &[u8], expected: &[u8], tol: u8) {
+pub(crate) fn near(got: &[u8], expected: &[u8], tol: u8) {
     assert_eq!(got.len(), expected.len());
     for (g, e) in got.iter().zip(expected) {
         assert!(g.abs_diff(*e) <= tol, "got {got:?}, expected {expected:?}");

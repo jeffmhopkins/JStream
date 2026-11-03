@@ -35,13 +35,16 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   client ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)), or with a developer's client from `--youtube-client` or the
   environment ([Design](#design)).
 - **Token file** (`token.rs`): reuses the token in an existing user-only file, or
-  creates the file with a new random token, and names the device file beside it
+  creates the file with a new random token, through `jstream_server::token_file`, which
+  the desktop app's `--mcp` shares, and registers it with the crash reports' redaction;
+  the device file beside it is `jstream_server::token_file::device_file`
   ([Design](#design)).
 - **Serving** (`serve.rs`): builds the engine (with the audit log, the `--collection`
   file, the plugin folder, the effect packs folder and the placeholder outputs; on Windows a live one, through `live.rs`, that scans
   the CLAP plugins, and with the `cef` feature also opens browser sources, on
   macOS a live one on the macOS backends built so far, and on 64-bit Linux a live one
-  on the Linux backends, [Design](#design)), installs the signal handlers that stop it, then binds the server
+  on the Linux backends, which with the `cef` feature also opens browser sources,
+  [Design](#design)), installs the signal handlers that stop it, then binds the server
   with MCP on, the UI settings file in the data directory and, with `--ui-dir`, the web
   UI's files.
 - **Media Foundation check** (`main.rs`, `components.rs`, Windows only): exits with
@@ -196,7 +199,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | `--token-file <path>` | The control token file. Default: the `JSTREAM_TOKEN_FILE` environment variable, which `jstream-cli` reads too. One of them is required. |
 | `--port <port>` | The port on `127.0.0.1`. Default `0`: the OS picks a free one, and the URL line says which. |
 | `--collection <path>` | Loads the collection from this JSON file and saves every change to it, so the next run starts where this one stopped. Created, holding an empty collection with the four sample labels (Intro / outro, Gameplay, Overlay, Sponsor), if it doesn't exist. Default: none, the collection starts empty and is lost on exit. |
-| `--effects-dir <dir>` | The folder of WGSL effect packs, one pack folder each, that the engine loads at startup and reloads when they change (`Engine::watch_effect_packs`, [jstream-core › Design](../../crates/jstream-core/README.md#design)). Each effect is a video filter kind, `<pack>/<effect>`. A missing folder holds no packs, and is watched for packs to appear. Default: `effects` in the platform data directory; without a data directory, no packs load. |
+| `--effects-dir <dir>` | The folder of WGSL effect packs, one pack folder each, that the engine loads at startup and reloads when they change (`Engine::watch_effect_packs`, [jstream-core › Design](../../crates/jstream-core/README.md#design)). Each effect is a video filter kind, `<pack>/<effect>`, and each `[[source]]` a source kind, `<pack>/<source>` (ADR-0093). A missing folder holds no packs, and is watched for packs to appear. Default: `effects` in the platform data directory; without a data directory, no packs load. |
 | `--plugin-dir <dir>` | Where installed WASM plugins and their grants are saved (`plugins.json`) and loaded from at startup, created if missing ([ADR-0076](../../docs/adr/0076-saved-wasm-plugins-and-manifest-requests.md)). A file there that can't be read, or that a newer version wrote, is logged at `error` and left as it is, and plugins aren't loaded or saved that run. Default: `plugins` in the platform data directory; without a data directory, plugins aren't saved. |
 | `--ui-dir <dir>` | Serves the web UI's built files (`trunk build`'s `dist`) from this directory at `http://127.0.0.1:<port>/`. The browser asks for a user name and password: the password is the token (see **Web UI** below). A path that isn't a directory fails with exit code 1, before the token or collection file is written. Default: no UI. |
 | `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. Where the daemon is live (Windows, macOS and 64-bit Linux) it has no target, so starting it fails: create outputs with `output.create` instead. |
@@ -470,7 +473,10 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   `stats.tick` about once a second while no output runs, and hands the engine the
   process CPU reader on Windows (`WindowsProcessCpu`), macOS (`MacosProcessCpu`) and
   Linux (`LinuxProcessCpu`), for the ticks' `load` (protocol 0.48). Elsewhere the ticks
-  leave `cpu_ms` out.
+  leave `cpu_ms` out. On Windows (`WindowsThreadCpu`) and Linux (`LinuxThreadCpu`) it
+  also hands it the thread CPU reader, for `profile.get`'s threads
+  ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)); on macOS the
+  profile has no threads.
 - **Media Foundation check and delay-load.** The `windows` crate imports Media
   Foundation's DLLs as load-time imports, so on a Windows without Media Foundation
   the loader would refuse to start the binary, naming a DLL, before `main` runs.
@@ -550,7 +556,7 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   no folder. `serve::engine` calls `Engine::watch_effect_packs` once the engine is built,
   on every platform: packs are drawn by the compositor, which needs no platform
   backend.
-- **Browser sources** (`serve.rs`, feature `cef`, Windows only). Built with
+- **Browser sources** (`serve.rs`, feature `cef`, Windows and 64-bit Linux). Built with
   `--features cef`, the daemon gives the engine `jstream-browser`'s CEF backend
   (`Engine::with_browser`), so `browser` sources open their pages
   ([jstream-browser › Purpose](../../crates/jstream-browser/README.md#purpose)). It does
@@ -562,7 +568,13 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   page ([ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md)): the helper
   (`jstream-browser-helper.exe`, CEF's bootstrap exe renamed, and
   `jstream-browser-helper.dll`) and CEF's runtime files must be in the `browser` folder
-  beside `jstream-daemon.exe`, as the portable zip has them, or next to it; its cache is the data directory's `cef` folder (else the log
+  beside `jstream-daemon.exe`, as the portable zip has them, or next to it. On Linux
+  the helper is the `jstream-browser-helper` executable with `libcef.so` and CEF's
+  runtime files beside it, in the `browser` folder `cargo xtask browser-linux` lays out,
+  beside `jstream-daemon` or next to it, and no device is opened: pages paint in
+  software and hand the engine CPU frames
+  ([ADR-0095](../../docs/adr/0095-browser-helper-on-linux.md)); the helper needs a user
+  other than root for Chromium's sandbox. Either way its cache is the data directory's `cef` folder (else the log
   directory's) and its log the log directory's `cef.log`. Nothing about the browser
   stops the daemon: a device that won't open leaves pages playing audio with their
   frames dropped, a daemon whose own path is unknown leaves browser sources empty, and
@@ -576,9 +588,10 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   stage
   ([jstream-core › Design](../../crates/jstream-core/README.md#design), *Live sources*).
   The daemon doesn't build or link CEF (only the helper does); the
-  feature is off by default until the helper and CEF's runtime are packaged
+  feature is off by default
   ([jstream-browser › Open items](../../crates/jstream-browser/README.md#open-items)).
-  `dox` type-checks the wiring without downloading CEF, as CI's Windows clippy does. Without the feature, `browser` sources show
+  `dox` type-checks the wiring without downloading CEF, as CI's Windows and Linux clippy
+  do. Without the feature, `browser` sources show
   nothing, as on other platforms. `browse` is that wiring over any backend, which is how
   the tests run it on `jstream-browser`'s fake.
 - **MCP over streamable HTTP.** `serve.rs` sets `ServerConfig::mcp`, so the server

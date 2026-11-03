@@ -1,31 +1,40 @@
-//! The browser helper's CEF code (Windows, feature `helper`; ADR-0048, ARCH › Browser
-//! source): what `jstream-browser-helper.dll` runs when CEF's bootstrap exe calls it,
-//! in CEF's browser process and in every one of its sandboxed subprocesses.
+//! The browser helper's CEF code (Windows and Linux, feature `helper`; ADR-0048,
+//! ADR-0095, ARCH › Browser source): what `jstream-browser-helper.dll` runs when CEF's
+//! bootstrap exe calls it on Windows, and what the `jstream-browser-helper` executable
+//! runs on Linux, in CEF's browser process and in every one of its sandboxed
+//! subprocesses.
 //!
 //! **In a subprocess** (renderer, GPU, utility) it hands the process to CEF.
 //!
-//! **In the browser process** it connects to the engine's two pipes (named by
-//! `--jstream-pipe`), starts CEF with the sandbox on, off-screen rendering, profiles in
+//! **In the browser process** it connects to the engine: on Windows to its two pipes
+//! (named by `--jstream-pipe`), on Linux through the socket that is its standard input,
+//! which it then swaps for `/dev/null` so CEF's subprocesses never hold it. It starts CEF with the sandbox on, off-screen rendering, profiles in
 //! memory and the engine's cache and log settings, and runs CEF's message loop on the
 //! process's main thread, which is CEF's UI thread. A reader thread takes the engine's
 //! messages: pages are opened, restyled and closed from it, which CEF allows on any of
 //! the browser process's threads, while a new adapter and shutting down are posted to the
 //! UI thread. Each page is a windowless browser with shared textures, painting at its
 //! frame rate with a transparent background; its paints are copied into textures it
-//! shares with the engine ([`d3d11`]), its audio is sent as interleaved stereo, and its
+//! shares with the engine on Windows (`d3d11`), and on Linux painted in software and
+//! written into slot files in the folder the engine named (`--jstream-frames`,
+//! `shm`), its audio is sent as interleaved stereo, and its
 //! requests go through its [`RequestPolicy`].
 //!
 //! **Shutting down.** The engine's `Shutdown`, its pipe closing, or a write to it failing
 //! closes every page; the loop quits once they have closed, or after [`CLOSE_GRACE`],
 //! and CEF shuts down on the UI thread before the process exits.
 
+#[cfg(windows)]
 mod d3d11;
 mod handlers;
+#[cfg(target_os = "linux")]
+mod shm;
 
 use std::collections::HashMap;
 use std::ffi::c_void;
-use std::fs::{File, OpenOptions};
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+#[cfg(windows)]
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
@@ -33,14 +42,28 @@ use ::cef::{BrowserSettings, CefString, ImplBrowser, ImplBrowserHost, ImplFrame,
 
 use crate::wire::{self, ToEngine, ToHelper};
 use crate::{PageSpec, RequestPolicy, css_script};
+#[cfg(windows)]
 use d3d11::{Gpu, PageTextures};
+#[cfg(target_os = "linux")]
+use shm::PageTextures;
+
+/// The helper's end of its connection to the engine, each way.
+#[cfg(windows)]
+type Stream = std::fs::File;
+#[cfg(target_os = "linux")]
+type Stream = std::os::unix::net::UnixStream;
 
 /// How long shutting down waits for open pages to close before CEF's loop is quit
 /// anyway.
 const CLOSE_GRACE: Duration = Duration::from_secs(10);
 
-/// The switch that names the engine's pipes.
+/// The switch that names the engine's pipes (Windows).
+#[cfg(windows)]
 const PIPE_SWITCH: &str = "--jstream-pipe=";
+
+/// The switch that names the folder paints go into (Linux).
+#[cfg(target_os = "linux")]
+const FRAMES_SWITCH: &str = "--jstream-frames=";
 
 /// The most stereo frames one audio message carries.
 const AUDIO_FRAMES: usize = wire::MAX_AUDIO_SAMPLES / 2;
@@ -51,7 +74,22 @@ const AUDIO_FRAMES: usize = wire::MAX_AUDIO_SAMPLES / 2;
 /// # Safety
 /// `sandbox_info` must be the sandbox information CEF's bootstrap exe passed to
 /// `RunWinMain`, unchanged; CEF reads it.
+#[cfg(windows)]
 pub unsafe fn run_helper(sandbox_info: *mut c_void) -> i32 {
+    run(sandbox_info)
+}
+
+/// Runs the helper's process, from the `jstream-browser-helper` executable's `main`,
+/// and returns its exit code. CEF's subprocesses are started as the same executable, so
+/// they come here too. Chromium's sandbox needs no information from the caller on
+/// Linux: it sets itself up in each subprocess.
+#[cfg(target_os = "linux")]
+#[must_use]
+pub fn run_helper() -> i32 {
+    run(std::ptr::null_mut())
+}
+
+fn run(sandbox_info: *mut c_void) -> i32 {
     // Must come before any other CEF call: it fixes the API version the bindings use.
     let _ = ::cef::api_hash(::cef::sys::CEF_API_VERSION_LAST, 0);
     let args = ::cef::args::Args::new();
@@ -78,19 +116,15 @@ fn browser_process(
     app: &mut ::cef::App,
     sandbox_info: *mut c_void,
 ) -> Result<(), ()> {
-    let name = std::env::args()
-        .find_map(|arg| arg.strip_prefix(PIPE_SWITCH).map(str::to_owned))
-        .ok_or(())?;
-    let mut from_engine = File::open(format!(r"\\.\pipe\{name}-in")).map_err(|_| ())?;
-    let to_engine = OpenOptions::new()
-        .write(true)
-        .open(format!(r"\\.\pipe\{name}-out"))
-        .map_err(|_| ())?;
+    let (mut from_engine, to_engine, frames) = connect().ok_or(())?;
     let host = Arc::new(Host {
         to_engine: Mutex::new(to_engine),
         pages: Mutex::new(HashMap::new()),
+        #[cfg(windows)]
         gpu: Mutex::new(None),
+        #[cfg(windows)]
         generation: AtomicU64::new(0),
+        frames,
         open: AtomicUsize::new(0),
         started: AtomicBool::new(false),
         stopping: AtomicBool::new(false),
@@ -107,8 +141,10 @@ fn browser_process(
     };
     let path = |p: &str| -> CefString { p.into() };
     let settings = ::cef::Settings {
-        // The sandbox is on (ADR-0021, ADR-0048): CEF's bootstrap exe set it up, and every
-        // subprocess starts as the same exe.
+        // The sandbox is on (ADR-0021, ADR-0048, ADR-0095): on Windows CEF's bootstrap exe
+        // set it up, on Linux Chromium's own (user namespaces, or the setuid
+        // `chrome-sandbox` beside the helper) starts in each subprocess, and every
+        // subprocess starts as the same executable.
         no_sandbox: 0,
         windowless_rendering_enabled: 1,
         root_cache_path: path(&cache_root),
@@ -126,9 +162,7 @@ fn browser_process(
     ) == 1;
     if !started {
         host.send(&ToEngine::StartFailed {
-            reason: "cef::initialize failed: libcef.dll and its resources must be next to \
-                     the helper"
-                .into(),
+            reason: INITIALIZE_FAILED.into(),
         });
         return Err(());
     }
@@ -145,19 +179,75 @@ fn browser_process(
     ::cef::run_message_loop();
     // The loop has quit, so no paint can run any more: let go of the device first.
     host.pages().clear();
-    *lock(&host.gpu) = None;
+    #[cfg(windows)]
+    {
+        *lock(&host.gpu) = None;
+    }
     ::cef::shutdown();
     Ok(())
 }
 
+/// What the engine is told when CEF won't start.
+#[cfg(windows)]
+const INITIALIZE_FAILED: &str =
+    "cef::initialize failed: libcef.dll and its resources must be next to the helper";
+#[cfg(target_os = "linux")]
+const INITIALIZE_FAILED: &str = "cef::initialize failed: libcef.so and its resources must be \
+     next to the helper, and the sandbox must be able to start: run as a user other than \
+     root, with unprivileged user namespaces allowed or chrome-sandbox set up \
+     (docs/adr/0095-browser-helper-on-linux.md)";
+
+/// Connects to the engine's two pipes, named by `--jstream-pipe` (Windows). Returns
+/// (from the engine, to the engine, no folder).
+#[cfg(windows)]
+fn connect() -> Option<(Stream, Stream, ())> {
+    use std::fs::{File, OpenOptions};
+    let name = std::env::args().find_map(|arg| arg.strip_prefix(PIPE_SWITCH).map(str::to_owned))?;
+    let from_engine = File::open(format!(r"\\.\pipe\{name}-in")).ok()?;
+    let to_engine = OpenOptions::new()
+        .write(true)
+        .open(format!(r"\\.\pipe\{name}-out"))
+        .ok()?;
+    Some((from_engine, to_engine, ()))
+}
+
+/// Takes the engine's socket, the process's standard input, and puts `/dev/null` in its
+/// place, so the subprocesses CEF starts never inherit it and the engine sees the
+/// helper's end close when the helper exits (Linux). Returns (from the engine, to the
+/// engine, the folder named by `--jstream-frames`).
+#[cfg(target_os = "linux")]
+fn connect() -> Option<(Stream, Stream, std::path::PathBuf)> {
+    use std::os::fd::{AsFd, AsRawFd};
+    let frames = std::env::args().find_map(|arg| {
+        arg.strip_prefix(FRAMES_SWITCH)
+            .map(std::path::PathBuf::from)
+    })?;
+    // `try_clone_to_owned` duplicates it close-on-exec.
+    let socket = std::io::stdin().as_fd().try_clone_to_owned().ok()?;
+    let null = std::fs::File::open("/dev/null").ok()?;
+    // SAFETY: both are open descriptors this process owns; `dup2` replaces descriptor 0
+    // with `/dev/null` atomically, and the socket lives on in its close-on-exec copy.
+    if unsafe { libc::dup2(null.as_raw_fd(), 0) } < 0 {
+        return None;
+    }
+    let from_engine = Stream::from(socket);
+    let to_engine = from_engine.try_clone().ok()?;
+    Some((from_engine, to_engine, frames))
+}
+
 /// What the helper's threads and CEF's callbacks share.
 pub(crate) struct Host {
-    to_engine: Mutex<File>,
+    to_engine: Mutex<Stream>,
     pages: Mutex<HashMap<u32, Arc<PageShared>>>,
-    /// The D3D11 device on the engine's adapter; `None` delivers no frames.
+    /// The D3D11 device on the engine's adapter; `None` delivers no frames (Windows).
+    #[cfg(windows)]
     gpu: Mutex<Option<Gpu>>,
-    /// Bumped with each device, so pages remake their textures.
+    /// Bumped with each device, so pages remake their textures (Windows).
+    #[cfg(windows)]
     generation: AtomicU64,
+    /// The folder paints are written into (Linux); nothing on Windows.
+    #[cfg_attr(windows, expect(dead_code, reason = "Windows needs no folder"))]
+    frames: Frames,
     /// Browsers asked for and not yet closed.
     open: AtomicUsize,
     /// Set once CEF has started, so its tasks may be posted.
@@ -168,11 +258,16 @@ pub(crate) struct Host {
 
 impl Host {
     /// Sends one message to the engine. A failed write means the engine is gone: the
-    /// helper shuts down.
+    /// helper shuts down, from a task on the UI thread, so no lock the caller holds is
+    /// taken again.
     fn send(self: &Arc<Self>, message: &ToEngine) {
         let sent = wire::send(&mut *lock(&self.to_engine), message);
-        if sent.is_err() {
-            self.stop();
+        // Before CEF has started there is nothing to stop, and no UI thread to post to.
+        if sent.is_err() && self.started.load(Ordering::Acquire) {
+            // Later, on the UI thread: the sender may hold a page's locks, which
+            // stopping takes to close the page.
+            let host = Arc::clone(self);
+            post(move || host.stop());
         }
     }
 
@@ -188,7 +283,7 @@ impl Host {
     }
 
     /// The pipe's reader thread: the engine's requests until its pipe closes.
-    fn read(self: &Arc<Self>, mut from_engine: File) {
+    fn read(self: &Arc<Self>, mut from_engine: Stream) {
         while let Ok(Some(message)) = wire::receive::<ToHelper>(&mut from_engine) {
             self.handle(message);
         }
@@ -199,30 +294,44 @@ impl Host {
         match message {
             ToHelper::Open { page, spec } => self.open(page, &spec),
             ToHelper::SetCss { page, css } => {
-                if let Some(page) = self.pages().get(&page).cloned() {
+                let page = self.pages().get(&page).cloned();
+                if let Some(page) = page {
                     page.set_css(css);
                 }
             }
+            ToHelper::Reload { page } => {
+                let page = self.pages().get(&page).cloned();
+                if let Some(page) = page {
+                    page.reload();
+                }
+            }
             ToHelper::Close { page } => {
-                if let Some(page) = self.pages().remove(&page) {
+                let page = self.pages().remove(&page);
+                if let Some(page) = page {
                     page.close();
                 }
             }
             ToHelper::Released { page, slot } => {
-                if let Some(page) = self.pages().get(&page).cloned() {
+                let page = self.pages().get(&page).cloned();
+                if let Some(page) = page {
                     page.textures.release(slot);
                 }
             }
+            #[cfg(windows)]
             ToHelper::Adapter { luid } => {
                 let host = Arc::clone(self);
                 post(move || host.use_adapter(luid));
             }
+            // Pages paint in software on Linux, on no adapter.
+            #[cfg(target_os = "linux")]
+            ToHelper::Adapter { .. } => {}
             ToHelper::Shutdown => self.stop(),
             ToHelper::Start { .. } => self.warn("the engine sent a second start"),
         }
     }
 
     /// Makes the device pages copy onto (UI thread).
+    #[cfg(windows)]
     fn use_adapter(self: &Arc<Self>, luid: Option<u64>) {
         let generation = self.generation.fetch_add(1, Ordering::Relaxed) + 1;
         let gpu = luid.and_then(|luid| match Gpu::on_adapter(luid, generation) {
@@ -244,13 +353,15 @@ impl Host {
             closing: AtomicBool::new(false),
             textures: PageTextures::default(),
             paint_warned: AtomicBool::new(false),
+            reloading: Mutex::new(false),
             channels: AtomicUsize::new(0),
             host: Arc::clone(self),
             policy: RequestPolicy::for_page(spec),
         });
         let window_info = ::cef::WindowInfo {
             windowless_rendering_enabled: 1,
-            shared_texture_enabled: 1,
+            // Shared textures on Windows; software paints on Linux (ADR-0095).
+            shared_texture_enabled: i32::from(cfg!(windows)),
             ..Default::default()
         };
         let settings = BrowserSettings {
@@ -339,6 +450,11 @@ pub(crate) struct PageShared {
     textures: PageTextures,
     /// Whether a failed paint was reported since the last good one.
     paint_warned: AtomicBool,
+    /// Set from a reload until the reloaded document starts loading: the old document's
+    /// paints meanwhile are skipped, so the engine never shows them after the reload.
+    /// A paint holds it from its check until its frame is sent, and a reload holds it
+    /// until [`ToEngine::Reloading`] is sent, so no old frame follows that message.
+    reloading: Mutex<bool>,
     /// Channels in the page's current audio stream (`OnAudioStreamStarted`).
     pub(crate) channels: AtomicUsize,
     pub(crate) host: Arc<Host>,
@@ -350,8 +466,9 @@ pub(crate) struct PageShared {
 struct SendBrowser(::cef::Browser);
 
 // SAFETY: CEF's browser object is reference counted with atomic counts, and the only
-// methods called through it (`host`, `main_frame`, then `close_browser` and
-// `execute_java_script`) are documented as callable on any thread of the browser process.
+// methods called through it (`host`, `main_frame`, then `close_browser`,
+// `execute_java_script` and `reload`) are documented as callable on any thread of the
+// browser process.
 unsafe impl Send for SendBrowser {}
 
 impl PageShared {
@@ -375,12 +492,21 @@ impl PageShared {
     /// The browser is about to be destroyed (`OnBeforeClose`, UI thread).
     pub(crate) fn closed(&self) {
         lock(&self.browser).take();
+        #[cfg(target_os = "linux")]
+        self.textures.remove(&self.host.frames, self.id);
         self.host.send(&ToEngine::Closed { page: self.id });
         self.host.browser_closed();
     }
 
+    /// The main frame started loading a document (`OnLoadStart`), or ended or failed
+    /// loading one: paints from here are the new document's, so a reload's hold ends.
+    pub(crate) fn load_started(&self) {
+        *lock(&self.reloading) = false;
+    }
+
     /// The main frame finished loading: applies the custom CSS to the new document.
     pub(crate) fn loaded(&self, frame: &::cef::Frame) {
+        self.load_started();
         let css = lock(&self.css).clone();
         run_script(frame, &css_script(&css));
     }
@@ -390,10 +516,16 @@ impl PageShared {
         self.closing.load(Ordering::Acquire)
     }
 
-    /// One accelerated paint of CEF's texture `handle` (UI thread): copied into a shared
-    /// texture and announced to the engine. Skipped while the engine holds every texture
-    /// or the helper has no device; a failure is reported once until a paint succeeds.
+    /// One accelerated paint of CEF's texture `handle` (UI thread, Windows): copied into
+    /// a shared texture and announced to the engine. Skipped while the engine holds every
+    /// texture or the helper has no device; a failure is reported once until a paint
+    /// succeeds.
+    #[cfg(windows)]
     pub(crate) fn paint(&self, handle: *mut c_void) {
+        let reloading = lock(&self.reloading);
+        if *reloading {
+            return;
+        }
         let painted = {
             let gpu = lock(&self.host.gpu);
             let Some(gpu) = gpu.as_ref() else {
@@ -401,6 +533,28 @@ impl PageShared {
             };
             self.textures.paint(gpu, handle)
         };
+        self.painted(painted);
+        drop(reloading);
+    }
+
+    /// One software paint, `bgra` of `width` × `height` premultiplied BGRA8 (UI thread,
+    /// Linux): written into a slot file as straight RGBA8 and announced to the engine.
+    /// Skipped while the engine holds every slot; a failure is reported once until a
+    /// paint succeeds.
+    #[cfg(target_os = "linux")]
+    pub(crate) fn paint(&self, bgra: &[u8], width: u32, height: u32) {
+        let reloading = lock(&self.reloading);
+        if *reloading {
+            return;
+        }
+        let painted = self
+            .textures
+            .paint(&self.host.frames, self.id, bgra, (width, height));
+        self.painted(painted);
+        drop(reloading);
+    }
+
+    fn painted(&self, painted: Result<Option<Painted>, String>) {
         match painted {
             Ok(Some(painted)) => {
                 self.paint_warned.store(false, Ordering::Relaxed);
@@ -474,6 +628,23 @@ impl PageShared {
         }
     }
 
+    /// Loads the page again; its custom CSS goes in again on load, as on the first.
+    /// The old document's paints stop first, and the engine is told so
+    /// ([`ToEngine::Reloading`]) before any paint of the new one.
+    fn reload(&self) {
+        let browser = lock(&self.browser);
+        if let Some(browser) = browser.as_ref() {
+            let mut reloading = lock(&self.reloading);
+            *reloading = true;
+            self.host.send(&ToEngine::Reloading { page: self.id });
+            drop(reloading);
+            browser.0.reload();
+        } else {
+            // No browser yet: its first load is the start the engine waits for.
+            self.host.send(&ToEngine::Reloading { page: self.id });
+        }
+    }
+
     fn close(&self) {
         self.closing.store(true, Ordering::Release);
         if let Some(browser) = lock(&self.browser).take() {
@@ -496,6 +667,17 @@ fn run_script(frame: &::cef::Frame, script: &str) {
         0,
     );
 }
+
+/// Where a page's paints go: the slot files' folder on Linux, nothing on Windows.
+#[cfg(windows)]
+type Frames = ();
+#[cfg(target_os = "linux")]
+type Frames = std::path::PathBuf;
+
+#[cfg(windows)]
+use d3d11::Painted;
+#[cfg(target_os = "linux")]
+use shm::Painted;
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)

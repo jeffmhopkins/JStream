@@ -16,9 +16,9 @@ const MAX_BARS: u32 = 1024;
 /// The quietest level drawn, in dBFS (a full-scale sine is 0).
 const FLOOR_DB: f32 = -90.0;
 /// The lowest frequency the `log` scale shows, in hertz.
-const LOW_HZ: f32 = 20.0;
+pub(super) const LOW_HZ: f32 = 20.0;
 /// The highest frequency shown, in hertz, when the sample rate allows it.
-const HIGH_HZ: f32 = 20_000.0;
+pub(super) const HIGH_HZ: f32 = 20_000.0;
 
 /// The `spectrum` kind.
 pub(crate) struct SpectrumKind(KindDescriptor);
@@ -248,7 +248,7 @@ impl Spectrum {
 
 /// A bin's squared magnitude as a bar height from 0 to 1, on the dB scale from
 /// [`FLOOR_DB`] to 0 dBFS.
-fn height(norm_sqr: f32) -> f32 {
+pub(super) fn height(norm_sqr: f32) -> f32 {
     // A full-scale sine at a bin's frequency peaks at sum(hann) / 2 = WINDOW / 4.
     let full = (WINDOW / 4) as f32;
     let db = 10.0 * (norm_sqr / (full * full)).max(1e-12).log10();

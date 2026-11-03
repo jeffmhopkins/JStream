@@ -206,6 +206,12 @@ impl CallResult {
 #[serde(tag = "type")]
 #[non_exhaustive]
 pub enum ActionResult {
+    /// The answer to `pack.write` (0.72): the pack as now loaded.
+    #[serde(rename = "pack.write")]
+    PackWrite {
+        /// The pack.
+        pack: crate::PackInfo,
+    },
     /// The answer to `pairing.start`: the one-time pairing code, sent to the client that
     /// started pairing and to no one else (ADR-0044).
     #[serde(rename = "pairing.start")]

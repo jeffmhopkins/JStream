@@ -14,7 +14,7 @@ use crate::encoder::EncoderProfile;
 use crate::error::EntityKind;
 use crate::filter::{FilterChain, FilterInfo, FilterOwner};
 use crate::finite::Finite32;
-use crate::geometry::ItemGeometry;
+use crate::geometry::{ItemGeometry, SceneCamera};
 use crate::hotkey::Chord;
 use crate::id::{
     BusId, DeviceId, EncoderProfileId, FilterId, FolderId, GestureId, IdempotencyKey, ItemId,
@@ -136,8 +136,9 @@ pub enum Edit {
     },
     /// Deletes a scene and its items; the sources they placed stay. Rejected with
     /// `invalid_argument` while a `scene` source or a video mix shows it, or any source's
-    /// settings refer to it: delete those sources, point those mixes elsewhere, or clear
-    /// those references, first (in the same batch if needed). Hotkey bindings whose
+    /// or transition preset's settings refer to it (a stinger's `scene`): delete those
+    /// sources, point those mixes elsewhere, or clear those references, first (in the
+    /// same batch if needed). Hotkey bindings whose
     /// action names the scene are not blockers: they are removed with it (ADR-0040 §3).
     /// A scene with keyframe scenes is refused the same way, the variants listed as its
     /// blockers; delete them first. Inverse: `scene.create` with its role (omitted for
@@ -196,8 +197,9 @@ pub enum Edit {
     /// form (`transform` or `geometry`), and its opacity and blend where they differ from
     /// the defaults, then `item.reorder` to its old stacking position (unless it was on
     /// top), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,
-    /// `item.set_transition` if its transition settings were not the default, and the
-    /// placement edits that write each dropped override back.
+    /// `item.set_transition` if its transition settings were not the default,
+    /// `item.set_locked` if it was locked (since 0.71), and the placement edits that
+    /// write each dropped override back.
     #[serde(rename = "item.remove")]
     ItemRemove {
         /// The item to remove.
@@ -745,6 +747,22 @@ pub enum Edit {
         #[serde(flatten)]
         options: SceneOptions,
     },
+    /// Sets or removes a scene's camera (ADR-0094, since 0.70). A scene with a camera is a
+    /// 3D scene: its items are placed in one 3D space by their geometry and seen through
+    /// the camera. On a keyframe scene it writes or, with `camera` omitted, removes the
+    /// keyframe's override of its parent's camera. `invalid_argument` for a field of view
+    /// outside 1 to 170, a position within 0.001 px of the target, a coordinate past the
+    /// drawable bound, or a camera on a keyframe scene whose parent has none. Removing a
+    /// parent's camera also removes its keyframe scenes' overrides. Inverse:
+    /// `scene.set_camera` with the previous camera, then each removed override.
+    #[serde(rename = "scene.set_camera")]
+    SceneSetCamera {
+        /// The scene to change.
+        scene_id: SceneId,
+        /// The new camera. Omitted removes it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        camera: Option<SceneCamera>,
+    },
     /// Adds a label, last in label order (ADR-0024 §4). Rejected with `invalid_argument`
     /// for an empty name, a colour that isn't `#rrggbb`, or an icon checked as
     /// `scene.set_meta`'s. Inverse: `label.delete`.
@@ -921,6 +939,19 @@ pub enum Edit {
         /// Its new settings.
         transition: ItemTransition,
     },
+    /// Locks or unlocks an item (ADR-0096, since 0.71). A lock is an editing aid kept
+    /// with the collection, as OBS's is: a client doesn't let a locked item be dragged,
+    /// resized or turned on its canvas, but the engine still applies every edit to it,
+    /// so the Inspector, the menus and a script can change it. It belongs to the item,
+    /// not to a placement, so it takes no `scene_id` and a keyframe doesn't override
+    /// it. Items are added unlocked. Inverse: `item.set_locked` with the previous value.
+    #[serde(rename = "item.set_locked")]
+    ItemSetLocked {
+        /// The item to lock or unlock.
+        item_id: ItemId,
+        /// Whether its canvas box is locked.
+        locked: bool,
+    },
     /// Changes some of an audio source's settings (ADR-0028): the fields sent change,
     /// the others keep their values, and sending none is `invalid_argument`. A source
     /// without audio is `invalid_argument` on `source_id`. A `scene` source has no fader
@@ -1090,6 +1121,7 @@ impl Edit {
             Edit::SceneSetFolder { .. } => "scene.set_folder",
             Edit::SceneSetMeta { .. } => "scene.set_meta",
             Edit::SceneSetOptions { .. } => "scene.set_options",
+            Edit::SceneSetCamera { .. } => "scene.set_camera",
             Edit::LabelCreate { .. } => "label.create",
             Edit::LabelUpdate { .. } => "label.update",
             Edit::LabelReorder { .. } => "label.reorder",
@@ -1103,6 +1135,7 @@ impl Edit {
             Edit::TransitionSetDefault { .. } => "transition.set_default",
             Edit::SceneSetTransitions { .. } => "scene.set_transitions",
             Edit::ItemSetTransition { .. } => "item.set_transition",
+            Edit::ItemSetLocked { .. } => "item.set_locked",
         }
     }
 }
@@ -1483,6 +1516,36 @@ pub enum Action {
         /// The download, as `codec.downloads` lists it.
         download_id: String,
     },
+    /// Writes one effect pack (0.72, ADR-0097): replaces the pack `pack` whole with
+    /// `files`, or adds it, and loads it at once. The pack is always the folder named
+    /// `pack` in the packs folder, whose `effect.toml` must say `id = "<pack>"`. Answers
+    /// with the pack as loaded. Fails, writing nothing and keeping the old version, with
+    /// `too_large` for `files` over 3 MiB as sent (`MAX_PACK_WRITE_BYTES`); with
+    /// `invalid_argument` for more than 64 files, an image over 2 MiB, a pack ID or file
+    /// path outside the rules, a manifest that names another ID, an ID another folder
+    /// holds, a folder `pack` that holds anything but that pack, or a pack that doesn't
+    /// load (the first problem's file, line and message); with `internal` when the disk
+    /// refuses the swap; and with `unsupported` from an engine that loads no packs. Not
+    /// an edit: undo doesn't reach the disk. Agents may call it; no plugin is granted it.
+    #[serde(rename = "pack.write")]
+    PackWrite {
+        /// The pack ID: lower-case ASCII letters, digits and `-`, starting with a letter
+        /// or digit.
+        pack: String,
+        /// Every file of the pack.
+        files: Vec<crate::PackFile>,
+    },
+    /// Removes one effect pack (0.72, ADR-0097): the folder whose `effect.toml` names
+    /// pack ID `pack`, whatever its name and whether or not it loads. Its kinds leave
+    /// `kind.list`, and filters and sources of them draw nothing, as before a pack loads.
+    /// Fails with `not_found` (entity `pack`) when no folder holds that pack, `internal`
+    /// when the disk refuses, and `unsupported` from an engine that loads no packs. Not
+    /// an edit: undo doesn't reach the disk. Agents may call it; no plugin is granted it.
+    #[serde(rename = "pack.delete")]
+    PackDelete {
+        /// The pack ID.
+        pack: String,
+    },
     /// **Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy
     /// screen: the engine refuses this with `unsupported` and covers nothing.
     #[serde(rename = "privacy.set")]
@@ -1522,6 +1585,8 @@ impl Action {
             Action::EffectEnable { .. } => "effect.enable",
             Action::CodecDownload { .. } => "codec.download",
             Action::CodecDelete { .. } => "codec.delete",
+            Action::PackWrite { .. } => "pack.write",
+            Action::PackDelete { .. } => "pack.delete",
         }
     }
 
@@ -1569,7 +1634,9 @@ impl Action {
             | Action::PluginEnable { .. }
             | Action::EffectEnable { .. }
             | Action::CodecDownload { .. }
-            | Action::CodecDelete { .. } => vec![],
+            | Action::CodecDelete { .. }
+            | Action::PackWrite { .. }
+            | Action::PackDelete { .. } => vec![],
         }
     }
 
@@ -1621,6 +1688,11 @@ impl Action {
                 "type",
                 "a codec action can't be bound: a person downloads or deletes a codec \
                  through the UI, after reading its licence (ADR-0061)",
+            )),
+            Action::PackWrite { .. } | Action::PackDelete { .. } => Some((
+                "type",
+                "a pack action can't be bound: it writes GPU code to disk, which a key \
+                 press shouldn't (ADR-0097)",
             )),
             Action::YoutubeSignIn
             | Action::YoutubeSignOut

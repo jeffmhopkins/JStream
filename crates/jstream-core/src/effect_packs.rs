@@ -16,8 +16,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use jstream_effects::{Effect, PackWatcher};
-use jstream_protocol::{KindDescriptor, ProtocolError, Settings};
+use jstream_effects::{Effect, PackWatcher, ShaderSource};
+use jstream_protocol::{KindDescriptor, PackInfo, ProtocolError, Settings};
 use jstream_render::VideoFilter;
 use serde::{Deserialize, Serialize};
 
@@ -54,6 +54,52 @@ impl std::fmt::Debug for PackEffect {
 /// The loaded effects, by kind ID (`<pack>/<effect>`), as plans read them.
 pub(crate) type PackEffects = Arc<BTreeMap<String, PackEffect>>;
 
+/// One loaded shader source (ADR-0093), as a source's chain draws it: its program is
+/// the chain's first filter. Two are equal only when they are the same load, as
+/// [`PackEffect`]s are.
+#[derive(Clone)]
+pub(crate) struct PackSource(Arc<ShaderSource>);
+
+impl PackSource {
+    pub(crate) fn new(source: ShaderSource) -> Self {
+        Self(Arc::new(source))
+    }
+
+    /// A render filter drawing this source's program with `settings`.
+    pub(crate) fn video_filter(&self, settings: &Settings) -> VideoFilter {
+        let program: Arc<dyn jstream_render::ExternalProgram> = self.0.clone();
+        VideoFilter::program(self.0.kind_id(), program, settings)
+    }
+
+    /// Its kind's descriptor.
+    #[cfg(test)]
+    pub(crate) fn descriptor(&self) -> jstream_protocol::KindDescriptor {
+        self.0.descriptor().clone()
+    }
+
+    /// Its `scene` parameters, in the order they fill the program's input slots.
+    pub(crate) fn scene_params(&self) -> &[String] {
+        self.0.scene_params()
+    }
+}
+
+impl PartialEq for PackSource {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl std::fmt::Debug for PackSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("PackSource")
+            .field(&self.0.kind_id())
+            .finish()
+    }
+}
+
+/// The loaded shader sources, by kind ID (`<pack>/<source>`), as plans read them.
+pub(crate) type PackSources = Arc<BTreeMap<String, PackSource>>;
+
 /// The file in the packs folder that keeps the quarantine across restarts. The watcher
 /// reads only sub-folders, so it is never taken for a pack.
 pub(crate) const QUARANTINE_FILE: &str = "quarantine.json";
@@ -68,6 +114,8 @@ pub(crate) struct Update {
     pub(crate) described: Vec<KindDescriptor>,
     /// Every loaded effect that draws from now on: the quarantined ones left out.
     pub(crate) effects: PackEffects,
+    /// Every loaded shader source that draws from now on, as `effects` holds effects.
+    pub(crate) sources: PackSources,
     /// The kinds quarantined now, loaded or not, for `kind.list`.
     pub(crate) quarantined: BTreeSet<String>,
     /// Counts up with each update [`Packs`] makes. The engine installs each under the
@@ -91,7 +139,9 @@ pub(crate) struct Blame {
 /// was blamed on, and a pack one of whose effects was blamed twice in one run. Kept in
 /// [`QUARANTINE_FILE`], not in the collection, so it isn't undoable and survives a
 /// collection change. A pack's files changing doesn't lift it: a pack author's loop bug
-/// survives most edits.
+/// survives most edits. It follows the shader too (ADR-0097): the digests of what a
+/// blamed kind drew quarantine any kind that draws one of them, under whatever pack or
+/// kind ID.
 #[derive(Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 struct Quarantine {
     /// Quarantined kinds, `<pack>/<effect>`.
@@ -100,13 +150,47 @@ struct Quarantine {
     /// Quarantined packs, every effect of each.
     #[serde(default)]
     packs: BTreeSet<String>,
+    /// The digests ([`digests`]) of the WGSL modules each quarantined kind drew, by kind.
+    /// A file from before ADR-0097 has none; a kind gains them when its pack loads.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    digests: BTreeMap<String, BTreeSet<String>>,
 }
 
 impl Quarantine {
-    /// Whether `kind_id` may not draw.
-    fn holds(&self, kind_id: &str) -> bool {
-        self.kinds.contains(kind_id) || self.packs.contains(pack_of(kind_id))
+    /// Whether `kind_id`, drawing the modules `drawn` digests, may not draw.
+    fn holds(&self, kind_id: &str, drawn: &[String]) -> bool {
+        self.kinds.contains(kind_id)
+            || self.packs.contains(pack_of(kind_id))
+            || self
+                .digests
+                .values()
+                .any(|held| drawn.iter().any(|d| held.contains(d)))
     }
+}
+
+/// The hex BLAKE3 digest of each WGSL module `kind_id` draws, as validated: for an
+/// effect, the filter prelude and its header and shader; for a shader source, each pass's
+/// program prelude, header, `common` and pass text (ADR-0097 decision 6).
+fn digests(effect: Option<&Effect>, source: Option<&ShaderSource>) -> Vec<String> {
+    let module = |prelude: &str, wgsl: &str| {
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(prelude.as_bytes());
+        hasher.update(wgsl.as_bytes());
+        hasher.finalize().to_hex().to_string()
+    };
+    let mut out: Vec<String> = effect
+        .map(|e| module(jstream_render::FILTER_PRELUDE, e.wgsl()))
+        .into_iter()
+        .collect();
+    if let Some(source) = source {
+        out.extend(
+            source
+                .passes()
+                .iter()
+                .map(|pass| module(jstream_render::PROGRAM_PRELUDE, &pass.wgsl)),
+        );
+    }
+    out
 }
 
 /// The pack of `kind_id`, `<pack>/<effect>`.
@@ -120,22 +204,34 @@ pub(crate) struct Packs {
     watcher: PackWatcher,
     /// Every loaded effect, quarantined or not.
     loaded: BTreeMap<String, PackEffect>,
+    /// Every loaded shader source, quarantined or not.
+    sources: BTreeMap<String, PackSource>,
     quarantine: Quarantine,
+    /// The digests of the modules each loaded kind draws ([`digests`]).
+    drawn: BTreeMap<String, Vec<String>>,
     /// How many losses each kind was blamed for in this run.
     blamed: BTreeMap<String, u32>,
     /// The last [`Update::seq`] made.
     seq: u64,
+    /// The client name of each pack's last `pack.write` (ADR-0097 decision 5), by pack ID.
+    writers: BTreeMap<String, String>,
 }
 
 impl Packs {
     /// Watches `root`, a folder of pack folders, with the quarantine its
-    /// [`QUARANTINE_FILE`] keeps. Nothing loads until the first [`Self::poll`].
+    /// [`QUARANTINE_FILE`] keeps. First recovers a pack write that stopped part-way
+    /// ([`crate::pack_store::recover`]). Nothing loads until the first [`Self::poll`].
     pub(crate) fn new(root: PathBuf) -> Self {
+        crate::pack_store::recover(&root);
         let quarantine = read_quarantine(&root.join(QUARANTINE_FILE));
+        let writers = crate::pack_store::read_writers(&root);
         Self {
+            writers,
             watcher: PackWatcher::new(root, jstream_render::FILTER_PRELUDE),
             loaded: BTreeMap::new(),
+            sources: BTreeMap::new(),
             quarantine,
+            drawn: BTreeMap::new(),
             blamed: BTreeMap::new(),
             seq: 0,
         }
@@ -182,18 +278,65 @@ impl Packs {
                 )
             })
             .collect();
+        let sources: BTreeMap<String, PackSource> = self
+            .watcher
+            .packs()
+            .flat_map(jstream_effects::Pack::sources)
+            .map(|source| {
+                let id = source.kind_id();
+                let kept = self
+                    .sources
+                    .get(id)
+                    .filter(|_| !changed.contains(&id))
+                    .cloned();
+                (
+                    id.to_owned(),
+                    kept.unwrap_or_else(|| PackSource::new(source.clone())),
+                )
+            })
+            .collect();
         let removed = self
-            .loaded
-            .keys()
-            .filter(|id| !loaded.contains_key(*id))
+            .kinds()
+            .filter(|id| !loaded.contains_key(*id) && !sources.contains_key(*id))
             .cloned()
             .collect();
         let described = changed
             .iter()
-            .filter_map(|id| self.watcher.effect(id))
-            .map(|effect| effect.descriptor().clone())
+            .filter_map(|id| {
+                self.watcher
+                    .effect(id)
+                    .map(Effect::descriptor)
+                    .or_else(|| self.watcher.source(id).map(ShaderSource::descriptor))
+            })
+            .cloned()
             .collect();
         self.loaded = loaded;
+        self.sources = sources;
+        self.drawn = self
+            .kinds()
+            .map(|id| {
+                let effect = self.loaded.get(id).map(|e| &*e.0);
+                let source = self.sources.get(id).map(|s| &*s.0);
+                (id.clone(), digests(effect, source))
+            })
+            .collect();
+        // A kind quarantined before ADR-0097 has no digests: it gains them the first
+        // time its pack loads, so renaming it can't put it back on air.
+        let unrecorded: Vec<String> = self
+            .quarantine
+            .kinds
+            .iter()
+            .filter(|id| !self.quarantine.digests.contains_key(*id))
+            .filter(|id| self.drawn.contains_key(*id))
+            .cloned()
+            .collect();
+        if !unrecorded.is_empty() {
+            for id in unrecorded {
+                let drawn = self.drawn[&id].iter().cloned().collect();
+                self.quarantine.digests.insert(id, drawn);
+            }
+            self.save();
+        }
         for change in &changes.kinds {
             tracing::info!(?change, "effect pack kind");
         }
@@ -207,7 +350,7 @@ impl Packs {
     pub(crate) fn blame(&mut self, drawn: &BTreeSet<String>) -> Blame {
         let blamed: Vec<String> = drawn
             .iter()
-            .filter(|id| self.loaded.contains_key(*id))
+            .filter(|id| self.is_loaded(id))
             .cloned()
             .collect();
         let mut quarantined = BTreeSet::new();
@@ -217,9 +360,8 @@ impl Packs {
             if *count >= 2 {
                 let pack = pack_of(kind_id).to_owned();
                 quarantined.extend(
-                    self.loaded
-                        .keys()
-                        .filter(|id| pack_of(id) == pack && !self.quarantine.holds(id))
+                    self.kinds()
+                        .filter(|id| pack_of(id) == pack && !self.holds(id))
                         .cloned(),
                 );
                 quarantined.insert(kind_id.clone());
@@ -228,6 +370,8 @@ impl Packs {
                 quarantined.insert(kind_id.clone());
             }
             self.quarantine.kinds.insert(kind_id.clone());
+            let drawn = self.drawn_by(kind_id).iter().cloned().collect();
+            self.quarantine.digests.insert(kind_id.clone(), drawn);
         }
         let update = (!blamed.is_empty()).then(|| {
             self.save();
@@ -245,12 +389,13 @@ impl Packs {
         }
     }
 
-    /// Lifts the quarantine of `kind_id`, and of its pack. `Ok(None)` when it wasn't
+    /// Lifts the quarantine of `kind_id`, and of its pack, and every quarantine whose
+    /// digests it draws (one blamed under another ID). `Ok(None)` when it wasn't
     /// quarantined. Fails with `invalid_argument` for a kind no loaded pack has and no
     /// quarantine names.
     pub(crate) fn enable(&mut self, kind_id: &str) -> Result<Option<Update>, ProtocolError> {
-        if !self.quarantine.holds(kind_id) {
-            if self.loaded.contains_key(kind_id) {
+        if !self.holds(kind_id) {
+            if self.is_loaded(kind_id) {
                 return Ok(None);
             }
             return Err(ProtocolError::invalid_argument(
@@ -260,9 +405,149 @@ impl Packs {
         }
         self.quarantine.kinds.remove(kind_id);
         self.quarantine.packs.remove(pack_of(kind_id));
+        self.quarantine.digests.remove(kind_id);
+        let drawn = self.drawn_by(kind_id).to_vec();
+        let shared: Vec<String> = self
+            .quarantine
+            .digests
+            .iter()
+            .filter(|(_, held)| drawn.iter().any(|d| held.contains(d)))
+            .map(|(id, _)| id.clone())
+            .collect();
+        for id in shared {
+            self.quarantine.digests.remove(&id);
+            self.quarantine.kinds.remove(&id);
+        }
         self.save();
         tracing::info!(kind_id, "quarantined effect re-enabled");
         Ok(Some(self.update(Vec::new(), Vec::new())))
+    }
+
+    /// `pack.write` (ADR-0097): replaces pack `pack` whole with `files`, written by the
+    /// client named `writer`, and loads it at once. The caller holds the packs' lock, so
+    /// the watcher too: no poll sees the pack half written. Returns the pack as
+    /// `pack.list` shows it, and the update its new kinds make.
+    pub(crate) fn write(
+        &mut self,
+        pack: &str,
+        files: &[jstream_protocol::PackFile],
+        writer: &str,
+    ) -> Result<(PackInfo, Option<Update>), ProtocolError> {
+        crate::pack_store::check_pack_id(pack)?;
+        let decoded = crate::pack_store::decode(files)?;
+        let root = self.watcher.root().to_owned();
+        std::fs::create_dir_all(&root).map_err(|error| ProtocolError::Internal {
+            reason: format!("couldn't make the packs folder {}: {error}", root.display()),
+        })?;
+        let home = crate::pack_store::write(&root, pack, &decoded, |dir| {
+            jstream_effects::load_pack(dir, jstream_render::FILTER_PRELUDE)
+        })?;
+        // A client that gave no name in its `hello` names no writer.
+        if writer.is_empty() {
+            self.writers.remove(pack);
+        } else {
+            self.writers.insert(pack.to_owned(), writer.to_owned());
+        }
+        crate::pack_store::save_writers(&root, &self.writers);
+        tracing::info!(pack, writer, files = files.len(), "effect pack written");
+        // Its files may keep the sizes and times of the ones they replaced.
+        self.watcher.mark_stale(&home);
+        let update = self.poll();
+        let info = self
+            .list()
+            .into_iter()
+            .find(|info| info.id == pack && root.join(&info.folder) == home)
+            .ok_or_else(|| ProtocolError::Internal {
+                reason: format!("pack `{pack}` was written but isn't in its folder"),
+            })?;
+        Ok((info, update))
+    }
+
+    /// `pack.delete` (ADR-0097): removes each folder whose `effect.toml` names pack ID
+    /// `pack`, loaded or not, and drops its kinds at once.
+    pub(crate) fn delete(&mut self, pack: &str) -> Result<Option<Update>, ProtocolError> {
+        crate::pack_store::check_pack_id(pack)?;
+        let root = self.watcher.root().to_owned();
+        crate::pack_store::delete(&root, pack)?;
+        if self.writers.remove(pack).is_some() {
+            crate::pack_store::save_writers(&root, &self.writers);
+        }
+        tracing::info!(pack, "effect pack deleted");
+        Ok(self.poll())
+    }
+
+    /// `pack.list` (ADR-0097): every folder in the packs folder whose `effect.toml`
+    /// names a pack ID, ordered by pack ID, then folder.
+    pub(crate) fn list(&self) -> Vec<PackInfo> {
+        let mut packs: Vec<PackInfo> = crate::pack_store::folders(self.watcher.root())
+            .into_iter()
+            .filter_map(|(folder, dir)| {
+                let loaded = self.watcher.packs().find(|p| p.dir() == dir);
+                let id = match loaded {
+                    Some(pack) => pack.id().to_owned(),
+                    None => jstream_effects::manifest_pack_id(&dir).ok()?,
+                };
+                let kinds = loaded.map_or_else(Vec::new, |pack| {
+                    pack.effects()
+                        .iter()
+                        .map(|e| e.kind_id().to_owned())
+                        .chain(pack.sources().iter().map(|s| s.kind_id().to_owned()))
+                        .collect()
+                });
+                Some(PackInfo {
+                    written_by: self.writers.get(&id).cloned(),
+                    id,
+                    folder,
+                    kinds,
+                    loaded: loaded.is_some(),
+                })
+            })
+            .collect();
+        packs.sort_by(|a, b| (&a.id, &a.folder).cmp(&(&b.id, &b.folder)));
+        packs
+    }
+
+    /// `pack.read` (ADR-0097): the files of pack `pack`, from the folder that loads it,
+    /// else the first whose `effect.toml` names it; with `path`, that one file.
+    pub(crate) fn read(
+        &self,
+        pack: &str,
+        path: Option<&str>,
+    ) -> Result<Vec<jstream_protocol::PackFileInfo>, ProtocolError> {
+        crate::pack_store::check_pack_id(pack)?;
+        let root = self.watcher.root();
+        let dir = self
+            .watcher
+            .packs()
+            .find(|p| p.id() == pack)
+            .map(|p| p.dir().to_owned())
+            .or_else(|| crate::pack_store::holders(root, pack).into_iter().next())
+            .ok_or_else(|| ProtocolError::NotFound {
+                entity: jstream_protocol::EntityKind::Pack,
+                id: pack.to_owned(),
+            })?;
+        crate::pack_store::read(&dir, path)
+    }
+
+    /// Whether `kind_id` may not draw: quarantined by ID, by its pack, or by a digest of
+    /// a module it draws.
+    fn holds(&self, kind_id: &str) -> bool {
+        self.quarantine.holds(kind_id, self.drawn_by(kind_id))
+    }
+
+    /// The digests of the modules loaded `kind_id` draws: none when it isn't loaded.
+    fn drawn_by(&self, kind_id: &str) -> &[String] {
+        self.drawn.get(kind_id).map_or(&[], Vec::as_slice)
+    }
+
+    /// Every loaded kind, effect or shader source, quarantined or not.
+    fn kinds(&self) -> impl Iterator<Item = &String> {
+        self.loaded.keys().chain(self.sources.keys())
+    }
+
+    /// Whether a loaded pack has `kind_id`, an effect or a shader source.
+    fn is_loaded(&self, kind_id: &str) -> bool {
+        self.loaded.contains_key(kind_id) || self.sources.contains_key(kind_id)
     }
 
     /// The update for the loaded effects and quarantine as they are now.
@@ -271,25 +556,27 @@ impl Packs {
         let effects = self
             .loaded
             .iter()
-            .filter(|(id, _)| !self.quarantine.holds(id))
+            .filter(|(id, _)| !self.holds(id))
             .map(|(id, effect)| (id.clone(), effect.clone()))
+            .collect();
+        let sources = self
+            .sources
+            .iter()
+            .filter(|(id, _)| !self.holds(id))
+            .map(|(id, source)| (id.clone(), source.clone()))
             .collect();
         let quarantined = self
             .quarantine
             .kinds
             .iter()
             .cloned()
-            .chain(
-                self.loaded
-                    .keys()
-                    .filter(|id| self.quarantine.packs.contains(pack_of(id)))
-                    .cloned(),
-            )
+            .chain(self.kinds().filter(|id| self.holds(id)).cloned())
             .collect();
         Update {
             removed,
             described,
             effects: Arc::new(effects),
+            sources: Arc::new(sources),
             quarantined,
             seq: self.seq,
         }
@@ -334,7 +621,7 @@ pub(crate) mod test_pack {
 
     pub(crate) const KIND: &str = "tint/mul";
 
-    const MANIFEST: &str = r##"
+    pub(crate) const MANIFEST: &str = r##"
 [pack]
 id = "tint"
 name = "Tint"
@@ -398,6 +685,85 @@ default = "#00ff00"
         super::PackEffect::new(pack.effect(KIND).expect("tint/mul").clone())
     }
 
+    /// A shader source kind, `glow/ramp` (ADR-0093): 16 by 9, each frame a quarter
+    /// brighter than the one before (its feedback), and showing the top-left texel of its
+    /// `sky` scene where that has any alpha.
+    pub(crate) const SOURCE_KIND: &str = "glow/ramp";
+
+    const SOURCE_MANIFEST: &str = r##"
+[pack]
+id = "glow"
+name = "Glow"
+
+[[source]]
+id = "ramp"
+name = "Ramp"
+version = 1
+width = 16
+height = 16
+
+[[source.param]]
+id = "sky"
+label = "Sky"
+type = "scene"
+
+[[source.pass]]
+id = "ramp"
+shader = "ramp.wgsl"
+inputs = ["ramp", "sky"]
+"##;
+
+    const RAMP: &str = "@fragment\nfn fs(in: VsOut) -> @location(0) vec4<f32> {\n    let last = ramp(in.uv).r;\n    let s = sky(vec2<f32>(0.0));\n    let up = vec4<f32>(vec3<f32>(min(last + 0.25, 1.0)), 1.0);\n    return select(up, s, s.a > 0.0);\n}\n";
+
+    /// A shader source that hears audio, `glow/ear`: white while its level and the band
+    /// a 1 kHz tone falls in are up, black otherwise.
+    pub(crate) const EAR_KIND: &str = "glow/ear";
+
+    const EAR_MANIFEST: &str = r##"
+
+[[source]]
+id = "ear"
+name = "Ear"
+version = 1
+width = 16
+height = 16
+audio = true
+
+[[source.pass]]
+id = "ear"
+shader = "ear.wgsl"
+inputs = ["audio"]
+"##;
+
+    const EAR: &str = "@fragment\nfn fs(in: VsOut) -> @location(0) vec4<f32> {\n    let on = sys.level > 0.1 && audio_band(36) > 0.5;\n    return vec4<f32>(vec3<f32>(select(0.0, 1.0, on)), 1.0);\n}\n";
+
+    /// The `glow/ear` source, loaded from a pack in `temp` beside `glow/ramp`.
+    pub(crate) fn ear(temp: &Temp) -> super::PackSource {
+        let dir = temp.0.join("glow");
+        std::fs::create_dir_all(&dir).expect("create pack dir");
+        std::fs::write(
+            dir.join("effect.toml"),
+            format!("{SOURCE_MANIFEST}{EAR_MANIFEST}"),
+        )
+        .expect("write manifest");
+        std::fs::write(dir.join("ramp.wgsl"), RAMP).expect("write shader");
+        std::fs::write(dir.join("ear.wgsl"), EAR).expect("write shader");
+        let pack = jstream_effects::Pack::load(&dir, jstream_render::FILTER_PRELUDE)
+            .expect("the test source pack loads");
+        super::PackSource::new(pack.source(EAR_KIND).expect("glow/ear").clone())
+    }
+
+    /// The `glow/ramp` source, loaded from a pack in `temp`.
+    pub(crate) fn source(temp: &Temp) -> super::PackSource {
+        let dir = temp.0.join("glow");
+        std::fs::create_dir_all(&dir).expect("create pack dir");
+        std::fs::write(dir.join("effect.toml"), SOURCE_MANIFEST).expect("write manifest");
+        std::fs::write(dir.join("ramp.wgsl"), RAMP).expect("write shader");
+        let pack = jstream_effects::Pack::load(&dir, jstream_render::FILTER_PRELUDE)
+            .expect("the test source pack loads");
+        super::PackSource::new(pack.source(SOURCE_KIND).expect("glow/ramp").clone())
+    }
+
     /// The `tint/mul` kind's descriptor.
     pub(crate) fn descriptor() -> jstream_protocol::KindDescriptor {
         let temp = Temp::new("descriptor");
@@ -410,8 +776,9 @@ default = "#00ff00"
 
 #[cfg(test)]
 mod tests {
-    use super::Packs;
     use super::test_pack::{self, KIND, Temp};
+    use super::{Packs, QUARANTINE_FILE};
+    use std::collections::BTreeSet;
 
     /// A poll reports the kinds a pack adds, changes and removes, and keeps an effect
     /// that didn't change, so the filters drawing it keep running.
@@ -503,6 +870,118 @@ mod tests {
         );
         let lifted = packs.enable(KIND).expect("enable").expect("lifted");
         assert!(lifted.effects.contains_key(KIND) && lifted.quarantined.is_empty());
+    }
+
+    /// The `tint` pack's manifest and shader under another pack ID, `copy`.
+    fn write_copy(temp: &Temp, shader: &str) {
+        let dir = temp.0.join("copy");
+        test_pack::write(&dir, shader);
+        let manifest = std::fs::read_to_string(dir.join("effect.toml")).expect("manifest");
+        std::fs::write(
+            dir.join("effect.toml"),
+            manifest.replacen("id = \"tint\"", "id = \"copy\"", 1),
+        )
+        .expect("rename the pack");
+    }
+
+    /// A quarantine follows the shader (ADR-0097): the same WGSL under another pack ID
+    /// loads quarantined, another shader there doesn't, and re-enabling the copy lifts
+    /// the original.
+    #[test]
+    fn a_blamed_shader_is_quarantined_under_another_id() {
+        let temp = Temp::new("digest");
+        test_pack::write(&temp.pack(), test_pack::MUL);
+        let mut packs = Packs::new(temp.0.clone());
+        packs.poll().expect("the pack loads");
+        let drawn: BTreeSet<String> = [KIND.to_owned()].into_iter().collect();
+        assert!(packs.blame(&drawn).update.is_some());
+        assert_eq!(
+            packs.quarantine.digests[KIND].len(),
+            1,
+            "one module, digested"
+        );
+
+        write_copy(&temp, test_pack::MUL);
+        let copied = packs.poll().expect("the copy loads");
+        assert!(copied.quarantined.contains("copy/mul"), "{copied:?}");
+        assert!(!copied.effects.contains_key("copy/mul"));
+
+        write_copy(&temp, test_pack::BLUE);
+        let other = packs.poll().expect("the copy reloads");
+        assert!(
+            other.effects.contains_key("copy/mul"),
+            "another shader draws"
+        );
+        write_copy(&temp, test_pack::MUL);
+        packs.poll().expect("the copy reloads");
+
+        let lifted = packs.enable("copy/mul").expect("enable").expect("lifted");
+        assert!(lifted.effects.contains_key("copy/mul") && lifted.effects.contains_key(KIND));
+        assert!(lifted.quarantined.is_empty() && packs.quarantine.digests.is_empty());
+    }
+
+    /// A quarantine file from before ADR-0097, which names kinds only, gains the digests
+    /// of what they draw when their pack loads, and keeps them in the file.
+    #[test]
+    fn an_old_quarantine_gains_digests_when_its_pack_loads() {
+        let temp = Temp::new("digest-old");
+        test_pack::write(&temp.pack(), test_pack::MUL);
+        std::fs::write(
+            temp.0.join(QUARANTINE_FILE),
+            format!(r#"{{"kinds":["{KIND}"],"packs":[]}}"#),
+        )
+        .expect("an old quarantine");
+        let mut packs = Packs::new(temp.0.clone());
+        let loaded = packs.poll().expect("the pack loads");
+        assert!(loaded.quarantined.contains(KIND));
+        assert_eq!(
+            Packs::new(temp.0.clone()).quarantine.digests.len(),
+            1,
+            "saved"
+        );
+        write_copy(&temp, test_pack::MUL);
+        let copied = packs.poll().expect("the copy loads");
+        assert!(copied.quarantined.contains("copy/mul"));
+    }
+
+    /// A pack's shader source is a kind like its effects: described on load, drawn
+    /// until a device loss is blamed on it, then quarantined, and forgotten with its
+    /// pack.
+    #[test]
+    fn a_shader_source_is_described_quarantined_and_forgotten() {
+        use test_pack::SOURCE_KIND;
+
+        let temp = Temp::new("source");
+        let _ = test_pack::source(&temp);
+        let mut packs = Packs::new(temp.0.clone());
+        let loaded = packs.poll().expect("the pack loads");
+        let described = &loaded.described;
+        assert_eq!(described.len(), 1);
+        assert_eq!(described[0].kind_id, SOURCE_KIND);
+        assert_eq!(
+            described[0].category,
+            jstream_protocol::KindCategory::Source
+        );
+        assert!(loaded.sources.contains_key(SOURCE_KIND) && loaded.effects.is_empty());
+
+        let drawn = [SOURCE_KIND.to_owned()].into_iter().collect();
+        let blame = packs.blame(&drawn);
+        assert_eq!(blame.quarantined, [SOURCE_KIND.to_owned()]);
+        let update = blame.update.expect("the plans change");
+        assert!(!update.sources.contains_key(SOURCE_KIND));
+        assert!(update.quarantined.contains(SOURCE_KIND));
+        assert_eq!(
+            packs.quarantine.digests[SOURCE_KIND].len(),
+            1,
+            "one digest per pass"
+        );
+        let lifted = packs.enable(SOURCE_KIND).expect("enable").expect("lifted");
+        assert!(lifted.sources.contains_key(SOURCE_KIND));
+
+        std::fs::remove_dir_all(temp.0.join("glow")).expect("remove the pack");
+        let removed = packs.poll().expect("the pack is gone");
+        assert_eq!(removed.removed, [SOURCE_KIND]);
+        assert!(removed.sources.is_empty());
     }
 
     /// A pack whose shader fails validation adds no kind.

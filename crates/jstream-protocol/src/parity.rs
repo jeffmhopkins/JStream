@@ -598,6 +598,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                         folder: None,
                         meta: Default::default(),
                         options: Default::default(),
+                        camera: None,
                     },
                     SceneInfo {
                         overrides: Vec::new(),
@@ -612,6 +613,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                         folder: None,
                         meta: Default::default(),
                         options: Default::default(),
+                        camera: None,
                     },
                 ],
                 outputs: outputs(),
@@ -2374,6 +2376,7 @@ fn items_of_a() -> Vec<ItemInfo> {
         opacity: Finite32::ONE,
         blend: BlendMode::Normal,
         transition: ItemTransition::default(),
+        locked: false,
     };
     vec![
         ItemInfo {
@@ -2388,6 +2391,7 @@ fn items_of_a() -> Vec<ItemInfo> {
             opacity: QUARTER,
             blend: BlendMode::Normal,
             transition: ItemTransition::default(),
+            locked: false,
         },
         plain("i1", "cam_copy"),
         plain("i2", "b_src"),
@@ -2408,5 +2412,6 @@ fn items_of_b() -> Vec<ItemInfo> {
         opacity: HALF,
         blend: BlendMode::Normal,
         transition: ItemTransition::default(),
+        locked: false,
     }]
 }

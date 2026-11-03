@@ -251,6 +251,9 @@ pub enum EntityKind {
     /// An installed plugin (0.35). Only an error answering a `plugin.*` action names it,
     /// so a client older than 0.35, which sends none, never reads it.
     Plugin,
+    /// An effect pack (0.72, ADR-0097). Only an error answering a `pack.*` command names
+    /// it, so a client older than 0.72, which sends none, never reads it.
+    Pack,
 }
 
 impl fmt::Display for EntityKind {
@@ -270,6 +273,7 @@ impl fmt::Display for EntityKind {
             EntityKind::Device => "device",
             EntityKind::Hotkey => "hotkey",
             EntityKind::Plugin => "plugin",
+            EntityKind::Pack => "pack",
         })
     }
 }

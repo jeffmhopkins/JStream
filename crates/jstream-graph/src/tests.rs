@@ -1328,7 +1328,7 @@ mod property {
         let owner = |source: String| jstream_protocol::FilterOwner::Source {
             source_id: SourceId::new(source),
         };
-        match rng.below(69) {
+        match rng.below(70) {
             0 => scene_create(&pool(rng, "s")),
             1 => Edit::SceneRename {
                 scene_id: SceneId::new(scene(rng)),
@@ -1792,6 +1792,23 @@ mod property {
                     .map(|_| bus(rng))
                     .collect(),
             },
+            // Sometimes none, and sometimes at its own target, which is refused.
+            68 => Edit::SceneSetCamera {
+                scene_id: SceneId::new(scene(rng)),
+                camera: match rng.below(3) {
+                    0 => None,
+                    1 => Some(jstream_protocol::SceneCamera::framing(
+                        jstream_protocol::Canvas::DEFAULT,
+                    )),
+                    _ => {
+                        let mut at = jstream_protocol::SceneCamera::framing(
+                            jstream_protocol::Canvas::DEFAULT,
+                        );
+                        at.target = at.position;
+                        Some(at)
+                    }
+                },
+            },
             _ => Edit::CanvasSetSize {
                 width: u32::try_from(rng.below(3000)).expect("fits"),
                 height: 720,
@@ -1920,6 +1937,7 @@ mod property {
             "scene.set_folder",
             "scene.set_meta",
             "scene.set_options",
+            "scene.set_camera",
             "label.create",
             "label.update",
             "label.reorder",
@@ -2499,7 +2517,9 @@ fn a_bus_reference_must_name_a_bus() {
         )),
         (
             "edits.0.settings.audio".into(),
-            "must be a bus reference or null".into()
+            "must be a bus reference or null: an object such as \
+             `{\"type\": \"bus\", \"bus_id\": \"<id>\"}`"
+                .into()
         )
     );
     apply_ok(
@@ -4058,6 +4078,50 @@ fn item_add_takes_opacity_and_blend_and_remove_restores_them() {
     assert_eq!(g.state(), &before);
 }
 
+/// `item.set_locked` (ADR-0096) locks the item, its inverse unlocks it, and removing a
+/// locked item is undone locked.
+#[test]
+fn a_lock_is_undone_and_survives_a_removal() {
+    let mut g = fixture();
+    apply_ok(&mut g, vec![add("a", "i1", "cam"), add("a", "i2", "cam")]);
+    let item = || ItemId::new("i1");
+    let missing = apply_err(
+        &mut g,
+        vec![Edit::ItemSetLocked {
+            item_id: ItemId::new("nope"),
+            locked: true,
+        }],
+    );
+    assert!(
+        matches!(missing, ProtocolError::NotFound { .. }),
+        "{missing:?}"
+    );
+    let locked = apply_ok(
+        &mut g,
+        vec![Edit::ItemSetLocked {
+            item_id: item(),
+            locked: true,
+        }],
+    );
+    assert!(item_info(&g, "i1").locked);
+    assert_eq!(
+        locked.inverse.edits,
+        [Edit::ItemSetLocked {
+            item_id: item(),
+            locked: false,
+        }]
+    );
+    let before = g.state().clone();
+    let removed = apply_ok(&mut g, vec![Edit::ItemRemove { item_id: item() }]);
+    assert!(removed.inverse.edits.contains(&Edit::ItemSetLocked {
+        item_id: item(),
+        locked: true,
+    }));
+    apply_ok(&mut g, removed.inverse.edits);
+    assert_eq!(g.state(), &before);
+}
+
+mod cameras;
 mod filters;
 mod keyframes;
 
@@ -4807,4 +4871,87 @@ mod hotkeys {
         assert_eq!(chords(&graph), ["F5", "F6"]);
         assert_eq!(graph.state().hotkey(&Chord::new("F5")), Some(&with_preset));
     }
+}
+
+/// A stinger preset's scene holds the scene like any other reference (ADR-0025, ADR-0037
+/// §1): `scene.delete` is refused with the preset as its blocker, and the delete plan
+/// sets the preset's `scene` back to `null` before deleting the scene.
+#[test]
+fn a_stinger_preset_blocks_deleting_its_scene_and_the_plan_clears_it() {
+    use jstream_protocol::{Easing, TransitionPresetId};
+    let mut graph = fixture();
+    let mut settings = Settings::new();
+    settings.insert("scene", scene_ref("c"));
+    apply_ok(
+        &mut graph,
+        vec![Edit::TransitionCreate {
+            preset_id: TransitionPresetId::new("sting"),
+            name: "Sting".into(),
+            kind: jstream_protocol::STINGER.into(),
+            duration_ms: 1000,
+            easing: Easing::Linear,
+            settings,
+        }],
+    );
+    let error = apply_err(
+        &mut graph,
+        vec![Edit::SceneDelete {
+            scene_id: SceneId::new("c"),
+        }],
+    );
+    let ProtocolError::InvalidArgument { blockers, .. } = error else {
+        panic!("not blocked: {error:?}");
+    };
+    // The fixture's `sc` source shows `c` too.
+    assert_eq!(
+        blockers,
+        vec![
+            jstream_protocol::Blocker {
+                entity: EntityKind::Source,
+                id: "sc".into(),
+                field: "kind.scene_id".into(),
+            },
+            jstream_protocol::Blocker {
+                entity: EntityKind::Transition,
+                id: "sting".into(),
+                field: "settings.scene".into(),
+            },
+        ]
+    );
+    let edits = plan(
+        &graph,
+        DeleteTarget::Scene {
+            scene_id: SceneId::new("c"),
+        },
+    );
+    let mut patch = Settings::new();
+    patch.insert("scene", Value::Null);
+    assert_eq!(
+        edits,
+        vec![
+            Edit::TransitionUpdate {
+                preset_id: TransitionPresetId::new("sting"),
+                name: None,
+                kind: None,
+                duration_ms: None,
+                easing: None,
+                patch,
+            },
+            Edit::SourceDelete {
+                source_id: SourceId::new("sc"),
+            },
+            Edit::SceneDelete {
+                scene_id: SceneId::new("c"),
+            },
+        ]
+    );
+    let before = graph.clone();
+    let applied = graph
+        .apply(&edits, Some(before.rev()))
+        .expect("plan applies");
+    assert!(graph.state().scene(&SceneId::new("c")).is_none());
+    graph
+        .apply(&applied.inverse.edits, Some(applied.rev))
+        .expect("undo applies");
+    assert_eq!(graph.state(), before.state());
 }

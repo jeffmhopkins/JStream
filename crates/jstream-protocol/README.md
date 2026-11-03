@@ -37,7 +37,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `LiveOutcome` (`committed`, `cancelled`, `expired`), `GestureInfo` (one open gesture
   in a `live.list` result), the limits `MAX_GESTURES_PER_CLIENT` (16) and
   `MAX_LIVE_VALUES` (256), and `is_live_adjustable`, which says which setters `live.set`
-  takes (`item.set_transform`, `item.set_geometry`, `item.set_crop`, `source.set_settings`), so every
+  takes (`item.set_transform`, `item.set_geometry`, `item.set_crop`, `source.set_settings`,
+  `scene.set_camera`), so every
   implementation agrees.
 - **Commands** (`command.rs`): `Edit` (`scene.create`, `scene.create_variant`,
   `scene.rename`, `scene.delete`,
@@ -55,8 +56,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `send.remove`, `hotkey.set`,
   `hotkey.clear`, `transition.create`, `transition.update`, `transition.delete`,
   `transition.set_default`, `scene.set_transitions`, `item.set_transition`,
-  `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
-  `folder.delete`, `scene.set_folder`, `scene.set_meta`, `scene.set_options`, `label.create`,
+  `item.set_locked`, `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
+  `folder.delete`, `scene.set_folder`, `scene.set_meta`, `scene.set_options`,
+  `scene.set_camera`, `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `source.set_meta`), with
   `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole` and `BlendMode`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
@@ -65,7 +67,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
   `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`,
-  `effect.enable`, `codec.download`, `codec.delete`), with
+  `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`), with
   `Action::named_objects` and `Action::bind_problem`,
   which every implementation uses to check and follow a hotkey's action; `Batch`, whose
   optional `ends_gesture` commits a gesture; and the `Command`/`CommandClass`
@@ -115,15 +117,16 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `live.list`, `capture.targets`,
-  `font.list`, `source.sizes`, `activity.list`, `plugin.list` and `codec.downloads`, with
-  `QueryResult`
+  `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `codec.downloads`,
+  `pack.list`, `pack.read` and `profile.get` (`profile.rs`, with `ProfileInfo` and the
+  shapes it holds), with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
   `CaptureTargetInfo`, `FontInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
   (`activity.rs` holds the last, with `MAX_ACTIVITY_ENTRIES` and
   `MAX_ACTIVITY_SUMMARY_CHARS`). `state.get` carries the `Canvas`, and
   `ItemInfo`
   the item's `placement` form and its `geometry`, `SceneInfo` a scene's transition
-  overrides, `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
+  overrides and its `camera` (since 0.70; on a keyframe scene its own override), `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
   returns the program mix as a PNG. `youtube.status`, `youtube.list_broadcasts` and
   `youtube.list_streams` read the YouTube account, and `youtube.stats` the running
   `youtube` outputs' audience and the day's quota estimate.
@@ -138,7 +141,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `QuotaInfo` and `StatsPolling` (0.38).
 - **Transitions** (`transition.rs`, [ADR-0029](../../docs/adr/0029-transitions.md),
   [ADR-0037](../../docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md)): the
-  built-in transition kinds (`cut`, `fade`, `move`) and their descriptors, `Easing` with
+  built-in transition kinds (`cut`, `fade`, `move`, `stinger`) and their
+  descriptors, `Easing` with
   `Easing::apply`, the one easing function every implementation shares (golden-tested),
   `ItemTransition` (an item's delay, easing, glide and appear and disappear effects) with
   its range check, `TransitionPresetInfo` and `TransitionsInfo` as `state.get` reports
@@ -170,7 +174,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `plugin_may_bind`, `PluginState`, `PluginDisabledReason`, and `PluginInfo` and
   `PluginRequest`, what `plugin.list` reports ([Plugins](#design)).
 - **Preview streams** (`preview.rs`, [ADR-0045](../../docs/adr/0045-leptos-web-ui.md)):
-  `PreviewCodec` (`h264`, `jpeg`), `PreviewSettings` (`preview.subscribe`'s fields with
+  `PreviewCodec` (`h264`, `jpeg`, `png`), `PreviewSettings` (`preview.subscribe`'s fields with
   their defaults and range checks, which the engine applies), `PreviewDraft` (its
   `source`, a draft source the collection doesn't hold), and the binary
   frame: `BinaryFrame`, its fixed `BinaryHeader` with `StreamKind`, the byte layout's
@@ -192,11 +196,27 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   neutral. `content` maps a cropped source with `stretch`, `fit` or `fill`, and
   `flip_h` and `flip_v` mirror it in the box. `drawn_polygon` and `unplace` are
   ADR-0050's 3D polygon and inverse map, and `check_drawable` whether an edit may store
-  a geometry ([Item geometry](#design)).
+  a geometry ([Item geometry](#design)). `geometry/camera.rs` holds the scene camera
+  ([ADR-0094](../../docs/adr/0094-scene-cameras.md)): `Vec3`, `SceneCamera` with
+  `framing(canvas)`, the camera that puts every flat item on its 2D box, and `validate`,
+  and `CameraView`, the camera seen on one canvas. `drawn_polygon_seen`, `unplace_seen`,
+  `drawn_vertex_seen` and `project_seen` take an optional view, and with one place the
+  item by its geometry in the scene's space through the camera (`w = D / f`, the same
+  near plane); with none they are the functions above.
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.69 because of the
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.73 because of the
+  `profile.get` query
+  ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)); 0.72 because of the
+  effect-pack commands `pack.write`, `pack.delete`, `pack.list` and `pack.read`
+  (`pack.rs`: `PackFile`, `PackContent`, `PackInfo`, `PackFileInfo` and the write's
+  limits, [ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)), which agents
+  may call and no plugin is granted but `pack.list` and `pack.read`, and no hotkey
+  binds; 0.71 because of `item.set_locked`, `ItemInfo.locked` and the `png` preview
+  codec ([ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md)); 0.70
+  because of `scene.set_camera` and `SceneInfo.camera`, a live value too
+  ([ADR-0094](../../docs/adr/0094-scene-cameras.md)); 0.69 because of the
   `codec.downloads` query and the `codec.download` and `codec.delete` actions, which
   download Cisco's OpenH264 on a person's request ([Codec downloads](#design),
   [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)); 0.68 because of the
@@ -675,7 +695,10 @@ never a type per kind.
   `absolute`, and `CON.png` and `media/nul` under `collection` or `app` (joined to the
   root folder, they still open the device), while `CONSOLE.png` or `COM10.png` is not.
   Earlier components may use these names: Win32 fails to open such a path, and elsewhere
-  they are ordinary folders. An asset that doesn't exist yet is accepted.
+  they are ordinary folders. An asset that doesn't exist yet is accepted. A value that
+  isn't the reference a parameter takes (a bare path or id string, or another kind's
+  reference) is refused with a reason that shows the reference's shape, such as
+  `{"type": "asset", "root": "absolute", "path": "/path/to/file.png"}` (#1021).
 - **References are dependency edges.** Items placing sources, `scene` sources showing
   scenes, and scene, source and bus references in settings (a filter's settings count
   as its source's) form one dependency graph. An edit that would close a cycle
@@ -907,7 +930,19 @@ none, which is transparent), `#rrggbb` or `#rrggbbaa` with straight alpha, drawn
 scene's items wherever it is drawn, though never for a group (`parse_rgba` reads it). `scene.set_options` replaces them all the
 same way, a keyframe scene has its own except a background, which it shows from its
 parent and is refused, and `state.get` reports them flattened beside the scene's other
-fields, each omitted while it has its default. Other colours are sRGB `#rrggbb`;
+fields, each omitted while it has its default. A scene's **camera**
+(`scene.set_camera {scene_id, camera?}`, since 0.70,
+[ADR-0094](../../docs/adr/0094-scene-cameras.md)) makes it a 3D scene: `SceneCamera`'s
+`position` and `target` (`Vec3`, scene pixels, x right, y down, z toward the viewer),
+`fov_deg` (vertical, 1 to 170, default 45), `roll_deg` (default 0) and `depth_sort`
+(default `true`, not written while true). A camera omitted removes it. The edit refuses a
+field of view out of range (`edits.N.camera.fov_deg`), a coordinate past the drawable
+limit (`edits.N.camera`) and a position closer than 0.001 px to the target
+(`edits.N.camera.target`). On a keyframe scene it sets the variant's override, refused
+while its parent has no camera; removing the parent's camera drops its variants'
+overrides, and its inverse restores them. `SceneInfo.camera` reports the scene's own
+camera, on a keyframe scene its override (it shows its parent's where it has none), and
+is omitted when there is none. It is live-adjustable. Other colours are sRGB `#rrggbb`;
 an icon is an opaque name from the UI's icon set, checked only for its length (1 to 64
 bytes). A folder that holds a scene or folder, and a label a source or scene carries, can't
 be deleted: the `invalid_argument` lists the `blockers` (`folder`, `parent` or `labels`;
@@ -943,10 +978,13 @@ over that (#1006).
 [ADR-0037](../../docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md) decide
 the model (0.30). A transition preset is collection state:
 `{preset_id, name, kind, duration_ms, easing, settings}`, where `kind` is a transition
-kind `kind.list` reports (category `transition`: `cut`, `fade` and `move` so far) and
-`settings` are checked against its descriptor as a source's are (`unmatched`, the
-effect for items nothing pairs, and `stagger_ms`, an extra delay per incoming item by
+kind `kind.list` reports (category `transition`: `cut`, `fade`, `move` and `stinger` so
+far) and `settings` are checked against its descriptor as a source's are (`unmatched`,
+the effect for items nothing pairs, and `stagger_ms`, an extra delay per incoming item by
 stacking order, for `fade` and `move`; [ADR-0052](../../docs/adr/0052-transition-mechanics-and-studio-preview.md)).
+A `stinger` takes the `scene` it plays over the switch (a scene reference, or `null` to
+cut), `cut_ms`, when the picture under it cuts (default 500, at most the duration), and
+`stagger_ms`, which staggers the stinger scene's items by stacking order.
 
 - `transition.create` adds a preset, `transition.update` changes its fields or patches
   its settings (a new `kind` resets the settings to that kind's defaults, overlaid by
@@ -960,6 +998,11 @@ stacking order, for `fade` and `move`; [ADR-0052](../../docs/adr/0052-transition
   scene's overrides (absent clears one), and `item.set_transition {item_id,
   transition}` an item's `ItemTransition {delay_ms, easing, glide, appear,
   disappear}`, omitted from `ItemInfo` while it is the default.
+- `item.set_locked {item_id, locked}` locks or unlocks an item's canvas box
+  ([ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md), 0.71), reported
+  as `ItemInfo.locked`, omitted while false. It is an editing aid a client honours by
+  not dragging the box; the engine still applies every edit to a locked item. It
+  belongs to the item, so it takes no `scene_id` and a keyframe doesn't override it.
 - `scene.switch {scene_id, preset_id?}` resolves the preset in order: the one it names
   (`not_found` when there is no such preset), else the new scene's `transition_in`,
   else the current scene's `transition_out`, else the default. A switch while a
@@ -1066,6 +1109,21 @@ Queries read and never change `rev`. Those that read the collection state carry 
   root `absolute`. A collection lists its first font. The engine reads its OS's font
   folders on the first call and keeps the list, so a font installed later shows after
   a restart. Runtime state, so no `rev`. Added in 0.68.
+- `profile.get {seconds?, top?}`: where the engine's time went over the last
+  `seconds` (1 to 60, default 5), as a `ProfileInfo`
+  ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)): each drawing
+  thread's (`program`, `preview`) frames, their average, 95th percentile and longest
+  time, the frames over `frame_budget_ms`, the program's skipped ticks and the time per
+  phase; the units of drawing work costliest first, each a `ProfileUnit` naming its
+  owner (a source's upload or chain, a capture, a scene's chain or pass, an item's
+  effects, a placed scene's chain, the composite, the master or an output's chain) with
+  its frames, average and recent longest time and share of its drawer's time; the
+  sources the `jstream-sources` thread and the planner spent time on; the plans; the
+  process's CPU; and its threads by name, as a percentage of one core (JStream's own
+  `name`, any other `remote_name`, third-party text). `top` (default 20, at most 200)
+  cuts each list. Times are the drawing thread's, not the GPU's; `gpu_ms` and
+  `gpu_timing` are reserved for GPU timestamps. Runtime state, so no `rev`. Added in
+  0.73.
 - `privacy.get`: deprecated
   ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), removed in
   1.0. JStream has no privacy screen, so it always answers `on: false`. Added in 0.33.
@@ -1190,8 +1248,8 @@ that sets it: `scene.reorder` and `item.reorder` restore positions,
 `canvas.set_size` restores the canvas, and `item.set_geometry` and
 `item.set_transform` each restore the previous placement in its own form. So undoing
 `item.remove` is `item.add` (with `geometry` or `transform`, matching the removed
-item's form) plus whichever of `item.reorder`, `item.set_crop`, `item.set_visible`
-and `item.set_transition` the removed item needs, and undoing `scene.delete` is
+item's form) plus whichever of `item.reorder`, `item.set_crop`, `item.set_visible`,
+`item.set_transition` and `item.set_locked` the removed item needs, and undoing `scene.delete` is
 `scene.create` with the scene's `role` (omitted for `scene`), `scene.reorder` unless it
 was last, `scene.set_transitions` if it had an override, and each item's restore,
 bottom to top. A variant's `scene.delete` is undone by `scene.create_variant`, its role
@@ -1286,7 +1344,10 @@ named by a `gesture_id` it chooses, and sends its values as it goes:
   the parameters its kind marks `live` (anything else is `values.<n>.patch.<param>`):
   the engine draws the collection with those values applied, rebuilding the render
   snapshot, and each parameter of each source is a parameter of its own
-  ([ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)). Audio faders
+  ([ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)). Since 0.70
+  `scene.set_camera` is one too, one parameter per scene, so an orbit drag moves a 3D
+  scene's camera every frame and commits once
+  ([ADR-0094](../../docs/adr/0094-scene-cameras.md)). Audio faders
   follow as their real-time path exists. Values are checked as a batch's edits are, named
   `values.<n>.<field>`. Any other edit (`values.<n>.type`), an empty list, more than 256
   values, or a 17th open gesture of the client is `invalid_argument`, and nothing in the
@@ -1611,6 +1672,29 @@ GPU, and the OS resets the device (#349,
   loaded pack has and no quarantine names. It is for a person, like `plugin.enable`: no
   MCP tool carries it, no plugin is granted it and no hotkey binds it.
 
+Since 0.72 a client can write the packs themselves
+([ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md), `pack.rs`). These are
+actions and queries, not edits: undo doesn't reach the disk, and there is no `rev`.
+- **`pack.write {pack, files}`** replaces pack `pack` whole, or adds it, and loads it
+  at once; it answers `ActionResult::PackWrite` with the pack's `PackInfo`. Each
+  `PackFile` is a `path` and either `text` (`effect.toml`, `.wgsl`) or `base64` (`.png`,
+  `.jpg`, `.jpeg`, standard with padding). `files` over 3 MiB as sent
+  (`MAX_PACK_WRITE_BYTES`, so the request stays under ADR-0074's limit) is `too_large`
+  before it is decoded; more than 64 files (`MAX_PACK_FILES`), an image over 2 MiB
+  (`MAX_PACK_IMAGE_BYTES`), a bad pack ID or path, a pack another folder holds, a
+  folder `pack` that holds something else, and a pack that doesn't load are
+  `invalid_argument`, and the old version stays.
+- **`pack.delete {pack}`** removes the folder whose `effect.toml` names the pack, or is
+  `not_found` with `EntityKind::Pack`.
+- **`pack.list`** answers each pack's `PackInfo`: its `id`, `folder`, `kinds` while it
+  loads, `loaded`, and `written_by`, the client name of the last `pack.write` of that
+  pack ID (omitted when it gave none).
+- **`pack.read {pack, path?}`** answers `PackFileInfo`s: each file's `path`, `size` and
+  BLAKE3 `digest`, the `text` of text files (up to 3 MiB of text in all; a text file
+  over that read by `path` is `too_large`), and with `path` an image's `base64`.
+- Agents may call all four. A plugin may call `pack.list` and `pack.read` (class
+  `read`) and never the writes, and no hotkey binds a pack action.
+
 ### Codec downloads
 
 Cisco's patent licence for H.264 covers only Cisco's own OpenH264 binary, downloaded
@@ -1729,6 +1813,16 @@ function in this crate so the compositor and the UI share one implementation.
   behind the viewer. With the 3D fields neutral this is rotation about the box centre
   in the canvas plane. Depth alone, with no perspective, does not move the orthographic
   projection.
+- In a scene with a camera (ADR-0094) the same box is a pose in the scene's space:
+  `(center.x, center.y, depth_px)` its position, the three angles its orientation, and
+  `perspective_px` ignored. `project_seen`, `drawn_polygon_seen` and `unplace_seen`
+  take the camera's `CameraView` and build ADR-0050's homogeneous map with `w = D / f`
+  (`D` the distance along the viewing axis, `f = (H / 2) / tan(fov / 2)`), so the near
+  plane and the polygon clipping are the same. The picture's up is −y, or −z within
+  0.01° of looking straight up or down. Through `SceneCamera::framing` an item with
+  neutral 3D lands exactly on its 2D box. `CameraView::on_plane` goes the other way for an
+  editor: the point of the plane `z = depth` under a canvas point, which the UI's canvas
+  drags an item to.
 - `content` maps a cropped source into that local frame, before the placement above.
   `stretch` fills the box. `fit` is the largest rectangle of the source's aspect ratio
   inside the box, centred, and the rest stays transparent. `fill` is the smallest such
@@ -1849,7 +1943,10 @@ the JSON text messages of the same connection (0.20,
   changes, at most `fps` times a second (default 15, at most 30), and at least every
   2 s as a keyframe. `codecs` lists what the client can decode, most preferred first
   (default `["h264", "jpeg"]`); the engine uses the first it can encode, and may fall
-  back to a later one if an encoder fails to open, so each frame names its codec. A
+  back to a later one if an encoder fails to open, so each frame names its codec.
+  `png` (0.71, [ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md)) is
+  lossless and never a default: a client taking a screenshot asks for it alone and
+  keeps the first picture. A
   session has at most 16 streams (4 before 0.46), enough for a multiview.
   `preview.unsubscribe {channel}` closes one (and succeeds for a channel that isn't
   open); so does the session's end. The stream shows the mix before any master stage,
@@ -1890,7 +1987,7 @@ the JSON text messages of the same connection (0.20,
   |---|---|---|
   | 0 | 1 | version, 1 |
   | 1 | 1 | kind: 1 = preview |
-  | 2 | 1 | codec: 0 = none (an end frame), 1 = H.264, 2 = JPEG |
+  | 2 | 1 | codec: 0 = none (an end frame), 1 = H.264, 2 = JPEG, 3 = PNG (0.71) |
   | 3 | 1 | flags: bit 0 keyframe, bit 1 end of stream |
   | 4 | 4 | channel |
   | 8 | 2 | width |
@@ -1901,7 +1998,8 @@ the JSON text messages of the same connection (0.20,
 
   An H.264 payload is one access unit in Annex B form, with the parameter sets in band
   at keyframes, which WebCodecs' `VideoDecoder` takes with no `description`. A JPEG
-  payload is a whole baseline JFIF picture, always a keyframe. An end frame (flag bit
+  payload is a whole baseline JFIF picture, always a keyframe, and a PNG payload a whole
+  RGBA PNG, always a keyframe too. An end frame (flag bit
   1, codec 0) says the engine ended the stream; its payload is the reason as UTF-8, and
   the channel is free again. A client ignores a frame whose version, kind or codec it
   doesn't know, and the reserved bytes and spare flag bits.

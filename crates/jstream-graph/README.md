@@ -58,7 +58,9 @@ protocol's types (`Overrides`).
   labels and a favourite flag (ADR-0024 §4).
 - `Scene`: a name, a `role` (`scene` or `group`, ADR-0024 §1; it changes no behaviour
   here), its `transition_in` and `transition_out` overrides, the folder it is filed in,
-  if any, its `SceneMeta` and its items in stacking order, bottom first. A keyframe
+  if any, its `SceneMeta`, its `camera` if it is a 3D scene (ADR-0094; a keyframe
+  scene's is an override of its parent's), and its items in stacking order, bottom
+  first. A keyframe
   scene has `variant_of`, naming its parent, its `Overrides` and no items;
   `State::shown_items` gives the items any scene draws, a keyframe scene's being its
   parent's at their effective values. A scene's `filters` (ADR-0065) are `Chains` whose
@@ -113,7 +115,8 @@ with no inverse. The engine draws open gestures' source settings through it
 - **Inverses** are computed from the state before each edit, and the batch's inverse is
   its edits' inverses in reverse order. They are plain protocol edits, as the protocol's
   Undo design requires: removing an item is undone by `item.add`, then `item.reorder`,
-  `item.set_crop`, `item.set_visible` and `item.set_transition` only where the item
+  `item.set_crop`, `item.set_visible`, `item.set_transition` and `item.set_locked`
+  only where the item
   differed from what `item.add` produces, and deleting a scene by `scene.create` (carrying its `role` for a
   group), `scene.reorder`, `scene.set_transitions` when it had an override, and each
   item's restore. The inverse carries no `expected_rev`: the engine's per-client undo
@@ -160,7 +163,8 @@ with no inverse. The engine draws open gestures' source settings through it
   `invalid_argument` lists every blocker in `blockers` (`deps::blockers`, the reverse
   of the cycle check's edges, plus the mixes and outputs): the item (`source_id`), the `scene`
   source (`kind.scene_id`), the mix (`mix.input.scene_id`), the output (`audio_buses`), the setting
-  (`settings.<param>`) or a filter's setting (`filters.<filter_id>.<param>`). The client removes them first, in the same batch if it likes,
+  (`settings.<param>`), a filter's setting (`filters.<filter_id>.<param>`) or a transition
+  preset's setting, such as a stinger's scene (entity `transition`, `settings.<param>`). The client removes them first, in the same batch if it likes,
   or sends the batch `delete.plan` returns. Rejecting rather than cascading keeps each
   edit's effect, and its inverse, limited to the object it names.
 - **Canvas and geometry** ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)):
@@ -356,6 +360,12 @@ with no inverse. The engine draws open gestures' source settings through it
   which the engine reads when it follows nesting for audio, and `background`, checked as
   a colour (`SceneOptions::problem`) and refused on a keyframe scene, which shows its
   parent's. A deleted scene's inverse restores them.
+  `scene.set_camera` (`camera.rs`) sets or removes a scene's camera
+  ([ADR-0094](../../docs/adr/0094-scene-cameras.md)), checked by `SceneCamera::validate`
+  (field `camera.fov_deg`, `camera.target` when it is on the position, else `camera`). On a keyframe scene it writes
+  the variant's override, refused while the parent has no camera, and `State::effective_camera`
+  reads the override or the parent's. Removing a parent's camera drops its variants'
+  overrides, and the inverse restores them; a deleted scene's inverse restores its camera.
   `folder.delete` is refused while a scene (`folder`) or folder (`parent`) sits in the
   folder, and `label.delete` while a source, then a scene (`labels`), carries the label,
   listing them as `blockers`; their `delete.plan` moves what the folder holds up to its
@@ -399,8 +409,8 @@ unknown kind), and `delete.plan` (`plan.rs`,
 target. `Graph::delete_plan` builds the plan from the same `deps::blockers` the delete
 check uses: a scene's plan also deletes the `scene` sources that show it, the items
 placing any deleted source are removed, settings references to anything deleted are set
-to `null` (one `source.set_settings` per source, and one `filter.set_settings` per
-filter), the video mixes that show a deleted scene are pointed at the program
+to `null` (one `source.set_settings` per source, one `transition.update` per transition
+preset, and one `filter.set_settings` per filter), the video mixes that show a deleted scene are pointed at the program
 (`video_mix.update`), and the target's own delete comes last. The plan also lists the
 hotkey bindings those deletes remove. A bus's plan clears references and moves the
 outputs that carry the bus to the master (`output.set_audio_buses`; its
@@ -443,11 +453,12 @@ with its `filters`, omitted while it has none, the `hotkeys` ordered by chord, o
 when there are none, and `transitions` (each preset with its `kind_version`, and the
 default), omitted while it is the initial `cut` alone (so no `schema_version` bump: an
 older file has none of these). A scene writes `transition_in` and `transition_out`
-when set, and an item its `transition` when not the default. A source's `audio` is saved
+when set, and an item its `transition` when not the default and `locked` when locked
+(ADR-0096). A source's `audio` is saved
 only where it differs from its kind's defaults, except a `webcam`'s, which is always
 saved, so a webcam without it can only come from before webcams had audio (#716). `folders` and `labels` are in their
 orders, each omitted when empty. A scene's `folder`, `labels`, `icon`, `color`,
-`favourite`, `show_in_multiview`, `include_audio` and `background`, and a source's `labels` and `favourite`, are each omitted while
+`favourite`, `show_in_multiview`, `include_audio`, `background` and `camera`, and a source's `labels` and `favourite`, are each omitted while
 they have their default, so a collection without them saves as it did before they
 existed and needs no schema bump. A keyframe scene writes `variant_of` and its
 `overrides` in item ID order, each omitted for any other scene, so it needed no schema

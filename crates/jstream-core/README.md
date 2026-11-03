@@ -34,10 +34,11 @@ state machine. Contents:
   `with_publish_opener`, `with_key_store`, `with_youtube`, `with_audit`,
   `with_history_limit`, `with_browser` (the browser engine `browser` sources and their
   `youtube_chat` preset open pages in) and `with_collection_file`; `set_process_cpu`
-  and `start_stats_heartbeat` (`stats.tick`'s load, below); `open_plugin_dir`
+  and `start_stats_heartbeat` (`stats.tick`'s load, below); `set_thread_cpu`
+  (`profile.get`'s threads, below); `open_plugin_dir`
   (where installed WASM plugins are saved, ADR-0076), called once the engine is built;
   `scan_clap_plugins` adds the CLAP filter kinds; `watch_effect_packs` loads and
-  hot-reloads the WGSL effect packs (video filter kinds, below), and
+  hot-reloads the WGSL effect packs (video filter kinds and shader source kinds, below), and
   `HANDLED_PANIC_THREADS` names the pack load thread, whose panics the engine catches,
   for the apps' crash hook to leave out (#999);
   `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
@@ -236,6 +237,10 @@ state machine. Contents:
   that shows one of those scenes plans it again in full, chain and boxes, since the
   mixes are planned after the transition (#961). A switch mid-Move
   holds the children where they are on screen and moves them on from there.
+  A scene with a camera ([ADR-0094](../../docs/adr/0094-scene-cameras.md)) is planned
+  with it on its pass (`Pass.camera`, the variant's override or its parent's, a live
+  value winning), and every item it draws carries it to the compositor; a Move between
+  two 3D scenes moves the camera too (*Transitions* in [Design](#design)).
   `Shot::chain_cost` is what its
   scene chains, item effects and, for the running outputs, output stage add to each
   frame, for `stats.tick`'s `chains`.
@@ -248,7 +253,8 @@ state machine. Contents:
   draft source the collection doesn't hold as small pictures sent to the session that asked as binary frames
   (`Control::binary`), in H.264 on a software `jstream-encode` session when the
   platform has an encoder and in JPEG otherwise (`preview/jpeg.rs`, a baseline
-  encoder of its own), drawn on the engine's `jstream-preview` thread with its own
+  encoder of its own), or in PNG for a client that asks for it to take a screenshot
+  (`video.snapshot`'s encoder, [ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md)), drawn on the engine's `jstream-preview` thread with its own
   compositor and its own captures of what the mix shows, a webcam's one open shared
   with the program stage (`runtime/devices.rs`; see
   *Preview streams* in [Design](#design)).
@@ -334,6 +340,21 @@ state machine. Contents:
   `ProcessCpu` (`Engine::set_process_cpu`), and the idle heartbeat
   (`Engine::start_stats_heartbeat`), which ticks while no output runs (*Engine load*
   below).
+- **Profile** (`profile/`, [ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)):
+  `profile.get`, answered outside the collection lock. The render thread and the
+  preview hub's thread each time their frames with a `DrawMeter` that
+  `snapshot::compose_metered` fills: each source's upload, each capture, each video
+  chain (an item's with its box), each nested scene's pass and the composite, and the
+  phases they make up, with the readback's wait (`Compositor::readback_wait`) in the
+  finish phase. A meter keeps its units in maps from frame to frame, so a steady frame
+  allocates nothing, and publishes running totals once a second through `arc-swap`
+  (`DrawerSlot`); the render thread's collector frees the totals it replaces. The
+  `jstream-sources` thread counts each source's paints and builds, and the planner each
+  source's look and each plan, in the live sources' `SourceMeters`. The `Profiler`
+  reads all of them, the threads from the host's `ThreadCpu`
+  (`Engine::set_thread_cpu`) and the process CPU into a sample on each `stats.tick`
+  and each `profile.get`, keeps a minute of samples, and answers a window as the
+  difference between the newest and the one from that long ago.
 - **Tests** (`tests.rs`, `src/tests/history.rs`, `src/tests/live_values.rs`,
   `src/tests/audio.rs`, `src/tests/audio_routing.rs`, `src/tests/sources.rs`,
   `src/tests/transitions.rs`, `src/tests/fonts.rs`, `tests/mcp.rs`,
@@ -476,6 +497,7 @@ state machine. Contents:
   preview streams (`src/tests/preview.rs`: no subscription without a binary channel,
   JPEG without an encoder following the mix's changes and the canvas size, H.264 from
   the platform fakes starting at a keyframe and JPEG beside it for a client that asks,
+  a full-size PNG for a client that asks for it alone,
   the subscription checks and limit, unsubscribe and the session's end, and a reader
   that stops reading holding a bounded queue and resuming in order, a live value
   sent at once with the same `rev`, a display and a webcam the program shows captured
@@ -544,7 +566,10 @@ state machine. Contents:
   isn't built showing the capture, a missing file showing nothing, an animated image
   advancing on the clock, on the sources thread by itself and after a clock swap, and
   a `waveform` source painted
-  by the sources thread (`a_waveform_source_is_painted_by_the_sources_thread`). The parity
+  by the sources thread (`a_waveform_source_is_painted_by_the_sources_thread`), and a
+  `timer` that keeps counting through a style change and a new density, showing the
+  count from the first plan after each, and starts again when its mode changes
+  (`a_timer_keeps_counting_through_a_style_change_and_a_density`). The parity
   tests add the fixture's `mic` kind, which no built-in kind matches.
 
 Not here yet: live audio values (faders), the audio and outputs snapshots, and the
@@ -628,7 +653,8 @@ settings, and the CLAP kinds' parameter defaults), `png`
 [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), `thiserror`
 (`SourceFrameError`), `futures-core` (the `Stream` trait of event streams),
 `arc-swap` (the published render snapshot and the mixer thread's list of bus and
-source scopes), `tracing` (see *Logging*) and, on Windows only,
+source scopes), `blake3` (the digests a quarantine keeps of each blamed
+shader, ADR-0097; already in the tree through `jstream-server`), `tracing` (see *Logging*) and, on Windows only,
 `jstream-platform-windows` (`create_private_file` and `check_private_file` for the audit
 log and the collection file, `src/private_file.rs`; the GPU capture hardware test,
 `src/tests/windows_gpu.rs`, compiled only with this crate's `hw-tests` feature, uses it
@@ -707,7 +733,8 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
 - **`font.list`** ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)) reads the OS's font folders
   (`jstream_sources::installed_fonts`) on the first call, with no engine lock held, and
   keeps the list in `Shared` for the engine's life (`tests/fonts.rs`, with a folder of
-  its own through the test-only `with_font_dirs`).
+  its own through the test-only `with_font_dirs`). A font whose path isn't UTF-8 is left
+  out, since a lossy copy of its path would name another file.
 - **YouTube** actions and queries (`youtube.*`) run with no engine lock held, since
   most call the Live API (see *YouTube* under *Outputs*). Without `with_youtube`,
   YouTube's API features are off: `youtube.status` answers `unavailable` and the others
@@ -893,7 +920,7 @@ left. A switch never moves it, and nothing draws it until E2's preview mix does.
 preset (`transition::resolve`: the preset it names, else the new scene's
 `transition_in`, else the old scene's `transition_out`, else the default). A `cut`, a
 zero duration, or a kind this engine can't run puts the scene on program for the next
-frame. A `fade` or `move` puts it on program at once too, and keeps a `Running`
+frame. A `fade`, `move` or `stinger` puts it on program at once too, and keeps a `Running`
 transition beside it in the studio: where it starts from, the scene it goes to, its
 start on the media clock, and the resolved preset. `studio.changed` names the preset and
 the transition's length. While it runs, `snapshot::plan_with` plans the transition
@@ -907,6 +934,17 @@ alone. A switch while a transition runs samples it at the switch time
 one from those items, so nothing jumps
 ([ADR-0052](../../docs/adr/0052-transition-mechanics-and-studio-preview.md) §1). A switch to the scene already on program, even
 mid-transition, does nothing. An edit that moves program drops the transition.
+
+A `stinger` pairs nothing: what is on screen shows until its `cut_ms` (at most the
+duration) and the new scene from then on, with no effect (`transition::cut_under`). Its
+`scene`'s items, planned as the scene places them, are drawn over both as
+`Track::Through` (`transition::through`): each comes in by its own appear effect after
+its delay plus `stagger_ms` × its index and is in by the cut, then goes by its disappear
+effect after the cut by the same delay, and is gone at the end. The transition runs for
+its whole duration. A preset with no scene cuts at the cut point; the scene it names
+can't be deleted while it does (the graph lists the preset as a blocker, and
+`delete.plan` sets its `scene` to `null`). The stinger scene's sources are shown when it starts, so a
+`browser` source with `restart_on_show` plays from the beginning each time.
 
 Pairing and its inputs: each visible item that has a frame (or places a nested scene,
 or a `display` or `window` source showing its capture) becomes a `Visual` at its stored opacity, its
@@ -925,6 +963,27 @@ two sides planned for it, with their chains and boxes, are dropped when no track
 them; a switch mid-Move holds them where `on_screen` finds them. Stagger delays only
 the incoming items (§3). Audio does not follow a transition
 yet (D29).
+
+Cameras ([ADR-0094](../../docs/adr/0094-scene-cameras.md) decision 7): each pass of a
+scene carries the cameras its effective camera comes from (its own or a keyframe
+variant's override, and a variant's parent's) as `Pass.camera`, and live
+`scene.set_camera` values resolve through them as committed ones do
+(`LiveParams::camera`): a live removal of a variant's override falls back to its
+parent's camera, and a live removal of the parent's makes its variants 2D. The switch records the camera on screen when it starts
+(`Running.from_camera`, which a switch mid-Move takes from the running Move). A Move
+between two 3D scenes interpolates the camera with the Move's own timing
+(`lerp_camera`) and draws both sides' tracks through it. A Move between a 3D scene and
+a 2D one has nothing to pair, so it runs as a Fade of the same duration, and a Fade
+keeps each side's own camera on its items. A stinger's items are seen through their
+own scene's camera (`TrackCameras.overlay`), none for a 2D stinger scene, in a
+`depth_run` of their own (one past every run held from the screen,
+`TrackCameras.overlay_run`), so they sort among themselves and stay over the scenes
+under them and over a stinger they cut short. A switch that cuts a transition short takes what is on screen with the
+camera each item was seen through and the depth run it sorted in (`Seen::Held`): it
+leaves through that camera, a stinger's items still over what they covered, and only a
+screen seen through one camera (a Move cut short) moves it toward the new scene's, for
+every track; one seen through several (a Fade or stinger between cameras) makes the
+switch a Fade (`transition::shared_camera`).
 
 ### No privacy screen
 
@@ -1086,10 +1145,72 @@ kind stays in `kind.list`, marked `quarantined`, and is left out of the effects 
 read, so its filters are bypassed. The quarantine is kept in `quarantine.json` in the
 packs folder (`QUARANTINE_FILE`; the watcher reads only sub-folders), not in the
 collection, so it isn't undoable and survives restarts; editing the pack doesn't lift
-it, and a file that can't be read quarantines nothing. Only `effect.enable` lifts it,
-for the kind and its pack, run before the collection lock is taken. The engine then
+it, and a file that can't be read quarantines nothing. It follows the shader too
+([ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md) decision 6): a blamed
+kind's entry keeps the BLAKE3 digest of each WGSL module it drew (the prelude, header
+and shader of an effect; each pass of a shader source), and any loaded kind that draws
+one of them is quarantined, under whatever pack or kind ID. A kind quarantined in a file
+from before that gains its digests when its pack loads. Only blamed kinds keep digests: the other
+kinds of a pack quarantined whole after a second blame are held by its pack ID alone,
+so a copy of that pack under another ID draws them (only the blamed one stays off). Only `effect.enable` lifts it,
+for the kind and its pack and for every entry whose digests the kind draws, run before
+the collection lock is taken. The engine then
 sends `gpu.device_lost` with the cause, the blamed and quarantined kinds, and whether
 it is recovering. The GPU-time guard of #349 is not built.
+**Packs written over the protocol** (`pack_store.rs`, `Packs::write`, `delete`, `list`
+and `read`, [ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)). The engine
+runs `pack.write`, `pack.delete`, `pack.list` and `pack.read` under the packs' lock, as
+`effect.enable`, so the watcher is held and they run one at a time; without a packs
+folder they fail with `unsupported`. A write checks the pack ID (a folder name on every
+platform), its files (at most 64, the asset-path rules for each component, no
+dot-component or trailing dot or space, `effect.toml` and `.wgsl` files as text and
+`.png`, `.jpg` and `.jpeg` images as base64 of at most 2 MiB, decoded strictly by
+`snapshot::decode_base64`; no path is both a file and a folder) and their size as sent
+(3 MiB, else `too_large`, before any is decoded). It puts back a `.trash/<pack>` an
+earlier failed undo left with no `<pack>`, refuses a pack ID another folder's manifest
+names and a folder `<pack>` whose manifest doesn't name it (folder names compared
+without case on Windows and macOS), and clears any leftover `.staging/<pack>` and
+`.trash/<pack>`. It then writes the files into `.staging/<pack>` and loads them there
+(`jstream_effects::load_pack`, so a panic is caught), with the staging folder taken out
+of an error's paths, and refuses a manifest that names another ID. Only a pack that
+loads is swapped in: the old folder renamed to `.trash/<pack>`, the staged one into its
+place, the old one removed, each rename retried for up to a second; a second rename
+that still fails is undone, and when the undo fails too the answer says the pack is off
+air until the next start. The engine then marks the folder stale
+(`PackWatcher::mark_stale`, as new files may keep the old sizes and times) and polls at
+once, so its kinds change before the answer, which is the pack as `pack.list` shows
+it. A delete first removes a `.trash/<pack>` a rewrite left (its old version, when removing
+it failed), so the next start can't take it for a stopped swap and bring the deleted pack
+back, then moves each folder whose manifest names the pack to `.deleted/<pack>` and
+removes it. `Packs::new` first recovers a stopped swap (`pack_store::recover`): a
+`.trash/<pack>` with no `<pack>` is renamed back, one beside its `<pack>` removed, and
+`.staging` and `.deleted` emptied. The last writer's client name of each pack ID is kept
+in `.writers.json` in the packs folder (none for a client that gave no name), and the
+activity log and audit log record every write and delete (`Wrote effect pack “tint” (2
+files)`).
+**Shader sources** (`pack_source.rs`, `chain.rs`,
+[ADR-0093](../../docs/adr/0093-shader-sources-from-effect-packs.md), X2). A pack's
+`[[source]]` table is a `source` kind, `<pack>/<source>`, loaded, described, quarantined
+and forgotten with its pack like its effects (`PackSource`, `Update::sources`), so
+`kind.list` reports it and `source.create` takes it. A source of such a kind runs a
+`StandIn` among the live sources: a transparent texel placed at its `width` by
+`height`, which is the size `source.size_changed` reports. Only those two settings
+build a new stand-in, and it is never drawn at a density. Its picture is the kind's
+program, which `Chain::of` puts first in the source's chain, made with the source's
+settings, so the others are live. The scenes its `scene` parameters name fill the
+program's input slots: they are scheduled before the chain like a `scene_mask`'s, and
+each layer is handed in once it is remade, the old one retired into the cache
+(`ResourceCache::retire_image`), so the program keeps its feedback. When the program
+mix shows the source again its stand-in makes a new frame, and a new frame restarts the
+program (`time` and frame count from 0, feedback cleared). While its pack isn't loaded,
+or the kind is quarantined, no program runs and the source draws nothing at its size.
+A shader source that hears audio (`audio = true`) hears the scope its `audio` and
+`audio_source` settings name, as a `spectrum` does: the live sources find it on each
+sync (`FilterAssets::heard`), the source it names is fed like a scope source's
+(`audio::retain_scopes`), and each frame the chain runs, the program's `AudioMeter`
+(made with the program, or when it starts to hear, never while a steady frame draws)
+measures it and hands the levels, bands and waveform to the
+program (`VideoFilter::set_audio`).
 Each filter's layer key is made when the chain's shape changes, so a steady frame
 builds none. A shot with a chain counts as
 changing with time (`Shot::changes_with_time`), so the preview redraws it like a
@@ -1249,7 +1370,13 @@ thread then installs the source under the lock and re-plans. Each build is numbe
 and only the latest build asked for a source installs, so a slow build can't replace
 a newer one. Until its build installs, a source keeps showing what it showed before,
 or nothing. A changed setting always rebuilds the source, live or not, so an
-animation restarts with it. A build that fails is logged at `warn` with the source ID
+animation restarts with it, unless its kind keeps the old instance's time zero for that
+change (`Registry::keeps_time`, `SourceKind::keeps_time`): a `timer` keeps counting
+through any change but its `mode` or `duration` (#1027). The build then carries that
+time zero (`Entry::anchor`; a build queued while another is in flight keeps what that
+one keeps, so a later style edit can't undo a restart), the thread paints the new
+instance for it as soon as it is created, off the lock, so its first plan already shows
+the count, and `install` gives it that start. A build that fails is logged at `warn` with the source ID
 and an error that never names a host path, and the source draws nothing; a kind that
 is only described (`NotBuilt`) draws nothing silently. Audio-only kinds
 (`audio_input`, `desktop_audio`, `app_audio`, whose descriptors have no video) get no
@@ -1288,7 +1415,7 @@ running source's own audio (`Source::audio`, heard whether or not it is shown) f
 *Audio sources*.
 
 A source the program mix shows enlarged is drawn at a density, when its kind can be
-(`Source::set_density`, the `text` kind,
+(`Source::set_density`, the `text` and `timer` kinds,
 [ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)). After each plan
 `Shot::scales` measures how much each frame its passes draw is enlarged: canvas pixels
 per pixel of the frame's extent, from the placements the collection holds (not a
@@ -1298,7 +1425,9 @@ their layer. A source a video chain runs over counts as 1,
 since its filters' settings are in its pixels. `LiveSources::densities` turns each scale
 into the next quarter step of a doubling at or above it (1, 1.19, 1.41, … up to 32, ADR-0079) and,
 when that differs from the source's density, queues a build at it: the thread creates the
-source and sets its density there, and `install` keeps the extent it returned. The
+source and sets its density there, and `install` keeps the extent it returned. A build at
+a new density keeps the running instance's time zero, so a `timer` keeps counting when its
+item is resized. The
 source's frames then reach the plan as `Frame`s placed at that extent, and `compose`
 gives their upload that extent (`ResourceCache::set_extent`), as the chains give their
 layers their input's. A source with a build in flight is not asked for another; the plan
@@ -1478,14 +1607,16 @@ audio.
 `snapshot::plan_with` asks what each source an item it reaches places shows: the
 stored frame if `set_source_frame` gave one, else, for a live `display` or `window`
 source, what the pipeline captures for it (`Source::capture`), else the live source's
-frame at the current time, counted from when the source was built. A live frame is shared with
+frame at the current time, counted from its time zero: when it was built, or the time
+zero its build kept (*Live sources*). A live frame is shared with
 the source (an `Arc` of its `VideoFrame`, not a copy) and gets a new version only when
 the source hands out a different one, so a still image is uploaded once. The plan also
 returns the earliest time one of its frames changes (`Source::next_change`), and the
 thread re-plans then, so an animated image or a video advances on the clock and a
 still one is never re-planned. A source with a `jstream_sources::Painter` (the
 `waveform` and `spectrum` kinds, which draw a whole frame and, for the spectrum, an
-FFT each 1/30 s, and `chat_message`, which redraws when another message is featured)
+FFT each 1/30 s, `chat_message`, which redraws when another message is featured, and
+`timer`, which redraws when the value it shows changes)
 is painted by that thread just before each re-plan, holding no engine
 lock, so under the collection lock the plan only takes the frame painted last;
 `install`, `sync` and a clock swap hand the thread the running painters and their time
@@ -1600,8 +1731,8 @@ is `not_found`, a request with `scene_id` or `source` too (or both) is
 (`PreviewHub::end_source`).
 
 The codec is picked when the client subscribes: the first of its `codecs` the engine
-can encode, H.264 when `codecs.list()` names an H.264 encoder (only with backends) and
-JPEG always. One `jstream-preview` thread per engine, started by the first stream and
+can encode, H.264 when `codecs.list()` names an H.264 encoder (only with backends), and
+JPEG and PNG always. One `jstream-preview` thread per engine, started by the first stream and
 gone once none is left, serves them all. It owns a compositor (`Compositor::open`,
 hardware adapter first with the software one as the fallback, or the CPU stand-in
 under `with_cpu_compositor`) and keeps each stream's
@@ -2498,7 +2629,11 @@ registry lock, an entry's grant lock is a leaf, which a plugin's session also ta
 alone. The plugin file's lock comes before the registry lock: a save holds it while it
 reads the plugins and writes `plugins.json`, and nothing takes it under the registry
 lock. A plugin's thread holds no engine lock while the plugin runs, so the plugin's
-calls take the collection lock as any session's do. A stream's poll takes only its queue's lock. No lock
+calls take the collection lock as any session's do. The live sources' `SourceMeters`
+(a source's paints, looks and builds, and the plans) are two leaf mutexes the planner
+takes under the collection lock and `jstream-sources` and the profiler take alone; the
+`Profiler`'s history and thread-reader locks are never taken with the collection lock
+(*Profile* in [Purpose](#purpose)). A stream's poll takes only its queue's lock. No lock
 is held across an `await`, and a snapshot's reply slot is not held across a wake.
 `output.start`
 drops the collection lock before `Compositor::open`. The pipeline gate is not held
@@ -2882,10 +3017,14 @@ the render thread sends to the engine (the lost-device paragraph above). The ren
 (`stats.tick`'s `program_frames`), and publishes capture mailbox skips and the frames an encode ring drops
 (`encode_frames`), and a tick that falls a
 whole period behind the clock skips to the current tick and counts the skipped ones in
-`render_ticks`. None of those threads lock the collection: the render thread reads the
+`render_ticks`. Each frame it draws is timed into its `DrawMeter` (the skipped ticks
+too; a tick that fails part-way is discarded), which allocates nothing in a steady
+frame and publishes one snapshot of its totals about once a second, the meter's only
+allocation, handing the totals it replaces to the collector (*Profile* in
+[Purpose](#purpose)). None of those threads lock the collection: the render thread reads the
 render snapshot and then the live values on the parameter channel, which it draws over
 it, and what the render and mixer threads let go of (replaced snapshots and live
-values, GPU images, finished sessions' inputs, the frame buffers and encode targets of a
+values, GPU images, replaced profile totals, finished sessions' inputs, the frame buffers and encode targets of a
 mix no session needs any more, replaced lists of bus and source scopes) goes to the program stage's
 `jstream-collector` thread. `output.stop` during `starting` cancels that start and
 emits `stopped` only after the start has dropped its threads. The render and mixer

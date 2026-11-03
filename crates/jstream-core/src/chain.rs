@@ -25,6 +25,14 @@
 //! once the GPU is done with it, so the render thread drops it on its collector
 //! (R-RT-003).
 //!
+//! A shader source of an effect pack (ADR-0093) draws its picture as the first filter of
+//! its chain: its program, made from the pack's [`PackSource`] with the source's own
+//! settings, over the stand-in its live source shows ([`crate::pack_source`]). The
+//! scenes its `scene` parameters name fill the program's input slots, read from their
+//! layers like a `scene_mask`'s, and handed in each time a layer is remade, so the
+//! program keeps its feedback. The program restarts when its source shows a new frame:
+//! the stand-in makes one each time the program mix shows it again.
+//!
 //! A chain whose filter fails (its layer can't be made, past the adapter's limit, or a
 //! shader the driver refuses fails to draw) draws nothing for that frame. The failure
 //! is logged once per filter until a frame it draws, so a filter that keeps failing
@@ -40,11 +48,15 @@ use std::sync::{Arc, OnceLock};
 use jstream_graph::{Filter, Source};
 use jstream_media::{FrameSize, MediaTime};
 use jstream_protocol::{
-    FilterChain, FilterId, ItemId, OutputId, Reference, SceneId, Settings, SourceId, VideoMixId,
+    FilterChain, FilterId, ItemId, OutputId, Reference, SceneId, Settings, SourceId, SourceKind,
+    VideoMixId,
 };
-use jstream_render::{Compositor, FilterClock, Image, RenderError, ResourceCache, VideoFilter};
+use jstream_render::{
+    Compositor, FilterClock, Image, ProgramAudio, RenderError, ResourceCache, VideoFilter,
+};
+use jstream_sources::{AudioMeter, AudioScope};
 
-use crate::effect_packs::PackEffect;
+use crate::effect_packs::{PackEffect, PackSource};
 use crate::filter_assets::{self, FilterAsset, FilterAssets};
 use crate::snapshot::GpuKey;
 
@@ -117,12 +129,53 @@ pub(crate) struct ChainFilter {
     /// The effect that draws it, for a kind from an effect pack; `None` for a built-in
     /// kind.
     pub(crate) effect: Option<PackEffect>,
+    /// The shader source whose program it is, for the first filter of a pack source's
+    /// chain (ADR-0093); `None` for any other filter.
+    pub(crate) program: Option<Program>,
 }
 
+/// The program that starts a pack source's chain, as a [`ChainFilter`] holds it.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Program {
+    pub(crate) source: PackSource,
+    /// The layer of the scene each of its `scene` parameters names, in slot order
+    /// ([`GpuKey::reference`]): `None` for a `null` one, which reads transparent.
+    pub(crate) slots: Vec<Option<GpuKey>>,
+    /// The version of the frame its source showed when planned: a new one restarts it.
+    pub(crate) shown: u64,
+    /// The scope it hears, for a shader source that hears audio: measured each frame
+    /// it draws.
+    pub(crate) heard: Option<Heard>,
+}
+
+/// The audio scope a program hears. Two are equal when they are the same scope.
+#[derive(Clone)]
+pub(crate) struct Heard(pub(crate) Arc<AudioScope>);
+
+impl PartialEq for Heard {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl std::fmt::Debug for Heard {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Heard")
+    }
+}
+
+/// The ID of the filter a pack source's program runs as. The kind is the source's, which
+/// no filter of the collection has, so it can't match a filter the collection holds.
+const PROGRAM_FILTER: &str = "program";
+
 impl ChainFilter {
-    /// A render filter drawing it: its pack's effect, or the built-in kind.
+    /// A render filter drawing it: its shader source's program, its pack's effect, or
+    /// the built-in kind.
     fn video_filter(&self) -> Option<VideoFilter> {
-        make(&self.kind, &self.settings, self.effect.as_ref())
+        match &self.program {
+            Some(program) => Some(program.source.video_filter(&self.settings)),
+            None => make(&self.kind, &self.settings, self.effect.as_ref()),
+        }
     }
 }
 
@@ -149,13 +202,63 @@ impl Chain {
     /// empty, every filter is disabled, or none is of a kind this engine draws (an
     /// effect pack that isn't loaded). Such a filter is bypassed. A filter that reads an
     /// asset gets it from `assets`, and a pack kind's effect comes from there too.
-    pub(crate) fn of(source: &Source, input: GpuKey, assets: &FilterAssets) -> Option<Self> {
-        Self::of_filters(
+    ///
+    /// A source of a loaded, unquarantined shader source kind starts its chain with the
+    /// kind's program, which restarts when `shown`, the version of the frame its source
+    /// shows, changes.
+    pub(crate) fn of(
+        source: &Source,
+        input: GpuKey,
+        shown: u64,
+        assets: &FilterAssets,
+    ) -> Option<Self> {
+        let chain = Self::of_filters(
             &ChainOwner::Source(source.id().clone()),
             source.filters().chain(FilterChain::Video),
-            input,
+            input.clone(),
             assets,
-        )
+        );
+        let SourceKind::Builtin { kind } = source.kind() else {
+            return chain;
+        };
+        let Some(program) = assets.sources().get(kind) else {
+            return chain;
+        };
+        let settings = source.settings();
+        let slots = program
+            .scene_params()
+            .iter()
+            .map(|id| {
+                match Reference::from_value(settings.get(id)?)? {
+                    Reference::Scene { scene_id } => Some(scene_id),
+                    _ => None,
+                }
+                .map(|scene| GpuKey::reference(&scene))
+            })
+            .collect();
+        let first = ChainFilter {
+            id: FilterId::new(PROGRAM_FILTER),
+            kind: kind.clone(),
+            settings: settings.clone(),
+            reference: None,
+            scene: None,
+            effect: None,
+            program: Some(Program {
+                source: program.clone(),
+                slots,
+                shown,
+                heard: assets
+                    .heard()
+                    .get(source.id())
+                    .map(|scope| Heard(Arc::clone(scope))),
+            }),
+        };
+        let mut chain = chain.unwrap_or(Self {
+            input,
+            filters: Vec::new(),
+        });
+        chain.filters.insert(0, first);
+        Some(chain)
     }
 
     /// The chain of `owner`'s video `filters` over `input`, as [`Self::of`] makes a
@@ -191,6 +294,7 @@ impl Chain {
                     scene: scene_read(filter.kind(), filter.settings())
                         .map(|id| GpuKey::reference(&id)),
                     effect,
+                    program: None,
                 })
             })
             .collect();
@@ -207,11 +311,12 @@ impl Chain {
             .fold(0, u32::saturating_add)
     }
 
-    /// The kinds of its filters an effect pack draws.
+    /// The kinds of its filters an effect pack draws: its effects, and the shader
+    /// source whose program starts it.
     pub(crate) fn pack_kinds(&self) -> impl Iterator<Item = &str> {
         self.filters
             .iter()
-            .filter(|filter| filter.effect.is_some())
+            .filter(|filter| filter.effect.is_some() || filter.program.is_some())
             .map(|filter| filter.kind.as_str())
     }
 
@@ -229,10 +334,12 @@ impl Chain {
     pub(crate) fn scenes(&self) -> impl Iterator<Item = &SceneId> {
         self.filters
             .iter()
-            .filter_map(|filter| match &filter.scene {
-                Some(GpuKey::Layer(scene, _) | GpuKey::Filtered(ChainOwner::Scene(scene))) => {
-                    Some(scene)
-                }
+            .flat_map(|filter| {
+                let slots = filter.program.iter().flat_map(|p| p.slots.iter().flatten());
+                filter.scene.iter().chain(slots)
+            })
+            .filter_map(|key| match key {
+                GpuKey::Layer(scene, _) | GpuKey::Filtered(ChainOwner::Scene(scene)) => Some(scene),
                 _ => None,
             })
     }
@@ -252,10 +359,13 @@ impl Chain {
     /// wherever it is placed.
     pub(crate) fn read_filtered(&mut self, filtered: impl Fn(&SceneId) -> bool) {
         for filter in &mut self.filters {
-            if let Some(GpuKey::Layer(scene, _)) = &filter.scene
-                && filtered(scene)
-            {
-                filter.scene = Some(GpuKey::Filtered(ChainOwner::Scene(scene.clone())));
+            let slots = filter.program.iter_mut().flat_map(|p| p.slots.iter_mut());
+            for key in std::iter::once(&mut filter.scene).chain(slots) {
+                if let Some(GpuKey::Layer(scene, _)) = key
+                    && filtered(scene)
+                {
+                    *key = Some(GpuKey::Filtered(ChainOwner::Scene(scene.clone())));
+                }
             }
         }
     }
@@ -294,6 +404,15 @@ struct Running {
     settings: Settings,
     /// The pack effect drawing it, for a pack kind: a reload makes the filter again.
     effect: Option<PackEffect>,
+    /// The shader source drawing it, for a program, and the frame version it last
+    /// restarted at: a reload makes the filter again, a new version restarts it.
+    program: Option<(PackSource, u64)>,
+    /// The scene layers a program's slots hold, as handed to `filter`, to tell when a
+    /// layer is remade.
+    slots: Vec<Option<Arc<Image>>>,
+    /// What measures a program's audio: made with the filter, or when it starts to hear
+    /// some, so on a chain or settings change and never while a steady frame draws.
+    meter: Option<Box<AudioMeter>>,
     filter: VideoFilter,
     /// The version of the asset whose image `filter` reads, if any.
     reference: Option<u64>,
@@ -434,6 +553,18 @@ impl Chains {
             }
         }
         for (r, f) in running.iter_mut().zip(&chain.filters) {
+            if let Some(program) = &f.program
+                && !fill(cache, source, r, &program.slots)
+            {
+                self.failed.insert(source.clone());
+                return;
+            }
+            if let Some(Program {
+                heard: Some(heard), ..
+            }) = &f.program
+            {
+                hear(r, heard, at);
+            }
             let Some(scene) = &f.scene else {
                 continue;
             };
@@ -597,6 +728,9 @@ fn sync(
                     kind: f.kind.clone(),
                     settings: f.settings.clone(),
                     effect: f.effect.clone(),
+                    program: f.program.as_ref().map(|p| (p.source.clone(), p.shown)),
+                    slots: Vec::new(),
+                    meter: meter_for(f),
                     filter,
                     reference: None,
                     scene: None,
@@ -620,19 +754,50 @@ fn sync(
 /// place, or, when its pack effect was reloaded, by making it again with the new effect
 /// and retiring the old one. A pack effect keeps no state between frames, so nothing is
 /// lost.
+///
+/// A program is made again when its shader source was reloaded, losing its feedback,
+/// and restarted when its source showed a new frame.
 fn update(running: &mut Running, filter: &ChainFilter, retired: &mut Vec<VideoFilter>) {
-    if running.effect != filter.effect {
+    let program = filter.program.as_ref().map(|p| (p.source.clone(), p.shown));
+    let reloaded = running.program.as_ref().map(|(source, _)| source)
+        != program.as_ref().map(|(source, _)| source);
+    if running.effect != filter.effect || reloaded {
         if let Some(fresh) = filter.video_filter() {
             retired.push(std::mem::replace(&mut running.filter, fresh));
         }
         running.effect = filter.effect.clone();
+        running.program = program;
+        // The new filter holds no slot yet.
+        running.slots.clear();
         running.settings = filter.settings.clone();
+        if running.meter.is_none() {
+            running.meter = meter_for(filter);
+        }
         return;
+    }
+    if let (Some((_, shown)), Some((_, now))) = (&mut running.program, &program)
+        && shown != now
+    {
+        running.filter.restart();
+        *shown = *now;
     }
     if running.settings != filter.settings {
         running.filter.set_settings(&filter.settings);
         running.settings = filter.settings.clone();
     }
+    if running.meter.is_none() {
+        running.meter = meter_for(filter);
+    }
+}
+
+/// A meter for `filter` when it is a program that hears a scope: its FFT is planned and
+/// its buffers made here, so measuring allocates nothing.
+fn meter_for(filter: &ChainFilter) -> Option<Box<AudioMeter>> {
+    filter
+        .program
+        .as_ref()
+        .filter(|p| p.heard.is_some())
+        .map(|_| Box::new(AudioMeter::new()))
 }
 
 /// Gives `running` the image of the asset `filter` reads, when that asset changed: the
@@ -681,6 +846,78 @@ fn scene_read(kind: &str, settings: &Settings) -> Option<SceneId> {
         Reference::Scene { scene_id } => Some(scene_id),
         _ => None,
     }
+}
+
+/// Measures what `running`, a program, hears from `heard` at `at`, and hands it over for
+/// this frame. The meter was made with the filter or when it started to hear
+/// ([`meter_for`]), so this allocates nothing and takes no lock.
+fn hear(running: &mut Running, heard: &Heard, at: MediaTime) {
+    let Some(meter) = running.meter.as_mut() else {
+        return;
+    };
+    let ms = at
+        .rescale(
+            jstream_media::Timebase::MILLIS,
+            jstream_media::Rounding::Down,
+        )
+        .map_or(0, |t| u64::try_from(t.ticks()).unwrap_or(0));
+    let metered = meter.measure(&heard.0, ms);
+    running.filter.set_audio(ProgramAudio {
+        level: metered.level,
+        peak: metered.peak,
+        onset: metered.onset,
+        bands: metered.bands,
+        wave: metered.wave,
+    });
+}
+
+/// Hands `running`, a program, the scene layers `slots` name as drawn this frame: each
+/// one remade since (the first, or one at another size) goes into its slot in place, so
+/// the program keeps its feedback, and the one it replaces is retired into `cache`
+/// (R-RT-003). An empty slot reads transparent. Returns `false`, logged once, when a
+/// layer isn't there.
+fn fill(
+    cache: &mut ResourceCache<GpuKey>,
+    source: &ChainOwner,
+    running: &mut Running,
+    slots: &[Option<GpuKey>],
+) -> bool {
+    running.slots.resize(slots.len(), None);
+    for (slot, key) in slots.iter().enumerate() {
+        let layer = match key {
+            Some(key) => {
+                let Some(layer) = cache.get(key) else {
+                    if !running.warned {
+                        running.warned = true;
+                        tracing::warn!(
+                            source = %source,
+                            kind = %running.kind,
+                            ?key,
+                            "a scene a shader source reads wasn't drawn; it draws nothing"
+                        );
+                    }
+                    return false;
+                };
+                Some(layer)
+            }
+            None => None,
+        };
+        let held = &running.slots[slot];
+        let same = match (held, layer) {
+            (Some(held), Some(layer)) => held.texture() == layer.texture(),
+            (None, None) => true,
+            _ => false,
+        };
+        if same {
+            continue;
+        }
+        let fresh = layer.map(|layer| Arc::new(layer.clone()));
+        running.filter.set_input(slot, fresh.clone());
+        if let Some(old) = std::mem::replace(&mut running.slots[slot], fresh) {
+            cache.retire_image(Image::clone(&old));
+        }
+    }
+    true
 }
 
 /// Hands `running`, a filter that reads the scene layer `key`, that layer as drawn this
@@ -965,6 +1202,235 @@ mod tests {
         let pixel = draw(&mut compositor, (&mut cache, &mut chains), &reloaded, 1);
         assert_eq!(pixel, [0, 0, 255, 255], "the reloaded shader");
         assert_eq!(chains.len(), 1, "the filter was made again, not added");
+    }
+
+    /// A shader source (ADR-0093) draws its program as its picture, keeping its
+    /// feedback from frame to frame; a new frame from its stand-in (it was shown again)
+    /// restarts it, and a scene its `scene` parameter names fills its input.
+    #[test]
+    fn a_shader_source_draws_its_program_restarts_on_show_and_reads_its_scene() {
+        use crate::effect_packs::test_pack::{self, Temp};
+
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let temp = Temp::new("chain-source");
+        let source = test_pack::source(&temp);
+        let assets = FilterAssets::new().with_sources(Arc::new(
+            [(test_pack::SOURCE_KIND.to_owned(), source)]
+                .into_iter()
+                .collect(),
+        ));
+        // `glow` in scene `main`, over `logo` and `cam`; scene `sky` shows `logo`.
+        let mut graph = graph(&[]).with_kinds(assets.sources().values().map(|s| s.descriptor()));
+        apply(
+            &mut graph,
+            vec![
+                Edit::SourceCreate {
+                    source_id: SourceId::new("glow"),
+                    name: "Glow".into(),
+                    kind: SourceKind::Builtin {
+                        kind: test_pack::SOURCE_KIND.into(),
+                    },
+                    settings: Settings::default(),
+                    duplicated_from: None,
+                },
+                Edit::ItemAdd {
+                    scene_id: SceneId::new("main"),
+                    item_id: ItemId::new("glow"),
+                    source_id: SourceId::new("glow"),
+                    transform: None,
+                    geometry: None,
+                    opacity: None,
+                    blend: None,
+                },
+            ],
+        );
+        let white: Vec<u8> = std::iter::repeat_n(WHITE, 16 * 9).flatten().collect();
+        let plan = |graph: &Graph, version: u64| {
+            let frame = Frame::new(16, 9, &white, version).expect("invariant: 16x9 RGBA8");
+            snapshot::plan_with(
+                graph,
+                Some(&SceneId::new("main")),
+                None,
+                &mut |_| Some(Look::Frame(frame.clone(), None)),
+                &assets,
+            )
+            .shot
+        };
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let shot = plan(&graph, 1);
+        assert_eq!(
+            shot.pack_kinds(),
+            [test_pack::SOURCE_KIND.to_owned()].into()
+        );
+        let mut grey = || draw(&mut compositor, (&mut cache, &mut chains), &shot, 1)[0];
+        let (first, second, third) = (grey(), grey(), grey());
+        assert!(first < second && second < third, "{first} {second} {third}");
+        // Shown again: its stand-in's new frame restarts it.
+        let shown = plan(&graph, 2);
+        let pixel = draw(&mut compositor, (&mut cache, &mut chains), &shown, 1);
+        assert_eq!(pixel[0], first);
+
+        apply(
+            &mut graph,
+            vec![
+                Edit::SceneCreate {
+                    scene_id: SceneId::new("sky"),
+                    name: "Sky".into(),
+                    role: None,
+                },
+                Edit::ItemAdd {
+                    scene_id: SceneId::new("sky"),
+                    item_id: ItemId::new("sky-logo"),
+                    source_id: SourceId::new("logo"),
+                    transform: None,
+                    geometry: None,
+                    opacity: None,
+                    blend: None,
+                },
+                Edit::SourceSetSettings {
+                    source_id: SourceId::new("glow"),
+                    patch: [(
+                        "sky",
+                        serde_json::json!({ "type": "scene", "scene_id": "sky" }),
+                    )]
+                    .into_iter()
+                    .collect(),
+                },
+            ],
+        );
+        let sky = plan(&graph, 2);
+        let pixel = draw(&mut compositor, (&mut cache, &mut chains), &sky, 1);
+        assert_eq!(pixel, WHITE, "the sky scene shows where it has alpha");
+    }
+
+    /// A shader source whose pack isn't loaded (or whose kind is quarantined, which
+    /// leaves it out of the loaded sources) runs no program; a new size makes its
+    /// feedback layers again, so it starts over from transparent.
+    #[test]
+    fn a_shader_source_runs_nothing_unloaded_and_starts_over_at_a_new_size() {
+        use crate::effect_packs::test_pack::{self, Temp};
+
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let temp = Temp::new("chain-source-size");
+        let source = test_pack::source(&temp);
+        let loaded = FilterAssets::new().with_sources(Arc::new(
+            [(test_pack::SOURCE_KIND.to_owned(), source.clone())]
+                .into_iter()
+                .collect(),
+        ));
+        let mut graph = graph(&[]).with_kinds([source.descriptor()]);
+        let glow = |settings: Settings| Edit::SourceCreate {
+            source_id: SourceId::new("glow"),
+            name: "Glow".into(),
+            kind: SourceKind::Builtin {
+                kind: test_pack::SOURCE_KIND.into(),
+            },
+            settings,
+            duplicated_from: None,
+        };
+        apply(
+            &mut graph,
+            vec![
+                glow(Settings::default()),
+                Edit::ItemAdd {
+                    scene_id: SceneId::new("main"),
+                    item_id: ItemId::new("glow"),
+                    source_id: SourceId::new("glow"),
+                    transform: None,
+                    geometry: None,
+                    opacity: None,
+                    blend: None,
+                },
+            ],
+        );
+        let unloaded = shot_with(&graph, &FilterAssets::default());
+        assert!(
+            unloaded.pack_kinds().is_empty(),
+            "no program while unloaded"
+        );
+        assert_eq!(unloaded.chain_count(), 0);
+
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let shot = shot_with(&graph, &loaded);
+        let mut grey = |shot: &Shot| draw(&mut compositor, (&mut cache, &mut chains), shot, 1)[0];
+        let (first, second) = (grey(&shot), grey(&shot));
+        assert!(first < second, "{first} {second}");
+        apply(
+            &mut graph,
+            vec![Edit::SourceSetSettings {
+                source_id: SourceId::new("glow"),
+                patch: [("width", serde_json::json!(32))].into_iter().collect(),
+            }],
+        );
+        let wider = shot_with(&graph, &loaded);
+        assert_eq!(grey(&wider), first, "new layers start transparent");
+        assert_eq!(chains.len(), 1, "the program took the size in place");
+    }
+
+    /// A shader source that hears audio measures its scope each frame it draws: its
+    /// level and spectrum reach the program.
+    #[test]
+    fn a_shader_source_hears_its_scope() {
+        use crate::effect_packs::test_pack::{self, Temp};
+
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let temp = Temp::new("chain-ear");
+        let ear = test_pack::ear(&temp);
+        let scope = Arc::new(jstream_sources::AudioScope::new());
+        let heard = [(SourceId::new("ear"), Arc::clone(&scope))]
+            .into_iter()
+            .collect();
+        let assets = FilterAssets::new()
+            .with_sources(Arc::new(
+                [(test_pack::EAR_KIND.to_owned(), ear.clone())]
+                    .into_iter()
+                    .collect(),
+            ))
+            .with_heard(Arc::new(heard));
+        let mut graph = graph(&[]).with_kinds([ear.descriptor()]);
+        apply(
+            &mut graph,
+            vec![
+                Edit::SourceCreate {
+                    source_id: SourceId::new("ear"),
+                    name: "Ear".into(),
+                    kind: SourceKind::Builtin {
+                        kind: test_pack::EAR_KIND.into(),
+                    },
+                    settings: Settings::default(),
+                    duplicated_from: None,
+                },
+                Edit::ItemAdd {
+                    scene_id: SceneId::new("main"),
+                    item_id: ItemId::new("ear"),
+                    source_id: SourceId::new("ear"),
+                    transform: None,
+                    geometry: None,
+                    opacity: None,
+                    blend: None,
+                },
+            ],
+        );
+        let shot = shot_with(&graph, &assets);
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let pixel = draw(&mut compositor, (&mut cache, &mut chains), &shot, 1);
+        assert_eq!(pixel, BLACK, "silence");
+        // A full-scale 1 kHz sine at 48 kHz, stereo.
+        let samples: Vec<f32> = (0..2048)
+            .flat_map(|n| {
+                let s = (std::f32::consts::TAU * 1000.0 * n as f32 / 48_000.0).sin();
+                [s, s]
+            })
+            .collect();
+        scope.push(48_000, &samples);
+        let pixel = draw(&mut compositor, (&mut cache, &mut chains), &shot, 1);
+        assert_eq!(pixel, WHITE, "the tone");
     }
 
     /// Applies `edits` to `graph`.
