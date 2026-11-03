@@ -1800,6 +1800,31 @@ pub fn adopt(opened: &mut Vec<(FilterOwner, FilterChains)>, target: &Target, now
     chain.insert(index.min(chain.len()), filter);
 }
 
+/// Which of `owners` are an item's effects in a keyframe that follows the item's own
+/// (ADR-0088): no override of `effects` for the item in that keyframe scene. Cancel in
+/// the Filters window makes such a keyframe follow the item again if the window's
+/// edits gave it its own ([`window_restore`]).
+pub fn following_keyframes<'a>(
+    collection: &Collection,
+    owners: impl IntoIterator<Item = &'a FilterOwner>,
+) -> Vec<FilterOwner> {
+    owners
+        .into_iter()
+        .filter(|o| match o {
+            FilterOwner::Keyframe { scene_id, item_id } => {
+                collection.scene(scene_id).is_some_and(|scene| {
+                    !scene
+                        .overrides
+                        .iter()
+                        .any(|o| &o.item_id == item_id && o.effects.is_some())
+                })
+            }
+            _ => false,
+        })
+        .cloned()
+        .collect()
+}
+
 /// Numbers each Filters window, so one closing never forgets a later one's log.
 static WINDOWS: AtomicU64 = AtomicU64::new(0);
 
@@ -2009,27 +2034,10 @@ fn WindowBody(
     // The keyframes among them that follow the item's own effects (ADR-0088): Cancel
     // makes them follow it again if the window gave them their own.
     let following: Vec<FilterOwner> = studio.collection.with_untracked(|c| {
-        let Some(c) = c.as_ref() else {
-            return Vec::new();
-        };
-        opened
-            .iter()
-            .map(|(o, _)| o)
-            .filter(|o| match o {
-                FilterOwner::Keyframe { scene_id, item_id } => {
-                    c.scene(scene_id).is_some_and(|scene| {
-                        !scene
-                            .overrides
-                            .iter()
-                            .any(|o| &o.item_id == item_id && o.effects.is_some())
-                    })
-                }
-                _ => false,
-            })
-            .cloned()
-            .collect()
+        c.as_ref()
+            .map(|c| following_keyframes(c, opened.iter().map(|(o, _)| o)))
+            .unwrap_or_default()
     });
-    let following = StoredValue::new(following);
     let window = WINDOWS.fetch_add(1, Ordering::Relaxed);
     dialogs.log.set_value(Some((window, Vec::new())));
     on_cleanup(move || {
@@ -2045,6 +2053,7 @@ fn WindowBody(
     // until a state at or after the batch's revision lacks it.
     let added_at = RwSignal::new(dialogs.added_at.get_untracked());
     let opened = StoredValue::new(opened);
+    let following = StoredValue::new(following);
     // Opened on a filter just added, which the collection may not hold yet: it joins
     // what the window opened with once it arrives, so Cancel puts it back as added.
     if let (Some(at), Some(filter_id)) = (added_at.get_untracked(), selected.get_untracked()) {
@@ -2067,6 +2076,18 @@ fn WindowBody(
                 return;
             };
             opened.update_value(|opened| adopt(opened, &target, &chains));
+            // That add went to a keyframe that followed the item when the window
+            // opened: the add, made before the window, gave it its own effects, which
+            // Cancel keeps, as it keeps the filter.
+            let owns = untrack(|| {
+                studio.collection.with(|c| {
+                    c.as_ref()
+                        .is_some_and(|c| following_keyframes(c, [&target.owner]).is_empty())
+                })
+            });
+            if owns {
+                following.update_value(|f| f.retain(|o| *o != target.owner));
+            }
         });
     }
     // A filter the Add filter dialog over the window just added: the window shows it.
@@ -3532,6 +3553,21 @@ mod tests {
             .chains(&keyframe("follows"))
             .expect("its effects");
         assert_eq!(chains.video, [vignette]);
+        // What the Filters window's Cancel counts as following (#1028): only a keyframe
+        // with no effects override. Once an add made before the window gives the
+        // keyframe its own (here `bare`), the window adopting it stops counting it.
+        let owners = [
+            keyframe("follows"),
+            keyframe("bare"),
+            FilterOwner::Item {
+                item_id: cam.clone(),
+            },
+        ];
+        assert_eq!(
+            following_keyframes(&collection, &owners),
+            [keyframe("follows")]
+        );
+        assert!(following_keyframes(&collection, [&keyframe("bare")]).is_empty());
         // One that overrides them with none reads none.
         assert_eq!(
             effects_owner(&collection, Some(&SceneId::new("bare")), &cam),
