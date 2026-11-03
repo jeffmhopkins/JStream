@@ -25,8 +25,9 @@ use jstream_sources::{Source, SourceError};
 /// them.
 const FALLBACK: (u32, u32) = (1920, 1080);
 
-/// Whether `kind` is an effect pack's kind, `<pack>/<id>`: no built-in or plugin kind
-/// has a slash.
+/// Whether `kind`, a source kind, is an effect pack's, `<pack>/<id>`: no built-in or
+/// plugin source kind has a slash. (CLAP kinds, `clap/<id>`, are audio filter kinds, never
+/// asked about here.)
 pub(crate) fn is_pack_kind(kind: &str) -> bool {
     kind.contains('/')
 }
