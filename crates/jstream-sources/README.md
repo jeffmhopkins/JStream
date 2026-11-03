@@ -138,7 +138,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   mix and light in linear light. The same settings always draw the same picture
   (integer hashes, no platform randomness), and `seed` picks another. Every setting but
   the size is live; an update draws the frame again on the sources thread, about a
-  third of a second for 1080p in a release build.
+  third of a second for 1080p in a release build. So the size is capped below other
+  kinds': at most 7680 a side and 7680 × 4320 pixels in all, either way round, which
+  `create` checks before drawing, naming the side to shrink. A backdrop is soft and
+  scales up with no visible loss.
 - `color`: one frame of the `color` setting (`#rrggbb` or `#rrggbbaa`, straight
   alpha), `width` by `height` pixels. The colour is live; a size change needs a new
   source. The frame must also fit the decoded-memory cap: 16384x16384 RGBA is exactly
