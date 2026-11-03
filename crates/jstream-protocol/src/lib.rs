@@ -31,6 +31,7 @@ mod pack;
 pub mod parity;
 mod plugin;
 mod preview;
+mod profile;
 mod query;
 mod schema;
 mod settings;
@@ -103,6 +104,11 @@ pub use plugin::{
 pub use preview::{
     BINARY_HEADER_LEN, BINARY_VERSION, BinaryError, BinaryFrame, BinaryHeader, KeyframeGate,
     PreviewCodec, PreviewDraft, PreviewSettings, StreamKind,
+};
+pub use profile::{
+    DEFAULT_PROFILE_SECONDS, DEFAULT_PROFILE_TOP, Drawer, DrawerProfile, MAX_PROFILE_SECONDS,
+    MAX_PROFILE_TOP, PhaseProfile, PlanProfile, ProfileInfo, ProfileUnit, SourceProfile,
+    ThreadProfile, UnitProfile,
 };
 pub use query::{
     CaptureTargetInfo, CaptureTargetKind, DeleteTarget, DeviceInfo, FontInfo, ItemInfo, MasterInfo,

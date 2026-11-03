@@ -322,7 +322,9 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
 5. **Readback**, only when asked. `copy_texture_to_buffer` into a map-read buffer,
    rows padded to 256 bytes, then a map and a pack into tightly packed RGBA8. This
    waits on the GPU. The tick that feeds an encoder does not call it. Snapshots and
-   tests do.
+   tests do. `Compositor::readback_wait` says how long the last `render`'s readback
+   waited for the map, which `profile.get` counts in the finish phase rather than in a
+   scene's own time.
 
 6. **NV12** (`convert/`), when the caller records it. `Nv12Converter::bind` ties a
    source (`Rgba8UnormSrgb` or `Bgra8UnormSrgb`, the compositor's output) to a target
