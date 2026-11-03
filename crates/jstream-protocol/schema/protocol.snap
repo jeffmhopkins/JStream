@@ -547,6 +547,50 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Writes one effect pack (0.72, ADR-0097): replaces the pack `pack` whole with\n`files`, or adds it, and loads it at once. The pack is always the folder named\n`pack` in the packs folder, whose `effect.toml` must say `id = \"<pack>\"`. Answers\nwith the pack as loaded. Fails, writing nothing and keeping the old version, with\n`too_large` for `files` over 3 MiB as sent (`MAX_PACK_WRITE_BYTES`); with\n`invalid_argument` for more than 64 files, an image over 2 MiB, a pack ID or file\npath outside the rules, a manifest that names another ID, an ID another folder\nholds, a folder `pack` that holds anything but that pack, or a pack that doesn't\nload (the first problem's file, line and message); with `internal` when the disk\nrefuses the swap; and with `unsupported` from an engine that loads no packs. Not\nan edit: undo doesn't reach the disk. Agents may call it; no plugin is granted it.",
+          "properties": {
+            "files": {
+              "description": "Every file of the pack.",
+              "items": {
+                "$ref": "#/$defs/PackFile"
+              },
+              "type": "array"
+            },
+            "pack": {
+              "description": "The pack ID: lower-case ASCII letters, digits and `-`, starting with a letter\nor digit.",
+              "type": "string"
+            },
+            "type": {
+              "const": "pack.write",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "pack",
+            "files"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Removes one effect pack (0.72, ADR-0097): the folder whose `effect.toml` names\npack ID `pack`, whatever its name and whether or not it loads. Its kinds leave\n`kind.list`, and filters and sources of them draw nothing, as before a pack loads.\nFails with `not_found` (entity `pack`) when no folder holds that pack, `internal`\nwhen the disk refuses, and `unsupported` from an engine that loads no packs. Not\nan edit: undo doesn't reach the disk. Agents may call it; no plugin is granted it.",
+          "properties": {
+            "pack": {
+              "description": "The pack ID.",
+              "type": "string"
+            },
+            "type": {
+              "const": "pack.delete",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "pack"
+          ],
+          "type": "object"
+        },
+        {
           "description": "**Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy\nscreen: the engine refuses this with `unsupported` and covers nothing.",
           "properties": {
             "on": {
@@ -569,6 +613,24 @@ source: crates/jstream-protocol/src/fixtures.rs
     "ActionResult": {
       "description": "What an action answered, for the few actions whose answer carries data. Its `type`\ntag repeats the action's name.",
       "oneOf": [
+        {
+          "description": "The answer to `pack.write` (0.72): the pack as now loaded.",
+          "properties": {
+            "pack": {
+              "$ref": "#/$defs/PackInfo",
+              "description": "The pack."
+            },
+            "type": {
+              "const": "pack.write",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "pack"
+          ],
+          "type": "object"
+        },
         {
           "description": "The answer to `pairing.start`: the one-time pairing code, sent to the client that\nstarted pairing and to no one else (ADR-0044).",
           "properties": {
@@ -912,7 +974,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         {
           "const": "additive_srgb",
-          "description": "Additive in sRGB-encoded values, as a browser's `plus-lighter` adds (since 0.76,\n#1096): the encoded colours add, so a faint glow adds what it does in the browser.",
+          "description": "Additive in sRGB-encoded values (since 0.76, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
           "type": "string"
         }
       ]
@@ -4225,6 +4287,11 @@ source: crates/jstream-protocol/src/fixtures.rs
           "const": "plugin",
           "description": "An installed plugin (0.35). Only an error answering a `plugin.*` action names it,\nso a client older than 0.35, which sends none, never reads it.",
           "type": "string"
+        },
+        {
+          "const": "pack",
+          "description": "An effect pack (0.72, ADR-0097). Only an error answering a `pack.*` command names\nit, so a client older than 0.72, which sends none, never reads it.",
+          "type": "string"
         }
       ]
     },
@@ -6235,6 +6302,122 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "PackFile": {
+      "description": "One file of a `pack.write`.",
+      "oneOf": [
+        {
+          "description": "UTF-8 text.",
+          "properties": {
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Bytes, as standard base64 with padding.",
+          "properties": {
+            "base64": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "base64"
+          ],
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "path": {
+          "description": "Its path in the pack, `/`-separated: `effect.toml`, or a `.wgsl`, `.png`, `.jpg`\nor `.jpeg` file, under the asset-path rules (no `..`, no absolute path, no\ncomponent that starts with `.`, no `\\` or `:`, no Windows reserved name).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "PackFileInfo": {
+      "description": "One file of a pack, as `pack.read` returns it.",
+      "properties": {
+        "base64": {
+          "description": "An image's bytes as base64, only when `pack.read` named that image by `path`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "digest": {
+          "description": "The BLAKE3 digest of its bytes, as lower-case hex.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Its path in the pack, `/`-separated.",
+          "type": "string"
+        },
+        "size": {
+          "description": "Its size in bytes.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "text": {
+          "description": "The text of an `effect.toml` or `.wgsl` file. Omitted for an image, and in a\nwhole-pack read for a file past its 3 MiB budget of text: read it by `path`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "size",
+        "digest"
+      ],
+      "type": "object"
+    },
+    "PackInfo": {
+      "description": "One pack in the packs folder, as `pack.list` and `pack.write` report it.",
+      "properties": {
+        "folder": {
+          "description": "The folder it is in, within the packs folder. A pack written over the protocol is\nin the folder named by its ID; one a person installed may be in another.",
+          "type": "string"
+        },
+        "id": {
+          "description": "Its pack ID, from its `effect.toml`.",
+          "type": "string"
+        },
+        "kinds": {
+          "description": "Its kinds, `<pack>/<id>`, effects then sources, while it is loaded. Empty for a\npack that doesn't load.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "loaded": {
+          "description": "Whether the engine loads it: `false` for a pack whose manifest or shaders fail\nto load, or whose ID another folder already holds.",
+          "type": "boolean"
+        },
+        "written_by": {
+          "description": "The client name (from its `hello`) of the last `pack.write` of this pack ID,\nwhich says who claims to have written it, not who proved it. It stays when a\nperson later edits or replaces the folder by hand. Omitted for a pack ID no\nclient has written, and when the last writer gave no name.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "folder",
+        "kinds",
+        "loaded"
+      ],
+      "type": "object"
+    },
     "ParamDescriptor": {
       "description": "One parameter of a kind.",
       "oneOf": [
@@ -7170,6 +7353,44 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Lists the effect packs in the engine's packs folder (0.72, ADR-0097), ordered by\npack ID: each one's folder, its kinds while it loads, and the client that last\nwrote it with `pack.write`. A folder whose `effect.toml` doesn't parse is left\nout. Packs are not collection state, so no `rev`. Fails with `unsupported` from an\nengine that loads no packs.",
+          "properties": {
+            "type": {
+              "const": "pack.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Reads one effect pack's files (0.72, ADR-0097): the text of its `effect.toml` and\n`.wgsl` files, and each image's path, size and digest. Past 3 MiB of text in all,\na file's `text` is left out; read it by `path`. With `path`, only that file, and\nan image's bytes as base64; an image over 2 MiB (`MAX_PACK_IMAGE_BYTES`), which\nonly a person can have put there, fails with `too_large`. Fails with `not_found`\n(entity `pack`) for a pack no folder holds, `invalid_argument` for a `path` it\ndoesn't have, and `unsupported` from an engine that loads no packs.",
+          "properties": {
+            "pack": {
+              "description": "The pack ID.",
+              "type": "string"
+            },
+            "path": {
+              "description": "One file of it, `/`-separated. Omitted for every file.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "pack.read",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "pack"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Lists the paired devices (ADR-0044), ordered by ID: each one's name and when it\npaired and was last used, never its token. Answered by the server that admits\nclients, not the engine: a `Control` with no server in front fails with\n`unsupported`.",
           "properties": {
             "type": {
@@ -7973,6 +8194,48 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "fonts"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `pack.list`.",
+          "properties": {
+            "packs": {
+              "description": "The packs, ordered by ID.",
+              "items": {
+                "$ref": "#/$defs/PackInfo"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "pack.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "packs"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `pack.read`.",
+          "properties": {
+            "files": {
+              "description": "The pack's files, ordered by path: every file, or the one `path` named.",
+              "items": {
+                "$ref": "#/$defs/PackFileInfo"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "pack.read",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "files"
           ],
           "type": "object"
         },

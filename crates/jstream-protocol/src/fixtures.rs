@@ -46,6 +46,7 @@ use crate::{FolderId, FolderInfo, LabelId, LabelInfo, SceneMeta, SourceMeta};
 use crate::{GestureId, GestureInfo, LiveOutcome};
 use crate::{HistoryCall, HistoryDirection, HistoryOp, PreviewCodec, PreviewDraft};
 use crate::{MixInput, MixResolution, VideoMix, VideoMixId, VideoMixInfo};
+use crate::{PackContent, PackFile, PackFileInfo, PackInfo};
 use crate::{PluginClass, PluginDisabledReason, PluginGrant, PluginId, PluginState};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -1039,6 +1040,22 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::EffectEnable {
             kind_id: "fx/blur".into(),
         },
+        Action::PackWrite {
+            pack: "glow".into(),
+            files: vec![
+                PackFile {
+                    path: "effect.toml".into(),
+                    content: PackContent::Text("[pack]\nid = \"glow\"\nname = \"Glow\"\n".into()),
+                },
+                PackFile {
+                    path: "images/noise.png".into(),
+                    content: PackContent::Base64("iVBORw0KGgo=".into()),
+                },
+            ],
+        },
+        Action::PackDelete {
+            pack: "glow".into(),
+        },
         Action::PrivacySet { on: true },
         Action::PreviewSubscribe {
             channel: 2,
@@ -1123,6 +1140,15 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::VideoMixList,
         Query::CaptureTargets,
         Query::FontList,
+        Query::PackList,
+        Query::PackRead {
+            pack: "glow".into(),
+            path: None,
+        },
+        Query::PackRead {
+            pack: "glow".into(),
+            path: Some("images/noise.png".into()),
+        },
         Query::LiveList,
         Query::YoutubeStatus,
         Query::YoutubeListBroadcasts {
@@ -1791,6 +1817,27 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 },
             ],
         },
+        QueryResult::PackList {
+            packs: vec![pack_info()],
+        },
+        QueryResult::PackRead {
+            files: vec![
+                PackFileInfo {
+                    path: "effect.toml".into(),
+                    size: 32,
+                    digest: "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262".into(),
+                    text: Some("[pack]\nid = \"glow\"\nname = \"Glow\"\n".into()),
+                    base64: None,
+                },
+                PackFileInfo {
+                    path: "images/noise.png".into(),
+                    size: 8,
+                    digest: "6c63b9b2c6b1cca5d8f7a1d2a9a7e5e6e8f8a1a2b3c4d5e6f708192a3b4c5d6e".into(),
+                    text: None,
+                    base64: None,
+                },
+            ],
+        },
         QueryResult::FontList {
             fonts: vec![
                 FontInfo {
@@ -2308,6 +2355,7 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
         EntityKind::Device,
         EntityKind::Hotkey,
         EntityKind::Plugin,
+        EntityKind::Pack,
     ] {
         errors.push(ProtocolError::NotFound {
             entity,
@@ -2450,6 +2498,7 @@ pub(crate) fn server_messages() -> Vec<ServerMessage> {
             broadcast: broadcast.clone(),
         },
         ActionResult::YoutubeTransitionBroadcast { broadcast },
+        ActionResult::PackWrite { pack: pack_info() },
     ] {
         msgs.push(ServerMessage::Response(Response {
             id: RequestId::new("r11"),
@@ -2477,6 +2526,17 @@ pub(crate) fn server_messages() -> Vec<ServerMessage> {
 }
 
 /// Every command (edit or action), as the classification view.
+/// A pack as `pack.list` and `pack.write` report it.
+fn pack_info() -> PackInfo {
+    PackInfo {
+        id: "glow".into(),
+        folder: "glow".into(),
+        kinds: vec!["glow/ramp".into()],
+        loaded: true,
+        written_by: Some("claude-desktop".into()),
+    }
+}
+
 fn commands() -> Vec<Command> {
     let mut commands: Vec<Command> = edits().into_iter().map(Command::from).collect();
     commands.extend(actions().into_iter().map(Command::from));

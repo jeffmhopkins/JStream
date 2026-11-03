@@ -42,6 +42,7 @@ mod load;
 mod output_stats;
 mod outputs;
 mod pack_source;
+mod pack_store;
 mod plugins;
 mod preview;
 mod private_file;

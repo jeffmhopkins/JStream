@@ -1134,6 +1134,37 @@ for the kind and its pack and for every entry whose digests the kind draws, run 
 the collection lock is taken. The engine then
 sends `gpu.device_lost` with the cause, the blamed and quarantined kinds, and whether
 it is recovering. The GPU-time guard of #349 is not built.
+**Packs written over the protocol** (`pack_store.rs`, `Packs::write`, `delete`, `list`
+and `read`, [ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)). The engine
+runs `pack.write`, `pack.delete`, `pack.list` and `pack.read` under the packs' lock, as
+`effect.enable`, so the watcher is held and they run one at a time; without a packs
+folder they fail with `unsupported`. A write checks the pack ID (a folder name on every
+platform), its files (at most 64, the asset-path rules for each component, no
+dot-component or trailing dot or space, `effect.toml` and `.wgsl` files as text and
+`.png`, `.jpg` and `.jpeg` images as base64 of at most 2 MiB, decoded strictly by
+`snapshot::decode_base64`; no path is both a file and a folder) and their size as sent
+(3 MiB, else `too_large`, before any is decoded). It puts back a `.trash/<pack>` an
+earlier failed undo left with no `<pack>`, refuses a pack ID another folder's manifest
+names and a folder `<pack>` whose manifest doesn't name it (folder names compared
+without case on Windows and macOS), and clears any leftover `.staging/<pack>` and
+`.trash/<pack>`. It then writes the files into `.staging/<pack>` and loads them there
+(`jstream_effects::load_pack`, so a panic is caught), with the staging folder taken out
+of an error's paths, and refuses a manifest that names another ID. Only a pack that
+loads is swapped in: the old folder renamed to `.trash/<pack>`, the staged one into its
+place, the old one removed, each rename retried for up to a second; a second rename
+that still fails is undone, and when the undo fails too the answer says the pack is off
+air until the next start. The engine then marks the folder stale
+(`PackWatcher::mark_stale`, as new files may keep the old sizes and times) and polls at
+once, so its kinds change before the answer, which is the pack as `pack.list` shows
+it. A delete first removes a `.trash/<pack>` a rewrite left (its old version, when removing
+it failed), so the next start can't take it for a stopped swap and bring the deleted pack
+back, then moves each folder whose manifest names the pack to `.deleted/<pack>` and
+removes it. `Packs::new` first recovers a stopped swap (`pack_store::recover`): a
+`.trash/<pack>` with no `<pack>` is renamed back, one beside its `<pack>` removed, and
+`.staging` and `.deleted` emptied. The last writer's client name of each pack ID is kept
+in `.writers.json` in the packs folder (none for a client that gave no name), and the
+activity log and audit log record every write and delete (`Wrote effect pack “tint” (2
+files)`).
 **Shader sources** (`pack_source.rs`, `chain.rs`,
 [ADR-0093](../../docs/adr/0093-shader-sources-from-effect-packs.md), X2). A pack's
 `[[source]]` table is a `source` kind, `<pack>/<source>`, loaded, described, quarantined

@@ -19,7 +19,7 @@ That is physically right, but a browser, CSS and most design tools composite in
 sRGB-encoded values. A soft overlay made in HTML (a vignette, a faint white veil, a
 glow, a drop shadow) therefore looks different in JStream than in the page it was
 designed in. A white veil at 10% over an sRGB 30 grey reads as about 53 in a browser and
-about 95 in linear light, almost twice as bright (#1096). A layout reproduced natively
+about 94 in linear light, almost twice as bright (#1096). A layout reproduced natively
 from a browser design can't look identical with only the linear modes, and changing
 `normal` itself would change every existing scene.
 
@@ -53,6 +53,11 @@ from a browser design can't look identical with only the linear modes, and chang
   strength.
 - **Harder:** each `_srgb` item costs a pass break and a copy, where `normal` costs
   neither. A scene of many full-canvas `normal_srgb` items copies the canvas once each.
+- **Older clients:** `BlendMode` has no fallback for an unknown value, so a client
+  older than 0.76, which the server still serves, can't parse a response that reports
+  an item with an `_srgb` mode. The protocol README's Compatibility paragraph records
+  this, as it records 0.9's `OutputKind` and 0.30's `KindCategory`. Whether `BlendMode`
+  gains a fallback is left to the protocol's open question 8.
 - **Not decided here:** an sRGB variant of the other linear modes (`multiply`, `screen`,
   `darken`, `lighten`), and a per-scene setting that makes every item blend in sRGB.
   Either can be added the same way if a design needs it.

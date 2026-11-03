@@ -67,7 +67,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
   `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`,
-  `effect.enable`), with
+  `effect.enable`, `pack.write`, `pack.delete`), with
   `Action::named_objects` and `Action::bind_problem`,
   which every implementation uses to check and follow a hotkey's action; `Batch`, whose
   optional `ends_gesture` commits a gesture; and the `Command`/`CommandClass`
@@ -115,7 +115,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `live.list`, `capture.targets`,
-  `font.list`, `source.sizes`, `activity.list` and `plugin.list`, with `QueryResult`
+  `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `pack.list` and
+  `pack.read`, with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
   `CaptureTargetInfo`, `FontInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
   (`activity.rs` holds the last, with `MAX_ACTIVITY_ENTRIES` and
@@ -203,12 +204,16 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
   reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.76 because of the
-  `normal_srgb` and `additive_srgb` blend modes (ADR-0105), with 0.72 to 0.75 left to
-  changes that claimed them first; 0.71 because of
-  `item.set_locked`, `ItemInfo.locked` and the `png` preview codec
-  ([ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md)), with 0.69 left
-  to a change that claimed it first; 0.70 because of
-  `scene.set_camera` and `SceneInfo.camera`, a live value too
+  `normal_srgb` and `additive_srgb` blend modes (ADR-0105), with 0.73 to 0.75 left to
+  changes that claimed them first; 0.72 because of the
+  effect-pack commands `pack.write`, `pack.delete`, `pack.list` and `pack.read`
+  (`pack.rs`: `PackFile`, `PackContent`, `PackInfo`, `PackFileInfo` and the write's
+  limits, [ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)), which agents
+  may call and no plugin is granted but `pack.list` and `pack.read`, and no hotkey
+  binds; 0.71 because of `item.set_locked`, `ItemInfo.locked` and the `png` preview
+  codec ([ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md)), with 0.69
+  left to a change that claimed it first; 0.70 because of `scene.set_camera` and
+  `SceneInfo.camera`, a live value too
   ([ADR-0094](../../docs/adr/0094-scene-cameras.md)); 0.68 because of the
   `font.list` query ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)); 0.67 because `live.set`
   takes a source's settings whose kind marks them `live` (`source.set_settings`,
@@ -1647,6 +1652,29 @@ GPU, and the OS resets the device (#349,
   loaded pack has and no quarantine names. It is for a person, like `plugin.enable`: no
   MCP tool carries it, no plugin is granted it and no hotkey binds it.
 
+Since 0.72 a client can write the packs themselves
+([ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md), `pack.rs`). These are
+actions and queries, not edits: undo doesn't reach the disk, and there is no `rev`.
+- **`pack.write {pack, files}`** replaces pack `pack` whole, or adds it, and loads it
+  at once; it answers `ActionResult::PackWrite` with the pack's `PackInfo`. Each
+  `PackFile` is a `path` and either `text` (`effect.toml`, `.wgsl`) or `base64` (`.png`,
+  `.jpg`, `.jpeg`, standard with padding). `files` over 3 MiB as sent
+  (`MAX_PACK_WRITE_BYTES`, so the request stays under ADR-0074's limit) is `too_large`
+  before it is decoded; more than 64 files (`MAX_PACK_FILES`), an image over 2 MiB
+  (`MAX_PACK_IMAGE_BYTES`), a bad pack ID or path, a pack another folder holds, a
+  folder `pack` that holds something else, and a pack that doesn't load are
+  `invalid_argument`, and the old version stays.
+- **`pack.delete {pack}`** removes the folder whose `effect.toml` names the pack, or is
+  `not_found` with `EntityKind::Pack`.
+- **`pack.list`** answers each pack's `PackInfo`: its `id`, `folder`, `kinds` while it
+  loads, `loaded`, and `written_by`, the client name of the last `pack.write` of that
+  pack ID (omitted when it gave none).
+- **`pack.read {pack, path?}`** answers `PackFileInfo`s: each file's `path`, `size` and
+  BLAKE3 `digest`, the `text` of text files (up to 3 MiB of text in all; a text file
+  over that read by `path` is `too_large`), and with `path` an image's `base64`.
+- Agents may call all four. A plugin may call `pack.list` and `pack.read` (class
+  `read`) and never the writes, and no hotkey binds a pack action.
+
 ### Errors
 
 `ProtocolError` is a `thiserror` enum ([R-RS-003](../../docs/RULES.md#R-RS-003)). On the
@@ -1697,7 +1725,7 @@ after 1.0:
   clients skip. An unknown error code still has its `message`. From 0.9, an output's
   `OutputKind`, `RtmpTarget` and `RecordContainer` parse an unknown `type` or value as
   `Unknown` too, so later output kinds won't break a 0.9 client. Not yet covered: a new
-  value of a string enum (`OutputState`, `EntityKind`) inside a known message breaks an
+  value of a string enum (`OutputState`, `EntityKind`, `BlendMode`) inside a known message breaks an
   older client's parse, so adding one needs open question 8 settled first. The same
   break happened once, in 0.9 itself: `OutputKind` had no fallback in 0.7 and 0.8, so a
   0.7 or 0.8 client can't parse `output.list` or `state.get` once a `record` output
@@ -1717,7 +1745,12 @@ after 1.0:
   break a 0.30 client. 0.31's organisation edits add `folder` and `label` to
   `EntityKind` for theirs. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
-  `Unknown` from the start.
+  `Unknown` from the start. 0.76 adds the `BlendMode` values `normal_srgb` and
+  `additive_srgb` (ADR-0105), which `ItemInfo.blend` reports, so a client older than
+  0.76 can't parse `item.list`, `scene.list` or `state.get` once an item uses one (the
+  whole response fails, and `WsControl` ends the session), as with `OutputKind` in 0.9.
+  `BlendMode` still has no `Unknown` fallback; whether it gets one, and whether such a
+  break counts as a minor bump, are part of open question 8.
 - **Major (breaking):** removing or renaming anything, changing a field's type or
   meaning, or making an optional field required. It needs an ADR and one minor release
   that deprecates the old form first.

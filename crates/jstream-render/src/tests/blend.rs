@@ -326,7 +326,7 @@ fn a_3d_item_reads_the_backdrop_under_its_polygon() {
 
 /// A faint veil over a dark backdrop keeps the strength a browser gives it under
 /// `normal_srgb` (#1096): white at 10% over sRGB 30 is about 53 mixed encoded, as a
-/// browser composites, where `normal`, mixing linear light, lifts it to about 95.
+/// browser composites, where `normal`, mixing linear light, lifts it to about 94.
 #[test]
 fn a_faint_veil_keeps_its_browser_strength_in_srgb() {
     let Some(mut opened) = open() else {
@@ -336,7 +336,7 @@ fn a_faint_veil_keeps_its_browser_strength_in_srgb() {
     let white = solid(compositor, 2, 2, [255, 255, 255, 255]);
     let dark = 30.0 / 255.0;
     let background = Color::rgb(dark, dark, dark);
-    for (mode, expected) in [(BlendMode::NormalSrgb, 53), (BlendMode::Normal, 95)] {
+    for (mode, expected) in [(BlendMode::NormalSrgb, 53), (BlendMode::Normal, 94)] {
         let items = [blended(&white, Placement::IDENTITY, 0.1, mode)];
         let shot = render(compositor, (2, 2), background, &items);
         near(&shot, 0, 0, [expected, expected, expected, 255], TOLERANCE);
