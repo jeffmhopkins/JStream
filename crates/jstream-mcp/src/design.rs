@@ -8,7 +8,7 @@
 //! and to look at the result before calling it done. It names the `backdrop` and `text`
 //! settings that make graphics look finished, the `shape` and `timer` kinds, how to
 //! group, scroll and animate, how to use 3D placement and blend modes, how to layer
-//! light, mask and build reflections (the recipes the cockpit build found, #1062), how
+//! light by role, mask, and build reflections on glossy surfaces (#1062), how
 //! to build a 3D set with a scene camera (ADR-0094), which transition to use (including
 //! a `stinger`), and when to build a graphic as HTML in a `browser` source, animated on
 //! one clock. Numbers are for a 1920×1080 canvas and scale with it.
@@ -85,33 +85,37 @@ designed move; keep angles under 90 and pair them with opacity. `item.set_blend`
 how an item composites: `screen` or `additive` for light leaks, glints and glows over \
 the picture, `multiply` for shadows and textures, `overlay` for a tinted wash; most \
 items stay `normal`. \
-Layering light: keep what is outside a window, what glows and the light thrown into \
-the room as separate layers, each with its own mask and blend, so reflections and \
-lighting agree. Light is `additive` (or `screen`); matter, such as smoke, a hull or a \
-plate, stays `normal`: a fireball reads as solid only when its smoke is drawn normally \
-and just the hot core is added. Masks: `image_mask` cuts an item by an image's alpha \
-or luma (`mode`), and `scene_mask` by a scene's picture, so a mask can be drawn with \
-`shape` sources instead of a file: a `linear` fill from white to black is a ramp with \
-`mode` `luma`, or from white to transparent with the default `alpha`. \
+Layering: build a scene as separate layers by role (the background, what glows or \
+emits light, the light it throws onto nearby surfaces, and the foreground frame or \
+set in front of it), each with its own mask and blend, so lighting and reflections \
+stay consistent when one of them changes. Light is `additive` (or `screen`): glows, \
+flares, beams, sparks. Matter is `normal`: smoke, objects, plates, people. An effect \
+that mixes both (an explosion, a fire) reads as solid only when its matter is drawn \
+normally and just its bright core is added. Masks: `image_mask` cuts an item by an \
+image's alpha or luma (`mode`), and `scene_mask` by a scene's picture, so a mask can \
+be drawn with `shape` sources instead of a file: a `linear` fill from white to black \
+is a ramp with `mode` `luma`, or from white to transparent with the default `alpha`. \
 A file setting, such as an `image` source's `file` or `image_mask`'s `image`, takes an \
 asset reference, `{\"type\": \"asset\", \"root\": \"absolute\", \"path\": \"/path/to/pic.png\"}` \
 (or `root` `collection` with a path relative to the collection file's folder), not a bare \
 path. \
-Reflections: reflect the composite the viewer sees, never each layer on its own. Put \
-what is reflected in one scene or group and place it again with a `scene` source, \
-with `flip_v` on, `fit_mode` `stretch` and a squashed height (about 0.7-0.8 of the \
-original), its top edge on the reflecting surface's top edge, so each surface mirrors \
-from its own edge and shows the right part of the view. Give that item a `blur` \
-(`radius` about 4) in its effects. A mask drawn for the canvas would be stretched over \
-that item's squashed box, not the canvas, so put the flipped item in a group of its own, place the group \
-full-frame and unflipped, and put the `image_mask` (or `scene_mask`) on that outer \
-placement's effects, with `item.set_blend` `additive` and the opacity there. Mask \
-specific surfaces (a console top, a screen, a canopy frame) with a fresnel ramp, \
-brighter toward the grazing edge, never one broad sheen over everything. A rim light \
-is the same composite again, unflipped, with a wide `blur` (about 12), an edge mask \
-and `additive`. Blending is in linear light, so a glass ghost needs far less than a \
-browser would (about 8% opacity where CSS needed 18%): tune it in JStream, and check \
-it over the brightest and the darkest background it will sit on. \
+Reflections on glossy surfaces (a desk, a floor, glass, a screen): reflect the \
+composite the viewer sees, never each layer on its own, or the layers won't line up. \
+Put what is reflected in one scene or group and place it again with a `scene` source, \
+with `flip_v` on and `fit_mode` `stretch`, its top edge on the surface's edge nearest \
+the reflected thing, so each surface mirrors from its own edge; squash its height to \
+suit the viewing angle (flatter for a surface seen at a low angle) and give it a small \
+`blur` in its effects, more for a rougher surface. A mask drawn for the canvas would be \
+stretched over that item's squashed box, not the canvas, so put the flipped item in a \
+group of its own, place the group full-frame and unflipped, and put the `image_mask` \
+(or `scene_mask`) on that outer placement's effects, with `item.set_blend` `additive` \
+and the opacity there. Mask the specific surfaces that would shine, each with a \
+fresnel ramp (stronger toward the edge seen at a grazing angle), never one broad sheen \
+over the whole picture. A glossy edge or rim is the same composite again, unflipped, \
+with a wider blur, an edge mask and `additive`. Blending is in linear light, so a \
+reflection on glass needs a low opacity (often 5-15%), less than the same look needs \
+in a browser: tune it in JStream, and check it over the brightest and the darkest \
+background it will sit on. \
 3D sets: `scene.set_camera` gives a scene a camera (`position`, `target`, `fov_deg`, \
 `roll_deg`), and then every item sits in one 3D space: `geometry.center` is its x and \
 y, `depth_px` its z (toward the viewer), and its rotation, `tilt_deg` and `turn_deg` \
@@ -149,13 +153,14 @@ its `width` and `height` to the canvas and place its item full-frame, or to the 
 graphic's bounds; the default `css` makes the page transparent, so draw only the \
 graphic and leave `body` without a background. Fonts and images can come from https \
 URLs (such as Google Fonts), not from local files. Animate the entrance with CSS \
-`@keyframes` that run once on load, with `animation-fill-mode: both`. Pages that move \
-together (a sky drift seen through several windows, lights that pulse in step) must \
-animate from the wall clock (`Date.now()`), not from when each page loaded, so \
-separate pages agree; use load time only for an effect that should replay when it is \
-shown. Keep continuous motion restrained: a cockpit sway of about 3 px and 0.1° feels \
-real and more feels seasick, and a streak must move less per frame than its own \
-length or it flickers. Changing `html` \
+`@keyframes` that run once on load, with `animation-fill-mode: both`. Time-based animation \
+in pages: when several pages show parts of one motion (a background that drifts \
+behind several layers, lights that pulse in step), compute it from the wall clock \
+(`Date.now()`), not from when each page loaded, so separate pages agree; use load time \
+only for an effect that should replay each time it is shown. Keep continuous motion \
+subtle: an ambient sway or drift of a few px and a fraction of a degree reads as real, \
+and more reads as unsteady; anything fast and thin (a streak, a line) must move less \
+per frame than its own length or it flickers. Changing `html` \
 reloads the page, which replays the entrance and blanks it for a moment, so put text \
 that changes during a show in a `text` source over it. If creating the source fails \
 because no browser is available on this system, build the graphic from the built-in \
