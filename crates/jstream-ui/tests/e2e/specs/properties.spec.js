@@ -159,3 +159,50 @@ test('a live setting shows as a live value, OK commits it in one edit, and Cance
   dialog = await openProperties(page);
   await expect(dialog.locator('input.color-text')).toHaveValue('#0000ffff');
 });
+
+const TEXT = {
+  kind_id: 'text', category: 'source', name: 'Text', version: 1, video: true, audio: false,
+  params: [
+    { id: 'text', type: 'string', multiline: true, max_len: 4096, default: '', label: 'Text', live: true },
+    { id: 'font', type: 'asset', accept: ['ttf', 'otf', 'ttc'], default: null, label: 'Font', live: false },
+  ],
+};
+
+test('a text source picks an installed font from the list, or another file', async ({ page, daemon }) => {
+  await describeKinds(page, [TEXT]);
+  await connect(page, daemon);
+  const add = await openAddSource(page);
+  await add.getByRole('option', { name: 'Text' }).click();
+  await add.getByRole('button', { name: 'Create', exact: true }).click();
+  let dialog = page.getByRole('dialog', { name: 'Properties' });
+  await expect(dialog.locator('.modal-title')).toHaveText('Text properties');
+
+  // The mock's two fonts, between the bundled font and any other file.
+  const fonts = dialog.locator('select.font-pick');
+  await expect(fonts.locator('option')).toHaveText(['Bundled font', 'Mock Sans Bold', 'Mock Sans Regular', 'Other file…']);
+  await expect(fonts).toHaveValue('');
+  await expect(dialog.locator('.font-file')).toBeHidden();
+
+  // A picked font is the file's absolute path, saved on OK as one edit.
+  const startRev = await rev(page);
+  await fonts.selectOption({ label: 'Mock Sans Regular' });
+  await dialog.getByRole('button', { name: 'OK' }).click();
+  await expect(dialog).toBeHidden();
+  await expect.poll(() => rev(page)).toBe(startRev + 1);
+  await rows(page).first().click({ button: 'right' });
+  await page.getByRole('menu', { name: 'Context menu' }).getByRole('menuitem', { name: 'Properties…' }).click();
+  dialog = page.getByRole('dialog', { name: 'Properties' });
+  await expect(fonts).toHaveValue('font:/mock/fonts/MockSans-Regular.ttf');
+
+  // Other file shows the root and path (absolute, as the stored font's); a path the
+  // list doesn't name keeps them shown.
+  await fonts.selectOption({ label: 'Other file…' });
+  const file = dialog.locator('.font-file');
+  await expect(file).toBeVisible();
+  await file.locator('input[type="text"]').fill('/home/me/fonts/Mine.otf');
+  await file.locator('input[type="text"]').press('Tab');
+  await expect(fonts).toHaveValue('other');
+  await dialog.getByRole('button', { name: 'OK' }).click();
+  await expect(dialog).toBeHidden();
+  await expect.poll(() => rev(page)).toBe(startRev + 2);
+});

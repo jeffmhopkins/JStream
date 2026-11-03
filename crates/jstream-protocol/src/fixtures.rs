@@ -30,7 +30,7 @@ use crate::{
     AudioFollow, BusId, BusInfo, BusMeter, BusMonitor, Loudness, MonitorTap, SendInfo, SourceAudio,
     SourceMeter,
 };
-use crate::{CaptureTargetInfo, CaptureTargetKind, PixelSize, SourceSize};
+use crate::{CaptureTargetInfo, CaptureTargetKind, FontInfo, PixelSize, SourceSize};
 use crate::{Chord, DeviceId, DeviceInfo, HotkeyBinding};
 use crate::{DroppedOverride, ItemOverride, OverrideField};
 use crate::{
@@ -1113,6 +1113,7 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::EncoderList,
         Query::VideoMixList,
         Query::CaptureTargets,
+        Query::FontList,
         Query::LiveList,
         Query::YoutubeStatus,
         Query::YoutubeListBroadcasts {
@@ -1773,6 +1774,20 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     name: "Untitled - Notepad".into(),
                     size: None,
                     primary: false,
+                },
+            ],
+        },
+        QueryResult::FontList {
+            fonts: vec![
+                FontInfo {
+                    remote_family: "Inter".into(),
+                    remote_style: "Bold".into(),
+                    path: "/usr/share/fonts/inter/Inter-Bold.otf".into(),
+                },
+                FontInfo {
+                    remote_family: "Inter".into(),
+                    remote_style: "Regular".into(),
+                    path: "/usr/share/fonts/inter/Inter-Regular.otf".into(),
                 },
             ],
         },
