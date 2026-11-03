@@ -2,14 +2,14 @@
 id = "ADR-0097"
 title = "Agents write effect packs over the protocol and MCP"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0097: Agents write effect packs over the protocol and MCP
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 <a id="context"></a>
