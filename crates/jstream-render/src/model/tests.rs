@@ -460,3 +460,102 @@ fn a_model_from_another_compositor_is_refused() {
         Err(crate::RenderError::Invalid { what: "model", .. })
     ));
 }
+
+/// ADR-0107 decisions 2 and 3: a normal map's green channel tilts the surface up its
+/// texture, toward the key light above, whether or not the placement mirrors the model.
+#[test]
+fn golden_model_a_normal_map_tilts_the_same_way_when_mirrored() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let plane = Shape::Plane
+        .model(Material {
+            base_color: [0.5, 0.5, 0.5, 1.0],
+            roughness: 0.9,
+            ..Material::default()
+        })
+        .expect("the plane builds");
+    // A plane whose every texel has one tangent-space normal, `green` its y.
+    let mapped = |green: u8| {
+        let rgba: Vec<u8> = (0..16).flat_map(|_| [128u8, green, 184, 255]).collect();
+        let normals = ModelTexture::new(4, 4, rgba, TextureColor::Linear).expect("a texture");
+        Model::new(
+            plane.primitives().to_vec(),
+            vec![Material {
+                normal_texture: Some(TextureRef { texture: 0 }),
+                ..plane.materials()[0].clone()
+            }],
+            vec![normals],
+        )
+        .expect("the plane builds")
+    };
+    // (0, 0.9, 0.44) tilts up the texture, toward the key light; (0, -0.9, 0.44) down.
+    let (up, down) = (mapped(242), mapped(13));
+    let luma = |shot: &Snapshot| {
+        let p = rgb(shot, 80, 50);
+        u32::from(p[0]) + u32::from(p[1]) + u32::from(p[2])
+    };
+    let geometry = boxed(80.0, 50.0, 80.0);
+    let mut mirrored = geometry;
+    mirrored.flip_h = true;
+    let compositor = &mut opened.compositor;
+    let plain = luma(&draw(compositor, &up, geometry, None, Lighting::Studio));
+    let away = luma(&draw(compositor, &down, geometry, None, Lighting::Studio));
+    let flipped = luma(&draw(compositor, &up, mirrored, None, Lighting::Studio));
+    assert!(plain > away + 150, "tilted up {plain} against down {away}");
+    assert!(
+        plain.abs_diff(flipped) <= 6,
+        "{plain} against {flipped} mirrored"
+    );
+}
+
+/// Layers of different sizes each get a depth target of their own size: a pass's
+/// attachments must match, so a smaller layer after a larger one still draws.
+#[test]
+fn a_model_draws_into_layers_of_different_sizes() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let model = compositor.upload_model(&coloured_cube()).expect("uploads");
+    for (w, h) in [(WIDTH, HEIGHT), (WIDTH / 2, HEIGHT / 2), (HEIGHT, WIDTH)] {
+        let layer = compositor.layer(w, h).expect("a layer");
+        compositor
+            .draw_model(
+                &ModelDraw {
+                    model: &model,
+                    geometry: boxed(w as f32 / 2.0, h as f32 / 2.0, 30.0),
+                    camera: None,
+                    lighting: Lighting::Unlit,
+                },
+                &layer,
+            )
+            .expect("the model draws");
+        // A bad pass would surface as an uncaptured error on the next render.
+        render(compositor, &[]);
+    }
+    let shot = draw(
+        compositor,
+        &coloured_cube(),
+        boxed(80.0, 50.0, 40.0),
+        None,
+        Lighting::Unlit,
+    );
+    assert_near(rgb(&shot, 80, 50), FRONT, (80, 50));
+}
+
+/// A primitive bigger than one of the adapter's buffers is refused, not a wgpu panic.
+#[test]
+fn a_primitive_past_the_buffer_limit_is_refused() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    opened.compositor.cap_buffer_size(1024);
+    let sphere = Shape::Sphere
+        .model(Material::default())
+        .expect("the sphere builds");
+    assert!(matches!(
+        opened.compositor.upload_model(&sphere),
+        Err(crate::RenderError::Invalid { what: "model", .. })
+    ));
+}

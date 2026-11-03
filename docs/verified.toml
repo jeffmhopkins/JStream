@@ -192,7 +192,7 @@ stamp = { hash = "b3:8f6c25a84d2e8a73" }
 stamp = { hash = "b3:aa614e3467e533fe", by = "agent:claude", note = "render gains only a test-only kind snapshot (insta dev-dependency, tests/kinds.rs, schema/kinds.snap) and its README Testing paragraph; the GPU pipeline steps are unchanged" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:7a38fb89d8a695ee", by = "agent:claude", note = "compositor.rs adds a readback-wait timer only; pipeline order, devices and fallbacks unchanged | merge: main's #1087 (ADR-0103 profile) added readback_wait to compositor.rs; the model pipeline paragraph still holds" }
+stamp = { hash = "b3:c4e40193d8564637", by = "agent:claude", note = "Re-read against the B1-B3 fixes: depth target per layer size, mirrored normal maps, buffer-limit refusal; the model pipeline paragraph still holds | kept from the merged side: compositor.rs adds a readback-wait timer only; pipeline order, devices and fallbacks unchanged" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:71b1120341fac73b", by = "agent:3d-models", note = "Added the model draw (layer per placement, reversed depth, studio rig, f64 camera-relative map, Placement::Layer sorting) after the 3D scene paragraph; benches added for a 3D scene and a model." }
@@ -213,7 +213,7 @@ stamp = { hash = "b3:1416a7b4551f29be", by = "agent:ui-parity", note = "One-scen
 stamp = { hash = "b3:90996e1f0ca79344", by = "agent:blend-modes", note = "Rewrote the blend sentence: fixed-function normal/additive/screen/multiply, a copy of the target for darken/lighten/overlay/difference/exclusion, sRGB mixing for the last three (ADR-0082). Layer and working textures gaining COPY_SRC, Item.blend and the composite_1080p_blend bench don't contradict anything else here." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/compositor.rs"]
-stamp = { hash = "b3:8c9752715f33036e", by = "agent:claude", note = "compositor.rs adds a readback-wait timer only; pipeline order, devices and fallbacks unchanged | merge: main's #1087 (ADR-0103 profile) added readback_wait to compositor.rs; the model pipeline paragraph still holds" }
+stamp = { hash = "b3:e333c46ac1f5ef08", by = "agent:claude", note = "Re-read against the B1-B3 fixes: depth target per layer size, mirrored normal maps, buffer-limit refusal; the model pipeline paragraph still holds | kept from the merged side: compositor.rs adds a readback-wait timer only; pipeline order, devices and fallbacks unchanged" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/convert/mod.rs"]
 stamp = { hash = "b3:d687fbbd6a293bb2", by = "agent:claude", note = "Merged wave/m1-4 at 89ea322e by taking its tree and re-applying this PR's own change (e993e0ee..80613b6b, the ledger took the wave's side). The merge brought the wave's GPU pipeline text (NV12 step 4 from #663, among others). This PR's sentence (render holds the context's SubmitLock from staging through its submit; the browser source's copies take it too) matches compositor.rs and cef/gpu.rs, and after f95f936d the NV12 encode submit, which is jstream-render's, holds it too; holds." }
@@ -411,13 +411,13 @@ stamp = { hash = "b3:923686b398d0595c", by = "agent:wave-owner", note = "Re-read
 stamp = { hash = "b3:3701d0ac19411e18", by = "agent:wave-owner", note = "Merged main at 5693733 (wave/m3-3 landed, #786) into wave/m1-4. This branch: #781 extents (ADR-0073), #672 submit lock, #712/#718 pooled scratch and uniforms. Main: X1's 3D drawn polygon, mips and chains (#622/#624/#643/#687/#629). The merge keeps both sentences; placement uses the image's extent and the chain region maps onto texels (Region::in_texels, tested). Holds." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/mod.rs"]
-stamp = { hash = "b3:251ec787232fbc0b", by = "agent:claude", note = "Lighting is now re-exported from jstream-media; the model pipeline described is unchanged" }
+stamp = { hash = "b3:2290997e3a099617", by = "agent:claude", note = "Re-read against the B1-B3 fixes: depth target per layer size, mirrored normal maps, buffer-limit refusal; the model pipeline paragraph still holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/model.wgsl"]
-stamp = { hash = "b3:eebefa3a0720c46b", by = "agent:3d-models", note = "Added the model draw (layer per placement, reversed depth, studio rig, f64 camera-relative map, Placement::Layer sorting) after the 3D scene paragraph; benches added for a 3D scene and a model." }
+stamp = { hash = "b3:763d495b6fd66bea", by = "agent:claude", note = "Re-read against the B1-B3 fixes: depth target per layer size, mirrored normal maps, buffer-limit refusal; the model pipeline paragraph still holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/tests.rs"]
-stamp = { hash = "b3:50ba663028610d46", by = "agent:3d-models", note = "Added the model draw (layer per placement, reversed depth, studio rig, f64 camera-relative map, Placement::Layer sorting) after the 3D scene paragraph; benches added for a 3D scene and a model." }
+stamp = { hash = "b3:18262bdbd5babfb1", by = "agent:claude", note = "Re-read against the B1-B3 fixes: depth target per layer size, mirrored normal maps, buffer-limit refusal; the model pipeline paragraph still holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/place.rs"]
 stamp = { hash = "b3:0bb6a603e8dff8af", by = "agent:3d-models", note = "Added the model draw (layer per placement, reversed depth, studio rig, f64 camera-relative map, Placement::Layer sorting) after the 3D scene paragraph; benches added for a 3D scene and a model." }
@@ -2499,7 +2499,7 @@ stamp = { hash = "b3:ab01e77b0cdf71d9", by = "agent:profile-builder", note = """
 stamp = { hash = "b3:54e497cc595c1491", by = "agent:profile-builder", note = "tools.rs adds a read-only profile tool; MCP purpose (tools generated from the protocol) unchanged; merge (#1079) adds layering guidance only | merge: #1055 narrowed destructiveHint to actions undo can't take back (tools.rs); the profile tool is a read-only query, untouched | merge: #1085 (effect-pack commands pack.write, pack.delete, pack.list, pack.read at protocol 0.72) added the pack tool (tools.rs, tests.rs); the tool count test now expects 34 with pack and profile | kept from the merged side: tools.rs: effect() marks a tool destructive for an action outside REVERSIBLE_ACTIONS or a history call (ADR-0098); REVERSIBLE_ACTIONS and OUTPUT_ONLY_EDITS, the batch refusal and their tests; the Tools bullet names both lists | kept from the merged side: Re-read the section after merging main's #1055 (ADR-0098: destructiveHint only for an action outside REVERSIBLE_ACTIONS or a history call). This PR's tools.rs changes are the pack tool, which comes from the protocol (pack.write/delete/list/read are not PEOPLE_ONLY), the annotations test and effect()'s doc now listing pack among the destructive tools, and the tool count test at 33. The Contents list of tools.rs's tables (PEOPLE_ONLY, DEPRECATED, OPEN_WORLD, REVERSIBLE_ACTIONS, OUTPUT_ONLY_EDITS) still holds; none of them gains an entry" }
 
 ["CRATE-jstream-media#purpose"."body"]
-stamp = { hash = "b3:aefe7d4640060da1", by = "agent:claude", note = "Lighting (studio/unlit) moved here from jstream-render so the model source can set it; README names it" }
+stamp = { hash = "b3:dbb8bceef0960629", by = "agent:3d-models", note = "Added the 3D model types (Model, Primitive, Material, ModelTexture with mips, caps, shapes, compute_tangents) to Contents; still plain data, no I/O or GPU, thiserror the only dependency." }
 
 ["CRATE-jstream-media#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-media"]
 stamp = { hash = "b3:18137b74917731cc" }
@@ -2523,7 +2523,7 @@ stamp = { hash = "b3:1d2c5fbae960d299" }
 stamp = { hash = "b3:c30b25d50e02e624", by = "agent:3d-models", note = "Added the 3D model types (Model, Primitive, Material, ModelTexture with mips, caps, shapes, compute_tangents) to Contents; still plain data, no I/O or GPU, thiserror the only dependency." }
 
 ["CRATE-jstream-media#purpose"."file:crates/jstream-media/src/model.rs"]
-stamp = { hash = "b3:5d95d119a878edce", by = "agent:claude", note = "Lighting (studio/unlit) moved here from jstream-render so the model source can set it; README names it" }
+stamp = { hash = "b3:f12a81e3991f3710", by = "agent:claude", note = "Only the ModelTexture doc changed (the 2x2 box leaves out an odd side's last row or column); the Contents bullet still matches model.rs" }
 
 ["CRATE-jstream-media#purpose"."file:crates/jstream-media/src/model/shapes.rs"]
 stamp = { hash = "b3:f91cc25ab5f94fad", by = "agent:3d-models", note = "Added the 3D model types (Model, Primitive, Material, ModelTexture with mips, caps, shapes, compute_tangents) to Contents; still plain data, no I/O or GPU, thiserror the only dependency." }
@@ -2544,7 +2544,7 @@ stamp = { hash = "b3:d6dfe064425156bb" }
 stamp = { hash = "b3:7e36816e2f28eaf7", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
 
 ["CRATE-jstream-mux#purpose"."dep:crates/jstream-media/README.md#purpose"]
-stamp = { hash = "b3:aefe7d4640060da1", by = "agent:claude", note = "media README only gained the Lighting enum for 3D models; mux uses packets and timebases, unaffected" }
+stamp = { hash = "b3:dbb8bceef0960629", by = "agent:3d-models", note = "jstream-media gained 3D model types (ADR-0107); mux still consumes only Packet and depends only on jstream-media and thiserror, so it holds." }
 
 ["CRATE-jstream-mux#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-mux"]
 stamp = { hash = "b3:cc699c75167f9edd" }
@@ -2673,7 +2673,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:6a1874ae217089c7", by = "agent:profile-builder", note = "Added ThreadCpu trait (Send+Sync, None where unsupported, read off real-time threads) and FakeThreads fake; matches process.rs and fake.rs" }
 
 ["CRATE-jstream-platform#purpose"."dep:crates/jstream-media/README.md#purpose"]
-stamp = { hash = "b3:aefe7d4640060da1", by = "agent:claude", note = "media README only gained the Lighting enum for 3D models; platform's frame and codec seams unaffected" }
+stamp = { hash = "b3:dbb8bceef0960629", by = "agent:3d-models", note = "jstream-media gained 3D model types (ADR-0107), unused here; platform still depends on jstream-media only for frame, packet and audio types, so it holds." }
 
 ["CRATE-jstream-platform#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform"]
 stamp = { hash = "b3:ee2cb26ac3f01c54", by = "agent:vcam-242", note = "depends_on, the VcamSink 'registering is the app's job' and paths.rs citations and lib.rs's doc now cite ADR-0066, which keeps registration in the app and the data-folder rule; crate-map dep changed only by the same swap" }
@@ -3654,7 +3654,7 @@ stamp = { hash = "b3:46687d4a4d0e469b", by = "agent:profile-builder", note = "Qu
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = "whole PR: contents list youtube.stats among the queries and events and AudienceStatsInfo, QuotaInfo and StatsPolling in youtube.rs; the version paragraph says 0.38 for YouTube audience stats and, after review B1, that 0.34 to 0.37 are assigned to other open bumps (#629, #642, #682, #653), which the PR API confirms are open, with only #653 on wave/m1-3; matches event.rs, query.rs, youtube.rs, lib.rs, version.rs and the fixtures; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) brought #726's Contents text on the parity fixture (a display capture screen never placed for no-audio cases, a webcam with its paired input); event.rs, fixtures.rs, lib.rs, query.rs, version.rs and youtube.rs came in unchanged, so the youtube contents and 0.38 version text hold" }
 
 ["CRATE-jstream-render#design"."body"]
-stamp = { hash = "b3:55e680f20396734e", by = "agent:claude", note = "Readback step now notes Compositor::readback_wait (time the last render waited on the map), reset per render; matches compositor.rs | merge: main's #1087 (ADR-0103 profile) documented readback_wait in step 5; the model draw and Layer placement sections unaffected" }
+stamp = { hash = "b3:dd973cfe7f0a334e", by = "agent:claude", note = "Models paragraph gains the bitangent sign and the buffer-limit refusal; the lifetime row now says the model depth target is the last layer's size and remade for another size, matching depth_view | kept from the merged side: Readback step now notes Compositor::readback_wait (time the last render waited on the map), reset per render; matches compositor.rs" }
 
 ["CRATE-jstream-render#design"."dep:docs/RULES.md#R-RT-002"]
 stamp = { hash = "b3:24c0e2f735f7e770" }
@@ -3675,7 +3675,7 @@ stamp = { hash = "b3:1416a7b4551f29be", by = "agent:ui-parity", note = "Backgrou
 stamp = { hash = "b3:90996e1f0ca79344", by = "agent:blend-modes", note = "The composite step describes per-mode pipelines, multiply's two draws and the backdrop copy with its pass break (blend.rs, compositor.rs record_composite, fs_<mode> in composite.wgsl); layer and working textures gain COPY_SRC; the resolve is unchanged; the opacity/blend ownership note points at ADR-0082." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/compositor.rs"]
-stamp = { hash = "b3:8c9752715f33036e", by = "agent:claude", note = "Readback step now notes Compositor::readback_wait (time the last render waited on the map), reset per render; matches compositor.rs | merge: main's #1087 (ADR-0103 profile) documented readback_wait in step 5; the model draw and Layer placement sections unaffected" }
+stamp = { hash = "b3:e333c46ac1f5ef08", by = "agent:claude", note = "Models paragraph gains the bitangent sign and the buffer-limit refusal; the lifetime row now says the model depth target is the last layer's size and remade for another size, matching depth_view | kept from the merged side: Readback step now notes Compositor::readback_wait (time the last render waited on the map), reset per render; matches compositor.rs" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/convert/mod.rs"]
 stamp = { hash = "b3:d687fbbd6a293bb2", by = "agent:claude", note = "Merged wave/m1-4 at 89ea322e by taking its tree and re-applying this PR's own change (e993e0ee..80613b6b, the ledger took the wave's side). The merge brought the wave's passes, take_error check after the submit, apply_filter's staged.clear on a stage error, check_filter_input and the NV12 converter. The SubmitLock is still taken just before stage_sources (render, render_into) or the stage loop (apply_filter) and dropped right after queue.submit, before take_error and the readback wait; f95f936d makes Nv12Converter::submit hold it from stage through submit, as the edited NV12 paragraph now says. Holds." }
@@ -3873,13 +3873,13 @@ stamp = { hash = "b3:923686b398d0595c", by = "agent:wave-owner", note = "Re-read
 stamp = { hash = "b3:3701d0ac19411e18", by = "agent:wave-owner", note = "Merged main at 5693733 (wave/m3-3 landed, #786) into wave/m1-4. This branch: #781 extents, #672 submit lock, #712/#718. Main: X1's 3D draw, mips and chains. The Mips step now says the crop counts in the extent and is scaled and widened to whole texels (Region::in_texels), which this merge adds. Holds." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/mod.rs"]
-stamp = { hash = "b3:251ec787232fbc0b", by = "agent:claude", note = "Only Lighting's definition moved to jstream-media; the model draw, depth and studio rig described hold" }
+stamp = { hash = "b3:2290997e3a099617", by = "agent:claude", note = "Models paragraph gains the bitangent sign and the buffer-limit refusal; the lifetime row now says the model depth target is the last layer's size and remade for another size, matching depth_view" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/model.wgsl"]
-stamp = { hash = "b3:eebefa3a0720c46b", by = "agent:3d-models", note = "Added the Models paragraph to Placement math (f64 Solid, reversed Depth32Float, NEAR_W clip, opaque then blended, shader-side back faces, shading) and the model resources to the lifetime table; benches and model goldens described with lavapipe numbers." }
+stamp = { hash = "b3:763d495b6fd66bea", by = "agent:claude", note = "Models paragraph gains the bitangent sign and the buffer-limit refusal; the lifetime row now says the model depth target is the last layer's size and remade for another size, matching depth_view" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/tests.rs"]
-stamp = { hash = "b3:50ba663028610d46", by = "agent:3d-models", note = "Added the Models paragraph to Placement math (f64 Solid, reversed Depth32Float, NEAR_W clip, opaque then blended, shader-side back faces, shading) and the model resources to the lifetime table; benches and model goldens described with lavapipe numbers." }
+stamp = { hash = "b3:18262bdbd5babfb1", by = "agent:claude", note = "Models paragraph gains the bitangent sign and the buffer-limit refusal; the lifetime row now says the model depth target is the last layer's size and remade for another size, matching depth_view" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/place.rs"]
 stamp = { hash = "b3:0bb6a603e8dff8af", by = "agent:3d-models", note = "Added the Models paragraph to Placement math (f64 Solid, reversed Depth32Float, NEAR_W clip, opaque then blended, shader-side back faces, shading) and the model resources to the lifetime table; benches and model goldens described with lavapipe numbers." }
@@ -4113,7 +4113,7 @@ stamp = { hash = "b3:1416a7b4551f29be", by = "agent:ui-parity", note = "scene.rs
 stamp = { hash = "b3:90996e1f0ca79344", by = "agent:blend-modes", note = "Added Item.blend and how each mode is drawn (ADR-0082); the transition note on halfway switches matches transition.rs's Endpoint.blend; the rest is unchanged." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/compositor.rs"]
-stamp = { hash = "b3:8c9752715f33036e", by = "agent:claude", note = "compositor.rs adds readback_wait accessor only; purpose unchanged | merge: main's #1087 (ADR-0103 profile) added Compositor::readback_wait next to this branch's models field; the model text still holds" }
+stamp = { hash = "b3:e333c46ac1f5ef08", by = "agent:claude", note = "upload_model now also refuses a primitive past max_buffer_size (Invalid), the depth target follows the layer's size, and the bitangent sign uses front_facing; the 3D model bullet still holds | kept from the merged side: compositor.rs adds readback_wait accessor only; purpose unchanged" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/convert/mod.rs"]
 stamp = { hash = "b3:d687fbbd6a293bb2", by = "agent:claude", note = "Merged wave/m1-4 at 89ea322e by taking its tree and re-applying this PR's own change (e993e0ee..80613b6b, the ledger took the wave's side). The merge brought the wave's device-fault watch (#349 via wave/m1-3: gpu.rs Faults and watch, Compositor::take_error) and the NV12 converter (#663). gpu.rs keeps both faults and this PR's submit field, from_context takes ctx.submit_lock(); render, render_into and apply_filter lock as before, and f95f936d makes Nv12Converter::submit hold it too: the GPU frames bullet's lock sentence and the NV12 bullet ('in a submit of its own on a compositor's queue') say so. Platform gpu-frames and ARCH agree." }
@@ -4311,13 +4311,13 @@ stamp = { hash = "b3:923686b398d0595c", by = "agent:wave-owner", note = "Re-read
 stamp = { hash = "b3:3701d0ac19411e18", by = "agent:wave-owner", note = "Merged main at 5693733 (wave/m3-3 landed, #786) into wave/m1-4. This branch: #781's extent, #672's submit lock, #712/#718. Main: X1's 3D draw, mips and chains (#622/#624/#643/#687/#629). The merge places the shape at the extent and builds a 3D chain from the crop mapped to texels (Region::in_texels, with a test). Holds." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/mod.rs"]
-stamp = { hash = "b3:251ec787232fbc0b", by = "agent:claude", note = "model/mod.rs re-exports jstream_media::model::Lighting instead of defining it; ModelDraw and the purpose text unchanged" }
+stamp = { hash = "b3:2290997e3a099617", by = "agent:claude", note = "upload_model now also refuses a primitive past max_buffer_size (Invalid), the depth target follows the layer's size, and the bitangent sign uses front_facing; the 3D model bullet still holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/model.wgsl"]
-stamp = { hash = "b3:eebefa3a0720c46b", by = "agent:3d-models", note = "Added upload_model/draw_model (ADR-0107) and Placement::Layer to what one scene means; models draw into a layer and sort at their centre." }
+stamp = { hash = "b3:763d495b6fd66bea", by = "agent:claude", note = "upload_model now also refuses a primitive past max_buffer_size (Invalid), the depth target follows the layer's size, and the bitangent sign uses front_facing; the 3D model bullet still holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/tests.rs"]
-stamp = { hash = "b3:50ba663028610d46", by = "agent:3d-models", note = "Added upload_model/draw_model (ADR-0107) and Placement::Layer to what one scene means; models draw into a layer and sort at their centre." }
+stamp = { hash = "b3:18262bdbd5babfb1", by = "agent:claude", note = "upload_model now also refuses a primitive past max_buffer_size (Invalid), the depth target follows the layer's size, and the bitangent sign uses front_facing; the 3D model bullet still holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/place.rs"]
 stamp = { hash = "b3:0bb6a603e8dff8af", by = "agent:3d-models", note = "Added upload_model/draw_model (ADR-0107) and Placement::Layer to what one scene means; models draw into a layer and sort at their centre." }
@@ -4341,7 +4341,7 @@ stamp = { hash = "b3:5c4f84e1609ed5f5", by = "agent:claude-3d-cameras", note = "
 stamp = { hash = "b3:595a63e6fed816d5", by = "agent:claude-3d-cameras", note = "This PR (ADR-0094): the scene description gains Item.camera, an item seen through a camera always takes the 3D path with its own perspective_px ignored, a legacy placement under a camera drawn as before and sorted at the canvas centre's depth (place.rs depth, canvas_depth), and Item.depth_run, items sorting together only within one run (0 but for a stinger's items). Checked against scene.rs, compositor.rs prepare and place.rs. The test files (tests.rs, convert/tests.rs, filter/testing.rs) add camera: None and depth_run: 0 to their Item literals; three_d.rs adds the camera goldens. Also holds against main's merged Through track and shader-source program text. | kept from the merged side: transition.rs gains Track::Through, sampled as its Appear half until its leave timing starts and its Disappear half after, with end_ms at the leave's end (or its start for None); the Transitions bullet says so. Checked with a_through_track_comes_in_stays_and_goes." }
 
 ["CRATE-jstream-render#testing"."body"]
-stamp = { hash = "b3:ba9db3df6cc90ea9", by = "agent:3d-models", note = "tests.rs only made item() pub(crate) for the model goldens, which are now listed; the 2D and 3D goldens are unchanged." }
+stamp = { hash = "b3:616a66371c9f9d37", by = "agent:claude", note = "Model goldens list the three new tests (mirrored normal map, layers of three sizes, buffer limit); the bench paragraph (composite_1080p_camera, model_1080p and their lavapipe numbers) now says Linux" }
 
 ["CRATE-jstream-render#testing"."dep:docs/RULES.md#R-TEST-003"]
 stamp = { hash = "b3:56dea7b43ab3b19d" }
@@ -4488,7 +4488,7 @@ stamp = { hash = "b3:09e0cbba67fc2339", by = "agent:claude", note = "ADR-0047: C
 stamp = { hash = "b3:cc9ecec38c66df9c", by = "agent:ui-layouts", note = "Contents gain the UI settings module and the config's UI settings file; devices.rs only exposes create_private to the crate." }
 
 ["CRATE-jstream-sources#purpose"."body"]
-stamp = { hash = "b3:6c3e55d21097b6a5", by = "agent:claude", note = "Added Source::model/ShownModel to Seams, the model kind (glTF loader scope, ignored features, live settings, stand-in size, not yet registered) to Kinds, serde and tracing to Dependencies, and the gltf and model tests to Tests" }
+stamp = { hash = "b3:94b28890cb216a92", by = "agent:claude", note = "The browser entry now says a restart_on_show page is transparent while it reloads, never the end of its previous run, as link.rs's reload hold makes it." }
 
 ["CRATE-jstream-sources#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-sources"]
 stamp = { hash = "b3:0bb97280a0b3ee27", by = "agent:claude", note = "This branch's own change to the section's inputs, re-read entry by entry: ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap, so each ADR-0031 citation moved to ADR-0061 (Purpose's depends_on and its kinds, audio-path and media citations in the README; the doc comments of lib.rs incl. its Docs: line, image/decode.rs, media/mod.rs, registry.rs, scope/mod.rs, source.rs and text/raster.rs; ARCH crate map's jstream-sources row), each still holding there; media/player.rs changed only in a test (a_seek_past_an_unknown_end_plays_on_when_looping waits for two queued frames after the seek), which the section doesn't describe | merge: wave/m1-3 at 211fc58 (#707) brought #701's AudioScopes text (bus()/source() after a retain give an unfed, unlisted scope for keys not kept; the engine retains before building) and its scope/mod.rs change; that bullet matches scope/mod.rs; holds" }
@@ -4527,7 +4527,7 @@ stamp = { hash = "b3:7b80176800be4eda", by = "agent:obs-ui-thread", note = "Re-r
 stamp = { hash = "b3:a067523daaa6cf14", by = "agent:claude", note = "This PR (#813 and #815): Stacked #529 PR 2 (protocol 0.43): describe.rs only gains max_outset_px: None on source descriptors; purpose holds. Merge: refreshed onto wave/m1-5 (main after m1-4 landed) with #813's refresh: conflicts resolved by taking m1-5's side and re-applying #813's and this PR's own diff; the tree equals refreshed #813 plus this PR's changes. #813's record: #529 PR 2 (protocol 0.43): describe.rs only gains max_outset_px: None on source descriptors; purpose holds. Merge: refreshed onto wave/m1-5 (main after m1-4 landed); conflicts resolved by taking m1-5's side and re-applying this PR's own diff, plus max_outset_px: None on the e2e mock daemon's new KindDescriptor literal; snapshots regenerated. Merge of wave/m1-5 at bd50026: the wave didn't change crates/jstream-sources/src/describe.rs. Merge of wave/m1-5 at e84bc9c: the wave didn't change crates/jstream-sources/src/describe.rs." }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/error.rs"]
-stamp = { hash = "b3:c46bd72b8c3f2b79", by = "agent:claude", note = "Added Source::model/ShownModel to Seams, the model kind (glTF loader scope, ignored features, live settings, stand-in size, not yet registered) to Kinds, serde and tracing to Dependencies, and the gltf and model tests to Tests" }
+stamp = { hash = "b3:bf3f22e531b135d8", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C3: capture.rs adds the display and window kinds with a target setting and CaptureSpec, error.rs adds SourceError::Captured, source.rs adds Source::capture, tests/sources.rs covers both kinds and the setting; wave/m1-2 merge: registry.rs builds them beside browser, chat, media, waveform and spectrum, describe.rs leaves webcam the only described kind, lib.rs and the README list the union; capture() sentence rewrapped. Text matches; latest merge changes nothing in jstream-sources; holds" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/fonts.rs"]
 stamp = { hash = "b3:f646320c23ed0318", by = "agent:obs-ui-thread", note = "Added the Installed fonts paragraph for fonts.rs (folders per OS, walk limits, name-table-only reads, ordering, cleaning, tests); lib.rs exports installed_fonts, system_font_dirs and InstalledFont." }
@@ -4536,10 +4536,10 @@ stamp = { hash = "b3:f646320c23ed0318", by = "agent:obs-ui-thread", note = "Adde
 stamp = { hash = "b3:624c3c3d9ebe0493", by = "agent:claude", note = "This branch's own change to the section's inputs, re-read entry by entry: ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap, so each ADR-0031 citation moved to ADR-0061 (Purpose's depends_on and its kinds, audio-path and media citations in the README; the doc comments of lib.rs incl. its Docs: line, image/decode.rs, media/mod.rs, registry.rs, scope/mod.rs, source.rs and text/raster.rs; ARCH crate map's jstream-sources row), each still holding there; media/player.rs changed only in a test (a_seek_past_an_unknown_end_plays_on_when_looping waits for two queued frames after the seek), which the section doesn't describe | merge: wave/m1-3 at 211fc58 (#707) brought #701's AudioScopes text (bus()/source() after a retain give an unfed, unlisted scope for keys not kept; the engine retains before building) and its scope/mod.rs change; that bullet matches scope/mod.rs; holds" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/image/mod.rs"]
-stamp = { hash = "b3:6bedfef188c004f3", by = "agent:claude", note = "Added Source::model/ShownModel to Seams, the model kind (glTF loader scope, ignored features, live settings, stand-in size, not yet registered) to Kinds, serde and tracing to Dependencies, and the gltf and model tests to Tests" }
+stamp = { hash = "b3:57a4cd0fd89acfa2", by = "agent:claude", note = "added the decode_still bullet: StillImage (straight sRGB RGBA8) is a file's first frame, decoded by image/decode.rs within Limits with the image kind's errors; exported from lib.rs; tests/sources.rs's a_still_image_is_the_first_frame covers a GIF's first frame and a non-image" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/lib.rs"]
-stamp = { hash = "b3:56795c1a8169823b", by = "agent:claude", note = "Added Source::model/ShownModel to Seams, the model kind (glTF loader scope, ignored features, live settings, stand-in size, not yet registered) to Kinds, serde and tracing to Dependencies, and the gltf and model tests to Tests" }
+stamp = { hash = "b3:92523cdcc8b9ba06", by = "agent:timer", note = "#1027: timer kind back (countdown, stopwatch, clock via jiff), documented under Kinds with its fixed box, painter, next_change and live settings; Seams add SourceKind::keeps_time and name timer among painted and density kinds; raster gains measure/render_within/Bounds (text output unchanged, goldens pass); text exposes style_params/load_font/bundled_face/text_style; Dependencies name jiff; Tests name tests/timer.rs and its unit tests. | merge: The merge brought in #1033 (font.list and the Properties font picker by name): sources gains fonts.rs (installed fonts, listed for font.list) and its README paragraph; the timer's font param is the text kind's asset param, so the picker offers fonts for it too. The timer text still holds. | merge: The merge brought in #1025/#1028 (backdrop cap), #1030 (HTML transitions, stingers), #1034/#1048/#1050 (shader sources), #1038/#1044/#1053 (3D scene cameras) and #1042: sources gains the shader-source helpers (heard_scope and stand-ins) and the backdrop's 8K cap in lib.rs and the README; the timer's Kinds, Seams, Dependencies and Tests text still holds. | kept from the merged side: Added the Installed fonts paragraph for fonts.rs (folders per OS, walk limits, name-table-only reads, ordering, cleaning, tests); lib.rs exports installed_fonts, system_font_dirs and InstalledFont. | kept from the merged side: Scope entry adds heard_source and heard_scope for a shader source with audio/audio_source settings; new AudioMeter entry (scope/meter.rs): level, peak, onset, 64 log bands on spectrum's dB scale, 64-point wave, FFT planned in new so measure allocates nothing and takes no lock, silence after STILL_MS, one test. spectrum.rs only made height and the Hz bounds pub(super)." }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/media/audio.rs"]
 stamp = { hash = "b3:d38089f7c063f4c3", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "wave/m2 main sync: the seams now name both sound paths as source.rs has them: wave/m2's media-file sound renamed Source::sound (Option<MediaAudio>, mixed while the program shows the source) and main's Source::audio (Option<Arc<dyn SourceAudio>>, a browser page's own audio) with gpu_frame and opens_browser; Context carries wave/m2's media decoders and AudioScopes beside main's BrowserBackend; the kinds list has wave/m2's media, waveform and spectrum (bus references, #362) beside main's browser and youtube_chat; dependencies and tests (media.rs, scope_no_alloc.rs, browser.rs, youtube_chat.rs) match the merged crate; holds" }
@@ -4549,18 +4549,6 @@ stamp = { hash = "b3:432be88821c3307a", by = "agent:claude", note = "This branch
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/media/player.rs"]
 stamp = { hash = "b3:172f1ec70f2547a8", by = "agent:claude", note = "This branch's own change to the section's inputs, re-read entry by entry: ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap, so each ADR-0031 citation moved to ADR-0061 (Purpose's depends_on and its kinds, audio-path and media citations in the README; the doc comments of lib.rs incl. its Docs: line, image/decode.rs, media/mod.rs, registry.rs, scope/mod.rs, source.rs and text/raster.rs; ARCH crate map's jstream-sources row), each still holding there; media/player.rs changed only in a test (a_seek_past_an_unknown_end_plays_on_when_looping waits for two queued frames after the seek), which the section doesn't describe | merge: wave/m1-3 at 211fc58 (#707) brought #701's AudioScopes text (bus()/source() after a retain give an unfed, unlisted scope for keys not kept; the engine retains before building) and its scope/mod.rs change; that bullet matches scope/mod.rs; holds" }
-
-["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/model/gltf.rs"]
-stamp = { hash = "b3:17d184ed84478087", by = "agent:claude", note = "Added Source::model/ShownModel to Seams, the model kind (glTF loader scope, ignored features, live settings, stand-in size, not yet registered) to Kinds, serde and tracing to Dependencies, and the gltf and model tests to Tests" }
-
-["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/model/gltf/tests.rs"]
-stamp = { hash = "b3:1c6fc7c8455bd00c", by = "agent:claude", note = "Added Source::model/ShownModel to Seams, the model kind (glTF loader scope, ignored features, live settings, stand-in size, not yet registered) to Kinds, serde and tracing to Dependencies, and the gltf and model tests to Tests" }
-
-["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/model/mod.rs"]
-stamp = { hash = "b3:ea1857635ad70572", by = "agent:claude", note = "Added Source::model/ShownModel to Seams, the model kind (glTF loader scope, ignored features, live settings, stand-in size, not yet registered) to Kinds, serde and tracing to Dependencies, and the gltf and model tests to Tests" }
-
-["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/model/tests.rs"]
-stamp = { hash = "b3:3d8f7ef701a632a8", by = "agent:claude", note = "Added Source::model/ShownModel to Seams, the model kind (glTF loader scope, ignored features, live settings, stand-in size, not yet registered) to Kinds, serde and tracing to Dependencies, and the gltf and model tests to Tests" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/registry.rs"]
 stamp = { hash = "b3:3adc7b1b2122dd89", by = "agent:timer", note = "#1027: timer kind back (countdown, stopwatch, clock via jiff), documented under Kinds with its fixed box, painter, next_change and live settings; Seams add SourceKind::keeps_time and name timer among painted and density kinds; raster gains measure/render_within/Bounds (text output unchanged, goldens pass); text exposes style_params/load_font/bundled_face/text_style; Dependencies name jiff; Tests name tests/timer.rs and its unit tests." }
@@ -4584,7 +4572,7 @@ stamp = { hash = "b3:4c527e14d1411030", by = "agent:obs-ui-thread", note = "Re-r
 stamp = { hash = "b3:de5d747d556099fb", by = "agent:claude", note = "Whole PR: Kinds gains backdrop (style canvas/muslin/paper, color and accent, texture, scale, light and its position, vignette, grain, seed; all but the size live; about 0.3 s per 1080p) and shape (a rectangle or ellipse drawn at exactly width by height, radius clamped to a pill, solid, linear or radial fill mixed premultiplied in linear light and dithered, an inside border, every setting live); text gains face (regular, bold, condensed_bold, bundled and swapped live), letter_spacing and a shadow (shadow_color, shadow_x, shadow_y, shadow_blur; the frame grows, the background keeps its box); Bundled fonts gives the two new subsets' provenance and hashes; backdrop's Encoder, hash, byte and linear are pub(crate) for shape; the labels say Color (168ae7e); Tests names tests/backdrop.rs, tests/shape.rs and the text face, spacing and shadow tests. The timer kind tried in 6472a01 is out of this PR, and text/mod.rs is back to its round-1 form. merge: #1023 changed none of these inputs; #1024 respelled Colour as Color in the kinds and snapshots, which this PR's new labels already follow." }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/source.rs"]
-stamp = { hash = "b3:4d6ade596aba33e3", by = "agent:claude", note = "Added Source::model/ShownModel to Seams, the model kind (glTF loader scope, ignored features, live settings, stand-in size, not yet registered) to Kinds, serde and tracing to Dependencies, and the gltf and model tests to Tests" }
+stamp = { hash = "b3:fcf8ab30eebe7fc2", by = "agent:timer", note = "#1027: timer kind back (countdown, stopwatch, clock via jiff), documented under Kinds with its fixed box, painter, next_change and live settings; Seams add SourceKind::keeps_time and name timer among painted and density kinds; raster gains measure/render_within/Bounds (text output unchanged, goldens pass); text exposes style_params/load_font/bundled_face/text_style; Dependencies name jiff; Tests name tests/timer.rs and its unit tests." }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/text/mod.rs"]
 stamp = { hash = "b3:6585e3f4890a3948", by = "agent:timer", note = "#1027: timer kind back (countdown, stopwatch, clock via jiff), documented under Kinds with its fixed box, painter, next_change and live settings; Seams add SourceKind::keeps_time and name timer among painted and density kinds; raster gains measure/render_within/Bounds (text output unchanged, goldens pass); text exposes style_params/load_font/bundled_face/text_style; Dependencies name jiff; Tests name tests/timer.rs and its unit tests." }

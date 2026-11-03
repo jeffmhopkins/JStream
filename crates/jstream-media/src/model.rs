@@ -255,7 +255,8 @@ pub struct ModelTexture {
 
 impl ModelTexture {
     /// A texture of `width` by `height` straight RGBA8, with its mips built here: each
-    /// level a box filter of the one above, in linear light for an sRGB texture.
+    /// level a 2×2 box filter of the one above (on an odd side the last row or column
+    /// is left out), in linear light for an sRGB texture.
     ///
     /// # Errors
     /// [`ModelError::TextureBytes`] (with texture 0; [`Model::new`] names the real index)
