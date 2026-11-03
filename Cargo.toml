@@ -40,7 +40,7 @@ clap-sys = { version = "0.5", default-features = false }
 # `jstream-browser`'s `helper` feature turns `sandbox` on for CEF's bootstrap layout
 # (ADR-0048), and `build-util`/`resources` are app-bundling helpers. Only that feature
 # pulls it in.
-cef = { version = "=154.5.0", default-features = false }
+cef = { version = "=156.2.0", default-features = false }
 # Benchmarks (`benches/` in jstream-render, jstream-audio and jstream-encode), dev-only.
 # No default features: no `rayon` or `plotters`, so no HTML plots; the JSON estimates under
 # `target/criterion` are what the `bench` workflow records. `cargo_bench_support` keeps
