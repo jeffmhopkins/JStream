@@ -233,6 +233,9 @@ ui_tools() {
 build() {
     step "Building (the first build takes a while; updates are much faster)"
     local started=$SECONDS
+    # The pinned toolchain from rust-toolchain.toml, explicitly: rustup 1.28.0 stopped
+    # installing it on the first cargo call.
+    (cd "$SRC" && rustup toolchain install)
     (cd "$SRC" && cargo fetch --locked)
     UI_DIST="$BUILD_DIR/ui-dist"
     rm -rf "$UI_DIST"

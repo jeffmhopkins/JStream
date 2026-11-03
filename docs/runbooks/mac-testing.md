@@ -76,7 +76,8 @@ updates what changed:
 2. **Apple's Command Line Tools**, through `xcode-select --install`, for the linker and
    git.
 3. **Rust:** rustup, if missing, installed without touching the shell profile. The
-   repository's `rust-toolchain.toml` picks the toolchain.
+   build then runs `rustup toolchain install` in the checkout, which installs the
+   toolchain the repository's `rust-toolchain.toml` pins.
 4. **Source:** a clone in `~/Library/Application Support/JStream-build/src`, checked
    out at `--ref`, else the newest release tag that has the installer, else `main`.
    `--source <dir>` builds a checkout as it is instead.
