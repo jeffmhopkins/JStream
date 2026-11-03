@@ -665,8 +665,8 @@ impl Compositor {
         let canvas_w = scene.canvas.width() as f32;
         let canvas_h = scene.canvas.height() as f32;
         // Stacking order, or far to near within each run of items seen through one camera
-        // that sorts (ADR-0094 decision 4): a stable sort, so equal depths keep stacking
-        // order.
+        // that sorts, in one `depth_run` (ADR-0094 decision 4); equal depths keep
+        // stacking order.
         self.order.clear();
         self.order.extend(
             scene
@@ -677,10 +677,10 @@ impl Compositor {
         );
         let mut start = 0;
         while start < scene.items.len() {
-            let camera = scene.items[start].camera;
+            let (camera, run) = (scene.items[start].camera, scene.items[start].depth_run);
             let end = scene.items[start..]
                 .iter()
-                .position(|item| item.camera != camera)
+                .position(|item| item.camera != camera || item.depth_run != run)
                 .map_or(scene.items.len(), |run| start + run);
             if let Some(camera) = camera.filter(|camera| camera.depth_sort) {
                 let view = view_of(camera, scene)?;

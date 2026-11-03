@@ -1087,7 +1087,7 @@ fn golden_camera_an_off_axis_set_is_perspective_correct() {
 }
 
 /// ADR-0094 decision 4: a 3D scene draws far to near whatever the stacking order, and
-/// with `depth_sort` off in stacking order.
+/// with `depth_sort` off in stacking order, as are items in another `depth_run`.
 #[test]
 fn golden_camera_items_draw_far_to_near() {
     let Some(mut opened) = open() else {
@@ -1108,7 +1108,7 @@ fn golden_camera_items_draw_far_to_near() {
     let near = geometry((120.0, 68.0), (60.0, 60.0), 0.0, 0.0, 0.0, 40.0, None);
     let far = geometry((120.0, 68.0), (160.0, 110.0), 0.0, 0.0, 0.0, -80.0, None);
     let mut seen = camera((120.0, 68.0, 300.0), (120.0, 68.0, 0.0), 45.0);
-    let centre = |seen: SceneCamera, compositor: &mut crate::Compositor| {
+    let centre = |seen: SceneCamera, far_run: u32, compositor: &mut crate::Compositor| {
         // The near item is first in stacking order, so the far one is on top of it.
         let items = [
             crate::Item {
@@ -1117,6 +1117,7 @@ fn golden_camera_items_draw_far_to_near() {
             },
             crate::Item {
                 camera: Some(seen),
+                depth_run: far_run,
                 ..item(&far_image, Placement::Geometry(far), Crop::NONE, 1.0)
             },
         ];
@@ -1133,14 +1134,20 @@ fn golden_camera_items_draw_far_to_near() {
             .pixel(WIDTH / 2 + 3, HEIGHT / 2 + 3)
             .expect("inside")
     };
-    let sorted = centre(seen, compositor);
+    let sorted = centre(seen, 0, compositor);
     assert_ne!(
         sorted[..3],
         [30, 200, 60],
         "the near item is drawn over the far one"
     );
+    let apart = centre(seen, 1, compositor);
+    assert_eq!(
+        apart[..3],
+        [30, 200, 60],
+        "an item in a run of its own (a stinger's) stays on top through an equal camera"
+    );
     seen.depth_sort = false;
-    let stacked = centre(seen, compositor);
+    let stacked = centre(seen, 0, compositor);
     assert_eq!(
         stacked[..3],
         [30, 200, 60],

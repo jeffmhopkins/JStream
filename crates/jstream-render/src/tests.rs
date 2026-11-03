@@ -113,6 +113,7 @@ fn item<'a>(image: &'a crate::Image, placement: Placement, crop: Crop, opacity: 
         blend: crate::BlendMode::Normal,
         visible: true,
         camera: None,
+        depth_run: 0,
     }
 }
 

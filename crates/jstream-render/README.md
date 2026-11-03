@@ -287,7 +287,8 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    whose `fs_<mode>` loads the backdrop at its own pixel and writes the W3C composite
    with blending off, and the items after it (ADR-0082). No depth buffer:
    stacking order is draw order, except that `prepare` sorts each run of consecutive
-   items that share one camera with `depth_sort` on, far to near by the depth of their
+   items that share one camera with `depth_sort` on and one `Item.depth_run` (a
+   transition gives a stinger's items their own), far to near by the depth of their
    box centre along the viewing axis (`CameraView::depth_of`), stacking order breaking
    ties (ADR-0094 decision 4). No cull, so a negative scale still draws (it flips
    the quad). The viewport clips to the canvas.

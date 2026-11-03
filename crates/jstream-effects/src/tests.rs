@@ -735,6 +735,7 @@ fn read(compositor: &mut jstream_render::Compositor, image: &jstream_render::Ima
         blend: jstream_render::BlendMode::Normal,
         visible: true,
         camera: None,
+        depth_run: 0,
     }];
     let scene = Scene {
         canvas: jstream_media::FrameSize::new(image.width(), image.height()).expect("non-zero"),

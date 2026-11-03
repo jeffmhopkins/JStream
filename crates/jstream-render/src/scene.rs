@@ -184,6 +184,11 @@ pub struct Item<'a> {
     /// and sorts as if at the canvas centre. The items of one scene carry the same
     /// camera, so a transition can draw two scenes' items, each through its own.
     pub camera: Option<jstream_protocol::SceneCamera>,
+    /// Which depth-sorted run it is in: consecutive items sort together only when they
+    /// share both their camera and this. A transition gives a stinger's items a run of
+    /// their own, so they stay over the scenes under them through an equal camera.
+    /// `0` otherwise.
+    pub depth_run: u32,
 }
 
 /// One scene: a canvas, its clear colour, and items bottom-first.
@@ -194,8 +199,9 @@ pub struct Scene<'a> {
     /// Clear colour, straight sRGB, drawn under every item.
     pub background: Color,
     /// Stacking order. The first item is at the bottom. Each run of consecutive items
-    /// seen through the same camera that sorts ([`Item::camera`]) draws far to near
-    /// instead, equal depths keeping stacking order (ADR-0094 decision 4).
+    /// seen through the same camera that sorts ([`Item::camera`]), in the same
+    /// [`Item::depth_run`], draws far to near instead, equal depths keeping stacking
+    /// order (ADR-0094 decision 4).
     pub items: &'a [Item<'a>],
 }
 

@@ -225,6 +225,7 @@ fn compositor_output_converts_like_its_readback() {
         blend: crate::BlendMode::Normal,
         visible: true,
         camera: None,
+        depth_run: 0,
     }];
     let scene = Scene {
         canvas: size(w, h),
