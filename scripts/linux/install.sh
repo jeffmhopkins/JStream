@@ -439,6 +439,12 @@ licences, in browser/.
 EOF
     if [ -n "$BROWSER" ]; then
         cp -R "$BUILD_DIR/browser-out/browser" "$STAGE/browser"
+        # CEF's libcef.so carries its debug symbols (about 1.4 GB); without them it is
+        # about 270 MB.
+        if command -v strip >/dev/null 2>&1; then
+            strip --strip-unneeded "$STAGE/browser/libcef.so" ||
+                warn "couldn't strip libcef.so: it keeps its debug symbols"
+        fi
     fi
     echo "$(version_of) $(git -C "$SRC" rev-parse --short HEAD 2>/dev/null || echo source)" >"$STAGE/VERSION"
     "$STAGE/jstream-daemon" --version >/dev/null || die "the built daemon doesn't run"
@@ -522,7 +528,7 @@ EOF
 checks() {
     step "Checking the install"
     note "$("$APP_DIR/jstream-daemon" --version | head -1)"
-    if ! ls /usr/share/vulkan/icd.d/*.json /etc/vulkan/icd.d/*.json >/dev/null 2>&1; then
+    if ! compgen -G '/usr/share/vulkan/icd.d/*.json' >/dev/null && ! compgen -G '/etc/vulkan/icd.d/*.json' >/dev/null; then
         warn "no Vulkan driver is installed: JStream can't render without one; install your"
         warn "distribution's Mesa Vulkan drivers (Debian and Ubuntu: mesa-vulkan-drivers)"
     fi

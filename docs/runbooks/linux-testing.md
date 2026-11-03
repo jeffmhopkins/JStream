@@ -98,7 +98,8 @@ does each step only when it is needed, so running it again updates what changed:
    `jstream-daemon` with its `cef` feature, and `cargo xtask browser-linux` for the
    browser helper and CEF's runtime (ADR-0095). `--no-browser-sources` builds the daemon
    without CEF.
-7. **Stage:** the daemon, the UI, the launcher, the `browser` folder, the licence files
+7. **Stage:** the daemon, the UI, the launcher, the `browser` folder (with `libcef.so`
+   stripped of its debug symbols, which takes it from about 1.4 GB to about 270 MB), the licence files
    and a `NOTICE.txt` that says JStream holds no AAC patent licence and names Via LA
    ([ADR-0062](../adr/0062-aac-lc-encoder-patent-check.md)), beside the install.
 8. **Browser sandbox:** where the kernel restricts unprivileged user namespaces (Ubuntu's
@@ -124,6 +125,7 @@ The `linux-install` workflow runs when the scripts, `Cargo.lock`, the browser he
 layout or what the UI build reads change. `lint` runs shellcheck. `ubuntu` runs the
 script from the checkout on `ubuntu-latest`, checks the install's files, the AAC notice
 and the setuid sandbox, starts the daemon through `jstream --print`, loads the UI, stops
-it and uninstalls. `fedora` runs the script in a Fedora container, which checks the dnf
+it, then starts it again and has a red browser source painted on program through MCP
+until the program snapshot shows red, and uninstalls. `fedora` runs the script in a Fedora container, which checks the dnf
 package names. mac-install's `pins` job checks every pin, the Linux ones included. The
 screen picker, PipeWire, the clipboard and the notification need a real desktop.

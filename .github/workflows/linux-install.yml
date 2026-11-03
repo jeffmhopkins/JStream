@@ -100,6 +100,59 @@ jobs:
           if "$JSTREAM_APP_DIR/jstream" --running; then echo "::error::--stop left it running"; exit 1; fi
           [ "$status" = 200 ] || { echo "::error::the UI answered $status"; exit 1; }
           grep -q '<html' page.html || { echo "::error::the UI page isn't HTML"; exit 1; }
+      # The installed browser folder (CEF stripped of its symbols, the sandbox as installed)
+      # paints a page: a red browser source on program shows red in the program snapshot.
+      - name: A browser source renders from the install
+        run: |
+          set -euo pipefail
+          out=$("$JSTREAM_APP_DIR/jstream" --print)
+          python3 - "$(sed -n 2p <<<"$out")" "$(sed -n 3p <<<"$out")" <<'PY'
+          import base64, json, sys, time, urllib.request, zlib
+          url, token = sys.argv[1], sys.argv[2]
+          meta = {"io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                  "io.modelcontextprotocol/clientCapabilities": {},
+                  "io.modelcontextprotocol/clientInfo": {"name": "linux-install", "version": "1"}}
+          def call(tool, op):
+              body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                                 "params": {"_meta": meta, "name": tool, "arguments": {"op": op}}}).encode()
+              req = urllib.request.Request(url + "mcp", body, {
+                  "Authorization": "Bearer " + token, "Content-Type": "application/json",
+                  "Accept": "application/json, text/event-stream"})
+              result = json.load(urllib.request.urlopen(req))["result"]
+              if result.get("isError"):
+                  sys.exit(f"{tool} {op['type']}: {result['structuredContent']}")
+              return result
+          call("source", {"type": "source.create", "source_id": "red", "name": "Red",
+                          "kind": {"type": "builtin", "kind": "browser"},
+                          "settings": {"html": "<body style='margin:0;background:#f00'></body>",
+                                       "width": 320, "height": 180}})
+          call("scene", {"type": "scene.create", "scene_id": "s", "name": "S"})
+          call("item", {"type": "item.add", "scene_id": "s", "item_id": "i", "source_id": "red"})
+          call("scene", {"type": "scene.switch", "scene_id": "s"})
+          for _ in range(60):
+              time.sleep(1)
+              png = next(c["data"] for c in call("video", {"type": "video.snapshot"})["content"]
+                         if c["type"] == "image")
+              with open("snapshot.png", "wb") as f:
+                  f.write(base64.b64decode(png))
+              # The PNG's top-left pixel, decoded with the standard library.
+              data = base64.b64decode(png)
+              pos, idat = 8, b""
+              while pos < len(data):
+                  n = int.from_bytes(data[pos:pos + 4], "big")
+                  kind = data[pos + 4:pos + 8]
+                  if kind == b"IDAT":
+                      idat += data[pos + 8:pos + 8 + n]
+                  pos += 12 + n
+              raw = zlib.decompress(idat)
+              # The first pixel of row 0 is stored as is under every PNG filter.
+              if raw[1:4] == b"\xff\x00\x00":
+                  print("the browser source paints")
+                  break
+          else:
+              sys.exit("the program snapshot never showed the red page (snapshot.png)")
+          PY
+          "$JSTREAM_APP_DIR/jstream" --stop
       - name: Uninstall
         run: |
           set -euo pipefail
