@@ -322,16 +322,20 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   than a bin shows its nearest bin. Bars at least three pixels wide have a
   one-pixel gap.
 - `browser` ([ADR-0021](../../docs/adr/0021-browser-source.md)): a web page (`url`,
-  `http://` or `https://`) or the `file` asset (`.html` or `.htm`, which wins when set),
-  opened at `width` by `height` with a frame-rate cap (`fps`, 1 to 60, default 30) through
+  `http://` or `https://`), the page itself as `html` (at most 128 KiB, its CSS and
+  scripts inline; it wins over the URL when it isn't blank), or the `file` asset
+  (`.html` or `.htm`, which wins over both when set), opened at `width` by `height` with a frame-rate cap (`fps`, 1 to 60, default 30) through
   `Context.browser` ([`jstream-browser`](../jstream-browser/README.md)). An empty URL
   with no file is a blank page. `css` (at most 64 KiB; the default makes the page's
   background transparent) is the one live setting: `update` replaces the page's custom
   CSS without reloading it. Through the engine a `css` edit still reloads the page, until
   the engine updates live settings in place (core's README › Open items).
+  `restart_on_show` (live, default off) reloads the page each time the program shows it
+  again (`show`), so an HTML graphic or stinger plays its entrance every time.
   `local_network` (advanced, default off) lets a page from the internet make requests
   to this computer and the local network, for widgets that talk to an app running here;
-  off, `jstream-browser`'s request policy refuses them (#347). `youtube_chat` never sets
+  off, `jstream-browser`'s request policy refuses them (#347), for a page given as
+  `html` too. `youtube_chat` never sets
   it. The page's picture is only on the GPU (`gpu_frame`), so
   `frame` is a transparent frame of the page's size, and the page's audio is the
   source's `audio`. With no backend, `create` fails with `SourceError::NoBackend`; a

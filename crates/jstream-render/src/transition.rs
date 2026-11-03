@@ -12,6 +12,9 @@
 //!   (opacity only), `scale` (toward 65% about its centre while fading), `slide` (toward
 //!   the nearest canvas edge until it is off the canvas, while fading) or `none` (at
 //!   once).
+//! - An item that **passes through** (a `stinger` transition's overlay) appears with
+//!   one effect, stays, and disappears with another: it covers the switch and then
+//!   uncovers it.
 //! - **Clamping:** a spring overshoots by design, so position, size, rotation and depth
 //!   may pass their end values. Values with a hard range are clamped after easing:
 //!   opacity to `[0, 1]`, crop to `[0, source size]`, size to `≥ 0` (an empty box draws
@@ -130,6 +133,21 @@ pub enum Track {
         /// When and how it goes.
         timing: Timing,
     },
+    /// An item that comes in, stays, and goes again within the transition: a `stinger`
+    /// transition's overlay. Until `leave` starts it samples as [`Track::Appear`], and
+    /// from then on as [`Track::Disappear`].
+    Through {
+        /// Where it is while it shows.
+        at: Endpoint,
+        /// How it comes in.
+        appear: Effect,
+        /// When and how it comes in.
+        enter: Timing,
+        /// How it goes.
+        disappear: Effect,
+        /// When and how it goes; its delay is when the item starts to go.
+        leave: Timing,
+    },
 }
 
 impl Track {
@@ -149,6 +167,42 @@ impl Track {
             Track::Pair { timing, .. }
             | Track::Appear { timing, .. }
             | Track::Disappear { timing, .. } => timing.end_ms(),
+            Track::Through {
+                disappear: Effect::None,
+                leave,
+                ..
+            } => leave.delay_ms,
+            Track::Through { leave, .. } => leave.end_ms(),
+        }
+    }
+
+    /// The track as it is `elapsed_ms` after the transition started: a
+    /// [`Track::Through`] is its appearing half until it starts to leave, and its
+    /// disappearing half from then on; every other track is itself.
+    fn phase(&self, elapsed_ms: f32) -> Track {
+        match *self {
+            Track::Through {
+                at,
+                appear,
+                enter,
+                disappear,
+                leave,
+            } => {
+                if elapsed_ms < leave.delay_ms {
+                    Track::Appear {
+                        to: at,
+                        effect: appear,
+                        timing: enter,
+                    }
+                } else {
+                    Track::Disappear {
+                        from: at,
+                        effect: disappear,
+                        timing: leave,
+                    }
+                }
+            }
+            track => track,
         }
     }
 
@@ -156,7 +210,7 @@ impl Track {
     /// pixels, or `None` when it draws nothing then (fully transparent, or an empty
     /// box).
     pub fn sample(&self, elapsed_ms: f32, canvas: [f32; 2]) -> Option<Endpoint> {
-        let sampled = match self {
+        let sampled = match self.phase(elapsed_ms) {
             Track::Pair {
                 from,
                 to,
@@ -166,7 +220,7 @@ impl Track {
                 let k = timing.progress(elapsed_ms);
                 Endpoint {
                     geometry: lerp_geometry(&from.geometry, &to.geometry, k),
-                    crop: lerp_crop(from.crop, to.crop, k, *source),
+                    crop: lerp_crop(from.crop, to.crop, k, source),
                     opacity: lerp(from.opacity, to.opacity, k.clamp(0.0, 1.0)),
                     blend: if k < 0.5 { from.blend } else { to.blend },
                 }
@@ -177,7 +231,7 @@ impl Track {
                     _ => timing.progress(elapsed_ms).clamp(0.0, 1.0),
                 };
                 Endpoint {
-                    geometry: away(&to.geometry, 1.0 - k, *effect, canvas),
+                    geometry: away(&to.geometry, 1.0 - k, effect, canvas),
                     crop: to.crop,
                     opacity: to.opacity * k,
                     blend: to.blend,
@@ -193,12 +247,14 @@ impl Track {
                     _ => timing.progress(elapsed_ms),
                 };
                 Endpoint {
-                    geometry: away(&from.geometry, k, *effect, canvas),
+                    geometry: away(&from.geometry, k, effect, canvas),
                     crop: from.crop,
                     opacity: from.opacity * (1.0 - k.clamp(0.0, 1.0)),
                     blend: from.blend,
                 }
             }
+            // `phase` never returns one.
+            Track::Through { .. } => return None,
         };
         let opacity = sampled.opacity.clamp(0.0, 1.0);
         let size = sampled.geometry.size;
@@ -345,6 +401,46 @@ mod tests {
 
     fn centre(e: &Endpoint) -> (f32, f32) {
         (e.geometry.center.x.get(), e.geometry.center.y.get())
+    }
+
+    /// A stinger's overlay item covers the switch and then uncovers it.
+    #[test]
+    fn a_through_track_comes_in_stays_and_goes() {
+        let track = Track::Through {
+            at: at(960.0, 540.0, 400.0, 1080.0),
+            appear: Effect::Slide,
+            enter: Timing {
+                delay_ms: 100.0,
+                duration_ms: 400.0,
+                easing: Easing::Linear,
+            },
+            disappear: Effect::Fade,
+            leave: Timing {
+                delay_ms: 700.0,
+                duration_ms: 300.0,
+                easing: Easing::Linear,
+            },
+        };
+        assert!(track.sample(50.0, CANVAS).is_none(), "not yet in");
+        let entering = track.sample(300.0, CANVAS).expect("coming in");
+        assert!(centre(&entering) != (960.0, 540.0) && entering.opacity < 1.0);
+        for t in [500.0, 600.0, 699.0] {
+            let held = track.sample(t, CANVAS).expect("there");
+            assert_eq!(centre(&held), (960.0, 540.0));
+            assert!((held.opacity - 1.0).abs() < 1e-6);
+        }
+        let leaving = track.sample(850.0, CANVAS).expect("going");
+        assert_eq!(centre(&leaving), (960.0, 540.0));
+        assert!((leaving.opacity - 0.5).abs() < 1e-3);
+        assert!(track.sample(1000.0, CANVAS).is_none(), "gone");
+        assert!((track.end_ms() - 1000.0).abs() < 1e-6);
+        let mut cut = track;
+        if let Track::Through { disappear, .. } = &mut cut {
+            *disappear = Effect::None;
+        }
+        assert!(cut.sample(699.0, CANVAS).is_some());
+        assert!(cut.sample(700.0, CANVAS).is_none());
+        assert!((cut.end_ms() - 700.0).abs() < 1e-6);
     }
 
     #[test]
