@@ -50,8 +50,9 @@ pub use capture::{
 };
 pub use clock::MediaClock;
 pub use codec::{
-    AudioEncoder, AudioEncoderConfig, CodecInfo, CodecRole, Codecs, HardwarePreference,
-    RateControl, VideoDecoder, VideoDecoderConfig, VideoEncoder, VideoEncoderConfig,
+    AudioEncoder, AudioEncoderConfig, CodecDownload, CodecInfo, CodecRole, Codecs,
+    HardwarePreference, RateControl, VideoDecoder, VideoDecoderConfig, VideoEncoder,
+    VideoEncoderConfig,
 };
 pub use cursor::{CaptureCursor, CursorCapture, CursorImage, draw_cursor};
 pub use error::PlatformError;

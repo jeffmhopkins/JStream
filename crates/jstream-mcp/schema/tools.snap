@@ -647,6 +647,42 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Downloads a codec library `codec.downloads` lists, from its maker's server, and\nchecks it against what the engine pins (0.68, ADR-0061): on Linux, Cisco's\nOpenH264. Send it only when a person asks, after showing the download's `notice`\nand a link to its `license_url`. It answers once the library is in place, which\ntakes as long as the download; outputs started afterwards can encode with it.\nSucceeds for one already installed, downloading it again. For a person only: no\nMCP tool carries it, no plugin is granted it and no hotkey binds it. Fails with\n`invalid_argument` on `download_id` for an ID `codec.downloads` doesn't list, and\n`action_failed` when the download fails or doesn't match the pin (nothing is kept\nthen), with the reason.",
+                "properties": {
+                  "download_id": {
+                    "description": "The download, as `codec.downloads` lists it.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "codec.download",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "download_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Deletes a downloaded codec library (0.68, ADR-0061). `codec.downloads` then\nlists it as not installed, and outputs started afterwards can't encode with it;\none running keeps its encoder. Succeeds for one that isn't installed. For a\nperson only, like `codec.download`. Fails with `invalid_argument` on\n`download_id` for an ID `codec.downloads` doesn't list, and `action_failed` when\nthe file can't be deleted.",
+                "properties": {
+                  "download_id": {
+                    "description": "The download, as `codec.downloads` lists it.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "codec.delete",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "download_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "**Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy\nscreen: the engine refuses this with `unsupported` and covers nothing.",
                 "properties": {
                   "on": {
@@ -6132,6 +6168,42 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Downloads a codec library `codec.downloads` lists, from its maker's server, and\nchecks it against what the engine pins (0.68, ADR-0061): on Linux, Cisco's\nOpenH264. Send it only when a person asks, after showing the download's `notice`\nand a link to its `license_url`. It answers once the library is in place, which\ntakes as long as the download; outputs started afterwards can encode with it.\nSucceeds for one already installed, downloading it again. For a person only: no\nMCP tool carries it, no plugin is granted it and no hotkey binds it. Fails with\n`invalid_argument` on `download_id` for an ID `codec.downloads` doesn't list, and\n`action_failed` when the download fails or doesn't match the pin (nothing is kept\nthen), with the reason.",
+                "properties": {
+                  "download_id": {
+                    "description": "The download, as `codec.downloads` lists it.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "codec.download",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "download_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Deletes a downloaded codec library (0.68, ADR-0061). `codec.downloads` then\nlists it as not installed, and outputs started afterwards can't encode with it;\none running keeps its encoder. Succeeds for one that isn't installed. For a\nperson only, like `codec.download`. Fails with `invalid_argument` on\n`download_id` for an ID `codec.downloads` doesn't list, and `action_failed` when\nthe file can't be deleted.",
+                "properties": {
+                  "download_id": {
+                    "description": "The download, as `codec.downloads` lists it.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "codec.delete",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "download_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "**Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy\nscreen: the engine refuses this with `unsupported` and covers nothing.",
                 "properties": {
                   "on": {
@@ -11229,6 +11301,42 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "kind_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Downloads a codec library `codec.downloads` lists, from its maker's server, and\nchecks it against what the engine pins (0.68, ADR-0061): on Linux, Cisco's\nOpenH264. Send it only when a person asks, after showing the download's `notice`\nand a link to its `license_url`. It answers once the library is in place, which\ntakes as long as the download; outputs started afterwards can encode with it.\nSucceeds for one already installed, downloading it again. For a person only: no\nMCP tool carries it, no plugin is granted it and no hotkey binds it. Fails with\n`invalid_argument` on `download_id` for an ID `codec.downloads` doesn't list, and\n`action_failed` when the download fails or doesn't match the pin (nothing is kept\nthen), with the reason.",
+                "properties": {
+                  "download_id": {
+                    "description": "The download, as `codec.downloads` lists it.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "codec.download",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "download_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Deletes a downloaded codec library (0.68, ADR-0061). `codec.downloads` then\nlists it as not installed, and outputs started afterwards can't encode with it;\none running keeps its encoder. Succeeds for one that isn't installed. For a\nperson only, like `codec.download`. Fails with `invalid_argument` on\n`download_id` for an ID `codec.downloads` doesn't list, and `action_failed` when\nthe file can't be deleted.",
+                "properties": {
+                  "download_id": {
+                    "description": "The download, as `codec.downloads` lists it.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "codec.delete",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "download_id"
                 ],
                 "type": "object"
               },

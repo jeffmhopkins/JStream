@@ -120,6 +120,11 @@ make an encoder or a video mix under **Encoders** and **Video mixes**, below the
 cards, and pick it in the output's **Encoder** or **Video** list. A running output takes
 the new choice when it next starts.
 
+On Linux, a machine with no hardware H.264 encoder (or an encoder set to **Software
+only**) encodes with Cisco's OpenH264, which JStream doesn't ship: **Encoders** offers
+to download it from Cisco, with Cisco's licence, and nothing downloads until you press
+its button. **Delete** beside it removes it again.
+
 Signing in to YouTube (choosing a broadcast, chat, viewer counts) is not in this alpha:
 create the broadcast in YouTube Studio and stream to it with its key.
 

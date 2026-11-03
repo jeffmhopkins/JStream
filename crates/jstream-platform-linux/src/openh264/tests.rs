@@ -255,6 +255,64 @@ fn vaapi_codecs_route_software_requests_to_openh264() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// A download that hands back fixed bytes, shareable across threads as the codec
+/// backend keeps it.
+struct SharedFetch(Vec<u8>);
+
+impl Fetch for SharedFetch {
+    fn get(&self, url: &str, _max_bytes: usize) -> Result<Vec<u8>, PlatformError> {
+        assert_eq!(url, pin().url, "only the pinned file is downloaded");
+        Ok(self.0.clone())
+    }
+}
+
+#[test]
+fn vaapi_codecs_list_download_and_delete_openh264() {
+    use jstream_platform::Codecs;
+    let dir = dir("backend");
+    let codecs = crate::VaapiCodecs::new()
+        .with_openh264(OpenH264Store::with_pin(dir.clone(), pin()))
+        .with_fetch(std::sync::Arc::new(SharedFetch(ARCHIVE.to_vec())));
+    let listed = |c: &crate::VaapiCodecs| {
+        let downloads = c.downloads();
+        assert_eq!(downloads.len(), 1, "{downloads:?}");
+        let download = &downloads[0];
+        assert_eq!(download.id, super::OPENH264_DOWNLOAD_ID);
+        assert_eq!(download.codec, Codec::H264);
+        assert_eq!(download.version, "2.6.0");
+        // ADR-0061 › Notices: Cisco's attribution and licence travel with the offer.
+        assert_eq!(download.notice, super::OPENH264_NOTICE);
+        assert_eq!(download.license_url, super::OPENH264_LICENSE_URL);
+        // Condition 3's notice and condition 4 itself are in the text the app shows.
+        assert!(download.license_text.contains(super::OPENH264_NOTICE));
+        assert!(
+            download
+                .license_text
+                .contains("4.  Any third-party software")
+        );
+        download.installed
+    };
+    assert!(!listed(&codecs));
+    codecs.download("openh264").expect("downloads");
+    assert!(listed(&codecs));
+    assert!(dir.join(pin().file_name).is_file());
+    // Another ID is refused, and changes nothing.
+    assert!(matches!(
+        codecs.download("x264"),
+        Err(PlatformError::Unsupported { .. })
+    ));
+    assert!(matches!(
+        codecs.delete_download("x264"),
+        Err(PlatformError::Unsupported { .. })
+    ));
+    assert!(listed(&codecs));
+    codecs.delete_download("openh264").expect("deletes");
+    assert!(!listed(&codecs));
+    // Deleting it again succeeds.
+    codecs.delete_download("openh264").expect("deletes nothing");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// Downloads the pinned release from Cisco and checks it against the pin. While the pin
 /// has no hashes, it fails with both SHA-256 values in its message, which is how a pin is
 /// recorded. It touches the network, so it is behind the `openh264-download` feature and

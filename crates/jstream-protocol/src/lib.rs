@@ -48,8 +48,8 @@ pub use command::{
     SourceKind, Vec2,
 };
 pub use encoder::{
-    AudioCodec, AudioEncoding, EncoderProfile, EncoderProfileInfo, EncoderSessionInfo,
-    HardwarePreference, RateControl, VideoCodec, VideoEncoding,
+    AudioCodec, AudioEncoding, CodecDownloadInfo, EncoderProfile, EncoderProfileInfo,
+    EncoderSessionInfo, HardwarePreference, RateControl, VideoCodec, VideoEncoding,
 };
 pub use envelope::{
     ActionResult, Call, CallResult, ClientMessage, ErrorResponse, EventMessage, Hello, Request,

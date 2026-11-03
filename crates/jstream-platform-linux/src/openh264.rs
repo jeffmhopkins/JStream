@@ -25,7 +25,8 @@ use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use jstream_platform::{PlatformError, VideoEncoder, VideoEncoderConfig};
+use jstream_platform::media::Codec;
+use jstream_platform::{CodecDownload, PlatformError, VideoEncoder, VideoEncoderConfig};
 
 use crate::dl::SystemLibrary;
 
@@ -42,6 +43,16 @@ pub const OPENH264_NOTICE: &str = "OpenH264 Video Codec provided by Cisco System
 /// Cisco's licence page for its binary, which the app links to wherever it offers the
 /// download and in its licence information.
 pub const OPENH264_LICENSE_URL: &str = "https://www.openh264.org/BINARY_LICENSE.txt";
+
+/// The ID the codec backend lists the download under (`Codecs::downloads`), and that a
+/// person's `codec.download` names.
+pub const OPENH264_DOWNLOAD_ID: &str = "openh264";
+
+/// The full text of [`OPENH264_LICENSE_URL`], as Cisco publishes it. Its condition 4
+/// asks every application that uses the binary to reproduce all of it where licensing
+/// information is presented to the user, so the app shows it beside the download offer
+/// and the installed codec.
+pub const OPENH264_LICENSE_TEXT: &str = include_str!("openh264/BINARY_LICENSE.txt");
 
 /// The largest download accepted. Cisco's Linux library is about 1 MB compressed.
 pub const MAX_DOWNLOAD_BYTES: usize = 16 << 20;
@@ -144,6 +155,21 @@ impl OpenH264Store {
     /// so listing codecs doesn't read the whole file.
     pub fn is_installed(&self) -> bool {
         self.pin.library_sha256.is_some() && self.library_path().is_file()
+    }
+
+    /// The download as the codec backend lists it: Cisco's notice and licence link,
+    /// the pinned release, and whether it is installed.
+    pub fn download_info(&self) -> CodecDownload {
+        CodecDownload {
+            id: OPENH264_DOWNLOAD_ID,
+            name: OPENH264_COMPONENT,
+            codec: Codec::H264,
+            version: version(&self.pin),
+            notice: OPENH264_NOTICE,
+            license_url: OPENH264_LICENSE_URL,
+            license_text: OPENH264_LICENSE_TEXT,
+            installed: self.is_installed(),
+        }
     }
 
     /// Downloads the pinned release from Cisco through `fetch`, checks it and stores it.
@@ -314,7 +340,6 @@ fn check_sha256(what: &'static str, data: &[u8], pinned: &[u8; 32]) -> Result<()
 /// in line).
 pub fn wants_software(hardware_encoders: usize, config: &VideoEncoderConfig) -> bool {
     use jstream_platform::HardwarePreference;
-    use jstream_platform::media::Codec;
     config.codec == Codec::H264
         && match config.hardware {
             HardwarePreference::Avoid => true,

@@ -208,6 +208,11 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("plugin.enable", N),
     // A person re-enables a quarantined effect (#349); a plugin never does.
     ("effect.enable", N),
+    // A person downloads or deletes a codec after reading its licence (ADR-0061); a
+    // plugin never does, nor lists them.
+    ("codec.download", N),
+    ("codec.delete", N),
+    ("codec.downloads", N),
     // History, on the plugin's own session.
     ("history.undo", Class(E)),
     ("history.redo", Class(E)),

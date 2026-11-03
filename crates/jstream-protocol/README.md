@@ -65,7 +65,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
   `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`,
-  `effect.enable`), with
+  `effect.enable`, `codec.download`, `codec.delete`), with
   `Action::named_objects` and `Action::bind_problem`,
   which every implementation uses to check and follow a hotkey's action; `Batch`, whose
   optional `ends_gesture` commits a gesture; and the `Command`/`CommandClass`
@@ -91,7 +91,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   control, keyframe interval and hardware preference), its range checks
   (`EncoderProfile::problem`, shared by every implementation), `EncoderProfileInfo`,
   and `EncoderSessionInfo`, the per-output sharing and cost `output.status` reports
-  ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)).
+  ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)); and
+  `CodecDownloadInfo`, a codec library the engine downloads on a person's request
+  ([Codec downloads](#design)).
 - **Video mixes** (`mix.rs`): `VideoMix`, what an output's video shows: a `MixInput`
   (`program`, `preview` or one `scene`), a `MixResolution` and an `fps_divisor` of the
   base frame rate, with its range checks (`VideoMix::problem`, shared by every
@@ -113,7 +115,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `live.list`, `capture.targets`,
-  `source.sizes`, `activity.list` and `plugin.list`, with `QueryResult`
+  `source.sizes`, `activity.list`, `plugin.list` and `codec.downloads`, with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
   `CaptureTargetInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
   (`activity.rs` holds the last, with `MAX_ACTIVITY_ENTRIES` and
@@ -193,7 +195,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.67 because `live.set`
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.68 because of the
+  `codec.downloads` query and the `codec.download` and `codec.delete` actions, which
+  download Cisco's OpenH264 on a person's request ([Codec downloads](#design),
+  [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)); 0.67 because `live.set`
   takes a source's settings whose kind marks them `live` (`source.set_settings`,
   [ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)); 0.66 because
   `stats.tick`'s `chains` counts the output stage's video chains too (`ChainCost`'s
@@ -1086,6 +1091,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   none. Not collection state, so no `rev`. Added in 0.52 (see *UI settings* below).
 - `plugin.list`: the installed WASM automation plugins, ordered by ID. Not collection
   state, so no `rev`. Added in 0.58 (see *Plugins* below).
+- `codec.downloads`: the codec libraries the engine can download on a person's request,
+  ordered by ID. Not collection state, so no `rev`. Added in 0.68 (see *Codec
+  downloads* below).
 - `delete.plan {target}`: the batch that deletes a scene, source or bus (`target` is
   `{"type":"scene","scene_id":…}`, `{"type":"source","source_id":…}` or, since 0.24,
   `{"type":"bus","bus_id":…}`), or a folder or label (`{"type":"folder","folder_id":…}`,
@@ -1593,6 +1601,27 @@ GPU, and the OS resets the device (#349,
   for a kind that isn't quarantined, and is `invalid_argument` on `kind_id` for one no
   loaded pack has and no quarantine names. It is for a person, like `plugin.enable`: no
   MCP tool carries it, no plugin is granted it and no hotkey binds it.
+
+### Codec downloads
+
+Cisco's patent licence for H.264 covers only Cisco's own OpenH264 binary, downloaded
+straight to the user's machine, so on Linux the engine downloads it from Cisco when a
+person asks, and never ships it
+([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)). Since 0.68:
+- **`codec.downloads`** lists what the engine can download, ordered by ID, each a
+  `CodecDownloadInfo`: its `download_id` (`openh264`), `name`, the `codec` it encodes,
+  the pinned `version`, the `notice` and `license_url` a client shows wherever it offers
+  it, the licence's full `license_text`, which the client reproduces there too, whether it is `installed`, and whether the machine has a `hardware_encoder` for
+  its codec, so a client can tell when an output needs it. An engine whose platform
+  downloads nothing (Windows, macOS), or that has no codec backend, lists none.
+- **`codec.download {download_id}`** downloads it from the maker's server, checks it
+  against the engine's pin and puts it in place, answering once that is done; outputs
+  started afterwards can encode with it. A download that fails or doesn't match the pin
+  is `action_failed` with the reason, and nothing is kept.
+- **`codec.delete {download_id}`** deletes it again; a running output keeps its encoder.
+- Both are `invalid_argument` on `download_id` for an ID the list doesn't hold. All
+  three are for a person, like `plugin.install`: no MCP tool carries them, no plugin is
+  granted them and no hotkey binds the actions.
 
 ### Errors
 

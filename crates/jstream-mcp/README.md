@@ -17,8 +17,8 @@ depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
 Protocol ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)), except YouTube's account
-features, which are for people, through the UI (ADR-0058 §3), and installing and
-granting plugins (ADR-0069 G1). It is written against
+features, which are for people, through the UI (ADR-0058 §3), installing and
+granting plugins (ADR-0069 G1), and downloading codecs (ADR-0061). It is written against
 `dyn Control` and `jstream-protocol` only, never the engine
 ([R-ARCH-003](../../docs/RULES.md#R-ARCH-003)): the host hands it a session, in process
 or over the WebSocket API. Layer 3: it builds on `jstream-control` (layer 2) and needs no
@@ -30,7 +30,8 @@ Contents (a first cut; [Design](#design) explains the choices):
   serves. Its instructions end with the design guidance in `design.rs`. A `video.snapshot` result leads with an image content block, the only place
   its PNG appears.
 - **Tools** (`tools.rs`): the tool table, generated from `jstream_protocol::json_schema()`,
-  less the people-only `youtube.*` and `plugin.*` ops (`PEOPLE_ONLY`) and the deprecated
+  less the people-only `youtube.*`, `plugin.*`, `effect.*` and `codec.*` ops
+  (`PEOPLE_ONLY`) and the deprecated
   `privacy.*` ops (`DEPRECATED`), each with its MCP annotations
   (`OPEN_WORLD` names the group tools that reach outside JStream, `output` and `source`;
   `batch`, which carries their edits, is open-world too), and the decoding of tool
@@ -69,7 +70,10 @@ So are the `plugin.*` ops (install, grant, re-enable) and `plugin.state_changed`
 person installs or grants a plugin (ADR-0069 G1), so an agent can't hand its access to
 code that keeps running after the conversation. So is `effect.enable` (`effect` is
 in `PEOPLE_ONLY`): an agent can't put back on air an effect a GPU device loss was blamed
-on (#349). The `gpu.device_lost` event that reports the loss does reach agents.
+on (#349). The `gpu.device_lost` event that reports the loss does reach agents. So are
+the `codec.*` ops (`codec.downloads`, `codec.download`, `codec.delete`): Cisco's
+OpenH264 downloads only when a person asks, after seeing Cisco's licence
+([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)).
 For the same reason an `output.create` or
 `output.set_target` with a `youtube { broadcast_id }` target, in a group tool or in
 `batch`, is refused with `invalid_argument` before it is sent (a `generic` RTMP(S)

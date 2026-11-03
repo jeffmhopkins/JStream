@@ -3,7 +3,7 @@
 use crate::activity::ActivityEntry;
 use crate::audio::{BusInfo, SendInfo, SourceAudio};
 use crate::command::{BlendMode, Crop, Edit, ItemTransform, SceneRole, SourceKind};
-use crate::encoder::{EncoderProfileInfo, EncoderSessionInfo};
+use crate::encoder::{CodecDownloadInfo, EncoderProfileInfo, EncoderSessionInfo};
 use crate::event::OutputState;
 use crate::filter::{FilterChains, FilterInfo};
 use crate::finite::Finite32;
@@ -212,6 +212,16 @@ pub enum Query {
     /// plugins lists none.
     #[serde(rename = "plugin.list")]
     PluginList,
+    /// Lists the codec libraries the engine can download on a person's request (0.68,
+    /// ADR-0061): on Linux, Cisco's OpenH264, the software H.264 encoder, which Cisco's
+    /// patent licence covers only when Cisco's own binary is downloaded to the machine.
+    /// Each one carries the notice and licence link a client shows wherever it offers
+    /// the download, whether it is installed, and whether the machine has a hardware
+    /// encoder for its codec. For a person only, like `codec.download`: no MCP tool
+    /// carries it and no plugin is granted it. Runtime state, so no `rev`. An engine
+    /// whose platform downloads no codec, or that has no codec backend, lists none.
+    #[serde(rename = "codec.downloads")]
+    CodecDownloads,
 }
 
 /// What a `delete.plan` deletes: a scene, a source, (since 0.24) a bus, a folder or a
@@ -278,6 +288,7 @@ impl Query {
             Query::ActivityList { .. } => "activity.list",
             Query::UiSettingsGet { .. } => "ui_settings.get",
             Query::PluginList => "plugin.list",
+            Query::CodecDownloads => "codec.downloads",
         }
     }
 }
@@ -583,6 +594,12 @@ pub enum QueryResult {
         /// The installed plugins, ordered by ID.
         plugins: Vec<PluginInfo>,
     },
+    /// The result of `codec.downloads` (0.68). Runtime state, so it carries no `rev`.
+    #[serde(rename = "codec.downloads")]
+    CodecDownloads {
+        /// The downloads, ordered by ID.
+        downloads: Vec<CodecDownloadInfo>,
+    },
 }
 
 impl QueryResult {
@@ -615,6 +632,7 @@ impl QueryResult {
             QueryResult::ActivityList { .. } => "activity.list",
             QueryResult::UiSettingsGet { .. } => "ui_settings.get",
             QueryResult::PluginList { .. } => "plugin.list",
+            QueryResult::CodecDownloads { .. } => "codec.downloads",
         }
     }
 }

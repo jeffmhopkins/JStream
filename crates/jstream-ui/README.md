@@ -116,7 +116,9 @@ Contents ([Design](#design) explains the choices):
   (the program output and each output with its FX button, creating, editing and
   deleting streams, recordings and the virtual camera, their stream keys, start and
   stop, and the pipeline's health); `encoders.rs`: `Profiles`, its encoder profile and
-  video mix lists and forms, whose drafts, edits and summaries are tested natively; and the calls and
+  video mix lists and forms, whose drafts, edits and summaries are tested natively;
+  `codec_downloads.rs`: the offer to download Cisco's OpenH264 there and in the encoder
+  form, whose wording and when it shows are tested natively; and the calls and
   logic behind it and the header's Go Live, tested natively against `MockEngine`; and `mixer.rs`: `Mixer`, the
   audio mixer (the master card with its loudness and true peak, the channels folded
   under it with their meters, faders, dB fields, mutes and routing, the same as
@@ -660,7 +662,21 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   input (program, preview or a scene, groups left out), a size preset (vertical
   1080 × 1920 and 720 × 1280 among them) or custom even sides, and a frame-rate divisor.
   Delete is disabled, titled with the outputs that use it, while any does, as the
-  engine refuses it then. Above the cards, the program output's row
+  engine refuses it then. Encoders also offers a codec the engine can download on a
+  person's request (`codec.downloads`, `codec_downloads.rs`,
+  [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)): on Linux,
+  Cisco's OpenH264, when it isn't installed and the machine has no hardware encoder for
+  H.264 or a profile asks for software H.264, and the encoder form offers it under the
+  hardware choice while the draft would need it. Each offer says why, that JStream
+  downloads Cisco's own copy from Cisco only when asked, and shows Cisco's notice
+  ("OpenH264 Video Codec provided by Cisco Systems, Inc.") with a link to Cisco's
+  licence and a folded "Licence terms" holding the licence's full text
+  (`license_text`, which Cisco's condition 4 asks the app to reproduce); its
+  "Download Cisco's OpenH264 2.6.0" button sends `codec.download` and reads
+  "Downloading…" until the engine answers. Once installed, the section keeps the notice
+  licence link and terms beside a Delete button (`codec.delete`). A failure, such as a file
+  that didn't match JStream's pin, shows under it. An engine older than 0.68, or one
+  that downloads nothing, shows no offer. Above the cards, the program output's row
   ("master") and a row per output with its state each have an "FX N" button counting
   that chain's filters, which shows the chain in the Filters panel (below the rows,
   the prototype's footnote). The header's "Go Live" starts every stopped or

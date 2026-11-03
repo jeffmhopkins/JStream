@@ -547,6 +547,42 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Downloads a codec library `codec.downloads` lists, from its maker's server, and\nchecks it against what the engine pins (0.68, ADR-0061): on Linux, Cisco's\nOpenH264. Send it only when a person asks, after showing the download's `notice`\nand a link to its `license_url`. It answers once the library is in place, which\ntakes as long as the download; outputs started afterwards can encode with it.\nSucceeds for one already installed, downloading it again. For a person only: no\nMCP tool carries it, no plugin is granted it and no hotkey binds it. Fails with\n`invalid_argument` on `download_id` for an ID `codec.downloads` doesn't list, and\n`action_failed` when the download fails or doesn't match the pin (nothing is kept\nthen), with the reason.",
+          "properties": {
+            "download_id": {
+              "description": "The download, as `codec.downloads` lists it.",
+              "type": "string"
+            },
+            "type": {
+              "const": "codec.download",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "download_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Deletes a downloaded codec library (0.68, ADR-0061). `codec.downloads` then\nlists it as not installed, and outputs started afterwards can't encode with it;\none running keeps its encoder. Succeeds for one that isn't installed. For a\nperson only, like `codec.download`. Fails with `invalid_argument` on\n`download_id` for an ID `codec.downloads` doesn't list, and `action_failed` when\nthe file can't be deleted.",
+          "properties": {
+            "download_id": {
+              "description": "The download, as `codec.downloads` lists it.",
+              "type": "string"
+            },
+            "type": {
+              "const": "codec.delete",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "download_id"
+          ],
+          "type": "object"
+        },
+        {
           "description": "**Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy\nscreen: the engine refuses this with `unsupported` and covers nothing.",
           "properties": {
             "on": {
@@ -1607,6 +1643,59 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         }
       ]
+    },
+    "CodecDownloadInfo": {
+      "description": "A codec library the engine downloads on a person's request, as `codec.downloads`\nlists it (0.68, ADR-0061). On Linux it is Cisco's OpenH264: JStream never ships it,\nand downloads Cisco's own binary from Cisco's server only when a person asks, since\nCisco's patent licence covers that copy alone. A client offering the download shows\n`notice` with a link to `license_url`, and sends `codec.download` only when the\nperson confirms.",
+      "properties": {
+        "codec": {
+          "$ref": "#/$defs/VideoCodec",
+          "description": "The codec it encodes. An output whose profile asks for it in software\n(`hardware: avoid`), or on a machine with no hardware encoder for it, needs it."
+        },
+        "download_id": {
+          "description": "The download's ID, which `codec.download` and `codec.delete` take: `openh264`.",
+          "type": "string"
+        },
+        "hardware_encoder": {
+          "description": "Whether this machine has a hardware encoder for `codec`. When it has none, an\noutput that encodes `codec` needs this download whatever its profile's\n`hardware` preference, except `require`, which then fails.",
+          "type": "boolean"
+        },
+        "installed": {
+          "description": "Whether it is downloaded and in place.",
+          "type": "boolean"
+        },
+        "license_text": {
+          "description": "That licence's full text, which a client reproduces where it presents licensing\ninformation for the download (Cisco's condition 4), beside the offer and the\ninstalled codec.",
+          "type": "string"
+        },
+        "license_url": {
+          "description": "The maker's licence for its binary, linked beside `notice`.",
+          "type": "string"
+        },
+        "name": {
+          "description": "What it is, for people: \"Cisco's OpenH264 (software H.264)\".",
+          "type": "string"
+        },
+        "notice": {
+          "description": "The attribution the maker's licence asks for, shown wherever the download is\noffered and in the app's licence information: \"OpenH264 Video Codec provided by\nCisco Systems, Inc.\".",
+          "type": "string"
+        },
+        "version": {
+          "description": "The release the engine pins, such as `2.6.0`. A newer one comes with a JStream\nupdate.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "download_id",
+        "name",
+        "codec",
+        "version",
+        "notice",
+        "license_url",
+        "license_text",
+        "installed",
+        "hardware_encoder"
+      ],
+      "type": "object"
     },
     "Crop": {
       "description": "How many source pixels an item cuts off each edge before it is transformed.\n\nWhole pixels of the source's own frame, so every value is valid; cropping more than\nthe source's size leaves nothing to draw.",
@@ -7136,6 +7225,19 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type"
           ],
           "type": "object"
+        },
+        {
+          "description": "Lists the codec libraries the engine can download on a person's request (0.68,\nADR-0061): on Linux, Cisco's OpenH264, the software H.264 encoder, which Cisco's\npatent licence covers only when Cisco's own binary is downloaded to the machine.\nEach one carries the notice and licence link a client shows wherever it offers\nthe download, whether it is installed, and whether the machine has a hardware\nencoder for its codec. For a person only, like `codec.download`: no MCP tool\ncarries it and no plugin is granted it. Runtime state, so no `rev`. An engine\nwhose platform downloads no codec, or that has no codec backend, lists none.",
+          "properties": {
+            "type": {
+              "const": "codec.downloads",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -7936,6 +8038,27 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "plugins"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `codec.downloads` (0.68). Runtime state, so it carries no `rev`.",
+          "properties": {
+            "downloads": {
+              "description": "The downloads, ordered by ID.",
+              "items": {
+                "$ref": "#/$defs/CodecDownloadInfo"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "codec.downloads",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "downloads"
           ],
           "type": "object"
         }
@@ -9438,5 +9561,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.67"
+  "title": "JStream protocol 0.68"
 }

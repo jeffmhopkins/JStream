@@ -365,7 +365,14 @@ It has:
   crate's own bzip2 decoder (`openh264/bzip2.rs`; the `bzip2` crate's backend has a
   licence `deny.toml` allows only at build time), checks the library's SHA-256, and
   writes it through a temporary file and a rename. A download that doesn't match is
-  discarded and reported, never written. `remove` deletes it. Each time an encoder
+  discarded and reported, never written. `remove` deletes it. `VaapiCodecs` offers it
+  through `Codecs::downloads` (ID `OPENH264_DOWNLOAD_ID`, `openh264`, with
+  `OpenH264Store::download_info`, with `OPENH264_LICENSE_TEXT`, Cisco's
+  `BINARY_LICENSE.txt` kept verbatim in `openh264/BINARY_LICENSE.txt`, whose condition 4
+  asks the app to reproduce it), and `Codecs::download` and `delete_download` call
+  `install`, through `HttpsFetch` unless `with_fetch` gave a test's `Fetch`, and
+  `remove`; the engine calls them for a person's `codec.download` and `codec.delete`.
+  Each time an encoder
   opens, the stored file's SHA-256 is checked again before `dlopen`, and the library
   must report the pinned version, since the hand-written declarations (`ffi.rs`, only
   the encoder calls JStream makes) follow that release's headers. A copy from anywhere

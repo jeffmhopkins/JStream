@@ -94,7 +94,7 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
 
 Not here yet: YouTube sign-in for users (it waits on JStream's own OAuth client,
 [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)), YouTube outside Windows (the daemon sets up its OAuth token store
-only there), on Linux a way to download OpenH264 (LNX2) and the UI's warning while
+only there), and on Linux the UI's warning while
 stream keys are in ADR-0071's fallback file, a default collection file, a
 default port and a default token file
 location ([Design › Open questions](#open-questions)).
