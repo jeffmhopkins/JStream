@@ -361,7 +361,8 @@ covers = ["crates/jstream-ui/src/panels/outputs.rs"]
 
 Spec: [panels › outputs](../design/ui-prototype/spec-panels.md#outputs-panel). The real
 panel manages outputs (create, keys, start and stop, encoders and video mixes), which the
-prototype doesn't show; that stays ([Beyond](#beyond)).
+prototype doesn't show; that stays ([Beyond](#beyond)). A stopped card's Edit changes an
+RTMP output's server URL or a recording's file path (`output.set_path`, #1072).
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|

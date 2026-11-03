@@ -152,6 +152,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("hotkey.clear", Class(E)),
     ("output.create", N),
     ("output.set_target", N),
+    ("output.set_path", N),
     ("output.delete", N),
     ("output.set_encoder", N),
     ("encoder.create", N),

@@ -2845,6 +2845,29 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Changes where a recording output writes its file (since 0.75, #1072), keeping its\ncontainer, encoder profile, mix, bus and filters. A running output keeps writing\nwhere it started; the new path applies from its next `output.start`, which still\nnever overwrites. The path is checked as in `output.create`'s\n[`OutputKind::Record`](crate::OutputKind::Record). An output that isn't a\nrecording is `invalid_argument`. Inverse: `output.set_path` with the previous\npath.",
+          "properties": {
+            "output_id": {
+              "$ref": "#/$defs/OutputId",
+              "description": "The recording output to change."
+            },
+            "path": {
+              "description": "Where the finished recording goes: an absolute path on the engine's machine,\nending in a file name.",
+              "type": "string"
+            },
+            "type": {
+              "const": "output.set_path",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "output_id",
+            "path"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Changes the canvas: every scene's coordinate space, in whole pixels (ADR-0022).\nItems keep their canvas-pixel placements; nothing moves or resizes. Zero, or a\nside over the engine's maximum (at least 7680, both ways), is `invalid_argument`.\nInverse: `canvas.set_size` with the previous size.",
           "properties": {
             "height": {
@@ -6070,7 +6093,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               "description": "The file format."
             },
             "path": {
-              "description": "Where the finished recording goes: an absolute path on the engine's\nmachine, ending in a file name. While recording, the file is written as\n`<path>.part` and renamed to `path` when the output stops. A recording never\noverwrites: `output.start` fails with `action_failed` when `path` or its\n`.part` name exists. The engine rejects, with `invalid_argument`, an empty or\nrelative path (absolute is `/…`, `\\…`, `C:\\…` or `C:/…`), one that starts\nwith two separators (a Windows UNC or device path, `\\\\host\\share\\…`,\n`\\\\.\\…` or `\\\\?\\…`), one with `:` other than a drive letter's, `?`, `*`,\ncontrol characters or a `..` segment, one that ends in a separator or names\nno file, and one whose file name is a DOS device name, in any case and with\nor without an extension (`NUL`, `nul.mp4`, `CON`, `PRN`, `AUX`, `COM1`,\n`LPT1`, …), which Windows opens in place of a file. `output.start` also fails\nwhen the path is not absolute on the engine's own machine.",
+              "description": "Where the finished recording goes: an absolute path on the engine's\nmachine, ending in a file name. While recording, the file is written as\n`<path>.part` and renamed to `path` when the output stops. A recording never\noverwrites: `output.start` fails with `action_failed` when `path` or its\n`.part` name exists; `output.set_path` (since 0.75) points it at a new file.\nThe engine rejects, with `invalid_argument`, an empty or relative path\n(absolute is `/…`, `\\…`, `C:\\…` or `C:/…`), one that starts with two\nseparators (a Windows UNC or device path, `\\\\host\\share\\…`, `\\\\.\\…` or\n`\\\\?\\…`), one with `:` other than a drive letter's, `?`, `*`,\ncontrol characters or a `..` segment, one that ends in a separator or names\nno file, and one whose file name is a DOS device name, in any case and with\nor without an extension (`NUL`, `nul.mp4`, `CON`, `PRN`, `AUX`, `COM1`,\n`LPT1`, …), which Windows opens in place of a file. `output.start` also fails\nwhen the path is not absolute on the engine's own machine.",
               "type": "string"
             },
             "type": {
@@ -9622,5 +9645,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.71"
+  "title": "JStream protocol 0.75"
 }
