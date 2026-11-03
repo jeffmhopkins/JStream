@@ -442,9 +442,11 @@ wholly behind the viewer draws nothing.
 changes from one item to the next, and `place` calls the `_seen` forms, `drawn_polygon_seen`, `unplace_seen` and
 `drawn_vertex_seen`, which place the box by its pose in the scene's space
 ([ADR-0094](../../docs/adr/0094-scene-cameras.md)). The near plane, edge push and
-coverage are the same. A camera that `SceneCamera::view` refuses makes the render
-`RenderError::Invalid` (`camera`), as a bad opacity does; the engine only passes
-cameras the graph accepted.
+coverage are the same. An item the camera can't place, such as a box far past the
+drawable bound seen from close by, draws nothing rather than failing the frame, and a
+vertex the edge push can't move stays where it was. A camera that `SceneCamera::view`
+refuses makes the render `RenderError::Invalid` (`camera`), as a bad opacity does; the
+engine only passes cameras the graph accepted.
 
 **Legacy.** `place` asks [`legacy_quad`](../jstream-protocol/src/geometry.rs) for the
 quad. For a source of size `(sw, sh)`, the image's extent, and crop `(left, top, right, bottom)` that
