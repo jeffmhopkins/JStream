@@ -96,6 +96,9 @@ enum Action {
     /// Turns a 3D scene's camera about its target, or with `dolly` moves it along its
     /// line of sight (ADR-0094): Alt-drag, with Shift for the dolly.
     Orbit {
+        /// The scene whose camera the drag moves: the one shown when it started, which
+        /// its preview is kept with and its commit goes to.
+        scene: SceneId,
         /// The camera when the drag started.
         start: SceneCamera,
         /// Where the press was.
@@ -198,8 +201,8 @@ pub fn Canvas() -> impl IntoView {
     // What the drag in progress does, for the readout.
     let active = RwSignal::new(None::<Active>);
     let marquee = RwSignal::new(None::<(Point, Point)>);
-    // The camera an orbit or dolly shows, until the collection has it.
-    let camera_preview = RwSignal::new(None::<SceneCamera>);
+    // The camera an orbit or dolly shows, and its scene, until the collection has it.
+    let camera_preview = RwSignal::new(None::<camera::Preview>);
     let hovered = RwSignal::new(None::<ItemId>);
     let cursor = RwSignal::new("default");
     let stage = NodeRef::<leptos::html::Div>::new();
@@ -417,6 +420,10 @@ pub fn Canvas() -> impl IntoView {
                 camera_preview.set(None);
                 return;
             };
+            let sent = camera::Preview {
+                scene: scene_id.clone(),
+                camera,
+            };
             spawn_local(async move {
                 let result =
                     model::commit_camera(&*open.control, scene_id, camera, gesture.clone()).await;
@@ -425,7 +432,7 @@ pub fn Canvas() -> impl IntoView {
                     if let Some(gesture) = gesture {
                         let _cancelled = model::live_cancel(&*open.control, gesture).await;
                     }
-                    if camera_preview.try_get_untracked() == Some(Some(camera)) {
+                    if camera_preview.try_get_untracked() == Some(Some(sent)) {
                         camera_preview.try_set(None);
                     }
                 }
@@ -434,7 +441,7 @@ pub fn Canvas() -> impl IntoView {
         };
     // The collection has the orbit's camera, or another scene is shown: stop showing it.
     Effect::new(move |_| {
-        let shown = layout.with(|l| l.as_ref().map(|l| l.camera));
+        let shown = layout.with(|l| l.as_ref().map(|l| (shown_scene(l).cloned(), l.camera)));
         if drag.with_value(|d| {
             matches!(
                 d,
@@ -446,9 +453,10 @@ pub fn Canvas() -> impl IntoView {
         }) {
             return;
         }
-        if let Some(preview) = camera_preview.get_untracked()
-            && shown.is_none_or(|camera| camera == Some(preview) || camera.is_none())
-        {
+        if camera_preview.with_untracked(|p| {
+            p.as_ref()
+                .is_some_and(|p| p.caught_up(shown.as_ref().map(|(s, c)| (s.as_ref(), *c))))
+        }) {
             camera_preview.set(None);
         }
     });
@@ -492,10 +500,10 @@ pub fn Canvas() -> impl IntoView {
     // The camera a 3D scene is seen through as the canvas shows it, the dragged one
     // first (ADR-0094); `None` in a 2D scene.
     let seen_in = move |current: &Layout| -> Option<CameraView> {
-        camera::view(
-            camera_preview.get_untracked().or(current.camera),
-            current.canvas,
-        )
+        let camera = camera_preview.with_untracked(|p| {
+            camera::Preview::camera_in(p.as_ref(), shown_scene(current), current.camera)
+        });
+        camera::view(camera, current.canvas)
     };
     // The item under `point`: the topmost box, or in a 3D scene the one the engine
     // draws on top through the camera.
@@ -660,9 +668,13 @@ pub fn Canvas() -> impl IntoView {
         let held = selection.iter().any(|(id, _)| current.is_locked(id));
         // Alt-drag in a 3D scene orbits its camera, with Shift dollies it.
         if event.alt_key()
-            && let Some(camera) = camera_preview.get_untracked().or(current.camera)
+            && let Some(scene) = shown_scene(&current).cloned()
+            && let Some(camera) = camera_preview.with_untracked(|p| {
+                camera::Preview::camera_in(p.as_ref(), Some(&scene), current.camera)
+            })
         {
             let orbit = Action::Orbit {
+                scene,
                 start: camera,
                 origin: point,
                 dolly: shift,
@@ -828,6 +840,7 @@ pub fn Canvas() -> impl IntoView {
         };
         match &mut current.action {
             Action::Orbit {
+                scene,
                 start,
                 origin,
                 dolly,
@@ -839,7 +852,10 @@ pub fn Canvas() -> impl IntoView {
                 } else {
                     camera::orbit(*start, dx, dy)
                 };
-                camera_preview.set(Some(moved));
+                camera_preview.set(Some(camera::Preview {
+                    scene: scene.clone(),
+                    camera: moved,
+                }));
                 live.with_value(|l| l.iter().for_each(|l| l.show_camera(moved)));
             }
             Action::Marquee { from, to, base } => {
@@ -917,23 +933,22 @@ pub fn Canvas() -> impl IntoView {
         guides.set(Vec::new());
         marquee.set(None);
         let (starts, crop_starts): live::Values = match finished.action {
-            Action::Orbit { start, .. } => {
+            Action::Orbit { scene, start, .. } => {
                 let gesture = live.with_value(Clone::clone);
                 live.set_value(None);
-                let moved = camera_preview
-                    .get_untracked()
-                    .filter(|c| keep && *c != start);
+                // Committed only while the canvas still shows the scene the drag moved: if
+                // another is shown now (the first deleted, say), the drag is dropped.
+                let still =
+                    layout.with_untracked(|l| l.as_ref().and_then(shown_scene) == Some(&scene));
+                let moved = camera_preview.with_untracked(|p| {
+                    camera::Preview::camera_in(p.as_ref(), Some(&scene), None)
+                        .filter(|c| keep && still && *c != start)
+                });
                 match (moved, gesture) {
                     (Some(camera), Some(gesture)) => {
                         gesture.commit(move |scene, ending| commit_camera(camera, scene, ending));
                     }
-                    (Some(camera), None) => {
-                        if let Some(scene) = layout.with_untracked(|l| {
-                            l.as_ref().and_then(|l| l.scene.clone()).map(|(id, _)| id)
-                        }) {
-                            commit_camera(camera, scene, None);
-                        }
-                    }
+                    (Some(camera), None) => commit_camera(camera, scene, None),
                     (None, gesture) => {
                         if let Some(gesture) = gesture {
                             gesture.cancel();
@@ -1326,10 +1341,14 @@ pub fn Canvas() -> impl IntoView {
     };
     // The camera the boxes are drawn through, in a 3D scene: the dragged one first.
     let seen_now = move || -> Option<CameraView> {
-        let dragged = camera_preview.get();
-        layout.with(|l| {
-            let l = l.as_ref()?;
-            camera::view(dragged.or(l.camera), l.canvas)
+        camera_preview.with(|p| {
+            layout.with(|l| {
+                let l = l.as_ref()?;
+                camera::view(
+                    camera::Preview::camera_in(p.as_ref(), shown_scene(l), l.camera),
+                    l.canvas,
+                )
+            })
         })
     };
     // Screen pixels in canvas units, for handle sizes and label text.
@@ -1496,10 +1515,12 @@ pub fn Canvas() -> impl IntoView {
     let selection_chrome = move || {
         let fit = viewport.get()?;
         // A 3D scene's selection has no handles; its readout is the camera's.
-        if let Some(camera) = camera_preview
-            .get()
-            .or_else(|| layout.with(|l| l.as_ref()?.camera))
-        {
+        if let Some(camera) = camera_preview.with(|p| {
+            layout.with(|l| {
+                let l = l.as_ref()?;
+                camera::Preview::camera_in(p.as_ref(), shown_scene(l), l.camera)
+            })
+        }) {
             let (width, height) = canvas_size();
             let text = camera::readout(camera);
             return Some(
@@ -2048,6 +2069,11 @@ async fn run_preview(
             }
         }
     }
+}
+
+/// The scene the canvas shows.
+fn shown_scene(layout: &Layout) -> Option<&SceneId> {
+    layout.scene.as_ref().map(|(id, _)| id)
 }
 
 #[cfg(test)]
