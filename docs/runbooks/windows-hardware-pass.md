@@ -73,8 +73,8 @@ scripts\windows-pass.bat -Unattended     # only the checks that need no one
   the last lines say what and how to undo it.
 - **Not checked by the script:** what isn't visible outside the engine, such as
   `OutputStats::readbacks` and `gpu_fallbacks` (it checks the log lines that report the
-  same events), item 19's log search (its step 3, by hand), item 20 (all by hand), and the items the report
-  lists under "Not in this pass".
+  same events), item 19's log search (its step 3, by hand), item 20 (all by hand), and
+  the items the report lists under "Not in this pass".
 
 | Check | Item | Source |
 |---|---|---|
