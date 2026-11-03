@@ -124,7 +124,19 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   keeps one, calls both before it builds the sources an edit changed, and feeds every
   scope in it from its mixer thread. Its locks are taken only to find, make or drop a
   scope, never by the thread that pushes. `drawn_source(kind, settings)` names the source a `waveform` or
-  `spectrum` draws, for the engine to feed.
+  `spectrum` draws, for the engine to feed. For a kind outside this crate with the same
+  `audio` and `audio_source` settings (a shader source that hears audio, ADR-0093),
+  `heard_source(settings)` names that source and `heard_scope(scopes, settings)` finds
+  the scope it hears.
+- `AudioMeter` (`scope/meter.rs`): what a shader source hears of a scope each frame, as
+  `Metered`: the window's RMS level and peak, an onset (1 when the level jumps above its
+  recent average, falling back), `METER_BANDS` (64) log-spaced bands from 20 Hz on the
+  `spectrum` kind's dB scale, and the window at 64 evenly spaced points. Levels and bands
+  rise at once and fall over a few frames. `AudioMeter::new` plans the FFT and allocates
+  its buffers, so `measure(scope, ms)` allocates nothing and takes no lock, and can run
+  on the engine's render thread. It hears silence once the ring has stood still for a
+  quarter second, as the scope sources do, and a non-finite sample as silence. Tests
+  measure a 1 kHz tone, then silence, and a window with NaN and infinite samples.
 
 **Kinds.**
 - `backdrop`: a generated studio backdrop, like the painted canvas, muslin or seamless

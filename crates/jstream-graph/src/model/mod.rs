@@ -72,8 +72,8 @@ use jstream_protocol::{
     Action, BlendMode, BusId, BusMonitor, Canvas, Chord, Crop, Easing, EncoderProfile,
     EncoderProfileId, FilterChain, FilterId, Finite32, FolderId, INITIAL_PRESET, ItemGeometry,
     ItemId, ItemTransform, ItemTransition, KindDescriptor, LabelId, OutputId, OutputKind,
-    PlacementForm, Rev, SceneId, SceneMeta, SceneOptions, SceneRole, Settings, SourceAudio,
-    SourceId, SourceKind, TransitionPresetId, TransitionPresetInfo, TransitionsInfo,
+    PlacementForm, Rev, SceneCamera, SceneId, SceneMeta, SceneOptions, SceneRole, Settings,
+    SourceAudio, SourceId, SourceKind, TransitionPresetId, TransitionPresetInfo, TransitionsInfo,
     VideoMix as MixSpec, VideoMixId, builtin_transition_kinds, initial_preset,
 };
 use std::borrow::Cow;
@@ -728,6 +728,9 @@ pub struct Scene {
     pub(crate) meta: SceneMeta,
     /// Its options (ADR-0089): whether its audio reaches the Mixer when nested.
     pub(crate) options: SceneOptions,
+    /// Its camera (ADR-0094), which makes it a 3D scene. On a keyframe scene, its
+    /// override of its parent's; [`State::effective_camera`] gives what it draws through.
+    pub(crate) camera: Option<SceneCamera>,
     pub(crate) items: Vec<Item>,
     /// The scene it is a keyframe scene of, if it is one.
     pub(crate) variant_of: Option<SceneId>,
@@ -777,6 +780,13 @@ impl Scene {
     /// Its options (ADR-0089), which `scene.set_options` sets.
     pub fn options(&self) -> &SceneOptions {
         &self.options
+    }
+
+    /// Its camera (ADR-0094), which `scene.set_camera` sets: a keyframe scene's override
+    /// of its parent's, if it is one. [`State::effective_camera`] gives the camera it
+    /// draws through.
+    pub fn camera(&self) -> Option<&SceneCamera> {
+        self.camera.as_ref()
     }
 
     /// Its own items in stacking order: the first is at the bottom. A keyframe scene

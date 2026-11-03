@@ -9,6 +9,7 @@
 //! both clips are exact. The engine and the UI draw, outline and hit-test from the same
 //! polygon and the same inverse map.
 
+use super::camera::{CameraView, dot, item_origin};
 use super::{CanvasPoint, ContentRect, GeometryError, ItemGeometry, rotate_x, rotate_y, rotate_z};
 
 /// The near plane: the smallest `w` a drawn point may have (ADR-0050 decision 2). A part
@@ -78,31 +79,79 @@ impl DrawnPolygon {
     }
 }
 
-/// The placement's affine part: local `(x, y, 0)` goes to `ax · x + ay · y + (0, 0,
-/// depth)`, and the projection divides x and y by `w`.
+/// The placement's affine part: local `(x, y, 0)` goes to `ax · x + ay · y + (offset,
+/// depth)` in a viewing frame with the viewer at `z = p`, and the projection divides x
+/// and y by `w` and adds `center`. For an item seen by its own viewer (ADR-0022) the
+/// offset is zero and `center` is the item's; through a scene camera (ADR-0094) the
+/// offset is the item centre's place off the camera's axis and `center` the canvas
+/// centre.
 #[derive(Clone, Copy, Debug)]
-struct Plane {
+pub(super) struct Plane {
     ax: [f32; 3],
     ay: [f32; 3],
+    offset: [f32; 2],
     depth: f32,
     perspective: Option<f32>,
     center: [f32; 2],
 }
 
+/// The item's local x and y axes in the scene (or its own viewing frame): ADR-0022's
+/// rotations of `(1, 0, 0)` and `(0, 1, 0)`.
+fn axes(geometry: ItemGeometry) -> ([f32; 3], [f32; 3]) {
+    let axis = |x: f32, y: f32| {
+        let (x, y, z) = rotate_z(x, y, 0.0, geometry.rotation_deg.get());
+        let (x, y, z) = rotate_y(x, y, z, geometry.turn_deg.get());
+        let (x, y, z) = rotate_x(x, y, z, geometry.tilt_deg.get());
+        [x, y, z]
+    };
+    (axis(1.0, 0.0), axis(0.0, 1.0))
+}
+
 impl Plane {
     fn of(geometry: ItemGeometry) -> Self {
-        let axis = |x: f32, y: f32| {
-            let (x, y, z) = rotate_z(x, y, 0.0, geometry.rotation_deg.get());
-            let (x, y, z) = rotate_y(x, y, z, geometry.turn_deg.get());
-            let (x, y, z) = rotate_x(x, y, z, geometry.tilt_deg.get());
-            [x, y, z]
-        };
+        let (ax, ay) = axes(geometry);
         Self {
-            ax: axis(1.0, 0.0),
-            ay: axis(0.0, 1.0),
+            ax,
+            ay,
+            offset: [0.0, 0.0],
             depth: geometry.depth_px.get(),
             perspective: geometry.perspective_px.map(|p| p.get()),
             center: [geometry.center.x.get(), geometry.center.y.get()],
+        }
+    }
+
+    /// The item's plane through a scene camera (ADR-0094 decision 3): its axes and
+    /// centre in the camera's frame, with the viewer at `z = f`, so `w = D / f`.
+    pub(super) fn seen(geometry: ItemGeometry, view: &CameraView) -> Self {
+        let (ax, ay) = axes(geometry);
+        let to_view = |axis: [f32; 3]| {
+            let axis = axis.map(f64::from);
+            [
+                dot(axis, view.right) as f32,
+                dot(axis, view.down) as f32,
+                -dot(axis, view.forward) as f32,
+            ]
+        };
+        let origin = item_origin(geometry);
+        let rel = [
+            origin[0] - view.position[0],
+            origin[1] - view.position[1],
+            origin[2] - view.position[2],
+        ];
+        Self {
+            ax: to_view(ax),
+            ay: to_view(ay),
+            offset: [dot(rel, view.right) as f32, dot(rel, view.down) as f32],
+            depth: (view.focal - dot(rel, view.forward)) as f32,
+            perspective: Some(view.focal as f32),
+            center: view.principal,
+        }
+    }
+
+    fn of_view(geometry: ItemGeometry, view: Option<&CameraView>) -> Self {
+        match view {
+            Some(view) => Self::seen(geometry, view),
+            None => Self::of(geometry),
         }
     }
 
@@ -111,9 +160,32 @@ impl Plane {
     /// seen edge-on; without, it is seen side-on. It does not depend on the item's size,
     /// so it decides edge-on where an area would not. Under [`EDGE_ON`] is a turn within
     /// about 6e-5° of a quarter, so anything visibly turned still draws.
+    ///
+    /// Seen through a scene camera, the item's centre is off the axis, so the facing is
+    /// the plane's unit normal along the line from the centre to the viewer instead: 0
+    /// still means the plane passes through the viewer.
     fn facing(&self) -> f64 {
-        f64::from(self.ax[0]) * f64::from(self.ay[1])
-            - f64::from(self.ax[1]) * f64::from(self.ay[0])
+        let normal_z = f64::from(self.ax[0]) * f64::from(self.ay[1])
+            - f64::from(self.ax[1]) * f64::from(self.ay[0]);
+        let (Some(p), true) = (self.perspective, self.offset != [0.0, 0.0]) else {
+            return normal_z;
+        };
+        let (ax, ay) = (self.ax.map(f64::from), self.ay.map(f64::from));
+        let normal = [
+            ax[1] * ay[2] - ax[2] * ay[1],
+            ax[2] * ay[0] - ax[0] * ay[2],
+            normal_z,
+        ];
+        let to_viewer = [
+            -f64::from(self.offset[0]),
+            -f64::from(self.offset[1]),
+            f64::from(p) - f64::from(self.depth),
+        ];
+        let distance = dot(to_viewer, to_viewer).sqrt();
+        if distance == 0.0 {
+            return 0.0;
+        }
+        dot(normal, to_viewer) / distance
     }
 
     /// The viewing-axis coordinate of a local point, positive toward the viewer.
@@ -122,7 +194,7 @@ impl Plane {
     }
 
     /// `w` of a local point: at or below 0 it is at or behind the viewer.
-    fn w(&self, x: f32, y: f32) -> f32 {
+    pub(super) fn w(&self, x: f32, y: f32) -> f32 {
         match self.perspective {
             Some(p) => (p - self.z(x, y)) / p,
             None => 1.0,
@@ -130,9 +202,9 @@ impl Plane {
     }
 
     /// The canvas point of a local point with `w > 0`.
-    fn canvas(&self, x: f32, y: f32, w: f32) -> CanvasPoint {
-        let x3 = self.ax[0] * x + self.ay[0] * y;
-        let y3 = self.ax[1] * x + self.ay[1] * y;
+    pub(super) fn canvas(&self, x: f32, y: f32, w: f32) -> CanvasPoint {
+        let x3 = self.offset[0] + self.ax[0] * x + self.ay[0] * y;
+        let y3 = self.offset[1] + self.ax[1] * x + self.ay[1] * y;
         CanvasPoint {
             x: self.center[0] + x3 / w,
             y: self.center[1] + y3 / w,
@@ -157,8 +229,22 @@ impl ItemGeometry {
         self,
         content: &ContentRect,
     ) -> Result<Option<DrawnPolygon>, GeometryError> {
+        self.drawn_polygon_seen(None, content)
+    }
+
+    /// [`Self::drawn_polygon`] through a scene camera (ADR-0094): the same clips and
+    /// vertices, with the item placed in the scene's space and seen through `view`, so
+    /// its own `perspective_px` is ignored. With no view it is [`Self::drawn_polygon`].
+    ///
+    /// # Errors
+    /// The same as [`Self::drawn_polygon`].
+    pub fn drawn_polygon_seen(
+        self,
+        view: Option<&CameraView>,
+        content: &ContentRect,
+    ) -> Result<Option<DrawnPolygon>, GeometryError> {
         self.validate()?;
-        let plane = Plane::of(self);
+        let plane = Plane::of_view(self, view);
         if plane.facing().abs() < EDGE_ON {
             return Ok(None);
         }
@@ -269,20 +355,34 @@ impl ItemGeometry {
     /// The same as [`Self::validate`], or [`GeometryError::NotFinite`] for a point that
     /// is not finite.
     pub fn unplace(self, point: CanvasPoint) -> Result<Option<LocalPoint>, GeometryError> {
+        self.unplace_seen(None, point)
+    }
+
+    /// [`Self::unplace`] through a scene camera (ADR-0094). With no view it is
+    /// [`Self::unplace`].
+    ///
+    /// # Errors
+    /// The same as [`Self::unplace`].
+    pub fn unplace_seen(
+        self,
+        view: Option<&CameraView>,
+        point: CanvasPoint,
+    ) -> Result<Option<LocalPoint>, GeometryError> {
         self.validate()?;
         if !point.x.is_finite() || !point.y.is_finite() {
             return Err(GeometryError::NotFinite);
         }
-        let plane = Plane::of(self);
+        let plane = Plane::of_view(self, view);
         if plane.facing().abs() < EDGE_ON {
             return Ok(None);
         }
-        // With (X, Y) the point from the centre, X · (p − z) = p · x3 and the same for
-        // Y: linear in the local x and y, so a 2×2 solve, in f64 for the near-edge-on
-        // cases.
+        // With (X, Y) the point from the centre, X · (p − z) = p · (offset + x3) and the
+        // same for Y: linear in the local x and y, so a 2×2 solve, in f64 for the
+        // near-edge-on cases.
         let cx = f64::from(point.x - plane.center[0]);
         let cy = f64::from(point.y - plane.center[1]);
         let (ax, ay) = (plane.ax.map(f64::from), plane.ay.map(f64::from));
+        let (ox, oy) = (f64::from(plane.offset[0]), f64::from(plane.offset[1]));
         let depth = f64::from(plane.depth);
         let (m, rhs, scale) = match plane.perspective.map(f64::from) {
             Some(p) => (
@@ -290,10 +390,10 @@ impl ItemGeometry {
                     [p * ax[0] + cx * ax[2], p * ay[0] + cx * ay[2]],
                     [p * ax[1] + cy * ax[2], p * ay[1] + cy * ay[2]],
                 ],
-                [cx * (p - depth), cy * (p - depth)],
+                [cx * (p - depth) - p * ox, cy * (p - depth) - p * oy],
                 p * p,
             ),
-            None => ([[ax[0], ay[0]], [ax[1], ay[1]]], [cx, cy], 1.0),
+            None => ([[ax[0], ay[0]], [ax[1], ay[1]]], [cx - ox, cy - oy], 1.0),
         };
         let det = m[0][0] * m[1][1] - m[0][1] * m[1][0];
         // The determinant is how much the plane's area shrinks on the canvas (times p²
@@ -324,11 +424,25 @@ impl ItemGeometry {
         content: &ContentRect,
         local: LocalPoint,
     ) -> Result<Option<DrawnVertex>, GeometryError> {
+        self.drawn_vertex_seen(None, content, local)
+    }
+
+    /// [`Self::drawn_vertex`] through a scene camera (ADR-0094). With no view it is
+    /// [`Self::drawn_vertex`].
+    ///
+    /// # Errors
+    /// The same as [`Self::drawn_vertex`].
+    pub fn drawn_vertex_seen(
+        self,
+        view: Option<&CameraView>,
+        content: &ContentRect,
+        local: LocalPoint,
+    ) -> Result<Option<DrawnVertex>, GeometryError> {
         self.validate()?;
         if !local.x.is_finite() || !local.y.is_finite() {
             return Err(GeometryError::NotFinite);
         }
-        let plane = Plane::of(self);
+        let plane = Plane::of_view(self, view);
         let w = plane.w(local.x, local.y);
         if w < NEAR_W {
             return Ok(None);

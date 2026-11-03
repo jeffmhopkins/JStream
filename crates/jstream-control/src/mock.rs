@@ -603,6 +603,8 @@ struct Scene {
     meta: jstream_protocol::SceneMeta,
     /// Its options (ADR-0089).
     options: jstream_protocol::SceneOptions,
+    /// Its camera (ADR-0094), or a keyframe scene's override of its parent's.
+    camera: Option<jstream_protocol::SceneCamera>,
     /// Its filters (ADR-0065), settings as given: a video chain only.
     filters: jstream_protocol::FilterChains,
     /// The scene it is a keyframe scene of (ADR-0024 §2), whose items it shows.
@@ -1106,6 +1108,7 @@ impl State {
                         folder: scene.folder.clone(),
                         meta: scene.meta.clone(),
                         options: scene.options.clone(),
+                        camera: scene.camera,
                     })
                     .collect(),
                 outputs: self.collection.output_infos(),
@@ -1414,6 +1417,7 @@ impl Collection {
                     folder: None,
                     meta: Default::default(),
                     options: Default::default(),
+                    camera: None,
                     filters: Default::default(),
                     variant_of: None,
                     overrides: keyframe::Overrides::new(),
@@ -1524,6 +1528,12 @@ impl Collection {
                     inverse.push(Edit::SceneSetOptions {
                         scene_id: scene.id.clone(),
                         options: scene.options.clone(),
+                    });
+                }
+                if scene.camera.is_some() {
+                    inverse.push(Edit::SceneSetCamera {
+                        scene_id: scene.id.clone(),
+                        camera: scene.camera,
                     });
                 }
                 let owner = jstream_protocol::FilterOwner::Scene {

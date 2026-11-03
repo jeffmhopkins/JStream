@@ -55,7 +55,8 @@ pub struct GestureInfo {
 /// (`item.set_transform`, `item.set_geometry`) and its crop (`item.set_crop`), which the
 /// real-time threads take from a parameter channel, and since 0.67 a source's settings
 /// (`source.set_settings`, ADR-0091), of which the engine accepts only the parameters
-/// its kind marks `live`.
+/// its kind marks `live`, and since 0.70 a scene's camera (`scene.set_camera`,
+/// ADR-0094).
 pub fn is_live_adjustable(edit: &Edit) -> bool {
     matches!(
         edit,
@@ -63,5 +64,6 @@ pub fn is_live_adjustable(edit: &Edit) -> bool {
             | Edit::ItemSetGeometry { .. }
             | Edit::ItemSetCrop { .. }
             | Edit::SourceSetSettings { .. }
+            | Edit::SceneSetCamera { .. }
     )
 }

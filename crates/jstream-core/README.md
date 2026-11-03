@@ -37,7 +37,7 @@ state machine. Contents:
   and `start_stats_heartbeat` (`stats.tick`'s load, below); `open_plugin_dir`
   (where installed WASM plugins are saved, ADR-0076), called once the engine is built;
   `scan_clap_plugins` adds the CLAP filter kinds; `watch_effect_packs` loads and
-  hot-reloads the WGSL effect packs (video filter kinds, below), and
+  hot-reloads the WGSL effect packs (video filter kinds and shader source kinds, below), and
   `HANDLED_PANIC_THREADS` names the pack load thread, whose panics the engine catches,
   for the apps' crash hook to leave out (#999);
   `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
@@ -236,6 +236,10 @@ state machine. Contents:
   that shows one of those scenes plans it again in full, chain and boxes, since the
   mixes are planned after the transition (#961). A switch mid-Move
   holds the children where they are on screen and moves them on from there.
+  A scene with a camera ([ADR-0094](../../docs/adr/0094-scene-cameras.md)) is planned
+  with it on its pass (`Pass.camera`, the variant's override or its parent's, a live
+  value winning), and every item it draws carries it to the compositor; a Move between
+  two 3D scenes moves the camera too (*Transitions* in [Design](#design)).
   `Shot::chain_cost` is what its
   scene chains, item effects and, for the running outputs, output stage add to each
   frame, for `stats.tick`'s `chains`.
@@ -929,6 +933,27 @@ them; a switch mid-Move holds them where `on_screen` finds them. Stagger delays 
 the incoming items (§3). Audio does not follow a transition
 yet (D29).
 
+Cameras ([ADR-0094](../../docs/adr/0094-scene-cameras.md) decision 7): each pass of a
+scene carries the cameras its effective camera comes from (its own or a keyframe
+variant's override, and a variant's parent's) as `Pass.camera`, and live
+`scene.set_camera` values resolve through them as committed ones do
+(`LiveParams::camera`): a live removal of a variant's override falls back to its
+parent's camera, and a live removal of the parent's makes its variants 2D. The switch records the camera on screen when it starts
+(`Running.from_camera`, which a switch mid-Move takes from the running Move). A Move
+between two 3D scenes interpolates the camera with the Move's own timing
+(`lerp_camera`) and draws both sides' tracks through it. A Move between a 3D scene and
+a 2D one has nothing to pair, so it runs as a Fade of the same duration, and a Fade
+keeps each side's own camera on its items. A stinger's items are seen through their
+own scene's camera (`TrackCameras.overlay`), none for a 2D stinger scene, in a
+`depth_run` of their own (one past every run held from the screen,
+`TrackCameras.overlay_run`), so they sort among themselves and stay over the scenes
+under them and over a stinger they cut short. A switch that cuts a transition short takes what is on screen with the
+camera each item was seen through and the depth run it sorted in (`Seen::Held`): it
+leaves through that camera, a stinger's items still over what they covered, and only a
+screen seen through one camera (a Move cut short) moves it toward the new scene's, for
+every track; one seen through several (a Fade or stinger between cameras) makes the
+switch a Fade (`transition::shared_camera`).
+
 ### No privacy screen
 
 JStream has no privacy screen
@@ -1093,6 +1118,29 @@ it, and a file that can't be read quarantines nothing. Only `effect.enable` lift
 for the kind and its pack, run before the collection lock is taken. The engine then
 sends `gpu.device_lost` with the cause, the blamed and quarantined kinds, and whether
 it is recovering. The GPU-time guard of #349 is not built.
+**Shader sources** (`pack_source.rs`, `chain.rs`,
+[ADR-0093](../../docs/adr/0093-shader-sources-from-effect-packs.md), X2). A pack's
+`[[source]]` table is a `source` kind, `<pack>/<source>`, loaded, described, quarantined
+and forgotten with its pack like its effects (`PackSource`, `Update::sources`), so
+`kind.list` reports it and `source.create` takes it. A source of such a kind runs a
+`StandIn` among the live sources: a transparent texel placed at its `width` by
+`height`, which is the size `source.size_changed` reports. Only those two settings
+build a new stand-in, and it is never drawn at a density. Its picture is the kind's
+program, which `Chain::of` puts first in the source's chain, made with the source's
+settings, so the others are live. The scenes its `scene` parameters name fill the
+program's input slots: they are scheduled before the chain like a `scene_mask`'s, and
+each layer is handed in once it is remade, the old one retired into the cache
+(`ResourceCache::retire_image`), so the program keeps its feedback. When the program
+mix shows the source again its stand-in makes a new frame, and a new frame restarts the
+program (`time` and frame count from 0, feedback cleared). While its pack isn't loaded,
+or the kind is quarantined, no program runs and the source draws nothing at its size.
+A shader source that hears audio (`audio = true`) hears the scope its `audio` and
+`audio_source` settings name, as a `spectrum` does: the live sources find it on each
+sync (`FilterAssets::heard`), the source it names is fed like a scope source's
+(`audio::retain_scopes`), and each frame the chain runs, the program's `AudioMeter`
+(made with the program, or when it starts to hear, never while a steady frame draws)
+measures it and hands the levels, bands and waveform to the
+program (`VideoFilter::set_audio`).
 Each filter's layer key is made when the chain's shape changes, so a steady frame
 builds none. A shot with a chain counts as
 changing with time (`Shot::changes_with_time`), so the preview redraws it like a

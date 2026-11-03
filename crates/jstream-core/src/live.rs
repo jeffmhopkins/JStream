@@ -47,13 +47,14 @@ use jstream_media::{FrameSize, MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_platform::{ContextKey, GpuContext, GpuFrame, MediaClock, MediaDecoders};
 use jstream_protocol::{AssetRoot, FilterChain, Settings, SourceId, SourceKind};
 use jstream_sources::{
-    AudioScopes, BrowserBackend, CaptureSpec, Context, MediaAudio, Painter, Registry, Source,
-    SourceAudio, SourceError,
+    AudioScope, AudioScopes, BrowserBackend, CaptureSpec, Context, MediaAudio, Painter, Registry,
+    Source, SourceAudio, SourceError,
 };
 
-use crate::effect_packs::PackEffects;
+use crate::effect_packs::{PackEffects, PackSources};
 use crate::filter_assets::{self, AssetKey, FilterAsset, FilterAssets, LoadError, Loaded};
 use crate::lock;
+use crate::pack_source;
 use crate::runtime::{FRAME_DEN, FRAME_NUM};
 use crate::snapshot::{CaptureKey, Frame, Look};
 
@@ -341,6 +342,7 @@ impl LiveSources {
         if let Some(scopes) = &self.ctx.audio {
             crate::audio::retain_scopes(scopes, state);
         }
+        self.sync_heard(state);
         let registry = Arc::clone(&self.registry);
         let before = self.entries.len();
         self.entries.retain(|id, _| {
@@ -364,12 +366,13 @@ impl LiveSources {
                 ticket: 0,
                 running: None,
             });
-            if entry.kind == kind && entry.settings == *source.settings() {
+            let settings = built_from(kind, source.settings());
+            if entry.kind == kind && entry.settings == settings {
                 continue;
             }
             self.tickets += 1;
             entry.kind = kind.to_owned();
-            entry.settings = source.settings().clone();
+            entry.settings = settings;
             entry.ticket = self.tickets;
             jobs.push(Job {
                 source_id: source.id().clone(),
@@ -388,6 +391,34 @@ impl LiveSources {
             queue.jobs.extend(jobs);
             queue.loads.extend(loads);
             self.worker.wake.notify_all();
+        }
+    }
+
+    /// Finds the scope each shader source that hears audio hears (ADR-0093), after the
+    /// scopes were kept for the collection: plans hand it to the program each frame.
+    fn sync_heard(&mut self, state: &jstream_graph::State) {
+        let heard: BTreeMap<SourceId, Arc<AudioScope>> = match &self.ctx.audio {
+            Some(scopes) => state
+                .sources()
+                .filter(|source| match source.kind() {
+                    SourceKind::Builtin { kind } => pack_source::is_pack_kind(kind),
+                    _ => false,
+                })
+                .filter(|source| source.settings().get("audio").is_some())
+                .filter_map(|source| {
+                    let scope = jstream_sources::heard_scope(scopes, source.settings())?;
+                    Some((source.id().clone(), scope))
+                })
+                .collect(),
+            None => BTreeMap::new(),
+        };
+        let same = heard.len() == self.loaded.heard().len()
+            && heard
+                .iter()
+                .zip(self.loaded.heard().iter())
+                .all(|((a, x), (b, y))| a == b && Arc::ptr_eq(x, y));
+        if !same {
+            self.loaded = Arc::new((*self.loaded).clone().with_heard(Arc::new(heard)));
         }
     }
 
@@ -482,21 +513,32 @@ impl LiveSources {
         })
     }
 
-    /// Rebuilds what plans read from the loaded assets, keeping the pack effects.
+    /// Rebuilds what plans read from the loaded assets, keeping the pack effects and
+    /// shader sources.
     fn share_assets(&mut self) {
         let effects = self.loaded.effects().clone();
+        let sources = self.loaded.sources().clone();
+        let heard = Arc::clone(self.loaded.heard());
         self.loaded = Arc::new(
             self.assets
                 .iter()
                 .filter_map(|(key, entry)| Some((key.clone(), Arc::clone(entry.loaded.as_ref()?))))
                 .collect::<FilterAssets>()
-                .with_effects(effects),
+                .with_effects(effects)
+                .with_sources(sources)
+                .with_heard(heard),
         );
     }
 
-    /// Hands plans the effect packs' effects as now loaded ([`crate::effect_packs`]).
-    pub(crate) fn set_effects(&mut self, effects: PackEffects) {
-        self.loaded = Arc::new((*self.loaded).clone().with_effects(effects));
+    /// Hands plans the effect packs' effects and shader sources as now loaded
+    /// ([`crate::effect_packs`]).
+    pub(crate) fn set_effects(&mut self, effects: PackEffects, sources: PackSources) {
+        self.loaded = Arc::new(
+            (*self.loaded)
+                .clone()
+                .with_effects(effects)
+                .with_sources(sources),
+        );
     }
 
     /// The loaded video filter assets, for a plan.
@@ -587,7 +629,12 @@ impl LiveSources {
             let Some(running) = &entry.running else {
                 continue;
             };
-            if running.extent.is_none() || running.ticket != entry.ticket {
+            // A pack source's stand-in is placed at its size at any density: a build
+            // would only restart its program.
+            if running.extent.is_none()
+                || running.ticket != entry.ticket
+                || pack_source::is_pack_kind(&entry.kind)
+            {
                 continue;
             }
             let density = density_for(scale);
@@ -1010,7 +1057,14 @@ fn run(worker: &Worker, host: &Weak<dyn LiveHost>) {
                 }
             }
             Next::Build(job) => {
-                let mut result = job.registry.create(&job.kind, &job.settings, &job.ctx);
+                let mut result = if pack_source::is_pack_kind(&job.kind)
+                    && job.registry.descriptor(&job.kind).is_none()
+                {
+                    pack_source::StandIn::new(&job.settings)
+                        .map(|stand_in| Box::new(stand_in) as Box<dyn Source>)
+                } else {
+                    job.registry.create(&job.kind, &job.settings, &job.ctx)
+                };
                 // Drawn at its density here, off the collection lock, as it was created.
                 let extent = result
                     .as_mut()
@@ -1097,9 +1151,58 @@ impl MediaClock for SystemClock {
     }
 }
 
+/// The settings a source of `kind` is built from, which a change to builds it again: all of
+/// them, but a pack source's stand-in is built from its size alone, as its program takes
+/// the other settings live.
+fn built_from(kind: &str, settings: &Settings) -> Settings {
+    if pack_source::is_pack_kind(kind) {
+        pack_source::stand_in_settings(settings)
+    } else {
+        settings.clone()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::density_for;
+    use super::{built_from, density_for};
+    use jstream_protocol::Settings;
+    use serde_json::json;
+
+    /// A shader source's stand-in is built again for a new size only; any other kind for
+    /// any change.
+    #[test]
+    fn only_a_size_change_builds_a_shader_source_again() {
+        let of = |pairs: &[(&str, serde_json::Value)]| -> Settings {
+            pairs
+                .iter()
+                .map(|(id, value)| ((*id).to_owned(), value.clone()))
+                .collect()
+        };
+        let before = of(&[
+            ("width", json!(64)),
+            ("height", json!(32)),
+            ("speed", json!(1.0)),
+        ]);
+        let faster = of(&[
+            ("width", json!(64)),
+            ("height", json!(32)),
+            ("speed", json!(2.0)),
+        ]);
+        let wider = of(&[
+            ("width", json!(128)),
+            ("height", json!(32)),
+            ("speed", json!(1.0)),
+        ]);
+        assert_eq!(
+            built_from("glow/ramp", &before),
+            built_from("glow/ramp", &faster)
+        );
+        assert_ne!(
+            built_from("glow/ramp", &before),
+            built_from("glow/ramp", &wider)
+        );
+        assert_ne!(built_from("color", &before), built_from("color", &faster));
+    }
 
     #[test]
     fn a_density_is_the_next_quarter_step_of_a_doubling() {

@@ -55,6 +55,9 @@ impl Collection {
             Edit::SceneSetOptions { scene_id, options } => {
                 self.set_scene_options(scene_id, options, at)
             }
+            Edit::SceneSetCamera { scene_id, camera } => {
+                self.set_scene_camera(scene_id, camera.as_ref(), at)
+            }
             Edit::LabelCreate {
                 label_id,
                 name,
@@ -297,6 +300,62 @@ impl Collection {
             scene_id: scene_id.clone(),
             options: old,
         }])
+    }
+
+    /// `scene.set_camera` (ADR-0094), as the engine applies it: checked, a keyframe
+    /// scene's override only while its parent has a camera, and removing a parent's
+    /// camera drops its keyframes' overrides, which the inverse restores after it.
+    fn set_scene_camera(
+        &mut self,
+        scene_id: &SceneId,
+        camera: Option<&jstream_protocol::SceneCamera>,
+        at: usize,
+    ) -> Result<Vec<Edit>, ProtocolError> {
+        let si = self.existing_scene(scene_id)?;
+        if let Some(camera) = camera {
+            if let Err(error) = camera.validate() {
+                let field = match error {
+                    jstream_protocol::GeometryError::FieldOfView => "camera.fov_deg",
+                    jstream_protocol::GeometryError::CameraAtTarget => "camera.target",
+                    _ => "camera",
+                };
+                return Err(invalid(at, field, error.to_string()));
+            }
+            if let Some(parent) = self.scenes[si].variant_of.clone() {
+                let parent_has_one = self
+                    .scenes
+                    .iter()
+                    .any(|s| s.id == parent && s.camera.is_some());
+                if !parent_has_one {
+                    return Err(invalid(
+                        at,
+                        "camera",
+                        format!(
+                            "keyframe scene `{scene_id}` shows its parent `{parent}`, which has \
+                             no camera; set one on `{parent}` first"
+                        ),
+                    ));
+                }
+            }
+        }
+        let old = std::mem::replace(&mut self.scenes[si].camera, camera.copied());
+        let mut inverse = vec![Edit::SceneSetCamera {
+            scene_id: scene_id.clone(),
+            camera: old,
+        }];
+        if camera.is_none() && self.scenes[si].variant_of.is_none() {
+            for scene in &mut self.scenes {
+                if scene.variant_of.as_ref() == Some(scene_id)
+                    && let Some(dropped) = scene.camera.take()
+                {
+                    inverse.push(Edit::SceneSetCamera {
+                        scene_id: scene.id.clone(),
+                        camera: Some(dropped),
+                    });
+                }
+            }
+        }
+        Ok(inverse)
     }
 
     fn set_scene_meta(

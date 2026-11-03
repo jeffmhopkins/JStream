@@ -10,13 +10,20 @@
 //! and items. Its keyframes and hotkey stay with the original, since a chord runs one
 //! action. Each paste is one batch, so one undo step.
 //!
+//! As in OBS, filters and a transform have clipboards of their own, filled from the
+//! item menus. Copy filters takes the primary item's source's chains; Paste filters adds
+//! them after each selected item's source's own, and Paste filters, replacing, removes
+//! those first (a chain the source doesn't have is left out). Copy transform takes the
+//! primary item's box and crop; Paste transform gives them to each selected item (in a
+//! keyframe, as its override).
+//!
 //! Docs: docs/UI-FEATURES.md#keyboard
 
 use crate::app::SessionContext;
 use crate::store::{Collection, Studio};
 use jstream_control::protocol::{
-    Crop, Edit, FilterChain, FilterId, FilterInfo, FilterOwner, Finite32, ItemId, ItemInfo,
-    SceneId, SourceKind,
+    Crop, Edit, FilterChain, FilterChains, FilterId, FilterInfo, FilterOwner, Finite32,
+    ItemGeometry, ItemId, ItemInfo, SceneId, SourceId, SourceKind,
 };
 use leptos::prelude::*;
 
@@ -162,6 +169,95 @@ impl Pasting {
             self.duplicate_scene(&scene_id);
         }
     }
+}
+
+/// The page's copied filters (Copy filters): a source's chains as they were.
+#[derive(Clone, Copy)]
+pub struct FilterClip(pub RwSignal<Option<FilterChains>>);
+
+/// The page's copied transform (Copy transform): an item's box and crop.
+#[derive(Clone, Copy)]
+pub struct TransformClip(pub RwSignal<Option<(ItemGeometry, Crop)>>);
+
+/// The batch that pastes copied `filters` onto each of `sources` once, in order: each
+/// chain the source has gets the clip's filters after its own, with new IDs, or, with
+/// `replace`, in place of its own. A source that is gone is left out. Empty when that
+/// changes nothing.
+pub fn paste_filter_edits(
+    collection: &Collection,
+    filters: &FilterChains,
+    sources: &[SourceId],
+    replace: bool,
+    fresh: &mut dyn FnMut(&str) -> String,
+) -> Vec<Edit> {
+    let mut edits = Vec::new();
+    let mut done: Vec<&SourceId> = Vec::new();
+    for source_id in sources {
+        if done.contains(&source_id) {
+            continue;
+        }
+        done.push(source_id);
+        let Some(source) = collection.source(source_id) else {
+            continue;
+        };
+        let (video, audio) = crate::panels::filters::chains_of(source);
+        let owner = FilterOwner::Source {
+            source_id: source_id.clone(),
+        };
+        for (has, chain, own, copied) in [
+            (
+                video,
+                FilterChain::Video,
+                &source.filters.video,
+                &filters.video,
+            ),
+            (
+                audio,
+                FilterChain::Audio,
+                &source.filters.audio,
+                &filters.audio,
+            ),
+        ] {
+            if !has {
+                continue;
+            }
+            if replace {
+                edits.extend(own.iter().map(|f| Edit::FilterRemove {
+                    owner: owner.clone(),
+                    filter_id: f.filter_id.clone(),
+                }));
+            }
+            edits.extend(filter_edits(&owner, chain, copied, fresh));
+        }
+    }
+    edits
+}
+
+/// The batch that gives each of `items` of `scene_id` the copied box and crop (in a
+/// keyframe scene, as its overrides).
+pub fn paste_transform_edits(
+    items: &[ItemId],
+    scene_id: &SceneId,
+    geometry: ItemGeometry,
+    crop: Crop,
+) -> Vec<Edit> {
+    items
+        .iter()
+        .flat_map(|item_id| {
+            [
+                Edit::ItemSetGeometry {
+                    item_id: item_id.clone(),
+                    scene_id: Some(scene_id.clone()),
+                    geometry,
+                },
+                Edit::ItemSetCrop {
+                    item_id: item_id.clone(),
+                    scene_id: Some(scene_id.clone()),
+                    crop,
+                },
+            ]
+        })
+        .collect()
 }
 
 impl Default for Clipboard {
@@ -387,6 +483,12 @@ pub fn duplicate_scene_edits(
             options: scene.options.clone(),
         });
     }
+    if scene.camera.is_some() {
+        edits.push(Edit::SceneSetCamera {
+            scene_id: new_id.clone(),
+            camera: scene.camera,
+        });
+    }
     if scene.transition_in.is_some() || scene.transition_out.is_some() {
         edits.push(Edit::SceneSetTransitions {
             scene_id: new_id.clone(),
@@ -472,6 +574,7 @@ mod tests {
             overrides: Vec::new(),
             items,
             filters: Default::default(),
+            camera: None,
         }
     }
 
@@ -533,6 +636,89 @@ mod tests {
             Edit::ItemAdd { geometry, .. } => geometry.map(|g| g.center.x.get()),
             _ => None,
         }
+    }
+
+    /// A filter of `kind` with ID `id`, turned on.
+    fn filter(id: &str, kind: &str) -> FilterInfo {
+        FilterInfo {
+            filter_id: id.into(),
+            kind: kind.into(),
+            enabled: true,
+            settings: Settings::new(),
+        }
+    }
+
+    /// What a filter batch does, as (`add` or `remove`, source, chain or filter).
+    fn summary(edits: &[Edit]) -> Vec<(&'static str, String, String)> {
+        edits
+            .iter()
+            .map(|e| match e {
+                Edit::FilterAdd {
+                    owner: FilterOwner::Source { source_id },
+                    chain,
+                    kind,
+                    ..
+                } => ("add", source_id.to_string(), format!("{chain:?}:{kind}")),
+                Edit::FilterRemove {
+                    owner: FilterOwner::Source { source_id },
+                    filter_id,
+                } => ("remove", source_id.to_string(), filter_id.to_string()),
+                other => panic!("unexpected {other:?}"),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn pasting_filters_appends_or_replaces_each_chain_the_source_has() {
+        let mut c = collection();
+        c.sources[0].filters.video = vec![filter("own", "sharpen")];
+        let copied = FilterChains {
+            video: vec![filter("x", "blur"), filter("y", "vignette")],
+            audio: vec![filter("z", "gain")],
+        };
+        // An image has no audio chain, and each source is pasted onto once.
+        let sources = ["logo".into(), "logo".into(), "gone".into()];
+        let appended = paste_filter_edits(&c, &copied, &sources, false, &mut counter());
+        assert_eq!(
+            summary(&appended),
+            [
+                ("add", "logo".into(), "Video:blur".into()),
+                ("add", "logo".into(), "Video:vignette".into()),
+            ]
+        );
+        let Edit::FilterAdd { filter_id, .. } = &appended[0] else {
+            panic!("an add")
+        };
+        assert_eq!(filter_id.as_str(), "filter1", "a new ID");
+        let replaced = paste_filter_edits(&c, &copied, &sources[..1], true, &mut counter());
+        assert_eq!(
+            summary(&replaced),
+            [
+                ("remove", "logo".into(), "own".into()),
+                ("add", "logo".into(), "Video:blur".into()),
+                ("add", "logo".into(), "Video:vignette".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn pasting_a_transform_sets_each_items_box_and_crop_in_the_scene() {
+        let g = item("a", "logo", 300.0).geometry.expect("a box");
+        let crop = Crop {
+            top: 4,
+            ..Crop::NONE
+        };
+        let edits = paste_transform_edits(&["a".into(), "b".into()], &"kf".into(), g, crop);
+        assert_eq!(edits.len(), 4);
+        assert!(matches!(
+            &edits[2],
+            Edit::ItemSetGeometry { item_id, scene_id: Some(scene), geometry }
+                if item_id.as_str() == "b" && scene.as_str() == "kf" && *geometry == g
+        ));
+        assert!(matches!(
+            &edits[3],
+            Edit::ItemSetCrop { crop: c, scene_id: Some(_), .. } if *c == crop
+        ));
     }
 
     #[test]
@@ -631,6 +817,7 @@ mod tests {
         c.scenes[0].folder = Some(FolderId::new("fld"));
         c.scenes[0].transition_in = Some(TransitionPresetId::new("fade"));
         c.scenes[0].options.include_audio = false;
+        c.scenes[0].camera = Some(jstream_control::protocol::SceneCamera::framing(c.canvas));
         c.scenes[0].filters = FilterChains {
             video: vec![blur()],
             audio: Vec::new(),
@@ -651,6 +838,11 @@ mod tests {
                 Edit::SceneSetOptions { scene_id, options } => {
                     assert_eq!((scene_id.as_str(), options.include_audio), ("copy", false));
                     "options"
+                }
+                Edit::SceneSetCamera { scene_id, camera } => {
+                    assert_eq!(scene_id.as_str(), "copy");
+                    assert!(camera.is_some());
+                    "camera"
                 }
                 Edit::SceneSetTransitions { .. } => "transitions",
                 Edit::FilterAdd {
@@ -677,6 +869,7 @@ mod tests {
                 "reorder",
                 "folder",
                 "options",
+                "camera",
                 "transitions",
                 "scene filter",
                 "item",

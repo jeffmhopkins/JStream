@@ -3174,6 +3174,7 @@ impl State {
                 state.item(item_id).is_some() && keyframe.is_none_or(|id| is_keyframe(state, id))
             },
             |source_id| state.source(source_id).is_some(),
+            |scene_id| state.scene(scene_id).is_some(),
         ) {
             self.publish_live();
             if self.refresh_shown() {
@@ -3363,7 +3364,7 @@ impl State {
         }
         let now = self.live.now();
         let running = match (run, from_scene) {
-            (Some(run), Some(from_scene)) => {
+            (Some(mut run), Some(from_scene)) => {
                 let state = self.graph.state();
                 let by_item = state.family_of(&from_scene) == state.family_of(&scene_id);
                 let from = match self.studio.running() {
@@ -3388,14 +3389,28 @@ impl State {
                         );
                         transition::From::OnScreen(visuals.into())
                     }
-                    None => transition::From::Scene(from_scene),
+                    None => transition::From::Scene(from_scene.clone()),
                 };
+                // What it moves from (ADR-0094 decision 7): the one camera of what is on
+                // screen, which a Move cut short shares. A screen seen through several
+                // (a Fade or stinger between cameras) has none to move, so the switch
+                // fades, each visual leaving through its own.
+                let shared = match &from {
+                    transition::From::OnScreen(visuals) => transition::shared_camera(visuals),
+                    transition::From::Scene(scene) => Ok(transition::camera_of(&self.graph, scene)),
+                };
+                let to_camera = transition::camera_of(&self.graph, &scene_id);
+                let from_camera = shared.unwrap_or(None);
+                if shared.is_err() || from_camera.is_some() != to_camera.is_some() {
+                    run.pairs = false;
+                }
                 Some(transition::Running {
                     from,
                     to: scene_id.clone(),
                     start: now,
                     run,
                     by_item,
+                    from_camera,
                 })
             }
             // Nothing on program yet: there is nothing to transition from.
@@ -3876,7 +3891,7 @@ impl Shared {
                 .without_kinds(update.removed.iter().map(String::as_str))
                 .with_kinds(update.described);
             state.quarantined = update.quarantined;
-            state.live.set_effects(update.effects);
+            state.live.set_effects(update.effects, update.sources);
             state.publish_render();
             state.sync_sizes(&mut wake);
         }

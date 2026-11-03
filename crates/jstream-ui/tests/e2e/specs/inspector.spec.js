@@ -1,4 +1,4 @@
-// The Inspector: the selected item's box, W/H link, crop, opacity and favourite, each
+// The Inspector: the selected item's box, W/H link, fit, crop, opacity and favourite, each
 // sent as an edit the canvas and Ctrl+Z follow, and the selected scene's sections. The
 // seed's Backdrop is 640 × 360 with its top-left corner at 640, 360. The mock engine
 // doesn't implement `scene.set_transitions`, so choosing a scene's transition is covered
@@ -111,7 +111,15 @@ test('crop, opacity and the favourite star are sent as edits', async ({ page, da
 
   await type(page, 'Opacity', 50);
   await expect(field(page, 'Opacity')).toHaveValue('50');
-  await expect(inspector(page).getByRole('combobox')).toHaveValue('Normal');
+  await expect(inspector(page).getByRole('combobox', { name: 'Mode' })).toHaveValue('Normal');
+
+  // Fit sets how the source fills its box, as OBS's bounding box type does.
+  const fit = inspector(page).getByRole('combobox', { name: 'Fit' });
+  await expect(fit).toHaveValue('Fit inside');
+  const before = await rev(page);
+  await fit.selectOption('Fill (crop)');
+  await expect.poll(() => rev(page)).toBe(before + 1);
+  await expect(fit).toHaveValue('Fill (crop)');
 
   const star = inspector(page).getByRole('button', { name: 'Add to favourites' });
   await star.click();

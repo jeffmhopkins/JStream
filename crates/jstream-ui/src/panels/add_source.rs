@@ -1004,6 +1004,7 @@ mod tests {
             items,
             transition_in: None,
             transition_out: None,
+            camera: None,
         }
     }
 

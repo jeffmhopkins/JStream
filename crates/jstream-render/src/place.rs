@@ -3,8 +3,8 @@
 //! and with 3D through ADR-0050's [`ItemGeometry::drawn_polygon`].
 
 use jstream_protocol::{
-    CanvasPoint, ContentRect, Crop as ProtocolCrop, DrawnVertex, Finite32, GeometryError,
-    ItemGeometry, ItemTransform, Placed, Vec2, legacy_quad,
+    CameraView, CanvasPoint, ContentRect, Crop as ProtocolCrop, DrawnVertex, Finite32,
+    GeometryError, ItemGeometry, ItemTransform, Placed, Vec2, legacy_quad,
 };
 
 use crate::error::RenderError;
@@ -108,19 +108,32 @@ const UNUSED: Vertex = Vertex {
     w: 1.0,
 };
 
+/// [`shape_seen`] in a 2D scene.
+#[cfg(test)]
+pub(crate) fn shape(
+    source_width: u32,
+    source_height: u32,
+    placement: Placement,
+    crop: Crop,
+) -> Result<Option<Shape>, RenderError> {
+    shape_seen(source_width, source_height, placement, crop, None)
+}
+
 /// The shape for one item, or `Ok(None)` when the crop, the scale or the 3D leaves
-/// nothing to draw.
+/// nothing to draw. `view` is the scene's camera (ADR-0094), through which a geometry
+/// item is placed in the scene's space; `None` in a 2D scene.
 ///
 /// A non-finite component, including a product that overflows, is
 /// [`RenderError::Invalid`].
 ///
 /// # Errors
 /// [`RenderError::Invalid`] when a placement component is not finite or not drawable.
-pub(crate) fn shape(
+pub(crate) fn shape_seen(
     source_width: u32,
     source_height: u32,
     placement: Placement,
     crop: Crop,
+    view: Option<&CameraView>,
 ) -> Result<Option<Shape>, RenderError> {
     let crop = ProtocolCrop {
         left: crop.left,
@@ -130,7 +143,17 @@ pub(crate) fn shape(
     };
     match placement {
         Placement::Legacy(transform) => legacy(source_width, source_height, transform, crop),
-        Placement::Geometry(geometry) => boxed(source_width, source_height, geometry, crop),
+        Placement::Geometry(geometry) => boxed(source_width, source_height, geometry, crop, view),
+    }
+}
+
+/// How far in front of a scene camera an item is, along its axis: what a 3D scene sorts
+/// by (ADR-0094 decision 4). A legacy placement isn't in the scene's space and sorts as
+/// if at the canvas centre.
+pub(crate) fn depth(view: &CameraView, placement: Placement) -> f64 {
+    match placement {
+        Placement::Geometry(geometry) => view.depth_of(geometry),
+        Placement::Legacy(_) => view.canvas_depth(),
     }
 }
 
@@ -164,16 +187,22 @@ fn boxed(
     source_height: u32,
     geometry: ItemGeometry,
     crop: ProtocolCrop,
+    view: Option<&CameraView>,
 ) -> Result<Option<Shape>, RenderError> {
-    let Some(content) = geometry
-        .content(source_width, source_height, crop)
-        .map_err(placement_error)?
-    else {
+    let content = match geometry.content(source_width, source_height, crop) {
+        Ok(content) => content,
+        // Through a camera a stored geometry draws or draws nothing (see `drawn`).
+        Err(_) if view.is_some() => return Ok(None),
+        Err(err) => return Err(placement_error(err)),
+    };
+    let Some(content) = content else {
         return Ok(None);
     };
-    if !geometry.is_neutral_3d() {
+    // Every item of a 3D scene is drawn in 3D (ADR-0094 decision 3).
+    if view.is_some() || !geometry.is_neutral_3d() {
         return drawn(
             geometry,
+            view,
             &content,
             crop_region(source_width, source_height, crop),
         );
@@ -228,10 +257,19 @@ fn crop_region(source_width: u32, source_height: u32, crop: ProtocolCrop) -> Reg
 /// coordinate stay exact; where it can't be (past the near plane), the vertex stays.
 fn drawn(
     geometry: ItemGeometry,
+    view: Option<&CameraView>,
     content: &ContentRect,
     crop: Region,
 ) -> Result<Option<Shape>, RenderError> {
-    let Some(polygon) = geometry.drawn_polygon(content).map_err(placement_error)? else {
+    // Through a camera, a geometry the graph accepted draws or draws nothing, never
+    // fails the frame (ADR-0022): `check_drawable` bounds only a non-neutral item's
+    // inputs, so a neutral one can be too large for a close camera to place finitely.
+    let polygon = match geometry.drawn_polygon_seen(view, content) {
+        Ok(polygon) => polygon,
+        Err(_) if view.is_some() => return Ok(None),
+        Err(err) => return Err(placement_error(err)),
+    };
+    let Some(polygon) = polygon else {
         return Ok(None);
     };
     let corners = polygon.vertices();
@@ -252,11 +290,17 @@ fn drawn(
     let mut vertices = [UNUSED; MAX_VERTICES];
     for (i, corner) in corners.iter().enumerate() {
         let target = push_out(edges[(i + len - 1) % len], edges[i], corner);
-        let pushed = match geometry.unplace(target).map_err(placement_error)? {
-            Some(local) => geometry
-                .drawn_vertex(content, local)
-                .map_err(placement_error)?,
-            None => None,
+        // A pushed point that can't be mapped back through a camera keeps the vertex,
+        // as one past the near plane does.
+        let pushed = match geometry.unplace_seen(view, target) {
+            Ok(Some(local)) => match geometry.drawn_vertex_seen(view, content, local) {
+                Ok(pushed) => pushed,
+                Err(_) if view.is_some() => None,
+                Err(err) => return Err(placement_error(err)),
+            },
+            Ok(None) => None,
+            Err(_) if view.is_some() => None,
+            Err(err) => return Err(placement_error(err)),
         };
         vertices[i] = vertex(&pushed.unwrap_or(*corner));
     }
@@ -758,6 +802,90 @@ mod tests {
             }
         }
         assert!(accepted > 5_000, "{accepted} accepted");
+    }
+
+    /// ADR-0094 with #629's invariant (#1044 round 1, B1): through any valid camera,
+    /// close to the canvas plane, oblique or rolled, every geometry an edit may store,
+    /// neutral ones of any size included, gives a shape or nothing, never an error that
+    /// would fail its whole frame.
+    #[test]
+    fn every_drawable_geometry_gives_a_shape_through_a_camera() {
+        use jstream_protocol::{Canvas, SceneCamera, Vec3};
+        let canvas = Canvas {
+            width: 1920,
+            height: 1080,
+        };
+        let at = |x: f32, y: f32, z: f32| Vec3::new(x, y, z).expect("finite");
+        let mut cameras = vec![SceneCamera::framing(canvas)];
+        for (position, target, roll) in [
+            (at(960.0, 540.0, 10.0), at(960.0, 540.0, 0.0), 0.0),
+            (at(960.0, 540.0, 0.5), at(961.0, 540.0, 0.0), 0.0),
+            (at(-4000.0, 2000.0, 900.0), at(960.0, 540.0, -300.0), 30.0),
+            (at(960.0, -5000.0, 10.0), at(960.0, 540.0, 0.0), 0.0),
+        ] {
+            let mut camera = SceneCamera::framing(canvas);
+            camera.position = position;
+            camera.target = target;
+            camera.roll_deg = Finite32::new(roll).expect("finite");
+            cameras.push(camera);
+        }
+        let views: Vec<_> = cameras
+            .iter()
+            .map(|camera| camera.view(canvas).expect("a valid camera"))
+            .collect();
+        let mut accepted = 0;
+        let mut neutral = 0;
+        // Each sweep geometry, and the same box with neutral 3D, which `check_drawable`
+        // bounds only by finite corners.
+        let sweep = crate::tests::extreme_geometries(8_000)
+            .into_iter()
+            .flat_map(|geometry| {
+                let mut flat = geometry;
+                flat.tilt_deg = Finite32::ZERO;
+                flat.turn_deg = Finite32::ZERO;
+                flat.depth_px = Finite32::ZERO;
+                flat.perspective_px = None;
+                [geometry, flat]
+            });
+        for geometry in sweep {
+            if geometry.check_drawable().is_err() {
+                continue;
+            }
+            accepted += 1;
+            if geometry.is_neutral_3d() {
+                neutral += 1;
+            }
+            for view in &views {
+                for (width, height) in crate::tests::SOURCES {
+                    super::shape_seen(
+                        width,
+                        height,
+                        Placement::Geometry(geometry),
+                        Crop::NONE,
+                        Some(view),
+                    )
+                    .unwrap_or_else(|err| panic!("{geometry:?} through {view:?}: {err}"));
+                }
+            }
+        }
+        assert!(
+            accepted > 1_000 && neutral > 50,
+            "{accepted} accepted, {neutral} neutral"
+        );
+        // The case round 1 found: a neutral box far wider than the drawable bound,
+        // through a camera 10 px in front of the canvas.
+        let wide = ItemGeometry::try_new(
+            Vec2::new(960.0, 540.0).expect("finite"),
+            Size::try_new(1e37, 100.0).expect("positive"),
+        )
+        .expect("geometry");
+        assert!(wide.check_drawable().is_ok());
+        for view in &views {
+            assert!(
+                super::shape_seen(64, 64, Placement::Geometry(wide), Crop::NONE, Some(view))
+                    .is_ok()
+            );
+        }
     }
 
     /// A 3D item's mip region is its crop's texels exactly, at sizes where `k / W * W`
