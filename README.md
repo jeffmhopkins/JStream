@@ -55,12 +55,12 @@ in, and **What's left** lists each unfinished item with the steps it still needs
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `█████████░` 91% | 10 | 0 | 1 |
 | [M2: UI](ROADMAP.md#m2) | `██████████` 96% | 27 | 0 | 1 |
-| [M3: Depth and reach](ROADMAP.md#m3) | `████░░░░░░` 39% | 7 | 1 | 10 |
+| [M3: Depth and reach](ROADMAP.md#m3) | `████░░░░░░` 44% | 8 | 1 | 9 |
 
-119 of 132 items are merged; 12 of those still wait on a run on Windows hardware.
+120 of 132 items are merged; 13 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 25 items, by next step: 🔨 build 14, 🧪 Windows run 10, 👤 maintainer 1</summary>
+<summary><b>What's left</b>: 25 items, by next step: 🔨 build 13, 🧪 Windows run 11, 👤 maintainer 1</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
@@ -90,7 +90,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | LNX3 | AAC-LC encoder in Rust, patent check first (ADR-0061) | M3 | 🔨 build | patent check ADR-0062 accepted (#508); encoder and Linux wiring (#518), landed with wave/m3-2 (#663); TNS (#723, more tests #727) landed with wave/m3-3 (#786); intensity stereo (#799) landed with wave/m3-4 (#827); before the Linux app ships the encoder its licence information must say JStream holds no AAC patent licence and name Via LA (ADR-0062) | #508, #518, #723, #727, #799 |
 | F6b | Choose HEVC or AV1 from a client | M3 | 🔨 build | F6 built the encoders; #807 names the encoder a machine lacks at output.start, landed with wave/m3-4 (#827); #814 (protocol 0.41) adds hevc and av1 to VideoCodec and lets an encoder profile take them, landed with wave/m1-5 (#877) | #807, #814 |
 | F7 | Direct NVENC and AMF encoders, if measurements justify them | M3 | 🔨 build | ROADMAP M3: measure Media Foundation's hardware encoders against direct NVENC and AMF first, and build the direct ones only where the numbers say so |  |
-| X2 | Shader sources: multipass WGSL packs with feedback, inputs and audio, written over MCP | M3 | 🔨 build | ADR-0093 (agent tier) and the program in jstream-effects and jstream-render (#1034), and the engine wiring: kinds, stand-ins, scene slots, restart on show and audio (#1048); writing packs over the protocol and MCP is decided by ADR-0097 (maintainer tier, accepted): the quarantine follows the shader digest (#1064), and pack.write, pack.delete, pack.list and pack.read (protocol 0.72, #1085); for the cockpit scenes (warp, reflections, audio glow) that browser sources draw on the CPU today | #1034, #1048, #1050, #1052, #1064, #1085 |
+| X2 | Shader sources: multipass WGSL packs with feedback, inputs and audio, written over MCP | M3 | 🧪 Windows run | ADR-0093 (agent tier) and the program in jstream-effects and jstream-render (#1034), and the engine wiring: kinds, stand-ins, scene slots, restart on show and audio (#1048); writing packs over the protocol and MCP is decided by ADR-0097 (maintainer tier, accepted): the quarantine follows the shader digest (#1064), and pack.write, pack.delete, pack.list and pack.read (protocol 0.72, #1085), whose Windows and macOS run is item 20 of the Windows hardware pass (#1088); for the cockpit scenes (warp, reflections, audio glow) that browser sources draw on the CPU today | #1034, #1048, #1050, #1052, #1064, #1085 |
 
 </details>
 
@@ -257,7 +257,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 </details>
 
 <details>
-<summary><b>M3</b> Depth and reach: 7 of 18 merged</summary>
+<summary><b>M3</b> Depth and reach: 8 of 18 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -278,7 +278,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | F6b | Choose HEVC or AV1 from a client | ⏳ planned: F6 built the encoders; #807 names the encoder a machine lacks at output.start, landed with wave/m3-4 (#827); #814 (protocol 0.41) adds hevc and av1 to VideoCodec and lets an encoder profile take them, landed with wave/m1-5 (#877) | #807, #814 |
 | F7 | Direct NVENC and AMF encoders, if measurements justify them | ⏳ planned: ROADMAP M3: measure Media Foundation's hardware encoders against direct NVENC and AMF first, and build the direct ones only where the numbers say so |  |
 | CL2 | A too_large error for oversized plugin state | ✅ merged: ROADMAP M3 and #102: ADR-0074 (#794, accepted by the maintainer, maintainer tier, landed with wave/m3-5 (#854)) amends ADR-0037's state clause with a stable too_large error; built in #981 (protocol 0.62): a message over the 4 MiB request limit, read below a 16 MiB frame limit, is refused with too_large and the connection stays open, so a batch carrying two 2 MiB CLAP states fails cleanly | #794, #981 |
-| X2 | Shader sources: multipass WGSL packs with feedback, inputs and audio, written over MCP | ⏳ planned: ADR-0093 (agent tier) and the program in jstream-effects and jstream-render (#1034), and the engine wiring: kinds, stand-ins, scene slots, restart on show and audio (#1048); writing packs over the protocol and MCP is decided by ADR-0097 (maintainer tier, accepted): the quarantine follows the shader digest (#1064), and pack.write, pack.delete, pack.list and pack.read (protocol 0.72, #1085); for the cockpit scenes (warp, reflections, audio glow) that browser sources draw on the CPU today | #1034, #1048, #1050, #1052, #1064, #1085 |
+| X2 | Shader sources: multipass WGSL packs with feedback, inputs and audio, written over MCP | 🧪 merged, Windows run pending: ADR-0093 (agent tier) and the program in jstream-effects and jstream-render (#1034), and the engine wiring: kinds, stand-ins, scene slots, restart on show and audio (#1048); writing packs over the protocol and MCP is decided by ADR-0097 (maintainer tier, accepted): the quarantine follows the shader digest (#1064), and pack.write, pack.delete, pack.list and pack.read (protocol 0.72, #1085), whose Windows and macOS run is item 20 of the Windows hardware pass (#1088); for the cockpit scenes (warp, reflections, audio glow) that browser sources draw on the CPU today | #1034, #1048, #1050, #1052, #1064, #1085 |
 
 </details>
 <!-- @generated end progress -->
