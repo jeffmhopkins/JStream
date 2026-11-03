@@ -197,8 +197,9 @@ pub enum Edit {
     /// form (`transform` or `geometry`), and its opacity and blend where they differ from
     /// the defaults, then `item.reorder` to its old stacking position (unless it was on
     /// top), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,
-    /// `item.set_transition` if its transition settings were not the default, and the
-    /// placement edits that write each dropped override back.
+    /// `item.set_transition` if its transition settings were not the default,
+    /// `item.set_locked` if it was locked (since 0.71), and the placement edits that
+    /// write each dropped override back.
     #[serde(rename = "item.remove")]
     ItemRemove {
         /// The item to remove.
@@ -938,6 +939,19 @@ pub enum Edit {
         /// Its new settings.
         transition: ItemTransition,
     },
+    /// Locks or unlocks an item (ADR-0096, since 0.71). A lock is an editing aid kept
+    /// with the collection, as OBS's is: a client doesn't let a locked item be dragged,
+    /// resized or turned on its canvas, but the engine still applies every edit to it,
+    /// so the Inspector, the menus and a script can change it. It belongs to the item,
+    /// not to a placement, so it takes no `scene_id` and a keyframe doesn't override
+    /// it. Items are added unlocked. Inverse: `item.set_locked` with the previous value.
+    #[serde(rename = "item.set_locked")]
+    ItemSetLocked {
+        /// The item to lock or unlock.
+        item_id: ItemId,
+        /// Whether its canvas box is locked.
+        locked: bool,
+    },
     /// Changes some of an audio source's settings (ADR-0028): the fields sent change,
     /// the others keep their values, and sending none is `invalid_argument`. A source
     /// without audio is `invalid_argument` on `source_id`. A `scene` source has no fader
@@ -1121,6 +1135,7 @@ impl Edit {
             Edit::TransitionSetDefault { .. } => "transition.set_default",
             Edit::SceneSetTransitions { .. } => "scene.set_transitions",
             Edit::ItemSetTransition { .. } => "item.set_transition",
+            Edit::ItemSetLocked { .. } => "item.set_locked",
         }
     }
 }

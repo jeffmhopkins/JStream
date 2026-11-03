@@ -283,6 +283,11 @@ fn describe_edit(edit: &Edit, state: &State) -> String {
             item(state, item_id),
             source(state, source_id)
         ),
+        Edit::ItemSetLocked { item_id, locked } => format!(
+            "{} {}",
+            if *locked { "Locked" } else { "Unlocked" },
+            item(state, item_id)
+        ),
         Edit::ItemSetTransition { item_id, .. } => {
             format!(
                 "Changed the show and hide transition of {}",

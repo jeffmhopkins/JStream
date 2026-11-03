@@ -361,6 +361,10 @@ pub(crate) fn edits() -> Vec<Edit> {
                 ..ItemTransition::default()
             },
         },
+        Edit::ItemSetLocked {
+            item_id: ItemId::new("itm_1"),
+            locked: true,
+        },
         Edit::VideoMixCreate {
             mix_id: VideoMixId::new("mix_cam"),
             name: "Camera".into(),
@@ -1508,6 +1512,7 @@ fn item_infos() -> Vec<ItemInfo> {
                 enabled: true,
                 settings: vignette(),
             }],
+            locked: false,
         },
         ItemInfo {
             item_id: ItemId::new("itm_2"),
@@ -1534,6 +1539,7 @@ fn item_infos() -> Vec<ItemInfo> {
                 ..ItemTransition::default()
             },
             effects: Vec::new(),
+            locked: false,
         },
     ]
 }

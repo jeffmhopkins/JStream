@@ -56,7 +56,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `send.remove`, `hotkey.set`,
   `hotkey.clear`, `transition.create`, `transition.update`, `transition.delete`,
   `transition.set_default`, `scene.set_transitions`, `item.set_transition`,
-  `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
+  `item.set_locked`, `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
   `folder.delete`, `scene.set_folder`, `scene.set_meta`, `scene.set_options`,
   `scene.set_camera`, `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `source.set_meta`), with
@@ -171,7 +171,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `plugin_may_bind`, `PluginState`, `PluginDisabledReason`, and `PluginInfo` and
   `PluginRequest`, what `plugin.list` reports ([Plugins](#design)).
 - **Preview streams** (`preview.rs`, [ADR-0045](../../docs/adr/0045-leptos-web-ui.md)):
-  `PreviewCodec` (`h264`, `jpeg`), `PreviewSettings` (`preview.subscribe`'s fields with
+  `PreviewCodec` (`h264`, `jpeg`, `png`), `PreviewSettings` (`preview.subscribe`'s fields with
   their defaults and range checks, which the engine applies), `PreviewDraft` (its
   `source`, a draft source the collection doesn't hold), and the binary
   frame: `BinaryFrame`, its fixed `BinaryHeader` with `StreamKind`, the byte layout's
@@ -208,7 +208,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   (`pack.rs`: `PackFile`, `PackContent`, `PackInfo`, `PackFileInfo` and the write's
   limits, [ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)), which agents
   may call and no plugin is granted but `pack.list` and `pack.read`, and no hotkey
-  binds; 0.70 because of `scene.set_camera` and `SceneInfo.camera`, a live value too
+  binds; 0.71 because of `item.set_locked`, `ItemInfo.locked` and the `png` preview
+  codec ([ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md)), with 0.69
+  left to a change that claimed it first; 0.70 because of `scene.set_camera` and
+  `SceneInfo.camera`, a live value too
   ([ADR-0094](../../docs/adr/0094-scene-cameras.md)); 0.68 because of the
   `font.list` query ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)); 0.67 because `live.set`
   takes a source's settings whose kind marks them `live` (`source.set_settings`,
@@ -988,6 +991,11 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
   scene's overrides (absent clears one), and `item.set_transition {item_id,
   transition}` an item's `ItemTransition {delay_ms, easing, glide, appear,
   disappear}`, omitted from `ItemInfo` while it is the default.
+- `item.set_locked {item_id, locked}` locks or unlocks an item's canvas box
+  ([ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md), 0.71), reported
+  as `ItemInfo.locked`, omitted while false. It is an editing aid a client honours by
+  not dragging the box; the engine still applies every edit to a locked item. It
+  belongs to the item, so it takes no `scene_id` and a keyframe doesn't override it.
 - `scene.switch {scene_id, preset_id?}` resolves the preset in order: the one it names
   (`not_found` when there is no such preset), else the new scene's `transition_in`,
   else the current scene's `transition_out`, else the default. A switch while a
@@ -1215,8 +1223,8 @@ that sets it: `scene.reorder` and `item.reorder` restore positions,
 `canvas.set_size` restores the canvas, and `item.set_geometry` and
 `item.set_transform` each restore the previous placement in its own form. So undoing
 `item.remove` is `item.add` (with `geometry` or `transform`, matching the removed
-item's form) plus whichever of `item.reorder`, `item.set_crop`, `item.set_visible`
-and `item.set_transition` the removed item needs, and undoing `scene.delete` is
+item's form) plus whichever of `item.reorder`, `item.set_crop`, `item.set_visible`,
+`item.set_transition` and `item.set_locked` the removed item needs, and undoing `scene.delete` is
 `scene.create` with the scene's `role` (omitted for `scene`), `scene.reorder` unless it
 was last, `scene.set_transitions` if it had an override, and each item's restore,
 bottom to top. A variant's `scene.delete` is undone by `scene.create_variant`, its role
@@ -1889,7 +1897,10 @@ the JSON text messages of the same connection (0.20,
   changes, at most `fps` times a second (default 15, at most 30), and at least every
   2 s as a keyframe. `codecs` lists what the client can decode, most preferred first
   (default `["h264", "jpeg"]`); the engine uses the first it can encode, and may fall
-  back to a later one if an encoder fails to open, so each frame names its codec. A
+  back to a later one if an encoder fails to open, so each frame names its codec.
+  `png` (0.71, [ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md)) is
+  lossless and never a default: a client taking a screenshot asks for it alone and
+  keeps the first picture. A
   session has at most 16 streams (4 before 0.46), enough for a multiview.
   `preview.unsubscribe {channel}` closes one (and succeeds for a channel that isn't
   open); so does the session's end. The stream shows the mix before any master stage,
@@ -1930,7 +1941,7 @@ the JSON text messages of the same connection (0.20,
   |---|---|---|
   | 0 | 1 | version, 1 |
   | 1 | 1 | kind: 1 = preview |
-  | 2 | 1 | codec: 0 = none (an end frame), 1 = H.264, 2 = JPEG |
+  | 2 | 1 | codec: 0 = none (an end frame), 1 = H.264, 2 = JPEG, 3 = PNG (0.71) |
   | 3 | 1 | flags: bit 0 keyframe, bit 1 end of stream |
   | 4 | 4 | channel |
   | 8 | 2 | width |
@@ -1941,7 +1952,8 @@ the JSON text messages of the same connection (0.20,
 
   An H.264 payload is one access unit in Annex B form, with the parameter sets in band
   at keyframes, which WebCodecs' `VideoDecoder` takes with no `description`. A JPEG
-  payload is a whole baseline JFIF picture, always a keyframe. An end frame (flag bit
+  payload is a whole baseline JFIF picture, always a keyframe, and a PNG payload a whole
+  RGBA PNG, always a keyframe too. An end frame (flag bit
   1, codec 0) says the engine ended the stream; its payload is the reason as UTF-8, and
   the channel is free again. A client ignores a frame whose version, kind or codec it
   doesn't know, and the reserved bytes and spare flag bits.

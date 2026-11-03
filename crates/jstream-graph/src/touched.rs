@@ -94,6 +94,8 @@ enum Prop {
     Camera,
     /// A label's colour and icon.
     Look,
+    /// Whether an item's canvas box is locked (ADR-0096).
+    Locked,
 }
 
 /// What a batch touched: computed from its edits and its inverse's, so a delete also
@@ -440,6 +442,9 @@ impl Touched {
             }
             Edit::ItemSetTransition { item_id, .. } => {
                 self.prop(Object::Item(item_id.clone()), Prop::Transitions);
+            }
+            Edit::ItemSetLocked { item_id, .. } => {
+                self.prop(Object::Item(item_id.clone()), Prop::Locked);
             }
             Edit::SourceSetAudio {
                 source_id,
