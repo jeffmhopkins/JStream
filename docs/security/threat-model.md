@@ -237,7 +237,8 @@ names opaque origins alike, so a sandboxed or `data:` frame that a third-party f
 inside a local file page creates counts as the file page's (#721). The same holds inside
 a page given as HTML whose source sets `local_network`: such a frame, made by a
 third-party frame the HTML embeds, gets the page's local-network access. It can't be
-narrowed by origin, since the HTML document's own origin is opaque too. Chromium's
+narrowed by origin, since the HTML document's own origin is opaque too; serving the
+HTML from a reserved origin would close it (#1035). Chromium's
 Local Network Access checks see both at the network layer and ask that permission
 handler first, so for an origin the policy refuses they are refused there; that Chromium
 enforces them in the pinned CEF's windowless pages is not yet confirmed on a Windows run

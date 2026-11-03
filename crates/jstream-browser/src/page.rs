@@ -37,9 +37,12 @@ pub struct PageSpec {
     pub css: String,
     /// Whether a page from the internet may make requests to this computer and the local
     /// network, for widgets that talk to a local app. Off, they are refused
-    /// ([`RequestPolicy`](crate::RequestPolicy), #347). On, it covers only the origin of
-    /// the source's own URL: a third-party frame inside it, or a page it navigates or
-    /// redirects to, is refused all the same (#721).
+    /// ([`RequestPolicy`](crate::RequestPolicy), #347). On, for a page from a URL it
+    /// covers only the origin of the source's own URL: a third-party frame inside it, or
+    /// a page it navigates or redirects to, is refused all the same (#721). An inline
+    /// [`PageLocation::Html`] page has an opaque origin, so its opt-in works like a file
+    /// page's access: it covers every opaque frame inside the page, one a third-party
+    /// frame creates included, while the main frame is still on `data:`.
     pub local_network: bool,
 }
 

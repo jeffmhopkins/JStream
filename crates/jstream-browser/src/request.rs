@@ -28,12 +28,17 @@
 //!     page: once the main frame navigates to the web
 //!     ([`main_frame_to`](RequestPolicy::main_frame_to)), an opaque frame inside it is
 //!     the web's;
+//!   - in an inline HTML source (a `data:` page, whose own origin is opaque too) an
+//!     opaque origin may when the source opts in, while the main frame is still on
+//!     `data:`. Like a file page's access, this covers every opaque frame inside the
+//!     page, so a sandboxed or `data:` frame that a third-party frame creates counts as
+//!     the page's own;
 //!   - a request CEF names no origin for was started by the browser itself (the
 //!     source's own load, a reload) and is judged as the source's own.
 //!
 //!   Every other origin from the internet is refused. CEF can't tell one opaque origin
 //!   from another, so a sandboxed or `data:` frame that a third-party frame inside a
-//!   file page creates counts as the file page's.
+//!   file page, or inside an opted-in HTML page, creates counts as that page's.
 //! - `data:` and `blob:` are allowed: they hold only what the page itself made.
 //! - `about:blank` and `about:srcdoc` are allowed; other `about:` pages are not.
 //! - `file:` is allowed only for a page loaded from a local file, and only for files in
