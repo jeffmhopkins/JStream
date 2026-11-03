@@ -2,14 +2,14 @@
 id = "ADR-0102"
 title = "Browser source pages can opt in to reading the engine through window.jstream"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0102: Browser source pages can opt in to reading the engine through window.jstream
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 <a id="context"></a>
