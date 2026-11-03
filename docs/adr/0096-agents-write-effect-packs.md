@@ -54,27 +54,43 @@ Letting a client write packs changes what a remote client is trusted to do, whic
      as text, images as base64) and loads it at once. It answers with the pack's kinds,
      or with `invalid_argument` naming each problem's file, line and message, and then
      the old version stays.
-   - `pack.delete {pack}` removes one pack; `pack.list` names the packs, their kinds and
-     who last wrote each (point 5).
+   - `pack.delete {pack}` removes the folder that loads pack ID `<pack>`, whatever its
+     name, or is refused with `not_found` when none does; `pack.list` names the packs,
+     their folders, their kinds and who last wrote each (point 5).
    - `pack.read {pack}` returns one pack's text files and, for each image, its path,
      size and digest; `pack.read {pack, path}` returns one file, an image as base64. An
-     image over 2 MiB (one a person installed: a write can't carry one) is refused
+     image over 2 MiB, which only a person can have installed (point 3), is refused
      with `too_large`, so no answer holds more than about 2.7 MiB of base64.
    - These are actions, not edits: undo doesn't reach the disk.
 2. **Where a write lands.** `pack` is a pack ID (ADR-0093's form: lower-case letters,
    digits and `-`), which can't name a dot-file, so the pack is always the folder
-   `<packs>/<pack>` and nothing else: never `quarantine.json`, `.staging` or `.trash`.
-   Its `effect.toml` must have `id = <pack>`, and each file path is relative, follows the
-   asset-path rules (no `..`, no absolute path, no dot-component) and names one of
-   `effect.toml`, a `.wgsl`, `.png`, `.jpg` or `.jpeg` file. A pack ID another folder
-   already loads (a pack a person installed under another folder name) is refused before
-   anything is written.
-3. **What a write may hold.** At most 64 files, the loader's per-file limits, and a
+   `<packs>/<pack>` and nothing else: never `quarantine.json`, `.staging`, `.trash` or
+   `.deleted`.
+   Its `effect.toml` must have `id = <pack>`. Each file path is relative and follows the
+   asset-path rules, applied to each component as the platform parses it: no `..`, no
+   absolute, drive or UNC path, no dot-component, no `\` or `:`, no Windows reserved
+   name (`CON`, `NUL`, `COM1` and the like) and no trailing dot or space; and it names
+   `effect.toml` or a `.wgsl`, `.png`, `.jpg` or `.jpeg` file. Folder names are
+   compared as the file system compares them, without case on Windows and macOS.
+   Before anything is written, a write is refused with `invalid_argument` when:
+   - another folder already loads pack ID `<pack>` (a pack a person installed under
+     another folder name); or
+   - `<packs>/<pack>` exists and its `effect.toml` doesn't name pack ID `<pack>`: a
+     folder holding a pack of another ID, a manifest that doesn't parse, or no
+     `effect.toml` at all. A pack of that ID that fails to load for another reason (a
+     shader that doesn't compile) can still be replaced, so an agent can fix it. So a
+     write only ever replaces the pack it names, or makes a new folder.
+3. **What a write may hold.** At most 64 files, the loader's per-file limits, each
+   image at most 2 MiB, and a
    `files` value of at most 3 MiB as sent (text after JSON escaping, images as base64),
    so the whole request, with its envelope, stays under the 4 MiB message limit of
    [ADR-0074](0074-too-large-requests.md). A larger `files` is refused with `too_large`
    before it is decoded.
 4. **How a write lands, and how a stopped one is recovered.**
+   - A write first removes any leftover `<packs>/.staging/<pack>` and
+     `<packs>/.trash/<pack>`; if it can't, it answers `internal` and the old version
+     stays. So a write never stages over an earlier write's files, and its first rename
+     never meets an existing folder.
    - The files are written into `<packs>/.staging/<pack>`, which the loader never reads
      (it reads only the direct sub-folders that hold an `effect.toml`), and loaded from
      there, checked against the other loaded packs as a poll would check them.
@@ -85,10 +101,17 @@ Letting a client write packs changes what a remote client is trusted to do, whic
    - A rename that fails (on Windows, a sharing violation from a virus scanner or an
      editor) is retried a few times for up to a second. If the second rename still
      fails, the first is undone (`.trash/<pack>` back to `<pack>`), the write answers
-     `internal`, and the old version stays.
+     `internal`, and the old version stays. If the undo fails too, the write answers
+     `internal` saying the pack is off air until the next start, whose recovery puts it
+     back. A failure to remove the old folder after a swap is logged and doesn't fail
+     the write: the next write removes it first.
+   - `pack.delete` removes any leftover `<packs>/.deleted/<pack>`, renames the pack's
+     folder there, then removes it, so recovery never mistakes a delete for a stopped
+     write.
    - At startup, before the first load, the watcher recovers a swap that stopped
      between the renames: a `.trash/<pack>` with no `<pack>` is renamed back, a
-     `.trash/<pack>` beside a `<pack>` is removed, and `.staging` is emptied.
+     `.trash/<pack>` beside a `<pack>` is removed, and `.staging` and `.deleted` are
+     emptied.
 5. **The UI shows who wrote a pack.** `pack.list` reports the client name of the last
    write, and the audit log records every write and delete, so a person can see that an
    agent installed GPU code.
