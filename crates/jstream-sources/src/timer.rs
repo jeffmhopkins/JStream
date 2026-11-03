@@ -329,6 +329,9 @@ impl Painter for TimerPainter {
             let ready = lock(&self.ready);
             (Arc::clone(&ready.plan), ready.revision)
         };
+        // An update may have swapped the plan meanwhile (a new `end_text` changes
+        // which value an ended countdown shows), so the value is read from this one.
+        let key = plan.count.key(elapsed, wall_millis());
         // The box holds every value, so a draw that fits once always fits; were it
         // ever to fail, the frame drawn last stays.
         let Ok(frame) = plan.draw(key, &self.limits) else {
@@ -394,12 +397,13 @@ impl Plan {
             .collect();
         let widest = widths.iter().copied().fold(0.0, f32::max);
         let wrap = (widest + style.letter_spacing.max(0.0)).ceil() + 1.0;
+        // What a box too large for the limits is blamed on: the end text when it is
+        // the widest candidate (it is the last one, when there is one), else the size.
+        let culprit = match (count.ends_with_text(), widths.last()) {
+            (true, Some(&end)) if end >= widest => "end_text",
+            _ => "size",
+        };
         if wrap > limits.max_side as f32 {
-            // The end text is the last candidate, when there is one.
-            let culprit = match (count.ends_with_text(), widths.last()) {
-                (true, Some(&end)) if end >= widest => "end_text",
-                _ => "size",
-            };
             return Err(text::bad(
                 culprit,
                 &format!(
@@ -429,8 +433,15 @@ impl Plan {
             density,
             count,
         };
-        // Every frame is this size, so drawing one checks them all.
-        plan.draw(Key::End, limits)?;
+        // Every frame is this size, so drawing one checks them all. The text renderer
+        // names its own `text` setting, which a timer doesn't have.
+        plan.draw(Key::End, limits).map_err(|e| match e {
+            SourceError::Setting { param, reason } if param == "text" => SourceError::Setting {
+                param: culprit.to_owned(),
+                reason,
+            },
+            other => other,
+        })?;
         Ok(plan)
     }
 

@@ -235,8 +235,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   of them so `align` places each value in one box, and draws every value into the union
   of their bounds (`raster::render_within`), cutting off any ink outside. So the frame
   the engine placed, and the size `source.sizes` reports, never change as the count
-  does, and a box too wide for `max_side` fails `create` or `update`, naming `end_text`
-  when that is the widest. The `Painter` draws a value when the one shown is out of
+  does, and a frame too large for the limits (its text, padding, outline or shadow)
+  fails `create` or `update`, naming `end_text` when that is the widest value, else
+  `size`. The `Painter` draws a value when the one shown is out of
   date, and `frame` only hands out the one drawn last; `next_change` is the value's next
   second (a clock's next wall-clock second, or minute without seconds), `at` itself while
   the painter hasn't caught up, and `None` once a countdown ends or a stopwatch stops.
@@ -515,7 +516,8 @@ checks that every setting is live. `tests/timer.rs` checks that a countdown keep
 frame size when it turns to its `end_text` and a stopwatch past an hour, that a clock has
 one size and changes within a second, that `frame` hands out what the painter drew and
 `next_change` asks for a paint while it is out of date, that a countdown stops changing
-at its end, that an `end_text` too wide for the limits fails `create` and `update`, a
+at its end, that an `end_text` too wide for the limits fails `create` and `update`, that
+a frame its padding takes past the limits names `end_text` rather than `text`, a
 density, a live update that keeps the count, which changes keep the time zero, and an
 unknown time zone; its unit tests check the values in every mode and format, the times
 they change at, and the candidates the box is measured by. The unit tests check the shape's distances (a

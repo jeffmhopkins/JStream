@@ -1464,14 +1464,16 @@ audio.
 `snapshot::plan_with` asks what each source an item it reaches places shows: the
 stored frame if `set_source_frame` gave one, else, for a live `display` or `window`
 source, what the pipeline captures for it (`Source::capture`), else the live source's
-frame at the current time, counted from when the source was built. A live frame is shared with
+frame at the current time, counted from its time zero: when it was built, or the time
+zero its build kept (*Live sources*). A live frame is shared with
 the source (an `Arc` of its `VideoFrame`, not a copy) and gets a new version only when
 the source hands out a different one, so a still image is uploaded once. The plan also
 returns the earliest time one of its frames changes (`Source::next_change`), and the
 thread re-plans then, so an animated image or a video advances on the clock and a
 still one is never re-planned. A source with a `jstream_sources::Painter` (the
 `waveform` and `spectrum` kinds, which draw a whole frame and, for the spectrum, an
-FFT each 1/30 s, and `chat_message`, which redraws when another message is featured)
+FFT each 1/30 s, `chat_message`, which redraws when another message is featured, and
+`timer`, which redraws when the value it shows changes)
 is painted by that thread just before each re-plan, holding no engine
 lock, so under the collection lock the plan only takes the frame painted last;
 `install`, `sync` and a clock swap hand the thread the running painters and their time

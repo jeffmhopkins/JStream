@@ -92,10 +92,12 @@ fn a_stopwatch_keeps_its_size_past_an_hour() {
 fn a_clock_has_one_size_and_changes_with_the_wall_clock() {
     let mut source = timer(&[("mode", json!("clock")), ("clock_format", json!("12h"))]);
     let first = source.frame(ms(0)).expect("a frame");
-    let next = source.next_change(ms(0)).expect("a clock changes");
-    assert!(next > ms(0) && next <= ms(1_000), "{next:?}");
     let later = painted(source.as_mut(), 0);
     assert_eq!(size(&first), size(&later));
+    // Within the next wall-clock second; `ms(0)` itself when a second boundary passed
+    // since the paint, which asks for another at once.
+    let next = source.next_change(ms(0)).expect("a clock changes");
+    assert!(next <= ms(1_000), "{next:?}");
 }
 
 #[test]
@@ -148,6 +150,29 @@ fn an_end_text_too_large_for_the_limits_fails_at_create_and_update() {
         source.update(&settings(&[("end_text", json!(wide))])),
         Err(SourceError::Setting { .. })
     ));
+}
+
+/// A box whose text fits `max_side` but whose padding doesn't is blamed on a timer
+/// setting, not on the text renderer's own `text` (review N2 on #1039).
+#[test]
+fn a_frame_too_large_names_a_timer_setting() {
+    let ctx = Context {
+        limits: Limits {
+            max_side: 1_000,
+            ..Limits::default()
+        },
+        ..Context::default()
+    };
+    let refused = Registry::builtin().create(
+        "timer",
+        &settings(&[("end_text", json!("LIVE NOW")), ("padding", json!(400))]),
+        &ctx,
+    );
+    assert!(
+        matches!(refused, Err(SourceError::Setting { ref param, .. }) if param == "end_text"),
+        "{:?}",
+        refused.err()
+    );
 }
 
 #[test]
