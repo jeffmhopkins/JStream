@@ -459,8 +459,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `source.set_settings` of every live setting changed since it opened, plus any it sent
   before, which may be back at its first value (`live_patch`, tested natively). With a
   gesture open, OK's batch carries `ends_gesture`, so it is one undo step.
-  Cancel, Escape and the backdrop drop the draft and send `live.cancel` (as does closing
-  the dialog any way but OK), so the output shows the stored values again and nothing
+  Cancel, Escape and the backdrop drop the draft and send `live.cancel` (as does any close
+  but a committing OK), so the output shows the stored values again and nothing
   is saved; Defaults empties it, and shows that live too. Enter in a
   field blurs it before pressing OK, so the field's `change` reaches the draft first.
   The filter chains are the Filters panel's rows (below), which apply at once. A double click on

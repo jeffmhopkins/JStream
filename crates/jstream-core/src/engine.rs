@@ -3131,7 +3131,7 @@ impl State {
     /// What follows every applied batch, undo and redo: the outputs, the live sources and
     /// the program mixer follow the collection, a deleted source's stored frame goes
     /// (unless the same edits made a new source under its id), live values on a deleted
-    /// item go, `state.changed` is emitted, and the program scene is reconciled
+    /// item and live settings of a deleted source go, `state.changed` is emitted, and the program scene is reconciled
     /// (ADR-0030).
     fn changed(
         &mut self,
@@ -4018,8 +4018,6 @@ fn live_ticker(shared: &Weak<Shared>) {
     }
 }
 
-/// A `live.set` value's error, named as the value: the graph names a batch's edits
-/// `edits.<n>`, and `live.set` carries them as `values.<n>`.
 /// Refuses a `source.set_settings` value that names a setting its kind doesn't mark
 /// `live` (ADR-0091), as `values.<n>.patch.<param>`. A source or setting that doesn't
 /// exist is left to the collection's own check.
@@ -4049,6 +4047,8 @@ fn check_live_settings(graph: &Graph, values: &[Edit]) -> Result<(), ProtocolErr
     Ok(())
 }
 
+/// A `live.set` value's error, named as the value: the graph names a batch's edits
+/// `edits.<n>`, and `live.set` carries them as `values.<n>`.
 fn values_error(error: ProtocolError) -> ProtocolError {
     match error {
         ProtocolError::InvalidArgument {
