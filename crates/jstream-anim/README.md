@@ -33,7 +33,7 @@ Contents:
   effects list ([ADR-0088](../../docs/adr/0088-keyframe-scenes-override-item-effects.md)),
   a type parameter that defaults to `()`. `Props` holds an item's values for the four
   keyable ones, which are all a switch animates, and `Value` one field's value. `Value::problem` refuses an opacity that isn't finite or is outside
-  `0..=1`; geometry and crop are the graph's to check.
+  `0..=MAX_OPACITY` (4, the protocol's limit, #1101); geometry and crop are the graph's to check.
 - `Override`: the fields a variant overrides for one item, each whole.
   `Override::apply` gives the effective values over the parent's values as passed in,
   so an absent field follows the parent live.

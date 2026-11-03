@@ -152,7 +152,7 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   - output buses: `output.set_audio_buses` naming a missing output, a list that isn't
     exactly one bus, a virtual camera, a missing bus and a running output moving, and
     `bus.delete` of a bus an output carries, with the graph's reason and blocker;
-  - an `opacity` outside 0 to 1, in `item.add` and `item.set_opacity` (every blend
+  - an `opacity` outside 0 to 4, in `item.add` and `item.set_opacity` (every blend
     mode is taken, as the engine draws them all,
     [ADR-0082](../../docs/adr/0082-blend-modes-drawn.md));
   - the filter edits (`mock/filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):

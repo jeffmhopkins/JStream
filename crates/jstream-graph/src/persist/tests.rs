@@ -1123,7 +1123,7 @@ fn opacity_blend_and_reserved_effects_are_checked() {
             reason: "a version 1 scene has no `filters`".into()
         })
     );
-    let file = edit_file(|v| v["scenes"][0]["items"][0]["opacity"] = json!(1.5));
+    let file = edit_file(|v| v["scenes"][0]["items"][0]["opacity"] = json!(4.5));
     assert!(
         matches!(load(&file), Err(LoadError::Invalid { ref object, .. }) if object == "item `i4`"),
         "{:?}",

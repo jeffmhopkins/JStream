@@ -86,6 +86,8 @@ fn edge(e: vec3<f32>, at: vec2<f32>) -> f32 {
 @group(0) @binding(1) var samp: sampler;
 
 // The item's premultiplied linear colour at this fragment, coverage and opacity applied.
+// Opacity above 1 is a gain on the item's light (#1101): it multiplies the colour, and
+// the alpha by at most 1, so the backdrop is never covered more than fully.
 fn source(in: VsOut) -> vec4<f32> {
     let uv = clamp(in.uv, in.uv_bounds.xy, in.uv_bounds.zw);
     let c = textureSample(tex, samp, uv);
@@ -106,7 +108,8 @@ fn source(in: VsOut) -> vec4<f32> {
         edge(in.e4, at),
     );
     let coverage = clamp(d + 0.5, 0.0, 1.0);
-    return vec4<f32>(rgb, alpha) * (in.opacity * coverage);
+    let gain = in.opacity * coverage;
+    return vec4<f32>(rgb * gain, alpha * min(gain, 1.0));
 }
 
 @fragment

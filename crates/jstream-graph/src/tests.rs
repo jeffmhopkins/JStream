@@ -4003,13 +4003,15 @@ fn opacity_and_blend_are_checked_reported_and_undone() {
     let applied = apply_ok(&mut g, vec![set_opacity("i", 0.25)]);
     assert_eq!(applied.inverse.edits, vec![set_opacity("i", 1.0)]);
     assert_eq!(item_info(&g, "i").opacity.get(), 0.25);
-    for edge in [0.0, 1.0] {
+    // Above 1 is a gain on the item's light, up to MAX_OPACITY (#1101).
+    for edge in [0.0, 1.0, 2.5, jstream_protocol::MAX_OPACITY] {
         apply_ok(&mut g, vec![set_opacity("i", edge)]);
+        assert_eq!(item_info(&g, "i").opacity.get(), edge);
     }
-    for bad in [-0.01, 1.01, 2.0] {
+    for bad in [-0.01, 4.01, 8.0] {
         let (field, reason) = invalid_reason(apply_err(&mut g, vec![set_opacity("i", bad)]));
         assert_eq!(field, "edits.0.opacity", "{bad}");
-        assert!(reason.contains("0 to 1"), "{reason}");
+        assert!(reason.contains("0 to 4"), "{reason}");
     }
     // The same addressing as every placement edit (ADR-0024 §2).
     let elsewhere = Edit::ItemSetOpacity {
@@ -4056,7 +4058,7 @@ fn item_add_takes_opacity_and_blend_and_remove_restores_them() {
         opacity: Some(Finite32::new(opacity).expect("finite")),
         blend: Some(blend),
     };
-    let (field, _) = invalid_reason(apply_err(&mut g, vec![with(1.5, BlendMode::Normal)]));
+    let (field, _) = invalid_reason(apply_err(&mut g, vec![with(4.5, BlendMode::Normal)]));
     assert_eq!(field, "edits.0.opacity");
     apply_ok(&mut g, vec![with(0.5, BlendMode::Screen)]);
     assert_eq!(item_info(&g, "i").opacity.get(), 0.5);

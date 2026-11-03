@@ -29,6 +29,6 @@ mod keyframe;
 mod switch;
 
 pub use keyframe::{
-    Field, InvalidValue, Inverse, Keyframe, Override, Props, RestoreConflict, Value,
+    Field, InvalidValue, Inverse, Keyframe, MAX_OPACITY, Override, Props, RestoreConflict, Value,
 };
 pub use switch::{Motion, Step, plan_switch};

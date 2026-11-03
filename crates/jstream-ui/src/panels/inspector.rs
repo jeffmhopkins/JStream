@@ -1016,7 +1016,8 @@ fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoV
         current.with(|i| i.as_ref().map(|i| f64::from(i.opacity.get()) * 100.0))
     });
     let send_opacity = move |v: f64| {
-        let Some(opacity) = Finite32::new(to_f32(v.clamp(0.0, 100.0) / 100.0)) else {
+        let max = f64::from(jstream_protocol::MAX_OPACITY) * 100.0;
+        let Some(opacity) = Finite32::new(to_f32(v.clamp(0.0, max) / 100.0)) else {
             return false;
         };
         if current.with_untracked(|i| i.as_ref().is_some_and(|i| i.opacity == opacity)) {
@@ -1162,7 +1163,7 @@ fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoV
                     </select>
                 </label>
                 <NumberField label="Opacity" unit="%" value=opacity step=1.0 decimals=0
-                    min=0.0 max=100.0 send=send_opacity />
+                    min=0.0 max=400.0 send=send_opacity />
             </div>
         </Fold>
         // A keyframe changes only placement, visibility and opacity (ADR-0049), so its

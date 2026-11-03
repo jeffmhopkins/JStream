@@ -61,7 +61,9 @@ and calls this crate.
   legacy scale and a fit mode's aspect ratio all count in the extent, and the texture
   is sampled across it.
 - `visible == false`, a crop that leaves no pixels, or a scale of zero draws nothing.
-- Opacity is a straight-alpha multiplier in `[0, 1]`, default 1: `jstream-core` passes
+- Opacity is a straight-alpha multiplier in `[0, 1]`, default 1, and above 1, up to
+  `MAX_OPACITY` (4), a gain on the item's light: the shader multiplies its premultiplied
+  colour by the opacity and its alpha by at most 1 (#1101). `jstream-core` passes
   an item's stored opacity, or during a transition its track's sampled one
   ([ARCH › Data model](../../docs/ARCHITECTURE.md#data-model)).
 - `Item.blend` is its `BlendMode` (re-exported), drawn per

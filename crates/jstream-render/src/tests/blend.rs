@@ -50,11 +50,15 @@ fn mixed(mode: BlendMode, cs: f64, cb: f64) -> f64 {
 
 /// The resolved straight sRGB pixel of `source` (straight sRGB 8-bit, times `opacity`)
 /// composited with `mode` over `backdrop` (straight sRGB in [0, 1], alpha linear).
+/// Opacity above 1 is a gain (#1101): the linear colour times the excess, the alpha
+/// times at most 1.
 fn reference(mode: BlendMode, source: [u8; 4], opacity: f32, backdrop: Color) -> [u8; 4] {
-    let sa = f64::from(source[3]) / 255.0 * f64::from(opacity);
+    let opacity = f64::from(opacity);
+    let sa = f64::from(source[3]) / 255.0 * opacity.min(1.0);
     let ba = f64::from(backdrop.a);
     let back = [backdrop.r, backdrop.g, backdrop.b].map(|c| decode(f64::from(c)));
-    let src = [source[0], source[1], source[2]].map(|c| decode(f64::from(c) / 255.0));
+    let src =
+        [source[0], source[1], source[2]].map(|c| decode(f64::from(c) / 255.0) * opacity.max(1.0));
     let alpha = if mode == BlendMode::Additive {
         sa + ba * (1.0 - sa)
     } else {
@@ -167,6 +171,96 @@ fn every_mode_matches_the_reference() {
             }
         }
     }
+}
+
+/// #1101: opacity above 1 is a gain on the item's light. An additive item adds that
+/// many times its light; a normal one is drawn brighter and covers the backdrop no more
+/// than fully.
+#[test]
+fn opacity_above_one_is_a_gain_on_the_light() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let backdrops = [
+        Color::rgb(0.1, 0.2, 0.3),
+        Color {
+            r: 0.5,
+            g: 0.9,
+            b: 0.25,
+            a: 0.5,
+        },
+    ];
+    let sources: [([u8; 4], f32); 3] = [
+        ([60, 40, 20, 255], 2.0),
+        ([90, 60, 30, 128], 3.0),
+        ([20, 30, 40, 255], jstream_protocol::MAX_OPACITY),
+    ];
+    for mode in [BlendMode::Normal, BlendMode::Additive] {
+        for backdrop in backdrops {
+            for (rgba, opacity) in sources {
+                let image = solid(compositor, 2, 2, rgba);
+                let items = [blended(&image, Placement::IDENTITY, opacity, mode)];
+                let shot = render(compositor, (4, 4), backdrop, &items);
+                let expected = reference(mode, rgba, opacity, backdrop);
+                let got = shot.pixel(0, 0).expect("inside");
+                assert!(
+                    (0..4).all(|c| got[c].abs_diff(expected[c]) <= TOLERANCE),
+                    "{} of {rgba:?} at {opacity} over {backdrop:?}: {got:?}, expected \
+                     {expected:?}",
+                    mode.as_str()
+                );
+            }
+        }
+    }
+    // Twice the light of the same item at 1, added to black.
+    let image = solid(compositor, 2, 2, [60, 40, 20, 255]);
+    let once = render(
+        compositor,
+        (4, 4),
+        Color::rgb(0.0, 0.0, 0.0),
+        &[blended(
+            &image,
+            Placement::IDENTITY,
+            1.0,
+            BlendMode::Additive,
+        )],
+    );
+    let twice = render(
+        compositor,
+        (4, 4),
+        Color::rgb(0.0, 0.0, 0.0),
+        &[blended(
+            &image,
+            Placement::IDENTITY,
+            2.0,
+            BlendMode::Additive,
+        )],
+    );
+    let linear = |v: u8| f64::from(srgb_channel_to_linear(f32::from(v) / 255.0));
+    let (a, b) = (
+        once.pixel(0, 0).expect("inside"),
+        twice.pixel(0, 0).expect("inside"),
+    );
+    for c in 0..3 {
+        let ratio = linear(b[c]) / linear(a[c]);
+        assert!((ratio - 2.0).abs() < 0.1, "channel {c}: {a:?} then {b:?}");
+    }
+    // Over the limit is refused.
+    let refused = compositor.render(
+        &Scene {
+            canvas: FrameSize::new(4, 4).expect("non-zero"),
+            background: Color::rgb(0.0, 0.0, 0.0),
+            items: &[blended(
+                &image,
+                Placement::IDENTITY,
+                jstream_protocol::MAX_OPACITY + 0.5,
+                BlendMode::Additive,
+            )],
+        },
+        true,
+    );
+    assert!(refused.is_err());
 }
 
 /// Items in a row that read the backdrop each see the ones before: the second difference

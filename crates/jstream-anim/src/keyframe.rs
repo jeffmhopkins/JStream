@@ -53,7 +53,7 @@ pub struct Props<G, C> {
     pub crop: C,
     /// Whether it is drawn.
     pub visible: bool,
-    /// Its opacity, in `0..=1`.
+    /// Its opacity, from 0 to [`MAX_OPACITY`]: above 1 a gain on its light.
     pub opacity: f32,
 }
 
@@ -91,14 +91,20 @@ impl<G, C, E> Value<G, C, E> {
     /// edits, which the graph runs before writing.
     pub fn problem(&self) -> Option<InvalidValue> {
         match self {
-            Value::Opacity(o) if !o.is_finite() || !(0.0..=1.0).contains(o) => Some(InvalidValue {
-                field: Field::Opacity,
-                reason: "must be finite and within 0..=1",
-            }),
+            Value::Opacity(o) if !o.is_finite() || !(0.0..=MAX_OPACITY).contains(o) => {
+                Some(InvalidValue {
+                    field: Field::Opacity,
+                    reason: "must be finite and within 0..=4",
+                })
+            }
             _ => None,
         }
     }
 }
+
+/// The highest opacity an item or an override holds: the protocol's `MAX_OPACITY`
+/// (#1101), which this crate doesn't depend on; `jstream-graph` checks they agree.
+pub const MAX_OPACITY: f32 = 4.0;
 
 /// A value [`Keyframe::write`] refuses. It names the field and a fixed reason, never the
 /// value.
@@ -466,13 +472,13 @@ mod tests {
     #[test]
     fn invalid_opacity_is_refused_and_changes_nothing() {
         let mut kf = Kf::new();
-        for bad in [f32::NAN, f32::INFINITY, -0.01, 1.01] {
+        for bad in [f32::NAN, f32::INFINITY, -0.01, 4.01] {
             let err = kf.write("a", Value::Opacity(bad)).expect_err("refused");
             assert_eq!(err.field, Field::Opacity);
-            assert_eq!(err.to_string(), "opacity must be finite and within 0..=1");
+            assert_eq!(err.to_string(), "opacity must be finite and within 0..=4");
             assert!(kf.is_empty());
         }
-        for good in [0.0, 1.0] {
+        for good in [0.0, 1.0, 2.5, MAX_OPACITY] {
             kf.write("a", Value::Opacity(good)).expect("in range");
         }
     }

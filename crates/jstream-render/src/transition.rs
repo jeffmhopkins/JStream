@@ -259,7 +259,7 @@ impl Track {
             // `phase` never returns one.
             Track::Through { .. } => return None,
         };
-        let opacity = sampled.opacity.clamp(0.0, 1.0);
+        let opacity = sampled.opacity.clamp(0.0, jstream_protocol::MAX_OPACITY);
         let size = sampled.geometry.size;
         let drawn = opacity > 0.0 && size.width.get() > 0.0 && size.height.get() > 0.0;
         drawn.then_some(Endpoint { opacity, ..sampled })

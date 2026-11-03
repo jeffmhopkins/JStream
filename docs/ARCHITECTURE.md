@@ -304,7 +304,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   video chain (the virtual camera's is its only one) and the master stage and each
   output that carries audio an audio chain, and their filters can't hold a reference
   (a scene, source, bus or asset) yet. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
-  multiplier in [0, 1]) and `blend` (default `normal`; every mode is drawn,
+  multiplier in [0, 1], and above 1, up to 4, a gain on its light, #1101) and `blend` (default `normal`; every mode is drawn,
   [ADR-0082](adr/0082-blend-modes-drawn.md)). A scene's `filters` and a placement's `effects[]` are video filter
   chains, the owners `scene` and `item` of `filter.*`
   ([ADR-0065](adr/0065-scene-chains-and-item-effects.md); item effects are in v1 under
@@ -1054,7 +1054,8 @@ centre, stacking order breaking ties; there is still no depth buffer. In a Fade 
 two scenes each side's items keep their own camera, a Move between two 3D scenes
 interpolates the camera, and what a switch takes from the screen mid-Fade or
 mid-stinger leaves through the camera each item had.
-Opacity is a straight multiplier in `[0, 1]`. The blend is the item's mode
+Opacity is a straight multiplier in `[0, 1]`, and above 1, up to 4, a gain on the item's
+light: its colour is multiplied and its alpha by at most 1 (#1101). The blend is the item's mode
 ([ADR-0082](adr/0082-blend-modes-drawn.md)): fixed-function for `normal` (premultiplied
 src-over), `additive`, `screen` and `multiply`; the other five read a copy of the
 target under the item, and overlay, difference and exclusion mix sRGB-encoded values. The composite pass writes premultiplied linear light into `Rgba16Float`; a
@@ -1149,7 +1150,7 @@ is on screen: the control thread samples the running plan at the switch time wit
 same function, so both threads agree on it without the render thread keeping any
 state. Rotation, tilt and turn take the shortest way round. The easing curves are one
 shared function (`jstream_protocol::Easing`) with golden tests. After easing, values
-are clamped to a hard range: opacity to `[0, 1]`, crop to `[0, source size]`, size to
+are clamped to a hard range: opacity to `[0, 4]`, crop to `[0, source size]`, size to
 `≥ 0` and perspective to `≥ 1`; the spring may overshoot everything else.
 
 **S1 result**, on a Ryzen 9 8945HS with Radeon 780M (driver 32.0.22029.9039), a

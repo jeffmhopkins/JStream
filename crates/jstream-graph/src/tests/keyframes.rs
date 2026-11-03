@@ -306,7 +306,7 @@ fn a_keyframe_scene_refuses_what_it_cant_hold() {
     ));
     // An opacity outside [0, 1] is refused as the item's own is.
     assert_eq!(
-        refused(&mut graph, set_opacity("i1", Some("k"), 1.5)).0,
+        refused(&mut graph, set_opacity("i1", Some("k"), 4.5)).0,
         "edits.0.opacity"
     );
 }
