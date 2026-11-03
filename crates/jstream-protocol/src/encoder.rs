@@ -253,7 +253,7 @@ pub struct EncoderSessionInfo {
 }
 
 /// A codec library the engine downloads on a person's request, as `codec.downloads`
-/// lists it (0.68, ADR-0061). On Linux it is Cisco's OpenH264: JStream never ships it,
+/// lists it (0.69, ADR-0061). On Linux it is Cisco's OpenH264: JStream never ships it,
 /// and downloads Cisco's own binary from Cisco's server only when a person asks, since
 /// Cisco's patent licence covers that copy alone. A client offering the download shows
 /// `notice` with a link to `license_url`, and sends `codec.download` only when the

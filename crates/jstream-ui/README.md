@@ -436,7 +436,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   source names that isn't listed now (a closed window) as "Window not open (<ID>)". It
   asks again each time the field gets focus, so a window opened since shows up; until
   the first list arrives, or while the engine can't list targets, it is the ID as text,
-  and a failed refresh keeps the last list. Fields
+  and a failed refresh keeps the last list. A font setting (an `asset` that takes
+  `ttf` or `otf` and only font types, `takes_fonts`) is a list from `font.list`
+  ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)): "Bundled font" (none), each installed font by family and style
+  (stored as an `absolute` asset of its path), and "Other file…", which shows the
+  root and path below it (`font_choices`, tested natively); a stored file the list
+  doesn't name selects "Other file…". Until the list arrives, or if the engine can't
+  list fonts, only the root and path show. Fields
   come in the descriptor's order, grouped by `group`, advanced
   ones collapsed, and hidden while their `visible_if` doesn't hold. A type this UI
   doesn't know is shown read-only. A change is checked with the descriptor's own check,
@@ -455,8 +461,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `source.set_settings` of every live setting changed since it opened, plus any it sent
   before, which may be back at its first value (`live_patch`, tested natively). With a
   gesture open, OK's batch carries `ends_gesture`, so it is one undo step.
-  Cancel, Escape and the backdrop drop the draft and send `live.cancel` (as does closing
-  the dialog any way but OK), so the output shows the stored values again and nothing
+  Cancel, Escape and the backdrop drop the draft and send `live.cancel` (as does any close
+  but a committing OK), so the output shows the stored values again and nothing
   is saved; Defaults empties it, and shows that live too. Enter in a
   field blurs it before pressing OK, so the field's `change` reaches the draft first.
   The filter chains are the Filters panel's rows (below), which apply at once. A double click on
@@ -675,7 +681,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   "Download Cisco's OpenH264 2.6.0" button sends `codec.download` and reads
   "Downloading…" until the engine answers. Once installed, the section keeps the notice
   licence link and terms beside a Delete button (`codec.delete`). A failure, such as a file
-  that didn't match JStream's pin, shows under it. An engine older than 0.68, or one
+  that didn't match JStream's pin, shows under it. An engine older than 0.69, or one
   that downloads nothing, shows no offer. Above the cards, the program output's row
   ("master") and a row per output with its state each have an "FX N" button counting
   that chain's filters, which shows the chain in the Filters panel (below the rows,

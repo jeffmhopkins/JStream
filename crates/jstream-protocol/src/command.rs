@@ -1458,7 +1458,7 @@ pub enum Action {
         kind_id: String,
     },
     /// Downloads a codec library `codec.downloads` lists, from its maker's server, and
-    /// checks it against what the engine pins (0.68, ADR-0061): on Linux, Cisco's
+    /// checks it against what the engine pins (0.69, ADR-0061): on Linux, Cisco's
     /// OpenH264. Send it only when a person asks, after showing the download's `notice`
     /// and a link to its `license_url`. It answers once the library is in place, which
     /// takes as long as the download; outputs started afterwards can encode with it.
@@ -1472,7 +1472,7 @@ pub enum Action {
         /// The download, as `codec.downloads` lists it.
         download_id: String,
     },
-    /// Deletes a downloaded codec library (0.68, ADR-0061). `codec.downloads` then
+    /// Deletes a downloaded codec library (0.69, ADR-0061). `codec.downloads` then
     /// lists it as not installed, and outputs started afterwards can't encode with it;
     /// one running keeps its encoder. Succeeds for one that isn't installed. For a
     /// person only, like `codec.download`. Fails with `invalid_argument` on

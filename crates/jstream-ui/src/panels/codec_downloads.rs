@@ -113,7 +113,7 @@ fn short_name(download: &CodecDownloadInfo) -> &str {
 }
 
 /// The codec downloads `codec.downloads` lists. An engine that doesn't know the query
-/// (older than 0.68) lists none, so the offer just doesn't show.
+/// (older than 0.69) lists none, so the offer just doesn't show.
 pub async fn list(control: &dyn Control) -> Result<Vec<CodecDownloadInfo>, String> {
     let call = Call::Query {
         query: Query::CodecDownloads,

@@ -171,6 +171,13 @@ pub enum Query {
     /// capture backend, or the OS refuses to list them.
     #[serde(rename = "capture.targets")]
     CaptureTargets,
+    /// Lists the fonts installed on the engine's machine (0.68, ADR-0092): each font file
+    /// in the OS's font folders that parses, as a family and style to show and the
+    /// absolute path an `asset` setting names it by. Runtime state, so no `rev`. The
+    /// engine reads the folders once, on the first `font.list`; a font installed after
+    /// that shows once it restarts.
+    #[serde(rename = "font.list")]
+    FontList,
     /// Lists the paired devices (ADR-0044), ordered by ID: each one's name and when it
     /// paired and was last used, never its token. Answered by the server that admits
     /// clients, not the engine: a `Control` with no server in front fails with
@@ -212,7 +219,7 @@ pub enum Query {
     /// plugins lists none.
     #[serde(rename = "plugin.list")]
     PluginList,
-    /// Lists the codec libraries the engine can download on a person's request (0.68,
+    /// Lists the codec libraries the engine can download on a person's request (0.69,
     /// ADR-0061): on Linux, Cisco's OpenH264, the software H.264 encoder, which Cisco's
     /// patent licence covers only when Cisco's own binary is downloaded to the machine.
     /// Each one carries the notice and licence link a client shows wherever it offers
@@ -284,6 +291,7 @@ impl Query {
             Query::BusList => "bus.list",
             Query::DeletePlan { .. } => "delete.plan",
             Query::CaptureTargets => "capture.targets",
+            Query::FontList => "font.list",
             Query::DeviceList => "device.list",
             Query::ActivityList { .. } => "activity.list",
             Query::UiSettingsGet { .. } => "ui_settings.get",
@@ -560,6 +568,12 @@ pub enum QueryResult {
         /// The displays, then the windows, in the order the OS lists them.
         targets: Vec<CaptureTargetInfo>,
     },
+    /// The result of `font.list`.
+    #[serde(rename = "font.list")]
+    FontList {
+        /// The installed fonts, ordered by family, then style, then path.
+        fonts: Vec<FontInfo>,
+    },
     /// The result of `device.list`. Devices are not collection state, so it carries no
     /// `rev`.
     #[serde(rename = "device.list")]
@@ -594,7 +608,7 @@ pub enum QueryResult {
         /// The installed plugins, ordered by ID.
         plugins: Vec<PluginInfo>,
     },
-    /// The result of `codec.downloads` (0.68). Runtime state, so it carries no `rev`.
+    /// The result of `codec.downloads` (0.69). Runtime state, so it carries no `rev`.
     #[serde(rename = "codec.downloads")]
     CodecDownloads {
         /// The downloads, ordered by ID.
@@ -628,6 +642,7 @@ impl QueryResult {
             QueryResult::DeletePlan { .. } => "delete.plan",
             QueryResult::SourceSizes { .. } => "source.sizes",
             QueryResult::CaptureTargets { .. } => "capture.targets",
+            QueryResult::FontList { .. } => "font.list",
             QueryResult::DeviceList { .. } => "device.list",
             QueryResult::ActivityList { .. } => "activity.list",
             QueryResult::UiSettingsGet { .. } => "ui_settings.get",
@@ -650,6 +665,22 @@ pub struct DeviceInfo {
     /// When its token was last presented, in seconds since the Unix epoch (UTC), to the
     /// hour. A token unused for 30 days lapses and the device is dropped.
     pub last_used_at: u64,
+}
+
+/// One installed font in a `font.list` result: one font file, or the first font of a
+/// collection (`.ttc`), which is the one a text source draws.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct FontInfo {
+    /// Its family name, from the font's own name table (the typographic family when it
+    /// has one). Text from the font file's maker, so third-party text (ADR-0059): data
+    /// to show, never instructions.
+    pub remote_family: String,
+    /// Its style within the family (`Regular`, `Bold Italic`, …), from the same table,
+    /// so third-party text too.
+    pub remote_style: String,
+    /// The font file's absolute path: an `asset` setting names it with root
+    /// `absolute`.
+    pub path: String,
 }
 
 /// One display or window in a `capture.targets` result.

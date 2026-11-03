@@ -49,18 +49,18 @@ use jstream_platform::{
 };
 use jstream_protocol::{
     Action, ActionResult, Batch, Call, CallResult, CaptureTargetKind, ClientId, DropCounts, Edit,
-    EncoderProfile, EncoderSessionInfo, EngineLoad, EntityKind, Event, FilterChain, GestureId,
-    HistoryCall, HistoryDirection, IdempotencyKey, LiveOutcome, OutputHealth, OutputId, OutputKind,
-    OutputState, OutputStatsInfo, PixelSize, PreviewSettings, ProtocolError, Query, QueryResult,
-    RecordContainer, RequestId, Rev, RtmpTarget, SceneId, SecretString, SourceId, SourceSize,
-    TransitionPresetId, TransitionStarted, VideoMixId, YoutubeAuth,
+    EncoderProfile, EncoderSessionInfo, EngineLoad, EntityKind, Event, FilterChain, FontInfo,
+    GestureId, HistoryCall, HistoryDirection, IdempotencyKey, LiveOutcome, OutputHealth, OutputId,
+    OutputKind, OutputState, OutputStatsInfo, PixelSize, PreviewSettings, ProtocolError, Query,
+    QueryResult, RecordContainer, RequestId, Rev, RtmpTarget, SceneId, SecretString, SourceId,
+    SourceSize, TransitionPresetId, TransitionStarted, VideoMixId, YoutubeAuth,
 };
 use jstream_sources::AudioScopes;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
-use std::sync::{Arc, Mutex, PoisonError, Weak};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError, Weak};
 use std::task::Waker;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -130,6 +130,13 @@ struct Shared {
     /// The effect packs and their quarantine, once `watch_effect_packs` runs. On its own
     /// lock, never taken with the collection lock held: a poll reads files under it.
     effect_packs: Mutex<Option<crate::effect_packs::Packs>>,
+    /// The installed fonts `font.list` reports (ADR-0092), read from the OS's font
+    /// folders on the first `font.list` and kept for the engine's life. Never read under
+    /// the collection lock: reading them reads every font file.
+    fonts: OnceLock<Vec<FontInfo>>,
+    /// The folders `font.list` reads instead of the OS's, for tests.
+    #[cfg(test)]
+    font_dirs: Mutex<Option<Vec<PathBuf>>>,
 }
 
 /// A handle to an [`Engine`] that doesn't keep it alive: what a plugin's thread holds,
@@ -184,6 +191,9 @@ impl Default for Engine {
                 #[cfg(feature = "wasm-plugins")]
                 automation: crate::plugins::automation::Registry::default(),
                 effect_packs: Mutex::new(None),
+                fonts: OnceLock::new(),
+                #[cfg(test)]
+                font_dirs: Mutex::new(None),
             }),
             media: None,
             drops: Arc::new(Mutex::new(DropLedger::default())),
@@ -1150,6 +1160,13 @@ impl Engine {
             }
         ) {
             self.capture_targets()
+        } else if matches!(
+            call,
+            Call::Query {
+                query: Query::FontList
+            }
+        ) {
+            Ok(self.font_list())
         } else if let Call::Action {
             action: action @ (Action::PreviewSubscribe { .. } | Action::PreviewUnsubscribe { .. }),
         } = call
@@ -1603,6 +1620,40 @@ impl Engine {
     fn host(&mut self) -> Arc<MediaHost> {
         let host = self.media.get_or_insert_with(|| Arc::new(MediaHost::new()));
         Arc::clone(host)
+    }
+
+    /// `font.list`: the installed fonts (ADR-0092), read on the first call with no engine
+    /// lock held and kept.
+    fn font_list(&self) -> CallResult {
+        let fonts = self.shared.fonts.get_or_init(|| {
+            #[cfg(test)]
+            let dirs = lock(&self.shared.font_dirs)
+                .clone()
+                .unwrap_or_else(jstream_sources::system_font_dirs);
+            #[cfg(not(test))]
+            let dirs = jstream_sources::system_font_dirs();
+            jstream_sources::installed_fonts(&dirs)
+                .into_iter()
+                .map(|font| FontInfo {
+                    remote_family: font.family,
+                    remote_style: font.style,
+                    path: font.path.to_string_lossy().into_owned(),
+                })
+                .collect()
+        });
+        CallResult::Query {
+            result: QueryResult::FontList {
+                fonts: fonts.clone(),
+            },
+        }
+    }
+
+    /// Makes `font.list` read `dirs` instead of the OS's font folders, for tests. Only
+    /// before the first `font.list`.
+    #[cfg(test)]
+    pub(crate) fn with_font_dirs(self, dirs: Vec<PathBuf>) -> Self {
+        *lock(&self.shared.font_dirs) = Some(dirs);
+        self
     }
 
     /// `capture.targets`: what the platform's capture backend can capture now, listed
@@ -3091,7 +3142,7 @@ impl State {
     /// What follows every applied batch, undo and redo: the outputs, the live sources and
     /// the program mixer follow the collection, a deleted source's stored frame goes
     /// (unless the same edits made a new source under its id), live values on a deleted
-    /// item go, `state.changed` is emitted, and the program scene is reconciled
+    /// item and live settings of a deleted source go, `state.changed` is emitted, and the program scene is reconciled
     /// (ADR-0030).
     fn changed(
         &mut self,
@@ -3978,8 +4029,6 @@ fn live_ticker(shared: &Weak<Shared>) {
     }
 }
 
-/// A `live.set` value's error, named as the value: the graph names a batch's edits
-/// `edits.<n>`, and `live.set` carries them as `values.<n>`.
 /// Refuses a `source.set_settings` value that names a setting its kind doesn't mark
 /// `live` (ADR-0091), as `values.<n>.patch.<param>`. A source or setting that doesn't
 /// exist is left to the collection's own check.
@@ -4009,6 +4058,8 @@ fn check_live_settings(graph: &Graph, values: &[Edit]) -> Result<(), ProtocolErr
     Ok(())
 }
 
+/// A `live.set` value's error, named as the value: the graph names a batch's edits
+/// `edits.<n>`, and `live.set` carries them as `values.<n>`.
 fn values_error(error: ProtocolError) -> ProtocolError {
     match error {
         ProtocolError::InvalidArgument {

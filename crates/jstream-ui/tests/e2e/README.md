@@ -235,7 +235,10 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   of `source.set_settings` with `rev` unchanged; Cancel sends `live.cancel` and saves
   nothing; OK's batch carries `ends_gesture` with the final colour as one edit, and the
   dialog opened again shows it. That the output draws the value is the engine's
-  test.
+  test. With the `text` kind described, a new Text source's Font list offers "Bundled
+  font", the mock's two fonts (`MOCK_FONTS`) and "Other file…" (ADR-0092); a picked
+  font is saved on OK as one edit and selected when the dialog opens again, and "Other
+  file…" shows the root and path, which stay shown for a path the list doesn't name.
 - **Capture targets** (`capture-targets.spec.js`): with the `window` kind described, a
   new Window capture's Properties dialog lists the mock's one window by name and size
   after None, and not its display; picking it and pressing OK is one edit, and the

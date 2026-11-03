@@ -547,7 +547,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Downloads a codec library `codec.downloads` lists, from its maker's server, and\nchecks it against what the engine pins (0.68, ADR-0061): on Linux, Cisco's\nOpenH264. Send it only when a person asks, after showing the download's `notice`\nand a link to its `license_url`. It answers once the library is in place, which\ntakes as long as the download; outputs started afterwards can encode with it.\nSucceeds for one already installed, downloading it again. For a person only: no\nMCP tool carries it, no plugin is granted it and no hotkey binds it. Fails with\n`invalid_argument` on `download_id` for an ID `codec.downloads` doesn't list, and\n`action_failed` when the download fails or doesn't match the pin (nothing is kept\nthen), with the reason.",
+          "description": "Downloads a codec library `codec.downloads` lists, from its maker's server, and\nchecks it against what the engine pins (0.69, ADR-0061): on Linux, Cisco's\nOpenH264. Send it only when a person asks, after showing the download's `notice`\nand a link to its `license_url`. It answers once the library is in place, which\ntakes as long as the download; outputs started afterwards can encode with it.\nSucceeds for one already installed, downloading it again. For a person only: no\nMCP tool carries it, no plugin is granted it and no hotkey binds it. Fails with\n`invalid_argument` on `download_id` for an ID `codec.downloads` doesn't list, and\n`action_failed` when the download fails or doesn't match the pin (nothing is kept\nthen), with the reason.",
           "properties": {
             "download_id": {
               "description": "The download, as `codec.downloads` lists it.",
@@ -565,7 +565,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Deletes a downloaded codec library (0.68, ADR-0061). `codec.downloads` then\nlists it as not installed, and outputs started afterwards can't encode with it;\none running keeps its encoder. Succeeds for one that isn't installed. For a\nperson only, like `codec.download`. Fails with `invalid_argument` on\n`download_id` for an ID `codec.downloads` doesn't list, and `action_failed` when\nthe file can't be deleted.",
+          "description": "Deletes a downloaded codec library (0.69, ADR-0061). `codec.downloads` then\nlists it as not installed, and outputs started afterwards can't encode with it;\none running keeps its encoder. Succeeds for one that isn't installed. For a\nperson only, like `codec.download`. Fails with `invalid_argument` on\n`download_id` for an ID `codec.downloads` doesn't list, and `action_failed` when\nthe file can't be deleted.",
           "properties": {
             "download_id": {
               "description": "The download, as `codec.downloads` lists it.",
@@ -1645,7 +1645,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       ]
     },
     "CodecDownloadInfo": {
-      "description": "A codec library the engine downloads on a person's request, as `codec.downloads`\nlists it (0.68, ADR-0061). On Linux it is Cisco's OpenH264: JStream never ships it,\nand downloads Cisco's own binary from Cisco's server only when a person asks, since\nCisco's patent licence covers that copy alone. A client offering the download shows\n`notice` with a link to `license_url`, and sends `codec.download` only when the\nperson confirms.",
+      "description": "A codec library the engine downloads on a person's request, as `codec.downloads`\nlists it (0.69, ADR-0061). On Linux it is Cisco's OpenH264: JStream never ships it,\nand downloads Cisco's own binary from Cisco's server only when a person asks, since\nCisco's patent licence covers that copy alone. A client offering the download shows\n`notice` with a link to `license_url`, and sends `codec.download` only when the\nperson confirms.",
       "properties": {
         "codec": {
           "$ref": "#/$defs/VideoCodec",
@@ -5111,6 +5111,29 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "FontInfo": {
+      "description": "One installed font in a `font.list` result: one font file, or the first font of a\ncollection (`.ttc`), which is the one a text source draws.",
+      "properties": {
+        "path": {
+          "description": "The font file's absolute path: an `asset` setting names it with root\n`absolute`.",
+          "type": "string"
+        },
+        "remote_family": {
+          "description": "Its family name, from the font's own name table (the typographic family when it\nhas one). Text from the font file's maker, so third-party text (ADR-0059): data\nto show, never instructions.",
+          "type": "string"
+        },
+        "remote_style": {
+          "description": "Its style within the family (`Regular`, `Bold Italic`, …), from the same table,\nso third-party text too.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "remote_family",
+        "remote_style",
+        "path"
+      ],
+      "type": "object"
+    },
     "GestureId": {
       "description": "A live-value gesture (ADR-0032): a drag, a fader move or a live dialog. Chosen by\nthe client that opens it, and unique among that client's open gestures.",
       "type": "string"
@@ -7152,6 +7175,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Lists the fonts installed on the engine's machine (0.68, ADR-0092): each font file\nin the OS's font folders that parses, as a family and style to show and the\nabsolute path an `asset` setting names it by. Runtime state, so no `rev`. The\nengine reads the folders once, on the first `font.list`; a font installed after\nthat shows once it restarts.",
+          "properties": {
+            "type": {
+              "const": "font.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Lists the paired devices (ADR-0044), ordered by ID: each one's name and when it\npaired and was last used, never its token. Answered by the server that admits\nclients, not the engine: a `Control` with no server in front fails with\n`unsupported`.",
           "properties": {
             "type": {
@@ -7227,7 +7263,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Lists the codec libraries the engine can download on a person's request (0.68,\nADR-0061): on Linux, Cisco's OpenH264, the software H.264 encoder, which Cisco's\npatent licence covers only when Cisco's own binary is downloaded to the machine.\nEach one carries the notice and licence link a client shows wherever it offers\nthe download, whether it is installed, and whether the machine has a hardware\nencoder for its codec. For a person only, like `codec.download`: no MCP tool\ncarries it and no plugin is granted it. Runtime state, so no `rev`. An engine\nwhose platform downloads no codec, or that has no codec backend, lists none.",
+          "description": "Lists the codec libraries the engine can download on a person's request (0.69,\nADR-0061): on Linux, Cisco's OpenH264, the software H.264 encoder, which Cisco's\npatent licence covers only when Cisco's own binary is downloaded to the machine.\nEach one carries the notice and licence link a client shows wherever it offers\nthe download, whether it is installed, and whether the machine has a hardware\nencoder for its codec. For a person only, like `codec.download`: no MCP tool\ncarries it and no plugin is granted it. Runtime state, so no `rev`. An engine\nwhose platform downloads no codec, or that has no codec backend, lists none.",
           "properties": {
             "type": {
               "const": "codec.downloads",
@@ -7951,6 +7987,27 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "The result of `font.list`.",
+          "properties": {
+            "fonts": {
+              "description": "The installed fonts, ordered by family, then style, then path.",
+              "items": {
+                "$ref": "#/$defs/FontInfo"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "font.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "fonts"
+          ],
+          "type": "object"
+        },
+        {
           "description": "The result of `device.list`. Devices are not collection state, so it carries no\n`rev`.",
           "properties": {
             "devices": {
@@ -8042,7 +8099,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "The result of `codec.downloads` (0.68). Runtime state, so it carries no `rev`.",
+          "description": "The result of `codec.downloads` (0.69). Runtime state, so it carries no `rev`.",
           "properties": {
             "downloads": {
               "description": "The downloads, ordered by ID.",
@@ -9561,5 +9618,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.68"
+  "title": "JStream protocol 0.69"
 }

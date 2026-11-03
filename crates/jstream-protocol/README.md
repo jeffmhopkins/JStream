@@ -115,9 +115,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `live.list`, `capture.targets`,
-  `source.sizes`, `activity.list`, `plugin.list` and `codec.downloads`, with `QueryResult`
+  `font.list`, `source.sizes`, `activity.list`, `plugin.list` and `codec.downloads`, with
+  `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
-  `CaptureTargetInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
+  `CaptureTargetInfo`, `FontInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
   (`activity.rs` holds the last, with `MAX_ACTIVITY_ENTRIES` and
   `MAX_ACTIVITY_SUMMARY_CHARS`). `state.get` carries the `Canvas`, and
   `ItemInfo`
@@ -195,10 +196,11 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.68 because of the
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.69 because of the
   `codec.downloads` query and the `codec.download` and `codec.delete` actions, which
   download Cisco's OpenH264 on a person's request ([Codec downloads](#design),
-  [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)); 0.67 because `live.set`
+  [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)); 0.68 because of the
+  `font.list` query ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)); 0.67 because `live.set`
   takes a source's settings whose kind marks them `live` (`source.set_settings`,
   [ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)); 0.66 because
   `stats.tick`'s `chains` counts the output stage's video chains too (`ChainCost`'s
@@ -1057,6 +1059,13 @@ Queries read and never change `rev`. Those that read the collection state carry 
   for the display an empty `display` target captures. Runtime state, so no `rev`; a
   source can still name a window closed since. `action_failed` when the engine has no
   capture backend or the OS refuses the list. Added in 0.27.
+- `font.list`: the fonts installed on the engine's machine ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)), ordered by
+  family, then style, then path, each a `FontInfo`: `remote_family` and
+  `remote_style` from the font's name table (the font maker's text, so `remote_`), and
+  the file's absolute `path`, which a text source's `font` names as an `asset` with
+  root `absolute`. A collection lists its first font. The engine reads its OS's font
+  folders on the first call and keeps the list, so a font installed later shows after
+  a restart. Runtime state, so no `rev`. Added in 0.68.
 - `privacy.get`: deprecated
   ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), removed in
   1.0. JStream has no privacy screen, so it always answers `on: false`. Added in 0.33.
@@ -1092,7 +1101,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
 - `plugin.list`: the installed WASM automation plugins, ordered by ID. Not collection
   state, so no `rev`. Added in 0.58 (see *Plugins* below).
 - `codec.downloads`: the codec libraries the engine can download on a person's request,
-  ordered by ID. Not collection state, so no `rev`. Added in 0.68 (see *Codec
+  ordered by ID. Not collection state, so no `rev`. Added in 0.69 (see *Codec
   downloads* below).
 - `delete.plan {target}`: the batch that deletes a scene, source or bus (`target` is
   `{"type":"scene","scene_id":…}`, `{"type":"source","source_id":…}` or, since 0.24,
@@ -1607,7 +1616,7 @@ GPU, and the OS resets the device (#349,
 Cisco's patent licence for H.264 covers only Cisco's own OpenH264 binary, downloaded
 straight to the user's machine, so on Linux the engine downloads it from Cisco when a
 person asks, and never ships it
-([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)). Since 0.68:
+([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)). Since 0.69:
 - **`codec.downloads`** lists what the engine can download, ordered by ID, each a
   `CodecDownloadInfo`: its `download_id` (`openh264`), `name`, the `codec` it encodes,
   the pinned `version`, the `notice` and `license_url` a client shows wherever it offers
