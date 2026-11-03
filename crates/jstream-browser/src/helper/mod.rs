@@ -258,11 +258,15 @@ pub(crate) struct Host {
 
 impl Host {
     /// Sends one message to the engine. A failed write means the engine is gone: the
-    /// helper shuts down.
+    /// helper shuts down, from a task on the UI thread, so no lock the caller holds is
+    /// taken again.
     fn send(self: &Arc<Self>, message: &ToEngine) {
         let sent = wire::send(&mut *lock(&self.to_engine), message);
         if sent.is_err() {
-            self.stop();
+            // Later, on the UI thread: the sender may hold a page's locks, which
+            // stopping takes to close the page.
+            let host = Arc::clone(self);
+            post(move || host.stop());
         }
     }
 
@@ -289,12 +293,14 @@ impl Host {
         match message {
             ToHelper::Open { page, spec } => self.open(page, &spec),
             ToHelper::SetCss { page, css } => {
-                if let Some(page) = self.pages().get(&page).cloned() {
+                let page = self.pages().get(&page).cloned();
+                if let Some(page) = page {
                     page.set_css(css);
                 }
             }
             ToHelper::Reload { page } => {
-                if let Some(page) = self.pages().get(&page).cloned() {
+                let page = self.pages().get(&page).cloned();
+                if let Some(page) = page {
                     page.reload();
                 }
             }
@@ -304,7 +310,8 @@ impl Host {
                 }
             }
             ToHelper::Released { page, slot } => {
-                if let Some(page) = self.pages().get(&page).cloned() {
+                let page = self.pages().get(&page).cloned();
+                if let Some(page) = page {
                     page.textures.release(slot);
                 }
             }
