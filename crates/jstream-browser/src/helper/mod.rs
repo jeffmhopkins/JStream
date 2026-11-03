@@ -355,8 +355,9 @@ pub(crate) struct PageShared {
 struct SendBrowser(::cef::Browser);
 
 // SAFETY: CEF's browser object is reference counted with atomic counts, and the only
-// methods called through it (`host`, `main_frame`, then `close_browser` and
-// `execute_java_script`) are documented as callable on any thread of the browser process.
+// methods called through it (`host`, `main_frame`, then `close_browser`,
+// `execute_java_script` and `reload`) are documented as callable on any thread of the
+// browser process.
 unsafe impl Send for SendBrowser {}
 
 impl PageShared {

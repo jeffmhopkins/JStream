@@ -77,12 +77,12 @@ page closes it.
   documents have an opaque origin, which may only while the main frame is still on a
   file or blank page: a main-frame navigation the policy allows tells it where the
   frame now is (`main_frame_to`), before the new document exists, so a file or blank
-  page that navigates to the web loses the access. A page given as HTML is judged as a
-  page from the internet: its opaque `data:` documents may only when its spec sets
-  `local_network`, and only while the main frame is still on a `data:` document; it
-  loads no files. CEF can't tell opaque origins apart,
+  page that navigates to the web loses the access. A page given as HTML loads no files, and its
+  opaque `data:` documents may only when its spec sets `local_network`, and only while
+  the main frame is still on a `data:` document. CEF can't tell opaque origins apart,
   so a sandboxed or `data:` frame made by a third-party frame inside a file page counts
-  as the file page's. A request with no initiator is one the browser started (the
+  as the file page's, and inside an opted-in HTML page as the HTML page's: there the
+  opt-in covers every opaque frame, not only the page's own documents. A request with no initiator is one the browser started (the
   source's own load, a reload) and is judged as the source's own. The check reads the
   host Chromium has already canonicalised, so it can't catch a public name that
   resolves to a local address, whether fixed (`*.nip.io`) or by DNS rebinding.

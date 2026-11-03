@@ -136,8 +136,9 @@ pub enum Edit {
     },
     /// Deletes a scene and its items; the sources they placed stay. Rejected with
     /// `invalid_argument` while a `scene` source or a video mix shows it, or any source's
-    /// settings refer to it: delete those sources, point those mixes elsewhere, or clear
-    /// those references, first (in the same batch if needed). Hotkey bindings whose
+    /// or transition preset's settings refer to it (a stinger's `scene`): delete those
+    /// sources, point those mixes elsewhere, or clear those references, first (in the
+    /// same batch if needed). Hotkey bindings whose
     /// action names the scene are not blockers: they are removed with it (ADR-0040 §3).
     /// A scene with keyframe scenes is refused the same way, the variants listed as its
     /// blockers; delete them first. Inverse: `scene.create` with its role (omitted for

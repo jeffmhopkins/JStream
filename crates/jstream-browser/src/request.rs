@@ -665,6 +665,31 @@ mod tests {
         assert!(!opted.local_allowed_from(Some("null")));
     }
 
+    /// An opted-in HTML page's access reaches every opaque frame inside it, as a file
+    /// page's does (#721): a sandboxed frame that a third-party frame creates reports
+    /// `null` like the page's own documents, so it gets the access too. A third-party
+    /// frame with a real origin does not.
+    #[test]
+    fn an_opted_in_html_page_s_access_covers_every_opaque_frame_in_it() {
+        let opted = RequestPolicy::for_page(&PageSpec {
+            location: PageLocation::Html("<iframe src=\"https://widget.example/\">".into()),
+            size: jstream_media::FrameSize::new(16, 16).expect("size"),
+            fps: 30,
+            css: String::new(),
+            local_network: true,
+        });
+        // The widget's own origin is refused local targets.
+        assert!(deny(opted.check_from(
+            "http://192.168.1.1/",
+            Some("https://widget.example")
+        )));
+        // A sandboxed frame it makes is opaque, indistinguishable from the page's own.
+        assert_eq!(
+            opted.check_from("http://192.168.1.1/", Some("null")),
+            Verdict::Allow
+        );
+    }
+
     /// #347: a page from the internet can't reach this computer or the local network.
     #[test]
     fn a_web_page_may_not_reach_the_local_network() {

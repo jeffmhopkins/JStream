@@ -887,8 +887,9 @@ duration) and the new scene from then on, with no effect (`transition::cut_under
 `Track::Through` (`transition::through`): each comes in by its own appear effect after
 its delay plus `stagger_ms` × its index and is in by the cut, then goes by its disappear
 effect after the cut by the same delay, and is gone at the end. The transition runs for
-its whole duration. A preset with no scene, or one naming a scene that no longer exists,
-cuts at the cut point. The stinger scene's sources are shown when it starts, so a
+its whole duration. A preset with no scene cuts at the cut point; the scene it names
+can't be deleted while it does (the graph lists the preset as a blocker, and
+`delete.plan` sets its `scene` to `null`). The stinger scene's sources are shown when it starts, so a
 `browser` source with `restart_on_show` plays from the beginning each time.
 
 Pairing and its inputs: each visible item that has a frame (or places a nested scene,
