@@ -74,6 +74,13 @@ image-webp = { version = "0.2", default-features = false }
 insta = { version = "1", default-features = false }
 # JavaScript built-ins (`Array`) for the browser WebSocket client. Part of wasm-bindgen.
 js-sys = { version = "0.3", default-features = false, features = ["std"] }
+# The time-of-day clock of the `timer` source: the time in the machine's time zone, or in
+# a named IANA zone. Pure Rust. `tz-system` finds the machine's zone (on Windows through
+# `windows-sys`, already in the tree); `tzdb-zoneinfo` reads the zone rules from
+# `/usr/share/zoneinfo` on Linux and macOS, and `tzdb-bundle-platform` compiles them in
+# (`jiff-tzdb`) only where the OS has none, which is Windows. No default features: no
+# `serde`, no `alloc`-only builds, no concatenated Android database.
+jiff = { version = "0.2", default-features = false, features = ["std", "tz-system", "tzdb-bundle-platform", "tzdb-zoneinfo"] }
 jstream-aac = { path = "crates/jstream-aac" }
 jstream-anim = { path = "crates/jstream-anim" }
 jstream-audio = { path = "crates/jstream-audio" }
