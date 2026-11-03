@@ -108,9 +108,10 @@ impl CpuFrames {
 }
 
 impl Frames for CpuFrames {
-    fn page(&self) -> Box<dyn PageFrames> {
+    fn page(&self, size: FrameSize) -> Box<dyn PageFrames> {
         Box::new(CpuPageFrames {
             dir: Arc::clone(&self.dir),
+            size,
             state: Mutex::new(PageState::default()),
         })
     }
@@ -122,6 +123,8 @@ impl Frames for CpuFrames {
 
 struct CpuPageFrames {
     dir: Arc<Path>,
+    /// The page's size: no paint is read that is larger.
+    size: FrameSize,
     state: Mutex<PageState>,
 }
 
@@ -139,7 +142,7 @@ impl PageFrames for CpuPageFrames {
     /// read is skipped, keeping the last frame, and logged once until one is read again.
     fn paint(&self, paint: &Paint, pts: MediaTime) {
         let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
-        match read(&self.dir, &mut state.files, paint, pts) {
+        match read(&self.dir, self.size, &mut state.files, paint, pts) {
             Ok(frame) => {
                 state.latest = Some(Arc::new(frame));
                 state.warned = false;
@@ -166,15 +169,25 @@ impl PageFrames for CpuPageFrames {
     }
 }
 
-/// One paint's frame, read from its slot file in `dir`.
+/// One paint's frame, read from its slot file in `dir`, for a page of `page` size.
 fn read(
     dir: &Path,
+    page: FrameSize,
     files: &mut HashMap<u64, File>,
     paint: &Paint,
     pts: MediaTime,
 ) -> Result<VideoFrame, String> {
     if usize::from(paint.slot) >= SLOTS {
         return Err(format!("the helper named slot {}", paint.slot));
+    }
+    if paint.width > page.width() || paint.height > page.height() {
+        return Err(format!(
+            "the helper painted {}x{} for a {}x{} page",
+            paint.width,
+            paint.height,
+            page.width(),
+            page.height()
+        ));
     }
     let bytes = frame_bytes(paint.width, paint.height)
         .ok_or_else(|| format!("the helper painted {}x{}", paint.width, paint.height))?;
@@ -239,7 +252,7 @@ mod tests {
         let dir = FramesDir::create().expect("a folder");
         let frames = CpuFrames::new(dir.path());
         assert!(frames.on_cpu());
-        let page = frames.page();
+        let page = frames.page(FrameSize::new(2, 1).expect("size"));
         let pts = MediaTime::zero(jstream_media::Timebase::MILLIS);
         let paint = Paint {
             slot: 1,
@@ -256,7 +269,7 @@ mod tests {
         let frame = page.latest_cpu().expect("a frame");
         assert_eq!(frame.planes()[0].data(), &rgba);
         assert_eq!(frame.info().format, PixelFormat::Rgba8);
-        // A paint larger than its file, or than any page, keeps the last frame.
+        // A paint larger than its page, or than any page, keeps the last frame.
         page.paint(&Paint { width: 4, ..paint }, pts);
         page.paint(
             &Paint {

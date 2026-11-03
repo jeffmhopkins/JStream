@@ -22,7 +22,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use jstream_media::{MediaTime, VideoFrame};
+use jstream_media::{FrameSize, MediaTime, VideoFrame};
 use jstream_platform::{GpuFrame, MediaClock, PlatformError};
 
 use crate::wire::{self, ToEngine, ToHelper};
@@ -46,8 +46,8 @@ pub(crate) struct Paint {
 /// Makes each page's frame importer: the D3D12 import on Windows, the slot-file reader
 /// on Linux, a recorder in tests.
 pub(crate) trait Frames: Send + Sync {
-    /// A new page's importer.
-    fn page(&self) -> Box<dyn PageFrames>;
+    /// A new page's importer, for a page of `size`.
+    fn page(&self, size: FrameSize) -> Box<dyn PageFrames>;
     /// Whether its pages' frames are CPU frames ([`PageFrames::latest_cpu`]).
     fn on_cpu(&self) -> bool {
         false
@@ -186,7 +186,7 @@ impl Link {
         let (tx, rx) = mpsc::sync_channel(1);
         let page = Arc::new(PageLink {
             audio: PageAudio::new(),
-            frames: self.frames.page(),
+            frames: self.frames.page(spec.size),
             denied: AtomicU64::new(0),
             opened: Mutex::new(Some(tx)),
         });
@@ -434,7 +434,7 @@ mod tests {
     use std::io::{PipeReader, PipeWriter};
     use std::path::PathBuf;
 
-    use jstream_media::{FrameSize, Timebase};
+    use jstream_media::Timebase;
     use jstream_platform::{AudioInputHandler, AudioPacket};
 
     use super::*;
@@ -460,7 +460,7 @@ mod tests {
     struct Recorder(Paints);
 
     impl Frames for Recorder {
-        fn page(&self) -> Box<dyn PageFrames> {
+        fn page(&self, _size: FrameSize) -> Box<dyn PageFrames> {
             Box::new(Recorder(Arc::clone(&self.0)))
         }
     }

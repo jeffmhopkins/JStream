@@ -149,7 +149,7 @@ What follows is Windows; **On Linux** below says what differs.
   folder is made fresh for each helper, mode 0700, under `$XDG_RUNTIME_DIR`, else
   `/dev/shm`, else the temp folder, and removed with everything in it once the helper
   has stopped. Each paint names a slot file there; the engine reads the whole frame from
-  it (a size over 16384 a side, a slot past the third, a missing or short file is
+  it (a size larger than the page, a slot past the third, a missing or short file is
   skipped, keeping the last frame, and logged once) into a new RGBA8 CPU frame, BT.709
   full range, stamped on arrival, then releases the slot. `use_device` does nothing, and
   no adapter is sent.
@@ -170,7 +170,9 @@ What follows is Windows; **On Linux** below says what differs.
   paints on Linux, painting at its spec's frame rate with a transparent background.
   Command-line switches let pages play sound without a click and turn off first-run and
   error dialogs, and on Linux with neither `DISPLAY` nor `WAYLAND_DISPLAY` set, start
-  Chromium on its headless platform. Pop-ups are blocked. Every
+  Chromium on its headless platform. On Linux Chromium also keeps its in-memory
+  profiles' key itself (`--password-store=basic`), never opening the desktop's keyring.
+  Pop-ups are blocked. Every
   permission a page asks for (camera, microphone, screen capture, geolocation,
   notifications, clipboard, MIDI and the rest) is refused by the page's permission
   handler rather than left to CEF's default: a media request is cancelled and a

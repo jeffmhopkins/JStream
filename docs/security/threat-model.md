@@ -201,7 +201,7 @@ depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0048-sandboxed-browse
 [ADR-0048](../adr/0048-sandboxed-browser-helper.md) decide. Its first run on Windows
 hardware is still to come (#341). On Linux it is built as
 [ADR-0095](../adr/0095-browser-helper-on-linux.md) decides, and CI opens a page through
-the sandboxed helper on every run.
+the sandboxed helper in its `browser-linux` job.
 
 **Threats:** a page exploiting the renderer to reach the engine, which holds the stream
 keys; a page reading local files; a page driving the control API; a page using the
@@ -217,7 +217,7 @@ own folder or below it, compared by name and again after resolving links; popups
 shown. The control server refuses a page's WebSocket upgrade, since its `Origin` is
 foreign or `null`. On Linux the engine's line to the helper is a socket pair, which no
 other process can join, and pages' frames cross through a folder made fresh for each
-helper with mode 0700, which the engine reads only within a frame's bounded size.
+helper with mode 0700, which the engine reads only up to the size of the page it opened.
 
 **Controls (#549, #721):** a page from a public origin is also refused loopback,
 private, link-local and local-name targets, redirects to them included, unless it is

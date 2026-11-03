@@ -35,6 +35,11 @@ wrap_app! {
             // No first-run, crash-restore or error dialogs in a browser nobody sees.
             command_line.append_switch(Some(&"no-first-run".into()));
             command_line.append_switch(Some(&"noerrdialogs".into()));
+            // Profiles live in memory and nothing is kept, so on a Linux desktop Chromium
+            // has no reason to open the user's keyring, which could prompt to unlock it.
+            #[cfg(target_os = "linux")]
+            command_line
+                .append_switch_with_value(Some(&"password-store".into()), Some(&"basic".into()));
             // Pages are painted off screen, so on Linux they need no display at all: with
             // neither X11 nor Wayland (a server, a container, CI) Chromium's headless
             // platform stands in (ADR-0095).

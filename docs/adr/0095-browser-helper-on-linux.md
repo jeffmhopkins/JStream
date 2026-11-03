@@ -2,14 +2,14 @@
 id = "ADR-0095"
 title = "Browser sources on Linux: the helper paints in software and hands the engine CPU frames"
 kind = "adr"
-status = "accepted"
-tier = "agent"
+status = "proposed"
+tier = "maintainer"
 -->
 
 # ADR-0095: Browser sources on Linux: the helper paints in software and hands the engine CPU frames
 
 <!-- @generated begin adr-status -->
-> **Status:** accepted
+> **Status:** proposed
 <!-- @generated end adr-status -->
 
 <a id="context"></a>
@@ -33,14 +33,19 @@ On Linux Chromium sandboxes its subprocesses itself, with unprivileged user name
 the setuid `chrome-sandbox` beside the executable, so no bootstrap exe is needed, and the
 browser process and every subprocess can be one ordinary executable.
 
-This ADR carries ADR-0021's and ADR-0048's decisions to another platform. It keeps the
-sandbox on and changes no security posture, product scope or public promise, so it is
-agent tier ([ADR-0043](0043-narrow-maintainer-tier.md)).
+This ADR is maintainer tier ([ADR-0043](0043-narrow-maintainer-tier.md)). It brings the
+browser source into Linux's supported scope, which ADR-0060 held back as its own later
+decision, and that is product scope. It also makes browser sources on some Linux systems
+depend on a setuid-root `chrome-sandbox` that an install creates, and refuses root users,
+which is security posture.
 
 <a id="decision"></a>
 ## Decision
-This ADR partially supersedes ADR-0048, on Linux only: it replaces ADR-0048's first,
-second and third decisions there. On Windows ADR-0048 stands unchanged.
+This ADR partially supersedes ADR-0048 and ADR-0021, on Linux only. It replaces
+ADR-0048's first, second and third decisions there. It also replaces ADR-0021's
+*Rendering* decision and its requirement that frames reach the compositor on the GPU
+without a CPU copy: on Linux pages paint in software and frames cross on the CPU. The
+rest of ADR-0021, and all of both ADRs on Windows, stand unchanged.
 
 1. **The helper is an executable.** On Linux `jstream-browser-helper` is a plain
    executable, built from `apps/jstream-browser-helper` (its `bin`, with the `cef`
