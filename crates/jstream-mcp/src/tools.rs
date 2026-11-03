@@ -675,7 +675,7 @@ enum Effect {
 
 /// A group tool's [`Effect`], from its ops (ADR-0098, amending ADR-0059 §1). Only an
 /// action outside [`REVERSIBLE_ACTIONS`], or a history call, makes a tool destructive:
-/// `device`, `history`, `output`, `pairing` and `ui_settings`. Deletes are undoable
+/// `device`, `history`, `output`, `pack`, `pairing` and `ui_settings`. Deletes are undoable
 /// edits.
 fn effect(ops: &[(Op, Value)]) -> Effect {
     let destructive = |op: &Op| match op.class {
@@ -1053,8 +1053,10 @@ mod tests {
         );
         // ADR-0098: an action undo can't take back, or a history call, makes a tool
         // destructive. `output` sets and clears keys and goes live, `device` revokes,
-        // `pairing` hands out a code, `ui_settings.set` replaces a person's settings, and
-        // an undo past an `output.create` removes a stream key redo doesn't restore.
+        // `pairing` hands out a code, `pack.write` and `pack.delete` change files on disk
+        // that undo never reaches (ADR-0097), `ui_settings.set` replaces a person's
+        // settings, and an undo past an `output.create` removes a stream key redo doesn't
+        // restore.
         let destructive: Vec<&str> = all
             .iter()
             .filter(|(_, a)| a["destructiveHint"] == true)
@@ -1062,7 +1064,14 @@ mod tests {
             .collect();
         assert_eq!(
             destructive,
-            ["device", "history", "output", "pairing", "ui_settings"]
+            [
+                "device",
+                "history",
+                "output",
+                "pack",
+                "pairing",
+                "ui_settings"
+            ]
         );
         // The tools a scene build uses ask nothing: their deletes are undoable,
         // `scene.switch` and `live.set` are reversible actions, and `batch` refuses the

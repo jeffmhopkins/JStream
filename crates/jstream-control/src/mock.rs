@@ -999,6 +999,12 @@ impl State {
             }
             // The mock runs no mixer, so there is no loudness to reset.
             Action::AudioResetLoudness {} => return Ok(CallResult::action()),
+            // The mock watches no packs folder (ADR-0097), as an engine without one.
+            action @ (Action::PackWrite { .. } | Action::PackDelete { .. }) => {
+                return Err(ProtocolError::Unsupported {
+                    call: action.name().into(),
+                });
+            }
             other => return Err(unimplemented_by_mock(other.name())),
         };
         let Some(&state) = self.outputs.get(&output_id) else {
@@ -1201,6 +1207,12 @@ impl State {
             },
             // The mock describes no kinds, so it lists none.
             Query::KindList => QueryResult::KindList { kinds: Vec::new() },
+            // It loads no packs either (ADR-0097), as an engine without a packs folder.
+            query @ (Query::PackList | Query::PackRead { .. }) => {
+                return Err(ProtocolError::Unsupported {
+                    call: query.name().into(),
+                });
+            }
             Query::DeviceList | Query::UiSettingsGet { .. } => {
                 return Err(ProtocolError::Unsupported {
                     call: query.name().into(),

@@ -26,6 +26,7 @@ mod live;
 mod mix;
 mod organise;
 mod output;
+mod pack;
 #[cfg(feature = "fixtures")]
 pub mod parity;
 mod plugin;
@@ -90,6 +91,10 @@ pub use organise::{
 pub use output::{
     OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString,
     rtmp_url_sends_key_in_cleartext,
+};
+pub use pack::{
+    MAX_PACK_FILES, MAX_PACK_IMAGE_BYTES, MAX_PACK_WRITE_BYTES, PackContent, PackFile,
+    PackFileInfo, PackInfo,
 };
 pub use plugin::{
     PLUGIN_SCOPES, PluginClass, PluginDenial, PluginDisabledReason, PluginGrant, PluginInfo,

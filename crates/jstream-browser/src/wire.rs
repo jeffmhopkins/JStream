@@ -89,6 +89,10 @@ pub(crate) enum ToEngine {
     Denied { page: u32, count: u64 },
     /// A page's browser closed.
     Closed { page: u32 },
+    /// The helper took a page's [`ToHelper::Reload`]: it paints nothing of the old
+    /// document after this, so every later [`Frame`](Self::Frame) of the page is the
+    /// reloaded one's.
+    Reloading { page: u32 },
     /// Something went wrong in the helper that the engine should log: the helper has no
     /// log of its own. The text names no page URL or path.
     Warning { message: String },
@@ -375,6 +379,10 @@ impl ToEngine {
                 out.u8(9);
                 out.str(message)?;
             }
+            Self::Reloading { page } => {
+                out.u8(10);
+                out.u32(*page);
+            }
         }
         Ok(())
     }
@@ -422,6 +430,7 @@ impl ToEngine {
             9 => Self::Warning {
                 message: body.string()?,
             },
+            10 => Self::Reloading { page: body.u32()? },
             _ => return Err(WireError::Malformed("an unknown message to the engine")),
         };
         body.end()?;
@@ -604,6 +613,7 @@ mod tests {
                 count: u64::MAX,
             },
             ToEngine::Closed { page: 1 },
+            ToEngine::Reloading { page: 2 },
             ToEngine::Warning {
                 message: "a paint could not be copied".into(),
             },
