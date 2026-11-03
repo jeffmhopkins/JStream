@@ -3,7 +3,7 @@
 // and adding through the dialog. The mock engine lists no kinds, so the dialog offers the
 // Color type of the seed's Backdrop (placed again, not created) and Scene; creating a
 // source of a new kind is covered natively.
-import { test, expect, connect, openAddSource, nestScene, rev } from '../fixtures.js';
+import { test, expect, connect, openAddSource, nestScene, rev, showPanel } from '../fixtures.js';
 
 /** The open right-click menu. */
 function menu(page) {
@@ -161,6 +161,7 @@ test('an item row has the item menu, which restacks and arranges', async ({ page
     'Visible',
     'Properties…',
     'Edit filters…',
+    'Copy/paste filters',
     'Labels',
     'Pop out',
     'Reference to original',
@@ -437,6 +438,60 @@ test('the item menu renames, hides, blends, copies and pastes, as OBS\'s does', 
   await rows(page).first().click({ button: 'right' });
   await item('Paste').click();
   await expect(rows(page)).toHaveCount(2);
+});
+
+test('the item menu copies filters and a transform onto other items, as OBS\'s does', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  const item = (name) => entry(page, name);
+  const videoFilters = page.locator('.filters-panel').getByRole('list', { name: 'Video filters' }).getByRole('listitem');
+
+  // The nested Intro (no filters) gets the Backdrop's two, after its own (none).
+  await nestScene(page, 'Intro');
+  // Adding the item showed the Inspector; the Filters panel shows the selected source's.
+  await showPanel(page, 'Filters');
+  const filterMenu = async (row) => {
+    await row.click({ button: 'right' });
+    await item('Copy/paste filters').hover();
+  };
+  await filterMenu(rows(page).first());
+  await expect(item('Copy filters')).toBeDisabled();
+  await expect(item('Paste filters')).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await filterMenu(rows(page).last());
+  await item('Copy filters').click();
+  let at = await rev(page);
+  await filterMenu(rows(page).first());
+  await item('Paste filters').click();
+  await expect.poll(() => rev(page)).toBe(at + 1);
+  await expect(videoFilters).toHaveCount(2);
+  // Pasting again appends; replacing leaves the copied two, each one edit.
+  await filterMenu(rows(page).first());
+  await item('Paste filters').click();
+  await expect(videoFilters).toHaveCount(4);
+  await filterMenu(rows(page).first());
+  await item('Paste filters, replacing').click();
+  await expect(videoFilters).toHaveCount(2);
+  expect(await rev(page)).toBe(at + 3);
+
+  // Copy transform takes the Backdrop's box; a stretched second placement gets it back.
+  await rows(page).last().click({ button: 'right' });
+  await item('Transform').hover();
+  await expect(item('Paste transform')).toBeDisabled();
+  await item('Copy transform').click();
+  const dialog = await openAddSource(page);
+  await dialog.getByRole('option', { name: 'Color' }).click();
+  await dialog.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(rows(page)).toHaveCount(3);
+  await rows(page).first().click({ button: 'right' });
+  await item('Transform').hover();
+  await item('Stretch to canvas').click();
+  await expect(page.locator('.stage-overlay .readout text')).toHaveText('1920 × 1080');
+  at = await rev(page);
+  await rows(page).first().click({ button: 'right' });
+  await item('Transform').hover();
+  await item('Paste transform').click();
+  await expect.poll(() => rev(page)).toBe(at + 1);
+  await expect(page.locator('.stage-overlay .readout text')).toHaveText('640 × 360');
 });
 
 test('the scene menu copies and pastes the scene, and sets whether a multiview shows it', async ({ page, daemon }) => {
