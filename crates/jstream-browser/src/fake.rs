@@ -1,11 +1,14 @@
 //! An in-memory [`BrowserBackend`] for tests (feature `fake`): it records the pages it
 //! opens, and a test plays audio into them and reads back their CSS and whether they
-//! closed. Its pages never paint. A test plays a page's requests through its
+//! closed. Its pages paint only what a test hands them as a CPU frame
+//! ([`FakePageState::paint`]), once the fake is told to paint on the CPU
+//! ([`FakeBrowser::paint_on_cpu`]), as the CEF backend does on Linux. A test plays a page's requests through its
 //! [`RequestPolicy`] with [`FakePageState::request`].
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
+use jstream_media::VideoFrame;
 use jstream_platform::{GpuContext, GpuFrame};
 
 use crate::{
@@ -23,6 +26,7 @@ struct State {
     pages: Vec<Arc<FakePageState>>,
     refuse: Option<BrowserError>,
     device: bool,
+    cpu: bool,
 }
 
 /// What a test sees of one page the fake opened.
@@ -34,12 +38,19 @@ pub struct FakePageState {
     audio: Arc<PageAudio>,
     policy: RequestPolicy,
     closed: AtomicBool,
+    cpu: bool,
+    painted: Mutex<Option<Arc<VideoFrame>>>,
 }
 
 impl FakePageState {
     /// The spec the page was opened with.
     pub fn spec(&self) -> &PageSpec {
         &self.spec
+    }
+
+    /// Makes `frame` the page's latest CPU frame.
+    pub fn paint(&self, frame: Arc<VideoFrame>) {
+        *self.painted.lock().unwrap_or_else(PoisonError::into_inner) = Some(frame);
     }
 
     /// The CSS it was given after it opened, in order.
@@ -88,6 +99,12 @@ impl FakeBrowser {
         self.lock().refuse = error;
     }
 
+    /// Makes pages opened after this paint on the CPU (`on`), as the CEF backend's do on
+    /// Linux, or on the GPU, the default.
+    pub fn paint_on_cpu(&self, on: bool) {
+        self.lock().cpu = on;
+    }
+
     /// Whether the host last gave it a device ([`BrowserBackend::use_device`]).
     pub fn has_device(&self) -> bool {
         self.lock().device
@@ -111,6 +128,8 @@ impl BrowserBackend for FakeBrowser {
             audio: PageAudio::new(),
             policy: RequestPolicy::for_page(spec),
             closed: AtomicBool::new(false),
+            cpu: state.cpu,
+            painted: Mutex::new(None),
         });
         state.pages.push(Arc::clone(&page));
         Ok(Box::new(FakePage(page)))
@@ -127,6 +146,18 @@ struct FakePage(Arc<FakePageState>);
 impl BrowserPage for FakePage {
     fn frame(&self) -> Option<GpuFrame> {
         None
+    }
+
+    fn paints_on_cpu(&self) -> bool {
+        self.0.cpu
+    }
+
+    fn cpu_frame(&self) -> Option<Arc<VideoFrame>> {
+        self.0
+            .painted
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 
     fn set_css(&mut self, css: &str) {

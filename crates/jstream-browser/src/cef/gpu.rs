@@ -133,7 +133,7 @@ impl HelperFrames {
 }
 
 impl Frames for HelperFrames {
-    fn page(&self) -> Box<dyn PageFrames> {
+    fn page(&self, _size: FrameSize) -> Box<dyn PageFrames> {
         Box::new(HelperPageFrames {
             device: Arc::clone(&self.device),
             process: Arc::clone(&self.process),
