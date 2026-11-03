@@ -221,7 +221,9 @@ state machine. Contents:
   so the layer stays shared. A Move within the family flattens a group over the whole
   canvas into its children, which pair by item and move between the two sides'
   values. A group that doesn't flatten (placed elsewhere, or with a blend, chain or
-  effects) moves as one item, and its children move inside its layer (ADR-0049 §3):
+  effects) moves as one item. Its children move inside its layer (ADR-0049 §3), unless
+  it is shown through its `scene` source's own video chain, which moves it as one
+  picture with nothing inside it moving:
   `transition.rs` plans them by item between the group's two sides (a view through
   each keyframe, or the group itself) with the group item's timing, as the
   `transition::Inside` of its visual, at any depth. The shot draws the group from a
@@ -1108,6 +1110,17 @@ leaves the scene composited as before. In a transition the scene is one picture
 it, Move falls back to that, and a filtered nested scene is never flattened into its
 items.
 
+A `scene` source's own video chain (ADR-0065 §4) runs where it places its scene, after
+the scene's own (#1018). Its chain (`ChainOwner::Placed`, shown as `SourceRef::Placed`)
+is keyed by the source and the ID its scene is planned under there, so a keyframe that
+draws a group through a view (ADR-0049 §3) gets a chain over that view, and the group's
+parent one over the group. It reads the scene drawn as a `scene_mask`'s scene is, at
+depth 1, or the scene's chain output when it has one, and its output is placed like any
+source's frame, at the size the chain draws for the canvas. It runs once per frame for
+each such ID, however many places show it, and an item's effects on it read that output.
+In a transition the source shows one picture, never flattened into its scene's items,
+and a switch that retargets the transition keeps the ID each side was planned under.
+
 An item's effects (ADR-0065 §5, in v1 under
 [ADR-0068](../../docs/adr/0068-item-effects-in-v1.md)) run over its box, once per frame,
 as the scene that draws the item draws it: a keyframe scene's items have chains of
@@ -1142,7 +1155,7 @@ plus one layer and pass per filter, and each item's effects as its box layer and
 plus one per effect, with each layer's texture bytes at the sizes `Chains` makes them
 (`Chain::layer_sizes`). It reads the plan the render hub holds, on the control side,
 so the render thread does no extra work. Not counted: a source's own chain, a scene a
-`scene_mask` reads, and the canvas-sized layer a nested scene without a chain is drawn
+`scene_mask` or a `scene` source's chain reads, and the canvas-sized layer a nested scene without a chain is drawn
 into for an item's effects (it takes the place of the layer it would be drawn into
 anyway). The output stage (below) runs only for an output's frame, so the engine hands
 `chain_cost` each running output (`Outputs::running`) as its frames are drawn since
