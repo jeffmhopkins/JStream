@@ -20,6 +20,7 @@ use crate::mix::VideoMixInfo;
 use crate::organise::{FolderInfo, LabelInfo, SceneMeta, SourceMeta};
 use crate::output::OutputInfo;
 use crate::plugin::PluginInfo;
+use crate::profile::ProfileInfo;
 use crate::settings::Settings;
 use crate::transition::{ItemTransition, TransitionsInfo};
 use crate::youtube::{
@@ -242,6 +243,24 @@ pub enum Query {
     /// plugins lists none.
     #[serde(rename = "plugin.list")]
     PluginList,
+    /// Reads where the engine's time went over the last `seconds` (0.73, ADR-0103): per
+    /// drawing thread, per unit of drawing work and its owner (a source's upload or
+    /// chain, a scene's chain or pass, an item's effects, an output's chain), per
+    /// source, the planner, and the CPU of each thread of the process. The engine
+    /// measures all the time, so it needs no start. Runtime state: the result carries
+    /// no `rev`.
+    #[serde(rename = "profile.get")]
+    ProfileGet {
+        /// The window, in seconds, from 1 to 60
+        /// ([`MAX_PROFILE_SECONDS`](crate::MAX_PROFILE_SECONDS)). Omitted, 5. A window
+        /// longer than the engine has read for covers what it has.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        seconds: Option<u32>,
+        /// At most this many entries in each list, the costliest. Omitted, 20; above 200
+        /// ([`MAX_PROFILE_TOP`](crate::MAX_PROFILE_TOP)), 200.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        top: Option<u32>,
+    },
 }
 
 /// What a `delete.plan` deletes: a scene, a source, (since 0.24) a bus, a folder or a
@@ -311,6 +330,7 @@ impl Query {
             Query::ActivityList { .. } => "activity.list",
             Query::UiSettingsGet { .. } => "ui_settings.get",
             Query::PluginList => "plugin.list",
+            Query::ProfileGet { .. } => "profile.get",
         }
     }
 }
@@ -634,6 +654,13 @@ pub enum QueryResult {
         /// The installed plugins, ordered by ID.
         plugins: Vec<PluginInfo>,
     },
+    /// The result of `profile.get` (0.73). Runtime state, so it carries no `rev`.
+    #[serde(rename = "profile.get")]
+    ProfileGet {
+        /// Where the time went.
+        #[serde(flatten)]
+        profile: ProfileInfo,
+    },
 }
 
 impl QueryResult {
@@ -669,6 +696,7 @@ impl QueryResult {
             QueryResult::ActivityList { .. } => "activity.list",
             QueryResult::UiSettingsGet { .. } => "ui_settings.get",
             QueryResult::PluginList { .. } => "plugin.list",
+            QueryResult::ProfileGet { .. } => "profile.get",
         }
     }
 }
