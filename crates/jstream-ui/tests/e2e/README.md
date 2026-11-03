@@ -183,7 +183,10 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   canvas; the item menu's Rename opens the row's name, Visible hides and shows the item
   with its check following, Blending's Multiply replaces the checked Normal, and Paste
   stays off until Copy, then places the source again; a scene row's Show in multiview
-  toggles its check, and Copy then Paste scene adds a copy of the scene; on the canvas the menu
+  toggles its check, and Copy then Paste scene adds a copy of the scene; Copy filters
+  from the Backdrop pastes its two video filters onto a nested Intro, a second paste
+  appends two more and Paste filters, replacing leaves two, each one edit, and Paste
+  transform gives a stretched second placement the Backdrop's 640 × 360 box; on the canvas the menu
   ends with Select all, Duplicate as clone adds "Backdrop copy" selected, two selected
   items get a counted head with the duplicates disabled, and Remove from scene removes
   both; a placement of a shared source switches to an independent clone and back to a
@@ -240,8 +243,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   and with it off the other side stays; a stepper is one edit Ctrl+Z on the canvas
   undoes; arrow keys step (Ctrl by 10), Escape drops typed text, a drag across the
   field is sent once on release, and text that isn't a number sends nothing while `−`
-  and `,` are read; crop (with the folded "cropped" hint), opacity and the favourite
-  star are sent; with no item selected the scene's object count, uses and Transition
+  and `,` are read; crop (with the folded "cropped" hint), opacity, the Fit select and
+  the favourite star are sent; with no item selected the scene's object count, uses and Transition
   in and out show, and a second selected item shows "+1". The mock engine doesn't
   implement `scene.set_transitions`, so choosing one isn't run.
 - **Filters** (`filters.spec.js`): with no item selected the panel shows the scene's

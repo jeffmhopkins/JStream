@@ -72,7 +72,7 @@ test('a keyframe nests under its scene and overrides only its own placements', a
   await expect(backdrop(page)).toHaveClass(/hidden/);
   await backdrop(page).locator('.row-main').click();
   await expect(inspector(page).locator('.keyframe-note')).toBeVisible();
-  await expect(inspector(page).getByRole('combobox')).toBeDisabled();
+  await expect(inspector(page).getByRole('combobox', { name: 'Mode' })).toBeDisabled();
   // A keyframe's items take their scene switches from the parent: no section for them.
   await expect(inspector(page).locator('section.fold').filter({ hasText: 'Scene switches' })).toHaveCount(0);
   const before = await rev(page);
