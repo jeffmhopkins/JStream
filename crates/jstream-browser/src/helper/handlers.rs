@@ -354,12 +354,15 @@ wrap_load_handler! {
             &self,
             _browser: Option<&mut Browser>,
             frame: Option<&mut Frame>,
-            _error_code: Errorcode,
+            error_code: Errorcode,
             _error_text: Option<&CefString>,
             _failed_url: Option<&CefString>,
         ) {
+            // An aborted load was replaced by another, whose start ends the hold; the
+            // old document may still be the one painting until then.
             if let Some(frame) = frame
                 && frame.is_main() == 1
+                && error_code != Errorcode::ABORTED
             {
                 self.page.0.load_started();
             }

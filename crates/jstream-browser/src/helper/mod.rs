@@ -344,7 +344,7 @@ impl Host {
             closing: AtomicBool::new(false),
             textures: PageTextures::default(),
             paint_warned: AtomicBool::new(false),
-            reloading: AtomicBool::new(false),
+            reloading: Mutex::new(false),
             channels: AtomicUsize::new(0),
             host: Arc::clone(self),
             policy: RequestPolicy::for_page(spec),
@@ -443,7 +443,9 @@ pub(crate) struct PageShared {
     paint_warned: AtomicBool,
     /// Set from a reload until the reloaded document starts loading: the old document's
     /// paints meanwhile are skipped, so the engine never shows them after the reload.
-    reloading: AtomicBool,
+    /// A paint holds it from its check until its frame is sent, and a reload holds it
+    /// until [`ToEngine::Reloading`] is sent, so no old frame follows that message.
+    reloading: Mutex<bool>,
     /// Channels in the page's current audio stream (`OnAudioStreamStarted`).
     pub(crate) channels: AtomicUsize,
     pub(crate) host: Arc<Host>,
@@ -490,7 +492,7 @@ impl PageShared {
     /// The main frame started loading a document (`OnLoadStart`), or ended or failed
     /// loading one: paints from here are the new document's, so a reload's hold ends.
     pub(crate) fn load_started(&self) {
-        self.reloading.store(false, Ordering::Release);
+        *lock(&self.reloading) = false;
     }
 
     /// The main frame finished loading: applies the custom CSS to the new document.
@@ -511,7 +513,8 @@ impl PageShared {
     /// succeeds.
     #[cfg(windows)]
     pub(crate) fn paint(&self, handle: *mut c_void) {
-        if self.reloading.load(Ordering::Acquire) {
+        let reloading = lock(&self.reloading);
+        if *reloading {
             return;
         }
         let painted = {
@@ -522,6 +525,7 @@ impl PageShared {
             self.textures.paint(gpu, handle)
         };
         self.painted(painted);
+        drop(reloading);
     }
 
     /// One software paint, `bgra` of `width` × `height` premultiplied BGRA8 (UI thread,
@@ -530,13 +534,15 @@ impl PageShared {
     /// paint succeeds.
     #[cfg(target_os = "linux")]
     pub(crate) fn paint(&self, bgra: &[u8], width: u32, height: u32) {
-        if self.reloading.load(Ordering::Acquire) {
+        let reloading = lock(&self.reloading);
+        if *reloading {
             return;
         }
         let painted = self
             .textures
             .paint(&self.host.frames, self.id, bgra, (width, height));
         self.painted(painted);
+        drop(reloading);
     }
 
     fn painted(&self, painted: Result<Option<Painted>, String>) {
@@ -619,8 +625,10 @@ impl PageShared {
     fn reload(&self) {
         let browser = lock(&self.browser);
         if let Some(browser) = browser.as_ref() {
-            self.reloading.store(true, Ordering::Release);
+            let mut reloading = lock(&self.reloading);
+            *reloading = true;
             self.host.send(&ToEngine::Reloading { page: self.id });
+            drop(reloading);
             browser.0.reload();
         } else {
             // No browser yet: its first load is the start the engine waits for.
