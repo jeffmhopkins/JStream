@@ -16,11 +16,12 @@ unsafe_allowed = false
 workspace = true
 
 [features]
-# Browser sources through CEF (ADR-0021, ADR-0048), Windows only. The daemon doesn't build
-# or link CEF: pages run in the sandboxed browser helper, which needs
-# `jstream-browser-helper.exe` (CEF's bootstrap exe renamed), its DLL and CEF's runtime
-# files next to `jstream-daemon.exe`. Off by default, as in `jstream-browser`, until those
-# are packaged (its README's open items). Without it, `browser` sources show nothing.
+# Browser sources through CEF (ADR-0021, ADR-0048, ADR-0095), Windows and Linux. The
+# daemon doesn't build or link CEF: pages run in the sandboxed browser helper, which needs
+# the helper and CEF's runtime files in a `browser` folder next to the daemon (on Windows
+# `jstream-browser-helper.exe`, CEF's bootstrap exe renamed, and its DLL; on Linux the
+# `jstream-browser-helper` executable, laid out by `cargo xtask browser-linux`). Off by
+# default, as in `jstream-browser`. Without it, `browser` sources show nothing.
 cef = ["jstream-browser/cef"]
 # Compile-checks the CEF wiring without CEF (`jstream-browser`'s `dox`), for CI's clippy.
 # A binary built with it doesn't link.
@@ -38,7 +39,7 @@ jstream-media.workspace = true
 # `Backends`, and the stream key store the publish opener reads.
 jstream-platform.workspace = true
 # The `BrowserBackend` the daemon gives the engine for `browser` sources, and, with the
-# `cef` feature on Windows, its CEF backend.
+# `cef` feature on Windows and Linux, its CEF backend.
 jstream-browser.workspace = true
 # `OutputId`, for `--output`; `OutputKind`, for the publish opener.
 jstream-protocol.workspace = true

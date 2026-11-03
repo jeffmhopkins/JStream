@@ -197,8 +197,9 @@ pub enum Edit {
     /// form (`transform` or `geometry`), and its opacity and blend where they differ from
     /// the defaults, then `item.reorder` to its old stacking position (unless it was on
     /// top), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,
-    /// `item.set_transition` if its transition settings were not the default, and the
-    /// placement edits that write each dropped override back.
+    /// `item.set_transition` if its transition settings were not the default,
+    /// `item.set_locked` if it was locked (since 0.71), and the placement edits that
+    /// write each dropped override back.
     #[serde(rename = "item.remove")]
     ItemRemove {
         /// The item to remove.
@@ -938,6 +939,19 @@ pub enum Edit {
         /// Its new settings.
         transition: ItemTransition,
     },
+    /// Locks or unlocks an item (ADR-0096, since 0.71). A lock is an editing aid kept
+    /// with the collection, as OBS's is: a client doesn't let a locked item be dragged,
+    /// resized or turned on its canvas, but the engine still applies every edit to it,
+    /// so the Inspector, the menus and a script can change it. It belongs to the item,
+    /// not to a placement, so it takes no `scene_id` and a keyframe doesn't override
+    /// it. Items are added unlocked. Inverse: `item.set_locked` with the previous value.
+    #[serde(rename = "item.set_locked")]
+    ItemSetLocked {
+        /// The item to lock or unlock.
+        item_id: ItemId,
+        /// Whether its canvas box is locked.
+        locked: bool,
+    },
     /// Changes some of an audio source's settings (ADR-0028): the fields sent change,
     /// the others keep their values, and sending none is `invalid_argument`. A source
     /// without audio is `invalid_argument` on `source_id`. A `scene` source has no fader
@@ -1121,6 +1135,7 @@ impl Edit {
             Edit::TransitionSetDefault { .. } => "transition.set_default",
             Edit::SceneSetTransitions { .. } => "scene.set_transitions",
             Edit::ItemSetTransition { .. } => "item.set_transition",
+            Edit::ItemSetLocked { .. } => "item.set_locked",
         }
     }
 }
@@ -1475,6 +1490,36 @@ pub enum Action {
         /// The kind, `<pack>/<effect>`.
         kind_id: String,
     },
+    /// Writes one effect pack (0.72, ADR-0097): replaces the pack `pack` whole with
+    /// `files`, or adds it, and loads it at once. The pack is always the folder named
+    /// `pack` in the packs folder, whose `effect.toml` must say `id = "<pack>"`. Answers
+    /// with the pack as loaded. Fails, writing nothing and keeping the old version, with
+    /// `too_large` for `files` over 3 MiB as sent (`MAX_PACK_WRITE_BYTES`); with
+    /// `invalid_argument` for more than 64 files, an image over 2 MiB, a pack ID or file
+    /// path outside the rules, a manifest that names another ID, an ID another folder
+    /// holds, a folder `pack` that holds anything but that pack, or a pack that doesn't
+    /// load (the first problem's file, line and message); with `internal` when the disk
+    /// refuses the swap; and with `unsupported` from an engine that loads no packs. Not
+    /// an edit: undo doesn't reach the disk. Agents may call it; no plugin is granted it.
+    #[serde(rename = "pack.write")]
+    PackWrite {
+        /// The pack ID: lower-case ASCII letters, digits and `-`, starting with a letter
+        /// or digit.
+        pack: String,
+        /// Every file of the pack.
+        files: Vec<crate::PackFile>,
+    },
+    /// Removes one effect pack (0.72, ADR-0097): the folder whose `effect.toml` names
+    /// pack ID `pack`, whatever its name and whether or not it loads. Its kinds leave
+    /// `kind.list`, and filters and sources of them draw nothing, as before a pack loads.
+    /// Fails with `not_found` (entity `pack`) when no folder holds that pack, `internal`
+    /// when the disk refuses, and `unsupported` from an engine that loads no packs. Not
+    /// an edit: undo doesn't reach the disk. Agents may call it; no plugin is granted it.
+    #[serde(rename = "pack.delete")]
+    PackDelete {
+        /// The pack ID.
+        pack: String,
+    },
     /// **Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy
     /// screen: the engine refuses this with `unsupported` and covers nothing.
     #[serde(rename = "privacy.set")]
@@ -1512,6 +1557,8 @@ impl Action {
             Action::PluginGrant { .. } => "plugin.grant",
             Action::PluginEnable { .. } => "plugin.enable",
             Action::EffectEnable { .. } => "effect.enable",
+            Action::PackWrite { .. } => "pack.write",
+            Action::PackDelete { .. } => "pack.delete",
         }
     }
 
@@ -1557,7 +1604,9 @@ impl Action {
             | Action::PluginInstall { .. }
             | Action::PluginGrant { .. }
             | Action::PluginEnable { .. }
-            | Action::EffectEnable { .. } => vec![],
+            | Action::EffectEnable { .. }
+            | Action::PackWrite { .. }
+            | Action::PackDelete { .. } => vec![],
         }
     }
 
@@ -1604,6 +1653,11 @@ impl Action {
                 "type",
                 "`effect.enable` can't be bound: a person re-enables a quarantined effect \
                  through the UI (#349)",
+            )),
+            Action::PackWrite { .. } | Action::PackDelete { .. } => Some((
+                "type",
+                "a pack action can't be bound: it writes GPU code to disk, which a key \
+                 press shouldn't (ADR-0097)",
             )),
             Action::YoutubeSignIn
             | Action::YoutubeSignOut

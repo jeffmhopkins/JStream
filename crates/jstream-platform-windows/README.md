@@ -32,7 +32,9 @@ The code is ported from spikes S1 to S3. This first cut has:
   the formula WASAPI uses for `pu64QPCPosition`, so clock readings and packet times share
   one time line ([ADR-0014](../../docs/adr/0014-media-clock.md)). `now` never decreases.
 - **`WindowsProcessCpu`** (`ProcessCpu`): the process's kernel and user time from
-  `GetProcessTimes`, for `stats.tick`'s load.
+  `GetProcessTimes`, for `stats.tick`'s load. **`WindowsThreadCpu`** (`ThreadCpu`): the
+  process's threads from a ToolHelp snapshot, each one's kernel and user time from
+  `GetThreadTimes` and its name from `GetThreadDescription`, for `profile.get`.
 - **`WasapiAudio`** (`AudioIo`):
   - **Listing** the active capture and render endpoints, with the console-role default
     of each, and the running processes (a ToolHelp snapshot: each one's ID, its

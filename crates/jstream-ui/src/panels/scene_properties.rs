@@ -1068,6 +1068,7 @@ mod tests {
             opacity: Finite32::ONE,
             blend: Default::default(),
             transition: jstream_control::protocol::ItemTransition::default(),
+            locked: false,
         });
         c.scenes = vec![scene];
         assert!(has_3d_items(&c, &a));

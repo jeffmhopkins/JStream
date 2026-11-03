@@ -55,6 +55,7 @@ test('the canvas has a menu on the frame and another on the margin', async ({ pa
   await page.mouse.click(margin.x, margin.y, { button: 'right' });
   expect(await labels(page)).toEqual([
     'Pop out',
+    'Screenshot (scene)',
     'Select all',
     'Turn snapping on',
     'Transition in',
@@ -159,11 +160,13 @@ test('an item row has the item menu, which restacks and arranges', async ({ page
   expect(await labels(page)).toEqual([
     'Rename',
     'Visible',
+    'Lock',
     'Properties…',
     'Edit filters…',
     'Copy/paste filters',
     'Labels',
     'Pop out',
+    'Screenshot (source)',
     'Reference to original',
     'Independent clone',
     'Copy',
@@ -360,6 +363,10 @@ test('the header menus behave like a menu bar', async ({ page, daemon }) => {
   await page.keyboard.press('ArrowLeft');
   await page.keyboard.press('ArrowLeft');
   await expect(dropdown('File').getByRole('menuitem', { name: 'Disconnect' })).toBeFocused();
+  // Left from File wraps to Help, the bar's last menu.
+  await page.keyboard.press('ArrowLeft');
+  await expect(dropdown('Help')).toBeVisible();
+  await expect(dropdown('Help').getByRole('menuitem', { name: 'Documentation' })).toBeFocused();
   await page.keyboard.press('ArrowLeft');
   await expect(dropdown('Layout')).toBeVisible();
   await page.keyboard.press('Escape');
@@ -372,6 +379,51 @@ test('the header menus behave like a menu bar', async ({ page, daemon }) => {
   await page.keyboard.press('Escape');
   await page.keyboard.press('Control+ArrowRight');
   await expect(button('Layout')).toBeFocused();
+});
+
+test('the Help menu links to the project and opens the About dialog', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  const header = page.locator('header.app-header');
+  const help = page.getByRole('menu', { name: 'Help' });
+  const repo = 'https://github.com/jeffmhopkins/JStream';
+
+  // The header's mark is the app icon, served from the bundle.
+  const mark = header.locator('img.brand-mark');
+  await expect(mark).toHaveAttribute('src', 'icon.png');
+  expect(await mark.evaluate((img) => img.complete && img.naturalWidth)).toBeGreaterThan(0);
+
+  // Help lists the project's pages, each opening in a new tab, then About.
+  await header.locator('.top-menu[data-menu="help"] > .menu-button').click();
+  await expect(help.getByRole('menuitem')).toHaveText([
+    'Documentation', 'Getting started', 'Release notes', 'Report an issue', 'About JStream',
+  ]);
+  const issue = help.getByRole('menuitem', { name: 'Report an issue' });
+  await expect(issue).toHaveAttribute('href', `${repo}/issues/new`);
+  await expect(issue).toHaveAttribute('target', '_blank');
+  await expect(issue).toHaveAttribute('rel', 'noopener noreferrer');
+
+  // About: the icon, the version, the build, the engine's protocol and the links.
+  await help.getByRole('menuitem', { name: 'About JStream' }).click();
+  await expect(help).toHaveCount(0);
+  const about = page.getByRole('dialog', { name: 'About JStream' });
+  await expect(about).toBeVisible();
+  const icon = about.locator('img.about-icon');
+  await expect(icon).toHaveAttribute('src', 'icon.png');
+  expect(await icon.evaluate((img) => img.complete && img.naturalWidth)).toBeGreaterThan(0);
+  const facts = about.locator('.about-facts');
+  await expect(facts.locator('dt')).toHaveText(['Version', 'Build', 'Protocol', 'License']);
+  await expect(facts.locator('dd').first()).toHaveText(/^\d+\.\d+\.\d+/);
+  await expect(facts.locator('dd').nth(2)).toHaveText(/^\d+\.\d+$/);
+  await expect(about.getByRole('link', { name: 'Source code on GitHub' })).toHaveAttribute('href', repo);
+  await expect(about.getByRole('link', { name: 'MIT' })).toHaveAttribute('href', `${repo}/blob/main/LICENSE-MIT`);
+
+  // Escape closes it, and so does Close.
+  await page.keyboard.press('Escape');
+  await expect(about).toHaveCount(0);
+  await header.locator('.top-menu[data-menu="help"] > .menu-button').click();
+  await help.getByRole('menuitem', { name: 'About JStream' }).click();
+  await about.locator('.modal-footer').getByRole('button', { name: 'Close' }).click();
+  await expect(about).toHaveCount(0);
 });
 
 test('an arrow key pressed before the next menu is drawn still moves along the bar', async ({ page, daemon }) => {
@@ -418,6 +470,12 @@ test('the item menu renames, hides, blends, copies and pastes, as OBS\'s does', 
   await expect(item('Visible')).toHaveAttribute('aria-checked', 'false');
   await item('Visible').click();
   await expect.poll(() => rev(page)).toBe(at + 2);
+
+  // Screenshot (source) asks the engine for a PNG; the mock engine streams no
+  // pictures, so the toast says it couldn't.
+  await rows(page).first().click({ button: 'right' });
+  await item('Screenshot (source)').click();
+  await expect(page.locator('.toast')).toContainText('screenshot');
 
   // Blending lists the modes, Normal checked; Multiply sets it, as the Inspector shows.
   await rows(page).first().click({ button: 'right' });

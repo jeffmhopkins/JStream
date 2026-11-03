@@ -56,7 +56,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `send.remove`, `hotkey.set`,
   `hotkey.clear`, `transition.create`, `transition.update`, `transition.delete`,
   `transition.set_default`, `scene.set_transitions`, `item.set_transition`,
-  `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
+  `item.set_locked`, `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
   `folder.delete`, `scene.set_folder`, `scene.set_meta`, `scene.set_options`,
   `scene.set_camera`, `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `source.set_meta`), with
@@ -67,7 +67,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
   `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`,
-  `effect.enable`), with
+  `effect.enable`, `pack.write`, `pack.delete`), with
   `Action::named_objects` and `Action::bind_problem`,
   which every implementation uses to check and follow a hotkey's action; `Batch`, whose
   optional `ends_gesture` commits a gesture; and the `Command`/`CommandClass`
@@ -115,7 +115,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `live.list`, `capture.targets`,
-  `font.list`, `source.sizes`, `activity.list` and `plugin.list`, with `QueryResult`
+  `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `pack.list`,
+  `pack.read` and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
+  holds), with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
   `CaptureTargetInfo`, `FontInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
   (`activity.rs` holds the last, with `MAX_ACTIVITY_ENTRIES` and
@@ -170,7 +172,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `plugin_may_bind`, `PluginState`, `PluginDisabledReason`, and `PluginInfo` and
   `PluginRequest`, what `plugin.list` reports ([Plugins](#design)).
 - **Preview streams** (`preview.rs`, [ADR-0045](../../docs/adr/0045-leptos-web-ui.md)):
-  `PreviewCodec` (`h264`, `jpeg`), `PreviewSettings` (`preview.subscribe`'s fields with
+  `PreviewCodec` (`h264`, `jpeg`, `png`), `PreviewSettings` (`preview.subscribe`'s fields with
   their defaults and range checks, which the engine applies), `PreviewDraft` (its
   `source`, a draft source the collection doesn't hold), and the binary
   frame: `BinaryFrame`, its fixed `BinaryHeader` with `StreamKind`, the byte layout's
@@ -202,8 +204,17 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.70 because of
-  `scene.set_camera` and `SceneInfo.camera`, a live value too
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.73 because of the
+  `profile.get` query
+  ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)); 0.72 because of the
+  effect-pack commands `pack.write`, `pack.delete`, `pack.list` and `pack.read`
+  (`pack.rs`: `PackFile`, `PackContent`, `PackInfo`, `PackFileInfo` and the write's
+  limits, [ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)), which agents
+  may call and no plugin is granted but `pack.list` and `pack.read`, and no hotkey
+  binds; 0.71 because of `item.set_locked`, `ItemInfo.locked` and the `png` preview
+  codec ([ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md)), with 0.69
+  left to a change that claimed it first; 0.70 because of `scene.set_camera` and
+  `SceneInfo.camera`, a live value too
   ([ADR-0094](../../docs/adr/0094-scene-cameras.md)); 0.68 because of the
   `font.list` query ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)); 0.67 because `live.set`
   takes a source's settings whose kind marks them `live` (`source.set_settings`,
@@ -680,7 +691,10 @@ never a type per kind.
   `absolute`, and `CON.png` and `media/nul` under `collection` or `app` (joined to the
   root folder, they still open the device), while `CONSOLE.png` or `COM10.png` is not.
   Earlier components may use these names: Win32 fails to open such a path, and elsewhere
-  they are ordinary folders. An asset that doesn't exist yet is accepted.
+  they are ordinary folders. An asset that doesn't exist yet is accepted. A value that
+  isn't the reference a parameter takes (a bare path or id string, or another kind's
+  reference) is refused with a reason that shows the reference's shape, such as
+  `{"type": "asset", "root": "absolute", "path": "/path/to/file.png"}` (#1021).
 - **References are dependency edges.** Items placing sources, `scene` sources showing
   scenes, and scene, source and bus references in settings (a filter's settings count
   as its source's) form one dependency graph. An edit that would close a cycle
@@ -980,6 +994,11 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
   scene's overrides (absent clears one), and `item.set_transition {item_id,
   transition}` an item's `ItemTransition {delay_ms, easing, glide, appear,
   disappear}`, omitted from `ItemInfo` while it is the default.
+- `item.set_locked {item_id, locked}` locks or unlocks an item's canvas box
+  ([ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md), 0.71), reported
+  as `ItemInfo.locked`, omitted while false. It is an editing aid a client honours by
+  not dragging the box; the engine still applies every edit to a locked item. It
+  belongs to the item, so it takes no `scene_id` and a keyframe doesn't override it.
 - `scene.switch {scene_id, preset_id?}` resolves the preset in order: the one it names
   (`not_found` when there is no such preset), else the new scene's `transition_in`,
   else the current scene's `transition_out`, else the default. A switch while a
@@ -1086,6 +1105,21 @@ Queries read and never change `rev`. Those that read the collection state carry 
   root `absolute`. A collection lists its first font. The engine reads its OS's font
   folders on the first call and keeps the list, so a font installed later shows after
   a restart. Runtime state, so no `rev`. Added in 0.68.
+- `profile.get {seconds?, top?}`: where the engine's time went over the last
+  `seconds` (1 to 60, default 5), as a `ProfileInfo`
+  ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)): each drawing
+  thread's (`program`, `preview`) frames, their average, 95th percentile and longest
+  time, the frames over `frame_budget_ms`, the program's skipped ticks and the time per
+  phase; the units of drawing work costliest first, each a `ProfileUnit` naming its
+  owner (a source's upload or chain, a capture, a scene's chain or pass, an item's
+  effects, a placed scene's chain, the composite, the master or an output's chain) with
+  its frames, average and recent longest time and share of its drawer's time; the
+  sources the `jstream-sources` thread and the planner spent time on; the plans; the
+  process's CPU; and its threads by name, as a percentage of one core (JStream's own
+  `name`, any other `remote_name`, third-party text). `top` (default 20, at most 200)
+  cuts each list. Times are the drawing thread's, not the GPU's; `gpu_ms` and
+  `gpu_timing` are reserved for GPU timestamps. Runtime state, so no `rev`. Added in
+  0.73.
 - `privacy.get`: deprecated
   ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), removed in
   1.0. JStream has no privacy screen, so it always answers `on: false`. Added in 0.33.
@@ -1207,8 +1241,8 @@ that sets it: `scene.reorder` and `item.reorder` restore positions,
 `canvas.set_size` restores the canvas, and `item.set_geometry` and
 `item.set_transform` each restore the previous placement in its own form. So undoing
 `item.remove` is `item.add` (with `geometry` or `transform`, matching the removed
-item's form) plus whichever of `item.reorder`, `item.set_crop`, `item.set_visible`
-and `item.set_transition` the removed item needs, and undoing `scene.delete` is
+item's form) plus whichever of `item.reorder`, `item.set_crop`, `item.set_visible`,
+`item.set_transition` and `item.set_locked` the removed item needs, and undoing `scene.delete` is
 `scene.create` with the scene's `role` (omitted for `scene`), `scene.reorder` unless it
 was last, `scene.set_transitions` if it had an override, and each item's restore,
 bottom to top. A variant's `scene.delete` is undone by `scene.create_variant`, its role
@@ -1631,6 +1665,29 @@ GPU, and the OS resets the device (#349,
   loaded pack has and no quarantine names. It is for a person, like `plugin.enable`: no
   MCP tool carries it, no plugin is granted it and no hotkey binds it.
 
+Since 0.72 a client can write the packs themselves
+([ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md), `pack.rs`). These are
+actions and queries, not edits: undo doesn't reach the disk, and there is no `rev`.
+- **`pack.write {pack, files}`** replaces pack `pack` whole, or adds it, and loads it
+  at once; it answers `ActionResult::PackWrite` with the pack's `PackInfo`. Each
+  `PackFile` is a `path` and either `text` (`effect.toml`, `.wgsl`) or `base64` (`.png`,
+  `.jpg`, `.jpeg`, standard with padding). `files` over 3 MiB as sent
+  (`MAX_PACK_WRITE_BYTES`, so the request stays under ADR-0074's limit) is `too_large`
+  before it is decoded; more than 64 files (`MAX_PACK_FILES`), an image over 2 MiB
+  (`MAX_PACK_IMAGE_BYTES`), a bad pack ID or path, a pack another folder holds, a
+  folder `pack` that holds something else, and a pack that doesn't load are
+  `invalid_argument`, and the old version stays.
+- **`pack.delete {pack}`** removes the folder whose `effect.toml` names the pack, or is
+  `not_found` with `EntityKind::Pack`.
+- **`pack.list`** answers each pack's `PackInfo`: its `id`, `folder`, `kinds` while it
+  loads, `loaded`, and `written_by`, the client name of the last `pack.write` of that
+  pack ID (omitted when it gave none).
+- **`pack.read {pack, path?}`** answers `PackFileInfo`s: each file's `path`, `size` and
+  BLAKE3 `digest`, the `text` of text files (up to 3 MiB of text in all; a text file
+  over that read by `path` is `too_large`), and with `path` an image's `base64`.
+- Agents may call all four. A plugin may call `pack.list` and `pack.read` (class
+  `read`) and never the writes, and no hotkey binds a pack action.
+
 ### Errors
 
 `ProtocolError` is a `thiserror` enum ([R-RS-003](../../docs/RULES.md#R-RS-003)). On the
@@ -1858,7 +1915,10 @@ the JSON text messages of the same connection (0.20,
   changes, at most `fps` times a second (default 15, at most 30), and at least every
   2 s as a keyframe. `codecs` lists what the client can decode, most preferred first
   (default `["h264", "jpeg"]`); the engine uses the first it can encode, and may fall
-  back to a later one if an encoder fails to open, so each frame names its codec. A
+  back to a later one if an encoder fails to open, so each frame names its codec.
+  `png` (0.71, [ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md)) is
+  lossless and never a default: a client taking a screenshot asks for it alone and
+  keeps the first picture. A
   session has at most 16 streams (4 before 0.46), enough for a multiview.
   `preview.unsubscribe {channel}` closes one (and succeeds for a channel that isn't
   open); so does the session's end. The stream shows the mix before any master stage,
@@ -1899,7 +1959,7 @@ the JSON text messages of the same connection (0.20,
   |---|---|---|
   | 0 | 1 | version, 1 |
   | 1 | 1 | kind: 1 = preview |
-  | 2 | 1 | codec: 0 = none (an end frame), 1 = H.264, 2 = JPEG |
+  | 2 | 1 | codec: 0 = none (an end frame), 1 = H.264, 2 = JPEG, 3 = PNG (0.71) |
   | 3 | 1 | flags: bit 0 keyframe, bit 1 end of stream |
   | 4 | 4 | channel |
   | 8 | 2 | width |
@@ -1910,7 +1970,8 @@ the JSON text messages of the same connection (0.20,
 
   An H.264 payload is one access unit in Annex B form, with the parameter sets in band
   at keyframes, which WebCodecs' `VideoDecoder` takes with no `description`. A JPEG
-  payload is a whole baseline JFIF picture, always a keyframe. An end frame (flag bit
+  payload is a whole baseline JFIF picture, always a keyframe, and a PNG payload a whole
+  RGBA PNG, always a keyframe too. An end frame (flag bit
   1, codec 0) says the engine ended the stream; its payload is the reason as UTF-8, and
   the channel is free again. A client ignores a frame whose version, kind or codec it
   doesn't know, and the reserved bytes and spare flag bits.

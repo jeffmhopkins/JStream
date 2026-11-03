@@ -108,4 +108,10 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0092](0092-installed-fonts-query.md) | The engine lists the installed fonts, so a font is picked by name | accepted | agent |  |
 | [ADR-0093](0093-shader-sources-from-effect-packs.md) | Shader sources from effect packs | accepted | agent |  |
 | [ADR-0094](0094-scene-cameras.md) | Scene cameras: items in one 3D space | accepted | agent |  |
+| [ADR-0095](0095-browser-helper-on-linux.md) | Browser sources on Linux: the helper paints in software and hands the engine CPU frames | accepted | maintainer |  |
+| [ADR-0096](0096-item-lock-and-png-preview-frames.md) | Items can be locked, and a preview stream can send PNG for a screenshot | accepted | agent |  |
+| [ADR-0097](0097-agents-write-effect-packs.md) | Agents write effect packs over the protocol and MCP | accepted | maintainer |  |
+| [ADR-0098](0098-mcp-destructive-hint-for-what-undo-cant-take-back.md) | MCP's destructiveHint marks only what undo can't take back | accepted | agent |  |
+| [ADR-0102](0102-page-api-for-browser-sources.md) | Browser source pages can opt in to reading the engine through window.jstream | accepted | maintainer |  |
+| [ADR-0103](0103-per-item-performance-profile.md) | A performance profile per item, source and thread, readable over the protocol and MCP | accepted | agent |  |
 <!-- @generated end adr-index -->

@@ -26,10 +26,12 @@ mod live;
 mod mix;
 mod organise;
 mod output;
+mod pack;
 #[cfg(feature = "fixtures")]
 pub mod parity;
 mod plugin;
 mod preview;
+mod profile;
 mod query;
 mod schema;
 mod settings;
@@ -90,6 +92,10 @@ pub use output::{
     OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString,
     rtmp_url_sends_key_in_cleartext,
 };
+pub use pack::{
+    MAX_PACK_FILES, MAX_PACK_IMAGE_BYTES, MAX_PACK_WRITE_BYTES, PackContent, PackFile,
+    PackFileInfo, PackInfo,
+};
 pub use plugin::{
     PLUGIN_SCOPES, PluginClass, PluginDenial, PluginDisabledReason, PluginGrant, PluginInfo,
     PluginRequest, PluginScope, PluginState, Reach, plugin_classes, plugin_may_bind, plugin_scope,
@@ -98,6 +104,11 @@ pub use plugin::{
 pub use preview::{
     BINARY_HEADER_LEN, BINARY_VERSION, BinaryError, BinaryFrame, BinaryHeader, KeyframeGate,
     PreviewCodec, PreviewDraft, PreviewSettings, StreamKind,
+};
+pub use profile::{
+    DEFAULT_PROFILE_SECONDS, DEFAULT_PROFILE_TOP, Drawer, DrawerProfile, MAX_PROFILE_SECONDS,
+    MAX_PROFILE_TOP, PhaseProfile, PlanProfile, ProfileInfo, ProfileUnit, SourceProfile,
+    ThreadProfile, UnitProfile,
 };
 pub use query::{
     CaptureTargetInfo, CaptureTargetKind, DeleteTarget, DeviceInfo, FontInfo, ItemInfo, MasterInfo,

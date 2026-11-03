@@ -2517,7 +2517,9 @@ fn a_bus_reference_must_name_a_bus() {
         )),
         (
             "edits.0.settings.audio".into(),
-            "must be a bus reference or null".into()
+            "must be a bus reference or null: an object such as \
+             `{\"type\": \"bus\", \"bus_id\": \"<id>\"}`"
+                .into()
         )
     );
     apply_ok(
@@ -4072,6 +4074,49 @@ fn item_add_takes_opacity_and_blend_and_remove_restores_them() {
     };
     assert_eq!(*opacity, Finite32::new(0.5));
     assert_eq!(*blend, Some(BlendMode::Screen));
+    apply_ok(&mut g, removed.inverse.edits);
+    assert_eq!(g.state(), &before);
+}
+
+/// `item.set_locked` (ADR-0096) locks the item, its inverse unlocks it, and removing a
+/// locked item is undone locked.
+#[test]
+fn a_lock_is_undone_and_survives_a_removal() {
+    let mut g = fixture();
+    apply_ok(&mut g, vec![add("a", "i1", "cam"), add("a", "i2", "cam")]);
+    let item = || ItemId::new("i1");
+    let missing = apply_err(
+        &mut g,
+        vec![Edit::ItemSetLocked {
+            item_id: ItemId::new("nope"),
+            locked: true,
+        }],
+    );
+    assert!(
+        matches!(missing, ProtocolError::NotFound { .. }),
+        "{missing:?}"
+    );
+    let locked = apply_ok(
+        &mut g,
+        vec![Edit::ItemSetLocked {
+            item_id: item(),
+            locked: true,
+        }],
+    );
+    assert!(item_info(&g, "i1").locked);
+    assert_eq!(
+        locked.inverse.edits,
+        [Edit::ItemSetLocked {
+            item_id: item(),
+            locked: false,
+        }]
+    );
+    let before = g.state().clone();
+    let removed = apply_ok(&mut g, vec![Edit::ItemRemove { item_id: item() }]);
+    assert!(removed.inverse.edits.contains(&Edit::ItemSetLocked {
+        item_id: item(),
+        locked: true,
+    }));
     apply_ok(&mut g, removed.inverse.edits);
     assert_eq!(g.state(), &before);
 }

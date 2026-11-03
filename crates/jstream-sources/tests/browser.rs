@@ -7,7 +7,9 @@ use std::sync::{Arc, Mutex};
 
 use jstream_browser::fake::FakeBrowser;
 use jstream_browser::{BrowserBackend, BrowserError, DEFAULT_CSS, PageLocation};
-use jstream_media::{MediaTime, Timebase};
+use jstream_media::{
+    ColorInfo, FrameSize, MediaTime, PixelFormat, Plane, Timebase, VideoFrame, VideoFrameInfo,
+};
 use jstream_platform::{AudioInputHandler, AudioPacket, PlatformError};
 use jstream_protocol::{AssetRoot, Reference, Settings};
 use jstream_sources::{AssetRoots, Context, Registry, Source, SourceError};
@@ -121,6 +123,49 @@ fn a_url_opens_a_web_page_of_the_set_size_and_rate() {
     assert!(!pages[0].is_closed());
     drop(source);
     assert!(pages[0].is_closed());
+}
+
+/// ADR-0095: a page whose backend paints on the CPU (CEF on Linux) shows its latest
+/// paint as the source's frame, and is looked at again every frame of its rate.
+#[test]
+fn a_page_that_paints_on_the_cpu_shows_its_paint_each_frame() {
+    let browser = FakeBrowser::new();
+    browser.paint_on_cpu(true);
+    let ctx = ctx(&browser, None);
+    let mut source = create(
+        &ctx,
+        &settings(&[
+            ("width", json!(2)),
+            ("height", json!(1)),
+            ("fps", json!(30)),
+        ]),
+    )
+    .expect("a page");
+    let at = MediaTime::new(1000, Timebase::MILLIS);
+    assert_eq!(
+        source.next_change(at),
+        Some(MediaTime::new(1034, Timebase::MILLIS)),
+        "one frame at 30 fps, rounded up"
+    );
+    let before = source.frame(at).expect("a frame");
+    assert!(
+        before.planes()[0].data().iter().all(|&b| b == 0),
+        "transparent before the first paint"
+    );
+    let painted = VideoFrame::new(
+        VideoFrameInfo {
+            size: FrameSize::new(2, 1).expect("a size"),
+            format: PixelFormat::Rgba8,
+            color: ColorInfo::default(),
+            pts: MediaTime::zero(Timebase::MILLIS),
+        },
+        vec![Plane::new(vec![255, 0, 0, 255, 0, 0, 255, 128], 8)],
+    )
+    .expect("a frame");
+    browser.pages()[0].paint(Arc::new(painted));
+    let after = source.frame(at).expect("a frame");
+    assert_eq!(after.planes()[0].data(), &[255, 0, 0, 255, 0, 0, 255, 128]);
+    assert!(source.gpu_frame().is_none());
 }
 
 /// A page given as HTML opens as that HTML, ahead of the URL, behind a local file, and

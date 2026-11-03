@@ -16,6 +16,7 @@
 //! `source.sizes` (every source without a size, since the mock makes no frames),
 //! `activity.list` (always empty: the mock keeps no activity log),
 //! `plugin.list` (always empty: the mock runs no plugins),
+//! `profile.get` (always empty: the mock draws nothing),
 //! `state.changed`, `studio.changed` and `output.state_changed` events, per-client undo
 //! and redo, and live-value gestures (`live.set`, `live.cancel`, `live.list`,
 //! `ends_gesture`, takeover and expiry). Each [`MockEngine::connect`] opens one client
@@ -628,6 +629,8 @@ struct Item {
     blend: BlendMode,
     /// Its effects (ADR-0065), settings as given: only the video chain holds any.
     effects: jstream_protocol::FilterChains,
+    /// Whether its canvas box is locked (ADR-0096).
+    locked: bool,
 }
 
 impl State {
@@ -996,6 +999,12 @@ impl State {
             }
             // The mock runs no mixer, so there is no loudness to reset.
             Action::AudioResetLoudness {} => return Ok(CallResult::action()),
+            // The mock watches no packs folder (ADR-0097), as an engine without one.
+            action @ (Action::PackWrite { .. } | Action::PackDelete { .. }) => {
+                return Err(ProtocolError::Unsupported {
+                    call: action.name().into(),
+                });
+            }
             other => return Err(unimplemented_by_mock(other.name())),
         };
         let Some(&state) = self.outputs.get(&output_id) else {
@@ -1198,6 +1207,12 @@ impl State {
             },
             // The mock describes no kinds, so it lists none.
             Query::KindList => QueryResult::KindList { kinds: Vec::new() },
+            // It loads no packs either (ADR-0097), as an engine without a packs folder.
+            query @ (Query::PackList | Query::PackRead { .. }) => {
+                return Err(ProtocolError::Unsupported {
+                    call: query.name().into(),
+                });
+            }
             Query::DeviceList | Query::UiSettingsGet { .. } => {
                 return Err(ProtocolError::Unsupported {
                     call: query.name().into(),
@@ -1215,6 +1230,10 @@ impl State {
                         u64::try_from(since.as_millis()).unwrap_or(u64::MAX)
                     }),
                 entries: Vec::new(),
+            },
+            // The mock draws nothing and reads no threads (ADR-0103): an empty profile.
+            Query::ProfileGet { .. } => QueryResult::ProfileGet {
+                profile: jstream_protocol::ProfileInfo::default(),
             },
             other => return Err(unimplemented_by_mock(other.name())),
         };
@@ -1605,6 +1624,7 @@ impl Collection {
                         opacity,
                         blend,
                         effects: Default::default(),
+                        locked: false,
                     },
                 );
                 vec![Edit::ItemRemove { item_id }]
@@ -1730,6 +1750,14 @@ impl Collection {
                 vec![Edit::ItemSetBlend {
                     item_id,
                     blend: old,
+                }]
+            }
+            Edit::ItemSetLocked { item_id, locked } => {
+                let item = self.existing_item(&item_id)?;
+                let old = std::mem::replace(&mut item.locked, locked);
+                vec![Edit::ItemSetLocked {
+                    item_id,
+                    locked: old,
                 }]
             }
             Edit::SourceCreate {
@@ -2407,6 +2435,7 @@ impl Collection {
                     opacity: item.opacity,
                     blend: item.blend,
                     transition: ItemTransition::default(),
+                    locked: item.locked,
                 })
             })
             .collect()
@@ -2662,6 +2691,12 @@ fn restore_item(
             item_id: item_id.clone(),
             scene_id: None,
             visible: false,
+        });
+    }
+    if item.locked {
+        edits.push(Edit::ItemSetLocked {
+            item_id: item_id.clone(),
+            locked: true,
         });
     }
     let owner = jstream_protocol::FilterOwner::Item {

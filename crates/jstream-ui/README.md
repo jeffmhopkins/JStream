@@ -31,10 +31,15 @@ Contents ([Design](#design) explains the choices):
   session.
 - **Header** (`header.rs`): `Header`, the bar along the top: the brand, the File menu
   (the connection's details and Disconnect), the Edit menu (Undo, Redo), the View menu
-  (show or hide each panel, and open the program or multiview projector) and the Layout menu (saved layouts), the stats
+  (show or hide each panel, and open the program or multiview projector), the Layout menu (saved layouts) and the
+  Help menu (the project's pages, and About), the stats
   readout (the program's frame rate, the frames dropped since the page connected and the
   engine's CPU use), Studio mode (kept in the browser's storage), Record, and Go
   Live / End stream. `RecordButton`, `Dropped` and `Load` are its logic, tested natively.
+- **About** (`about.rs`): `About`, the About dialog (the app icon, the version and build
+  the UI was built as, the engine's protocol, the licence and links), and `Link`, the
+  project's pages on GitHub the Help menu and the dialog link to, all under the
+  workspace's `repository`. Tested natively.
 - **Dock** (`dock.rs`): `Dock`, the model of which panel sits where: eight `Zone`s
   around the canvas, each holding `Group`s of tabbed `PanelId`s, the zones' sizes, and
   the saved layouts (`Layout`, with Editing and Live built in). Every change goes
@@ -87,7 +92,10 @@ Contents ([Design](#design) explains the choices):
   ungrouping they send, tested natively), `clipboard.rs` (copy and paste, KB-05: the
   page's own clipboard of items or a scene, and the batches Paste, Paste scene and
   Duplicate scene send; also the item menu's clipboards of one source's filters and one
-  item's box and crop, and the edits their pastes send, tested natively), `dialog.rs` (`Modal`,
+  item's box and crop, and the edits their pastes send, tested natively),
+  `screenshot.rs` (Screenshot (scene) and Screenshot (source), ADR-0096: a one-picture
+  PNG preview stream on a tap of the canvas's channel, saved through a download link;
+  the request, the frame's outcome and the file's name are tested natively), `dialog.rs` (`Modal`,
   the modal dialog frame) and `icons.rs` (`Icon`, the prototype's stroke icons, plus
   the tool bars' own).
 - **Panels** (`panels/`): the scene list (`scenes.rs`, with its folders: the rows each
@@ -309,11 +317,16 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   toast, and Remove from scene, each one batch. Ctrl+C copies the selection (on a scene
   row, the scene) into the page's own clipboard (`Clipboard` context), and Ctrl+V,
   Paste or Paste scene sends one batch that places the copied items' sources again,
-  with their placement settings and effects, or duplicates the copied scene. As OBS's
+  with their placement settings, lock and effects, or duplicates the copied scene. As OBS's
   does, the item menu also copies the primary item's source's filters (`FilterClip`)
   and pastes them onto each selected item's source, after its own or replacing them,
-  chain by chain, and copies the primary item's box and crop (`TransformClip`) onto each
-  selected item, each paste one batch. For one item of a source placed more than once, or a
+  chain by chain (a chain the clip has nothing for keeps its own), and copies the
+  primary item's whole placement (box, fit, rotation, 3D and flips) and crop
+  (`TransformClip`) onto each selected item, each paste one batch. Lock, a check after Visible, locks or unlocks
+  each selected item (`item.set_locked`, ADR-0096), as each row's lock button does; a
+  locked item's box takes no canvas drag (see [Canvas](#canvas)). Screenshot (source)
+  saves the item's source alone as a PNG, and a nested scene's item, the scene's
+  Screenshot (scene), as the scene rows' and the canvas margin's menus do. For one item of a source placed more than once, or a
   copy whose original exists, it switches between a reference and an independent clone
   (decision register D3): `source.duplicate` and `item.set_source` to the copy, or
   `item.set_source` back to the original and `source.delete` of a copy nothing else
@@ -342,9 +355,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   placed again but not created, and Scene. A search box above the list narrows it by
   name, description or group (`type_matches`, tested natively), keeping the pick while
   it is shown, else the first match. "Create new" sends `source.create` and
-  `item.add` as one batch (a new `text` starting bold with a soft shadow,
+  `item.add` as one batch (a new `text` or `timer` starting bold with a soft shadow,
   `starting_settings`, over its kind's plain defaults), with a box of the prototype's native size for the type
-  (Shape's 400 × 120, which the prototype doesn't have),
+  (Shape 400 × 120 and Timer 300 × 90, which the prototype doesn't have),
   centred and scaled down to fit the canvas (ADR-0022's `fit` keeps the picture's
   aspect within it). An existing source is placed again 40 pixels right of and below
   its first placement, or, placed nowhere, at its own size when the engine reports one
@@ -664,7 +677,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   logical CPUs, "<1%" below half a percent, left out when the engine reads none. Undo and
   Redo in the Edit menu call `history.undo` and `history.redo`, like the canvas's
   buttons. A failed call shows in the shell's problem bar. The menus close on Escape
-  or on a press anywhere outside them.
+  or on a press anywhere outside them. The Help menu's entries are links to the
+  project's pages on GitHub, opened in a new tab (the desktop app hands them to the
+  system browser), then About JStream. The About dialog's version is the workspace's
+  (`jstream-ui` takes `version.workspace`, as the apps do), its build the `GITHUB_SHA`
+  CI built it with (`option_env!`, so a local build says "local build"), and its
+  protocol the session's `welcome`. The brand mark, the favicon and the dialog show the
+  bundle's `icon.png` (see [Build](#build)).
 - **Outputs.** The panel reads the outputs, encoder profiles, video mixes, buses and scenes with `state.get`, then
   each output's `output.status`, and re-reads them on `state.changed` and
   `events.dropped`; `output.state_changed` updates one output's state in place. It
@@ -911,6 +930,11 @@ browser, and `mod.rs` is the component.
   placement and visibility can change", and its edits are addressed to it, so they
   write its overrides (ADR-0049). Its drags send the keyframe's live values, addressed
   to it as the commit is, which the engine takes from protocol 0.53 (#846).
+- **Locked items** (`Layout::is_locked`, ADR-0096). A click selects a locked item as
+  any other, but no drag, handle or arrow key moves it: a selection holding one shows
+  its outline and readout, which ends “· locked”, with no handles or knob, and a drag
+  of several moves only the unlocked ones. The Inspector, the menus and the Transform
+  panel still change it, as the engine applies every edit.
 - **The preview.** Under the boxes is the shown scene's picture, live: the program
   mix while the canvas shows the scene on program, so its transitions show, else that
   scene's own stream (`preview.subscribe`'s `scene_id`, CV-03). The canvas opens the
@@ -1050,8 +1074,11 @@ trunk serve            # rebuilds on change and serves dist/ locally
 trunk needs the `wasm-bindgen` CLI at the version `Cargo.lock` resolves for
 `wasm-bindgen`. It uses one found on `PATH`, and otherwise downloads it; a release build
 also downloads `wasm-opt`. `dist/` holds `index.html`, the JavaScript glue, the `.wasm`
-and the stylesheet, with content hashes in their names, and `fonts/`, copied as it is
-(`copy-dir` in `index.html`, so the fonts and `OFL.txt` keep their names). It is not
+and the stylesheet, with content hashes in their names, `fonts/`, copied as it is
+(`copy-dir` in `index.html`, so the fonts and `OFL.txt` keep their names), and
+`icon.png`, the desktop app's `apps/jstream-desktop/icons/icon.png` (`copy-file`), so
+the app has one icon: replacing that file changes the UI's mark, favicon and About
+dialog too. It is not
 committed. trunk's
 inline loader script carries a `{{__TRUNK NONCE__}}` placeholder (`create_nonce` in
 `Trunk.toml`), which the serving engine replaces with each response's

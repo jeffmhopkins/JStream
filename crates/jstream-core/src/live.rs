@@ -3,7 +3,10 @@
 //! them and wakes the program mix when an animation's frame is due.
 //!
 //! A source is built when it is created and built again when its settings change; a
-//! deleted source's instance goes with it. Building reads and decodes files, so it never
+//! deleted source's instance goes with it. A source built again starts its time again,
+//! unless its kind keeps the old instance's time zero for that change
+//! (`SourceKind::keeps_time`: a `timer` keeps counting through a change of its look)
+//! or it is built again only for a new density. Building reads and decodes files, so it never
 //! runs under the collection lock: the engine records what it wants under the lock
 //! ([`LiveSources::sync`]) and the thread builds it and installs the result
 //! ([`LiveSources::install`]), which re-plans the program mix. Until then the source
@@ -55,6 +58,7 @@ use crate::effect_packs::{PackEffects, PackSources};
 use crate::filter_assets::{self, AssetKey, FilterAsset, FilterAssets, LoadError, Loaded};
 use crate::lock;
 use crate::pack_source;
+use crate::profile::SourceMeters;
 use crate::runtime::{FRAME_DEN, FRAME_NUM};
 use crate::snapshot::{CaptureKey, Frame, Look};
 
@@ -97,6 +101,9 @@ pub(crate) struct LiveSources {
     /// The loaded ones, as plans read them: rebuilt when one is installed or let go, so
     /// a plan takes them with no copy.
     loaded: Arc<FilterAssets>,
+    /// What each source's paints, builds and plans' looks cost, and the plans, for
+    /// `profile.get` (ADR-0103). The thread holds it too.
+    meters: Arc<SourceMeters>,
 }
 
 /// One asset a video filter reads.
@@ -133,7 +140,23 @@ struct Entry {
     density: f32,
     /// The build asked for last. Only its result is installed.
     ticket: u64,
+    /// The time zero that build keeps, on the media clock: the running instance's, for
+    /// a build at another density or for a settings change its kind counts on through
+    /// (`SourceKind::keeps_time`, a `timer`'s style); `None` starts it at its install.
+    anchor: Option<MediaTime>,
     running: Option<Running>,
+}
+
+impl Entry {
+    /// The time zero a build queued now would keep: the one the build in flight keeps,
+    /// if there is one (`None` when it starts again, which a later build mustn't undo),
+    /// else the running instance's.
+    fn time_zero(&self) -> Option<MediaTime> {
+        match &self.running {
+            Some(running) if running.ticket == self.ticket => Some(running.start),
+            _ => self.anchor,
+        }
+    }
 }
 
 /// A built source and the frame it showed last.
@@ -143,7 +166,8 @@ struct Running {
     ticket: u64,
     /// Its sound, if it has any.
     audio: Option<MediaAudio>,
-    /// When it was built, on the media clock: its time zero.
+    /// Its time zero on the media clock: when it was installed, or the time zero of the
+    /// instance before it that its build kept ([`Entry::anchor`]).
     start: MediaTime,
     shown: Option<(Arc<VideoFrame>, Frame)>,
     /// The last plan that reached it, or the plan current when it was built, so the
@@ -169,6 +193,9 @@ pub(crate) struct Job {
     settings: Settings,
     density: f32,
     ticket: u64,
+    /// The time zero it keeps ([`Entry::anchor`]), so the thread paints it for the
+    /// right time before it is installed.
+    anchor: Option<MediaTime>,
     registry: Arc<Registry>,
     ctx: Context,
 }
@@ -218,12 +245,16 @@ impl LiveHost for NoHost {
 impl LiveSources {
     /// The built-in kinds, with no asset folders yet and `host` to call back.
     pub(crate) fn new(host: Weak<dyn LiveHost>) -> Self {
+        let meters = Arc::new(SourceMeters::default());
         Self {
             registry: Arc::new(Registry::builtin()),
             ctx: Context::default(),
             entries: BTreeMap::new(),
             tickets: 0,
-            worker: Arc::new(Worker::new(Arc::new(SystemClock::new()))),
+            worker: Arc::new(Worker::new(
+                Arc::new(SystemClock::new()),
+                Arc::clone(&meters),
+            )),
             host,
             started: false,
             plan: 0,
@@ -231,7 +262,14 @@ impl LiveSources {
             context: None,
             assets: HashMap::new(),
             loaded: Arc::new(FilterAssets::new()),
+            meters,
         }
+    }
+
+    /// What each source's paints, builds and plans' looks cost, and the plans
+    /// (ADR-0103).
+    pub(crate) fn meters(&self) -> Arc<SourceMeters> {
+        Arc::clone(&self.meters)
     }
 
     /// The clock animations run on: the platform's media clock once the host injects
@@ -244,9 +282,12 @@ impl LiveSources {
     pub(crate) fn set_clock(&mut self, clock: Arc<dyn MediaClock>) {
         let now = clock.now();
         let mut running = false;
-        for source in self.entries.values_mut().filter_map(|e| e.running.as_mut()) {
-            source.start = now;
-            running = true;
+        for entry in self.entries.values_mut() {
+            entry.anchor = entry.anchor.map(|_| now);
+            if let Some(source) = entry.running.as_mut() {
+                source.start = now;
+                running = true;
+            }
         }
         self.audio_changed = true;
         let replan = running || lock(&self.worker.queue).wake.is_some();
@@ -354,6 +395,7 @@ impl LiveSources {
         if self.entries.len() != before {
             self.share_painters();
         }
+        self.meters.retain(|id| state.source(id).is_some());
         let mut jobs = Vec::new();
         for source in state.sources() {
             let Some(kind) = framed(&registry, source.kind()) else {
@@ -364,12 +406,15 @@ impl LiveSources {
                 settings: Settings::new(),
                 density: 1.0,
                 ticket: 0,
+                anchor: None,
                 running: None,
             });
             let settings = built_from(kind, source.settings());
             if entry.kind == kind && entry.settings == settings {
                 continue;
             }
+            let keeps = entry.kind == kind && registry.keeps_time(kind, &entry.settings, &settings);
+            entry.anchor = if keeps { entry.time_zero() } else { None };
             self.tickets += 1;
             entry.kind = kind.to_owned();
             entry.settings = settings;
@@ -380,6 +425,7 @@ impl LiveSources {
                 settings: entry.settings.clone(),
                 density: entry.density,
                 ticket: entry.ticket,
+                anchor: entry.anchor,
                 registry: Arc::clone(&self.registry),
                 ctx: self.ctx.clone(),
             });
@@ -562,7 +608,7 @@ impl LiveSources {
                 audio: source.sound(),
                 source,
                 ticket: built.ticket,
-                start: self.worker.now(),
+                start: entry.anchor.unwrap_or_else(|| self.worker.now()),
                 shown: None,
                 planned: plan,
                 shown_gpu: None,
@@ -601,9 +647,9 @@ impl LiveSources {
     fn share_painters(&mut self) {
         let painters = self
             .entries
-            .values()
-            .filter_map(|e| e.running.as_ref())
-            .filter_map(|r| Some((r.source.painter()?, r.start)))
+            .iter()
+            .filter_map(|(id, e)| Some((id, e.running.as_ref()?)))
+            .filter_map(|(id, r)| Some((id.clone(), r.source.painter()?, r.start)))
             .collect();
         lock(&self.worker.queue).painters = painters;
     }
@@ -641,6 +687,8 @@ impl LiveSources {
             if density == entry.density {
                 continue;
             }
+            // Drawing it finer changes nothing it shows, so it keeps its time zero.
+            entry.anchor = Some(running.start);
             self.tickets += 1;
             entry.density = density;
             entry.ticket = self.tickets;
@@ -650,6 +698,7 @@ impl LiveSources {
                 settings: entry.settings.clone(),
                 density,
                 ticket: entry.ticket,
+                anchor: entry.anchor,
                 registry: Arc::clone(&self.registry),
                 ctx: self.ctx.clone(),
             });
@@ -712,6 +761,21 @@ impl LiveSources {
     }
 
     fn look_as(
+        &mut self,
+        source_id: &SourceId,
+        now: MediaTime,
+        versions: &mut u64,
+        reach: bool,
+    ) -> Option<Look> {
+        let started = Instant::now();
+        let look = self.look_timed(source_id, now, versions, reach);
+        if look.is_some() {
+            self.meters.looked(source_id, started.elapsed());
+        }
+        look
+    }
+
+    fn look_timed(
         &mut self,
         source_id: &SourceId,
         now: MediaTime,
@@ -922,6 +986,8 @@ fn after(start: MediaTime, change: MediaTime, timebase: Timebase) -> Option<Medi
 pub(crate) struct Worker {
     queue: Mutex<Queue>,
     wake: Condvar,
+    /// Where the thread counts its paints and builds (ADR-0103).
+    meters: Arc<SourceMeters>,
 }
 
 struct Queue {
@@ -934,14 +1000,15 @@ struct Queue {
     building: usize,
     /// The running sources that draw their frames as they come due, with each one's
     /// time zero: the thread paints them before every re-plan.
-    painters: Vec<(Arc<dyn Painter>, MediaTime)>,
+    painters: Vec<(SourceId, Arc<dyn Painter>, MediaTime)>,
     clock: Arc<dyn MediaClock>,
     closed: bool,
 }
 
 impl Worker {
-    fn new(clock: Arc<dyn MediaClock>) -> Self {
+    fn new(clock: Arc<dyn MediaClock>, meters: Arc<SourceMeters>) -> Self {
         Self {
+            meters,
             queue: Mutex::new(Queue {
                 jobs: VecDeque::new(),
                 loads: VecDeque::new(),
@@ -985,7 +1052,7 @@ enum Next {
     Build(Job),
     Load(AssetJob),
     /// Paint these at this time, then re-plan.
-    Replan(Vec<(Arc<dyn Painter>, MediaTime)>, MediaTime),
+    Replan(Vec<(SourceId, Arc<dyn Painter>, MediaTime)>, MediaTime),
     Exit,
 }
 
@@ -1032,8 +1099,10 @@ fn run(worker: &Worker, host: &Weak<dyn LiveHost>) {
             Next::Replan(painters, now) => {
                 // Drawing can take milliseconds, so it happens here, before the re-plan
                 // takes the collection lock and asks for the painted frames.
-                for (painter, start) in painters {
+                for (source_id, painter, start) in painters {
+                    let started = Instant::now();
                     painter.paint(since(now, start));
+                    worker.meters.painted(&source_id, started.elapsed());
                 }
                 match host.upgrade() {
                     Some(host) => host.replan(),
@@ -1057,6 +1126,7 @@ fn run(worker: &Worker, host: &Weak<dyn LiveHost>) {
                 }
             }
             Next::Build(job) => {
+                let started = Instant::now();
                 let mut result = if pack_source::is_pack_kind(&job.kind)
                     && job.registry.descriptor(&job.kind).is_none()
                 {
@@ -1070,10 +1140,19 @@ fn run(worker: &Worker, host: &Weak<dyn LiveHost>) {
                     .as_mut()
                     .ok()
                     .and_then(|source| source.set_density(job.density));
+                // A source that keeps an earlier time zero is painted for the time it
+                // will show once installed, so its first plan doesn't show its zero's
+                // frame (a `timer` built again for a style change keeps its count).
+                if let (Ok(source), Some(anchor)) = (result.as_ref(), job.anchor)
+                    && let Some(painter) = source.painter()
+                {
+                    painter.paint(since(worker.now(), anchor));
+                }
                 let size = match result.as_mut() {
                     Ok(source) => extent.or_else(|| first_size(source.as_mut())),
                     Err(_) => None,
                 };
+                worker.meters.built(&job.source_id, started.elapsed());
                 let built = Built {
                     source_id: job.source_id,
                     ticket: job.ticket,
