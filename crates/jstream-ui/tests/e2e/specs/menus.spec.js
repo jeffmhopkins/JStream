@@ -360,6 +360,10 @@ test('the header menus behave like a menu bar', async ({ page, daemon }) => {
   await page.keyboard.press('ArrowLeft');
   await page.keyboard.press('ArrowLeft');
   await expect(dropdown('File').getByRole('menuitem', { name: 'Disconnect' })).toBeFocused();
+  // Left from File wraps to Help, the bar's last menu.
+  await page.keyboard.press('ArrowLeft');
+  await expect(dropdown('Help')).toBeVisible();
+  await expect(dropdown('Help').getByRole('menuitem', { name: 'Documentation' })).toBeFocused();
   await page.keyboard.press('ArrowLeft');
   await expect(dropdown('Layout')).toBeVisible();
   await page.keyboard.press('Escape');
@@ -372,6 +376,51 @@ test('the header menus behave like a menu bar', async ({ page, daemon }) => {
   await page.keyboard.press('Escape');
   await page.keyboard.press('Control+ArrowRight');
   await expect(button('Layout')).toBeFocused();
+});
+
+test('the Help menu links to the project and opens the About dialog', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  const header = page.locator('header.app-header');
+  const help = page.getByRole('menu', { name: 'Help' });
+  const repo = 'https://github.com/jeffmhopkins/JStream';
+
+  // The header's mark is the app icon, served from the bundle.
+  const mark = header.locator('img.brand-mark');
+  await expect(mark).toHaveAttribute('src', 'icon.png');
+  expect(await mark.evaluate((img) => img.complete && img.naturalWidth)).toBeGreaterThan(0);
+
+  // Help lists the project's pages, each opening in a new tab, then About.
+  await header.locator('.top-menu[data-menu="help"] > .menu-button').click();
+  await expect(help.getByRole('menuitem')).toHaveText([
+    'Documentation', 'Getting started', 'Release notes', 'Report an issue', 'About JStream',
+  ]);
+  const issue = help.getByRole('menuitem', { name: 'Report an issue' });
+  await expect(issue).toHaveAttribute('href', `${repo}/issues/new`);
+  await expect(issue).toHaveAttribute('target', '_blank');
+  await expect(issue).toHaveAttribute('rel', 'noopener noreferrer');
+
+  // About: the icon, the version, the build, the engine's protocol and the links.
+  await help.getByRole('menuitem', { name: 'About JStream' }).click();
+  await expect(help).toHaveCount(0);
+  const about = page.getByRole('dialog', { name: 'About JStream' });
+  await expect(about).toBeVisible();
+  const icon = about.locator('img.about-icon');
+  await expect(icon).toHaveAttribute('src', 'icon.png');
+  expect(await icon.evaluate((img) => img.complete && img.naturalWidth)).toBeGreaterThan(0);
+  const facts = about.locator('.about-facts');
+  await expect(facts.locator('dt')).toHaveText(['Version', 'Build', 'Protocol', 'License']);
+  await expect(facts.locator('dd').first()).toHaveText(/^\d+\.\d+\.\d+/);
+  await expect(facts.locator('dd').nth(2)).toHaveText(/^\d+\.\d+$/);
+  await expect(about.getByRole('link', { name: 'Source code on GitHub' })).toHaveAttribute('href', repo);
+  await expect(about.getByRole('link', { name: 'MIT' })).toHaveAttribute('href', `${repo}/blob/main/LICENSE-MIT`);
+
+  // Escape closes it, and so does Close.
+  await page.keyboard.press('Escape');
+  await expect(about).toHaveCount(0);
+  await header.locator('.top-menu[data-menu="help"] > .menu-button').click();
+  await help.getByRole('menuitem', { name: 'About JStream' }).click();
+  await about.locator('.modal-footer').getByRole('button', { name: 'Close' }).click();
+  await expect(about).toHaveCount(0);
 });
 
 test('an arrow key pressed before the next menu is drawn still moves along the bar', async ({ page, daemon }) => {

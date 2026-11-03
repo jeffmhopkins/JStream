@@ -155,7 +155,7 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
   border-bottom: 1px solid var(--line);
 }
 .app-header .brand { display: flex; align-items: center; gap: 10px; margin-right: 6px; font-size: 15px; font-weight: 600; }
-.app-header .brand-mark { width: 22px; height: 22px; border-radius: 6px; background: var(--accent); }
+.app-header .brand-mark { width: 22px; height: 22px; border-radius: 5px; }
 .app-header .spacer { flex: 1 1 auto; }
 .app-header .readout { display: flex; gap: 14px; color: var(--muted); font-size: 12px; }
 .top-menu { position: relative; }
@@ -192,6 +192,8 @@ input::placeholder, textarea::placeholder { color: var(--dim); }
 .menuitem:hover:not(:disabled), .menuitem:focus-visible { background: var(--menu-hover); color: #fff; outline: none; }
 .menuitem .mark { font-size: 11px; color: var(--dim); }
 .menuitem .mark.add, .menuitem.link { color: var(--link); }
+a.menuitem { box-sizing: border-box; color: var(--text); text-decoration: none; }
+a.menuitem:focus-visible { outline: none; }
 .menu-button .layout-name { color: var(--muted); }
 .menu-button .caret { margin-left: 4px; font-size: 10px; color: var(--dim); }
 .dropdown.layouts { min-width: 260px; }
@@ -1117,6 +1119,19 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .plugin-meta { color: var(--muted); font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .plugin-actions { display: flex; gap: 0.4rem; }
 .modal.plugin-dialog { width: 480px; }
+
+/* The About dialog (about.rs). */
+.modal.about-dialog { width: 400px; }
+.about-body { display: flex; flex-direction: column; align-items: center; padding: 20px 24px 18px; text-align: center; }
+.about-icon { width: 96px; height: 96px; border-radius: 20px; }
+.about-name { margin: 12px 0 2px; font-size: 20px; font-weight: 600; }
+.about-tagline { margin: 0 0 16px; color: var(--muted); font-size: 12px; }
+.about-facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; width: 100%; margin: 0 0 16px; font-size: 12px; text-align: left; }
+.about-facts dt { color: var(--muted); }
+.about-facts dd { margin: 0; overflow-wrap: anywhere; }
+.about-dialog a { color: var(--link); text-decoration: none; }
+.about-dialog a:hover, .about-dialog a:focus-visible { text-decoration: underline; }
+.about-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; font-size: 12px; }
 .plugin-dialog-body { display: grid; gap: 10px; padding: 14px 16px; overflow: auto; max-height: 60vh; }
 .plugin-dialog-body .field { display: grid; grid-template-columns: 1fr; align-items: start; gap: 0.35rem; margin: 0; }
 .plugin-dialog-body textarea { width: 100%; box-sizing: border-box; }
