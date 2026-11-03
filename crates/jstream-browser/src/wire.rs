@@ -51,6 +51,8 @@ pub(crate) enum ToHelper {
     SetCss { page: u32, css: String },
     /// Load a page again from its location.
     Reload { page: u32 },
+    /// Tell a page whether anything draws it: a hidden one stops painting.
+    SetHidden { page: u32, hidden: bool },
     /// Close a page.
     Close { page: u32 },
     /// The engine is done with a page's shared texture `slot`: the helper may paint
@@ -246,6 +248,11 @@ impl ToHelper {
                 out.u8(7);
                 out.u32(*page);
             }
+            Self::SetHidden { page, hidden } => {
+                out.u8(8);
+                out.u32(*page);
+                out.u8(u8::from(*hidden));
+            }
         }
         Ok(())
     }
@@ -308,6 +315,14 @@ impl ToHelper {
                 slot: body.u8()?,
             },
             7 => Self::Reload { page: body.u32()? },
+            8 => Self::SetHidden {
+                page: body.u32()?,
+                hidden: match body.u8()? {
+                    0 => false,
+                    1 => true,
+                    _ => return Err(WireError::Malformed("a hidden flag isn't 0 or 1")),
+                },
+            },
             _ => return Err(WireError::Malformed("an unknown message to the helper")),
         };
         body.end()?;
@@ -571,6 +586,14 @@ mod tests {
             },
             ToHelper::Close { page: 2 },
             ToHelper::Reload { page: 4 },
+            ToHelper::SetHidden {
+                page: 4,
+                hidden: true,
+            },
+            ToHelper::SetHidden {
+                page: 5,
+                hidden: false,
+            },
             ToHelper::Released { page: 3, slot: 2 },
             ToHelper::Shutdown,
         ]);

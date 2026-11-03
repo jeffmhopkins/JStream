@@ -134,7 +134,9 @@ What follows is Windows; **On Linux** below says what differs.
   HTML and 64 KiB of CSS); a malformed or oversized one ends the link. The engine
   opens a page and waits up to 10 s for the helper to confirm it, sets its CSS, reloads
   it (`BrowserPage::reload`, which the helper does with CEF's own reload, the custom CSS
-  going in again on load), closes it, tells the helper which adapter to paint on, and shuts it down. The helper sends
+  going in again on load), hides or shows it (`BrowserPage::set_hidden`, which the
+  helper does with CEF's `WasHidden` on its UI thread, so a hidden page stops painting;
+  a hide sent before the browser exists applies when it arrives, #1071), closes it, tells the helper which adapter to paint on, and shuts it down. The helper sends
   frames, audio, audio failures, refused-request counts (never URLs) and warnings for
   the engine's log. A reader thread hands each to its page, stamping frames and audio on
   the media clock as they arrive. When the helper's pipe ends, every page's audio fails

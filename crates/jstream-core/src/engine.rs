@@ -3627,6 +3627,8 @@ impl State {
         if !same {
             *source_shots = Arc::new(shots);
         }
+        // Every mix and preview has looked at what it draws: the rest can rest.
+        live.rest_undrawn();
         live.wake_at(wake);
         planning.end_ms
     }

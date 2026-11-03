@@ -399,6 +399,13 @@ impl BrowserPage for LinkPage {
         self.link.send(&ToHelper::Reload { page: self.id });
     }
 
+    fn set_hidden(&mut self, hidden: bool) {
+        self.link.send(&ToHelper::SetHidden {
+            page: self.id,
+            hidden,
+        });
+    }
+
     fn audio(&self) -> &Arc<PageAudio> {
         &self.page.audio
     }

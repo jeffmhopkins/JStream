@@ -298,6 +298,11 @@ impl Host {
                     page.reload();
                 }
             }
+            ToHelper::SetHidden { page, hidden } => {
+                if let Some(page) = self.pages().get(&page).cloned() {
+                    page.set_hidden(hidden);
+                }
+            }
             ToHelper::Close { page } => {
                 if let Some(page) = self.pages().remove(&page) {
                     page.close();
@@ -342,6 +347,7 @@ impl Host {
             css: Mutex::new(spec.css.clone()),
             browser: Mutex::new(None),
             closing: AtomicBool::new(false),
+            hidden: AtomicBool::new(false),
             textures: PageTextures::default(),
             paint_warned: AtomicBool::new(false),
             channels: AtomicUsize::new(0),
@@ -437,6 +443,9 @@ pub(crate) struct PageShared {
     /// Set when the engine closes the page: a browser that arrives later is closed at
     /// once.
     closing: AtomicBool,
+    /// Whether the engine said nothing draws the page (#1071). A browser that arrives
+    /// later starts hidden.
+    hidden: AtomicBool,
     textures: PageTextures,
     /// Whether a failed paint was reported since the last good one.
     paint_warned: AtomicBool,
@@ -453,7 +462,7 @@ struct SendBrowser(::cef::Browser);
 // SAFETY: CEF's browser object is reference counted with atomic counts, and the only
 // methods called through it (`host`, `main_frame`, then `close_browser`,
 // `execute_java_script` and `reload`) are documented as callable on any thread of the
-// browser process.
+// browser process. `was_hidden` is called only on CEF's UI thread.
 unsafe impl Send for SendBrowser {}
 
 impl PageShared {
@@ -463,6 +472,11 @@ impl PageShared {
         if self.closing.load(Ordering::Acquire) {
             close(&browser);
             return;
+        }
+        if self.hidden.load(Ordering::Acquire)
+            && let Some(host) = browser.host()
+        {
+            host.was_hidden(1);
         }
         *lock(&self.browser) = Some(SendBrowser(browser));
         // `closing` may have been set between the check and the store; `close` then
@@ -601,6 +615,20 @@ impl PageShared {
         if let Some(browser) = lock(&self.browser).as_ref() {
             browser.0.reload();
         }
+    }
+
+    /// Hides or shows the page (`WasHidden`): hidden, it stops painting. On CEF's UI
+    /// thread, in order with the browser's arrival, which applies a hide sent before it.
+    fn set_hidden(self: &Arc<Self>, hidden: bool) {
+        let page = Arc::clone(self);
+        post(move || {
+            if page.hidden.swap(hidden, Ordering::AcqRel) == hidden {
+                return;
+            }
+            if let Some(host) = lock(&page.browser).as_ref().and_then(|b| b.0.host()) {
+                host.was_hidden(i32::from(hidden));
+            }
+        });
     }
 
     fn close(&self) {
