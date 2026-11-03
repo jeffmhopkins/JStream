@@ -60,10 +60,11 @@ The forces:
 
 This extends ADR-0050 and ADR-0094 and contradicts neither: a scene with no model draws as
 before. It is agent tier ([R-GOV-005](../RULES.md#R-GOV-005)): the maintainer asked for the
-feature; it adds a source kind and an optional protocol field, and one pure-Rust parsing
-crate under the existing licence list ([R-DEP-001](../RULES.md#R-DEP-001)). 3D models are
-neither audio nor video codecs, so ADR-0061's codec rule doesn't reach them; like images
-and fonts they use a pure-Rust crate, the same on every platform.
+feature; it adds a source kind and an optional protocol field, and no new dependency: the
+loader is `jstream-sources`' own, on the `serde` and `serde_json` the workspace already
+uses ([R-DEP-004](../RULES.md#R-DEP-004)), with the image source's decoders for its
+textures. 3D models are neither audio nor video codecs, so ADR-0061's codec rule doesn't
+reach them; like images and fonts they are read in pure Rust, the same on every platform.
 
 <a id="decision"></a>
 ## Decision
@@ -88,8 +89,9 @@ with no hand-written code. A setting change that only changes the material (`col
 `file` reloads the model.
 
 **2. What a file may hold.** The loader reads a glTF file's default scene: its node
-hierarchy (matrix or TRS), triangle meshes with positions, normals, tangents, one or two
-texture-coordinate sets and vertex colours, and metallic-roughness materials (base colour,
+hierarchy (matrix or TRS), triangle meshes with positions, normals, tangents, the first
+texture-coordinate set (`TEXCOORD_0`; a texture that names another set is drawn with the
+first, and logged) and vertex colours, and metallic-roughness materials (base colour,
 metal and roughness, normal, occlusion and emissive textures and factors, alpha mode
 `OPAQUE`, `MASK` or `BLEND`, `doubleSided`), with `KHR_materials_unlit` and
 `KHR_materials_emissive_strength`. Missing normals are computed flat, missing tangents
@@ -210,8 +212,8 @@ for a model that reflects its scene, and `studio` against `unlit`.
   - cards still sort by their centres among themselves, and a card drawn before a model
     can't hide part of it; per-pixel depth for cards would need a new ADR;
   - only static models: an asset's own animation, skins and morphs don't play;
-  - `jstream-sources` gains a glTF parsing dependency, justified in its PR
-    ([R-DEP-004](../RULES.md#R-DEP-004)).
+  - `jstream-sources` carries its own glTF loader (no crate fits R-DEP-004 better than
+    the workspace's `serde_json`), so glTF support beyond this subset is ours to write.
 - **Not decided here:** scene lights and shadows; playing a file's animations on the media
   clock; per-material settings beyond the base-colour texture; cards that share the depth
   buffer.
