@@ -206,6 +206,16 @@ fn manifest_rules_for_sources_name_the_field() {
             "already names",
         ),
         (
+            "prelude-name",
+            MANIFEST.replace("id = \"trail\"\nshader", "id = \"noise\"\nshader"),
+            "the shader prelude defines",
+        ),
+        (
+            "helper-name",
+            MANIFEST.replace("images = { tint", "images = { trail_wrap"),
+            "a helper the name `trail` defines",
+        ),
+        (
             "no-audio",
             MANIFEST.replace("audio = true\n", ""),
             "`audio` names no pass",
@@ -306,6 +316,61 @@ fn the_watcher_reports_a_source_kind_and_its_image_changing() {
         .expect("mtime");
     let changes = watcher.poll();
     assert_eq!(changes.kinds, [KindChange::Changed("space/warp".into())]);
+}
+
+/// Sets `path`'s modification time `hours` ahead, so a poll sees it changed whatever
+/// the clock's resolution.
+fn touch(path: &Path, hours: u64) {
+    let file = std::fs::File::options()
+        .write(true)
+        .open(path)
+        .expect("open");
+    file.set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(3600 * hours))
+        .expect("mtime");
+}
+
+/// A PNG of `width` by `height` opaque green pixels.
+fn green(width: u32, height: u32) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(&mut bytes, width, height);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = encoder.write_header().expect("header");
+        writer
+            .write_image_data(&[0, 255, 0, 255].repeat((width * height) as usize))
+            .expect("data");
+    }
+    bytes
+}
+
+/// A change only a pass's `scale`, or only an image's size, holds still changes the
+/// kind, so the engine draws the new program.
+#[test]
+fn the_watcher_reports_a_scale_or_image_size_change() {
+    let temp = Temp::new("watch-scale");
+    let dir = temp.0.join("space");
+    space(&dir, MANIFEST, OUT);
+    std::fs::write(dir.join("tint.png"), green(2, 2)).expect("png");
+    let mut watcher = PackWatcher::new(&temp.0, PRELUDE);
+    assert_eq!(watcher.poll().kinds.len(), 1);
+    let changed = [KindChange::Changed("space/warp".into())];
+
+    write(
+        &dir.join("effect.toml"),
+        &MANIFEST.replace("scale = 0.5", "scale = 0.25"),
+    );
+    touch(&dir.join("effect.toml"), 1);
+    assert_eq!(watcher.poll().kinds, changed, "only the scale changed");
+
+    // The same 16 bytes, 4 by 1 instead of 2 by 2.
+    std::fs::write(dir.join("tint.png"), green(4, 1)).expect("png");
+    touch(&dir.join("tint.png"), 2);
+    assert_eq!(
+        watcher.poll().kinds,
+        changed,
+        "only the image's size changed"
+    );
 }
 
 #[test]

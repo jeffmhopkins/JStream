@@ -113,7 +113,9 @@ last pass's 1) and `inputs`, at most 12 names it reads. A source's parameters ma
 be of type `scene` (an effect's may not): a scene reference with no default, which
 fills an input slot instead of a uniform field. The names a pass can read, which follow
 the parameter-ID rules and are unique per source, are its passes' IDs, its image names,
-its `scene` parameters and, with `audio`, `audio`. `width`, `height`, `audio` and
+its `scene` parameters and, with `audio`, `audio`. None of them is a name the prelude
+defines (`sys`, `noise`, `luma` and the rest), or another name plus `_tex`, `_wrap`,
+`_texel` or `_size`, which that name's header defines. `width`, `height`, `audio` and
 `audio_source` are not parameter IDs a pack may declare. Image paths follow the shader
 paths' rules.
 

@@ -349,6 +349,33 @@ fn check(path: &Path, manifest: &Manifest) -> Result<(), PackError> {
 }
 
 /// Checks one shader source, whose ID shares `ids` with the pack's effects.
+/// The names the shader-source prelude and header define, which no pass, image or scene
+/// parameter may take: its bindings, entry points, helpers and `audio`'s helpers.
+const PRELUDE_NAMES: [&str; 19] = [
+    "sys",
+    "lin",
+    "rep",
+    "p",
+    "vs",
+    "fs",
+    "input_alpha",
+    "hash12",
+    "hash22",
+    "noise",
+    "fbm",
+    "to_premul_linear",
+    "unpremul",
+    "premul",
+    "linear_to_srgb",
+    "srgb_to_linear",
+    "luma",
+    "audio_band",
+    "audio_wave",
+];
+
+/// What the header appends to an input's name for its texture and helpers.
+const INPUT_SUFFIXES: [&str; 4] = ["_tex", "_wrap", "_texel", "_size"];
+
 fn check_source<'a>(
     source: &'a SourceSection,
     ids: &mut BTreeSet<&'a str>,
@@ -379,8 +406,16 @@ fn check_source<'a>(
     }
     // Every name a pass can read: passes, images, scene parameters and `audio`.
     let mut names: BTreeSet<&str> = BTreeSet::new();
+    let mut fields: Vec<(&str, String)> = Vec::new();
     let mut claim = |name: &'a str, field: String| -> Result<(), (String, String)> {
         check_id(name, true).map_err(|m| (field.clone(), m))?;
+        if PRELUDE_NAMES.contains(&name) {
+            return Err((
+                field,
+                format!("`{name}` is a name the shader prelude defines"),
+            ));
+        }
+        fields.push((name, field.clone()));
         if !names.insert(name) {
             return Err((
                 field,
@@ -443,6 +478,19 @@ fn check_source<'a>(
     }
     for pass in &source.passes {
         claim(&pass.id, format!("source.{}.pass.id", source.id))?;
+    }
+    // Each name `n` also defines `n_tex`, `n_wrap`, `n_texel` and `n_size`.
+    for (name, field) in &fields {
+        for suffix in INPUT_SUFFIXES {
+            if let Some(base) = name.strip_suffix(suffix)
+                && names.contains(base)
+            {
+                return Err((
+                    field.clone(),
+                    format!("`{name}` is a helper the name `{base}` defines"),
+                ));
+            }
+        }
     }
     let last = source.passes.len() - 1;
     for (n, pass) in source.passes.iter().enumerate() {

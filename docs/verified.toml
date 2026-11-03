@@ -189,7 +189,7 @@ stamp = { hash = "b3:8f6c25a84d2e8a73" }
 stamp = { hash = "b3:aa614e3467e533fe", by = "agent:claude", note = "render gains only a test-only kind snapshot (insta dev-dependency, tests/kinds.rs, schema/kinds.snap) and its README Testing paragraph; the GPU pipeline steps are unchanged" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:e4fe3ed424bb4f0a", by = "agent:shader-source", note = "one sentence on shader-source programs drawing through the filter harness (ADR-0093); the layer cap is render detail kept in its README" }
+stamp = { hash = "b3:2425703506f53be1", by = "agent:shader-source", note = "Round 2: re-read the shader-source sentence against the allocation and clamp changes; it describes the harness only and still holds." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:10a7a0c6d685e4f4", by = "agent:blend-modes", note = "Rewrote the blend sentence: fixed-function normal/additive/screen/multiply, a copy of the target for darken/lighten/overlay/difference/exclusion, sRGB mixing for the last three (ADR-0082). Layer and working textures gaining COPY_SRC, Item.blend and the composite_1080p_blend bench don't contradict anything else here." }
@@ -372,13 +372,13 @@ stamp = { hash = "b3:34ef776d7e1bb9ca", by = "agent:claude", note = "#529: adds 
 stamp = { hash = "b3:c22b506007429415", by = "agent:claude", note = "This PR (#813 and #815): Stacked #529 PR 2 (protocol 0.43): render's filter/params.rs only gains max_outset_px: None on descriptor literals; the GPU pipeline text holds. Merge: refreshed onto wave/m1-5 (main after m1-4 landed) with #813's refresh: conflicts resolved by taking m1-5's side and re-applying #813's and this PR's own diff; the tree equals refreshed #813 plus this PR's changes. #813's record: #529 PR 2 (protocol 0.43): render's filter/params.rs only gains max_outset_px: None on descriptor literals; the GPU pipeline text holds. Merge: refreshed onto wave/m1-5 (main after m1-4 landed); conflicts resolved by taking m1-5's side and re-applying this PR's own diff, plus max_outset_px: None on the e2e mock daemon's new KindDescriptor literal; snapshots regenerated. Merge of wave/m1-5 at bd50026: the wave didn't change crates/jstream-render/src/filter/params.rs. Merge of wave/m1-5 at e84bc9c: the wave didn't change crates/jstream-render/src/filter/params.rs." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pass.rs"]
-stamp = { hash = "b3:69c85ac929687849", by = "agent:shader-source", note = "one sentence on shader-source programs drawing through the filter harness (ADR-0093); the S1 steps, compositor and encode text are unchanged" }
+stamp = { hash = "b3:d6a94be35ee6ab33", by = "agent:shader-source", note = "Round 2: re-read the shader-source sentence against the allocation and clamp changes; it describes the harness only and still holds." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/prelude.wgsl"]
 stamp = { hash = "b3:27e4c5c532c91d74", by = "agent:shader-source", note = "one sentence on shader-source programs drawing through the filter harness (ADR-0093); the S1 steps, compositor and encode text are unchanged" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/program/mod.rs"]
-stamp = { hash = "b3:eb88774d08ad0155", by = "agent:shader-source", note = "one sentence on shader-source programs drawing through the filter harness (ADR-0093); the layer cap is render detail kept in its README" }
+stamp = { hash = "b3:19eec7b7853cdb71", by = "agent:shader-source", note = "Round 2: re-read the shader-source sentence against the allocation and clamp changes; it describes the harness only and still holds." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/program/noise.wgsl"]
 stamp = { hash = "b3:189d62ca714b935c", by = "agent:shader-source", note = "one sentence on shader-source programs drawing through the filter harness (ADR-0093); the S1 steps, compositor and encode text are unchanged" }
@@ -2100,10 +2100,10 @@ stamp = { hash = "b3:cc576af06e07c96f", by = "agent:a2656", note = "Earlier note
 stamp = { hash = "b3:6fe378871c2a3ee9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "main.rs only adds the handled field to the crash Program; the Usage text about where crash reports and logs go still holds" }
 
 ["CRATE-jstream-effects#purpose"."body"]
-stamp = { hash = "b3:c5d255306ebd5b12", by = "agent:shader-source", note = "added the Shader sources paragraphs ([[source]] fields, scene params, images and limits, the generated per-pass header and its helpers, slots, errors naming common or pass file, watcher stamps and diff, tests); manifest limits now count effects and sources together; deps add png/zune for images; checked against manifest.rs, source.rs, shader.rs validate_parts, pack.rs, watch.rs" }
+stamp = { hash = "b3:77eaf20faf3f1cf5", by = "agent:shader-source", note = "Round 2: added the rule that a readable name is neither a prelude name nor another name plus _tex/_wrap/_texel/_size (manifest.rs, tests). The watcher now compares each pass's WGSL, scale and inputs and each image's size and pixels (watch.rs, new scale/size test). Against render's Filters paragraph: this section's ExternalProgram seam, PROGRAM_PRELUDE, Params at binding 3, inputs from 4 up and slots match it; the 4096 side clamp and the steady-path note there change nothing here." }
 
 ["CRATE-jstream-effects#purpose"."dep:crates/jstream-render/README.md#filters"]
-stamp = { hash = "b3:61c84d2d803da0e4", by = "agent:shader-source", note = "ADR-0093 now leaves pack writing to ADR-0095 and adds the layer cap, which is render's; this section's manifest, header, slots, watcher and tests text still matches source.rs, manifest.rs, shader.rs and watch.rs" }
+stamp = { hash = "b3:96790b137c07b8c9", by = "agent:shader-source", note = "Round 2: added the rule that a readable name is neither a prelude name nor another name plus _tex/_wrap/_texel/_size (manifest.rs, tests). The watcher now compares each pass's WGSL, scale and inputs and each image's size and pixels (watch.rs, new scale/size test). Against render's Filters paragraph: this section's ExternalProgram seam, PROGRAM_PRELUDE, Params at binding 3, inputs from 4 up and slots match it; the 4096 side clamp and the steady-path note there change nothing here." }
 
 ["CRATE-jstream-effects#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-effects"]
 stamp = { hash = "b3:f31c0c24cd5ef737", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 render hookup onto wave/m1-2: re-read; dependency paragraph names jstream-render, the Drawing paragraph matches pack.rs (ExternalFilter, video_filter, FILTER_PRELUDE) and the GPU draw/reload test; the fixture prelude is gone and covers is src/** only" }
@@ -2127,7 +2127,7 @@ stamp = { hash = "b3:85654e65cbac5964", by = "agent:shader-source", note = "adde
 stamp = { hash = "b3:4e4ca7ef4b869399", by = "agent:shader-source", note = "added the Shader sources paragraphs ([[source]] fields, scene params, images and limits, the generated per-pass header and its helpers, slots, errors naming common or pass file, watcher stamps and diff, tests); manifest limits now count effects and sources together; deps add png/zune for images; checked against manifest.rs, source.rs, shader.rs validate_parts, pack.rs, watch.rs" }
 
 ["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/manifest.rs"]
-stamp = { hash = "b3:24dfa563e0fd17fc", by = "agent:shader-source", note = "added the Shader sources paragraphs ([[source]] fields, scene params, images and limits, the generated per-pass header and its helpers, slots, errors naming common or pass file, watcher stamps and diff, tests); manifest limits now count effects and sources together; deps add png/zune for images; checked against manifest.rs, source.rs, shader.rs validate_parts, pack.rs, watch.rs" }
+stamp = { hash = "b3:a01d04a02f1d7210", by = "agent:shader-source", note = "Round 2: added the rule that a readable name is neither a prelude name nor another name plus _tex/_wrap/_texel/_size (manifest.rs, tests). The watcher now compares each pass's WGSL, scale and inputs and each image's size and pixels (watch.rs, new scale/size test). Against render's Filters paragraph: this section's ExternalProgram seam, PROGRAM_PRELUDE, Params at binding 3, inputs from 4 up and slots match it; the 4096 side clamp and the steady-path note there change nothing here." }
 
 ["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/pack.rs"]
 stamp = { hash = "b3:a9fdd0b19e3f4bac", by = "agent:shader-source", note = "added the Shader sources paragraphs ([[source]] fields, scene params, images and limits, the generated per-pass header and its helpers, slots, errors naming common or pass file, watcher stamps and diff, tests); manifest limits now count effects and sources together; deps add png/zune for images; checked against manifest.rs, source.rs, shader.rs validate_parts, pack.rs, watch.rs" }
@@ -2139,13 +2139,13 @@ stamp = { hash = "b3:cc4c155d09ca279e", by = "agent:shader-source", note = "adde
 stamp = { hash = "b3:e130fab313c76e35", by = "agent:shader-source", note = "added the Shader sources paragraphs ([[source]] fields, scene params, images and limits, the generated per-pass header and its helpers, slots, errors naming common or pass file, watcher stamps and diff, tests); manifest limits now count effects and sources together; deps add png/zune for images; checked against manifest.rs, source.rs, shader.rs validate_parts, pack.rs, watch.rs" }
 
 ["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/source_tests.rs"]
-stamp = { hash = "b3:9553eec3e16902d3", by = "agent:shader-source", note = "added the Shader sources paragraphs ([[source]] fields, scene params, images and limits, the generated per-pass header and its helpers, slots, errors naming common or pass file, watcher stamps and diff, tests); manifest limits now count effects and sources together; deps add png/zune for images; checked against manifest.rs, source.rs, shader.rs validate_parts, pack.rs, watch.rs" }
+stamp = { hash = "b3:4d82f93307471c8c", by = "agent:shader-source", note = "Round 2: added the rule that a readable name is neither a prelude name nor another name plus _tex/_wrap/_texel/_size (manifest.rs, tests). The watcher now compares each pass's WGSL, scale and inputs and each image's size and pixels (watch.rs, new scale/size test). Against render's Filters paragraph: this section's ExternalProgram seam, PROGRAM_PRELUDE, Params at binding 3, inputs from 4 up and slots match it; the 4096 side clamp and the steady-path note there change nothing here." }
 
 ["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/tests.rs"]
 stamp = { hash = "b3:5b9e7930c034691f", by = "agent:shader-source", note = "added the Shader sources paragraphs ([[source]] fields, scene params, images and limits, the generated per-pass header and its helpers, slots, errors naming common or pass file, watcher stamps and diff, tests); manifest limits now count effects and sources together; deps add png/zune for images; checked against manifest.rs, source.rs, shader.rs validate_parts, pack.rs, watch.rs" }
 
 ["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/watch.rs"]
-stamp = { hash = "b3:73be38c271a21605", by = "agent:shader-source", note = "added the Shader sources paragraphs ([[source]] fields, scene params, images and limits, the generated per-pass header and its helpers, slots, errors naming common or pass file, watcher stamps and diff, tests); manifest limits now count effects and sources together; deps add png/zune for images; checked against manifest.rs, source.rs, shader.rs validate_parts, pack.rs, watch.rs" }
+stamp = { hash = "b3:bc70e490d350a003", by = "agent:shader-source", note = "Round 2: added the rule that a readable name is neither a prelude name nor another name plus _tex/_wrap/_texel/_size (manifest.rs, tests). The watcher now compares each pass's WGSL, scale and inputs and each image's size and pixels (watch.rs, new scale/size test). Against render's Filters paragraph: this section's ExternalProgram seam, PROGRAM_PRELUDE, Params at binding 3, inputs from 4 up and slots match it; the 4096 side clamp and the steady-path note there change nothing here." }
 
 ["CRATE-jstream-encode#design"."body"]
 stamp = { hash = "b3:15db2c7c4956344d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "The shared-state paragraph names Subscription::codec beside VideoSession::codec as readers of the fallback cell, which the encode thread sets once; reading still never waits on it (OnceLock::get)" }
@@ -3693,13 +3693,13 @@ stamp = { hash = "b3:34ef776d7e1bb9ca", by = "agent:claude", note = "#529: adds 
 stamp = { hash = "b3:c22b506007429415", by = "agent:claude", note = "This PR (#813 and #815): Stacked #529 PR 2 (protocol 0.43): filter/params.rs only gains max_outset_px: None; design holds. Merge: refreshed onto wave/m1-5 (main after m1-4 landed) with #813's refresh: conflicts resolved by taking m1-5's side and re-applying #813's and this PR's own diff; the tree equals refreshed #813 plus this PR's changes. #813's record: #529 PR 2 (protocol 0.43): filter/params.rs only gains max_outset_px: None; design holds. Merge: refreshed onto wave/m1-5 (main after m1-4 landed); conflicts resolved by taking m1-5's side and re-applying this PR's own diff, plus max_outset_px: None on the e2e mock daemon's new KindDescriptor literal; snapshots regenerated. Merge of wave/m1-5 at bd50026: the wave didn't change crates/jstream-render/src/filter/params.rs. Merge of wave/m1-5 at e84bc9c: the wave didn't change crates/jstream-render/src/filter/params.rs." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pass.rs"]
-stamp = { hash = "b3:69c85ac929687849", by = "agent:shader-source", note = "the images this crate drops itself now include a shader-source program's feedback layers on a size change or restart; no new file or network I/O; program uniform buffers ride the filter Scratch slots" }
+stamp = { hash = "b3:d6a94be35ee6ab33", by = "agent:shader-source", note = "Round 2: Program::encode and draw_program now keep their lists or use fixed arrays, so 'does not allocate per item on the steady path' holds for programs; the drop list (feedback layers on a size change or restart) is unchanged." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/prelude.wgsl"]
 stamp = { hash = "b3:27e4c5c532c91d74", by = "agent:shader-source", note = "the images this crate drops itself now include a shader-source program's feedback layers on a size change or restart; no new file or network I/O; program uniform buffers ride the filter Scratch slots" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/program/mod.rs"]
-stamp = { hash = "b3:eb88774d08ad0155", by = "agent:shader-source", note = "the images this crate drops itself include a program's feedback layers on a size change or restart; the 512 MiB layer cap refuses before allocating; no new I/O" }
+stamp = { hash = "b3:19eec7b7853cdb71", by = "agent:shader-source", note = "Round 2: Program::encode and draw_program now keep their lists or use fixed arrays, so 'does not allocate per item on the steady path' holds for programs; the drop list (feedback layers on a size change or restart) is unchanged." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/program/noise.wgsl"]
 stamp = { hash = "b3:189d62ca714b935c", by = "agent:shader-source", note = "the images this crate drops itself now include a shader-source program's feedback layers on a size change or restart; no new file or network I/O; program uniform buffers ride the filter Scratch slots" }
@@ -3750,7 +3750,7 @@ stamp = { hash = "b3:bdea21c8e26711ae", by = "agent:builder-render", note = "tes
 stamp = { hash = "b3:182831f2ce010703", by = "agent:blend-modes", note = "The composite step describes per-mode pipelines, multiply's two draws and the backdrop copy with its pass break (blend.rs, compositor.rs record_composite, fs_<mode> in composite.wgsl); layer and working textures gain COPY_SRC; the resolve is unchanged; the opacity/blend ownership note points at ADR-0082." }
 
 ["CRATE-jstream-render#filters"."body"]
-stamp = { hash = "b3:61c84d2d803da0e4", by = "agent:shader-source", note = "Shader-source programs paragraph: ExternalProgram, VideoFilter::program, PROGRAM_PRELUDE (prelude, colour.wgsl, noise.wgsl), sys and bindings, per-count layouts, scale, feedback history and restart, slots, set_audio, and the MAX_PROGRAM_BYTES cap with its test" }
+stamp = { hash = "b3:96790b137c07b8c9", by = "agent:shader-source", note = "Round 2: added that each side is held to 4096 (so the output layer made before the 512 MiB layer check is at most 128 MiB; the cap covers the program's own layers) and that a steady frame allocates no list." }
 
 ["CRATE-jstream-render#filters"."dep:docs/adr/0025-typed-settings-kind-descriptors.md"]
 stamp = { hash = "b3:b655210653447199", by = "agent:wave-owner", note = "main into wave/m1-2: main changed nothing under src/filter/ or ADR-0025/0026; the section (kinds per module, harness, V3 assets and references, not wired until V0) still matches filter/**; its wave stamp was dropped by the merge, so re-stamped here" }
@@ -3903,13 +3903,13 @@ stamp = { hash = "b3:34ef776d7e1bb9ca", by = "agent:claude", note = "#529: adds 
 stamp = { hash = "b3:c22b506007429415", by = "agent:claude", note = "This PR (#813 and #815): Stacked #529 PR 2 (protocol 0.43): filter/params.rs only gains max_outset_px: None; no built-in kind declares an outset yet; Filters text holds. Merge: refreshed onto wave/m1-5 (main after m1-4 landed) with #813's refresh: conflicts resolved by taking m1-5's side and re-applying #813's and this PR's own diff; the tree equals refreshed #813 plus this PR's changes. #813's record: #529 PR 2 (protocol 0.43): filter/params.rs only gains max_outset_px: None; no built-in kind declares an outset yet; Filters text holds. Merge: refreshed onto wave/m1-5 (main after m1-4 landed); conflicts resolved by taking m1-5's side and re-applying this PR's own diff, plus max_outset_px: None on the e2e mock daemon's new KindDescriptor literal; snapshots regenerated. Merge of wave/m1-5 at bd50026: the wave didn't change crates/jstream-render/src/filter/params.rs. Merge of wave/m1-5 at e84bc9c: the wave didn't change crates/jstream-render/src/filter/params.rs." }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pass.rs"]
-stamp = { hash = "b3:69c85ac929687849", by = "agent:shader-source", note = "added Shader-source programs (ExternalProgram, VideoFilter::program, PROGRAM_PRELUDE with colour.wgsl and noise.wgsl, sys and bindings, per-count layouts, pass scale, feedback history and restart, slots, set_audio) and the kept-between-frames list; filter prelude still ends with the colour helpers, now from colour.wgsl" }
+stamp = { hash = "b3:d6a94be35ee6ab33", by = "agent:shader-source", note = "Round 2: added that each side is held to 4096 (so the output layer made before the 512 MiB layer check is at most 128 MiB; the cap covers the program's own layers) and that a steady frame allocates no list." }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/prelude.wgsl"]
 stamp = { hash = "b3:27e4c5c532c91d74", by = "agent:shader-source", note = "added Shader-source programs (ExternalProgram, VideoFilter::program, PROGRAM_PRELUDE with colour.wgsl and noise.wgsl, sys and bindings, per-count layouts, pass scale, feedback history and restart, slots, set_audio) and the kept-between-frames list; filter prelude still ends with the colour helpers, now from colour.wgsl" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/program/mod.rs"]
-stamp = { hash = "b3:eb88774d08ad0155", by = "agent:shader-source", note = "Shader-source programs paragraph: ExternalProgram, VideoFilter::program, PROGRAM_PRELUDE (prelude, colour.wgsl, noise.wgsl), sys and bindings, per-count layouts, scale, feedback history and restart, slots, set_audio, and the MAX_PROGRAM_BYTES cap with its test" }
+stamp = { hash = "b3:19eec7b7853cdb71", by = "agent:shader-source", note = "Round 2: added that each side is held to 4096 (so the output layer made before the 512 MiB layer check is at most 128 MiB; the cap covers the program's own layers) and that a steady frame allocates no list." }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/program/noise.wgsl"]
 stamp = { hash = "b3:189d62ca714b935c", by = "agent:shader-source", note = "added Shader-source programs (ExternalProgram, VideoFilter::program, PROGRAM_PRELUDE with colour.wgsl and noise.wgsl, sys and bindings, per-count layouts, pass scale, feedback history and restart, slots, set_audio) and the kept-between-frames list; filter prelude still ends with the colour helpers, now from colour.wgsl" }
@@ -4122,13 +4122,13 @@ stamp = { hash = "b3:34ef776d7e1bb9ca", by = "agent:claude", note = "#529: adds 
 stamp = { hash = "b3:c22b506007429415", by = "agent:claude", note = "This PR (#813 and #815): Stacked #529 PR 2 (protocol 0.43): filter/params.rs only gains max_outset_px: None; purpose holds. Merge: refreshed onto wave/m1-5 (main after m1-4 landed) with #813's refresh: conflicts resolved by taking m1-5's side and re-applying #813's and this PR's own diff; the tree equals refreshed #813 plus this PR's changes. #813's record: #529 PR 2 (protocol 0.43): filter/params.rs only gains max_outset_px: None; purpose holds. Merge: refreshed onto wave/m1-5 (main after m1-4 landed); conflicts resolved by taking m1-5's side and re-applying this PR's own diff, plus max_outset_px: None on the e2e mock daemon's new KindDescriptor literal; snapshots regenerated. Merge of wave/m1-5 at bd50026: the wave didn't change crates/jstream-render/src/filter/params.rs. Merge of wave/m1-5 at e84bc9c: the wave didn't change crates/jstream-render/src/filter/params.rs." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pass.rs"]
-stamp = { hash = "b3:69c85ac929687849", by = "agent:shader-source", note = "Not in this cut now names shader-source programs as loaded by jstream-effects and only drawn here; the rest of the purpose (one scene, placement, device) is unchanged by the program module" }
+stamp = { hash = "b3:d6a94be35ee6ab33", by = "agent:shader-source", note = "Round 2 (no allocation lists in Program::encode or draw_program, sides clamped to 4096): the Not in this cut wording still holds." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/prelude.wgsl"]
 stamp = { hash = "b3:27e4c5c532c91d74", by = "agent:shader-source", note = "Not in this cut now names shader-source programs as loaded by jstream-effects and only drawn here; the rest of the purpose (one scene, placement, device) is unchanged by the program module" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/program/mod.rs"]
-stamp = { hash = "b3:eb88774d08ad0155", by = "agent:shader-source", note = "Not in this cut names shader-source programs as loaded by jstream-effects and only drawn here; the program's MAX_PROGRAM_BYTES export changes nothing in the one-scene purpose" }
+stamp = { hash = "b3:19eec7b7853cdb71", by = "agent:shader-source", note = "Round 2 (no allocation lists in Program::encode or draw_program, sides clamped to 4096): the Not in this cut wording still holds." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/program/noise.wgsl"]
 stamp = { hash = "b3:189d62ca714b935c", by = "agent:shader-source", note = "Not in this cut now names shader-source programs as loaded by jstream-effects and only drawn here; the rest of the purpose (one scene, placement, device) is unchanged by the program module" }

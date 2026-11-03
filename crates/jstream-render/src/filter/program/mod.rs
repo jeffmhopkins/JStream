@@ -19,7 +19,6 @@ use std::sync::Arc;
 use jstream_protocol::Settings;
 
 use crate::error::RenderError;
-use crate::filter::params::Uniforms;
 use crate::filter::pass::{Ctx, ShaderRef};
 use crate::image::{self, Image};
 
@@ -69,8 +68,9 @@ pub enum ProgramInput {
     Slot(usize),
 }
 
-/// One pass of a program.
-#[derive(Clone, Debug)]
+/// One pass of a program. Two are equal when they draw the same: the same WGSL, scale
+/// and inputs.
+#[derive(Clone, Debug, PartialEq)]
 pub struct ProgramPass {
     /// WGSL appended to [`PROGRAM_PRELUDE`]: the generated header and the pass's file,
     /// defining `@fragment fn fs(in: VsOut) -> @location(0) vec4<f32>`. It declares its
@@ -84,7 +84,7 @@ pub struct ProgramPass {
 }
 
 /// An image a program reads: straight-alpha sRGB RGBA8, row-major.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProgramImage {
     /// Width in pixels.
     pub width: u32,
@@ -152,6 +152,10 @@ pub(crate) struct Program {
     start: Option<f64>,
     frame: u32,
     audio: ProgramAudio,
+    /// Each pass's picture this frame, and one pass's inputs: kept, so a steady frame
+    /// allocates no list.
+    drawn: Vec<Option<Image>>,
+    inputs: Vec<Image>,
 }
 
 impl Program {
@@ -193,6 +197,8 @@ impl Program {
             start: None,
             frame: 0,
             audio: ProgramAudio::default(),
+            drawn: Vec::with_capacity(passes.len()),
+            inputs: Vec::with_capacity(MAX_INPUTS),
             program,
         }
     }
@@ -260,26 +266,38 @@ impl Program {
         Ok(())
     }
 
-    fn system(&self, pass: (u32, u32), time: f64, clock: f64, alpha: &[f32]) -> Vec<u8> {
-        let mut uniforms = Uniforms::new()
-            .vec2([self.size.0 as f32, self.size.1 as f32])
-            .vec2([pass.0 as f32, pass.1 as f32])
-            .f32(time as f32)
-            .f32(clock.rem_euclid(CLOCK_WRAP_SECONDS) as f32)
-            .u32(self.frame)
-            .f32(self.audio.level)
-            .f32(self.audio.peak)
-            .f32(self.audio.onset)
-            .vec2([0.0; 2]);
-        for chunk in 0..3 {
-            let mut v = [0.0; 4];
-            for (i, slot) in v.iter_mut().enumerate() {
-                *slot = alpha.get(chunk * 4 + i).copied().unwrap_or(0.0);
-            }
-            uniforms = uniforms.vec4(v);
+    /// The `sys` uniform's bytes for a pass of `pass` size, little-endian as WGSL reads
+    /// them, in a fixed array so a frame allocates none.
+    fn system(
+        &self,
+        pass: (u32, u32),
+        time: f64,
+        clock: f64,
+        alpha: &[f32; MAX_INPUTS],
+    ) -> [u8; SYSTEM_BYTES] {
+        let mut bytes = [0u8; SYSTEM_BYTES];
+        let mut at = 0;
+        let mut put = |word: [u8; 4]| {
+            bytes[at..at + 4].copy_from_slice(&word);
+            at += 4;
+        };
+        put((self.size.0 as f32).to_le_bytes());
+        put((self.size.1 as f32).to_le_bytes());
+        put((pass.0 as f32).to_le_bytes());
+        put((pass.1 as f32).to_le_bytes());
+        put((time as f32).to_le_bytes());
+        put((clock.rem_euclid(CLOCK_WRAP_SECONDS) as f32).to_le_bytes());
+        put(self.frame.to_le_bytes());
+        put(self.audio.level.to_le_bytes());
+        put(self.audio.peak.to_le_bytes());
+        put(self.audio.onset.to_le_bytes());
+        // `_pad`.
+        put([0; 4]);
+        put([0; 4]);
+        for value in alpha {
+            put(value.to_le_bytes());
         }
-        let bytes = uniforms.finish();
-        debug_assert_eq!(bytes.len(), SYSTEM_BYTES);
+        debug_assert_eq!(at, SYSTEM_BYTES);
         bytes
     }
 }
@@ -319,7 +337,8 @@ impl super::pass::Pass for Program {
         _input: &Image,
         output: &Image,
     ) -> Result<(), RenderError> {
-        let label = self.program.label().to_owned();
+        let program = Arc::clone(&self.program);
+        let label = program.label();
         if self.params.len() < 16 || !self.params.len().is_multiple_of(16) {
             return Err(RenderError::Invalid {
                 what: "shader source uniforms",
@@ -344,15 +363,44 @@ impl super::pass::Pass for Program {
         }
         self.upload(ctx)?;
         self.keep_history(ctx)?;
-        let now = ctx.clock().seconds;
-        let start = *self.start.get_or_insert(now);
-        let time = (now - start).max(0.0);
-        let program = Arc::clone(&self.program);
-        let passes = program.passes();
-        let last = passes.len().saturating_sub(1);
+        self.start.get_or_insert(ctx.clock().seconds);
         let current = self.parity;
         let previous = 1 - current;
-        let mut drawn: Vec<Option<Image>> = vec![None; passes.len()];
+        // Kept between frames, so a steady frame allocates no list.
+        let mut drawn = std::mem::take(&mut self.drawn);
+        drawn.clear();
+        drawn.resize(program.passes().len(), None);
+        let mut inputs = std::mem::take(&mut self.inputs);
+        let result = self.draw_passes(ctx, output, (current, previous), &mut drawn, &mut inputs);
+        drawn.clear();
+        inputs.clear();
+        self.drawn = drawn;
+        self.inputs = inputs;
+        result?;
+        self.parity = previous;
+        self.frame = self.frame.saturating_add(1);
+        Ok(())
+    }
+}
+
+impl Program {
+    /// Draws every pass of this frame, each into its layer, `drawn[n]` holding pass
+    /// `n`'s once drawn, and the picture into `output`. `inputs` is a kept list for
+    /// each pass's inputs.
+    fn draw_passes(
+        &mut self,
+        ctx: &mut Ctx<'_>,
+        output: &Image,
+        (current, previous): (usize, usize),
+        drawn: &mut [Option<Image>],
+        inputs: &mut Vec<Image>,
+    ) -> Result<(), RenderError> {
+        let program = Arc::clone(&self.program);
+        let label = program.label();
+        let passes = program.passes();
+        let last = passes.len().saturating_sub(1);
+        let now = ctx.clock().seconds;
+        let time = (now - self.start.unwrap_or(now)).max(0.0);
         for (n, pass) in passes.iter().enumerate() {
             let size = self.pass_size(n);
             let target = match &self.history[n] {
@@ -360,7 +408,7 @@ impl super::pass::Pass for Program {
                 None if n == last => output.clone(),
                 None => ctx.scratch(size.0, size.1)?,
             };
-            let mut inputs = Vec::with_capacity(pass.inputs.len());
+            inputs.clear();
             for input in &pass.inputs {
                 let image = match *input {
                     ProgramInput::Pass(read) if read < n => drawn.get(read).and_then(Clone::clone),
@@ -385,14 +433,17 @@ impl super::pass::Pass for Program {
                 };
                 inputs.push(image);
             }
-            let alpha: Vec<f32> = inputs.iter().map(|i| i.alpha().shader_mode()).collect();
+            let mut alpha = [0.0; MAX_INPUTS];
+            for (slot, input) in alpha.iter_mut().zip(inputs.iter()) {
+                *slot = input.alpha().shader_mode();
+            }
             let system = self.system(size, time, now, &alpha);
             let shader = ShaderRef {
                 label: &self.labels[n],
                 source: &pass.wgsl,
                 blend: super::pass::Blend::Replace,
             };
-            ctx.draw_program(shader, &inputs, &system, &self.params, &target)?;
+            ctx.draw_program(shader, inputs, &system, &self.params, &target)?;
             drawn[n] = Some(target);
         }
         if self.history[last].is_some()
@@ -400,15 +451,18 @@ impl super::pass::Pass for Program {
         {
             super::multipass::copy(ctx, picture, output)?;
         }
-        self.parity = previous;
-        self.frame = self.frame.saturating_add(1);
         Ok(())
     }
 }
 
-/// Each side of a program's size, from 1 to 16384 (the adapter refuses what it can't hold).
+/// The most pixels a program's side may be: what `jstream-effects` allows a shader
+/// source (`SOURCE_SIDE`), so the output layer `apply_filter` makes before the memory
+/// cap is checked is at most 128 MiB.
+const MAX_SIDE: u32 = 4096;
+
+/// Each side of a program's size, from 1 to [`MAX_SIDE`].
 fn clamp_size((width, height): (u32, u32)) -> (u32, u32) {
-    (width.clamp(1, 16_384), height.clamp(1, 16_384))
+    (width.clamp(1, MAX_SIDE), height.clamp(1, MAX_SIDE))
 }
 
 #[cfg(test)]

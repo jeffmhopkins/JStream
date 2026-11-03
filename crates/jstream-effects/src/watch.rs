@@ -23,6 +23,7 @@ use std::time::{Duration, SystemTime};
 
 use crate::error::PackError;
 use crate::pack::{Effect, MANIFEST, Pack};
+use jstream_render::{ProgramImage, ProgramPass};
 
 /// A poll interval that feels immediate to someone editing a shader.
 pub const DEFAULT_POLL_INTERVAL: Duration = Duration::from_millis(500);
@@ -277,13 +278,15 @@ fn stamp(files: &[PathBuf]) -> Stamp {
         .collect()
 }
 
-/// What a kind draws, to tell a changed kind from an unchanged one: its descriptor, its
-/// WGSL and a shader source's images.
+/// What a kind draws, to tell a changed kind from an unchanged one: its descriptor, an
+/// effect's WGSL, and a shader source's passes (WGSL, scale and inputs) and images
+/// (size and pixels).
 #[derive(PartialEq)]
 struct Drawn<'a> {
     descriptor: &'a jstream_protocol::KindDescriptor,
-    wgsl: Vec<&'a str>,
-    images: Vec<&'a [u8]>,
+    wgsl: Option<&'a str>,
+    passes: &'a [ProgramPass],
+    images: &'a [ProgramImage],
 }
 
 /// The kind changes from `old` to `new`.
@@ -295,19 +298,18 @@ fn diff(old: Option<&Pack>, new: Option<&Pack>, out: &mut Vec<KindChange>) {
         let effects = pack.effects().iter().map(|e| {
             let drawn = Drawn {
                 descriptor: e.descriptor(),
-                wgsl: vec![e.wgsl()],
-                images: Vec::new(),
+                wgsl: Some(e.wgsl()),
+                passes: &[],
+                images: &[],
             };
             (e.kind_id().to_owned(), drawn)
         });
         let sources = pack.sources().iter().map(|s| {
             let drawn = Drawn {
                 descriptor: s.descriptor(),
-                wgsl: s.passes().iter().map(|p| &*p.wgsl).collect(),
-                images: jstream_render::ExternalProgram::images(s)
-                    .iter()
-                    .map(|i| &*i.rgba)
-                    .collect(),
+                wgsl: None,
+                passes: s.passes(),
+                images: jstream_render::ExternalProgram::images(s),
             };
             (s.kind_id().to_owned(), drawn)
         });

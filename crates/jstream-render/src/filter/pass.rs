@@ -744,50 +744,61 @@ impl Ctx<'_> {
                 .slot(self.gpu, self.maker.owner, system, params);
         let (system_buffer, params_buffer) = (system_buffer.clone(), params_buffer.clone());
         self.runtime.program_layouts(&self.gpu.device, inputs.len());
-        let views: Vec<wgpu::TextureView> = inputs
-            .iter()
-            .map(|i| {
-                i.texture()
-                    .create_view(&wgpu::TextureViewDescriptor::default())
-            })
-            .collect();
+        let max = super::program::MAX_INPUTS;
+        if inputs.len() > max {
+            return Err(RenderError::Invalid {
+                what: "shader source",
+                detail: format!("{}: {} inputs, over {max}", shader.label, inputs.len()),
+            });
+        }
+        // Fixed arrays, so a steady frame allocates no list for the bind group.
+        let views: [Option<wgpu::TextureView>; super::program::MAX_INPUTS] =
+            std::array::from_fn(|n| {
+                inputs.get(n).map(|i| {
+                    i.texture()
+                        .create_view(&wgpu::TextureViewDescriptor::default())
+                })
+            });
         let Some(Some((layout, _))) = self.runtime.programs.layouts.get(inputs.len()) else {
             return Err(RenderError::Invalid {
                 what: "shader source",
                 detail: format!("{}: no layout for {} inputs", shader.label, inputs.len()),
             });
         };
-        let mut entries = vec![
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: system_buffer.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: wgpu::BindingResource::Sampler(&self.runtime.sampler),
-            },
-            wgpu::BindGroupEntry {
-                binding: 2,
-                resource: wgpu::BindingResource::Sampler(&self.runtime.programs.repeat),
-            },
-            wgpu::BindGroupEntry {
-                binding: super::program::PROGRAM_PARAMS_BINDING,
-                resource: params_buffer.as_entire_binding(),
-            },
-        ];
-        for (n, view) in views.iter().enumerate() {
-            entries.push(wgpu::BindGroupEntry {
-                binding: super::program::FIRST_INPUT_BINDING + n as u32,
-                resource: wgpu::BindingResource::TextureView(view),
+        let first = super::program::FIRST_INPUT_BINDING as usize;
+        let entries: [wgpu::BindGroupEntry<'_>;
+            super::program::FIRST_INPUT_BINDING as usize + super::program::MAX_INPUTS] =
+            std::array::from_fn(|n| {
+                let (binding, resource) = match n {
+                    0 => (0, system_buffer.as_entire_binding()),
+                    1 => (1, wgpu::BindingResource::Sampler(&self.runtime.sampler)),
+                    2 => (
+                        2,
+                        wgpu::BindingResource::Sampler(&self.runtime.programs.repeat),
+                    ),
+                    3 => (
+                        super::program::PROGRAM_PARAMS_BINDING,
+                        params_buffer.as_entire_binding(),
+                    ),
+                    _ => match &views[n - first] {
+                        Some(view) => (n as u32, wgpu::BindingResource::TextureView(view)),
+                        // Past the inputs: never handed to wgpu.
+                        None => (
+                            n as u32,
+                            wgpu::BindingResource::Sampler(&self.runtime.sampler),
+                        ),
+                    },
+                };
+                wgpu::BindGroupEntry { binding, resource }
             });
-        }
+        let entries = &entries[..first + inputs.len()];
         let bind_group = self
             .gpu
             .device
             .create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some(shader.label),
                 layout,
-                entries: &entries,
+                entries,
             });
         let pipeline = self
             .runtime

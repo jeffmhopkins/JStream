@@ -597,7 +597,11 @@ A feedback last pass is copied into the output. Every other pass draws into scra
 layers, and a non-feedback last pass straight into the output. `VideoFilter::set_audio`
 hands over the levels for the next frame. A program whose layers at its size (one per
 pass, two for a feedback pass, `Rgba16Float`) would take more than `MAX_PROGRAM_BYTES`
-(512 MiB) fails to draw, so a live `width` and `height` can't take gigabytes. Tests draw programs of one and two passes,
+(512 MiB) fails to draw, so a live `width` and `height` can't take gigabytes, and each
+side is held to 4096, so the output layer made before that check is at most 128 MiB.
+A steady frame allocates no list: the passes' pictures, a pass's inputs, the `sys`
+bytes and the bind group's entries live in kept or fixed-size storage, bounded by
+`PROGRAM_MAX_PASSES` and `PROGRAM_MAX_INPUTS`. Tests draw programs of one and two passes,
 feedback on the pass itself and on a later pass with a restart, images and slots, and
 `sys`, and a program over the cap, on the test adapter.
 
