@@ -1100,16 +1100,18 @@ fn centre(control: &dyn Control) -> Option<[u8; 4]> {
 /// does; with a chain on the scene too, the source's runs over the scene's output.
 #[test]
 fn a_scene_sources_chain_is_drawn_where_it_places_its_scene() {
-    let _gpu = super::one_gpu_test_at_a_time();
+    use crate::chain::ChainOwner;
+    use crate::snapshot::GpuKey;
     use jstream_protocol::{FilterChain, FilterId, FilterOwner};
+    let _gpu = super::one_gpu_test_at_a_time();
     let engine = Engine::new();
     let control = connected(&engine);
-    let filter = |owner: FilterOwner, id: &str, multiply: &str| Edit::FilterAdd {
+    let filter = |owner: FilterOwner, id: &str, setting: (&str, Value)| Edit::FilterAdd {
         owner,
         chain: FilterChain::Video,
         filter_id: FilterId::new(id),
         kind: "color_correction".into(),
-        settings: settings(&[("multiply", json!(multiply))]),
+        settings: settings(&[setting]),
         enabled: None,
         index: None,
     };
@@ -1142,74 +1144,76 @@ fn a_scene_sources_chain_is_drawn_where_it_places_its_scene() {
     )
     .expect("a nests b");
     assert!(engine.settle_sources(), "the sources were built in time");
+    let (nest, b) = (SourceId::new("nest"), SceneId::new("b"));
     let shot = || engine.render_hub().load();
-    assert!(shot().shot().chain(&SourceId::new("nest")).is_none());
+    assert!(shot().shot().placed_chain(&nest, &b).is_none());
     let before = centre(&control);
 
+    // Greyscale on the source.
     batch(
         &control,
         edits(vec![filter(
             FilterOwner::Source {
-                source_id: SourceId::new("nest"),
+                source_id: nest.clone(),
             },
-            "tint",
-            "#ff0000",
+            "grey",
+            ("saturation", json!(-1.0)),
         )]),
     )
     .expect("the scene source filtered");
     let chain = shot()
         .shot()
-        .chain(&SourceId::new("nest"))
+        .placed_chain(&nest, &b)
         .cloned()
         .expect("the scene source's chain is planned");
-    assert_eq!(chain.input_scene(), Some(&SceneId::new("b")));
+    assert_eq!(chain.input, GpuKey::Layer(b.clone(), 1));
     assert_eq!(
         shot().shot().chain_passes(),
         [("b".to_owned(), 1)],
         "the nested scene is drawn for the chain first"
     );
 
-    // With a chain on the scene as well, the source's runs over its output.
+    // Red on the scene: the source's greyscale runs over the scene's output.
     batch(
         &control,
         edits(vec![filter(
             FilterOwner::Scene {
-                scene_id: SceneId::new("b"),
+                scene_id: b.clone(),
             },
-            "own",
-            "#00ffff",
+            "red",
+            ("multiply", json!("#ff0000")),
         )]),
     )
     .expect("the scene filtered");
     let chain = shot()
         .shot()
-        .chain(&SourceId::new("nest"))
+        .placed_chain(&nest, &b)
         .cloned()
         .expect("the scene source's chain");
-    assert_eq!(
-        chain.input,
-        crate::snapshot::GpuKey::Filtered(crate::chain::ChainOwner::Scene(SceneId::new("b")))
-    );
+    assert_eq!(chain.input, GpuKey::Filtered(ChainOwner::Scene(b.clone())));
 
     let Some(before) = before else {
         return;
     };
     assert_eq!(before, [0xff, 0xff, 0xff, 0xff], "b's white, unfiltered");
-    // White, times cyan by the scene's chain, then times red by the source's.
-    assert_eq!(centre(&control), Some([0, 0, 0, 0xff]));
+    // White, made red by the scene's chain, then grey by the source's. The other order
+    // would leave it red.
+    let [red, green, blue, alpha] = centre(&control).expect("an adapter");
+    assert!(
+        red == green && green == blue && (16..224).contains(&red) && alpha == 0xff,
+        "red's grey: {red} {green} {blue} {alpha}"
+    );
     batch(
         &control,
         edits(vec![Edit::FilterRemove {
-            owner: FilterOwner::Scene {
-                scene_id: SceneId::new("b"),
-            },
-            filter_id: FilterId::new("own"),
+            owner: FilterOwner::Source { source_id: nest },
+            filter_id: FilterId::new("grey"),
         }]),
     )
-    .expect("the scene's own filter removed");
+    .expect("the source's filter removed");
     assert_eq!(
         centre(&control),
         Some([0xff, 0, 0, 0xff]),
-        "the source's red tint alone"
+        "the scene's red alone"
     );
 }

@@ -64,6 +64,10 @@ pub(crate) enum ChainOwner {
     Master(Option<VideoMixId>),
     /// An output's own chain, after the master stage.
     Output(OutputId),
+    /// A `scene` source's chain where it places its scene (ADR-0065 §4), by the ID the
+    /// scene is planned under there: the scene, or a group's view through a keyframe
+    /// (ADR-0049 §3). Each has a chain of its own, as each draws its own picture.
+    Placed(SourceId, SceneId),
 }
 
 impl std::fmt::Display for ChainOwner {
@@ -75,6 +79,7 @@ impl std::fmt::Display for ChainOwner {
             Self::Master(None) => write!(f, "the master stage over the program"),
             Self::Master(Some(mix)) => write!(f, "the master stage over mix {mix}"),
             Self::Output(id) => write!(f, "output {id}"),
+            Self::Placed(id, scene) => write!(f, "source {id} over scene {scene}"),
         }
     }
 }
