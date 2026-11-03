@@ -168,8 +168,14 @@ impl BrowserPage for FakePage {
             .push(css.to_owned());
     }
 
+    /// As a real page: transparent until the test paints the reloaded document.
     fn reload(&mut self) {
         self.0.reloads.fetch_add(1, Ordering::AcqRel);
+        *self
+            .0
+            .painted
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = None;
     }
 
     fn audio(&self) -> &Arc<PageAudio> {
