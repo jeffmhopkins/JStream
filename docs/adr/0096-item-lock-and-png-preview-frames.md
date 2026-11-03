@@ -50,8 +50,8 @@ keep.
    UI takes a screenshot by opening a one-frame PNG stream of the program, a scene or a
    source at the canvas's size (at most 1920 × 1080), saving its first picture as a
    file, and closing the stream. Captures show in it, as in any preview. An engine
-   older than 0.71 refuses the codec's name, and the UI says it can't take a
-   screenshot.
+   older than 0.71 refuses the codec's name; the JStream UI never meets one, since the
+   handshake refuses a client newer than the engine.
 4. **`font.list`'s exposure, stated plainly** (ADR-0092 left it implicit). Any client
    that may read, and any plugin granted the `read` class, sees each installed font's
    absolute path. A font in the user's own font folder names their home folder, and
