@@ -84,6 +84,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("bus.list", Class(R)),
     ("delete.plan", Class(R)),
     ("capture.targets", Class(R)),
+    // Font paths, so a `read` plugin learns the user's home folder (ADR-0096 §4).
     ("font.list", Class(R)),
     ("profile.get", Class(R)),
     ("privacy.get", Class(R)),
@@ -125,6 +126,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("item.set_blend", Class(E)),
     ("item.set_source", Class(E)),
     ("item.set_transition", Class(E)),
+    ("item.set_locked", Class(E)),
     ("item.clear_override", Class(E)),
     ("item.set_effects", Class(E)),
     ("source.create", Class(E)),

@@ -1659,12 +1659,15 @@ impl Engine {
                 .unwrap_or_else(jstream_sources::system_font_dirs);
             #[cfg(not(test))]
             let dirs = jstream_sources::system_font_dirs();
+            // A path that isn't UTF-8 is left out: a lossy copy would name another file.
             jstream_sources::installed_fonts(&dirs)
                 .into_iter()
-                .map(|font| FontInfo {
-                    remote_family: font.family,
-                    remote_style: font.style,
-                    path: font.path.to_string_lossy().into_owned(),
+                .filter_map(|font| {
+                    Some(FontInfo {
+                        path: font.path.to_str()?.to_owned(),
+                        remote_family: font.family,
+                        remote_style: font.style,
+                    })
                 })
                 .collect()
         });
@@ -3162,8 +3165,8 @@ impl State {
     /// What follows every applied batch, undo and redo: the outputs, the live sources and
     /// the program mixer follow the collection, a deleted source's stored frame goes
     /// (unless the same edits made a new source under its id), live values on a deleted
-    /// item and live settings of a deleted source go, `state.changed` is emitted, and the program scene is reconciled
-    /// (ADR-0030).
+    /// item and live settings of a deleted source go, `state.changed` is emitted, and the
+    /// program scene is reconciled (ADR-0030).
     fn changed(
         &mut self,
         client_id: &ClientId,

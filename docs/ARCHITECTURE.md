@@ -181,7 +181,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 │                          labels, icon, color, favourite, show_in_multiview, transition_in?, transition_out?,
 │                          camera?, filters { video[] }, items[] }   flat display order
 │                  SceneItem { id, source_id, geometry: ItemGeometry, crop, visible, opacity, blend,
-│                              effects[] (video filters), transition }
+│                              effects[] (video filters), transition, locked }
 ├── folders        Folder { id, name, parent? }   ordered; a tree; organising only
 ├── labels         Label { id, name, icon?, color }   ordered
 ├── hotkeys        [{ chord, action }]   chord → protocol action request
@@ -497,7 +497,7 @@ every mix runs at the base rate divided by an integer.
 | Mixer | Activity gains, sends, buses, filters with keys (in audio-graph order), latency compensation, meters on the engine clock | [R-RT-001](RULES.md#R-RT-001) |
 | Render | Composites every mix on each base-rate tick | [R-RT-002](RULES.md#R-RT-002). A missing source frame repeats the last one. |
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |
-| Preview (one per engine, while any preview stream is open) | Draws the program mix, or the stream's scene, small for each `preview.subscribe` stream and encodes it (H.264 or JPEG) into the session's bounded frame queue | Not real-time: it has its own compositor, like `video.snapshot`'s, and loads the render snapshot, `rev` and live values under a brief collection lock, never held while drawing or encoding. A stream whose queue is full is not drawn. |
+| Preview (one per engine, while any preview stream is open) | Draws the program mix, or the stream's scene, small for each `preview.subscribe` stream and encodes it (H.264, JPEG, or PNG for a screenshot) into the session's bounded frame queue | Not real-time: it has its own compositor, like `video.snapshot`'s, and loads the render snapshot, `rev` and live values under a brief collection lock, never held while drawing or encoding. A stream whose queue is full is not drawn. |
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
 | Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003). One for the program stage while any output runs, fed by its render and mixer threads (snapshots, live values, GPU images, finished sessions' inputs, a dropped mix's frame buffers), and the mixer's own for the input rings the mixer and audio threads release, and removed buses' state, filter chains and filters. |
 
@@ -762,7 +762,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   [ADR-0037](adr/0037-kind-descriptors-for-transitions-and-plugins.md)),
   `transition.set_default` sets the default, `scene.set_transitions` sets a scene's
   `transition_in` and `transition_out`, and `item.set_transition` an item's transition
-  settings. `scene.switch` takes an optional `preset_id`, and the `studio.changed` it
+  settings. `item.set_locked` (0.71, [ADR-0096](adr/0096-item-lock-and-png-preview-frames.md))
+  locks an item's canvas box, an editing aid clients honour and the engine never
+  enforces. `scene.switch` takes an optional `preset_id`, and the `studio.changed` it
   causes names the preset it ran and how long the transition lasts (0 for a cut).
   `state.get` reports the presets and the default under `transitions`, and `kind.list`
   the transition kinds.
@@ -873,7 +875,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `source_id`: the UI's projector of a source), for the calling session,
   scaled down, at most `fps` pictures a second and only when the mix changes (as it
   does throughout a running transition), in H.264
-  when the platform has an encoder and JPEG otherwise; `preview.unsubscribe` or the
+  when the platform has an encoder and JPEG otherwise, or in PNG for a client that asks
+  for it alone to take a screenshot (0.71,
+  [ADR-0096](adr/0096-item-lock-and-png-preview-frames.md)); `preview.unsubscribe` or the
   session's end closes it. Each frame is a fixed 32-byte header (channel, codec,
   keyframe, size, presentation time, `rev`) and the picture, and every hop that queues
   frames drops up to the next keyframe when full, so a slow client still decodes what
@@ -1278,7 +1282,7 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   `jstream-graph`, which checks a loaded collection as it checks edits. A field added
   for new collection state (encoder profiles, hotkey bindings, transition presets and
   settings, folders, labels and organisation metadata, keyframe scenes' `variant_of` and
-  `overrides`, an output's `audio_bus`, a scene's `camera` and a variant's override of it) is omitted when empty or at its default (for presets, a new collection's one `cut`), so a file without it is still
+  `overrides`, an output's `audio_bus`, a scene's `camera` and a variant's override of it, an item's `locked`) is omitted when empty or at its default (for presets, a new collection's one `cut`), so a file without it is still
   valid at the same `schema_version`. Scene filters and item effects (version 2) and a
   keyframe override's `effects` (version 3, ADR-0088) bumped it instead, each with a
   migration that refuses the new field in an older file. `jstream-core`

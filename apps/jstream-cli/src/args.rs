@@ -90,6 +90,7 @@ Edits (each is its protocol command name followed by its arguments):
   item.reorder <item-id> <index>
   item.move <item-id> <scene-id> <index>
   item.set_visible <item-id> true|false
+  item.set_locked <item-id> true|false
   item.set_source <item-id> <source-id>
   item.set_opacity <item-id> <0..1>
   item.set_blend <item-id> normal|additive|multiply|screen|overlay|darken|lighten
@@ -424,8 +425,9 @@ fn arity(name: &str) -> Option<usize> {
     Some(match name {
         "scene.delete" | "source.delete" | "item.remove" | "output.delete" | "hotkey.clear" => 1,
         "scene.create" | "scene.rename" | "scene.reorder" | "scene.set_role" | "source.rename"
-        | "item.reorder" | "item.set_visible" | "item.set_source" | "item.set_opacity"
-        | "item.set_blend" | "output.create" | "output.set_target" | "canvas.set_size" => 2,
+        | "item.reorder" | "item.set_visible" | "item.set_locked" | "item.set_source"
+        | "item.set_opacity" | "item.set_blend" | "output.create" | "output.set_target"
+        | "canvas.set_size" => 2,
         "source.create" | "source.duplicate" | "item.add" | "item.move" | "hotkey.set" => 3,
         "item.set_crop" => 5,
         "item.set_transform" => 6,
@@ -558,6 +560,18 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
                 other => {
                     return Err(usage(format!(
                         "`item.set_visible` takes `true` or `false`, not `{other}`"
+                    )));
+                }
+            },
+        },
+        ("item.set_locked", [id, locked]) => Edit::ItemSetLocked {
+            item_id: ItemId::new(*id),
+            locked: match *locked {
+                "true" => true,
+                "false" => false,
+                other => {
+                    return Err(usage(format!(
+                        "`item.set_locked` takes `true` or `false`, not `{other}`"
                     )));
                 }
             },
@@ -1427,6 +1441,20 @@ mod tests {
         assert_eq!(
             err(&["edit", "item.set_visible", "i", "yes"]),
             "`item.set_visible` takes `true` or `false`, not `yes`"
+        );
+        assert_eq!(
+            err(&["edit", "item.set_locked", "i", "on"]),
+            "`item.set_locked` takes `true` or `false`, not `on`"
+        );
+        let Command::Edit(batch) = ok(&["edit", "item.set_locked", "i", "true"]).command else {
+            panic!("not an edit");
+        };
+        assert_eq!(
+            batch.edits,
+            [Edit::ItemSetLocked {
+                item_id: ItemId::new("i"),
+                locked: true,
+            }]
         );
         assert_eq!(
             err(&["edit", "source.create", "a", "A", "webcam"]),
