@@ -6,9 +6,10 @@
 //! `scene.set_camera`, `hotkey.clear` and `hotkey.set`); Cancel, Escape and the backdrop
 //! drop it, and Defaults clears the overrides, the hotkey and the background and checks
 //! both switches again, keeping the name and the camera. A keyframe scene's camera is
-//! its override of its parent's, offered only while the parent has one. A keyframe scene shows its parent's background, which its
-//! dialog shows and doesn't edit. The scene's filters show on the right, each change sent
-//! at once, as the source Properties dialog's are.
+//! its override of its parent's, offered only while the parent has one. A keyframe
+//! scene shows its parent's background, which its dialog shows and doesn't edit. The
+//! scene's filters show on the right, each change sent at once, as the source
+//! Properties dialog's are.
 //!
 //! Docs: docs/UI-FEATURES.md#dialogs
 
@@ -87,12 +88,24 @@ impl SceneDraft {
     }
 }
 
+/// The camera the dialog's switch starts `scene_id` from when it is turned on (ADR-0094
+/// §6): a keyframe scene's parent's, which its own then overrides, or `None` while that
+/// parent has none, as `scene.set_camera` refuses; any other scene's starts from one that
+/// shows it as it is now.
+pub fn camera_start(collection: &Collection, scene_id: &SceneId) -> Option<SceneCamera> {
+    match collection.scene(scene_id)?.variant_of {
+        Some(_) => collection.parent_of(scene_id)?.camera,
+        None => Some(SceneCamera::framing(collection.canvas)),
+    }
+}
+
 /// The edits that turn `before` into `draft` for `scene_id`, in one batch: a rename
 /// (a blank name is ignored), the overrides, the multiview flag (the scene's other
-/// metadata kept), the options, then the hotkey (the old chord cleared
+/// metadata kept), the options, the camera, then the hotkey (the old chord cleared
 /// before the new one is bound, keeping the preset the old binding named). Refused when
-/// the background isn't a colour, or the new chord is bound already, which
-/// `scene.set_options` and `hotkey.set` would refuse too.
+/// the background isn't a colour, the camera is one the engine can't see through, or
+/// the new chord is bound already, which `scene.set_options`, `scene.set_camera` and
+/// `hotkey.set` would refuse too.
 pub fn scene_edits(
     collection: &Collection,
     scene_id: &SceneId,
@@ -297,7 +310,10 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
         })
     });
     let camera_label = if keyframe { "Own camera" } else { "3D camera" };
-    let camera_locked = keyframe && parent_camera.is_none();
+    let start = studio
+        .collection
+        .with_untracked(|c| c.as_ref().map(|c| camera_start(c, &scene_id)));
+    let camera_locked = start.is_some_and(|s| s.is_none());
     let parent_name = keyframe_of.as_ref().map(|(parent, _)| parent.clone());
     let camera_note = move || {
         let on = draft.with(|d| d.camera.is_some());
@@ -315,7 +331,11 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
     };
     let toggle_camera = move |on: bool| {
         draft.update(|d| {
-            d.camera = on.then(|| parent_camera.unwrap_or_else(|| SceneCamera::framing(canvas)));
+            d.camera = on.then(|| {
+                start
+                    .flatten()
+                    .unwrap_or_else(|| SceneCamera::framing(canvas))
+            });
         });
     };
     let number = move |label: &'static str, field: CameraField, step: &'static str| {
@@ -985,6 +1005,31 @@ mod tests {
             960.0,
             "a non-finite number is ignored"
         );
+    }
+
+    /// ADR-0094 §6: a keyframe scene's Own camera starts from its parent's, and is
+    /// offered only while the parent has one; any other scene starts from the framing.
+    #[test]
+    fn a_keyframe_gets_own_camera_only_while_its_parent_has_one() {
+        let scenes: Vec<SceneInfo> = serde_json::from_value(serde_json::json!([
+            { "scene_id": "p", "name": "P", "items": [] },
+            { "scene_id": "k", "name": "K", "items": [], "variant_of": "p" },
+        ]))
+        .expect("scenes");
+        let mut c = Collection {
+            scenes,
+            ..Collection::default()
+        };
+        let p = SceneId::new("p");
+        let k = SceneId::new("k");
+        let framing = SceneCamera::framing(c.canvas);
+        assert_eq!(camera_start(&c, &p), Some(framing));
+        assert_eq!(camera_start(&c, &k), None, "the parent has no camera");
+        let mut parents = framing;
+        CameraField::Position(0).set(&mut parents, 300.0);
+        c.scenes[0].camera = Some(parents);
+        assert_eq!(camera_start(&c, &k), Some(parents));
+        assert_eq!(camera_start(&c, &SceneId::new("gone")), None);
     }
 
     /// A scene whose items already have depth or angles warns that a camera changes them.
