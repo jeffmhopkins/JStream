@@ -179,8 +179,10 @@ pub fn orbit(start: SceneCamera, dx: f32, dy: f32) -> SceneCamera {
     let level = offset[0].hypot(offset[2]);
     let elevation = (-offset[1]).atan2(level);
     let azimuth = offset[0].atan2(offset[2]);
-    let limit = MAX_ELEVATION_DEG.to_radians().max(elevation.abs());
-    let elevation = (elevation + (dy * ORBIT_DEG_PER_PX).to_radians()).clamp(-limit, limit);
+    // Only the side a typed camera is already past widens; the other keeps the cap.
+    let cap = MAX_ELEVATION_DEG.to_radians();
+    let (below, above) = (cap.max(-elevation), cap.max(elevation));
+    let elevation = (elevation + (dy * ORBIT_DEG_PER_PX).to_radians()).clamp(-below, above);
     let azimuth = azimuth - (dx * ORBIT_DEG_PER_PX).to_radians();
     let moved = [
         target[0] + distance * elevation.cos() * azimuth.sin(),
@@ -362,9 +364,11 @@ mod tests {
         // Sideways, and further down, it stays where it was rather than snapping to 85°.
         assert!((elevation_of(orbit(start, 30.0, 0.0)) - 89.0).abs() < 0.01);
         assert!((elevation_of(orbit(start, 0.0, 100.0)) - 89.0).abs() < 0.01);
-        // Back up, it comes down from there.
+        // Back up, it comes down from there, and on the far side stops at the cap.
         let lowered = elevation_of(orbit(start, 0.0, -10.0));
         assert!((lowered - 86.0).abs() < 0.01, "{lowered}");
+        let under = elevation_of(orbit(start, 0.0, -10_000.0));
+        assert!((under + MAX_ELEVATION_DEG).abs() < 0.01, "{under}");
     }
 
     #[test]
@@ -387,6 +391,8 @@ mod tests {
             Some(stored)
         );
         assert_eq!(Preview::camera_in(None, Some(&a), None), None);
+        // Nor is a 2D scene shown mid-drag seen through it.
+        assert_eq!(Preview::camera_in(Some(&p), Some(&b), None), None);
         // It is dropped once A has the camera, once A's camera is removed, or once
         // another scene is shown; A with its old camera still keeps it.
         assert!(p.caught_up(Some((Some(&a), Some(moved)))));

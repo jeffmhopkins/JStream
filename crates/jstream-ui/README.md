@@ -1014,13 +1014,15 @@ browser, and `mod.rs` is the component.
   the pointer, and nothing snaps; a group moves by the delta on the first selected
   box's plane, so boxes at other depths move as far in the scene but not under it; the boxes have no handles, and a marquee touches
   each box's on-screen bounds. Alt-drag orbits the camera about its target (0.3° per
-  screen pixel, at most 85° above or below it, or no further than a typed camera
-  already is) and Alt+Shift-drag dollies it
+  screen pixel, at most 85° above or below it, or on the side a typed camera is
+  already past 85°, no further than it is) and Alt+Shift-drag dollies it
   (`exp(0.005 × px)`, no closer than 10 px): the drag shows the camera on the overlay
   and on output through the gesture's `live.set` of `scene.set_camera`, and the drop
   commits one `scene.set_camera` with `ends_gesture`, so the orbit is one undo step.
-  The overlay keeps the dragged camera, with its scene (`camera::Preview`), until the
-  collection has it, and shows it in no other scene. In place of the
+  The drag keeps the scene it started on (`Action::Orbit.scene`), and the overlay keeps
+  the dragged camera with it (`camera::Preview`) until the collection has it, showing it
+  in no other scene; a drag that ends with another scene shown is dropped, not
+  committed. In place of the
   selection chrome, a pill reads the camera's position and distance to its target.
 - **Styles** are classes in `style.css`. The hosts' Content Security Policy has no
   `'unsafe-inline'` for styles, so a `style` attribute would be refused, static or set at

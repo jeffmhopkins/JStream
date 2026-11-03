@@ -96,6 +96,9 @@ enum Action {
     /// Turns a 3D scene's camera about its target, or with `dolly` moves it along its
     /// line of sight (ADR-0094): Alt-drag, with Shift for the dolly.
     Orbit {
+        /// The scene whose camera the drag moves: the one shown when it started, which
+        /// its preview is kept with and its commit goes to.
+        scene: SceneId,
         /// The camera when the drag started.
         start: SceneCamera,
         /// Where the press was.
@@ -663,11 +666,13 @@ pub fn Canvas() -> impl IntoView {
         let shift = event.shift_key();
         // Alt-drag in a 3D scene orbits its camera, with Shift dollies it.
         if event.alt_key()
+            && let Some(scene) = shown_scene(&current).cloned()
             && let Some(camera) = camera_preview.with_untracked(|p| {
-                camera::Preview::camera_in(p.as_ref(), shown_scene(&current), current.camera)
+                camera::Preview::camera_in(p.as_ref(), Some(&scene), current.camera)
             })
         {
             let orbit = Action::Orbit {
+                scene,
                 start: camera,
                 origin: point,
                 dolly: shift,
@@ -829,6 +834,7 @@ pub fn Canvas() -> impl IntoView {
         };
         match &mut current.action {
             Action::Orbit {
+                scene,
                 start,
                 origin,
                 dolly,
@@ -840,14 +846,10 @@ pub fn Canvas() -> impl IntoView {
                 } else {
                     camera::orbit(*start, dx, dy)
                 };
-                if let Some(scene) =
-                    layout.with_untracked(|l| l.as_ref().and_then(shown_scene).cloned())
-                {
-                    camera_preview.set(Some(camera::Preview {
-                        scene,
-                        camera: moved,
-                    }));
-                }
+                camera_preview.set(Some(camera::Preview {
+                    scene: scene.clone(),
+                    camera: moved,
+                }));
                 live.with_value(|l| l.iter().for_each(|l| l.show_camera(moved)));
             }
             Action::Marquee { from, to, base } => {
@@ -925,26 +927,22 @@ pub fn Canvas() -> impl IntoView {
         guides.set(Vec::new());
         marquee.set(None);
         let (starts, crop_starts): live::Values = match finished.action {
-            Action::Orbit { start, .. } => {
+            Action::Orbit { scene, start, .. } => {
                 let gesture = live.with_value(Clone::clone);
                 live.set_value(None);
+                // Committed only while the canvas still shows the scene the drag moved: if
+                // another is shown now (the first deleted, say), the drag is dropped.
+                let still =
+                    layout.with_untracked(|l| l.as_ref().and_then(shown_scene) == Some(&scene));
                 let moved = camera_preview.with_untracked(|p| {
-                    let shown =
-                        layout.with_untracked(|l| l.as_ref().and_then(shown_scene).cloned());
-                    camera::Preview::camera_in(p.as_ref(), shown.as_ref(), None)
-                        .filter(|c| keep && *c != start)
+                    camera::Preview::camera_in(p.as_ref(), Some(&scene), None)
+                        .filter(|c| keep && still && *c != start)
                 });
                 match (moved, gesture) {
                     (Some(camera), Some(gesture)) => {
                         gesture.commit(move |scene, ending| commit_camera(camera, scene, ending));
                     }
-                    (Some(camera), None) => {
-                        if let Some(scene) = layout.with_untracked(|l| {
-                            l.as_ref().and_then(|l| l.scene.clone()).map(|(id, _)| id)
-                        }) {
-                            commit_camera(camera, scene, None);
-                        }
-                    }
+                    (Some(camera), None) => commit_camera(camera, scene, None),
                     (None, gesture) => {
                         if let Some(gesture) = gesture {
                             gesture.cancel();

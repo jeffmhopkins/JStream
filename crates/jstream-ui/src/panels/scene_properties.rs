@@ -7,8 +7,9 @@
 //! drop it, and Defaults clears the overrides, the hotkey and the background and checks
 //! both switches again, keeping the name and the camera. A keyframe scene's camera is
 //! its override of its parent's, offered only while the parent has one. A keyframe
-//! scene shows its parent's background, which its dialog shows and doesn't edit. The scene's filters show on the right, each change sent
-//! at once, as the source Properties dialog's are.
+//! scene shows its parent's background, which its dialog shows and doesn't edit. The
+//! scene's filters show on the right, each change sent at once, as the source
+//! Properties dialog's are.
 //!
 //! Docs: docs/UI-FEATURES.md#dialogs
 
