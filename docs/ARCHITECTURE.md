@@ -966,10 +966,13 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   tool's `preview.subscribe` fails with `action_failed`; an agent looks with
   `video.snapshot`.
 - **Annotations and third-party text:** every tool carries MCP tool annotations derived
-  from its ops (`readOnlyHint` for queries only; `destructiveHint` for actions, history
-  calls and deletes; `openWorldHint` for `output`, `source`, whose `browser` kind loads
-  any web page, and `batch`), so a client can ask the user before an agent retargets an
-  output, sets its key, goes live, points a browser source at a page or deletes. Text
+  from its ops (`readOnlyHint` for queries only; `destructiveHint` for a tool with an
+  action undo can't take back or a history call, today `device`, `history`, `output`,
+  `pairing` and `ui_settings`;
+  `openWorldHint` for `output`, `source`, whose `browser` kind loads any web page, and
+  `batch`), so a client can ask the user before an agent retargets an output, sets its
+  key, goes live, steps through undo or points a browser source at a page, and lets
+  undoable edits, deletes included, through ([ADR-0098](adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md)). Text
   from outside JStream sits in `remote_*` fields, in an `output.start` `action_failed`
   `reason` (the whole of which is untrusted), or in a window's `name` in
   `capture.targets` (its title or, on macOS, its application's name, set by the

@@ -58,7 +58,7 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,
         "readOnlyHint": false
@@ -95,12 +95,12 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": true,
         "readOnlyHint": false
       },
-      "description": "Applies one or more edits atomically, as one undo step: either all of them apply or none does, and the state `rev` goes up by exactly one. The edits are those the `bus`, `canvas`, `encoder`, `filter`, `folder`, `hotkey`, `item`, `label`, `output`, `scene`, `send`, `source`, `transition`, `video_mix` tools take as `op`. Actions and queries can't be batched. Pass `expected_rev` to apply only if nobody changed the state since you read it, and `idempotency_key` to make a retry safe, and `ends_gesture` to commit a gesture you opened with the `live` tool's `live.set`. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Applies one or more edits atomically, as one undo step: either all of them apply or none does, and the state `rev` goes up by exactly one. The edits are those the `bus`, `canvas`, `encoder`, `filter`, `folder`, `hotkey`, `item`, `label`, `output`, `scene`, `send`, `source`, `transition`, `video_mix` tools take as `op`, except `output.delete` and `output.set_target`, which can remove a stream key and go through the `output` tool. Actions and queries can't be batched. Pass `expected_rev` to apply only if nobody changed the state since you read it, and `idempotency_key` to make a retry safe, and `ends_gesture` to commit a gesture you opened with the `live` tool's `live.set`. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "Action": {
@@ -4171,7 +4171,7 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,
         "readOnlyHint": false
@@ -4761,7 +4761,7 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,
         "readOnlyHint": false
@@ -5099,7 +5099,7 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,
         "readOnlyHint": false
@@ -5472,7 +5472,7 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,
         "readOnlyHint": false
@@ -9885,7 +9885,7 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,
         "readOnlyHint": false
@@ -10875,7 +10875,7 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,
         "readOnlyHint": false
@@ -11050,7 +11050,7 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,
         "readOnlyHint": false
@@ -15768,7 +15768,7 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,
         "readOnlyHint": false
@@ -15946,7 +15946,7 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,
         "readOnlyHint": false
@@ -16462,7 +16462,7 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,
         "readOnlyHint": false
@@ -16584,7 +16584,7 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": true,
         "readOnlyHint": false
@@ -16999,7 +16999,7 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,
         "readOnlyHint": false
@@ -17060,7 +17060,7 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,
         "readOnlyHint": false
@@ -17386,7 +17386,7 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,
         "readOnlyHint": false

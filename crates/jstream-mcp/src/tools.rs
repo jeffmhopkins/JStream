@@ -105,6 +105,30 @@ pub(crate) struct Tools {
 /// `batch`'s, since it carries their edits; every other tool's is false.
 pub(crate) const OPEN_WORLD: [&str; 2] = ["output", "source"];
 
+/// The actions that change only what JStream shows or measures, so another call puts
+/// back what they changed and they send nothing new off the machine (ADR-0098; a
+/// `scene.switch` does change what a running stream shows): switching the program or
+/// preview scene, a live value and its cancel, the loudness meter's reset, and
+/// a preview stream (which MCP can't receive anyway). A tool whose actions are all here
+/// is not `destructiveHint`. Every other action is: going live or stopping, setting or
+/// clearing a stream key, revoking a device, starting a pairing and replacing the UI's
+/// settings. A new action is destructive until it is added here.
+pub(crate) const REVERSIBLE_ACTIONS: [&str; 7] = [
+    "audio.reset_loudness",
+    "live.cancel",
+    "live.set",
+    "preview.subscribe",
+    "preview.unsubscribe",
+    "scene.switch",
+    "studio.set_preview",
+];
+
+/// The edits the `batch` tool refuses, because undo can't fully take them back: each can
+/// remove an output's stream key from the credential store (ADR-0098). They go through
+/// the `output` tool, which is `destructiveHint`, so `batch`, whose other edits undo
+/// takes back, need not be.
+pub(crate) const OUTPUT_ONLY_EDITS: [&str; 2] = ["output.delete", "output.set_target"];
+
 /// The prefix of a protocol field that holds text from outside JStream, which an agent
 /// reads as data and never as instructions (ADR-0059), such as `plugin.state_changed`'s
 /// `remote_name` (though `plugin.*` events don't reach agents). The server instructions
@@ -202,7 +226,7 @@ impl Tools {
         let tool = self.tools.iter().find(|t| t.name == name)?;
         Some(
             match &tool.kind {
-                ToolKind::Batch => decode_batch(arguments),
+                ToolKind::Batch => decode_batch(arguments).and_then(refuse_output_only_edits),
                 ToolKind::Describe => match arguments.as_object() {
                     Some(args) if args.is_empty() => Ok(Invocation::Describe),
                     _ => Err(malformed("`describe_api` takes no arguments")),
@@ -319,6 +343,29 @@ fn decode_batch(arguments: Value) -> Result<Invocation, ProtocolError> {
     })))
 }
 
+/// Refuses, in the `batch` tool, an edit of [`OUTPUT_ONLY_EDITS`]: the `output` tool takes
+/// it, as a batch of one.
+fn refuse_output_only_edits(invocation: Invocation) -> Result<Invocation, ProtocolError> {
+    if let Invocation::Call(Call::Batch(batch)) = &invocation {
+        for (i, edit) in batch.edits.iter().enumerate() {
+            let name = match edit {
+                Edit::OutputDelete { .. } => "output.delete",
+                Edit::OutputSetTarget { .. } => "output.set_target",
+                _ => continue,
+            };
+            debug_assert!(OUTPUT_ONLY_EDITS.contains(&name));
+            return Err(ProtocolError::invalid_argument(
+                format!("edits.{i}"),
+                format!(
+                    "`{name}` can remove the output's stream key, which undo can't put back, \
+                     so `batch` doesn't carry it: call the `output` tool with it as `op`"
+                ),
+            ));
+        }
+    }
+    Ok(invocation)
+}
+
 /// Refuses an edit that points an output at a YouTube broadcast: that binds the output to
 /// YouTube, which is for people, through the UI (ADR-0058 §3). A plain RTMP(S) target
 /// with a stream key stays open to agents.
@@ -397,7 +444,9 @@ fn batch_tool(defs: &Map<String, Value>, groups: &BTreeMap<String, Vec<(Op, Valu
     let description = format!(
         "Applies one or more edits atomically, as one undo step: either all of them apply \
          or none does, and the state `rev` goes up by exactly one. The edits are those the \
-         {} tools take as `op`. Actions and queries can't be batched. Pass `expected_rev` \
+         {} tools take as `op`, except `output.delete` and `output.set_target`, which can \
+         remove a stream key and go through the `output` tool. Actions and queries can't \
+         be batched. Pass `expected_rev` \
          to apply only if nobody changed the state since you read it, and \
          `idempotency_key` to make a retry safe, and `ends_gesture` to commit a gesture \
          you opened with the `live` tool's `live.set`. Failures come back as a tool error whose \
@@ -407,13 +456,14 @@ fn batch_tool(defs: &Map<String, Value>, groups: &BTreeMap<String, Vec<(Op, Valu
     Tool {
         name: BATCH_TOOL.into(),
         kind: ToolKind::Batch,
-        // Its edits include deletes and `output.set_target`, and `source` edits that
-        // point a `browser` source at any web page.
+        // Undo takes back each edit it carries ([`OUTPUT_ONLY_EDITS`] go through the
+        // `output` tool), but its `source` edits can point a `browser` source at any web
+        // page.
         definition: definition(
             BATCH_TOOL,
             &description,
             with_defs(schema, defs),
-            annotations(Effect::Destructive, open_world),
+            annotations(Effect::Additive, open_world),
         ),
     }
 }
@@ -596,21 +646,25 @@ fn group_tool(defs: &Map<String, Value>, noun: &str, ops: &[(Op, Value)]) -> Too
 enum Effect {
     /// Only queries: it changes nothing.
     ReadOnly,
-    /// Edits that add or change, all taken back by undo.
+    /// Edits, which undo takes back (a `delete` or `remove` too, ADR-0032), and
+    /// [`REVERSIBLE_ACTIONS`].
     Additive,
-    /// At least one op undo can't take back (an action), that removes something (a
-    /// `delete` or `remove` edit), or that steps through the session's history.
+    /// At least one action outside [`REVERSIBLE_ACTIONS`], which undo can't take back
+    /// and may reach outside the machine or remove a secret, or a history call: an undo
+    /// past an `output.create` or `output.set_target` removes a stream key that redo
+    /// doesn't put back (ADR-0098).
     Destructive,
 }
 
-/// A group tool's [`Effect`], from its ops. `output.set_target` is an undoable edit, but
-/// it shares the `output` tool with actions such as `output.set_key` and `output.start`,
-/// and `batch` is destructive as a whole; `history.undo` can remove what a create made.
+/// A group tool's [`Effect`], from its ops (ADR-0098, amending ADR-0059 §1). Only an
+/// action outside [`REVERSIBLE_ACTIONS`], or a history call, makes a tool destructive:
+/// `device`, `history`, `output`, `pairing` and `ui_settings`. Deletes are undoable
+/// edits.
 fn effect(ops: &[(Op, Value)]) -> Effect {
     let destructive = |op: &Op| match op.class {
-        OpClass::Action | OpClass::History => true,
-        OpClass::Edit => matches!(op.name.rsplit_once('.'), Some((_, "delete" | "remove"))),
-        OpClass::Query => false,
+        OpClass::Action => !REVERSIBLE_ACTIONS.contains(&op.name.as_str()),
+        OpClass::History => true,
+        OpClass::Edit | OpClass::Query => false,
     };
     if ops.iter().all(|(op, _)| op.class == OpClass::Query) {
         Effect::ReadOnly
@@ -760,12 +814,13 @@ pub(crate) fn check_tool_names_are_valid() {
 
 #[cfg(test)]
 mod tests {
-    use super::{Invocation, Tools};
+    use super::{Invocation, OpClass, ToolKind, Tools};
     use jstream_protocol::{
         Action, Batch, Call, Edit, GestureId, HistoryCall, HistoryOp, IdempotencyKey, OutputId,
         ProtocolError, Query, Rev, SceneId,
     };
     use serde_json::{Value, json};
+    use std::collections::BTreeSet;
 
     fn decode(tool: &str, args: Value) -> Result<Invocation, ProtocolError> {
         Tools::generate()
@@ -978,16 +1033,35 @@ mod tests {
                 "video"
             ]
         );
-        // `output` carries `output.set_target`, `output.set_key`, `output.start` and
-        // `output.delete`; `batch` carries every delete and `output.set_target`; `live`
-        // carries the `live.set` and `live.cancel` actions.
+        // ADR-0098: an action undo can't take back, or a history call, makes a tool
+        // destructive. `output` sets and clears keys and goes live, `device` revokes,
+        // `pairing` hands out a code, `ui_settings.set` replaces a person's settings, and
+        // an undo past an `output.create` removes a stream key redo doesn't restore.
+        let destructive: Vec<&str> = all
+            .iter()
+            .filter(|(_, a)| a["destructiveHint"] == true)
+            .map(|(name, _)| name.as_str())
+            .collect();
+        assert_eq!(
+            destructive,
+            ["device", "history", "output", "pairing", "ui_settings"]
+        );
+        // The tools a scene build uses ask nothing: their deletes are undoable,
+        // `scene.switch` and `live.set` are reversible actions, and `batch` refuses the
+        // two output edits undo can't fully take back.
         for name in [
-            "output", "batch", "scene", "source", "history", "device", "pairing", "live",
+            "batch",
+            "canvas",
+            "filter",
+            "item",
+            "live",
+            "scene",
+            "source",
+            "transition",
         ] {
             assert_eq!(all[name]["readOnlyHint"], false, "{name}");
-            assert_eq!(all[name]["destructiveHint"], true, "{name}");
+            assert_eq!(all[name]["destructiveHint"], false, "{name}");
         }
-        assert_eq!(all["canvas"]["destructiveHint"], false);
         let open: Vec<&str> = all
             .iter()
             .filter(|(_, a)| a["openWorldHint"] == true)
@@ -1048,6 +1122,74 @@ mod tests {
         );
     }
 
+    /// ADR-0098: every name in `REVERSIBLE_ACTIONS` is an action a tool carries, so a
+    /// renamed action can't leave a stale entry that marks nothing.
+    #[test]
+    fn reversible_actions_name_actions() {
+        let tools = Tools::generate();
+        let actions: BTreeSet<&str> = tools
+            .tools
+            .iter()
+            .filter_map(|t| match &t.kind {
+                ToolKind::Group(ops) => Some(ops),
+                _ => None,
+            })
+            .flatten()
+            .filter(|op| op.class == OpClass::Action)
+            .map(|op| op.name.as_str())
+            .collect();
+        for name in super::REVERSIBLE_ACTIONS {
+            assert!(
+                actions.contains(name),
+                "{name} is not an action any tool carries"
+            );
+        }
+        let edits: BTreeSet<&str> = tools
+            .tools
+            .iter()
+            .filter_map(|t| match &t.kind {
+                ToolKind::Group(ops) => Some(ops),
+                _ => None,
+            })
+            .flatten()
+            .filter(|op| op.class == OpClass::Edit)
+            .map(|op| op.name.as_str())
+            .collect();
+        for name in super::OUTPUT_ONLY_EDITS {
+            assert!(edits.contains(name), "{name} is not an edit");
+        }
+    }
+
+    /// ADR-0098: `batch` refuses `output.delete` and `output.set_target`, which can remove
+    /// a stream key, and points to the `output` tool, which still takes them.
+    #[test]
+    fn batch_refuses_edits_that_can_remove_a_key() {
+        let target = json!({"type": "generic", "url": "rtmps://example.com/live"});
+        let set = json!({"type": "output.set_target", "output_id": "o", "target": target});
+        let delete = json!({"type": "output.delete", "output_id": "o"});
+        let scene = json!({"type": "scene.create", "scene_id": "s", "name": "S"});
+        for (edit, name) in [(set, "output.set_target"), (delete, "output.delete")] {
+            match decode("batch", json!({"edits": [scene.clone(), edit.clone()]})) {
+                Err(ProtocolError::InvalidArgument { field, reason, .. }) => {
+                    assert_eq!(field, "edits.1");
+                    assert!(
+                        reason.contains(name) && reason.contains("`output` tool"),
+                        "{reason}"
+                    );
+                }
+                other => panic!("expected invalid_argument, got {other:?}"),
+            }
+            assert!(matches!(
+                decode("output", json!({"op": edit})),
+                Ok(Invocation::Call(Call::Batch(_)))
+            ));
+        }
+        assert!(matches!(
+            decode("batch", json!({"edits": [scene]})),
+            Ok(Invocation::Call(Call::Batch(_)))
+        ));
+    }
+
     /// ADR-0058 §3: an agent can't bind an output to a YouTube broadcast, in a group
     /// tool's edit or in a batch; a generic RTMP(S) target is still fine.
     #[test]
@@ -1073,9 +1215,10 @@ mod tests {
         );
         let generic = json!({"type": "output.set_target", "output_id": "yt",
                              "target": {"type": "generic", "url": "rtmps://example.com/live"}});
+        let other = json!({"type": "scene.create", "scene_id": "s", "name": "S"});
         assert_eq!(
-            field(decode("batch", json!({"edits": [generic, set]}))),
-            "edits.1.target"
+            field(decode("batch", json!({"edits": [other, create]}))),
+            "edits.1.kind.target"
         );
         assert!(matches!(
             decode("output", json!({"op": generic})),
