@@ -135,7 +135,8 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   rise at once and fall over a few frames. `AudioMeter::new` plans the FFT and allocates
   its buffers, so `measure(scope, ms)` allocates nothing and takes no lock, and can run
   on the engine's render thread. It hears silence once the ring has stood still for a
-  quarter second, as the scope sources do. A test measures a 1 kHz tone, then silence.
+  quarter second, as the scope sources do, and a non-finite sample as silence. Tests
+  measure a 1 kHz tone, then silence, and a window with NaN and infinite samples.
 
 **Kinds.**
 - `backdrop`: a generated studio backdrop, like the painted canvas, muslin or seamless

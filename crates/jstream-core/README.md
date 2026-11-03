@@ -1138,7 +1138,8 @@ A shader source that hears audio (`audio = true`) hears the scope its `audio` an
 `audio_source` settings name, as a `spectrum` does: the live sources find it on each
 sync (`FilterAssets::heard`), the source it names is fed like a scope source's
 (`audio::retain_scopes`), and each frame the chain runs, the program's `AudioMeter`
-(made on its first frame) measures it and hands the levels, bands and waveform to the
+(made with the program, or when it starts to hear, never while a steady frame draws)
+measures it and hands the levels, bands and waveform to the
 program (`VideoFilter::set_audio`).
 Each filter's layer key is made when the chain's shape changes, so a steady frame
 builds none. A shot with a chain counts as
