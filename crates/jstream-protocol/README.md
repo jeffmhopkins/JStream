@@ -48,7 +48,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `canvas.set_size`, `source.create`, `source.rename`, `source.set_settings`,
   `source.duplicate`, `source.delete`, `filter.add`, `filter.remove`,
   `filter.set_enabled`, `filter.set_settings`, `filter.reorder`, `output.create`,
-  `output.set_target`, `output.set_encoder`, `output.set_video_mix`,
+  `output.set_target`, `output.set_path`, `output.set_encoder`, `output.set_video_mix`,
   `output.set_audio_buses`, `output.delete`,
   `encoder.create`, `encoder.update`, `encoder.delete`, `video_mix.create`,
   `video_mix.update`, `video_mix.delete`, `source.set_audio`, `bus.create`,
@@ -207,9 +207,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   negative scale is not refused: `from_legacy` returns the drawn outline with the
   reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.76 because of
   `item.set_effects_space` and `ItemInfo.effects_space`
-  ([ADR-0106](../../docs/adr/0106-item-effects-in-canvas-space.md)), with 0.74 and 0.75
-  left to changes that claimed them first; 0.73 because of the
-  `profile.get` query
+  ([ADR-0106](../../docs/adr/0106-item-effects-in-canvas-space.md)), with 0.75 left to a
+  change that claimed it first; 0.74 because of `output.set_path` (#1072); 0.73 because
+  of the `profile.get` query
   ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)); 0.72 because of the
   effect-pack commands `pack.write`, `pack.delete`, `pack.list` and `pack.read`
   (`pack.rs`: `PackFile`, `PackContent`, `PackInfo`, `PackFileInfo` and the write's
@@ -813,8 +813,11 @@ as an asset path's last component. And
 `container` is `mp4` (fragmented). `output.start` writes `<path>.part` and fails with
 `action_failed` when `path` or `<path>.part` already exists, so a recording never
 overwrites; `output.stop` renames it to `path`. A recording output has no RTMP target,
-so `output.set_target` refuses it with `invalid_argument`; delete and re-create it to
-record elsewhere. A `virtual_cam` output (0.18) has no fields: it offers the program
+so `output.set_target` refuses it with `invalid_argument`. `output.set_path
+{output_id, path}` (0.74, #1072) points it at another file, checked like `path` above,
+keeping its container, encoder profile, mix, bus and filters; a running recording keeps
+its file, and the new path applies from the next `output.start`. On any other output it
+is `invalid_argument`, and its inverse is `output.set_path` with the previous path. A `virtual_cam` output (0.18) has no fields: it offers the program
 video to other apps on the engine's machine as a webcam, with no audio, at the canvas
 size it has when it starts and 30 fps. `output.start` fails with `action_failed` when
 the engine has no virtual camera, the camera isn't registered on the machine, or it

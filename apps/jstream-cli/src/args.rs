@@ -103,6 +103,7 @@ Edits (each is its protocol command name followed by its arguments):
   canvas.set_size <width> <height>
   output.create <output-id> <rtmp-url>
   output.set_target <output-id> <rtmp-url>
+  output.set_path <output-id> <file-path>
   output.delete <output-id>
   hotkey.set <chord> <action> <id>
                     bind a chord such as Ctrl+Digit1 or F1 to scene.switch
@@ -439,6 +440,7 @@ fn arity(name: &str) -> Option<usize> {
         | "item.set_blend"
         | "output.create"
         | "output.set_target"
+        | "output.set_path"
         | "canvas.set_size" => 2,
         "source.create" | "source.duplicate" | "item.add" | "item.move" | "hotkey.set" => 3,
         "item.set_crop" => 5,
@@ -666,6 +668,10 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
         ("output.set_target", [id, url]) => Edit::OutputSetTarget {
             output_id: OutputId::new(*id),
             target: rtmp_target(url)?,
+        },
+        ("output.set_path", [id, path]) => Edit::OutputSetPath {
+            output_id: OutputId::new(*id),
+            path: (*path).to_owned(),
         },
         ("output.delete", [id]) => Edit::OutputDelete {
             output_id: OutputId::new(*id),
@@ -1021,6 +1027,27 @@ mod tests {
         assert_eq!(
             err(&["edit", "output.set_target", "o"]),
             "`output.set_target` takes 2 arguments; try `jstream-cli help`"
+        );
+    }
+
+    /// #1072: a recording's file changes with `output.set_path`.
+    #[test]
+    fn output_set_path_takes_a_file_path() {
+        let Command::Edit(batch) =
+            ok(&["edit", "output.set_path", "rec", "/home/me/take2.mp4"]).command
+        else {
+            panic!("not an edit");
+        };
+        assert_eq!(
+            batch.edits,
+            [Edit::OutputSetPath {
+                output_id: OutputId::new("rec"),
+                path: "/home/me/take2.mp4".into(),
+            }]
+        );
+        assert_eq!(
+            err(&["edit", "output.set_path", "rec"]),
+            "`output.set_path` takes 2 arguments; try `jstream-cli help`"
         );
     }
 
