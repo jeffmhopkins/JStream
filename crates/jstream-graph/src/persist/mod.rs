@@ -19,8 +19,9 @@ use jstream_protocol::{
     Action, BlendMode, BusId, BusMonitor, Canvas, Chord, Crop, Easing, Edit, EncoderProfile,
     EncoderProfileId, FilterChain, FilterId, FilterInfo, FilterOwner, Finite32, FolderId,
     INITIAL_PRESET, ItemGeometry, ItemId, ItemTransform, ItemTransition, LabelId, OutputId,
-    OutputKind, ProtocolError, Rev, SceneId, SceneMeta, SceneOptions, SceneRole, Settings,
-    SourceAudio, SourceId, SourceKind, SourceMeta, TransitionPresetId, VideoMix, VideoMixId,
+    OutputKind, ProtocolError, Rev, SceneCamera, SceneId, SceneMeta, SceneOptions, SceneRole,
+    Settings, SourceAudio, SourceId, SourceKind, SourceMeta, TransitionPresetId, VideoMix,
+    VideoMixId,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -268,6 +269,10 @@ struct FileScene {
     /// Its background colour (ADR-0089 §4); omitted for none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     background: Option<String>,
+    /// Its camera (ADR-0094), or a keyframe scene's override of its parent's; omitted
+    /// for none, so a file without cameras is unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    camera: Option<SceneCamera>,
     /// The scene it is a keyframe scene of (ADR-0024 §2); omitted for any other scene.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     variant_of: Option<SceneId>,
@@ -555,6 +560,7 @@ impl Graph {
                     show_in_multiview: scene.meta.show_in_multiview,
                     include_audio: scene.options.include_audio,
                     background: scene.options.background.clone(),
+                    camera: scene.camera,
                     variant_of: scene.variant_of.clone(),
                     overrides: scene
                         .overrides
@@ -991,10 +997,21 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
         };
         if !options.is_default() {
             edits.push((
-                object,
+                object.clone(),
                 Edit::SceneSetOptions {
                     scene_id: scene.id.clone(),
                     options,
+                },
+            ));
+        }
+        // Parents come before their keyframes here, so a keyframe's override finds its
+        // parent's camera set.
+        if scene.camera.is_some() {
+            edits.push((
+                object,
+                Edit::SceneSetCamera {
+                    scene_id: scene.id.clone(),
+                    camera: scene.camera,
                 },
             ));
         }

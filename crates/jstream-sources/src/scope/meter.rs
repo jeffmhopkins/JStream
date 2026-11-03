@@ -115,7 +115,14 @@ impl AudioMeter {
             self.moved_at = ms;
         }
         let heard = rate != 0 && ms.saturating_sub(self.moved_at) < STILL_MS;
-        if !heard {
+        if heard {
+            // A non-finite sample (a plugin's NaN) is heard as silence.
+            for s in &mut self.window {
+                if !s.is_finite() {
+                    *s = 0.0;
+                }
+            }
+        } else {
             self.window.fill(0.0);
         }
         // How many sixtieths of a second since the last measure, for the falls.
@@ -207,5 +214,31 @@ mod tests {
         // The ring stands still: after a quarter second it is silence, falling.
         let later = *meter.measure(&scope, 16 + STILL_MS);
         assert!(later.level < heard.level && later.wave.iter().all(|&s| s == 0.0));
+    }
+
+    /// A non-finite sample is heard as silence, so every value stays finite.
+    #[test]
+    fn a_meter_hears_a_nan_as_silence() {
+        let scope = AudioScope::new();
+        let mut meter = AudioMeter::new();
+        let samples: Vec<f32> = (0..WINDOW)
+            .flat_map(|n| {
+                let s = if n % 7 == 0 {
+                    f32::NAN
+                } else if n % 11 == 0 {
+                    f32::INFINITY
+                } else {
+                    0.5
+                };
+                [s, s]
+            })
+            .collect();
+        scope.push(48_000, &samples);
+        let heard = *meter.measure(&scope, 16);
+        assert!(heard.level.is_finite() && heard.peak.is_finite() && heard.onset.is_finite());
+        assert!(
+            heard.wave.iter().chain(&heard.bands).all(|v| v.is_finite()),
+            "{heard:?}"
+        );
     }
 }

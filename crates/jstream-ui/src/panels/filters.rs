@@ -3168,6 +3168,7 @@ mod tests {
             items,
             transition_in: None,
             transition_out: None,
+            camera: None,
         };
         let collection = Collection {
             scenes: vec![
@@ -3223,6 +3224,7 @@ mod tests {
             items,
             transition_in: None,
             transition_out: None,
+            camera: None,
         };
         let nested = |id: &str, scene_id: &str| SourceInfo {
             source_id: SourceId::new(id),
@@ -3315,6 +3317,7 @@ mod tests {
             items,
             transition_in: None,
             transition_out: None,
+            camera: None,
         };
         let source = |id: &str, kind: SourceKind| SourceInfo {
             source_id: SourceId::new(id),
@@ -3505,6 +3508,7 @@ mod tests {
                 items,
                 transition_in: None,
                 transition_out: None,
+                camera: None,
             }
         };
         let own = |effects: Option<Vec<FilterInfo>>| ItemOverride {

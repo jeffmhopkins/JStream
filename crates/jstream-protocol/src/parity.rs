@@ -598,6 +598,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                         folder: None,
                         meta: Default::default(),
                         options: Default::default(),
+                        camera: None,
                     },
                     SceneInfo {
                         overrides: Vec::new(),
@@ -612,6 +613,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                         folder: None,
                         meta: Default::default(),
                         options: Default::default(),
+                        camera: None,
                     },
                 ],
                 outputs: outputs(),

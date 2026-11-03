@@ -1,15 +1,15 @@
 //! What the canvas edits and the calls that change it: the selected scene's items'
 //! boxes, taken from the shared [`Collection`], the live values a drag shows as it
 //! goes (`live.set` and `live.cancel`), `item.set_geometry` (and `item.set_crop` for a
-//! crop) as one batch per finished gesture, and `history.undo` and `history.redo`
-//! (ADR-0032).
+//! crop) as one batch per finished gesture, `scene.set_camera` for a 3D scene's orbit
+//! and dolly (ADR-0094), and `history.undo` and `history.redo` (ADR-0032).
 //!
 //! Docs: crates/jstream-ui/README.md#canvas, docs/adr/0032-live-edits-and-undo.md
 
 use crate::store::{Collection, Sizes};
 use jstream_control::protocol::{
     Action, Batch, Call, CallResult, Canvas, Crop, Edit, GestureId, HistoryCall, HistoryOp,
-    ItemGeometry, ItemId, PlacementForm, Rev, SceneId,
+    ItemGeometry, ItemId, PlacementForm, Rev, SceneCamera, SceneId,
 };
 use jstream_control::{Control, ControlError};
 use std::fmt;
@@ -81,6 +81,9 @@ pub struct Layout {
     pub keyframe_of: Option<String>,
     /// Its items, in stacking order: the first is at the bottom.
     pub items: Vec<CanvasItem>,
+    /// The camera it is seen through when it is a 3D scene (ADR-0094): its own, or on a
+    /// keyframe scene its override or else its parent's.
+    pub camera: Option<SceneCamera>,
 }
 
 impl Layout {
@@ -131,6 +134,7 @@ impl Layout {
                 scene: None,
                 keyframe_of: None,
                 items: Vec::new(),
+                camera: None,
             };
         };
         let items = scene
@@ -157,6 +161,7 @@ impl Layout {
                 .parent_of(&scene.scene_id)
                 .map(|p| p.name.clone()),
             items,
+            camera: collection.camera_of(&scene.scene_id),
         }
     }
 }
@@ -221,19 +226,58 @@ pub async fn commit(
     }
 }
 
-/// Shows the items at these geometries and crops on output while a drag goes on,
-/// opening the gesture if it is new (`live.set`): the collection and its revision don't
-/// change.
+/// The batch that sets `scene_id`'s camera, ending the orbit's gesture if its live
+/// values reached the engine: one undo step for the whole drag.
+pub fn set_camera(scene_id: SceneId, camera: SceneCamera, gesture: Option<GestureId>) -> Call {
+    Call::Batch(Batch {
+        edits: vec![Edit::SceneSetCamera {
+            scene_id,
+            camera: Some(camera),
+        }],
+        expected_rev: None,
+        idempotency_key: None,
+        ends_gesture: gesture,
+    })
+}
+
+/// Sends [`set_camera`]'s batch and returns the revision it produced.
+pub async fn commit_camera(
+    control: &dyn Control,
+    scene_id: SceneId,
+    camera: SceneCamera,
+    gesture: Option<GestureId>,
+) -> Result<Rev, CanvasError> {
+    match control
+        .call(set_camera(scene_id, camera, gesture))
+        .await?
+        .result
+    {
+        CallResult::Batch { rev, .. } => Ok(rev),
+        _ => Err(CanvasError::UnexpectedAnswer {
+            call: "scene.set_camera",
+        }),
+    }
+}
+
+/// Shows the items at these geometries and crops, and the scene through `camera`, on
+/// output while a drag goes on, opening the gesture if it is new (`live.set`): the
+/// collection and its revision don't change.
 pub async fn live_set(
     control: &dyn Control,
     gesture: GestureId,
     scene_id: SceneId,
     placed: Vec<(ItemId, ItemGeometry)>,
     crops: Vec<(ItemId, Crop)>,
+    camera: Option<SceneCamera>,
 ) -> Result<(), CanvasError> {
+    let mut values = geometry_edits(&scene_id, placed, crops);
+    values.extend(camera.map(|camera| Edit::SceneSetCamera {
+        scene_id,
+        camera: Some(camera),
+    }));
     let action = Action::LiveSet {
         gesture_id: gesture,
-        values: geometry_edits(&scene_id, placed, crops),
+        values,
     };
     control.call(Call::Action { action }).await?;
     Ok(())
@@ -436,6 +480,7 @@ mod tests {
             "s2".into(),
             vec![("box".into(), moving)],
             Vec::new(),
+            None,
         ))
         .expect("live.set");
         assert_eq!(open_gestures(&control), 1);
@@ -462,6 +507,39 @@ mod tests {
         );
     }
 
+    /// ADR-0094: an orbit shows its camera live and commits it in one step, which the
+    /// layout then reports as the scene's camera; a keyframe scene shows its parent's.
+    #[test]
+    fn an_orbit_commits_the_scene_s_camera() {
+        let control = engine();
+        let before = load(&control, "s2");
+        assert_eq!(before.camera, None);
+        let canvas = before.canvas;
+        let camera = jstream_control::protocol::SceneCamera::framing(canvas);
+        let turned = crate::canvas::camera::orbit(camera, 120.0, 40.0);
+        let gesture = GestureId::new("orbit-1");
+        now(live_set(
+            &control,
+            gesture.clone(),
+            "s2".into(),
+            Vec::new(),
+            Vec::new(),
+            Some(turned),
+        ))
+        .expect("live.set takes a camera");
+        assert_eq!(open_gestures(&control), 1);
+        assert_eq!(
+            load(&control, "s2").camera,
+            None,
+            "live values change nothing stored"
+        );
+        let rev = now(commit_camera(&control, "s2".into(), turned, Some(gesture)))
+            .expect("scene.set_camera");
+        assert_eq!(rev.0, before.rev.0 + 1);
+        assert_eq!(open_gestures(&control), 0);
+        assert_eq!(load(&control, "s2").camera, Some(turned));
+    }
+
     #[test]
     fn a_cancel_ends_the_gesture_with_no_edit() {
         let control = engine();
@@ -474,6 +552,7 @@ mod tests {
             "s2".into(),
             vec![("box".into(), moving)],
             Vec::new(),
+            None,
         ))
         .expect("live.set");
         now(live_cancel(&control, gesture)).expect("live.cancel");

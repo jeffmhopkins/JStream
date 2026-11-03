@@ -325,6 +325,7 @@ impl Scene {
                 .map(|(item_id, o)| crate::keyframe::to_info(item_id, o))
                 .collect(),
             items: self.items.iter().map(Item::to_info).collect(),
+            camera: self.camera,
         }
     }
 }

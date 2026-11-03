@@ -60,6 +60,8 @@ pub(crate) fn read(opened: &mut Opened, image: &Image) -> Snapshot {
         opacity: 1.0,
         blend: crate::BlendMode::Normal,
         visible: true,
+        camera: None,
+        depth_run: 0,
     }];
     let scene = Scene {
         canvas: jstream_media::FrameSize::new(image.width(), image.height())

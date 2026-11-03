@@ -3357,6 +3357,35 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Sets or removes a scene's camera (ADR-0094, since 0.70). A scene with a camera is a\n3D scene: its items are placed in one 3D space by their geometry and seen through\nthe camera. On a keyframe scene it writes or, with `camera` omitted, removes the\nkeyframe's override of its parent's camera. `invalid_argument` for a field of view\noutside 1 to 170, a position within 0.001 px of the target, a coordinate past the\ndrawable bound, or a camera on a keyframe scene whose parent has none. Removing a\nparent's camera also removes its keyframe scenes' overrides. Inverse:\n`scene.set_camera` with the previous camera, then each removed override.",
+          "properties": {
+            "camera": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneCamera"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The new camera. Omitted removes it."
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene to change."
+            },
+            "type": {
+              "const": "scene.set_camera",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Adds a label, last in label order (ADR-0024 §4). Rejected with `invalid_argument`\nfor an empty name, a colour that isn't `#rrggbb`, or an icon checked as\n`scene.set_meta`'s. Inverse: `label.delete`.",
           "properties": {
             "color": {
@@ -8210,6 +8239,38 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "SceneCamera": {
+      "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, and omitted\n`depth_sort` `true`, which is not written.",
+      "properties": {
+        "depth_sort": {
+          "description": "Whether items draw far to near, by the depth of their box centre along the\nviewing axis, with stacking order breaking ties. `false` keeps stacking order.\nDefault `true`.",
+          "type": "boolean"
+        },
+        "fov_deg": {
+          "$ref": "#/$defs/Finite32",
+          "default": 45.0,
+          "description": "Vertical field of view, in degrees, from 1 to 170. Default 45."
+        },
+        "position": {
+          "$ref": "#/$defs/Vec3",
+          "description": "Where the camera is."
+        },
+        "roll_deg": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "Rotation of the picture about the viewing axis, clockwise, in degrees. Default 0."
+        },
+        "target": {
+          "$ref": "#/$defs/Vec3",
+          "description": "The point it looks at. At least 0.001 px from `position`."
+        }
+      },
+      "required": [
+        "position",
+        "target"
+      ],
+      "type": "object"
+    },
     "SceneId": {
       "description": "A scene in the collection.",
       "type": "string"
@@ -8223,6 +8284,17 @@ source: crates/jstream-protocol/src/fixtures.rs
             "string",
             "null"
           ]
+        },
+        "camera": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SceneCamera"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Its camera (ADR-0094, since 0.70), which makes it a 3D scene. On a keyframe scene,\nits override of its parent's camera; the keyframe shows the parent's camera where\nit has none. Omitted for none, so missing (also from an older server) parses as a\n2D scene."
         },
         "color": {
           "description": "The scene's colour, sRGB as `#rrggbb`. Omitted for none.",
@@ -8975,6 +9047,29 @@ source: crates/jstream-protocol/src/fixtures.rs
       "required": [
         "x",
         "y"
+      ],
+      "type": "object"
+    },
+    "Vec3": {
+      "description": "A point or a direction in a scene's 3D space, in scene pixels: x right, y down, z\ntoward the viewer, the canvas at `z = 0`.",
+      "properties": {
+        "x": {
+          "$ref": "#/$defs/Finite32",
+          "description": "Right."
+        },
+        "y": {
+          "$ref": "#/$defs/Finite32",
+          "description": "Down."
+        },
+        "z": {
+          "$ref": "#/$defs/Finite32",
+          "description": "Toward the viewer."
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
       ],
       "type": "object"
     },

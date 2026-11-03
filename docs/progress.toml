@@ -946,8 +946,8 @@ id = "3D2"
 milestone = "M3"
 title = "3D scenes with a camera"
 status = "review"
-prs = [1038]
-note = "ADR-0094 (#1038): items placed in one 3D space per scene and seen through the scene's camera; then the protocol, graph, render and core parts, and the UI's camera fields and orbit drag"
+prs = [1038, 1044, 1053]
+note = "ADR-0094 (#1038): items placed in one 3D space per scene and seen through the scene's camera; the engine half, scene.set_camera, the camera drawn through and sorted far to near, and a Move moving the camera (#1044, protocol 0.70); the UI's camera fields, depth-plane drag, orbit and dolly (#1053)"
 needs = ["build"]
 
 [[item]]
@@ -1044,6 +1044,6 @@ id = "X2"
 milestone = "M3"
 title = "Shader sources: multipass WGSL packs with feedback, inputs and audio, written over MCP"
 status = "planned"
-needs = ["build", "maintainer"]
-prs = [1034, 1048]
-note = "ADR-0093 (agent tier) and the program in jstream-effects and jstream-render (#1034), and the engine wiring: kinds, stand-ins, scene slots, restart on show and audio (#1048); writing packs over the protocol and MCP waits on a maintainer-tier ADR of its own; for the cockpit scenes (warp, reflections, audio glow) that browser sources draw on the CPU today"
+needs = ["build"]
+prs = [1034, 1048, 1050, 1052, 1064]
+note = "ADR-0093 (agent tier) and the program in jstream-effects and jstream-render (#1034), and the engine wiring: kinds, stand-ins, scene slots, restart on show and audio (#1048); writing packs over the protocol and MCP is decided by ADR-0097 (maintainer tier, accepted) and not built yet; for the cockpit scenes (warp, reflections, audio glow) that browser sources draw on the CPU today"
