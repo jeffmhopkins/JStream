@@ -311,7 +311,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   toast, and Remove from scene, each one batch. Ctrl+C copies the selection (on a scene
   row, the scene) into the page's own clipboard (`Clipboard` context), and Ctrl+V,
   Paste or Paste scene sends one batch that places the copied items' sources again,
-  with their placement settings and effects, or duplicates the copied scene. As OBS's
+  with their placement settings, lock and effects, or duplicates the copied scene. As OBS's
   does, the item menu also copies the primary item's source's filters (`FilterClip`)
   and pastes them onto each selected item's source, after its own or replacing them,
   chain by chain (a chain the clip has nothing for keeps its own), and copies the

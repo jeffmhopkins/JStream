@@ -812,7 +812,7 @@ pub fn Sources() -> impl IntoView {
                     type="button"
                     class="hov tree-tool lock"
                     class:on=locked
-                    title="Locked: the canvas won't move it"
+                    title="Lock on the canvas"
                     aria-label=lock_label
                     aria-pressed=locked.to_string()
                     on:click=toggle_lock

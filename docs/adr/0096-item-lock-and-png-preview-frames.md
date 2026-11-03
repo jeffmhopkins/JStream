@@ -71,4 +71,9 @@ keep.
   which refuses the unknown field rather than drop the lock on its next save.
 - A screenshot costs one preview picture, drawn on the preview thread, so it never
   touches an output. It is limited to 1920 × 1080; a larger canvas is scaled down.
+- A PNG stream is paced like any preview, and each picture is a lossless encode on
+  the one preview thread every session's previews share. The UI asks for 1 fps and
+  closes after the first picture, so it costs one encode; a client that kept a `png`
+  stream open at 30 fps would slow every other preview, so a client should ask for
+  `png` only for a still.
 - `video.snapshot` keeps its contract; the PNG codec doesn't change it.

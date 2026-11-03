@@ -4,9 +4,9 @@
 //! A screenshot opens a preview stream asking for `png` only, at the canvas's size
 //! within the largest a preview may be, on a channel from the canvas's taps
 //! ([`Taps`](crate::canvas::taps::Taps)). Its first picture is saved through a
-//! download link, and the stream is closed. Captures show in it, as in any preview. An
-//! engine older than protocol 0.71 refuses the codec, and a toast says why. Native
-//! builds (tests, clippy) get a stand-in that only says so.
+//! download link, and the stream is closed. Captures show in it, as in any preview. If
+//! the engine refuses the stream (too many streams, a scene or source gone), a toast
+//! gives its reason. Native builds (tests, clippy) get a stand-in that only says so.
 //!
 //! Docs: crates/jstream-ui/README.md#design
 
@@ -124,12 +124,11 @@ fn name_of(studio: Studio, shot: &Shot) -> String {
         .unwrap_or_default()
 }
 
-/// The toast when the engine refuses the stream: an engine before 0.71 doesn't know
-/// the `png` codec.
+/// The toast when the engine refuses the stream, with the engine's reason: too many
+/// streams, a scene or source deleted meanwhile. (An engine without the `png` codec
+/// can't get here: the handshake refuses a client newer than the engine.)
 pub fn refused(error: &str) -> String {
-    format!(
-        "Couldn't take the screenshot: {error}. It needs an engine with protocol 0.71 or later."
-    )
+    format!("Couldn't take the screenshot: {error}.")
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -204,7 +203,16 @@ mod web {
         let link: leptos::web_sys::HtmlElement =
             link.dyn_into().map_err(|_| "no link to save with")?;
         link.click();
-        let _revoked = call(&global("URL")?, "revokeObjectURL", &[url]);
+        // Some browsers cancel a download whose URL is revoked in the same task, so the
+        // picture is let go a few seconds later instead.
+        leptos::prelude::set_timeout(
+            move || {
+                if let Ok(url_api) = global("URL") {
+                    let _revoked = call(&url_api, "revokeObjectURL", &[url]);
+                }
+            },
+            std::time::Duration::from_secs(5),
+        );
         Ok(())
     }
 

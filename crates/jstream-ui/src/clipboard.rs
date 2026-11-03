@@ -2,7 +2,7 @@
 //! the system's: Ctrl+C on the canvas or a Sources row, or the item menu's Copy, copies
 //! the selected items, and on a scene row (or its menu's Copy) copies the scene. Ctrl+V,
 //! or Paste in the item menu and the empty canvas's and the Sources panel's menus, places the copied items' sources again in the shown
-//! scene as references, each with the copied item's box, crop, visibility, opacity,
+//! scene as references, each with the copied item's box, crop, visibility, lock, opacity,
 //! blend, transition settings and effects. Into the scene they came from they land 40
 //! pixels right and down, as a duplicate does. Ctrl+V in the Scenes panel, or Paste
 //! scene, duplicates the copied scene, as Duplicate scene does: a scene named
@@ -374,6 +374,12 @@ fn place_edits(
                 transition: item.transition,
             });
         }
+        if item.locked {
+            edits.push(Edit::ItemSetLocked {
+                item_id: item_id.clone(),
+                locked: true,
+            });
+        }
         let owner = FilterOwner::Item {
             item_id: item_id.clone(),
         };
@@ -595,6 +601,7 @@ mod tests {
             ..Crop::NONE
         };
         a.visible = false;
+        a.locked = true;
         a.opacity = Finite32::new(0.5).expect("finite");
         a.effects = vec![blur()];
         let mut kf = scene("kf", Vec::new());
@@ -765,6 +772,10 @@ mod tests {
                     scene_id: None,
                     visible: false,
                 },
+                Edit::ItemSetLocked {
+                    item_id: "item1".into(),
+                    locked: true,
+                },
                 Edit::FilterAdd {
                     owner: FilterOwner::Item {
                         item_id: "item1".into(),
@@ -855,6 +866,7 @@ mod tests {
                 }
                 Edit::ItemSetCrop { .. } => "crop",
                 Edit::ItemSetVisible { .. } => "hidden",
+                Edit::ItemSetLocked { locked: true, .. } => "locked",
                 Edit::FilterAdd { .. } => "effect",
                 other => panic!("{other:?}"),
             })
@@ -871,6 +883,7 @@ mod tests {
                 "item",
                 "crop",
                 "hidden",
+                "locked",
                 "effect",
                 "item"
             ]

@@ -196,7 +196,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   negative scale is not refused: `from_legacy` returns the drawn outline with the
   reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.71 because of
   `item.set_locked`, `ItemInfo.locked` and the `png` preview codec
-  ([ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md)); 0.68 because of the
+  ([ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md)), with 0.69 and
+  0.70 left to changes that claimed them first; 0.68 because of the
   `font.list` query ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)); 0.67 because `live.set`
   takes a source's settings whose kind marks them `live` (`source.set_settings`,
   [ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)); 0.66 because
