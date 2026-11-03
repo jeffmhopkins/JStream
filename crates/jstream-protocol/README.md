@@ -202,8 +202,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.75 because of
-  `output.set_path` (#1072), with 0.72 to 0.74 left to changes that claimed them first;
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.74 because of
+  `output.set_path` (#1072), with 0.72 and 0.73 left to changes that claimed them first;
   0.71 because of
   `item.set_locked`, `ItemInfo.locked` and the `png` preview codec
   ([ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md)), with 0.69 left
@@ -804,7 +804,7 @@ as an asset path's last component. And
 `action_failed` when `path` or `<path>.part` already exists, so a recording never
 overwrites; `output.stop` renames it to `path`. A recording output has no RTMP target,
 so `output.set_target` refuses it with `invalid_argument`. `output.set_path
-{output_id, path}` (0.75, #1072) points it at another file, checked like `path` above,
+{output_id, path}` (0.74, #1072) points it at another file, checked like `path` above,
 keeping its container, encoder profile, mix, bus and filters; a running recording keeps
 its file, and the new path applies from the next `output.start`. On any other output it
 is `invalid_argument`, and its inverse is `output.set_path` with the previous path. A `virtual_cam` output (0.18) has no fields: it offers the program

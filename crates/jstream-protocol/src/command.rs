@@ -529,7 +529,7 @@ pub enum Edit {
         /// The new target, validated as in `output.create`.
         target: RtmpTarget,
     },
-    /// Changes where a recording output writes its file (since 0.75, #1072), keeping its
+    /// Changes where a recording output writes its file (since 0.74, #1072), keeping its
     /// container, encoder profile, mix, bus and filters. A running output keeps writing
     /// where it started; the new path applies from its next `output.start`, which still
     /// never overwrites. The path is checked as in `output.create`'s

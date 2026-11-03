@@ -33,7 +33,7 @@ pub enum OutputKind {
         /// machine, ending in a file name. While recording, the file is written as
         /// `<path>.part` and renamed to `path` when the output stops. A recording never
         /// overwrites: `output.start` fails with `action_failed` when `path` or its
-        /// `.part` name exists; `output.set_path` (since 0.75) points it at a new file.
+        /// `.part` name exists; `output.set_path` (since 0.74) points it at a new file.
         /// The engine rejects, with `invalid_argument`, an empty or relative path
         /// (absolute is `/…`, `\…`, `C:\…` or `C:/…`), one that starts with two
         /// separators (a Windows UNC or device path, `\\host\share\…`, `\\.\…` or
