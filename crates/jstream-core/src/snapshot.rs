@@ -4308,8 +4308,9 @@ pub(crate) fn encode_png(width: u32, height: u32, rgba: &[u8]) -> Result<Vec<u8>
     Ok(buf)
 }
 
-/// Standard base64 with padding and no line breaks.
-fn base64(data: &[u8]) -> String {
+/// Standard base64 with padding and no line breaks: a `video.snapshot`'s PNG, and an
+/// image `pack.read` returns.
+pub(crate) fn base64(data: &[u8]) -> String {
     const ALPHA: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
     let push = |out: &mut String, n: u32, count: usize| {
@@ -4357,8 +4358,9 @@ pub(crate) fn decode_png(bytes: &[u8]) -> Result<(u32, u32, Vec<u8>), String> {
     Ok((info.width, info.height, buf))
 }
 
-/// Standard base64 decode, for tests that check the query's `png` field.
-#[cfg(test)]
+/// Standard base64 with padding decoded, strictly: `=` only at the end of the last
+/// four characters. For a `pack.write`'s images (ADR-0097), which a client sends, and
+/// tests that check `video.snapshot`'s `png` field.
 pub(crate) fn decode_base64(text: &str) -> Result<Vec<u8>, String> {
     fn val(byte: u8) -> Result<u8, String> {
         match byte {
@@ -4375,10 +4377,14 @@ pub(crate) fn decode_base64(text: &str) -> Result<Vec<u8>, String> {
         return Err("base64 length is not a multiple of 4".into());
     }
     let mut out = Vec::with_capacity(bytes.len() / 4 * 3);
-    for chunk in bytes.chunks_exact(4) {
+    let last = bytes.len() / 4;
+    for (index, chunk) in bytes.chunks_exact(4).enumerate() {
         let pad = chunk.iter().rev().take_while(|b| **b == b'=').count();
         if pad > 2 {
             return Err("too much base64 padding".into());
+        }
+        if (pad > 0 && index + 1 != last) || chunk[..4 - pad].contains(&b'=') {
+            return Err("base64 padding before the end".into());
         }
         let mut n = 0u32;
         for (i, byte) in chunk.iter().enumerate() {

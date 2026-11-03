@@ -14,6 +14,7 @@ mod gpu_capture;
 mod history;
 mod keyframes;
 mod live_values;
+mod packs;
 mod preview;
 mod source_sizes;
 mod sources;
