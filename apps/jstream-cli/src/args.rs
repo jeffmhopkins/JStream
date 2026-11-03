@@ -46,6 +46,9 @@ Commands:
                                    (query capture.targets)
   font list                        list the installed fonts, each with its family,
                                    style and path (query font.list)
+  profile get [<seconds>]          where the engine's time went over the last 5 (or
+                                   <seconds>, up to 60) seconds: per drawing thread,
+                                   item, source and thread, as JSON (query profile.get)
   source list                      list the sources (query source.list)
   item list <scene-id>             list a scene's items, bottom first (query item.list)
   output list                      list the configured outputs (query output.list)
@@ -294,6 +297,14 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         }),
         ["capture", "targets"] => Command::Query(Query::CaptureTargets),
         ["font", "list"] => Command::Query(Query::FontList),
+        ["profile", "get"] => Command::Query(Query::ProfileGet {
+            seconds: None,
+            top: None,
+        }),
+        ["profile", "get", seconds] => Command::Query(Query::ProfileGet {
+            seconds: Some(number(seconds, "seconds")?),
+            top: None,
+        }),
         ["source", "list"] => Command::Query(Query::SourceList),
         ["item", "list", id] => Command::Query(Query::ItemList {
             scene_id: SceneId::new(*id),
@@ -916,6 +927,21 @@ mod tests {
             ok(&["font", "list"]).command,
             Command::Query(Query::FontList)
         );
+        assert_eq!(
+            ok(&["profile", "get"]).command,
+            Command::Query(Query::ProfileGet {
+                seconds: None,
+                top: None
+            })
+        );
+        assert_eq!(
+            ok(&["profile", "get", "10"]).command,
+            Command::Query(Query::ProfileGet {
+                seconds: Some(10),
+                top: None
+            })
+        );
+        assert!(err(&["profile", "get", "ten"]).contains("seconds"));
     }
 
     #[test]

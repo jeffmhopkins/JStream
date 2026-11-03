@@ -51,7 +51,7 @@ reflection needs one more nested scene, with the mask on the nested scene's item
 5. **Cost.** One canvas-sized `Rgba16Float` layer and its scratch texture per item, in
    place of the box-sized ones, and a pass per enabled effect over the whole canvas. It
    is bounded by the canvas, so it costs no more than the nested scene it replaces.
-6. **The protocol** goes to 0.77 for the new edit and field. The CLI, the MCP tool's
+6. **The protocol** goes to 0.76 for the new edit and field. The CLI, the MCP tool's
    schema and the Filters panel (an "Over the canvas" check under an item's effects)
    expose it.
 

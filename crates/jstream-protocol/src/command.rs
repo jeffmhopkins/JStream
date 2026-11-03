@@ -199,7 +199,7 @@ pub enum Edit {
     /// top), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,
     /// `item.set_transition` if its transition settings were not the default,
     /// `item.set_locked` if it was locked (since 0.71), `item.set_effects_space` if its
-    /// effects run in canvas space (since 0.77), and the placement edits that write each
+    /// effects run in canvas space (since 0.76), and the placement edits that write each
     /// dropped override back.
     #[serde(rename = "item.remove")]
     ItemRemove {
@@ -953,7 +953,7 @@ pub enum Edit {
         /// Whether its canvas box is locked.
         locked: bool,
     },
-    /// Sets where an item's effects run (ADR-0106, since 0.77): over its box before it is
+    /// Sets where an item's effects run (ADR-0106, since 0.76): over its box before it is
     /// placed (`box`, the default), or over the canvas after it is placed (`canvas`), so
     /// a mask or a gradient lines up with the canvas however the item is moved, scaled,
     /// turned or flipped. Like a lock, it belongs to the item, so it takes no `scene_id`
@@ -1912,7 +1912,7 @@ impl Crop {
     };
 }
 
-/// Where an item's effects run (ADR-0106, since 0.77).
+/// Where an item's effects run (ADR-0106, since 0.76).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]

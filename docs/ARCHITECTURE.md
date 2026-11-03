@@ -775,7 +775,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `transition_in` and `transition_out`, and `item.set_transition` an item's transition
   settings. `item.set_locked` (0.71, [ADR-0096](adr/0096-item-lock-and-png-preview-frames.md))
   locks an item's canvas box, an editing aid clients honour and the engine never
-  enforces. `item.set_effects_space` (0.77,
+  enforces. `item.set_effects_space` (0.76,
   [ADR-0106](adr/0106-item-effects-in-canvas-space.md)) makes an item's effects run over
   the canvas after it is placed. `scene.switch` takes an optional `preset_id`, and the `studio.changed` it
   causes names the preset it ran and how long the transition lasts (0 for a cut).
@@ -829,6 +829,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   size, runtime state ([ADR-0022](adr/0022-item-transform-and-canvas.md) §4);
   `activity.list` (protocol 0.51) → the engine's last 100 audit entries, each with a
   sentence saying what it did ([ADR-0083](adr/0083-activity-log-over-the-protocol.md));
+  `profile.get` (protocol 0.73, [ADR-0103](adr/0103-per-item-performance-profile.md)) →
+  where the frame time went over the last few seconds: each drawing thread's frame time
+  against the budget, the costliest units (a source's upload, a capture, a chain, a
+  scene pass, the composite), each source's paints, looks and builds, the planner, and
+  each named thread's CPU;
   audio levels are the `meters.tick` event, not a query).
 - **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops, load, chains, outputs}`, `meters.tick`,
   `source.size_changed` (protocol 0.40), …).
@@ -937,7 +942,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`activity`, `audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `ui_settings`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  (`activity`, `audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `ui_settings`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
@@ -970,6 +975,10 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
   MCP revisions and transports are in
   [jstream-mcp › Design](../crates/jstream-mcp/README.md#design).
+- **Profiling:** the `profile` tool's `profile.get` tells an agent where a frame's time
+  goes, by thread, scene, item, chain and source, so it can find what makes a scene slow,
+  change it, and measure again
+  ([ADR-0103](adr/0103-per-item-performance-profile.md)).
 - **Preview streams** need a binary channel, which MCP doesn't have, so the `preview`
   tool's `preview.subscribe` fails with `action_failed`; an agent looks with
   `video.snapshot`.

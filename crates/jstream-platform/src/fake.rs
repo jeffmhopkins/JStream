@@ -25,8 +25,9 @@ use crate::{
     CodecInfo, CodecRole, Codecs, CompressedFrame, DeviceId, GpuContext, GpuFrame, GpuInterop,
     HardwarePreference, MediaAudioInfo, MediaClock, MediaDecoder, MediaDecoderConfig,
     MediaDecoders, MediaInfo, MediaVideoInfo, OAuthTokenStore, PlatformError, ProcessCpu, Secret,
-    StreamKeyStore, VcamFormat, VcamSink, VideoDecoder, VideoDecoderConfig, VideoDeviceFormat,
-    VideoDeviceInfo, VideoDevices, VideoEncoder, VideoEncoderConfig, VideoSurface,
+    StreamKeyStore, ThreadCpu, ThreadTime, VcamFormat, VcamSink, VideoDecoder, VideoDecoderConfig,
+    VideoDeviceFormat, VideoDeviceInfo, VideoDevices, VideoEncoder, VideoEncoderConfig,
+    VideoSurface,
 };
 
 /// A full set of fake backends on `clock`: a 320x180 display, a stereo 48 kHz
@@ -1433,6 +1434,39 @@ impl Default for FakeCpu {
 impl ProcessCpu for FakeCpu {
     fn cpu_time(&self) -> Option<std::time::Duration> {
         (*lock(&self.nanos)).map(std::time::Duration::from_nanos)
+    }
+}
+
+/// A [`ThreadCpu`] whose threads the test sets. Clones share the same list, so a test
+/// keeps one and changes it while the engine holds another. It starts with none.
+#[derive(Clone, Debug)]
+pub struct FakeThreads {
+    threads: Arc<Mutex<Option<Vec<ThreadTime>>>>,
+}
+
+impl FakeThreads {
+    /// No threads.
+    pub fn new() -> Self {
+        Self {
+            threads: Arc::new(Mutex::new(Some(Vec::new()))),
+        }
+    }
+
+    /// Sets what the next reading returns, or `None` for an OS that refuses.
+    pub fn set(&self, threads: Option<Vec<ThreadTime>>) {
+        *lock(&self.threads) = threads;
+    }
+}
+
+impl Default for FakeThreads {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ThreadCpu for FakeThreads {
+    fn threads(&self) -> Option<Vec<ThreadTime>> {
+        lock(&self.threads).clone()
     }
 }
 

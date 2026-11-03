@@ -249,6 +249,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `plugin.grant` and `plugin.enable` with `not_found` (entity `plugin`), as the engine
   answers them for a plugin that isn't installed: none ever is in the mock, so
   `plugin.list` lists none;
+- `profile.get` answered with an empty profile: the mock draws nothing and reads no
+  threads ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md));
 - `effect.enable` answered with `invalid_argument` on `kind_id`, as an engine that loads
   no effect packs answers it: the mock quarantines nothing;
 - `pack.write`, `pack.delete`, `pack.list` and `pack.read` answered with `unsupported`,
