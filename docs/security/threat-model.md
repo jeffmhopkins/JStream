@@ -91,6 +91,7 @@ covers = [
   "crates/jstream-server/src/session.rs",
   "apps/jstream-daemon/src/token.rs",
   "apps/jstream-daemon/src/args.rs",
+  "crates/jstream-server/src/token_file.rs",
 ]
 depends_on = ["docs/RULES.md#R-SEC-002", "docs/adr/0006-mcp-full-access.md"]
 -->
@@ -112,6 +113,10 @@ a stolen token, local denial of service.
 - The server keeps only a BLAKE3 digest of the token and compares digests in constant
   time. Tokens are 32 bytes from the OS random source. Header values are never logged.
 - The daemon binds `127.0.0.1` and has no flag to bind elsewhere. There is no TLS yet.
+  The desktop app serves only its window, on an OS-picked port with a token kept in
+  memory, unless it is started with `--mcp`: then it binds `127.0.0.1` on a fixed port
+  (4455 by default), turns MCP on and takes its token from a token file with the
+  daemon's checks, which both hosts share (`jstream_server::token_file`).
 - Limits: 4 MiB messages and MCP bodies (one over that and up to 16 MiB is read and
   refused with `too_large`, echoing at most a 256-byte `id`, one larger closes the
   connection or is `413`; [ADR-0074](../adr/0074-too-large-requests.md)), 128 open TCP connections of any kind
@@ -122,7 +127,7 @@ a stolen token, local denial of service.
 - Failed tokens are logged one by one only up to 10 a minute, then counted, so a flood
   of them can't fill the log (#354).
 - On Unix the token file is created `0600` and refused if group or others can read it.
-  On Windows (#548) the daemon's token, devices and log files, the desktop app's log file
+  On Windows (#548) the daemon's token (and the desktop app's, with `--mcp`), devices and log files, the desktop app's log file
   (#780), the daemon's and the desktop app's crash reports (#656), and the UI settings
   file both write (ADR-0084), are created with a protected DACL for SYSTEM and the user
   in the same `CreateFileW` call (`jstream_platform_windows::create_private_file`), so
